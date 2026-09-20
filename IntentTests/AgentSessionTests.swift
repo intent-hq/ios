@@ -1,10 +1,9 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 @Suite("AgentSession parsing and display")
 struct AgentSessionTests {
-
     // MARK: - parseAgent
 
     @Test func parseCompleteAgent() {
@@ -64,7 +63,7 @@ struct AgentSessionTests {
         #expect(agent?.isProcessing == false)
         #expect(agent?.isResponding == false)
         #expect(agent?.isWaitingForOtherAgents == false)
-        #expect(agent?.waitingForAgentIds == [])
+        #expect(agent?.waitingForAgentIds.isEmpty == true)
         #expect(agent?.createdAt == nil)
         #expect(agent?.lastMessageRole == nil)
         #expect(agent?.specialist == nil)
@@ -73,6 +72,40 @@ struct AgentSessionTests {
         #expect(agent?.attentionRequestReason == nil)
         #expect(agent?.attentionRequestTimestamp == nil)
         #expect(agent?.hasPendingAttentionRequest == false)
+        #expect(agent?.notificationsMuted == false)
+    }
+
+    // MARK: - notificationsMuted (PROTOCOL §5.5)
+
+    @Test func parseNotificationsMutedTopLevel() {
+        // Served top-level on every AgentLite / AgentSession projection.
+        let dict: [String: Any] = ["id": "agent-m1", "name": "Muted", "notificationsMuted": true]
+        #expect(AgentSession.parseAgent(dict)?.notificationsMuted == true)
+    }
+
+    @Test func parseNotificationsMutedFromMetadata() {
+        let dict: [String: Any] = [
+            "id": "agent-m2",
+            "name": "Muted",
+            "metadata": ["notificationsMuted": true] as [String: Any]
+        ]
+        #expect(AgentSession.parseAgent(dict)?.notificationsMuted == true)
+    }
+
+    @Test func parseNotificationsMutedExplicitFalse() {
+        let dict: [String: Any] = ["id": "agent-m3", "name": "Loud", "notificationsMuted": false]
+        #expect(AgentSession.parseAgent(dict)?.notificationsMuted == false)
+    }
+
+    @Test func parseNotificationsMutedIgnoresNonBoolean() {
+        let dict: [String: Any] = ["id": "agent-m4", "name": "Odd", "notificationsMuted": "true"]
+        #expect(AgentSession.parseAgent(dict)?.notificationsMuted == false)
+    }
+
+    @Test func applyingPreviewKeepsNotificationsMuted() {
+        let dict: [String: Any] = ["id": "agent-m5", "name": "Muted", "notificationsMuted": true]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.applyingPreview(lastAgentResponse: "Hi", digest: nil).notificationsMuted == true)
     }
 
     // MARK: - attention-request fields (PROTOCOL §5.5)
@@ -151,13 +184,13 @@ struct AgentSessionTests {
         #expect(pending?.raisedAt == ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
     }
 
-    @Test func parsePendingAttentionRequestTimestampWithFractionalSeconds() {
+    @Test func parsePendingAttentionRequestTimestampWithFractionalSeconds() throws {
         let dict: [String: Any] = [
             "attentionRequestKind": "discussion",
             "attentionRequestTimestamp": "2026-07-30T10:00:00.500Z"
         ]
         let pending = AgentSession.parsePendingAttentionRequest(dict)
-        let expected = ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z")!
+        let expected = try #require(ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
         #expect(pending?.raisedAt == expected.addingTimeInterval(0.5))
     }
 
@@ -244,7 +277,9 @@ struct AgentSessionTests {
         let pending = AgentSession.parseAgent(dict)?.pendingAttentionRequest
         #expect(pending?.reason == "line one line two spaced out")
     }
+}
 
+extension AgentSessionTests {
     @Test func pendingAttentionRequestEmptyReasonBecomesNil() {
         let dict: [String: Any] = [
             "id": "agent-13",
@@ -271,290 +306,6 @@ struct AgentSessionTests {
         #expect(AgentSession.parseAgent([:]) == nil)
     }
 
-    // MARK: - displayMessage
-
-    @Test func displayMessagePrefersDigest() {
-        let agent = makeAgent(digest: "digest text", lastAgentResponse: "response text")
-        #expect(agent.displayMessage == "digest text")
-    }
-
-    @Test func displayMessageFallsToLastResponse() {
-        let agent = makeAgent(digest: nil, lastAgentResponse: "response text")
-        #expect(agent.displayMessage == "response text")
-    }
-
-    @Test func displayMessageNilWhenBothNil() {
-        let agent = makeAgent(digest: nil, lastAgentResponse: nil)
-        #expect(agent.displayMessage == nil)
-    }
-
-    @Test func displayMessageStripsGroupTags() {
-        let raw = "<group:Setup>Hello</group:Setup>"
-        let agent = makeAgent(lastAgentResponse: raw)
-        #expect(agent.displayMessage == "Hello")
-    }
-
-    @Test func displayMessageStripsClosingGroupWithoutName() {
-        let raw = "<group:Work>Content</group>"
-        let agent = makeAgent(lastAgentResponse: raw)
-        #expect(agent.displayMessage == "Content")
-    }
-
-    @Test func displayMessageStripsAgentDigestBlock() {
-        let raw = "Before <agent_digest>summary</agent_digest> After"
-        let agent = makeAgent(lastAgentResponse: raw)
-        #expect(agent.displayMessage == "Before  After")
-    }
-
-    @Test func displayMessageStripsHTMLComments() {
-        let raw = "Hello <!-- a note --> World"
-        let agent = makeAgent(lastAgentResponse: raw)
-        #expect(agent.displayMessage == "Hello  World")
-    }
-
-    @Test func displayMessageStripsWellFormedSuggestedPromptsBlock() {
-        let raw = "Hello\n<!-- suggested-prompts\nRun tests\n-->\nWorld"
-        let agent = makeAgent(lastAgentResponse: raw)
-        #expect(agent.displayMessage == "Hello\nWorld")
-    }
-
-    @Test func displayMessageStripsInlineSuggestedPromptsComment() {
-        // A one-liner comment mentioning suggested-prompts is not a block
-        // opener (an opener ends its line), so it is stripped like any comment.
-        let raw = "Hello <!-- suggested-prompts config note --> World"
-        let agent = makeAgent(lastAgentResponse: raw)
-        #expect(agent.displayMessage == "Hello  World")
-    }
-
-    @Test func displayMessageKeepsMalformedSuggestedPromptsBlock() {
-        // An embedded `-->` (Mermaid edge, prose arrow) does not close a block,
-        // so body text must survive intact.
-        let raw = "Hello <!-- suggested-prompts\nA --> B"
-        let agent = makeAgent(lastAgentResponse: raw)
-        #expect(agent.displayMessage == raw)
-    }
-
-    @Test func displayMessageReturnsNilWhenOnlyTags() {
-        let raw = "<group:X></group:X>"
-        let agent = makeAgent(lastAgentResponse: raw)
-        #expect(agent.displayMessage == nil)
-    }
-
-    @Test func displayMessageMixedContent() {
-        let raw = "<group:A>Real content</group>\n<!-- comment -->\n<agent_digest>d</agent_digest>"
-        let agent = makeAgent(lastAgentResponse: raw)
-        #expect(agent.displayMessage == "Real content")
-    }
-
-    // MARK: - displayMessage lastMessageRole precedence (PROTOCOL §5.5)
-
-    @Test func displayMessagePrefersUserFirstLineWhenUserIsNewest() {
-        let agent = makeAgent(
-            digest: "old digest", lastAgentResponse: "old response",
-            lastUserMessage: "Please rerun the tests", lastMessageRole: "user"
-        )
-        #expect(agent.displayMessage == "Please rerun the tests")
-    }
-
-    @Test func displayMessageUserNewestTakesFirstLineOnly() {
-        let agent = makeAgent(
-            lastUserMessage: "First line\nSecond line", lastMessageRole: "user"
-        )
-        #expect(agent.displayMessage == "First line")
-    }
-
-    @Test func displayMessageUserNewestSkipsBlankLeadingLines() {
-        let agent = makeAgent(
-            lastUserMessage: "\n  \nActual question", lastMessageRole: "user"
-        )
-        #expect(agent.displayMessage == "Actual question")
-    }
-
-    @Test func displayMessageAssistantNewestKeepsExistingBehavior() {
-        let agent = makeAgent(
-            digest: "digest text", lastAgentResponse: "response text",
-            lastUserMessage: "user text", lastMessageRole: "assistant"
-        )
-        #expect(agent.displayMessage == "digest text")
-    }
-
-    @Test func displayMessageAbsentRoleKeepsExistingBehavior() {
-        // Older daemons omit lastMessageRole — back-compat fallback.
-        let agent = makeAgent(
-            digest: "digest text", lastAgentResponse: "response text",
-            lastUserMessage: "user text", lastMessageRole: nil
-        )
-        #expect(agent.displayMessage == "digest text")
-    }
-
-    @Test func displayMessageUserNewestWithBlankUserMessageFallsBack() {
-        let agent = makeAgent(
-            digest: "digest text", lastUserMessage: "   \n ",
-            lastMessageRole: "user"
-        )
-        #expect(agent.displayMessage == "digest text")
-    }
-
-    @Test func displayMessageUserNewestWithNilUserMessageFallsBack() {
-        let agent = makeAgent(
-            lastAgentResponse: "response text", lastMessageRole: "user"
-        )
-        #expect(agent.displayMessage == "response text")
-    }
-
-    // MARK: - applyingPreview role flip
-
-    @Test func applyingPreviewFlipsRoleToAssistant() {
-        // Live agent text arriving mirrors the daemon's read-path overlay:
-        // the agent-side preview resumes over the user's newest message.
-        let agent = makeAgent(
-            lastUserMessage: "Do the thing", lastMessageRole: "user"
-        )
-        #expect(agent.displayMessage == "Do the thing")
-        let updated = agent.applyingPreview(
-            lastAgentResponse: "On it — running now", digest: nil
-        )
-        #expect(updated.lastMessageRole == "assistant")
-        #expect(updated.displayMessage == "On it — running now")
-    }
-
-    @Test func applyingPreviewWithNilFieldsKeepsRole() {
-        let agent = makeAgent(
-            lastUserMessage: "Do the thing", lastMessageRole: "user"
-        )
-        let updated = agent.applyingPreview(lastAgentResponse: nil, digest: nil)
-        #expect(updated.lastMessageRole == "user")
-        #expect(updated.displayMessage == "Do the thing")
-    }
-
-    @Test func applyingPreviewDigestOnlyKeepsRole() {
-        // The daemon's read-path overlay flips the role only with the
-        // response overlay; a digest-only payload keeps the persisted role.
-        let agent = makeAgent(
-            lastUserMessage: "Do the thing", lastMessageRole: "user"
-        )
-        let updated = agent.applyingPreview(
-            lastAgentResponse: nil, digest: "Working on it"
-        )
-        #expect(updated.lastMessageRole == "user")
-        #expect(updated.digest == "Working on it")
-        #expect(updated.displayMessage == "Do the thing")
-    }
-
-    // MARK: - isActive
-
-    @Test func isActiveForRespondingStatus() {
-        let agent = makeAgent(status: "responding")
-        #expect(agent.isActive == true)
-    }
-
-    @Test func isActiveForActiveStatus() {
-        let agent = makeAgent(status: "Active")
-        #expect(agent.isActive == true)
-    }
-
-    @Test func isActiveForStreamingFlag() {
-        let agent = makeAgent(status: "Idle", isStreaming: true)
-        #expect(agent.isActive == true)
-    }
-
-    @Test func isActiveForProcessingFlag() {
-        let agent = makeAgent(status: "Idle", isProcessing: true)
-        #expect(agent.isActive == true)
-    }
-
-    @Test func isActiveForRespondingFlag() {
-        let agent = makeAgent(status: "Idle", isResponding: true)
-        #expect(agent.isActive == true)
-    }
-
-    @Test func notActiveForIdleStatus() {
-        let agent = makeAgent(status: "Idle")
-        #expect(agent.isActive == false)
-    }
-
-    @Test func notActiveForUnknownStatus() {
-        let agent = makeAgent(status: "completed")
-        #expect(agent.isActive == false)
-    }
-
-    // MARK: - pending-question markers (PROTOCOL §5.5)
-
-    @Test func parsePendingQuestionMarkersFromMetadata() {
-        let dict: [String: Any] = [
-            "id": "agent-q",
-            "name": "Asker",
-            "metadata": [
-                "pendingQuestionsMessageId": "msg-7",
-                "dismissedQuestionsMessageId": "msg-3"
-            ] as [String: Any]
-        ]
-        let agent = AgentSession.parseAgent(dict)
-        #expect(agent?.pendingQuestionsMessageId == "msg-7")
-        #expect(agent?.dismissedQuestionsMessageId == "msg-3")
-        #expect(agent?.hasPendingQuestions == true)
-    }
-
-    @Test func pendingQuestionMarkerAloneIsPending() {
-        let dict: [String: Any] = [
-            "id": "agent-q",
-            "name": "Asker",
-            "metadata": ["pendingQuestionsMessageId": "msg-7"] as [String: Any]
-        ]
-        let agent = AgentSession.parseAgent(dict)
-        #expect(agent?.dismissedQuestionsMessageId == nil)
-        #expect(agent?.hasPendingQuestions == true)
-    }
-
-    @Test func pendingMarkerEqualToDismissedIsNotPending() {
-        let dict: [String: Any] = [
-            "id": "agent-q",
-            "name": "Asker",
-            "metadata": [
-                "pendingQuestionsMessageId": "msg-7",
-                "dismissedQuestionsMessageId": "msg-7"
-            ] as [String: Any]
-        ]
-        let agent = AgentSession.parseAgent(dict)
-        #expect(agent?.hasPendingQuestions == false)
-    }
-
-    @Test func absentPendingMarkerIsNotPending() {
-        let dict: [String: Any] = [
-            "id": "agent-q",
-            "name": "Asker",
-            "metadata": ["dismissedQuestionsMessageId": "msg-3"] as [String: Any]
-        ]
-        let agent = AgentSession.parseAgent(dict)
-        #expect(agent?.pendingQuestionsMessageId == nil)
-        #expect(agent?.hasPendingQuestions == false)
-
-        let minimal = AgentSession.parseAgent(["id": "agent-q", "name": "Asker"])
-        #expect(minimal?.hasPendingQuestions == false)
-    }
-
-    @Test func emptyPendingMarkerIsAuthoritativeClear() {
-        // The daemon writes "" at turn end when nothing is pending.
-        let dict: [String: Any] = [
-            "id": "agent-q",
-            "name": "Asker",
-            "metadata": ["pendingQuestionsMessageId": ""] as [String: Any]
-        ]
-        let agent = AgentSession.parseAgent(dict)
-        #expect(agent?.pendingQuestionsMessageId == "")
-        #expect(agent?.hasPendingQuestions == false)
-    }
-
-    @Test func applyingPreviewKeepsQuestionMarkers() {
-        let agent = makeAgent(
-            pendingQuestionsMessageId: "msg-7", dismissedQuestionsMessageId: "msg-3"
-        )
-        let updated = agent.applyingPreview(lastAgentResponse: "text", digest: nil)
-        #expect(updated.pendingQuestionsMessageId == "msg-7")
-        #expect(updated.dismissedQuestionsMessageId == "msg-3")
-        #expect(updated.hasPendingQuestions == true)
-    }
-
     // MARK: - AgentAvatarState precedence (mirrors avatar-state.test.ts)
 
     @Test func avatarStateIdleByDefault() {
@@ -568,7 +319,9 @@ struct AgentSessionTests {
 
     @Test func avatarStateRunningWinsOverPeerWaitFlagDuringLiveTurn() {
         let agent = makeAgent(
-            status: "processing", isResponding: true, isWaitingForOtherAgents: true
+            status: "processing",
+            isResponding: true,
+            isWaitingForOtherAgents: true
         )
         #expect(AgentAvatarState.state(for: agent) == .running)
     }
@@ -585,7 +338,8 @@ struct AgentSessionTests {
 
     @Test func avatarStateQuestionBeatsOtherNonFailureStates() {
         let agent = makeAgent(
-            status: "Active", isStreaming: true,
+            status: "Active",
+            isStreaming: true,
             attentionRequestKind: "discussion",
             pendingQuestionsMessageId: "msg-7"
         )
@@ -597,7 +351,8 @@ struct AgentSessionTests {
     @Test func avatarStateDismissedQuestionFallsThrough() {
         let agent = makeAgent(
             status: "Idle",
-            pendingQuestionsMessageId: "msg-7", dismissedQuestionsMessageId: "msg-7"
+            pendingQuestionsMessageId: "msg-7",
+            dismissedQuestionsMessageId: "msg-7"
         )
         #expect(AgentAvatarState.state(for: agent) == .idle)
     }
@@ -661,7 +416,7 @@ struct AgentSessionTests {
 
     // MARK: - Helpers
 
-    private func makeAgent(
+    func makeAgent(
         status: String = "Idle",
         isStreaming: Bool = false,
         isProcessing: Bool = false,
@@ -676,20 +431,29 @@ struct AgentSessionTests {
         dismissedQuestionsMessageId: String? = nil
     ) -> AgentSession {
         AgentSession(
-            id: "test", name: "Test", status: status,
-            isBackground: false, isStreaming: isStreaming,
-            isProcessing: isProcessing, isResponding: isResponding,
-            isWaitingForOtherAgents: isWaitingForOtherAgents, waitingForAgentIds: [],
-            createdAt: nil, updatedAt: nil, lastActivity: nil,
+            id: "test",
+            name: "Test",
+            status: status,
+            isBackground: false,
+            isStreaming: isStreaming,
+            isProcessing: isProcessing,
+            isResponding: isResponding,
+            isWaitingForOtherAgents: isWaitingForOtherAgents,
+            waitingForAgentIds: [],
+            createdAt: nil,
+            updatedAt: nil,
+            lastActivity: nil,
             lastAgentResponse: lastAgentResponse,
             lastUserMessage: lastUserMessage,
             lastMessageRole: lastMessageRole,
-            digest: digest, specialist: nil, createdByAgentId: nil,
-            attentionRequestKind: attentionRequestKind, attentionRequestReason: nil,
+            digest: digest,
+            specialist: nil,
+            createdByAgentId: nil,
+            attentionRequestKind: attentionRequestKind,
+            attentionRequestReason: nil,
             attentionRequestTimestamp: nil,
             pendingQuestionsMessageId: pendingQuestionsMessageId,
             dismissedQuestionsMessageId: dismissedQuestionsMessageId
         )
     }
 }
-

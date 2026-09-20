@@ -1,5 +1,15 @@
 import Foundation
 
+enum HookPostWakeState: Equatable {
+    case continues
+    case retired
+    case unreported
+
+    init(reportedActive: Bool) {
+        self = reportedActive ? .continues : .retired
+    }
+}
+
 /// Attribution for background-hook wake messages (PROTOCOL §5.40). The daemon
 /// tags user-role rows delivered by a background hook wake with
 /// `{ type: "hook_wake", hookId, hookName, reason, hookStillActive? }` — on
@@ -21,15 +31,15 @@ struct HookWakeAttribution: Equatable {
     /// Whether the hook remains active after a `dispatched` wake (perpetual
     /// re-arm) or is retired. Nil on other reasons and on messages persisted
     /// before the daemon added the field (presence-detected additive field).
-    let hookStillActive: Bool?
+    let postWakeState: HookPostWakeState
 
     private static let maxNameLength = 20
     private static let fallbackName = "Hook"
 
     /// Extracts hook-wake attribution from an opaque metadata dictionary.
     /// Returns nil unless `metadata.type == "hook_wake"`.
-    static func from(_ metadata: [String: AnyCodable]?) -> HookWakeAttribution? {
-        guard let metadata, metadata["type"]?.stringValue == "hook_wake" else { return nil }
+    static func from(_ metadata: [String: AnyCodable]) -> Self? {
+        guard metadata["type"]?.stringValue == "hook_wake" else { return nil }
         let hookId = (metadata["hookId"]?.stringValue ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let rawName = metadata["hookName"]?.stringValue ?? ""
@@ -38,12 +48,19 @@ struct HookWakeAttribution: Equatable {
         let displayName = name.count > maxNameLength
             ? String(name.prefix(maxNameLength - 1)) + "…"
             : name
-        return HookWakeAttribution(
+        let postWakeState: HookPostWakeState
+        if case let .some(.value(value)) = metadata["hookStillActive"]?.boolValue {
+            postWakeState = HookPostWakeState(reportedActive: value)
+        } else {
+            postWakeState = .unreported
+        }
+        return Self(
             hookId: hookId,
             rawName: rawName,
             displayName: displayName,
             reason: metadata["reason"]?.stringValue ?? "",
-            hookStillActive: metadata["hookStillActive"]?.boolValue)
+            postWakeState: postWakeState
+        )
     }
 
     /// Post-fire state suffix for the attribution header: on dispatched wakes
@@ -53,10 +70,15 @@ struct HookWakeAttribution: Equatable {
     /// plain "woke the agent" (FE parity: HookWakeAttributionHeader).
     var stateLabel: String {
         if reason == "evicted" { return "woke the agent and is now retired" }
-        if reason == "dispatched", let hookStillActive {
-            return hookStillActive
-                ? "woke the agent and will continue to run"
-                : "woke the agent and is now retired"
+        if reason == "dispatched" {
+            switch postWakeState {
+            case .continues:
+                return "woke the agent and will continue to run"
+            case .retired:
+                return "woke the agent and is now retired"
+            case .unreported:
+                break
+            }
         }
         return "woke the agent"
     }
@@ -68,7 +90,7 @@ struct HookWakeAttribution: Equatable {
     /// from it (works for names containing double quotes or edge whitespace,
     /// which defeat the regex); otherwise fall back to the regex. Returns the
     /// input unchanged when no prefix matches.
-    static func stripPrefix(_ text: String, attribution: HookWakeAttribution? = nil) -> String {
+    static func stripPrefix(_ text: String, attribution: Self? = nil) -> String {
         if let rawName = attribution?.rawName, !rawName.isEmpty {
             let literal = "[Background hook \"\(rawName)\"]"
             if text.hasPrefix(literal) {
@@ -76,13 +98,15 @@ struct HookWakeAttribution: Equatable {
                     .replacingOccurrences(
                         of: "^\\s*",
                         with: "",
-                        options: .regularExpression)
+                        options: .regularExpression
+                    )
             }
         }
         return text.replacingOccurrences(
             of: "^\\[Background hook \"[^\"]*\"\\]\\s*",
             with: "",
-            options: .regularExpression)
+            options: .regularExpression
+        )
     }
 
     /// Trailing state note the daemon appends to dispatched/evicted hook wake
@@ -94,11 +118,12 @@ struct HookWakeAttribution: Equatable {
         text.replacingOccurrences(
             of: "(?:\\n[ \\t]*\\n|^)\\[This hook [^\\n]*\\]\\s*$",
             with: "",
-            options: .regularExpression)
+            options: .regularExpression
+        )
     }
 
     /// Display text for a hook-wake body: prefix and state note stripped.
-    static func displayText(_ text: String, attribution: HookWakeAttribution? = nil) -> String {
+    static func displayText(_ text: String, attribution: Self? = nil) -> String {
         stripStateNote(stripPrefix(text, attribution: attribution))
     }
 }
@@ -110,7 +135,7 @@ extension ConversationMessage {
     /// (FE parity: ChatMessage.svelte).
     var hookWakeAttribution: HookWakeAttribution? {
         if let attribution = HookWakeAttribution.from(metadata) { return attribution }
-        for block in contentBlocks ?? [] where block.type == .text {
+        for block in contentBlocks where block.type == .text {
             if let attribution = HookWakeAttribution.from(block.messageMetadata) {
                 return attribution
             }

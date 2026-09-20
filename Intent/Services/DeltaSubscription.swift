@@ -12,21 +12,36 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
     let subscriptionId: String
     let kind: Kind
     let seq: Int
-    let snapshot: [[String: Any]]?
+    let snapshot: [[String: Any]]? // swiftlint:disable:this discouraged_optional_collection
     let delta: DeltaPayload?
     /// Snapshot-level metadata for object-shaped snapshots (chat channel):
     /// agentId, truncated, totalMessages, nextToken, plus activity flags like
     /// isResponding, isWaitingOnTool, turnInFlight, lastStreamActivityAt.
     /// Nil for array-shaped snapshots (collection channels).
-    let snapshotMeta: [String: Any]?
+    let snapshotMeta: [String: Any]? // swiftlint:disable:this discouraged_optional_collection
     /// Chat-channel snapshot `messages` pre-decoded by `parse` (undecodable
     /// rows dropped, matching `ConversationMessage.parseMessage`). Nil for
     /// collection channels and for pushes built without `parse`.
-    let snapshotMessages: [ConversationMessage]?
+    let snapshotMessages: [ConversationMessage]? // swiftlint:disable:this discouraged_optional_collection
 
     enum Kind {
         case snapshot
         case delta
+    }
+
+    enum Payload {
+        case collectionSnapshot([[String: Any]])
+        case conversationSnapshot(rows: [[String: Any]], metadata: [String: Any])
+        case delta(DeltaPayload)
+    }
+
+    var payload: Payload {
+        if let delta { return .delta(delta) }
+        let rows = snapshot ?? []
+        if let snapshotMeta {
+            return .conversationSnapshot(rows: rows, metadata: snapshotMeta)
+        }
+        return .collectionSnapshot(rows)
     }
 
     /// One chat-channel block delta entity (PROTOCOL §7.1) with its `block`
@@ -41,17 +56,53 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
 
         /// Nil when the entity is not block-shaped or its block does not decode.
         init?(entity: [String: Any]) {
-            guard let messageId = entity["messageId"] as? String,
-                  let blockDictionary = entity["block"] as? [String: Any],
-                  let block = ContentBlock.decode(blockDictionary)
+            guard let shaped = ShapedChatBlockEntity(entity: entity),
+                  let block = ContentBlock.decode(shaped.block, fallbackIdentity: shaped.fallbackIdentity)
             else {
                 return nil
             }
+            self.init(shaped: shaped, block: block)
+        }
+
+        private init(shaped: ShapedChatBlockEntity, block: ContentBlock) {
+            messageId = shaped.messageId
+            self.block = block
+            role = MessageRole(rawValue: shaped.entity["role"] as? String ?? "assistant") ?? .system
+            timestamp = shaped.entity["timestamp"] as? String
+            streamingComplete = shaped.entity["streamingComplete"] as? Bool ?? false
+        }
+
+        /// Decodes every entity's block in one `ContentBlock.decodeBatch`
+        /// pass (ios#258): same elements, in order, as mapping `init?(entity:)`
+        /// (non-block-shaped entities and undecodable blocks dropped).
+        static func decodeAll(_ entities: [[String: Any]]) -> [Self] {
+            let shaped = entities.compactMap { ShapedChatBlockEntity(entity: $0) }
+            let blocks = ContentBlock.decodeBatch(
+                shaped.map(\.block),
+                fallbackIdentities: shaped.map(\.fallbackIdentity)
+            )
+            return zip(shaped, blocks).compactMap { entry, block in
+                block.map { Self(shaped: entry, block: $0) }
+            }
+        }
+    }
+
+    /// A block-shaped entity (`messageId` + `block`) before its block is
+    /// decoded; the shape check shared by `ChatBlockEntity`'s per-entity and
+    /// batched paths.
+    private struct ShapedChatBlockEntity {
+        let entity: [String: Any]
+        let messageId: String
+        let block: [String: Any]
+
+        var fallbackIdentity: ContentBlock.FallbackIdentity { .fingerprint(messageId: messageId) }
+
+        init?(entity: [String: Any]) {
+            guard let messageId = entity["messageId"] as? String,
+                  let block = entity["block"] as? [String: Any] else { return nil }
+            self.entity = entity
             self.messageId = messageId
             self.block = block
-            role = MessageRole(rawValue: entity["role"] as? String ?? "assistant") ?? .system
-            timestamp = entity["timestamp"] as? String
-            streamingComplete = entity["streamingComplete"] as? Bool ?? false
         }
     }
 
@@ -63,10 +114,14 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         /// `parse` (entities that are not block-shaped or do not decode are
         /// dropped). Nil when no entity is block-shaped (collection channels)
         /// and for payloads built without `parse`.
-        let chatBlocks: [ChatBlockEntity]?
+        let chatBlocks: [ChatBlockEntity]? // swiftlint:disable:this discouraged_optional_collection
 
-        init(added: [[String: Any]], updated: [[String: Any]], removedIds: [String],
-             chatBlocks: [ChatBlockEntity]? = nil) {
+        init(
+            added: [[String: Any]],
+            updated: [[String: Any]],
+            removedIds: [String],
+            chatBlocks: [ChatBlockEntity]? = nil // swiftlint:disable:this discouraged_optional_collection
+        ) {
             self.added = added
             self.updated = updated
             self.removedIds = removedIds
@@ -75,16 +130,27 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
 
         /// Decodes `added` + `updated` into chat block entities; nil when none
         /// of them is block-shaped.
-        static func decodeChatBlocks(added: [[String: Any]], updated: [[String: Any]]) -> [ChatBlockEntity]? {
+        /// Nil preserves the distinction between a collection delta and a chat
+        /// delta whose block-shaped rows all failed decoding.
+        static func decodeChatBlocks(
+            added: [[String: Any]],
+            updated: [[String: Any]]
+        ) -> [ChatBlockEntity]? { // swiftlint:disable:this discouraged_optional_collection
             let entities = added + updated
             guard entities.contains(where: { $0["block"] is [String: Any] }) else { return nil }
-            return entities.compactMap { ChatBlockEntity(entity: $0) }
+            return ChatBlockEntity.decodeAll(entities)
         }
     }
 
-    init(subscriptionId: String, kind: Kind, seq: Int, snapshot: [[String: Any]]?,
-         delta: DeltaPayload?, snapshotMeta: [String: Any]? = nil,
-         snapshotMessages: [ConversationMessage]? = nil) {
+    init(
+        subscriptionId: String,
+        kind: Kind,
+        seq: Int,
+        snapshot: [[String: Any]]?, // swiftlint:disable:this discouraged_optional_collection
+        delta: DeltaPayload?,
+        snapshotMeta: [String: Any]? = nil, // swiftlint:disable:this discouraged_optional_collection
+        snapshotMessages: [ConversationMessage]? = nil // swiftlint:disable:this discouraged_optional_collection
+    ) {
         self.subscriptionId = subscriptionId
         self.kind = kind
         self.seq = seq
@@ -94,10 +160,47 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         self.snapshotMessages = snapshotMessages
     }
 
+    init(subscriptionId: String, seq: Int, snapshot: [[String: Any]]) {
+        self.init(
+            subscriptionId: subscriptionId,
+            kind: .snapshot,
+            seq: seq,
+            snapshot: snapshot,
+            delta: nil
+        )
+    }
+
+    init(
+        subscriptionId: String,
+        seq: Int,
+        conversationSnapshot: [[String: Any]],
+        metadata: [String: Any]
+    ) {
+        self.init(
+            subscriptionId: subscriptionId,
+            kind: .snapshot,
+            seq: seq,
+            snapshot: conversationSnapshot,
+            delta: nil,
+            snapshotMeta: metadata,
+            snapshotMessages: ConversationMessage.parseMessages(conversationSnapshot)
+        )
+    }
+
+    init(subscriptionId: String, seq: Int, delta: DeltaPayload) {
+        self.init(
+            subscriptionId: subscriptionId,
+            kind: .delta,
+            seq: seq,
+            snapshot: nil,
+            delta: delta
+        )
+    }
+
     /// Parse a daemon notification into a SubscriptionPush, or nil if it isn't one.
     /// Chat-channel payloads are decoded into typed values here so the caller's
     /// isolation domain (off-main in the live frame pump) pays the decode cost.
-    static func parse(method: String, params: Any) -> SubscriptionPush? {
+    static func parse(method: String, params: Any) -> Self? {
         guard method == "subscription.push",
               let dict = params as? [String: Any],
               let subscriptionId = dict["subscriptionId"] as? String,
@@ -105,53 +208,60 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
             return nil
         }
 
-        if let kindStr = dict["kind"] as? String, kindStr == "snapshot" {
-            // Collection channels: snapshot is an array of entities.
-            if let snapshot = dict["snapshot"] as? [[String: Any]] {
-                return SubscriptionPush(
-                    subscriptionId: subscriptionId,
-                    kind: .snapshot,
-                    seq: seq,
-                    snapshot: snapshot,
-                    delta: nil
-                )
-            }
-            // Chat channel: snapshot is an object with a "messages" array plus
-            // snapshot-level metadata/activity flags (PROTOCOL §7.1).
-            if let snapshotObj = dict["snapshot"] as? [String: Any],
-               let messages = snapshotObj["messages"] as? [[String: Any]] {
-                var meta = snapshotObj
-                meta.removeValue(forKey: "messages")
-                return SubscriptionPush(
-                    subscriptionId: subscriptionId,
-                    kind: .snapshot,
-                    seq: seq,
-                    snapshot: messages,
-                    delta: nil,
-                    snapshotMeta: meta,
-                    snapshotMessages: messages.compactMap { ConversationMessage.parseMessage($0) }
-                )
-            }
-            return nil // Malformed: no snapshot array and no snapshot.messages
-        } else if let kindStr = dict["kind"] as? String, kindStr == "delta" {
-            guard let deltaDict = dict["delta"] as? [String: Any] else {
-                return nil // Malformed: delta push must have "delta" field
-            }
-            let added = (deltaDict["added"] as? [[String: Any]]) ?? []
-            let updated = (deltaDict["updated"] as? [[String: Any]]) ?? []
-            let removedIds = (deltaDict["removedIds"] as? [String]) ?? []
-            let delta = DeltaPayload(
-                added: added, updated: updated, removedIds: removedIds,
-                chatBlocks: DeltaPayload.decodeChatBlocks(added: added, updated: updated))
-            return SubscriptionPush(
+        if dict["kind"] as? String == "snapshot" {
+            return parseSnapshot(dict: dict, subscriptionId: subscriptionId, seq: seq)
+        }
+        guard dict["kind"] as? String == "delta",
+              let deltaDict = dict["delta"] as? [String: Any] else {
+            return nil // Malformed or unknown push kind.
+        }
+        let added = (deltaDict["added"] as? [[String: Any]]) ?? []
+        let updated = (deltaDict["updated"] as? [[String: Any]]) ?? []
+        let removedIds = (deltaDict["removedIds"] as? [String]) ?? []
+        let delta = DeltaPayload(
+            added: added,
+            updated: updated,
+            removedIds: removedIds,
+            chatBlocks: DeltaPayload.decodeChatBlocks(added: added, updated: updated)
+        )
+        return Self(
+            subscriptionId: subscriptionId,
+            kind: .delta,
+            seq: seq,
+            snapshot: nil,
+            delta: delta
+        )
+    }
+
+    private static func parseSnapshot(
+        dict: [String: Any],
+        subscriptionId: String,
+        seq: Int
+    ) -> Self? {
+        if let snapshot = dict["snapshot"] as? [[String: Any]] {
+            return Self(
                 subscriptionId: subscriptionId,
-                kind: .delta,
+                kind: .snapshot,
                 seq: seq,
-                snapshot: nil,
-                delta: delta
+                snapshot: snapshot,
+                delta: nil
             )
         }
-        return nil
+        guard let snapshotObject = dict["snapshot"] as? [String: Any],
+              let messages = snapshotObject["messages"] as? [[String: Any]] else {
+            return nil
+        }
+        var metadata = snapshotObject
+        metadata.removeValue(forKey: "messages")
+        return Self(
+            subscriptionId: subscriptionId,
+            kind: .snapshot,
+            seq: seq,
+            snapshot: messages,
+            delta: nil,
+            snapshotMeta: metadata,
+            snapshotMessages: ConversationMessage.parseMessages(messages)
+        )
     }
 }
 
@@ -219,7 +329,7 @@ class DeltaReconciler<T> {
 
     /// Current collection as an array preserving server snapshot/insertion order.
     func values() -> [T] {
-        return orderedIds.compactMap { items[$0] }
+        orderedIds.compactMap { items[$0] }
     }
 
     /// Insert or update an already-normalized value without touching sequence

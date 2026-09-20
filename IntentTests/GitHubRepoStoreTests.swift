@@ -1,11 +1,17 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 @MainActor
 struct GitHubRepoStoreTests {
+    func repoResult(_ outcome: GitHubRepoSearchOutcome) -> (repos: [GitHubRepo], failed: Bool) {
+        switch outcome {
+        case .failed: ([], true)
+        case .results(let repos): (repos, false)
+        }
+    }
 
-    private func makeRepoDict(
+    func makeRepoDict(
         owner: String = "intent-hq",
         name: String = "intentd",
         htmlUrl: String? = "https://github.com/intent-hq/intentd",
@@ -17,6 +23,38 @@ struct GitHubRepoStoreTests {
         if let defaultBranch { dict["defaultBranch"] = defaultBranch }
         if let updatedAt { dict["updatedAt"] = updatedAt }
         return dict
+    }
+
+    /// A fake whose three load reads answer immediately with one recent and
+    /// one own repo, plus a store that has completed its cold load over it.
+    func makeLoadedStore(
+        configured: Bool = true
+    ) async -> (store: GitHubRepoStore, fake: FakeConnectionManager) {
+        let fake = FakeConnectionManager()
+        fake.responseMap["github.authStatus"] = ["isConfigured": configured]
+        fake.responseMap["repo.list"] = [
+            "repos": [
+                [
+                    "path": "/repos/monorepo", "name": "monorepo", "owner": "intent-hq",
+                    "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-10T10:00:00Z"
+                ]
+            ]
+        ]
+        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict(name: "cached")]]
+        let store = GitHubRepoStore(connectionManager: fake)
+        await store.loadIfNeeded()
+        return (store, fake)
+    }
+
+    /// Poll (bounded) until the condition holds — avoids fixed-sleep
+    /// flakiness for assertions on Task-spawned background refreshes.
+    /// Records a failure on timeout so a missed update cannot pass silently.
+    func waitFor(_ description: String = "condition", _ condition: () -> Bool) async throws {
+        for _ in 0..<200 {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        Issue.record("Timed out waiting for \(description)")
     }
 
     // MARK: - Model parsing
@@ -56,13 +94,13 @@ struct GitHubRepoStoreTests {
     @Test func rewritesPartialSlashQueries() {
         #expect(GitHubRepoStore.rewriteSearchQuery("intent-hq/") == "user:intent-hq")
         #expect(GitHubRepoStore.rewriteSearchQuery("/intentd") == "intentd")
-        #expect(GitHubRepoStore.rewriteSearchQuery("/") == "")
+        #expect(GitHubRepoStore.rewriteSearchQuery("/").isEmpty)
     }
 
     @Test func leavesBareQueriesUnchanged() {
         #expect(GitHubRepoStore.rewriteSearchQuery("intentd") == "intentd")
-        #expect(GitHubRepoStore.rewriteSearchQuery("") == "")
-        #expect(GitHubRepoStore.rewriteSearchQuery("   ") == "")
+        #expect(GitHubRepoStore.rewriteSearchQuery("").isEmpty)
+        #expect(GitHubRepoStore.rewriteSearchQuery("   ").isEmpty)
     }
 
     // MARK: - Auth status
@@ -77,13 +115,19 @@ struct GitHubRepoStoreTests {
         #expect(fake.didCallMethod("github.authStatus"))
     }
 
-    @Test func fetchAuthStatusErrorLeavesUnconfigured() async {
+    @Test func fetchAuthStatusErrorReturnsNilAndKeepsIsConfigured() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        fake.errorMap["github.authStatus"] = NSError(domain: "t", code: -1)
+        store.isConfigured = true
+        fake.errorMap["github.authStatus"] = NSError(
+            domain: "t",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "socket closed"]
+        )
         let configured = await store.fetchAuthStatus()
-        #expect(configured == false)
-        #expect(store.isConfigured == false)
+        #expect(configured == nil)
+        #expect(store.isConfigured == true)
+        #expect(store.lastError == "socket closed")
     }
 
     // MARK: - fetchRecentRepos
@@ -93,32 +137,38 @@ struct GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["repo.list"] = [
             "repos": [
-                ["path": "/repos/monorepo", "name": "monorepo", "owner": "intent-hq",
-                 "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-10T10:00:00Z"],
-                ["path": "/repos/local-only", "name": "local-only",
-                 "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-09T10:00:00Z"],
-                ["path": "/repos/intentd", "name": "intentd", "owner": "intent-hq",
-                 "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-08T10:00:00Z"],
+                [
+                    "path": "/repos/monorepo", "name": "monorepo", "owner": "intent-hq",
+                    "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-10T10:00:00Z"
+                ],
+                [
+                    "path": "/repos/local-only", "name": "local-only",
+                    "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-09T10:00:00Z"
+                ],
+                [
+                    "path": "/repos/intentd", "name": "intentd", "owner": "intent-hq",
+                    "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-08T10:00:00Z"
+                ]
             ]
         ]
         await store.fetchRecentRepos()
         #expect(store.recentRepos.map(\.fullName) == ["intent-hq/monorepo", "intent-hq/intentd"])
     }
 
-    @Test func fetchRecentReposErrorLeavesRecentsUnchanged() async {
+    @Test func fetchRecentReposErrorLeavesRecentsUnchanged() async throws {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        let existing = GitHubRepo.parseRepo(makeRepoDict())!
+        let existing = try #require(GitHubRepo.parseRepo(makeRepoDict()))
         store.recentRepos = [existing]
         fake.errorMap["repo.list"] = NSError(domain: "t", code: -1)
         await store.fetchRecentRepos()
         #expect(store.recentRepos == [existing])
     }
 
-    @Test func fetchRecentReposMalformedResponseLeavesRecentsUnchanged() async {
+    @Test func fetchRecentReposMalformedResponseLeavesRecentsUnchanged() async throws {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        let existing = GitHubRepo.parseRepo(makeRepoDict())!
+        let existing = try #require(GitHubRepo.parseRepo(makeRepoDict()))
         store.recentRepos = [existing]
         fake.responseMap["repo.list"] = ["unexpected": "shape"]
         await store.fetchRecentRepos()
@@ -132,7 +182,7 @@ struct GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.repos.list"] = [
             "repos": [makeRepoDict(name: "a"), makeRepoDict(name: "b")],
-            "nextToken": "tok-1",
+            "nextToken": "tok-1"
         ]
         await store.fetchOwnRepos()
         #expect(store.ownRepos.map(\.name) == ["a", "b"])
@@ -160,7 +210,8 @@ struct GitHubRepoStoreTests {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.errorMap["github.repos.list"] = NSError(
-            domain: "t", code: -1,
+            domain: "t",
+            code: -1,
             userInfo: [NSLocalizedDescriptionKey: "boom"]
         )
         await store.fetchOwnRepos()
@@ -168,59 +219,72 @@ struct GitHubRepoStoreTests {
         #expect(store.lastError == "boom")
         #expect(store.isLoading == false)
     }
+}
 
+extension GitHubRepoStoreTests {
     // MARK: - searchRepos
 
     @Test func searchReposSendsRewrittenQuery() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict()]]
-        let results = await store.searchRepos(query: "intent-hq/intentd")
+        let result = repoResult(await store.searchRepos(query: "intent-hq/intentd"))
         let params = fake.paramsForMethod("github.repos.search")
         #expect(params.count == 1)
         #expect(params[0]["query"] as? String == "intentd user:intent-hq")
-        #expect(results?.count == 1)
+        #expect(result.repos.count == 1)
+        #expect(!result.failed)
     }
 
     @Test func searchReposSendsBareQueryVerbatim() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.repos.search"] = ["repos": []]
-        let results = await store.searchRepos(query: "intentd")
+        let result = repoResult(await store.searchRepos(query: "intentd"))
         #expect(fake.paramsForMethod("github.repos.search")[0]["query"] as? String == "intentd")
-        #expect(results?.isEmpty == true)
+        #expect(result.repos.isEmpty)
+        #expect(!result.failed)
     }
 
     @Test func searchReposEmptyQueryReturnsEmptyWithoutRequest() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        let results = await store.searchRepos(query: "   ")
-        #expect(results?.isEmpty == true)
+        let result = repoResult(await store.searchRepos(query: "   "))
+        #expect(result.repos.isEmpty)
+        #expect(!result.failed)
         #expect(fake.didCallMethod("github.repos.search") == false)
     }
 
-    @Test func searchReposDoesNotAssignPublishedResults() async {
-        // The debounced caller publishes results itself after its
-        // cancellation check, so an out-of-order older response can't
-        // overwrite a newer one's published results.
-        let fake = FakeConnectionManager()
-        let store = GitHubRepoStore(connectionManager: fake)
-        let existing = GitHubRepo.parseRepo(makeRepoDict())!
-        store.searchResults = [existing]
-        fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "other")]]
-        _ = await store.searchRepos(query: "other")
-        #expect(store.searchResults == [existing])
+    @Test func searchReposReturnsPerCallerResultsWithoutTouchingSharedLists() async {
+        // The store is shared by every picker on the session, so search
+        // results are returned to the caller (per-view state) and never
+        // stored: two pickers searching different queries each get their
+        // own answer and the cached lists stay untouched.
+        let (store, fake) = await makeLoadedStore()
+        let cachedRecents = store.recentRepos
+        let cachedOwn = store.ownRepos
+        fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "alpha")]]
+        let first = repoResult(await store.searchRepos(query: "alpha"))
+        fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "beta")]]
+        let second = repoResult(await store.searchRepos(query: "beta"))
+        #expect(first.repos.map(\.name) == ["alpha"])
+        #expect(second.repos.map(\.name) == ["beta"])
+        #expect(!first.failed && !second.failed)
+        #expect(store.recentRepos == cachedRecents)
+        #expect(store.ownRepos == cachedOwn)
     }
 
     @Test func searchReposErrorSetsLastErrorAndReturnsNil() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.errorMap["github.repos.search"] = NSError(
-            domain: "t", code: -1,
+            domain: "t",
+            code: -1,
             userInfo: [NSLocalizedDescriptionKey: "search down"]
         )
-        let results = await store.searchRepos(query: "intentd")
-        #expect(results == nil)
+        let result = repoResult(await store.searchRepos(query: "intentd"))
+        #expect(result.failed)
+        #expect(result.repos.isEmpty)
         #expect(store.lastError == "search down")
         #expect(store.isLoading == false)
     }
@@ -262,7 +326,7 @@ struct GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.branches.list"] = [
             "branches": ["main", "dev"],
-            "nextToken": "tok-1",
+            "nextToken": "tok-1"
         ]
         let branches = try await store.fetchRemoteBranches(owner: "intent-hq", repo: "intentd")
         #expect(branches == ["main", "dev"])
@@ -283,7 +347,9 @@ struct GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.branches.list"] = ["branches": ["feature/x"]]
         let branches = try await store.fetchRemoteBranches(
-            owner: "intent-hq", repo: "intentd", prefix: "feature/"
+            owner: "intent-hq",
+            repo: "intentd",
+            prefix: "feature/"
         )
         #expect(branches == ["feature/x"])
         let calls = fake.paramsForMethod("github.branches.list")

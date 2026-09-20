@@ -1,17 +1,21 @@
 import Foundation
+import Network
 
 /// Merges the iCloud-synced backend registry (read by
 /// `SyncedBackendRegistry.listBackends()`) into the app's saved connections.
 /// iOS has no opt-out: every live registry record WITH a cert fingerprint
 /// appears as a saved connection (fingerprint-less records are never
-/// auto-added — no pinned cert means a plain-`ws://` fallback that would
-/// leak the synced token), a newer remote copy overwrites the local fields
+/// auto-added — without a pinned cert the transport refuses to connect
+/// (ios#251), so the record could only ever surface as a re-pair prompt
+/// for a host this device never trusted), a newer remote copy overwrites the local fields
 /// (last-writer-wins on `updatedAt`), and a tombstone removes the matching
 /// local connection — matched by cert fingerprint first, `host:port` as
 /// fallback. Absence is NOT deletion: local-only connections that predate
 /// sync are never removed just because the registry doesn't list them (they
 /// get pushed to the registry by the write-back path instead).
 enum SyncedBackendConnectionMerge {
+    // Date.timeIntervalSince1970 is expressed in seconds.
+    private static let millisecondsPerSecond: TimeInterval = 1000
 
     /// Outcome of one merge pass over a saved-connections list.
     struct Result: Equatable {
@@ -46,7 +50,7 @@ enum SyncedBackendConnectionMerge {
                 // delete the fresh pairing.
                 let localClock =
                     existing.syncUpdatedAt
-                    ?? existing.server.pairedAt.timeIntervalSince1970 * 1000
+                    ?? existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond
                 if localClock > record.updatedAt { continue }
                 result.removedIds.append(existing.id)
                 result.connections.remove(at: index)
@@ -61,19 +65,18 @@ enum SyncedBackendConnectionMerge {
                 if let applied = existing.syncUpdatedAt {
                     if record.updatedAt <= applied { continue }
                 } else if record.updatedAt
-                    < existing.server.pairedAt.timeIntervalSince1970 * 1000
-                {
+                    < existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond {
                     continue
                 }
                 result.connections[index] = apply(record, to: existing)
                 result.updatedIds.append(existing.id)
             } else {
                 // Never auto-add a fingerprint-less record: without a pinned
-                // cert the socket falls back to plain ws://, which would send
-                // the synced bearer token in cleartext to an unauthenticated
-                // host. (Existing fingerprint-less locals were paired by the
-                // user on this device; the host:port fallback above can still
-                // update them.)
+                // cert the transport refuses to connect (ios#251), so the
+                // record would only ever surface as a re-pair prompt for a
+                // host this device never trusted. (Existing fingerprint-less
+                // locals were paired by the user on this device; the
+                // host:port fallback above can still update them.)
                 guard !normalizeFingerprint(record.fingerprint).isEmpty,
                     !candidateHosts(of: record).isEmpty
                 else { continue }
@@ -92,22 +95,22 @@ enum SyncedBackendConnectionMerge {
     /// DIFFERENT fingerprint at the same address is never matched — that is
     /// another machine reusing the IP.
     static func matchIndex(
-        for record: SyncedBackendRecord, in connections: [StoredConnection]
+        for record: SyncedBackendRecord,
+        in connections: [StoredConnection]
     ) -> Int? {
         let fingerprint = normalizeFingerprint(record.fingerprint)
         if !fingerprint.isEmpty,
-            let index = connections.firstIndex(where: {
-                normalizeFingerprint($0.server.certFingerprint) == fingerprint
-            })
-        {
+            let index = connections.firstIndex(where: { connection in
+                normalizeFingerprint(connection.server.certFingerprint) == fingerprint
+            }) {
             return index
         }
         let hosts = Set(candidateHosts(of: record).map(normalizeHost))
-        return connections.firstIndex(where: { connection in
+        return connections.firstIndex { connection in
             normalizeFingerprint(connection.server.certFingerprint).isEmpty
                 && connection.server.port == record.port
                 && !hosts.isDisjoint(with: connection.server.hosts.map(normalizeHost))
-        })
+        }
     }
 
     /// Same fingerprint normalization as `SyncedBackendRecord.registryKey`.
@@ -120,23 +123,28 @@ enum SyncedBackendConnectionMerge {
     }
 
     /// The record's candidate hosts: primary `host` first, then the rest of
-    /// `hosts`, deduped — keeping only hosts usable in a WebSocket URL,
-    /// bracket-normalizing raw IPv6 literals. Registry strings are untrusted
+    /// `hosts`, keeping only hosts usable in a WebSocket URL and
+    /// bracket-normalizing raw IPv6 literals, then deduped. Validation runs
+    /// BEFORE dedup so `2001:DB8::1` and `[2001:db8::1]` collapse to one
+    /// route and an unusable primary (e.g. padded with spaces) never masks
+    /// a usable spelling of the same host. Registry strings are untrusted
     /// input and `ConnectionManager.raceHosts` force-unwraps `URL(string:)`,
     /// so a malformed host must never survive the merge.
     static func candidateHosts(of record: SyncedBackendRecord) -> [String] {
         PersistenceManager.mergeHostLists(
-            existing: [record.host], incoming: record.hosts
-        ).compactMap(usableHost)
+            existing: [record.host].compactMap(usableHost),
+            incoming: record.hosts.compactMap(usableHost)
+        )
     }
 
     /// The URL-embeddable form of the host string, or nil when it has no
-    /// safe form. Accepts a plain DNS name / IPv4 address or an IPv6
-    /// literal — raw IPv6 strings (intentd's pairing_hosts advertises
+    /// safe form. Accepts a structurally valid DNS name / IPv4 address or an
+    /// IPv6 literal — raw IPv6 strings (intentd's pairing_hosts advertises
     /// unbracketed `2001:db8::1` forms) are bracket-normalized. Anything
     /// else is rejected: a deterministic allowlist on purpose, since iOS
     /// 17+'s lenient URL parser would percent-encode junk instead of
-    /// failing, hiding the problem until connect.
+    /// failing, hiding the problem until connect. Spelling is preserved
+    /// (`MAC.Local` stays as entered); callers dedup on `normalizeHost`.
     static func usableHost(_ raw: String) -> String? {
         guard !raw.isEmpty else { return nil }
         let inner: Substring
@@ -146,15 +154,53 @@ enum SyncedBackendConnectionMerge {
         } else if raw.contains(":") {
             inner = raw[...]
         } else {
-            let usable = raw.allSatisfy { char in
-                char.isLetter && char.isASCII || char.isNumber && char.isASCII
-                    || char == "-" || char == "." || char == "_"
-            }
-            return usable ? raw : nil
+            return isValidNameOrIPv4(raw) ? raw : nil
         }
-        // IPv6 literal (bare or bracketed): hex digits and colons only.
-        return inner.allSatisfy { $0.isHexDigit && $0.isASCII || $0 == ":" }
-            ? "[\(inner)]" : nil
+        // IPv6 literal (bare or bracketed): hex digits and colons only, and
+        // structurally valid — the character allowlist alone admits `::::`.
+        guard inner.allSatisfy({ $0.isHexDigit && $0.isASCII || $0 == ":" }),
+            IPv6Address(String(inner)) != nil
+        else { return nil }
+        return "[\(inner)]"
+    }
+
+    // RFC 1035 presentation-form limits.
+    private static let maxHostNameLength = 253
+    private static let maxHostLabelLength = 63
+    private static let ipv4OctetCount = 4
+    private static let maxIPv4OctetDigits = 3
+    private static let maxIPv4OctetValue = 255
+
+    /// Structural check for the non-IPv6 branch (ios#341). A DNS name is
+    /// dot-separated labels of 1–63 ASCII letters/digits/hyphens/underscores
+    /// (underscores stay allowed for local names such as `my-mac_2.local`),
+    /// no label starting or ending with a hyphen, no empty label — so no
+    /// leading, trailing or doubled dot — and at most 253 characters. A
+    /// string made only of digits and dots is an IPv4 literal and must be a
+    /// dotted quad with octets 0–255 and no leading zeros.
+    private static func isValidNameOrIPv4(_ raw: String) -> Bool {
+        guard raw.count <= maxHostNameLength else { return false }
+        let labels = raw.split(separator: ".", omittingEmptySubsequences: false)
+        if raw.allSatisfy({ $0 == "." || $0.isNumber && $0.isASCII }) {
+            return labels.count == ipv4OctetCount && labels.allSatisfy(isIPv4Octet)
+        }
+        return labels.allSatisfy(isDNSLabel)
+    }
+
+    private static func isDNSLabel(_ label: Substring) -> Bool {
+        guard !label.isEmpty, label.count <= maxHostLabelLength,
+            label.first != "-", label.last != "-"
+        else { return false }
+        return label.allSatisfy { char in
+            char.isLetter && char.isASCII || char.isNumber && char.isASCII
+                || char == "-" || char == "_"
+        }
+    }
+
+    private static func isIPv4Octet(_ octet: Substring) -> Bool {
+        guard !octet.isEmpty, octet.count <= maxIPv4OctetDigits, let value = Int(octet), value <= maxIPv4OctetValue
+        else { return false }
+        return octet.count == 1 || octet.first != "0"
     }
 
     /// Display name mirroring the desktop convention: the record label
@@ -172,29 +218,33 @@ enum SyncedBackendConnectionMerge {
     /// record identity, pairing date and connection history. Remote hosts
     /// come first (primary route); locally learned extra routes are kept.
     private static func apply(
-        _ record: SyncedBackendRecord, to existing: StoredConnection
+        _ record: SyncedBackendRecord,
+        to existing: StoredConnection
     ) -> StoredConnection {
         StoredConnection(
             id: existing.id,
             server: PairedServer(
                 hosts: PersistenceManager.mergeHostLists(
-                    existing: candidateHosts(of: record), incoming: existing.server.hosts),
+                    existing: candidateHosts(of: record),
+                    incoming: existing.server.hosts
+                ),
                 port: record.port,
                 name: existing.server.name,
                 pairedAt: existing.server.pairedAt,
                 certFingerprint: fingerprintOrNil(record) ?? existing.server.certFingerprint,
                 // Registry records don't carry the tunnel address; keep the
                 // locally learned one.
-                tcAddress: existing.server.tcAddress),
+                tcAddress: existing.server.tcAddress
+            ),
             token: record.token,
             displayName: displayName(for: record),
             lastConnectedAt: existing.lastConnectedAt,
-            syncUpdatedAt: record.updatedAt)
+            syncUpdatedAt: record.updatedAt
+        )
     }
 
     private static func makeConnection(from record: SyncedBackendRecord, now: Date)
-        -> StoredConnection
-    {
+        -> StoredConnection {
         let name = displayName(for: record)
         return StoredConnection(
             server: PairedServer(
@@ -202,10 +252,12 @@ enum SyncedBackendConnectionMerge {
                 port: record.port,
                 name: name,
                 pairedAt: now,
-                certFingerprint: fingerprintOrNil(record)),
+                certFingerprint: fingerprintOrNil(record)
+            ),
             token: record.token,
             displayName: name,
-            syncUpdatedAt: record.updatedAt)
+            syncUpdatedAt: record.updatedAt
+        )
     }
 
     private static func fingerprintOrNil(_ record: SyncedBackendRecord) -> String? {
@@ -223,5 +275,9 @@ struct SyncedBackendMergeOutcome: Equatable {
     /// True when a tombstone removed the connection that was active — the
     /// caller must disconnect and route away from it.
     var removedActiveConnection: Bool
+    /// True when the merge was skipped because the saved-connections blob
+    /// exists but could not be decoded; nothing was written so the original
+    /// blob is preserved (intent-hq/ios#265).
+    var registryUndecodable: Bool = false
     var changed: Bool { !(addedIds.isEmpty && updatedIds.isEmpty && removedIds.isEmpty) }
 }

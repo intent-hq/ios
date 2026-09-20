@@ -1,13 +1,20 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 struct TaskStatsTests {
     private func makeNote(id: String, taskStatus: String?) -> Note {
         Note(
-            id: id, title: "Task \(id)", content: "", tags: [],
-            isDefault: false, isArchived: false, taskStatus: taskStatus,
-            parentId: "spec", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z"
+            id: id,
+            title: "Task \(id)",
+            content: "",
+            tags: [],
+            isDefault: false,
+            isArchived: false,
+            taskStatus: taskStatus,
+            parentId: "spec",
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z"
         )
     }
 
@@ -30,7 +37,7 @@ struct TaskStatsTests {
             makeNote(id: "d", taskStatus: "not_started"),
             makeNote(id: "e", taskStatus: "waiting"),
             makeNote(id: "f", taskStatus: "discussion_needed"),
-            makeNote(id: "g", taskStatus: "blocked"),
+            makeNote(id: "g", taskStatus: "blocked")
         ]
         let content = ["a", "b", "c", "d", "e", "f", "g"].map { link("Task", $0) }.joined(separator: "\n")
         let stats = TaskContentParser.parseTaskStats(content: content, notes: notes)
@@ -40,7 +47,7 @@ struct TaskStatsTests {
     @Test func cancelledTasksAreExcludedFromTotal() {
         let notes = [
             makeNote(id: "a", taskStatus: "cancelled"),
-            makeNote(id: "b", taskStatus: "complete"),
+            makeNote(id: "b", taskStatus: "complete")
         ]
         let content = link("Cancelled", "a") + "\n" + link("Done", "b")
         let stats = TaskContentParser.parseTaskStats(content: content, notes: notes)

@@ -12,11 +12,6 @@ import Testing
 /// registry of known thread-hopping callback APIs and the guard that keeps
 /// their closures explicitly `@Sendable`.
 struct ObjCCallbackIsolationTests {
-
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // IntentTests/
-        .deletingLastPathComponent()  // repo root
-
     /// Known thread-hopping ObjC callback APIs. A call site passes only if
     /// its closure literal opens with `{ @Sendable` or the call is `await`-ed
     /// (async overloads hop isolation correctly). The AVCapture* delegate
@@ -31,7 +26,7 @@ struct ObjCCallbackIsolationTests {
         "AVAudioApplication.requestRecordPermission",  // arbitrary queue
         ".setSampleBufferDelegate(",                // AVCaptureVideoDataOutput
         ".setMetadataObjectsDelegate(",             // AVCaptureMetadataOutput
-        ".addObserver(forName",                     // NotificationCenter — posting thread
+        ".addObserver(forName"                     // NotificationCenter — posting thread
     ]
 
     /// How many lines below a match to search for the opening `{` of a
@@ -40,11 +35,12 @@ struct ObjCCallbackIsolationTests {
 
     @Test func threadHoppingCallbackClosuresAreExplicitlySendable() throws {
         var violations: [String] = []
-        for file in try Self.swiftFiles(under: Self.repoRoot.appendingPathComponent("Intent")) {
-            let lines = try String(contentsOf: file, encoding: .utf8)
+        let inputs = try TestBundleInputs.current()
+        let files = try inputs.swiftFiles(under: "Intent")
+        try #require(!files.isEmpty, "Intent/ contains no bundled Swift inputs")
+        for file in files {
+            let lines = try String(contentsOf: file.url, encoding: .utf8)
                 .components(separatedBy: "\n")
-            let relativePath = file.path.replacingOccurrences(
-                of: Self.repoRoot.path + "/", with: "")
             for (index, line) in lines.enumerated() {
                 guard !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") else { continue }
                 for api in Self.threadHoppingCallbackAPIs {
@@ -52,16 +48,18 @@ struct ObjCCallbackIsolationTests {
                     guard !Self.callSiteIsSafe(lines: lines, lineIndex: index, matchRange: matchRange)
                     else { continue }
                     violations.append(
-                        "\(relativePath):\(index + 1): closure passed to `\(api)` must open "
+                        "\(file.path):\(index + 1): closure passed to `\(api)` must open "
                             + "with `{ @Sendable` (or the call must be awaited) — it is "
                             + "otherwise inferred MainActor-isolated and crashes on device "
-                            + "when invoked off-main; see 09c22b6.")
+                            + "when invoked off-main; see 09c22b6."
+                    )
                 }
             }
         }
         #expect(
             violations.isEmpty,
-            "Thread-hopping ObjC callback call sites missing explicit @Sendable (see 09c22b6):\n\(violations.joined(separator: "\n"))")
+            "Thread-hopping ObjC callback call sites missing explicit @Sendable (see 09c22b6):\n\(violations.joined(separator: "\n"))"
+        )
     }
 
     /// A match is safe when the call is `await`-ed, or the first closure
@@ -70,7 +68,9 @@ struct ObjCCallbackIsolationTests {
     /// text after the last `;` before the match, so an earlier semicolon-
     /// separated statement's `await` cannot mark the callback safe.
     private static func callSiteIsSafe(
-        lines: [String], lineIndex: Int, matchRange: Range<String.Index>
+        lines: [String],
+        lineIndex: Int,
+        matchRange: Range<String.Index>
     ) -> Bool {
         let line = lines[lineIndex]
         let ownStatementPrefix = line[..<matchRange.lowerBound]
@@ -89,14 +89,5 @@ struct ObjCCallbackIsolationTests {
             remainder = lines[nextLine]
         }
         return false
-    }
-
-    private static func swiftFiles(under directory: URL) throws -> [URL] {
-        let enumerator = try #require(
-            FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil),
-            "cannot enumerate \(directory.path)")
-        return enumerator.compactMap { $0 as? URL }
-            .filter { $0.pathExtension == "swift" }
-            .sorted { $0.path < $1.path }
     }
 }

@@ -2,7 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- intent:// deep links (pairing via intent://pair, protocol §5). -->
+	<key>AppIdentifierPrefix</key>
+	<string>$(AppIdentifierPrefix)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -16,28 +17,19 @@
 			</array>
 		</dict>
 	</array>
-	<!-- Multi-scene support for the pinned-backend windows
-	     (WindowGroup(for: BackendID.self)) on visionOS and iPad. iPhone
-	     never offers multiple scenes, so its behaviour is unchanged. -->
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<true/>
-	</dict>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+	</dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<!-- Add-only photo library access for the chat image "Save Image" action. -->
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Intent saves images from your conversations to your photo library when you choose Save Image.</string>
-	<!-- Team-ID prefix ("TEAMID.") for building keychain access-group names
-	     at runtime (SyncedBackendRegistry); iOS has no public entitlement
-	     introspection API. -->
-	<key>AppIdentifierPrefix</key>
-	<string>$(AppIdentifierPrefix)</string>
 </dict>
 </plist>

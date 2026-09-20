@@ -9,7 +9,8 @@ enum ImageInfoFormat {
     static func dimensionsText(for image: UIImage) -> String {
         dimensionsText(
             pixelWidth: Int((image.size.width * image.scale).rounded()),
-            pixelHeight: Int((image.size.height * image.scale).rounded()))
+            pixelHeight: Int((image.size.height * image.scale).rounded())
+        )
     }
 
     static func dimensionsText(pixelWidth: Int, pixelHeight: Int) -> String {
@@ -47,7 +48,7 @@ struct ImageActionMenuItems: View {
     let image: UIImage
     /// Original encoded bytes when known (base64 image blocks); the size
     /// row falls back to a PNG re-encode of the loaded image when absent.
-    var originalData: Data? = nil
+    var originalData: Data?
 
     var body: some View {
         Button {
@@ -89,13 +90,15 @@ struct SquareImageThumbnail: View {
         Image(uiImage: image)
             .resizable()
             .scaledToFill()
+            .accessibilityLabel("Attached image")
             .frame(width: side, height: side)
             .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius)
                     .strokeBorder(
                         Theme.border(for: colorScheme),
-                        lineWidth: Constants.Conversation.ImageThumbnail.borderWidth)
+                        lineWidth: Constants.Conversation.ImageThumbnail.borderWidth
+                    )
             )
     }
 }

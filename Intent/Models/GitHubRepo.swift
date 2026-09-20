@@ -16,11 +16,11 @@ struct GitHubRepo: Identifiable, Equatable {
     /// The canonical `owner/name` display form.
     var fullName: String { "\(owner)/\(name)" }
 
-    static func parseRepo(_ dict: [String: Any]) -> GitHubRepo? {
+    static func parseRepo(_ dict: [String: Any]) -> Self? {
         guard let owner = dict["owner"] as? String,
               let name = dict["name"] as? String,
               !owner.isEmpty, !name.isEmpty else { return nil }
-        return GitHubRepo(
+        return Self(
             owner: owner,
             name: name,
             htmlUrl: dict["htmlUrl"] as? String,
@@ -28,4 +28,26 @@ struct GitHubRepo: Identifiable, Equatable {
             updatedAt: dict["updatedAt"] as? String
         )
     }
+}
+
+/// One repo's branch names plus its default branch, as the branch picker
+/// renders them. Produced both by the authoritative `github.branches.list`
+/// read and by the cached-first `github.branches.listCached` paint
+/// (PROTOCOL §5.27); `defaultBranch` is nil when unresolvable.
+struct GitHubBranchListing: Equatable {
+    let branches: [String]
+    let defaultBranch: String?
+}
+
+/// The branch step's state for one repo, owned by `GitHubRepoStore` so every
+/// consumer (two sheets on one session, a retry, a reconnect) renders one
+/// outcome: the authoritative listing, the cached-first paint shown only
+/// until it lands, and the last cold-load error (cleared by a success).
+struct GitHubBranchLoadState: Equatable {
+    var listing: GitHubBranchListing?
+    var paint: GitHubBranchListing?
+    var error: String?
+
+    /// What the branch step renders: authoritative first, else the paint.
+    var displayed: GitHubBranchListing? { listing ?? paint }
 }

@@ -41,21 +41,14 @@ class ScrollViewMomentumProxy {
     /// `.unavailable` when the scroll view has not been found, so the caller
     /// can fall back.
     func rePinIfRestingPastEnd(confirming: RestingGeometry?, isFollowing: Bool = false) -> RePinOutcome {
-        guard let scrollView else { return .unavailable }
-        let insets = scrollView.adjustedContentInset
+        guard let scrollView, let geometry = restingGeometry else { return .unavailable }
         let decision = ConversationTranscriptScrollPolicy.rePinDecision(
-            contentOffsetY: scrollView.contentOffset.y,
-            distanceToBottom: ConversationTranscriptScrollPolicy.distanceToBottom(
-                contentHeight: scrollView.contentSize.height,
-                contentOffsetY: scrollView.contentOffset.y,
-                containerHeight: scrollView.bounds.height,
-                bottomInset: insets.bottom
-            ),
-            isInteracting: isFollowing
-                || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating,
-            contentHeight: scrollView.contentSize.height,
-            containerHeight: scrollView.bounds.height,
-            verticalInsets: insets.top + insets.bottom
+            contentOffsetY: geometry.contentOffsetY,
+            distanceToBottom: geometry.distanceToBottom,
+            isInteracting: isFollowing || isInteracting,
+            contentHeight: geometry.contentHeight,
+            containerHeight: geometry.containerHeight,
+            verticalInsets: geometry.verticalInsets
         )
         switch decision {
         case .none:
@@ -63,15 +56,8 @@ class ScrollViewMomentumProxy {
         case .deferred:
             return .deferred(nil)
         case .rePin(let offsetY):
-            let geometry = RestingGeometry(
-                contentOffsetY: scrollView.contentOffset.y,
-                contentHeight: scrollView.contentSize.height,
-                boundsHeight: scrollView.bounds.height,
-                topInset: insets.top,
-                bottomInset: insets.bottom
-            )
             guard geometry == confirming else { return .deferred(geometry) }
-            AppLog.ui.debug("[SCROLL] Re-pinning past-end viewport from \(geometry.contentOffsetY) to \(offsetY)")
+            AppLog.userInterface.debug("[SCROLL] Re-pinning past-end viewport from \(geometry.contentOffsetY) to \(offsetY)")
             scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: offsetY), animated: false)
             return .rePinned
         }
@@ -85,15 +71,20 @@ class ScrollViewMomentumProxy {
         return scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
     }
 
-    /// Everything the re-pin decision reads: the adjusted insets are part of
-    /// it because the keyboard or safe area can change them between the two
-    /// confirming reads while offset, content size and bounds stay the same.
-    struct RestingGeometry: Equatable {
-        let contentOffsetY: CGFloat
-        let contentHeight: CGFloat
-        let boundsHeight: CGFloat
-        let topInset: CGFloat
-        let bottomInset: CGFloat
+    typealias RestingGeometry = ConversationTranscriptScrollPolicy.ViewportGeometry
+
+    /// One read of everything the landing and re-pin decisions compare, or
+    /// nil before the scroll view has been found.
+    var restingGeometry: RestingGeometry? {
+        guard let scrollView else { return nil }
+        let insets = scrollView.adjustedContentInset
+        return RestingGeometry(
+            contentOffsetY: scrollView.contentOffset.y,
+            contentHeight: scrollView.contentSize.height,
+            containerHeight: scrollView.bounds.height,
+            topInset: insets.top,
+            bottomInset: insets.bottom
+        )
     }
 
     enum RePinOutcome: Equatable {
@@ -105,15 +96,26 @@ class ScrollViewMomentumProxy {
         case unavailable
     }
 
+    /// Moves a resting viewport to `offsetY` without animation, so the lazy
+    /// stack lays out the rows there before a follow back to the end (#338);
+    /// false when the scroll view has not been found.
+    @discardableResult
+    func pageTo(offsetY: CGFloat) -> Bool {
+        guard let scrollView else { return false }
+        AppLog.userInterface.debug("[SCROLL] Paging blank viewport from \(scrollView.contentOffset.y) to \(offsetY)")
+        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: offsetY), animated: false)
+        return true
+    }
+
     /// Kills any ongoing deceleration by setting contentOffset to its current value.
     func stopMomentum() {
-        AppLog.ui.debug("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")
+        AppLog.userInterface.debug("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")
         guard let scrollView else {
-            AppLog.ui.warning("[SCROLL] WARNING: scrollView is nil, cannot stop momentum")
+            AppLog.userInterface.warning("[SCROLL] WARNING: scrollView is nil, cannot stop momentum")
             return
         }
         scrollView.setContentOffset(scrollView.contentOffset, animated: false)
-        AppLog.ui.debug("[SCROLL] Momentum stopped at offset \(scrollView.contentOffset)")
+        AppLog.userInterface.debug("[SCROLL] Momentum stopped at offset \(scrollView.contentOffset)")
     }
 }
 
@@ -128,7 +130,7 @@ class ScrollViewMomentumProxy {
 struct ScrollViewFinder: UIViewRepresentable {
     let proxy: ScrollViewMomentumProxy
 
-    func makeUIView(context: Context) -> FinderView {
+    func makeUIView(context _: Context) -> FinderView {
         let view = FinderView()
         view.isUserInteractionEnabled = false
         view.frame = .zero
@@ -136,7 +138,7 @@ struct ScrollViewFinder: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: FinderView, context: Context) {
+    func updateUIView(_ uiView: FinderView, context _: Context) {
         uiView.proxy = proxy
     }
 
@@ -159,12 +161,12 @@ struct ScrollViewFinder: UIViewRepresentable {
         private func resolveScrollView() {
             guard let proxy else { return }
             guard let scrollView = ScrollViewFinder.firstScrollViewAncestor(of: self) else {
-                AppLog.ui.warning("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
+                AppLog.userInterface.warning("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
                 return
             }
             if proxy.scrollView !== scrollView {
                 proxy.scrollView = scrollView
-                AppLog.ui.debug("[SCROLL] Found UIScrollView: \(scrollView)")
+                AppLog.userInterface.debug("[SCROLL] Found UIScrollView: \(scrollView)")
             }
             ScrollViewFinder.installKeyboardDismissTap(on: scrollView)
         }
@@ -183,13 +185,15 @@ struct ScrollViewFinder: UIViewRepresentable {
         @objc private func handleTap() {
             UIApplication.shared.sendAction(
                 #selector(UIResponder.resignFirstResponder),
-                to: nil, from: nil, for: nil
+                to: nil,
+                from: nil,
+                for: nil
             )
         }
 
         func gestureRecognizer(
-            _ gestureRecognizer: UIGestureRecognizer,
-            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+            _: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer
         ) -> Bool {
             true
         }

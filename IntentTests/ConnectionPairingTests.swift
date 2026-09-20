@@ -1,16 +1,15 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Tests for the connection display-name selection from a `host.status` result:
 /// prettyHostname > hostname > nil (caller falls back to host:port).
 struct ConnectionPairingTests {
-
     private func makePersistence(
         storage: InMemoryKeychainStorage
-    ) -> (manager: PersistenceManager, suiteName: String) {
+    ) throws -> (manager: PersistenceManager, suiteName: String) {
         let suiteName = "ConnectionPairingTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         return (PersistenceManager(defaults: defaults, keychainStorage: storage), suiteName)
     }
@@ -18,7 +17,7 @@ struct ConnectionPairingTests {
     @Test func prefersPrettyHostnameOverHostname() {
         let status: [String: Any] = [
             "prettyHostname": "Clement's Mac Studio",
-            "hostname": "ClementacStudio.local-domain",
+            "hostname": "ClementacStudio.local-domain"
         ]
         #expect(ConnectionPairing.displayName(fromHostStatus: status) == "Clement's Mac Studio")
     }
@@ -58,36 +57,93 @@ struct ConnectionPairingTests {
 
     @Test func nilSelectionFallsBackToHostPortInStoredConnection() {
         let server = PairedServer(
-            hosts: ["10.0.0.1"], port: 4242, name: "Intent", pairedAt: Date())
+            hosts: ["10.0.0.1"],
+            port: 4242,
+            name: "Intent",
+            pairedAt: Date()
+        )
         let stored = StoredConnection(server: server, token: "tok", displayName: nil)
         #expect(stored.displayName == "10.0.0.1:4242")
     }
 
-    @Test @MainActor func failedRepairKeepsOldRecordAndActivePointer() async {
+    @Test @MainActor func failedRepairKeepsOldRecordAndActivePointer() async throws {
         let storage = InMemoryKeychainStorage()
-        let setup = makePersistence(storage: storage)
+        let setup = try makePersistence(storage: storage)
         defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
         let old = setup.manager.upsertConnection(StoredConnection(
             server: PairedServer(
-                hosts: ["10.0.0.1"], port: 4242, name: "daemon", pairedAt: Date(),
-                certFingerprint: "aa:bb"),
-            token: "old-token"))
+                hosts: ["10.0.0.1"],
+                port: 4242,
+                name: "daemon",
+                pairedAt: Date(),
+                certFingerprint: "aa:bb"
+            ),
+            token: "old-token"
+        ))
         setup.manager.setActiveConnection(id: old.id)
         storage.setSaveFailure(true)
         let fake = FakeConnectionManager()
         fake.responseMap["host.status"] = ["prettyHostname": "Updated Name"]
         let repairedServer = PairedServer(
-            hosts: ["10.0.0.1"], port: 4242, name: "daemon", pairedAt: Date(),
-            certFingerprint: "aa:bb")
+            hosts: ["10.0.0.1"],
+            port: 4242,
+            name: "daemon",
+            pairedAt: Date(),
+            certFingerprint: "aa:bb"
+        )
 
         await #expect(throws: ConnectionPairing.PersistenceError.self) {
             try await ConnectionPairing.finalize(
-                server: repairedServer, token: "new-token", connection: fake,
-                persistence: setup.manager)
+                server: repairedServer,
+                token: "new-token",
+                connection: fake,
+                persistence: setup.manager
+            )
         }
 
         #expect(setup.manager.loadConnections() == [old])
         #expect(setup.manager.activeConnection()?.id == old.id)
+        #expect(fake.refreshHostRoutesCallCount == 0)
+    }
+
+    /// A pairing over an undecodable saved-connections blob must not replace
+    /// it with a one-entry list; it fails with a distinct, recoverable error
+    /// and leaves the blob and active pointer alone (intent-hq/ios#265).
+    @Test @MainActor func pairingOverUndecodableRegistryPreservesBlob() async throws {
+        let storage = InMemoryKeychainStorage()
+        let setup = try makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let manager = setup.manager
+        let undecodable = Data("{\"v\": 99, \"schema\": \"future\"}".utf8)
+        #expect(manager.saveDataToKeychain(
+            data: undecodable,
+            account: manager.keychainAccountConnections
+        ))
+        let fake = FakeConnectionManager()
+        fake.responseMap["host.status"] = ["prettyHostname": "New Mac"]
+        let server = PairedServer(
+            hosts: ["10.0.0.1"],
+            port: 4242,
+            name: "daemon",
+            pairedAt: Date(),
+            certFingerprint: "aa:bb"
+        )
+
+        await #expect(throws: ConnectionPairing.PersistenceError.registryUndecodable) {
+            try await ConnectionPairing.finalize(
+                server: server,
+                token: "new-token",
+                connection: fake,
+                persistence: manager
+            )
+        }
+
+        #expect(manager.loadDataFromKeychain(
+            account: manager.keychainAccountConnections
+        ) == undecodable)
+        #expect(manager.isConnectionRegistryUndecodable())
+        #expect(manager.activeConnection() == nil)
+        #expect(manager.defaults.string(forKey: manager.activeConnectionIdKey) == nil)
         #expect(fake.refreshHostRoutesCallCount == 0)
     }
 }

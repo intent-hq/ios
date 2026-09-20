@@ -1,9 +1,8 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 struct GitHubRepoSuggestionsTests {
-
     private func repo(_ owner: String, _ name: String) -> GitHubRepo {
         GitHubRepo(owner: owner, name: name, htmlUrl: nil, defaultBranch: nil, updatedAt: nil)
     }

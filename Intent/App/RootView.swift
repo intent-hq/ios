@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct RootView: View {
+    private static let reconnectPanelMaximumWidth: CGFloat = 320
+
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.horizontalSizeClass) var sizeClass
@@ -13,30 +15,37 @@ struct RootView: View {
     /// Token of this window's selection-handler registration, so disappear
     /// removes only this window's registration — never a successor's.
     @State private var selectionHandlerToken: UUID?
-    @State var showingWorkspaceDetail = false
-    @State var showingConversation = false
-    @State var conversationAgentId: String = ""
-    @State var conversationWorkspaceId: String = ""
-    @State var conversationAgentName: String = ""
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var showingConversation = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var conversationAgentId: String = "" // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var conversationWorkspaceId: String = "" // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var conversationAgentName: String = "" // swiftlint:disable:this private_swiftui_state
     // Compact (iPhone) note detail navigation — uses isPresented instead of noteStack
-    @State var showingNoteDetail = false
-    @State var noteDetailNoteId: String = ""
-    @State var noteDetailWorkspaceId: String = ""
-    @State var noteDetailNoteTitle: String = ""
-    @State var pendingConversationPush = false
-    @State var pendingNoteDetailPush = false
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var showingNoteDetail = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var noteDetailNoteId: String = "" // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var noteDetailWorkspaceId: String = "" // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var noteDetailNoteTitle: String = "" // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var pendingConversationPush = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var pendingNoteDetailPush = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     /// True while syncNavigationState() tears down the conversation for the iPad
     /// re-push dance, so the user-back onChange handler doesn't misfire.
-    @State var programmaticConversationDismiss = false
-    @State var noteStack = NavigationPath()
+    @State var programmaticConversationDismiss = false // swiftlint:disable:this private_swiftui_state
+    @State var handledConversationRequestId = 0 // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
 
-    /// The pushed conversation page. The target is resolved in the page's own
-    /// body, not in the destination closure: a sole-agent auto-open pushes the
-    /// conversation while the workspace push is still in flight, and the page
-    /// then shows the closure's value from when the workspace page was built —
-    /// before `syncNavigationState` wrote the ids, so a ConversationView bound
-    /// to the "" defaults (#275). The `conversation*` state is the fallback
-    /// once the coordinator has moved on (the pop animation).
     var conversationDestination: some View {
         ConversationDestinationView(
             fallback: conversationAgentId.isEmpty ? nil : ConversationDestinationView.Target(
@@ -87,65 +96,134 @@ struct RootView: View {
               NotificationManager.windowPresentsAlert(
                   source: event.sourceBackendID,
                   windowBackendID: session.backendID,
-                  supportsMultipleWindows: supportsMultipleWindows)
+                  supportsMultipleWindows: supportsMultipleWindows
+              )
         else { return nil }
         return event
     }
     #endif
 
-    var body: some View {
-        @Bindable var coordinator = coordinator
+    @ViewBuilder private var rootContent: some View {
         Group {
             if isWorkspaceFlow {
-                if sizeClass == .compact {
-                    // iPhone: standard NavigationStack with push/pop
-                    compactNavigationView
-                } else {
-                    // iPad: NavigationSplitView with sidebar selection
-                    NavigationSplitView {
-                        WorkspaceListSidebar(workspaceStore: session.workspaceStore)
-                            .navigationSplitViewColumnWidth(
-                                min: Constants.Root.sidebarMinimumWidth,
-                                ideal: Constants.Root.sidebarIdealWidth,
-                                max: Constants.Root.sidebarMaximumWidth)
-                    } detail: {
-                        detailContent
-                    }
-                    .navigationSplitViewStyle(.automatic)
-                }
+                workspaceFlowContent
             } else {
-                ZStack {
-                    // One SplashArtView spans loading and connecting. Keeping
-                    // it in this stable position preserves GIF playback across
-                    // the phase transition; the phase views render on top.
-                    if isLaunchSplash {
-                        SplashArtView()
-                    }
-                    switch coordinator.currentScreen {
-                    case .loading:
-                        LoadingView()
-                    case .pairing:
-                        PairingView()
-                    case .connecting:
-                        ConnectingView()
-                    case .connectionFailed(let error):
-                        ConnectionFailureView(
-                            errorMessage: error,
-                            isCertMismatch: ConnectionFailureView.isCertificateMismatchMessage(error),
-                            retryPolicy: coordinator.connectionFailureRetryPolicy
-                        )
-                    case .settings:
-                        SettingsView()
-                    case .disconnected:
-                        DisconnectedView()
-                    default:
-                        EmptyView()
-                    }
-                }
+                launchContent
             }
         }
-        .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration),
-                   value: String(describing: coordinator.currentScreen))
+    }
+
+    @ViewBuilder private var workspaceFlowContent: some View {
+        if sizeClass == .compact {
+            // iPhone: standard NavigationStack with push/pop
+            compactNavigationView
+        } else {
+            // iPad: NavigationSplitView with sidebar selection
+            NavigationSplitView {
+                WorkspaceListSidebar(workspaceStore: session.workspaceStore)
+                    .navigationSplitViewColumnWidth(
+                        min: Constants.Root.sidebarMinimumWidth,
+                        ideal: Constants.Root.sidebarIdealWidth,
+                        max: Constants.Root.sidebarMaximumWidth
+                    )
+            } detail: {
+                detailContent
+            }
+            .navigationSplitViewStyle(.automatic)
+        }
+    }
+
+    private var launchContent: some View {
+        ZStack {
+            // One SplashArtView spans loading and connecting. Keeping
+            // it in this stable position preserves GIF playback across
+            // the phase transition; the phase views render on top.
+            if isLaunchSplash {
+                SplashArtView()
+            }
+            switch coordinator.currentScreen {
+            case .loading:
+                LoadingView()
+            case .pairing:
+                PairingView()
+            case .connecting:
+                ConnectingView()
+            case .connectionFailed(let error):
+                ConnectionFailureView(
+                    errorMessage: error,
+                    isCertMismatch: ConnectionFailureView.isCertificateMismatchMessage(error),
+                    retryPolicy: coordinator.connectionFailureRetryPolicy
+                )
+            case .settings:
+                SettingsView()
+            case .disconnected:
+                DisconnectedView()
+            default:
+                EmptyView()
+            }
+        }
+    }
+
+    @ViewBuilder private var reconnectOverlay: some View {
+        if coordinator.isDisconnected {
+            ZStack {
+                // Light tinted backdrop — lets blurred content show through
+                Color.black.opacity(Constants.Root.reconnectBackdropOpacity)
+                    .ignoresSafeArea()
+                    .background(.ultraThinMaterial)
+                reconnectPanel
+            }
+            .transition(.opacity)
+            .animation(
+                .easeInOut(duration: Constants.Root.screenAnimationDuration),
+                value: coordinator.isDisconnected
+            )
+        }
+    }
+
+    private var reconnectPanel: some View {
+        VStack(spacing: Constants.Root.reconnectPanelSpacing) {
+            ProgressView()
+                .scaleEffect(Constants.Root.reconnectProgressScale)
+                .tint(.primary)
+
+            Text("Reconnecting...")
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Text("Connection to desktop app was lost")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            // Passive per-host cert-mismatch list: hosts that
+            // presented a wrong certificate during the reconnect
+            // race, while retries continue on the remaining hosts.
+            if !session.connection.certMismatches.isEmpty {
+                CertMismatchListView(mismatches: session.connection.certMismatches)
+                    .frame(maxWidth: Self.reconnectPanelMaximumWidth)
+            }
+
+            Button("Log Off") {
+                coordinator.onLogOff()
+            }
+            .buttonStyle(.bordered)
+            .tint(.primary)
+            .padding(.top, Constants.Root.reconnectButtonTopPadding)
+        }
+        .padding(Constants.Root.reconnectPanelPadding)
+        .background(.regularMaterial, in: RoundedRectangle(
+            cornerRadius: Constants.Root.reconnectPanelCornerRadius
+        ))
+    }
+
+    var body: some View {
+        @Bindable var coordinator = coordinator
+        rootContent
+        .animation(
+            .easeInOut(duration: Constants.Root.screenAnimationDuration),
+            value: String(describing: coordinator.currentScreen)
+        )
         .overlay(alignment: .top) {
             // On multi-window platforms only the source backend's window
             // renders the toast (windowPresentsAlert); on iPhone every
@@ -156,7 +234,8 @@ struct RootView: View {
                NotificationManager.windowPresentsAlert(
                    source: toast.sourceBackendID,
                    windowBackendID: session.backendID,
-                   supportsMultipleWindows: supportsMultipleWindows) {
+                   supportsMultipleWindows: supportsMultipleWindows
+               ) {
                 ToastView(
                     toast: toast,
                     onTap: {
@@ -175,6 +254,34 @@ struct RootView: View {
                 .padding(.top, Constants.Root.toastTopPadding)
             }
         }
+        .overlay(alignment: .bottom) {
+            // A live socket without its global subscription leaves every store
+            // blind to updates; surface the bounded retry failure to the user.
+            if case .failed = session.connection.globalSubscriptionState,
+               session.connection.connectionState == .connected,
+               !coordinator.isDisconnected {
+                HStack(spacing: Constants.Root.reconnectButtonTopPadding) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                    Text("Live updates unavailable")
+                        .font(.subheadline)
+                    Spacer(minLength: 0)
+                    Button("Retry") {
+                        session.connection.retryGlobalSubscription()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, Constants.Root.reconnectPanelSpacing)
+                .padding(.vertical, Constants.Root.reconnectButtonTopPadding)
+                .background(.regularMaterial, in: Capsule())
+                .padding(.horizontal, Constants.Root.reconnectPanelSpacing)
+                .padding(.bottom, Constants.Root.toastTopPadding)
+                .accessibilityIdentifier("global-subscription-failed-banner")
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .background {
             // visionOS: notification sounds (agent-completion chime and
             // workspace attention cue) are emitted from within THIS window's
@@ -184,51 +291,7 @@ struct RootView: View {
             windowFeedbackEmitter
         }
         .overlay {
-            if coordinator.isDisconnected {
-                ZStack {
-                    // Light tinted backdrop — lets blurred content show through
-                    Color.black.opacity(Constants.Root.reconnectBackdropOpacity)
-                        .ignoresSafeArea()
-                        .background(.ultraThinMaterial)
-
-                    VStack(spacing: Constants.Root.reconnectPanelSpacing) {
-                        ProgressView()
-                            .scaleEffect(Constants.Root.reconnectProgressScale)
-                            .tint(.primary)
-
-                        Text("Reconnecting...")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-
-                        Text("Connection to desktop app was lost")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-
-                        // Passive per-host cert-mismatch list: hosts that
-                        // presented a wrong certificate during the reconnect
-                        // race, while retries continue on the remaining hosts.
-                        if !session.connection.certMismatches.isEmpty {
-                            CertMismatchListView(
-                                mismatches: session.connection.certMismatches)
-                                .frame(maxWidth: 320)
-                        }
-
-                        Button("Log Off") {
-                            coordinator.onLogOff()
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.primary)
-                        .padding(.top, Constants.Root.reconnectButtonTopPadding)
-                    }
-                    .padding(Constants.Root.reconnectPanelPadding)
-                    .background(.regularMaterial, in: RoundedRectangle(
-                        cornerRadius: Constants.Root.reconnectPanelCornerRadius))
-                }
-                .transition(.opacity)
-                .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration),
-                           value: coordinator.isDisconnected)
-            }
+            reconnectOverlay
         }
         // intent://pair deep-link confirmation — presented over whichever
         // screen is current (first-run pairing or an existing connection).
@@ -254,7 +317,7 @@ struct RootView: View {
             guard let backendID = session.backendID else { return }
             selectionHandlerToken = notificationManager.registerAgentSelectionHandler(
                 for: backendID
-            ) { [weak coordinator] agentId, workspaceId, agentName, connectionId in
+            ) { [weak coordinator = coordinator] agentId, workspaceId, agentName, connectionId in
                 if supportsMultipleWindows {
                     // Raise this backend's window before navigating it.
                     openWindow(value: backendID)
@@ -275,10 +338,6 @@ struct RootView: View {
     }
 }
 
-/// The conversation page pushed by `RootView`; see `conversationDestination`.
-/// Reads the coordinator's screen when its body runs, so the page built by
-/// the push shows the conversation the coordinator navigated to, whatever the
-/// enclosing destination closure evaluated to earlier.
 struct ConversationDestinationView: View {
     struct Target: Equatable {
         let agentId: String
@@ -291,7 +350,7 @@ struct ConversationDestinationView: View {
     @Environment(AppCoordinator.self) private var coordinator
 
     private var target: Target? {
-        if case .agentConversation(let agentId, let workspaceId, let agentName) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, workspaceId, agentName) = coordinator.currentScreen {
             return Target(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
         }
         return fallback

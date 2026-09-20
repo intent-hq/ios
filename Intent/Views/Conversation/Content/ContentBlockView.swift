@@ -4,13 +4,13 @@ struct ContentBlockView: View {
     let block: ContentBlock
     let allBlocks: [ContentBlock]
     let workspaceId: String
-    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
+    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
     /// Block ids of this message with an agent.getMessageBlock hydration
     /// fetch in flight (slim projection, PROTOCOL §5.5).
     var hydratingBlockIds: Set<String> = []
     /// Fetch the full body of a slim-truncated block by id; absent → no
     /// hydration (bounded previews stay).
-    var onHydrateBlock: ((_ blockId: String) -> Void)? = nil
+    var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var thinkingExpanded = false
@@ -19,24 +19,39 @@ struct ContentBlockView: View {
     /// automatically once the full block merges in (dataTruncated clears).
     @State private var lightboxPendingHydration = false
 
+    private static let thinkingTopPadding: CGFloat = 4
+    private static let thinkingLabelSpacing: CGFloat = 4
+    private static let hydratingImageOpacity: Double = 0.6
+    private static let loadedImageOpacity: Double = 1
+    private static let loadingLabelSpacing: CGFloat = 4
+    private static let fileLabelSpacing: CGFloat = 6
+    private static let fileHorizontalPadding: CGFloat = 10
+    private static let fileVerticalPadding: CGFloat = 6
+    private static let fileBackgroundOpacity: Double = 0.5
+    private static let fileCornerRadius: CGFloat = 6
+
     var body: some View {
         switch block.type {
         case .text:
             if let text = block.resolvedText {
                 let cleaned = Self.stripSuggestedPrompts(text)
                 if !cleaned.isEmpty {
-                    MarkdownTextView(text: cleaned, onOpenURL: { url in
-                        if let link = NoteDetailView.parseIntentNoteLink(url) {
-                            let targetWorkspaceId = link.workspaceId ?? workspaceId
-                            if let onNavigateToNote = onNavigateToNote {
-                                onNavigateToNote(link.id, targetWorkspaceId, "Note")
-                            } else {
-                                coordinator.onSelectNote(link.id, workspaceId: targetWorkspaceId, noteTitle: "Note")
+                    MarkdownTextView(
+                        text: cleaned,
+                        onOpenURL: { url in
+                            if let link = NoteDetailView.parseIntentNoteLink(url) {
+                                let targetWorkspaceId = link.workspaceId ?? workspaceId
+                                if let onNavigateToNote {
+                                    onNavigateToNote(link.id, targetWorkspaceId, "Note")
+                                } else {
+                                    coordinator.onSelectNote(link.id, workspaceId: targetWorkspaceId, noteTitle: "Note")
+                                }
+                                return .handled
                             }
-                            return .handled
-                        }
-                        return .systemAction
-                    }, workspaceId: workspaceId)
+                            return .systemAction
+                        },
+                        workspaceId: workspaceId
+                    )
                 }
             }
 
@@ -57,8 +72,8 @@ struct ContentBlockView: View {
                     {
                         // Hydrate whichever side of the row was truncated
                         // (input and output are separate persisted blocks).
-                        if block.inputTruncated == true { hydrate(block.id) }
-                        if let result, result.outputTruncated == true { hydrate(result.id) }
+                        if block.inputTruncation.isTruncated { hydrate(block.id) }
+                        if let result, result.outputTruncation.isTruncated { hydrate(result.id) }
                     }
                 }
             )
@@ -92,11 +107,12 @@ struct ContentBlockView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .italic()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
+                .padding(.top, Self.thinkingTopPadding)
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: Self.thinkingLabelSpacing) {
                 Image(systemName: "brain")
                     .font(.caption)
+                    .accessibilityHidden(true)
                 Text("Thinking")
                     .font(.caption.weight(.medium))
             }
@@ -109,7 +125,7 @@ struct ContentBlockView: View {
     /// the lightbox opens once hydration swaps the full block in (the
     /// truncation flag then disappears from the merged block).
     private var imageNeedsHydration: Bool {
-        block.dataTruncated == true && onHydrateBlock != nil
+        block.dataTruncation.isTruncated && onHydrateBlock != nil
     }
 
     private var isHydratingImage: Bool {
@@ -118,11 +134,14 @@ struct ContentBlockView: View {
 
     @ViewBuilder
     private var imageView: some View {
-        if block.data == nil, block.dataTruncated != true, let attachmentId = block.attachmentId {
+        if block.data == nil, !block.dataTruncation.isTruncated, let attachmentId = block.attachmentId {
             // Attachment-reference block (PROTOCOL §5.5): no inline bytes —
             // resolve the registry row and fetch via file.readChunk.
             AttachmentReferenceImageView(
-                workspaceId: workspaceId, attachmentId: attachmentId, style: .inline)
+                workspaceId: workspaceId,
+                attachmentId: attachmentId,
+                style: .inline
+            )
         } else if let uiImage = Self.decodeImage(block) {
             // Full image, or the write-time thumbnail served by the slim
             // projection (dataIsThumbnail) — tapping a thumbnail hydrates.
@@ -136,7 +155,9 @@ struct ContentBlockView: View {
                 }
             } label: {
                 SquareImageThumbnail(image: uiImage, side: SquareImageThumbnail.transcriptSide)
-                    .opacity(isHydratingImage ? 0.6 : 1)
+                    .opacity(isHydratingImage
+                        ? Self.hydratingImageOpacity
+                        : Self.loadedImageOpacity)
                     .copyContextMenuPassthrough()
             }
             .buttonStyle(.plain)
@@ -147,17 +168,17 @@ struct ContentBlockView: View {
                 // the full image (and the info rows would describe the
                 // preview). Suppress the menu; tapping hydrates the full
                 // block, whose lightbox ellipsis menu offers the actions.
-                if block.dataTruncated != true {
+                if !block.dataTruncation.isTruncated {
                     ImageActionMenuItems(image: uiImage, originalData: imageData)
                 }
             }
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: uiImage, data: imageData)
             }
-            .onChange(of: block.dataTruncated) { _, truncated in
+            .onChange(of: block.dataTruncation) { _, truncation in
                 // Hydration merged the full block in (the truncation flag
                 // cleared): open the lightbox the tap asked for.
-                if truncated != true && lightboxPendingHydration {
+                if !truncation.isTruncated, lightboxPendingHydration {
                     lightboxPendingHydration = false
                     lightboxPresented = true
                 }
@@ -165,23 +186,24 @@ struct ContentBlockView: View {
             .onChange(of: isHydratingImage) { _, hydrating in
                 // Fetch settled without clearing the flag (failure): drop the
                 // pending open so a later unrelated merge can't surprise-open.
-                if !hydrating && block.dataTruncated == true {
+                if !hydrating, block.dataTruncation.isTruncated {
                     lightboxPendingHydration = false
                 }
             }
-        } else if block.dataTruncated == true {
+        } else if block.dataTruncation.isTruncated {
             // Slim row with no persisted thumbnail (legacy rows, failed
             // generation): placeholder chip with the same on-demand fetch.
             Button {
                 onHydrateBlock?(block.id)
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: Self.loadingLabelSpacing) {
                     if isHydratingImage {
                         ProgressView()
                             .controlSize(.mini)
                         Text("Loading image…")
                     } else {
                         Image(systemName: "photo")
+                            .accessibilityHidden(true)
                         Text(imageNeedsHydration ? "Tap to load image" : "Image")
                     }
                 }
@@ -198,17 +220,18 @@ struct ContentBlockView: View {
 
     @ViewBuilder
     private var fileView: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Self.fileLabelSpacing) {
             Image(systemName: "doc")
                 .font(.caption)
+                .accessibilityHidden(true)
             Text(block.fileName ?? "File")
                 .font(.caption.monospaced())
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Theme.muted(for: colorScheme).opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .padding(.horizontal, Self.fileHorizontalPadding)
+        .padding(.vertical, Self.fileVerticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Self.fileBackgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Self.fileCornerRadius))
     }
 
     /// Decode an image block's base64 payload bytes; nil when absent or
@@ -266,9 +289,12 @@ struct ContentBlockView: View {
 struct ImageDecodeFailureView: View {
     @Environment(\.colorScheme) var colorScheme
 
+    private static let labelSpacing: CGFloat = 4
+
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Self.labelSpacing) {
             Image(systemName: "photo")
+                .accessibilityHidden(true)
             Text("Image")
         }
         .font(.caption)
@@ -290,7 +316,10 @@ struct ImageAttachmentThumbnail: View {
             // Attachment-reference block (PROTOCOL §5.5): fetch the bytes
             // from the workspace's attachment store.
             AttachmentReferenceImageView(
-                workspaceId: workspaceId, attachmentId: attachmentId, style: .thumbnail)
+                workspaceId: workspaceId,
+                attachmentId: attachmentId,
+                style: .thumbnail
+            )
         } else if let uiImage = ContentBlockView.decodeImage(block) {
             let imageData = ContentBlockView.decodeImageData(block)
             Button { lightboxPresented = true } label: {
@@ -418,4 +447,3 @@ struct AttachmentReferenceImageView: View {
             .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
     }
 }
-

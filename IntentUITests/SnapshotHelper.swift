@@ -15,6 +15,16 @@
 import Foundation
 import XCTest
 
+private enum SnapshotLayoutMetrics {
+    static let legacyIndicatorWidth: CGFloat = 10
+    static let legacyIndicatorHeight: CGFloat = 20
+    static let legacyIndicatorSize = CGSize(width: legacyIndicatorWidth, height: legacyIndicatorHeight)
+    static let modernIndicatorWidthRange: ClosedRange<CGFloat> = 46...47
+    static let modernIndicatorHeightRange: ClosedRange<CGFloat> = 2...3
+    static let legacyStatusBarHeight: CGFloat = 20
+    static let modernStatusBarHeight: CGFloat = 44
+}
+
 @MainActor
 func setupSnapshot(_ app: XCUIApplication, waitForAnimations: Bool = true) {
     Snapshot.setupSnapshot(app, waitForAnimations: waitForAnimations)
@@ -43,29 +53,29 @@ enum SnapshotError: Error, CustomDebugStringConvertible {
 }
 
 @objcMembers
+@preconcurrency
 @MainActor
 open class Snapshot: NSObject {
     static var app: XCUIApplication?
     static var waitForAnimations = true
     static var cacheDirectory: URL?
     static var screenshotsDirectory: URL? {
-        return cacheDirectory?.appendingPathComponent("screenshots", isDirectory: true)
+        cacheDirectory?.appendingPathComponent("screenshots", isDirectory: true)
     }
     static var deviceLanguage = ""
     static var currentLocale = ""
 
     open class func setupSnapshot(_ app: XCUIApplication, waitForAnimations: Bool = true) {
-
-        Snapshot.app = app
-        Snapshot.waitForAnimations = waitForAnimations
+        Self.app = app
+        Self.waitForAnimations = waitForAnimations
 
         do {
             let cacheDir = try getCacheDirectory()
-            Snapshot.cacheDirectory = cacheDir
+            Self.cacheDirectory = cacheDir
             setLanguage(app)
             setLocale(app)
             setLaunchArguments(app)
-        } catch let error {
+        } catch {
             NSLog(error.localizedDescription)
         }
     }
@@ -102,7 +112,7 @@ open class Snapshot: NSObject {
             NSLog("Couldn't detect/set locale...")
         }
 
-        if currentLocale.isEmpty && !deviceLanguage.isEmpty {
+        if currentLocale.isEmpty, !deviceLanguage.isEmpty {
             currentLocale = Locale(identifier: deviceLanguage).identifier
         }
 
@@ -124,8 +134,9 @@ open class Snapshot: NSObject {
             let launchArguments = try String(contentsOf: path, encoding: String.Encoding.utf8)
             let regex = try NSRegularExpression(pattern: "(\\\".+?\\\"|\\S+)", options: [])
             let matches = regex.matches(in: launchArguments, options: [], range: NSRange(location: 0, length: launchArguments.count))
-            let results = matches.map { result -> String in
-                (launchArguments as NSString).substring(with: result.range)
+            let results = matches.compactMap { result -> String? in
+                guard let range = Range(result.range, in: launchArguments) else { return nil }
+                return String(launchArguments[range])
             }
             app.launchArguments += results
         } catch {
@@ -140,7 +151,7 @@ open class Snapshot: NSObject {
 
         NSLog("snapshot: \(name)") // more information about this, check out https://docs.fastlane.tools/actions/snapshot/#how-does-it-work
 
-        if Snapshot.waitForAnimations {
+        if Self.waitForAnimations {
             sleep(1) // Waiting for the animation to be finished (kind of)
         }
 
@@ -160,7 +171,7 @@ open class Snapshot: NSObject {
 
             let screenshot = XCUIScreen.main.screenshot()
             #if os(iOS) && !targetEnvironment(macCatalyst)
-            let image = XCUIDevice.shared.orientation.isLandscape ?  fixLandscapeOrientation(image: screenshot.image) : screenshot.image
+            let image = XCUIDevice.shared.orientation.isLandscape ? fixLandscapeOrientation(image: screenshot.image) : screenshot.image
             #else
             let image = screenshot.image
             #endif
@@ -179,7 +190,7 @@ open class Snapshot: NSObject {
                 #else
                     try image.pngData()?.write(to: path, options: .atomic)
                 #endif
-            } catch let error {
+            } catch {
                 NSLog("Problem writing screenshot: \(name) to \(screenshotsDir)/\(simulator)-\(name).png")
                 NSLog(error.localizedDescription)
             }
@@ -194,7 +205,7 @@ open class Snapshot: NSObject {
                 let format = UIGraphicsImageRendererFormat()
                 format.scale = image.scale
                 let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
-                return renderer.image { context in
+                return renderer.image { _ in
                     image.draw(in: CGRect(x: 0, y: 0, width: image.size.width, height: image.size.height))
                 }
             } else {
@@ -241,8 +252,9 @@ private extension XCUIElementAttributes {
     var isNetworkLoadingIndicator: Bool {
         if hasAllowListedIdentifier { return false }
 
-        let hasOldLoadingIndicatorSize = frame.size == CGSize(width: 10, height: 20)
-        let hasNewLoadingIndicatorSize = frame.size.width.isBetween(46, and: 47) && frame.size.height.isBetween(2, and: 3)
+        let hasOldLoadingIndicatorSize = frame.size == SnapshotLayoutMetrics.legacyIndicatorSize
+        let hasNewLoadingIndicatorSize = SnapshotLayoutMetrics.modernIndicatorWidthRange.contains(frame.size.width)
+            && SnapshotLayoutMetrics.modernIndicatorHeightRange.contains(frame.size.height)
 
         return hasOldLoadingIndicatorSize || hasNewLoadingIndicatorSize
     }
@@ -257,8 +269,8 @@ private extension XCUIElementAttributes {
         if elementType == .statusBar { return true }
         guard frame.origin == .zero else { return false }
 
-        let oldStatusBarSize = CGSize(width: deviceWidth, height: 20)
-        let newStatusBarSize = CGSize(width: deviceWidth, height: 44)
+        let oldStatusBarSize = CGSize(width: deviceWidth, height: SnapshotLayoutMetrics.legacyStatusBarHeight)
+        let newStatusBarSize = CGSize(width: deviceWidth, height: SnapshotLayoutMetrics.modernStatusBarHeight)
 
         return [oldStatusBarSize, newStatusBarSize].contains(frame.size)
     }
@@ -266,7 +278,7 @@ private extension XCUIElementAttributes {
 
 private extension XCUIElementQuery {
     var networkLoadingIndicators: XCUIElementQuery {
-        let isNetworkLoadingIndicator = NSPredicate { (evaluatedObject, _) in
+        let isNetworkLoadingIndicator = NSPredicate { evaluatedObject, _ in
             guard let element = evaluatedObject as? XCUIElementAttributes else { return false }
 
             return element.isNetworkLoadingIndicator
@@ -283,7 +295,7 @@ private extension XCUIElementQuery {
 
         let deviceWidth = app.windows.firstMatch.frame.width
 
-        let isStatusBar = NSPredicate { (evaluatedObject, _) in
+        let isStatusBar = NSPredicate { evaluatedObject, _ in
             guard let element = evaluatedObject as? XCUIElementAttributes else { return false }
 
             return element.isStatusBar(deviceWidth)
@@ -295,7 +307,7 @@ private extension XCUIElementQuery {
 
 private extension CGFloat {
     func isBetween(_ numberA: CGFloat, and numberB: CGFloat) -> Bool {
-        return numberA...numberB ~= self
+        numberA...numberB ~= self
     }
 }
 

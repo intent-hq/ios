@@ -5,13 +5,12 @@ import Foundation
 /// `mergeMonitoredPRs`, `selectPrimaryPr`, `countOtherMonitors`) so iOS picks
 /// the identical primary PR and "+N" count. No networking or view concerns.
 nonisolated enum WorkspacePrPill {
-
     /// FE `PRDisplayStatus` — the four pill buckets.
     enum Status: String, Equatable {
-        case open
-        case merged
         case closed
         case draft
+        case merged
+        case open
     }
 
     /// Pill-relevant subset of an FE `PRInfo` row.
@@ -27,9 +26,14 @@ nonisolated enum WorkspacePrPill {
         /// workspace PR row).
         let monitorOnly: Bool
 
-        init(number: Int, status: Status, createdAt: String? = nil,
-             updatedAt: String? = nil, crossRepo: String? = nil,
-             monitorOnly: Bool = false) {
+        init(
+            number: Int,
+            status: Status,
+            createdAt: String? = nil,
+            updatedAt: String? = nil,
+            crossRepo: String? = nil,
+            monitorOnly: Bool = false
+        ) {
             self.number = number
             self.status = status
             self.createdAt = createdAt
@@ -40,9 +44,13 @@ nonisolated enum WorkspacePrPill {
 
         /// Project a workspace detected-PR row (§7.6) into a pill row —
         /// the `mapWorkspacePRs` field subset the pill logic reads.
-        init(_ pr: WorkspacePullRequest) {
-            self.init(number: pr.number, status: Status(wire: pr.status),
-                      createdAt: pr.createdAt, updatedAt: pr.updatedAt)
+        init(_ pullRequest: WorkspacePullRequest) {
+            self.init(
+                number: pullRequest.number,
+                status: Status(wire: pullRequest.status),
+                createdAt: pullRequest.createdAt,
+                updatedAt: pullRequest.updatedAt
+            )
         }
     }
 
@@ -63,17 +71,20 @@ nonisolated enum WorkspacePrPill {
     /// lookups only match bare (non-`crossRepo`) rows. Unmatched monitors
     /// append as monitor-only rows with monitor timestamps standing in for
     /// the PR's own and `crossRepo` set when the repo differs.
-    static func mergeMonitoredPRs(_ basePRs: [PillPr], _ monitors: [MonitoredPr],
-                                  workspaceRepo: String?) -> [PillPr] {
+    static func mergeMonitoredPRs(
+        _ basePRs: [PillPr],
+        _ monitors: [MonitoredPr],
+        workspaceRepo: String?
+    ) -> [PillPr] {
         if monitors.isEmpty { return basePRs }
         var merged = basePRs
         for monitor in monitors {
             let sameRepo = workspaceRepo == nil || workspaceRepo?.isEmpty == true
                 || monitor.repo == workspaceRepo
-            let duplicatesExisting = merged.contains { pr in
+            let duplicatesExisting = merged.contains { pullRequest in
                 sameRepo
-                    ? pr.crossRepo == nil && pr.number == monitor.prNumber
-                    : pr.crossRepo == monitor.repo && pr.number == monitor.prNumber
+                    ? pullRequest.crossRepo == nil && pullRequest.number == monitor.prNumber
+                    : pullRequest.crossRepo == monitor.repo && pullRequest.number == monitor.prNumber
             }
             if duplicatesExisting { continue }
             merged.append(PillPr(
@@ -96,18 +107,18 @@ nonisolated enum WorkspacePrPill {
     static func selectPrimaryPr(_ prs: [PillPr]) -> PillPr? {
         let unmerged = prs.filter { $0.status == .open || $0.status == .draft }
         if !unmerged.isEmpty {
-            return unmerged.min { a, b in
-                let byCreated = compareMissingLast(a.createdAt, b.createdAt) { $0 < $1 }
+            return unmerged.min { left, right in
+                let byCreated = compareMissingLast(left.createdAt, right.createdAt) { $0 < $1 }
                 if byCreated != 0 { return byCreated < 0 }
-                return a.number < b.number
+                return left.number < right.number
             }
         }
         let merged = prs.filter { $0.status == .merged }
         if !merged.isEmpty {
-            return merged.min { a, b in
-                let byUpdated = compareMissingLast(a.updatedAt, b.updatedAt) { $0 > $1 }
+            return merged.min { left, right in
+                let byUpdated = compareMissingLast(left.updatedAt, right.updatedAt) { $0 > $1 }
                 if byUpdated != 0 { return byUpdated < 0 }
-                return a.number > b.number
+                return left.number > right.number
             }
         }
         return prs.first
@@ -119,11 +130,13 @@ nonisolated enum WorkspacePrPill {
     /// primary PR's repo — `primaryCrossRepo` when the primary is a
     /// cross-repo monitored row, else the workspace repo (an unknown repo
     /// matches by number alone).
-    static func countOtherMonitors(_ monitors: [MonitoredPr],
-                                   primaryPrNumber: Int?,
-                                   repositoryOwner: String?,
-                                   repositoryName: String?,
-                                   primaryCrossRepo: String? = nil) -> Int {
+    static func countOtherMonitors(
+        _ monitors: [MonitoredPr],
+        primaryPrNumber: Int?,
+        repositoryOwner: String?,
+        repositoryName: String?,
+        primaryCrossRepo: String? = nil
+    ) -> Int {
         var workspaceRepo: String?
         if let owner = repositoryOwner, let name = repositoryName,
            !owner.isEmpty, !name.isEmpty {
@@ -141,12 +154,13 @@ nonisolated enum WorkspacePrPill {
     /// without one (nil or empty, mirroring TS truthiness); two present
     /// timestamps compare via `areInIncreasingOrder`.
     private static func compareMissingLast(
-        _ a: String?, _ b: String?,
+        _ left: String?,
+        _ right: String?,
         _ areInIncreasingOrder: (String, String) -> Bool
     ) -> Int {
-        let aPresent = (a?.isEmpty == false) ? a : nil
-        let bPresent = (b?.isEmpty == false) ? b : nil
-        switch (aPresent, bPresent) {
+        let leftPresent = (left?.isEmpty == false) ? left : nil
+        let rightPresent = (right?.isEmpty == false) ? right : nil
+        switch (leftPresent, rightPresent) {
         case let (x?, y?):
             if areInIncreasingOrder(x, y) { return -1 }
             if areInIncreasingOrder(y, x) { return 1 }

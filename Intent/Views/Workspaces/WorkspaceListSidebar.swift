@@ -29,7 +29,7 @@ struct WorkspaceListSidebar: View {
             ZStack {
                 Theme.sidebar(for: colorScheme).ignoresSafeArea()
 
-                if viewModel.isLoading && viewModel.workspaces.isEmpty {
+                if viewModel.isLoading, viewModel.workspaces.isEmpty {
                     ProgressView("Loading workspaces...")
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 } else if viewModel.filteredWorkspaces.isEmpty {
@@ -110,32 +110,19 @@ struct WorkspaceListSidebar: View {
             switch viewModel.viewMode {
             case .recent:
                 ForEach(viewModel.filteredWorkspaces) { workspace in
-                    WorkspaceRowView(workspace: workspace, colorScheme: colorScheme)
-                        .tag(workspace.id)
-                        .listRowInsets(EdgeInsets(
-                            top: Constants.WorkspaceList.sidebarRowInset,
-                            leading: Constants.WorkspaceList.sidebarRowInset,
-                            bottom: Constants.WorkspaceList.sidebarRowInset,
-                            trailing: Constants.WorkspaceList.sidebarRowInset))
-                        .listRowSeparator(.hidden)
+                    sidebarRow(workspace)
                 }
             case .repo:
                 ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
                     Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
                         RepoOwnerAvatarView(
                             owner: workspaces.first?.repositoryOwner,
-                            size: Constants.WorkspaceList.sidebarSectionAvatarSize)
+                            size: Constants.WorkspaceList.sidebarSectionAvatarSize
+                        )
                         Text(repoName)
                     }) {
                         ForEach(workspaces) { workspace in
-                            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: false)
-                                .tag(workspace.id)
-                                .listRowInsets(EdgeInsets(
-                                    top: Constants.WorkspaceList.sidebarRowInset,
-                                    leading: Constants.WorkspaceList.sidebarRowInset,
-                                    bottom: Constants.WorkspaceList.sidebarRowInset,
-                                    trailing: Constants.WorkspaceList.sidebarRowInset))
-                                .listRowSeparator(.hidden)
+                            sidebarRow(workspace, showRepo: false)
                         }
                     }
                 }
@@ -143,14 +130,7 @@ struct WorkspaceListSidebar: View {
                 ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
                     Section(header: Text(statusLabel)) {
                         ForEach(workspaces) { workspace in
-                            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme)
-                                .tag(workspace.id)
-                                .listRowInsets(EdgeInsets(
-                                    top: Constants.WorkspaceList.sidebarRowInset,
-                                    leading: Constants.WorkspaceList.sidebarRowInset,
-                                    bottom: Constants.WorkspaceList.sidebarRowInset,
-                                    trailing: Constants.WorkspaceList.sidebarRowInset))
-                                .listRowSeparator(.hidden)
+                            sidebarRow(workspace)
                         }
                     }
                 }
@@ -160,8 +140,40 @@ struct WorkspaceListSidebar: View {
         #if !os(visionOS)
         // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
         .scrollDismissesKeyboard(.immediately)
+        // With a hardware keyboard attached, iPadOS draws the focused row's
+        // selection as an accent-coloured halo once the row background is
+        // customised (ios#339). The grey listRowBackground already marks the
+        // selection, so suppress the default focus effect for the sidebar rows.
+        .focusEffectDisabled()
         #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
     }
-}
 
+    /// Shared row modifiers for every view mode. The explicit row background
+    /// replaces the sidebar list's accent-tinted selection with a neutral grey.
+    private func sidebarRow(_ workspace: Workspace, showRepo: Bool = true) -> some View {
+        WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
+            .tag(workspace.id)
+            .listRowInsets(EdgeInsets(
+                top: Constants.WorkspaceList.sidebarRowInset,
+                leading: Constants.WorkspaceList.sidebarRowInset,
+                bottom: Constants.WorkspaceList.sidebarRowInset,
+                trailing: Constants.WorkspaceList.sidebarRowInset
+            ))
+            .listRowSeparator(.hidden)
+            .listRowBackground(
+                RoundedRectangle(
+                    cornerRadius: Constants.WorkspaceList.sidebarSelectionCornerRadius,
+                    style: .continuous
+                )
+                .fill(Self.rowSelectionBackground(
+                    isSelected: coordinator.selectedWorkspaceId == workspace.id,
+                    colorScheme: colorScheme
+                ))
+            )
+    }
+
+    static func rowSelectionBackground(isSelected: Bool, colorScheme: ColorScheme) -> Color {
+        isSelected ? Theme.sidebarSelection(for: colorScheme) : .clear
+    }
+}

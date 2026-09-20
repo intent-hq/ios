@@ -17,30 +17,61 @@ extension SpecialistPickerView {
         !hasSpecialist || isCreating || isLoadingProviders || isLoadingModels || providers.noneSelectable
     }
 
-    /// Keeps the current selection when it is still selectable, otherwise falls
-    /// back to auggie if selectable, else the first selectable provider.
-    static func resolveProviderSelection(current: ProviderInfo?, providers: [ProviderInfo]) -> ProviderInfo? {
-        let selectable = providers.filter { isSelectable($0) }
-        if let current, let updated = selectable.first(where: { $0.id == current.id }) {
-            return updated
+    /// Keeps the selection while `current`'s id is still pickable in the
+    /// unfiltered `catalog`, rebound to the fresh entry so refreshed
+    /// metadata is what the picker shows; otherwise the resolved
+    /// orchestrator (PROTOCOL §5.11), else the first pickable specialist in
+    /// daemon order, else nil when the catalog lists nothing pickable (a
+    /// hidden id must never be submitted). An empty catalog (cold load or
+    /// reconnect clear) keeps `current` so the selection survives the reload.
+    static func reconciledSpecialist(
+        current: SpecialistInfo?, catalog: [SpecialistInfo]
+    ) -> SpecialistInfo? {
+        guard !catalog.isEmpty else { return current }
+        let pickable = catalog.modalPickable
+        if let current, let fresh = pickable.first(where: { $0.id == current.id }) {
+            return fresh
         }
-        return selectable.first(where: { $0.id == "auggie" }) ?? selectable.first
+        return pickable.orchestrator ?? pickable.first
     }
 
-    /// Returns nil for a superseded fetch. A current fetch only applies models
-    /// when its requested provider is still selected.
-    static func modelFetchOutcome(
-        fetched: [ModelInfo],
-        requestedProviderId: String,
-        selectedProviderId: String?,
-        requestGeneration: Int,
-        latestGeneration: Int
-    ) -> (models: [ModelInfo]?, selectedModel: ModelInfo?, isLoadingModels: Bool)? {
-        guard requestGeneration == latestGeneration else { return nil }
-        guard selectedProviderId == requestedProviderId else {
-            return (nil, nil, false)
+    // The Model section's loading state distinguishes no catalog from an empty
+    // settled catalog, so the optional collection is intentional.
+    // `nil` means no catalog has arrived; an empty catalog is a settled result.
+    // swiftlint:disable:next discouraged_optional_collection
+    static func showsModelsLoading(catalog: [ModelInfo]?, settled: Bool) -> Bool {
+        catalog == nil && !settled
+    }
+
+    /// This sheet's settled-load markers, gated by the store's
+    /// `loadGeneration`: a marker is published only when the load returned
+    /// in the generation it started in. A load superseded by a reconnect
+    /// clear (`invalidate()`) returns for a cache the store already dropped;
+    /// settling on it would show the daemon-default row and enable Create
+    /// while the fresh load for the same provider is still pending.
+    struct SettledLoads {
+        private(set) var options = false
+        private(set) var modelProviders: Set<String> = []
+
+        /// Returns true when the marker was published (the load is current).
+        @discardableResult
+        mutating func settleOptions(startedAt: Int, current: Int) -> Bool {
+            guard startedAt == current else { return false }
+            options = true
+            return true
         }
-        return (fetched, nil, false)
+
+        @discardableResult
+        mutating func settleModels(for providerId: String, startedAt: Int, current: Int) -> Bool {
+            guard startedAt == current else { return false }
+            modelProviders.insert(providerId)
+            return true
+        }
+
+        /// A reconnect clear: every marker belonged to the dropped cache.
+        mutating func reset() {
+            self = Self()
+        }
     }
 
     /// Builds the provider/model params for `agent.create`; auggie is omitted

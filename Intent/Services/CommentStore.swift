@@ -1,12 +1,12 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
 
 @MainActor
 @Observable class CommentStore {
     var threads: [CommentThread] = []
     var isLoading = false
-    
+
     @ObservationIgnored private var workspaceId: String?
     @ObservationIgnored private var currentNoteId: String?
     @ObservationIgnored private var connectionObserver: AnyCancellable?
@@ -25,7 +25,7 @@ import Observation
     }
 
     /// Test-only initializer that skips connection observation
-    init(forTesting: Bool) {
+    init(forTesting _: Bool) {
         self.connectionManager = ConnectionManager.shared
         // No connection observation for unit tests
     }
@@ -40,16 +40,16 @@ import Observation
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
         }
     }
-    
+
     /// Test-only helper to set reconciler for race condition testing
     func setTestReconciler(_ reconciler: DeltaReconciler<CommentThread>) async {
         await MainActor.run {
             commentReconciler = reconciler
         }
     }
-    
+
     // MARK: - Connection observation
-    
+
     private func observeConnection() {
         connectionObserver = connectionManager.connectionStatePublisher
             .receive(on: DispatchQueue.main)
@@ -76,9 +76,9 @@ import Observation
             await subscribeToNote(workspaceId: wsId, noteId: noteId)
         }
     }
-    
+
     // MARK: - Public API
-    
+
     func subscribeToNote(workspaceId: String, noteId: String) async {
         // Unsubscribe from previous note if different
         if let prevSubId = commentSubscriptionId, currentNoteId != noteId {
@@ -118,16 +118,16 @@ import Observation
         currentNoteId = nil
         threads = []
     }
-    
+
     // MARK: - Subscription
-    
+
     private func subscribeLiveState(workspaceId: String, noteId: String) async {
         // Initialize comment reconciler SYNCHRONOUSLY before RPC
         commentReconciler = DeltaReconciler<CommentThread>(
             getId: { dict in dict["threadId"] as? String },
             normalize: { dict in CommentThread.parseThread(dict) }
         )
-        
+
         do {
             let result = try await connectionManager.request("comment.subscribe", params: [
                 "workspaceId": workspaceId,
@@ -160,10 +160,10 @@ import Observation
             AppLog.comments.error("[CommentStore] comment.subscribe failed: \(error), falling back to legacy")
         }
     }
-    
+
     private func unsubscribe(subscriptionId: String) async {
         do {
-            let _ = try await connectionManager.request("comment.unsubscribe", params: [
+            _ = try await connectionManager.request("comment.unsubscribe", params: [
                 "subscriptionId": subscriptionId
             ])
             AppLog.comments.debug("[CommentStore] Unsubscribed: \(subscriptionId)")
@@ -171,7 +171,7 @@ import Observation
             AppLog.comments.error("[CommentStore] comment.unsubscribe failed: \(error)")
         }
     }
-    
+
     // MARK: - Event handling
 
     func handleEvent(_ method: String, params: Any) {

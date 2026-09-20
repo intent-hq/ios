@@ -6,10 +6,16 @@ import SwiftUI
 /// by unpadded base64url-encoded CBOR; the tunnel dial remains the authoritative
 /// validation of the decoded contents.
 enum ManualConnectionInput: Equatable {
+    private static let base64BlockSize = 4
+    private static let minimumConnectionBlobByteCount = 37
+    private static let cborMapPrefixRange: ClosedRange<UInt8> = 0xa1...0xa4
+    private static let publicKeyHeaderRange = 1...4
+    private static let publicKeyHeader = Array("apX ".utf8)
+
     case direct(host: String)
     case tailcat(tcAddress: String)
 
-    static func classify(_ raw: String) -> ManualConnectionInput {
+    static func classify(_ raw: String) -> Self {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if isTailcatConnectionBlob(trimmed) {
             return .tailcat(tcAddress: trimmed)
@@ -29,14 +35,16 @@ enum ManualConnectionInput: Equatable {
         var base64 = String(encoded)
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
-        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
-        guard let decoded = Data(base64Encoded: base64), decoded.count >= 37 else { return false }
+        let paddingCount = (base64BlockSize - base64.count % base64BlockSize) % base64BlockSize
+        base64 += String(repeating: "=", count: paddingCount)
+        guard let decoded = Data(base64Encoded: base64),
+              decoded.count >= minimumConnectionBlobByteCount else { return false }
         // v0.4.0's wireConnInfo emits a 1–4 entry map whose first, required
         // field is `p`: a 32-byte server public key. Requiring that structure
         // prevents short legal DNS labels such as `tcoA` (an empty CBOR map)
         // from being mistaken for connection blobs.
-        return (0xa1...0xa4).contains(decoded[0])
-            && decoded[1...4].elementsEqual([0x61, 0x70, 0x58, 0x20])
+        return cborMapPrefixRange.contains(decoded[0])
+            && decoded[publicKeyHeaderRange].elementsEqual(publicKeyHeader)
     }
 
     /// Direct hosts to race and persist: empty for a tunnel-only target
@@ -81,122 +89,11 @@ struct ManualTokenEntryView: View {
     @State private var connectTask: Task<Void, Never>?
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Theme.background(for: colorScheme).ignoresSafeArea()
+        NavigationStack { navigationContent }
+    }
 
-                ScrollView {
-                    VStack(spacing: Constants.ManualTokenEntry.contentSpacing) {
-                        VStack(spacing: Constants.ManualTokenEntry.headerSpacing) {
-                            Image(systemName: "keyboard")
-                                .font(.largeTitle)
-                                .foregroundStyle(Theme.primary(for: colorScheme))
-                            Text("Manual Connection")
-                                .font(.title3.bold())
-                                .foregroundStyle(Theme.foreground(for: colorScheme))
-                        }
-                        .padding(.top, Constants.ManualTokenEntry.headerTopPadding)
-
-                        VStack(spacing: Constants.ManualTokenEntry.formSpacing) {
-                            VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
-                                #if os(visionOS)
-                                // No TailcatKit build for visionOS yet, so tunnel
-                                // addresses are not offered: LAN pairing only.
-                                Text("Host")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                TextField("192.168.1.42", text: $host)
-                                    .textFieldStyle(.roundedBorder)
-                                    .autocorrectionDisabled()
-                                    .textInputAutocapitalization(.never)
-                                    .keyboardType(.URL)
-                                Text("Tailcat addresses aren't supported on visionOS yet — pair over your local network.")
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                #else
-                                Text("Host / Tailcat Address")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                TextField("192.168.1.42 or tc…", text: $host)
-                                    .textFieldStyle(.roundedBorder)
-                                    .autocorrectionDisabled()
-                                    .textInputAutocapitalization(.never)
-                                    .keyboardType(.URL)
-                                #endif
-                            }
-
-                            VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
-                                Text("Port")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                TextField("5180", text: $port)
-                                    .textFieldStyle(.roundedBorder)
-                                    .keyboardType(.numberPad)
-                            }
-
-                            VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
-                                Text("API Token")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                HStack {
-                                    TextField("Paste token here", text: $token)
-                                        .font(.system(.body, design: .monospaced))
-                                        .textFieldStyle(.roundedBorder)
-                                        .autocorrectionDisabled()
-                                        .textInputAutocapitalization(.never)
-
-                                    Button {
-                                        if let clipboard = UIPasteboard.general.string {
-                                            token = clipboard
-                                        }
-                                    } label: {
-                                        Image(systemName: "doc.on.clipboard")
-                                            .foregroundStyle(Theme.primary(for: colorScheme))
-                                    }
-                                    .accessibilityLabel("Paste API token")
-                                }
-                            }
-                        }
-                        .disabled(isValidating)
-                        .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
-
-                        if let error = errorMessage {
-                            Text(error)
-                                .font(.caption)
-                                .foregroundStyle(Theme.destructive(for: colorScheme))
-                                .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
-                        }
-
-                        Button {
-                            if isValidating {
-                                connectTask?.cancel()
-                                connectTask = nil
-                                isValidating = false
-                            } else {
-                                validateAndConnect()
-                            }
-                        } label: {
-                            if isValidating {
-                                HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
-                                    ProgressView()
-                                        .tint(.white)
-                                    Text("Cancel")
-                                }
-                                .frame(maxWidth: .infinity)
-                            } else {
-                                Text("Connect")
-                                    .frame(maxWidth: .infinity)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.primary(for: colorScheme))
-                        .disabled(!isValidating && (host.isEmpty || token.isEmpty))
-                        .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
-
-                        Spacer()
-                    }
-                }
-            }
+    private var navigationContent: some View {
+        entryContent
             .navigationTitle("Manual Connection")
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
@@ -210,6 +107,145 @@ struct ManualTokenEntryView: View {
             } message: {
                 Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
             }
+    }
+
+    private var entryContent: some View {
+        ZStack {
+            Theme.background(for: colorScheme).ignoresSafeArea()
+            ScrollView { entryForm }
+        }
+    }
+
+    private var entryForm: some View {
+        VStack(spacing: Constants.ManualTokenEntry.contentSpacing) {
+            entryHeader
+            connectionFields
+            validationError
+            connectButton
+            Spacer()
+        }
+    }
+
+    private var entryHeader: some View {
+        VStack(spacing: Constants.ManualTokenEntry.headerSpacing) {
+            Image(systemName: "keyboard")
+                .font(.largeTitle)
+                .foregroundStyle(Theme.primary(for: colorScheme))
+                .accessibilityHidden(true)
+            Text("Manual Connection")
+                .font(.title3.bold())
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+        }
+        .padding(.top, Constants.ManualTokenEntry.headerTopPadding)
+    }
+
+    private var connectionFields: some View {
+        VStack(spacing: Constants.ManualTokenEntry.formSpacing) {
+            hostField
+            portField
+            tokenField
+        }
+        .disabled(isValidating)
+        .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
+    }
+
+    private var hostField: some View {
+        VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
+            #if os(visionOS)
+            Text("Host")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            TextField("192.168.1.42", text: $host)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+            Text("Tailcat addresses aren't supported on visionOS yet — pair over your local network.")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            #else
+            Text("Host / Tailcat Address")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            TextField("192.168.1.42 or tc…", text: $host)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+            #endif
+        }
+    }
+
+    private var portField: some View {
+        VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
+            Text("Port")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            TextField("5180", text: $port)
+                .textFieldStyle(.roundedBorder)
+                .keyboardType(.numberPad)
+        }
+    }
+
+    private var tokenField: some View {
+        VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
+            Text("API Token")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            HStack {
+                TextField("Paste token here", text: $token)
+                    .font(.system(.body, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                Button(action: pasteToken) {
+                    Image(systemName: "doc.on.clipboard")
+                        .foregroundStyle(Theme.primary(for: colorScheme))
+                }
+                .accessibilityLabel("Paste API token")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var validationError: some View {
+        if let error = errorMessage {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(Theme.destructive(for: colorScheme))
+                .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
+        }
+    }
+
+    private var connectButton: some View {
+        Button(action: toggleConnectionValidation) {
+            if isValidating {
+                HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
+                    ProgressView().tint(.white)
+                    Text("Cancel")
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                Text("Connect").frame(maxWidth: .infinity)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Theme.primary(for: colorScheme))
+        .disabled(!isValidating && (host.isEmpty || token.isEmpty))
+        .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
+    }
+
+    private func pasteToken() {
+        if let clipboard = UIPasteboard.general.string { token = clipboard }
+    }
+
+    private func toggleConnectionValidation() {
+        if isValidating {
+            connectTask?.cancel()
+            connectTask = nil
+            isValidating = false
+        } else {
+            validateAndConnect()
         }
     }
 
@@ -232,15 +268,17 @@ struct ManualTokenEntryView: View {
         errorMessage = nil
 
         connectTask = Task {
-            let fingerprint: String?
+            let probed: CertFingerprintProbe.ProbeResult
             switch input {
             case .direct(let host):
-                fingerprint = await CertFingerprintProbe.probe(host: host, port: portNum)
+                probed = await CertFingerprintProbe.probe(host: host, port: portNum)
             case .tailcat(let tcAddress):
                 do {
-                    fingerprint = try await CertFingerprintProbe.probeViaTunnel(
+                    probed = try await CertFingerprintProbe.probeViaTunnel(
                         dialer: session.connection.tunnelDialer,
-                        tcAddress: tcAddress, remotePort: portNum)
+                        tcAddress: tcAddress,
+                        remotePort: portNum
+                    )
                 } catch {
                     // Classification only recognizes the expected prefix,
                     // base64, and CBOR-header shape. TailcatKit authoritatively
@@ -254,20 +292,21 @@ struct ManualTokenEntryView: View {
             }
 
             // The user may have hit Cancel while the probe was in flight: a
-            // cancelled direct probe surfaces here as a nil fingerprint (the
+            // cancelled direct probe surfaces here as `.cancelled` (the
             // tunnel branch handles its thrown cancellation above), and
             // processing it would show a spurious certificate error (or
             // clobber the state of a newer attempt). Drop the result instead.
             guard !Task.isCancelled else { return }
 
-            switch CertFingerprintProbe.outcome(forFingerprint: fingerprint) {
+            switch CertFingerprintProbe.outcome(forProbe: probed) {
             case .confirmFingerprint(let fingerprint):
                 probedFingerprint = fingerprint
                 probedInput = input
                 showFingerprintConfirmation = true
             case .abort(let message):
                 // Never connect unpinned: without a probed certificate there is
-                // no way to verify the server's identity.
+                // no way to verify the server's identity. The message names
+                // the stage the probe failed at (ios#233).
                 errorMessage = message
                 isValidating = false
             }
@@ -278,34 +317,46 @@ struct ManualTokenEntryView: View {
         guard let portNum = Int(port), let fingerprint = probedFingerprint,
               let input = probedInput else { return }
 
-        Task {
-            do {
-                try await session.connection.connect(
-                    hosts: input.hosts, port: portNum, token: token,
-                    certFingerprint: fingerprint, tcAddress: input.tcAddress)
-                let server = PairedServer(
-                    hosts: input.hosts, port: portNum, name: "Intent", pairedAt: Date(),
-                    certFingerprint: fingerprint, tcAddress: input.tcAddress)
-                let stored: StoredConnection
-                do {
-                    stored = try await ConnectionPairing.finalize(
-                        server: server, token: token, connection: session.connection)
-                } catch {
-                    session.connection.disconnect()
-                    throw error
-                }
-                dismiss()
-                if let onPaired {
-                    onPaired(stored)
-                } else {
-                    coordinator.onPaired(stored)
-                }
-            } catch {
-                errorMessage = "Connection failed: \(error.localizedDescription)"
-                isValidating = false
-            }
-        }
+        Task { await connect(input: input, port: portNum, fingerprint: fingerprint) }
     }
 
+    private func connect(input: ManualConnectionInput, port: Int, fingerprint: String) async {
+        do {
+            try await session.connection.connect(
+                hosts: input.hosts,
+                port: port,
+                token: token,
+                certFingerprint: fingerprint,
+                tcAddress: input.tcAddress
+            )
+            let server = PairedServer(
+                hosts: input.hosts,
+                port: port,
+                name: "Intent",
+                pairedAt: Date(),
+                certFingerprint: fingerprint,
+                tcAddress: input.tcAddress
+            )
+            let stored: StoredConnection
+            do {
+                stored = try await ConnectionPairing.finalize(
+                    server: server,
+                    token: token,
+                    connection: session.connection
+                )
+            } catch {
+                session.connection.disconnect()
+                throw error
+            }
+            dismiss()
+            if let onPaired {
+                onPaired(stored)
+            } else {
+                coordinator.onPaired(stored)
+            }
+        } catch {
+            errorMessage = "Connection failed: \(error.localizedDescription)"
+            isValidating = false
+        }
+    }
 }
-

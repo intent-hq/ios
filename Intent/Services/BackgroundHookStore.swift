@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
 
 /// Live background-hook list for one workspace (PROTOCOL §5.40, §6.5).
@@ -58,7 +58,7 @@ import Observation
         if let subscriptionId {
             let connectionManager = self.connectionManager
             Task { @MainActor in
-                let _ = try? await connectionManager.request("events.unsubscribe", params: [
+                _ = try? await connectionManager.request("events.unsubscribe", params: [
                     "subscriptionId": subscriptionId
                 ])
             }
@@ -68,7 +68,7 @@ import Observation
     private func onConnected() async {
         // Subscriptions are per-connection (§6.1) — replay and re-seed
         subscriptionId = nil
-        if let wsId = workspaceId, let agentId = agentId {
+        if let wsId = workspaceId, let agentId {
             await subscribe(workspaceId: wsId, agentId: agentId)
         }
     }
@@ -117,7 +117,7 @@ import Observation
         if let subId = subscriptionId {
             subscriptionId = nil
             do {
-                let _ = try await connectionManager.request("events.unsubscribe", params: [
+                _ = try await connectionManager.request("events.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {
@@ -135,7 +135,7 @@ import Observation
     func runNow(hookId: String) async {
         guard let wsId = workspaceId else { return }
         do {
-            let _ = try await connectionManager.request("hook.runNow", params: [
+            _ = try await connectionManager.request("hook.runNow", params: [
                 "workspaceId": wsId,
                 "hookId": hookId
             ])
@@ -148,7 +148,7 @@ import Observation
     func cancel(hookId: String) async {
         guard let wsId = workspaceId else { return }
         do {
-            let _ = try await connectionManager.request("hook.cancel", params: [
+            _ = try await connectionManager.request("hook.cancel", params: [
                 "workspaceId": wsId,
                 "hookId": hookId
             ])
@@ -161,7 +161,10 @@ import Observation
 
     /// Event types that end a hook's life — they drop from the list.
     private static let terminalHookEvents: Set<String> = [
-        "hook:dispatched", "hook:evicted", "hook:cancelled", "hook:expired"
+        "hook:dispatched",
+        "hook:evicted",
+        "hook:cancelled",
+        "hook:expired"
     ]
 
     struct FoldResult {
@@ -219,7 +222,7 @@ import Observation
 
     // MARK: - Event handling
 
-    func handleEvent(_ method: String, params: Any) {
+    func handleEvent(_: String, params: Any) {
         guard let dict = params as? [String: Any] else { return }
 
         // Events from the event bridge are wrapped:

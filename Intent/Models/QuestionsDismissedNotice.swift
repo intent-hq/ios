@@ -26,7 +26,7 @@ extension ConversationMessage {
         if let notice = Self.dismissalInfo(from: metadata) {
             return notice.withText(fullText)
         }
-        for block in contentBlocks ?? [] where block.type == .text {
+        for block in contentBlocks where block.type == .text {
             if let notice = Self.dismissalInfo(from: block.messageMetadata) {
                 return notice.withText(fullText)
             }
@@ -35,7 +35,7 @@ extension ConversationMessage {
     }
 
     private var fullText: String {
-        (contentBlocks ?? [])
+        contentBlocks
             .filter { $0.type == .text }
             .compactMap { $0.resolvedText }
             .joined(separator: "\n")
@@ -43,21 +43,24 @@ extension ConversationMessage {
     }
 
     private static func dismissalInfo(
-        from metadata: [String: AnyCodable]?
+        from metadata: [String: AnyCodable]
     ) -> QuestionsDismissedNotice? {
-        guard let metadata,
-              metadata["type"]?.value as? String == "questions_dismissed" else {
+        guard metadata["type"]?.value as? String == "questions_dismissed" else {
             return nil
         }
         let dismissedId = metadata["dismissedQuestionsMessageId"]?.value as? String ?? ""
         return QuestionsDismissedNotice(
-            dismissedQuestionsMessageId: dismissedId, fullText: "")
+            dismissedQuestionsMessageId: dismissedId,
+            fullText: ""
+        )
     }
 }
 
 private extension QuestionsDismissedNotice {
     func withText(_ text: String) -> QuestionsDismissedNotice {
         QuestionsDismissedNotice(
-            dismissedQuestionsMessageId: dismissedQuestionsMessageId, fullText: text)
+            dismissedQuestionsMessageId: dismissedQuestionsMessageId,
+            fullText: text
+        )
     }
 }

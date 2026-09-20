@@ -9,6 +9,11 @@ import SwiftUI
 /// desktop-setup guidance instead — there is no fallback flow, so recents
 /// are deliberately auth-gated at render time too: picking a repo needs
 /// GitHub for branch listing and workspace creation either way.
+///
+/// `store` is the session-owned cache: on a reopen the cached lists render
+/// immediately (no spinner) while `loadIfNeeded` revalidates silently.
+/// Search state stays per-picker (the store is shared by every picker on
+/// the session, so one picker's search must not surface in another).
 struct GitHubRepoPickerView: View {
     var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
@@ -17,21 +22,19 @@ struct GitHubRepoPickerView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var searchText = ""
-    /// The trimmed query the current `store.searchResults` answer; nil until
-    /// a search completes, so stale results never surface.
+    @State private var searchResults: [GitHubRepo] = []
+    /// The trimmed query the current `searchResults` answer; nil until a
+    /// search completes, so stale results never surface.
     @State private var completedSearchQuery: String?
     /// The qualifying query currently in its debounce or remote-search phase.
     @State private var pendingSearchQuery: String?
     @State private var searchTask: Task<Void, Never>?
-    /// False until the first `github.authStatus` read completes, so the
-    /// not-connected guidance doesn't flash while the status is unknown.
-    @State private var authChecked = false
 
     private var suggestions: GitHubRepoSuggestions.Sections {
         GitHubRepoSuggestions.merged(
             recentRepos: store.recentRepos,
             ownRepos: store.ownRepos,
-            searchResults: store.searchResults,
+            searchResults: searchResults,
             searchQuery: completedSearchQuery,
             currentQuery: searchText
         )
@@ -41,9 +44,15 @@ struct GitHubRepoPickerView: View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
-            if !authChecked {
-                ProgressView("Checking GitHub connection...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            if !store.hasCheckedAuth {
+                if store.lastError != nil {
+                    // The cold auth read itself failed: surface the error
+                    // rather than not-connected guidance or an endless spinner.
+                    emptyState
+                } else {
+                    ProgressView("Checking GitHub connection...")
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
             } else if !store.isConfigured {
                 notConnectedPlaceholder
             } else {
@@ -51,16 +60,7 @@ struct GitHubRepoPickerView: View {
             }
         }
         .task {
-            // Recents come from the daemon registry (no GitHub round-trip),
-            // so fetch them concurrently with the auth-gated GitHub list —
-            // they render as soon as they arrive.
-            async let recents: Void = store.fetchRecentRepos()
-            let configured = await store.fetchAuthStatus()
-            authChecked = true
-            if configured {
-                await store.fetchOwnRepos()
-            }
-            await recents
+            await store.loadIfNeeded()
         }
         .onChange(of: searchText) { _, newValue in
             scheduleSearch(for: newValue)
@@ -71,7 +71,7 @@ struct GitHubRepoPickerView: View {
 
     private var repoList: some View {
         Group {
-            if (store.isLoading || pendingSearchQuery != nil) && suggestions.isEmpty {
+            if store.isLoading || pendingSearchQuery != nil, suggestions.isEmpty {
                 ProgressView("Loading repositories...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if suggestions.isEmpty {
@@ -178,7 +178,7 @@ struct GitHubRepoPickerView: View {
         guard query.count >= GitHubRepoSuggestions.minSearchQueryLength else {
             pendingSearchQuery = nil
             completedSearchQuery = nil
-            store.searchResults = []
+            searchResults = []
             return
         }
         pendingSearchQuery = query
@@ -190,8 +190,8 @@ struct GitHubRepoPickerView: View {
             // task is still the latest — an out-of-order older response can't
             // overwrite a newer one's results.
             guard !Task.isCancelled, pendingSearchQuery == query else { return }
-            if let results {
-                store.searchResults = results
+            if case let .results(results) = results {
+                searchResults = results
                 completedSearchQuery = query
             }
             pendingSearchQuery = nil

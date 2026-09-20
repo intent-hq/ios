@@ -20,6 +20,7 @@ struct ContextMention: Equatable {
     /// Matches `@context[...]` tokens; group 1 is the inner payload.
     /// Equivalent to the FE mention regex's `context\[[^\]]+\]` branch.
     private static let tokenRegex = #/@context\[([^\]]+)\]/#
+    private static let base64QuantumSize = 4
 
     /// Splits `text` into interleaved plain-text and mention segments,
     /// preserving all surrounding text.
@@ -40,7 +41,7 @@ struct ContextMention: Equatable {
             segments.append(.text(String(text[lastIndex...])))
         }
 
-        if segments.isEmpty && !text.isEmpty {
+        if segments.isEmpty, !text.isEmpty {
             segments.append(.text(text))
         }
 
@@ -56,13 +57,14 @@ struct ContextMention: Equatable {
             case .text(let run): return run
             case .mention(let mention): return mention.title
             }
-        }.joined()
+        }
+        .joined()
     }
 
     /// Decodes one token payload (the text between the brackets). A payload
     /// starting with `eyJ` (base64 for `{"`) is treated as base64-encoded
     /// JSON; malformed base64/JSON falls back to pipe parsing.
-    static func mention(fromPayload payload: String) -> ContextMention {
+    static func mention(fromPayload payload: String) -> Self {
         if payload.hasPrefix("eyJ"), let mention = decodeBase64JSON(payload) {
             return mention
         }
@@ -78,10 +80,12 @@ struct ContextMention: Equatable {
         let url: String?
     }
 
-    private static func decodeBase64JSON(_ payload: String) -> ContextMention? {
+    private static func decodeBase64JSON(_ payload: String) -> Self? {
         // JS `atob` tolerates missing padding; Data(base64Encoded:) does not.
         let padded = payload.padding(
-            toLength: (payload.count + 3) / 4 * 4, withPad: "=", startingAt: 0
+            toLength: (payload.count + base64QuantumSize - 1) / base64QuantumSize * base64QuantumSize,
+            withPad: "=",
+            startingAt: 0
         )
         guard let data = Data(base64Encoded: padded),
               let json = try? JSONDecoder().decode(Payload.self, from: data) else {
@@ -93,15 +97,15 @@ struct ContextMention: Equatable {
         if title.isEmpty { title = identifier }
         if title.isEmpty { title = "Shared context" }
         let url = json.url.flatMap { $0.isEmpty ? nil : $0 }
-        return ContextMention(provider: provider, identifier: identifier, title: title, url: url)
+        return Self(provider: provider, identifier: identifier, title: title, url: url)
     }
 
-    private static func decodePipeSeparated(_ payload: String) -> ContextMention {
+    private static func decodePipeSeparated(_ payload: String) -> Self {
         let parts = payload.components(separatedBy: "|")
-        let provider = parts.count > 0 && !parts[0].isEmpty ? parts[0] : "browser"
+        let provider = !parts.isEmpty && !parts[0].isEmpty ? parts[0] : "browser"
         let identifier = parts.count > 1 ? parts[1] : ""
         var title = parts.count > 2 ? parts[2] : ""
         if title.isEmpty { title = identifier }
-        return ContextMention(provider: provider, identifier: identifier, title: title, url: nil)
+        return Self(provider: provider, identifier: identifier, title: title, url: nil)
     }
 }

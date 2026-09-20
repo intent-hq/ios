@@ -102,7 +102,8 @@ struct CreateWorkspaceBranchStepView: View {
                         .padding(.horizontal, Constants.CreateWorkspace.branchBadgeHorizontalPadding)
                         .padding(.vertical, Constants.CreateWorkspace.branchBadgeVerticalPadding)
                         .background(Theme.primary(for: colorScheme).opacity(
-                            Constants.CreateWorkspace.branchBadgeOpacity))
+                            Constants.CreateWorkspace.branchBadgeOpacity
+                        ))
                         .foregroundStyle(Theme.primary(for: colorScheme))
                         .clipShape(Capsule())
                 }
@@ -167,6 +168,6 @@ extension CreateWorkspaceView {
 
     static func preselectedBranch(current: String?, branches: [String], defaultBranch: String?) -> String? {
         if let current, branches.contains(current) { return current }
-        return branches.first(where: { $0 == defaultBranch }) ?? branches.first
+        return branches.first { $0 == defaultBranch } ?? branches.first
     }
 }

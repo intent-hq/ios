@@ -12,9 +12,14 @@ import XCTest
 /// skips pairing and serves polished fixture data with no daemon, so every
 /// screen shows realistic marketing-safe content.
 nonisolated final class AppStoreScreenshotTests: XCTestCase {
-
     override func setUpWithError() throws {
+        try super.setUpWithError()
         continueAfterFailure = false
+    }
+
+    override func tearDownWithError() throws {
+        continueAfterFailure = true
+        try super.tearDownWithError()
     }
 
     @MainActor
@@ -31,7 +36,7 @@ nonisolated final class AppStoreScreenshotTests: XCTestCase {
     /// 01–04: workspace list → workspace detail → agent conversation →
     /// note with tasks, all against `--demo-data` fixture content.
     @MainActor
-    func testCaptureDemoModeScreenshots() throws {
+    func testCaptureDemoModeScreenshots() {
         configureOrientation()
         let app = XCUIApplication()
         setupSnapshot(app)
@@ -91,7 +96,7 @@ nonisolated final class AppStoreScreenshotTests: XCTestCase {
     /// erased simulators the `screenshots` lane prepares). Marketing-safe:
     /// no camera or QR scanner is opened, only the option list is shown.
     @MainActor
-    func testCapturePairingScreenshot() throws {
+    func testCapturePairingScreenshot() {
         configureOrientation()
         let app = XCUIApplication()
         setupSnapshot(app)

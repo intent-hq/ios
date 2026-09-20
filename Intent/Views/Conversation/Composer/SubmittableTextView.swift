@@ -77,9 +77,12 @@ class KeyCommandTextView: UITextView {
         ComposerSubmitPolicy.returnSubmits(
             isVisionOS: isVisionOS,
             idiom: UIDevice.current.userInterfaceIdiom,
-            hasHardwareKeyboard: GCKeyboard.coalesced != nil)
+            hasHardwareKeyboard: GCKeyboard.coalesced != nil
+        )
     }
 
+    // UIKit requires this override to remain optional; nil means no commands.
+    // swiftlint:disable:next discouraged_optional_collection
     override var keyCommands: [UIKeyCommand]? {
         // Don't intercept Return where it should insert a newline (iPhone
         // always; visionOS without a hardware keyboard)
@@ -138,11 +141,19 @@ struct SubmittableTextView: UIViewRepresentable {
     /// Reports the caret's UTF-16 offset (end of selection) on every
     /// selection change; used by visionOS dictation to insert at the caret.
     var onCaretChange: ((Int) -> Void)?
+    /// Corner radius of the visionOS hover/highlight shape; defaults to the
+    /// composer field's corners.
+    var hoverCornerRadius: CGFloat = Constants.Conversation.Composer.fieldCornerRadius
+    /// VoiceOver label for the text view (UITextView has no placeholder to
+    /// announce, so a SwiftUI placeholder overlay does not label it).
+    var accessibilityLabel: String?
 
     func makeUIView(context: Context) -> KeyCommandTextView {
         let textView = KeyCommandTextView()
         textView.delegate = context.coordinator
         textView.onSubmit = onSubmit
+        textView.accessibilityLabel = accessibilityLabel
+        textView.accessibilityIdentifier = "composer.textView"
         textView.font = UIFont.preferredFont(forTextStyle: .body)
         textView.backgroundColor = .clear
         #if os(visionOS)
@@ -151,7 +162,8 @@ struct SubmittableTextView: UIViewRepresentable {
         // inside the rounded field (the outer RoundedRectangle clip in
         // MessageInputView does not affect it).
         textView.hoverStyle = UIHoverStyle(
-            shape: .rect(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius))
+            shape: .rect(cornerRadius: hoverCornerRadius)
+        )
         #endif
         let inset = Constants.Conversation.Composer.textContainerInset
         textView.textContainerInset = UIEdgeInsets(top: inset, left: inset, bottom: inset, right: inset)
@@ -163,7 +175,7 @@ struct SubmittableTextView: UIViewRepresentable {
 
         // Report height whenever layout changes (e.g. initial layout, rotation)
         textView.onLayoutChange = { [weak textView] in
-            guard let textView = textView else { return }
+            guard let textView else { return }
             onHeightChange?(textView.naturalHeight)
         }
 
@@ -177,6 +189,7 @@ struct SubmittableTextView: UIViewRepresentable {
 
         // Update onSubmit closure so it always captures current state
         textView.onSubmit = onSubmit
+        textView.accessibilityLabel = accessibilityLabel
 
         // Sync text from SwiftUI → UIKit (avoid cursor jump during editing)
         if textView.text != text {
@@ -184,14 +197,14 @@ struct SubmittableTextView: UIViewRepresentable {
 
             let idealHeight = textView.naturalHeight
             DispatchQueue.main.async {
-                self.onHeightChange?(idealHeight)
+                onHeightChange?(idealHeight)
             }
         }
 
         // Sync focus
-        if isFocused && !textView.isFirstResponder {
+        if isFocused, !textView.isFirstResponder {
             DispatchQueue.main.async { textView.becomeFirstResponder() }
-        } else if !isFocused && textView.isFirstResponder {
+        } else if !isFocused, textView.isFirstResponder {
             DispatchQueue.main.async { textView.resignFirstResponder() }
         }
     }
@@ -231,13 +244,13 @@ struct SubmittableTextView: UIViewRepresentable {
             parent.onCaretChange?(range.location + range.length)
         }
 
-        func textViewDidBeginEditing(_ textView: UITextView) {
+        func textViewDidBeginEditing(_: UITextView) {
             DispatchQueue.main.async {
                 self.parent.isFocused = true
             }
         }
 
-        func textViewDidEndEditing(_ textView: UITextView) {
+        func textViewDidEndEditing(_: UITextView) {
             DispatchQueue.main.async {
                 self.parent.isFocused = false
             }
@@ -249,7 +262,7 @@ struct SubmittableTextView: UIViewRepresentable {
         /// detect the held Shift key and allow the newline insertion.
         func textView(
             _ textView: UITextView,
-            shouldChangeTextIn range: NSRange,
+            shouldChangeTextIn _: NSRange,
             replacementText text: String
         ) -> Bool {
             if text == "\n" {
@@ -268,4 +281,3 @@ struct SubmittableTextView: UIViewRepresentable {
         }
     }
 }
-

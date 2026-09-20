@@ -1,14 +1,13 @@
 import Foundation
+@testable import Intent
 import Observation
 import Synchronization
 import Testing
-@testable import Intent
 
 /// Integration tests for the workspace-keyed monitor pool feeding the list
 /// rows (one global prMonitor:* subscription, per-workspace seed + fold).
 @MainActor
 struct WorkspacePrMonitorsStoreTests {
-
     private func makeMonitorDict(
         monitorId: String = "prm-1",
         workspaceId: String = "ws-abc",
@@ -32,10 +31,9 @@ struct WorkspacePrMonitorsStoreTests {
     private func makeEventData(
         monitorId: String = "prm-1",
         workspaceId: String = "ws-abc",
-        state: String = "active",
-        changes: [String]? = nil
+        state: String = "active"
     ) -> [String: Any] {
-        var data: [String: Any] = [
+        [
             "workspaceId": workspaceId,
             "agentId": "agent-1",
             "monitorId": monitorId,
@@ -43,8 +41,6 @@ struct WorkspacePrMonitorsStoreTests {
             "prNumber": 12,
             "state": state
         ]
-        if let changes { data["changes"] = changes }
-        return data
     }
 
     private func makeSeededStore(
@@ -73,7 +69,7 @@ struct WorkspacePrMonitorsStoreTests {
         #expect(store.monitors(for: "ws-other").isEmpty)
     }
 
-    @Test func repeatSeedIsNoOpAndSecondWorkspaceGetsOwnBucket() async throws {
+    @Test func repeatSeedIsNoOpAndSecondWorkspaceGetsOwnBucket() async {
         let fake = FakeConnectionManager()
         let store = await makeSeededStore(fake, monitors: [makeMonitorDict()])
         fake.clearRequestLog()
@@ -82,9 +78,11 @@ struct WorkspacePrMonitorsStoreTests {
         #expect(fake.paramsForMethod("prMonitor.list").isEmpty)
         #expect(fake.paramsForMethod("events.subscribe").isEmpty)
 
-        fake.responseMap["prMonitor.list"] = ["monitors": [
-            makeMonitorDict(monitorId: "prm-9", workspaceId: "ws-def", prNumber: 9)
-        ]]
+        fake.responseMap["prMonitor.list"] = [
+            "monitors": [
+                makeMonitorDict(monitorId: "prm-9", workspaceId: "ws-def", prNumber: 9)
+            ]
+        ]
         await store.seed(workspaceId: "ws-def")
         #expect(fake.paramsForMethod("prMonitor.list").first?["workspaceId"] as? String == "ws-def")
         // One global subscription serves both workspaces.
@@ -105,9 +103,9 @@ struct WorkspacePrMonitorsStoreTests {
                 "data": makeEventData(state: "completed")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        #expect(store.monitors(for: "ws-abc")[0].state == .completed)
+        try await waitUntil("prMonitor:completed fold") {
+            store.monitors(for: "ws-abc").first?.state == .completed
+        }
     }
 
     @Test func monitorEventsInvalidateObservedWorkspaceBucket() async throws {
@@ -128,10 +126,11 @@ struct WorkspacePrMonitorsStoreTests {
                 "data": makeEventData(state: "completed")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitUntil("prMonitor:completed fold") {
+            store.monitors(for: "ws-abc").first?.state == .completed
+        }
 
         #expect(changeCount.withLock { $0 } == 1)
-        #expect(store.monitors(for: "ws-abc")[0].state == .completed)
     }
 
     @Test func eventForUnseededWorkspaceIsIgnored() async throws {
@@ -147,11 +146,11 @@ struct WorkspacePrMonitorsStoreTests {
                 "data": makeEventData(monitorId: "prm-x", workspaceId: "ws-unseen")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
 
         // No bucket, no refetch for a workspace no row has seeded.
-        #expect(store.monitors(for: "ws-unseen").isEmpty)
-        #expect(fake.paramsForMethod("prMonitor.list").isEmpty)
+        try await expectNever("bucket or prMonitor.list refetch for an unseeded workspace") {
+            !store.monitors(for: "ws-unseen").isEmpty || fake.didCallMethod("prMonitor.list")
+        }
     }
 
     @Test func foreignSubscriptionEventIsIgnored() async throws {
@@ -166,9 +165,9 @@ struct WorkspacePrMonitorsStoreTests {
                 "data": makeEventData(state: "cancelled")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        #expect(store.monitors(for: "ws-abc").count == 1)
+        try await expectNever("fold of a foreign-subscription event") {
+            store.monitors(for: "ws-abc").count != 1
+        }
     }
 
     @Test func cancelledEventDropsMonitorFromBucket() async throws {
@@ -183,9 +182,9 @@ struct WorkspacePrMonitorsStoreTests {
                 "data": makeEventData(state: "cancelled")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        #expect(store.monitors(for: "ws-abc").isEmpty)
+        try await waitUntil("prMonitor:cancelled fold") {
+            store.monitors(for: "ws-abc").isEmpty
+        }
     }
 
     @Test func unknownMonitorEventRefetchesOnlyItsWorkspace() async throws {
@@ -194,9 +193,11 @@ struct WorkspacePrMonitorsStoreTests {
         fake.responseMap["prMonitor.list"] = ["monitors": [] as [[String: Any]]]
         await store.seed(workspaceId: "ws-def")
         fake.clearRequestLog()
-        fake.responseMap["prMonitor.list"] = ["monitors": [
-            makeMonitorDict(monitorId: "prm-new", workspaceId: "ws-def")
-        ]]
+        fake.responseMap["prMonitor.list"] = [
+            "monitors": [
+                makeMonitorDict(monitorId: "prm-new", workspaceId: "ws-def")
+            ]
+        ]
 
         fake.deliverEvent(method: "events.event", params: [
             "subscriptionId": "sub-rows",
@@ -206,13 +207,13 @@ struct WorkspacePrMonitorsStoreTests {
                 "data": makeEventData(monitorId: "prm-new", workspaceId: "ws-def")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("prMonitor.list refetch for the unknown monitor") {
+            store.monitors(for: "ws-def").map(\.monitorId) == ["prm-new"]
+        }
 
         let listCalls = fake.paramsForMethod("prMonitor.list")
         #expect(listCalls.count == 1)
         #expect(listCalls.first?["workspaceId"] as? String == "ws-def")
-        #expect(store.monitors(for: "ws-def").count == 1)
-        #expect(store.monitors(for: "ws-def")[0].monitorId == "prm-new")
     }
 
     @Test func reconnectResubscribesAndReseedsAllWorkspaces() async throws {
@@ -225,11 +226,7 @@ struct WorkspacePrMonitorsStoreTests {
 
         fake.simulateDisconnect()
         fake.simulateConnect()
-        await Task.yield()
-        for _ in 0..<40 {
-            try await Task.sleep(nanoseconds: 50_000_000)
-            if fake.paramsForMethod("prMonitor.list").count >= 2 { break }
-        }
+        try await fake.waitForRequests("prMonitor.list", count: 2)
 
         #expect(fake.didCallMethod("events.subscribe"))
         let reseededIds = Set(fake.paramsForMethod("prMonitor.list")
@@ -245,7 +242,7 @@ struct WorkspacePrMonitorsStoreTests {
         // Suspend prMonitor.list so a fold can land while one is in flight.
         fake.pendingMethods.insert("prMonitor.list")
         let refetchTask = Task { await store.refetch(workspaceId: "ws-abc") }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await fake.waitForPendingRequests("prMonitor.list")
 
         fake.deliverEvent(method: "events.event", params: [
             "subscriptionId": "sub-rows",
@@ -255,16 +252,18 @@ struct WorkspacePrMonitorsStoreTests {
                 "data": makeEventData(state: "cancelled")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 20_000_000)
-        #expect(store.monitors(for: "ws-abc").isEmpty)
+        try await waitUntil("prMonitor:cancelled fold") {
+            store.monitors(for: "ws-abc").isEmpty
+        }
 
         // Resolve the in-flight request with the STALE payload — it still
-        // lists the cancelled monitor.
+        // lists the cancelled monitor. The discarded response queues exactly
+        // one follow-up fetch, which stays suspended.
         fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await fake.waitForRequests("prMonitor.list", count: 2)
+        #expect(fake.paramsForMethod("prMonitor.list").count == 2)
 
         #expect(store.monitors(for: "ws-abc").isEmpty)
-        #expect(fake.paramsForMethod("prMonitor.list").count == 2)
 
         // Fresh server state (post-cancel) for the queued follow-up fetch.
         fake.resolvePending("prMonitor.list", with: ["monitors": [] as [[String: Any]]])
@@ -279,10 +278,8 @@ struct WorkspacePrMonitorsStoreTests {
         #expect(store != nil)
 
         store = nil
-        for _ in 0..<40 {
-            if fake.eventHandlerCount == 0 { break }
-            try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitUntil("deinit to remove the event handler") {
+            fake.eventHandlerCount == 0
         }
-        #expect(fake.eventHandlerCount == 0)
     }
 }

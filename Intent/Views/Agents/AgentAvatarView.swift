@@ -8,8 +8,8 @@ import SwiftUI
 struct AgentAvatarView: View {
     let agentId: String
     var size: CGFloat = 20
-    var specialist: String? = nil
-    var icon: String? = nil  // Specialist icon metadata (PROTOCOL §5.11)
+    var specialist: String?
+    var icon: String?  // Specialist icon metadata (PROTOCOL §5.11)
     var isActive: Bool = false
     var state: AgentAvatarState = .idle
 
@@ -32,7 +32,8 @@ struct AgentAvatarView: View {
                     lineWidth: Constants.AgentAvatar.referenceStrokeWidth * artSize
                         / Constants.AgentAvatar.referenceArtSize,
                     lineCap: .round,
-                    lineJoin: .round))
+                    lineJoin: .round
+                ))
                 .frame(width: artSize, height: artSize)
 
             AgentAvatarFillShape(glyphPath: design.glyph.fillPath)
@@ -50,7 +51,8 @@ struct AgentAvatarView: View {
                             strong
                                 ? Constants.Colors.AgentAvatar.activeStrokeStrong
                                 : Constants.Colors.AgentAvatar.activeStrokeWeak,
-                            lineWidth: Constants.AgentAvatar.activeStrokeWidth)
+                            lineWidth: Constants.AgentAvatar.activeStrokeWidth
+                        )
                 } animation: { _ in
                     .easeInOut(duration: Constants.AgentAvatar.pulseAnimationDuration)
                 }
@@ -84,7 +86,7 @@ struct AgentAvatarView: View {
     }
 }
 
-private struct AgentAvatarStrokeShape: Shape {
+nonisolated private struct AgentAvatarStrokeShape: Shape {
     let glyphPath: Path
 
     func path(in rect: CGRect) -> Path {
@@ -92,7 +94,7 @@ private struct AgentAvatarStrokeShape: Shape {
     }
 }
 
-private struct AgentAvatarFillShape: Shape {
+nonisolated private struct AgentAvatarFillShape: Shape {
     let glyphPath: Path
 
     func path(in rect: CGRect) -> Path {
@@ -105,5 +107,6 @@ nonisolated private func artTransform(for rect: CGRect) -> CGAffineTransform {
     CGAffineTransform(translationX: rect.minX, y: rect.minY)
         .scaledBy(
             x: rect.width / Constants.AgentAvatar.referenceArtSize,
-            y: rect.height / Constants.AgentAvatar.referenceArtSize)
+            y: rect.height / Constants.AgentAvatar.referenceArtSize
+        )
 }

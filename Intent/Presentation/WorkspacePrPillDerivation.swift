@@ -1,14 +1,15 @@
 import SwiftUI
 
 extension WorkspaceRowView {
+    struct PrIndicatorPill: Equatable {
+        let status: WorkspacePrPill.Status
+        let number: Int?
+    }
+
     /// What the metadata line shows for PRs: the primary pill (nil renders
     /// no pill — exactly today's legacy behavior) and the "+N" count.
     struct PrIndicatorModel: Equatable {
-        struct Pill: Equatable {
-            let status: WorkspacePrPill.Status
-            let number: Int?
-        }
-        let pill: Pill?
+        let pill: PrIndicatorPill?
         let otherMonitorCount: Int
     }
 
@@ -18,31 +19,36 @@ extension WorkspaceRowView {
     /// "+N" = `countOtherMonitors` against the primary's repo-qualified
     /// number. Like FE `mapWorkspacePRs`, an empty/absent `pullRequests`
     /// falls back to the single `activePullRequest` row before merging.
-    static func derivePrIndicator(workspace: Workspace,
-                                  monitors: [MonitoredPr]) -> PrIndicatorModel {
+    static func derivePrIndicator(
+        workspace: Workspace,
+        monitors: [MonitoredPr]
+    ) -> PrIndicatorModel {
         var workspaceRepo: String?
         if let owner = workspace.repositoryOwner, let name = workspace.repositoryName,
            !owner.isEmpty, !name.isEmpty {
             workspaceRepo = "\(owner)/\(name)"
         }
         let basePrs: [WorkspacePullRequest]
-        if let prs = workspace.pullRequests, !prs.isEmpty {
-            basePrs = prs
+        if !workspace.pullRequests.isEmpty {
+            basePrs = workspace.pullRequests
         } else if let activePr = workspace.activePullRequest {
             basePrs = [activePr]
         } else {
             basePrs = []
         }
         let base = basePrs.map(WorkspacePrPill.PillPr.init)
-        let pool = WorkspacePrPill.mergeMonitoredPRs(base, monitors,
-                                                     workspaceRepo: workspaceRepo)
+        let pool = WorkspacePrPill.mergeMonitoredPRs(
+            base,
+            monitors,
+            workspaceRepo: workspaceRepo
+        )
         let primary = WorkspacePrPill.selectPrimaryPr(pool)
 
-        let pill: PrIndicatorModel.Pill?
+        let pill: PrIndicatorPill?
         if let primary {
-            pill = PrIndicatorModel.Pill(status: primary.status, number: primary.number)
+            pill = PrIndicatorPill(status: primary.status, number: primary.number)
         } else if let legacy = workspace.prStatus.flatMap(legacyPillStatus) {
-            pill = PrIndicatorModel.Pill(status: legacy, number: workspace.prNumber)
+            pill = PrIndicatorPill(status: legacy, number: workspace.prNumber)
         } else {
             pill = nil
         }
@@ -52,7 +58,8 @@ extension WorkspaceRowView {
             primaryPrNumber: primary?.number ?? workspace.prNumber,
             repositoryOwner: workspace.repositoryOwner,
             repositoryName: workspace.repositoryName,
-            primaryCrossRepo: primary?.crossRepo)
+            primaryCrossRepo: primary?.crossRepo
+        )
         return PrIndicatorModel(pill: pill, otherMonitorCount: count)
     }
 

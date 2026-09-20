@@ -1,15 +1,26 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 @MainActor
 struct BackgroundHookStoreTests {
+    private struct HookStateExpectation {
+        let rawValue: String
+        let state: BackgroundHook.State
+        let isActive: Bool
+    }
+
+    private enum PerpetualFixtureState {
+        case oneShot
+        case perpetual
+        case unreported
+    }
 
     private func makeHookDict(
         hookId: String = "hook-1",
         state: String = "scheduled",
         nextRunAt: String? = "2026-07-31T10:06:00Z",
-        perpetual: Bool? = nil
+        perpetual: PerpetualFixtureState = .unreported
     ) -> [String: Any] {
         var dict: [String: Any] = [
             "hookId": hookId,
@@ -17,14 +28,18 @@ struct BackgroundHookStoreTests {
             "agentId": "agent-1",
             "name": "ci-watch",
             "code": "const s = await ws.pr.status();",
-            "delayMs": 60000,
+            "delayMs": 60_000,
             "state": state,
             "createdAt": "2026-07-31T10:00:00Z",
             "expiresAt": "2026-07-31T11:00:00Z",
             "runCount": 6
         ]
         if let nextRunAt { dict["nextRunAt"] = nextRunAt }
-        if let perpetual { dict["perpetual"] = perpetual }
+        switch perpetual {
+        case .oneShot: dict["perpetual"] = false
+        case .perpetual: dict["perpetual"] = true
+        case .unreported: break
+        }
         return dict
     }
 
@@ -37,7 +52,7 @@ struct BackgroundHookStoreTests {
         #expect(hook.agentId == "agent-1")
         #expect(hook.name == "ci-watch")
         #expect(hook.code == "const s = await ws.pr.status();")
-        #expect(hook.delayMs == 60000)
+        #expect(hook.delayMs == 60_000)
         #expect(hook.state == .scheduled)
         #expect(hook.createdAt == "2026-07-31T10:00:00Z")
         #expect(hook.expiresAt == "2026-07-31T11:00:00Z")
@@ -48,25 +63,25 @@ struct BackgroundHookStoreTests {
     }
 
     @Test func parsesPerpetualFlag() throws {
-        let perpetual = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: true)))
+        let perpetual = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: .perpetual)))
         #expect(perpetual.perpetual == true)
-        let oneShot = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: false)))
+        let oneShot = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: .oneShot)))
         #expect(oneShot.perpetual == false)
     }
 
     @Test func parsesAllStatesAndIsActive() throws {
-        let expectations: [(String, BackgroundHook.State, Bool)] = [
-            ("scheduled", .scheduled, true),
-            ("running", .running, true),
-            ("dispatched", .dispatched, false),
-            ("evicted", .evicted, false),
-            ("cancelled", .cancelled, false),
-            ("expired", .expired, false)
+        let expectations = [
+            HookStateExpectation(rawValue: "scheduled", state: .scheduled, isActive: true),
+            HookStateExpectation(rawValue: "running", state: .running, isActive: true),
+            HookStateExpectation(rawValue: "dispatched", state: .dispatched, isActive: false),
+            HookStateExpectation(rawValue: "evicted", state: .evicted, isActive: false),
+            HookStateExpectation(rawValue: "cancelled", state: .cancelled, isActive: false),
+            HookStateExpectation(rawValue: "expired", state: .expired, isActive: false)
         ]
-        for (raw, expected, active) in expectations {
-            let hook = try #require(BackgroundHook.parseHook(makeHookDict(state: raw)))
-            #expect(hook.state == expected)
-            #expect(hook.isActive == active)
+        for expectation in expectations {
+            let hook = try #require(BackgroundHook.parseHook(makeHookDict(state: expectation.rawValue)))
+            #expect(hook.state == expectation.state)
+            #expect(hook.isActive == expectation.isActive)
         }
     }
 
@@ -106,10 +121,10 @@ struct BackgroundHookStoreTests {
         #expect(DurationFormat.compact(59.6) == "1m")
         #expect(DurationFormat.compact(12 * 60) == "12m")
         #expect(DurationFormat.compact(12 * 60 + 30) == "12m 30s")
-        #expect(DurationFormat.compact(3_600) == "1h")
-        #expect(DurationFormat.compact(3_600 + 5 * 60 + 30) == "1h 5m")
-        #expect(DurationFormat.compact(3_600 + 30) == "1h")
-        #expect(DurationFormat.compact(2 * 86_400 + 3 * 3_600) == "2d 3h")
+        #expect(DurationFormat.compact(3600) == "1h")
+        #expect(DurationFormat.compact(3600 + 5 * 60 + 30) == "1h 5m")
+        #expect(DurationFormat.compact(3600 + 30) == "1h")
+        #expect(DurationFormat.compact(2 * 86_400 + 3 * 3600) == "2d 3h")
         #expect(DurationFormat.compact(86_400 + 30 * 60) == "1d")
     }
 
@@ -167,7 +182,7 @@ struct BackgroundHookStoreTests {
         }
     }
 
-    @Test func foldUnknownHookRequestsRefetch() throws {
+    @Test func foldUnknownHookRequestsRefetch() {
         let result = BackgroundHookStore.foldHookEvent(
             hooks: [],
             eventType: "hook:scheduled",
@@ -186,7 +201,9 @@ struct BackgroundHookStoreTests {
         )
         #expect(result.hooks[0].code == "const s = await ws.pr.status();")
     }
+}
 
+extension BackgroundHookStoreTests {
     // MARK: - Store integration (subscribe / events / RPC / reconnect)
 
     private func makeSubscribedStore(
@@ -223,13 +240,19 @@ struct BackgroundHookStoreTests {
             "event": [
                 "type": "hook:run-started",
                 "workspaceId": "ws-1",
-                "data": ["workspaceId": "ws-1", "agentId": "agent-1",
-                         "hookId": "hook-1", "name": "ci-watch", "state": "running"]
+                "data": [
+                    "workspaceId": "ws-1",
+                    "agentId": "agent-1",
+                    "hookId": "hook-1",
+                    "name": "ci-watch",
+                    "state": "running"
+                ]
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitUntil("hook:run-started fold") {
+            store.hooks.first?.state == .running
+        }
 
-        #expect(store.hooks[0].state == .running)
         #expect(store.hooks[0].code == "const s = await ws.pr.status();")
     }
 
@@ -253,9 +276,9 @@ struct BackgroundHookStoreTests {
                 "data": ["workspaceId": "ws-1", "hookId": "hook-1"]
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        #expect(store.hooks.count == 1)
+        try await expectNever("fold of a foreign-workspace or foreign-subscription event") {
+            store.hooks.count != 1
+        }
     }
 
     @Test func unknownHookEventTriggersRefetch() async throws {
@@ -272,11 +295,11 @@ struct BackgroundHookStoreTests {
                 "data": ["workspaceId": "ws-1", "hookId": "hook-new"]
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("hook.list refetch for the unknown hook") {
+            store.hooks.map(\.hookId) == ["hook-new"]
+        }
 
         #expect(fake.paramsForMethod("hook.list").count == 1)
-        #expect(store.hooks.count == 1)
-        #expect(store.hooks[0].hookId == "hook-new")
     }
 
     @Test func runNowAndCancelSendExactParams() async throws {
@@ -303,14 +326,9 @@ struct BackgroundHookStoreTests {
 
         fake.simulateDisconnect()
         fake.simulateConnect()
-        await Task.yield()
-        for _ in 0..<40 {
-            try await Task.sleep(nanoseconds: 50_000_000)
-            if fake.didCallMethod("hook.list") { break }
-        }
+        try await fake.waitForRequests("hook.list")
 
         #expect(fake.didCallMethod("events.subscribe"))
-        #expect(fake.didCallMethod("hook.list"))
         #expect(store.hooks.count == 1)
     }
 
@@ -334,7 +352,7 @@ struct BackgroundHookStoreTests {
         // Suspend hook.list requests so a fold can land while one is in flight.
         fake.pendingMethods.insert("hook.list")
         let refetchTask = Task { await store.refetch() }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await fake.waitForPendingRequests("hook.list")
 
         fake.deliverEvent(method: "events.event", params: [
             "subscriptionId": "sub-hooks",
@@ -344,19 +362,18 @@ struct BackgroundHookStoreTests {
                 "data": ["workspaceId": "ws-1", "hookId": "hook-1"]
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 20_000_000)
-        #expect(store.hooks.isEmpty)
+        try await waitUntil("hook:cancelled fold") { store.hooks.isEmpty }
 
         // Resolve the in-flight request with the STALE payload — it still
         // lists the cancelled hook. The queued follow-up stays suspended, so
         // a wrongly applied stale response cannot be masked by convergence.
         fake.resolvePending("hook.list", with: ["hooks": [makeHookDict()]])
-        try await Task.sleep(nanoseconds: 20_000_000)
-
-        // The stale response must not restore the cancelled hook; the
-        // discarded response queues one follow-up fetch to converge.
-        #expect(store.hooks.isEmpty)
+        // The discarded response queues exactly one follow-up fetch to converge.
+        try await fake.waitForRequests("hook.list", count: 2)
         #expect(fake.paramsForMethod("hook.list").count == 2)
+
+        // The stale response must not restore the cancelled hook.
+        #expect(store.hooks.isEmpty)
 
         // Fresh server state (post-cancel) for the queued follow-up fetch.
         fake.resolvePending("hook.list", with: ["hooks": [] as [[String: Any]]])
@@ -369,13 +386,17 @@ struct BackgroundHookStoreTests {
         let store = await makeSubscribedStore(fake, hooks: [makeHookDict()])
         fake.clearRequestLog()
 
-        fake.delayMap["hook.list"] = 100_000_000
+        // Suspend hook.list so unsubscribe lands while the request is in flight.
+        fake.pendingMethods.insert("hook.list")
         let refetchTask = Task { await store.refetch() }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await fake.waitForPendingRequests("hook.list")
 
         await store.unsubscribe()
         #expect(store.hooks.isEmpty)
 
+        // Resolve the in-flight request with the STALE payload — it still
+        // lists the hook that unsubscribe cleared.
+        fake.resolvePending("hook.list", with: ["hooks": [makeHookDict()]])
         await refetchTask.value
 
         // The stale response must not repopulate the cleared list, and the
@@ -393,11 +414,8 @@ struct BackgroundHookStoreTests {
         #expect(store != nil)
 
         store = nil
-        // deinit hops to the main actor to remove the handler; wait for that task
-        for _ in 0..<40 {
-            if fake.eventHandlerCount == 0 { break }
-            try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitUntil("deinit to remove the event handler") {
+            fake.eventHandlerCount == 0
         }
-        #expect(fake.eventHandlerCount == 0)
     }
 }

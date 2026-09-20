@@ -9,13 +9,15 @@ import Foundation
 enum PairingFlow {
     /// How to pin the connection for a parsed pairing payload.
     enum FingerprintResolution: Equatable {
-        /// The payload carried a fingerprint — connect pinned immediately.
-        case pinned(String)
+        /// No payload fingerprint and the probe failed — abort. The message
+        /// names the stage the probe failed at (unreachable, timeout, TLS
+        /// handshake, no certificate).
+        case failed(message: String)
         /// The payload carried no fingerprint: the server certificate was
         /// probed; the user must confirm trust before connecting pinned.
         case needsUserConfirmation(String)
-        /// No payload fingerprint and the probe found no certificate — abort.
-        case failed(message: String)
+        /// The payload carried a fingerprint — connect pinned immediately.
+        case pinned(String)
     }
 
     /// Resolve the certificate fingerprint to pin for a payload. `probe` is
@@ -23,7 +25,7 @@ enum PairingFlow {
     /// the payload's hosts.
     static func resolveFingerprint(
         for payload: PairingPayload,
-        probe: ([String], Int) async -> String? = { hosts, port in
+        probe: ([String], Int) async -> CertFingerprintProbe.ProbeResult = { hosts, port in
             await CertFingerprintProbe.probeFirst(hosts: hosts, port: port)
         }
     ) async -> FingerprintResolution {
@@ -31,7 +33,7 @@ enum PairingFlow {
             return .pinned(fingerprint)
         }
         let probed = await probe(payload.hosts, payload.port)
-        switch CertFingerprintProbe.outcome(forFingerprint: probed) {
+        switch CertFingerprintProbe.outcome(forProbe: probed) {
         case .confirmFingerprint(let fingerprint):
             return .needsUserConfirmation(fingerprint)
         case .abort(let message):
@@ -47,13 +49,18 @@ enum PairingFlow {
     /// model v2: there is no default session), so the pairing dials the
     /// connection the presenting window will keep using.
     static func connect(
-        payload: PairingPayload, certFingerprint: String,
+        payload: PairingPayload,
+        certFingerprint: String,
         connectionManager: any SessionConnectionManaging,
         persistence: PersistenceManager = .shared
     ) async throws -> StoredConnection {
         try await connectionManager.connect(
-            hosts: payload.hosts, port: payload.port, token: payload.token,
-            certFingerprint: certFingerprint, tcAddress: payload.tcAddress)
+            hosts: payload.hosts,
+            port: payload.port,
+            token: payload.token,
+            certFingerprint: certFingerprint,
+            tcAddress: payload.tcAddress
+        )
         // A cancelled pairing (deep-link sheet dismissed mid-flight) must
         // not be persisted after the connect happens to complete first —
         // and the just-established authenticated socket must not be left
@@ -63,13 +70,20 @@ enum PairingFlow {
             throw CancellationError()
         }
         let server = PairedServer(
-            hosts: payload.hosts, port: payload.port, name: "Intent",
-            pairedAt: Date(), certFingerprint: certFingerprint,
-            tcAddress: payload.tcAddress)
+            hosts: payload.hosts,
+            port: payload.port,
+            name: "Intent",
+            pairedAt: Date(),
+            certFingerprint: certFingerprint,
+            tcAddress: payload.tcAddress
+        )
         do {
             return try await ConnectionPairing.finalize(
-                server: server, token: payload.token, connection: connectionManager,
-                persistence: persistence)
+                server: server,
+                token: payload.token,
+                connection: connectionManager,
+                persistence: persistence
+            )
         } catch {
             // The authenticated socket belongs to this failed pairing attempt;
             // do not leave it live when no saved connection can own it.

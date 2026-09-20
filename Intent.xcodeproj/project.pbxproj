@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		AB000003AAAA000000000003 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */; platformFilter = ios; };
 		AB000004AAAA000000000004 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */; platformFilter = ios; };
+		AC000011AAAA000000000011 /* Intent in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000001AAAA000000000001 /* Intent */; };
+		AC000012AAAA000000000012 /* IntentTests in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000002AAAA000000000002 /* IntentTests */; };
+		AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000003AAAA000000000003 /* Info-visionOS.plist */; };
 		EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* Textual */; };
 /* End PBXBuildFile section */
 
@@ -29,8 +32,27 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		AC000021AAAA000000000021 /* Copy Test Source Inputs */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = TestSourceInputs;
+			dstSubfolderSpec = 7;
+			files = (
+				AC000011AAAA000000000011 /* Intent in Copy Test Source Inputs */,
+				AC000012AAAA000000000012 /* IntentTests in Copy Test Source Inputs */,
+				AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */,
+			);
+			name = "Copy Test Source Inputs";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = TailcatKit/build/TailcatKit.xcframework; sourceTree = "<group>"; };
+		AC000001AAAA000000000001 /* Intent */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Intent; sourceTree = SOURCE_ROOT; };
+		AC000002AAAA000000000002 /* IntentTests */ = {isa = PBXFileReference; lastKnownFileType = folder; path = IntentTests; sourceTree = SOURCE_ROOT; };
+		AC000003AAAA000000000003 /* Info-visionOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-visionOS.plist"; sourceTree = SOURCE_ROOT; };
 		EB655EC92F669E6B00176730 /* Intent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EDA2F669E6C00176730 /* IntentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EE42F669E6C00176730 /* IntentUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -102,8 +124,19 @@
 				EB655EDD2F669E6C00176730 /* IntentTests */,
 				EB655EE72F669E6C00176730 /* IntentUITests */,
 				AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */,
+				AC000004AAAA000000000004 /* Test Source Inputs */,
 				EB655ECA2F669E6B00176730 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		AC000004AAAA000000000004 /* Test Source Inputs */ = {
+			isa = PBXGroup;
+			children = (
+				AC000001AAAA000000000001 /* Intent */,
+				AC000002AAAA000000000002 /* IntentTests */,
+				AC000003AAAA000000000003 /* Info-visionOS.plist */,
+			);
+			name = "Test Source Inputs";
 			sourceTree = "<group>";
 		};
 		EB655ECA2F669E6B00176730 /* Products */ = {
@@ -123,6 +156,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = EB655EED2F669E6C00176730 /* Build configuration list for PBXNativeTarget "Intent" */;
 			buildPhases = (
+				B0825EC4FC1B470EBF85C8D3 /* SwiftLint Diagnostics */,
 				EB655EC52F669E6B00176730 /* Sources */,
 				EB655EC62F669E6B00176730 /* Frameworks */,
 				EB655EC72F669E6B00176730 /* Resources */,
@@ -149,6 +183,8 @@
 				EB655ED62F669E6C00176730 /* Sources */,
 				EB655ED72F669E6C00176730 /* Frameworks */,
 				EB655ED82F669E6C00176730 /* Resources */,
+				B1000001BUNDLEINPUTS000001 /* Generate Test Source Inputs */,
+				AC000021AAAA000000000021 /* Copy Test Source Inputs */,
 			);
 			buildRules = (
 			);
@@ -259,6 +295,59 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		B0825EC4FC1B470EBF85C8D3 /* SwiftLint Diagnostics */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"$(SRCROOT)/scripts/swiftlint-xcode-inputs.xcfilelist",
+			);
+			inputPaths = (
+				"$(SRCROOT)/.swiftlint.yml",
+				"$(SRCROOT)/scripts/swiftlint-xcode.sh",
+				"$(SRCROOT)/Intent",
+				"$(SRCROOT)/IntentTests",
+				"$(SRCROOT)/IntentUITests",
+			);
+			name = "SwiftLint Diagnostics";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"$SRCROOT/scripts/swiftlint-xcode.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		B1000001BUNDLEINPUTS000001 /* Generate Test Source Inputs */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"$(SRCROOT)/scripts/test-source-inputs.xcfilelist",
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/generate-test-inputs.sh",
+				"$(SRCROOT)/Intent/Info.plist",
+				"$(SRCROOT)/Info-visionOS.plist",
+			);
+			name = "Generate Test Source Inputs";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SourceInputs/",
+				"$(TARGET_TEMP_DIR)/TestSourceInputsScratch/",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"$SRCROOT/scripts/generate-test-inputs.sh\" \"$SRCROOT\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/SourceInputs\" \"$TARGET_TEMP_DIR/TestSourceInputsScratch\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		EB655EC52F669E6B00176730 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -316,10 +405,11 @@
 				"INFOPLIST_FILE[sdk=xros*]" = "Info-visionOS.plist";
 				"INFOPLIST_FILE[sdk=xrsimulator*]" = "Info-visionOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Intent;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Intent needs camera access to scan QR codes for pairing with the desktop app.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Intent needs local network access to connect to the desktop app on your network.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Intent saves images from your conversations to your photo library when you choose Save Image.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -328,7 +418,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -363,10 +453,11 @@
 				"INFOPLIST_FILE[sdk=xros*]" = "Info-visionOS.plist";
 				"INFOPLIST_FILE[sdk=xrsimulator*]" = "Info-visionOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Intent;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Intent needs camera access to scan QR codes for pairing with the desktop app.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Intent needs local network access to connect to the desktop app on your network.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Intent saves images from your conversations to your photo library when you choose Save Image.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -375,7 +466,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -528,7 +619,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -556,7 +647,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -578,7 +669,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -600,7 +691,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

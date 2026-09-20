@@ -35,7 +35,7 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
         Coordinator(text: text, preview: preview)
     }
 
-    func makeUIView(context: Context) -> OverlayView {
+    func makeUIView(context _: Context) -> OverlayView {
         let view = OverlayView()
         view.backgroundColor = .clear
         return view
@@ -126,9 +126,10 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
             // to any text-input descendant that claims the point directly.
             if let below, isDescendant(of: below),
                 let textInput = below.textInputDescendant(
-                    containing: convert(point, to: below), with: event, excluding: self
-                )
-            {
+                    containing: convert(point, to: below),
+                    with: event,
+                    excluding: self
+                ) {
                 return textInput
             }
             // Same skip can hide a pass-through marker (tappable image
@@ -137,9 +138,10 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
             // reaches the SwiftUI Button above it instead of this overlay.
             if let below, isDescendant(of: below),
                 let marker = below.passthroughMarkerDescendant(
-                    containing: convert(point, to: below), with: event, excluding: self
-                )
-            {
+                    containing: convert(point, to: below),
+                    with: event,
+                    excluding: self
+                ) {
                 return marker
             }
             return self
@@ -165,8 +167,8 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
         }
 
         func contextMenuInteraction(
-            _ interaction: UIContextMenuInteraction,
-            configurationForMenuAtLocation location: CGPoint
+            _: UIContextMenuInteraction,
+            configurationForMenuAtLocation _: CGPoint
         ) -> UIContextMenuConfiguration? {
             let text = text
             return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
@@ -181,21 +183,21 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
 
         func contextMenuInteraction(
             _ interaction: UIContextMenuInteraction,
-            previewForHighlightingMenuWithConfiguration configuration: UIContextMenuConfiguration
+            previewForHighlightingMenuWithConfiguration _: UIContextMenuConfiguration
         ) -> UITargetedPreview? {
             uprightPreview(for: interaction)
         }
 
         func contextMenuInteraction(
             _ interaction: UIContextMenuInteraction,
-            previewForDismissingMenuWithConfiguration configuration: UIContextMenuConfiguration
+            previewForDismissingMenuWithConfiguration _: UIContextMenuConfiguration
         ) -> UITargetedPreview? {
             uprightPreview(for: interaction)
         }
 
         func contextMenuInteraction(
-            _ interaction: UIContextMenuInteraction,
-            willEndFor configuration: UIContextMenuConfiguration,
+            _: UIContextMenuInteraction,
+            willEndFor _: UIContextMenuConfiguration,
             animator: UIContextMenuInteractionAnimating?
         ) {
             if let animator {
@@ -248,11 +250,13 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
     }
 }
 
-/// Transparent UIKit view placed behind tappable image thumbnails inside a
-/// `MessageCopyContextMenu` row. The copy overlay claims any touch whose
-/// probe resolves to plain SwiftUI content (an ancestor hosting view), which
-/// is why taps on an attached image never reached its `Button` or its
-/// `.contextMenu`. A UIKit view beneath the overlay is a sibling instead: the
+/// Transparent UIKit view placed behind tappable controls (image thumbnails,
+/// tool-call row headers) inside a `MessageCopyContextMenu` row. The copy
+/// overlay claims any touch whose probe resolves to plain SwiftUI content (an
+/// ancestor hosting view), which is why taps on an attached image never
+/// reached its `Button` or its `.contextMenu`, and why tool rows in
+/// text-bearing assistant messages did not expand (ios#344). A UIKit view
+/// beneath the overlay is a sibling instead: the
 /// probe resolves to the marker, the overlay passes the touch through, and
 /// SwiftUI routes it to the gestures above the marker in its own tree — the
 /// Button's tap (lightbox) and the thumbnail's long-press (image Save/Copy
@@ -261,14 +265,14 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
 struct CopyContextMenuPassthroughMarker: UIViewRepresentable {
     final class MarkerView: UIView {}
 
-    func makeUIView(context: Context) -> MarkerView {
+    func makeUIView(context _: Context) -> MarkerView {
         let view = MarkerView()
         view.backgroundColor = .clear
         view.isUserInteractionEnabled = true
         return view
     }
 
-    func updateUIView(_ uiView: MarkerView, context: Context) {}
+    func updateUIView(_: MarkerView, context _: Context) {}
 }
 
 extension View {
@@ -292,25 +296,31 @@ extension UIView {
     /// hiding a correctly-framed interaction view beneath it. `excluding`
     /// prunes the caller's own subtree.
     func textInputDescendant(
-        containing point: CGPoint, with event: UIEvent?, excluding excluded: UIView
+        containing point: CGPoint,
+        with event: UIEvent?,
+        excluding excluded: UIView
     ) -> UIView? {
-        passthroughDescendant(containing: point, with: event, excluding: excluded) {
-            $0 is UITextInput
+        passthroughDescendant(containing: point, with: event, excluding: excluded) { view in
+            view is UITextInput
         }
     }
 
     /// Same walk as `textInputDescendant`, matching a
     /// `CopyContextMenuPassthroughMarker` view (tappable image thumbnails).
     func passthroughMarkerDescendant(
-        containing point: CGPoint, with event: UIEvent?, excluding excluded: UIView
+        containing point: CGPoint,
+        with event: UIEvent?,
+        excluding excluded: UIView
     ) -> UIView? {
-        passthroughDescendant(containing: point, with: event, excluding: excluded) {
-            $0 is CopyContextMenuPassthroughMarker.MarkerView
+        passthroughDescendant(containing: point, with: event, excluding: excluded) { view in
+            view is CopyContextMenuPassthroughMarker.MarkerView
         }
     }
 
     private func passthroughDescendant(
-        containing point: CGPoint, with event: UIEvent?, excluding excluded: UIView,
+        containing point: CGPoint,
+        with event: UIEvent?,
+        excluding excluded: UIView,
         where matches: (UIView) -> Bool
     ) -> UIView? {
         for subview in subviews.reversed() {
@@ -326,7 +336,10 @@ extension UIView {
                 return subview
             }
             if let match = subview.passthroughDescendant(
-                containing: localPoint, with: event, excluding: excluded, where: matches
+                containing: localPoint,
+                with: event,
+                excluding: excluded,
+                where: matches
             ) {
                 return match
             }

@@ -11,6 +11,20 @@ enum NotificationChime {
     /// 16-bit mono PCM.
     private static let sampleRate = 44_100
     private static let duration = 0.6
+    private static let riffHeaderByteCount = 44
+    private static let riffSizeFieldByteCount = 8
+    private static let formatChunkByteCount: UInt32 = 16
+    private static let bytesPerSample = 2
+    private static let pcmFormat: UInt16 = 1
+    private static let channelCount: UInt16 = 1
+    private static let bitsPerSample: UInt16 = 16
+    private static let firstToneFrequency = 880.0
+    private static let secondToneFrequency = 1174.66
+    private static let secondToneDelay = 0.12
+    private static let toneAmplitude = 0.38
+    private static let decayRate = 7.0
+    private static let normalizedAmplitudeLimit = 1.0
+    private static let int16AmplitudeLimit = 32_766.0
 
     /// URL of the cached chime WAV, generating it on first use. Nil only
     /// when the file cannot be written.
@@ -29,20 +43,27 @@ enum NotificationChime {
     /// Complete WAV bytes (44-byte RIFF header + 16-bit little-endian PCM).
     static func wavData() -> Data {
         let samples = chimeSamples()
-        var data = Data(capacity: 44 + samples.count * 2)
+        var data = Data(capacity: Self.riffHeaderByteCount + samples.count * Self.bytesPerSample)
         data.append(contentsOf: Array("RIFF".utf8))
-        appendUInt32(&data, UInt32(36 + samples.count * 2))
+        appendUInt32(
+            &data,
+            UInt32(
+                Self.riffHeaderByteCount
+                    - Self.riffSizeFieldByteCount
+                    + samples.count * Self.bytesPerSample
+            )
+        )
         data.append(contentsOf: Array("WAVE".utf8))
         data.append(contentsOf: Array("fmt ".utf8))
-        appendUInt32(&data, 16)                       // fmt chunk size
-        appendUInt16(&data, 1)                        // PCM
-        appendUInt16(&data, 1)                        // mono
+        appendUInt32(&data, Self.formatChunkByteCount)
+        appendUInt16(&data, Self.pcmFormat)
+        appendUInt16(&data, Self.channelCount)
         appendUInt32(&data, UInt32(sampleRate))
-        appendUInt32(&data, UInt32(sampleRate * 2))   // byte rate
-        appendUInt16(&data, 2)                        // block align
-        appendUInt16(&data, 16)                       // bits per sample
+        appendUInt32(&data, UInt32(sampleRate * Self.bytesPerSample))
+        appendUInt16(&data, UInt16(Self.bytesPerSample))
+        appendUInt16(&data, Self.bitsPerSample)
         data.append(contentsOf: Array("data".utf8))
-        appendUInt32(&data, UInt32(samples.count * 2))
+        appendUInt32(&data, UInt32(samples.count * Self.bytesPerSample))
         for sample in samples {
             appendUInt16(&data, UInt16(bitPattern: sample))
         }
@@ -53,14 +74,22 @@ enum NotificationChime {
     /// short, license-free "ding".
     static func chimeSamples() -> [Int16] {
         let count = Int(Double(sampleRate) * duration)
-        return (0..<count).map { i in
-            let t = Double(i) / Double(sampleRate)
-            var value = 0.38 * sin(2 * .pi * 880.0 * t) * exp(-7 * t)
-            let t2 = t - 0.12
-            if t2 >= 0 {
-                value += 0.38 * sin(2 * .pi * 1174.66 * t2) * exp(-7 * t2)
+        return (0..<count).map { sampleIndex in
+            let time = Double(sampleIndex) / Double(sampleRate)
+            var value = Self.toneAmplitude
+                * sin(2 * .pi * Self.firstToneFrequency * time)
+                * exp(-Self.decayRate * time)
+            let secondToneTime = time - Self.secondToneDelay
+            if secondToneTime >= 0 {
+                value += Self.toneAmplitude
+                    * sin(2 * .pi * Self.secondToneFrequency * secondToneTime)
+                    * exp(-Self.decayRate * secondToneTime)
             }
-            return Int16((max(-1.0, min(1.0, value)) * 32_766.0).rounded())
+            let limitedValue = max(
+                -Self.normalizedAmplitudeLimit,
+                min(Self.normalizedAmplitudeLimit, value)
+            )
+            return Int16((limitedValue * Self.int16AmplitudeLimit).rounded())
         }
     }
 

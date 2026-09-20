@@ -3,9 +3,9 @@
 #if canImport(TailcatKit)
 
 import Foundation
+@testable import Intent
 import TailcatKit
 import Testing
-@testable import Intent
 
 /// Smoke tests for the vendored TailcatKit.xcframework (gomobile bind
 /// of TailcatKit/, wrapping github.com/tailscale/tailcat).
@@ -37,7 +37,7 @@ struct TailcatKitSmokeTests {
         let client = try #require(TailcatkitNewClient("tc-not-a-real-token"))
         defer { try? client.close() }
         #expect(throws: (any Error).self) {
-            try client.forward(70000)
+            try client.forward(70_000)
         }
     }
 

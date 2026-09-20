@@ -48,7 +48,7 @@ enum TaskContentParser {
         guard let content, !content.isEmpty else {
             return TaskStats(total: 0, completed: 0, inProgress: 0)
         }
-        let noteById = Dictionary(notes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let noteById = Dictionary(notes.map { ($0.id, $0) }) { first, _ in first }
 
         var total = 0
         var completed = 0

@@ -1,7 +1,7 @@
 import Foundation
+@testable import Intent
 import Testing
 import UIKit
-@testable import Intent
 
 /// Covers the `file.readChunk` fetch path: chunk assembly, malformed
 /// responses, the size cap, decode failure, and caching.
@@ -46,7 +46,7 @@ struct WorkspaceFileImageLoaderTests {
         let fake = FakeConnectionManager()
         fake.responseQueueMap["file.readChunk"] = [
             Self.chunkResponse(Data(first), size: png.count),
-            Self.chunkResponse(Data(second), size: png.count),
+            Self.chunkResponse(Data(second), size: png.count)
         ]
         let loader = WorkspaceFileImageLoader(connection: fake)
 
@@ -72,7 +72,7 @@ struct WorkspaceFileImageLoaderTests {
     @Test func bytesReadMismatchThrowsMalformedResponse() async {
         let fake = FakeConnectionManager()
         fake.responseMap["file.readChunk"] = [
-            "content": Data([1, 2, 3]).base64EncodedString(), "bytesRead": 99, "size": 3,
+            "content": Data([1, 2, 3]).base64EncodedString(), "bytesRead": 99, "size": 3
         ]
         let loader = WorkspaceFileImageLoader(connection: fake)
 
@@ -85,7 +85,7 @@ struct WorkspaceFileImageLoaderTests {
         let fake = FakeConnectionManager()
         fake.responseMap["file.readChunk"] = [
             "content": Data([1]).base64EncodedString(), "bytesRead": 1,
-            "size": WorkspaceFileImageLoader.maxFileBytes + 1,
+            "size": WorkspaceFileImageLoader.maxFileBytes + 1
         ]
         let loader = WorkspaceFileImageLoader(connection: fake)
 
@@ -128,5 +128,119 @@ struct WorkspaceFileImageLoaderTests {
 
         #expect(first === second)
         #expect(fake.paramsForMethod("file.readChunk").count == 1)
+    }
+
+    // MARK: - Workspace assets (`note.readAsset`)
+
+    private static func assetResponse(_ bytes: Data, assetId: String = "a1-b2.png") -> [String: Any] {
+        [
+            "assetId": assetId, "mimeType": "image/png",
+            "data": bytes.base64EncodedString(), "sizeKb": 1
+        ]
+    }
+
+    @Test func assetFetchReadsTheAssetOverNoteReadAsset() async throws {
+        let png = Self.pngBytes()
+        let fake = FakeConnectionManager()
+        fake.responseMap["note.readAsset"] = Self.assetResponse(png)
+        let loader = WorkspaceFileImageLoader(connection: fake)
+
+        let image = try await loader.assetImage(workspaceId: "ws-1", assetId: "a1-b2.png")
+
+        #expect(image.size.width > 0)
+        let params = fake.paramsForMethod("note.readAsset")
+        #expect(params.count == 1)
+        #expect(params[0]["workspaceId"] as? String == "ws-1")
+        #expect(params[0]["asset"] as? String == "a1-b2.png")
+        #expect(fake.paramsForMethod("file.readChunk").isEmpty)
+    }
+
+    @Test func assetResponseWithoutDataThrowsMalformedResponse() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["note.readAsset"] = ["assetId": "a1-b2.png", "mimeType": "image/png"]
+        let loader = WorkspaceFileImageLoader(connection: fake)
+
+        await #expect(throws: LoadError.malformedResponse) {
+            _ = try await loader.assetImage(workspaceId: "ws-1", assetId: "a1-b2.png")
+        }
+    }
+
+    @Test func assetResponseWithInvalidBase64ThrowsMalformedResponse() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["note.readAsset"] = [
+            "assetId": "a1-b2.png", "mimeType": "image/png", "data": "%%not-base64%%", "sizeKb": 0
+        ]
+        let loader = WorkspaceFileImageLoader(connection: fake)
+
+        await #expect(throws: LoadError.malformedResponse) {
+            _ = try await loader.assetImage(workspaceId: "ws-1", assetId: "a1-b2.png")
+        }
+    }
+
+    @Test func undecodableAssetBytesThrowNotAnImage() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["note.readAsset"] = Self.assetResponse(Data("not an image".utf8))
+        let loader = WorkspaceFileImageLoader(connection: fake)
+
+        await #expect(throws: LoadError.notAnImage) {
+            _ = try await loader.assetImage(workspaceId: "ws-1", assetId: "a1-b2.png")
+        }
+    }
+
+    @Test func assetImageIsCachedPerAssetIdAndRefetchedWhenTheIdChanges() async throws {
+        let png = Self.pngBytes()
+        let fake = FakeConnectionManager()
+        fake.responseMap["note.readAsset"] = Self.assetResponse(png)
+        let loader = WorkspaceFileImageLoader(connection: fake)
+
+        let first = try await loader.assetImage(workspaceId: "ws-1", assetId: "a1-b2.png")
+        let second = try await loader.assetImage(workspaceId: "ws-1", assetId: "a1-b2.png")
+        #expect(first === second)
+        #expect(fake.paramsForMethod("note.readAsset").count == 1)
+
+        // A replaced status image is a new content-addressed id: it must
+        // fetch again rather than serve the previous screenshot.
+        let replaced = try await loader.assetImage(workspaceId: "ws-1", assetId: "c3-d4.png")
+        #expect(replaced !== first)
+        let params = fake.paramsForMethod("note.readAsset")
+        #expect(params.count == 2)
+        #expect(params[1]["asset"] as? String == "c3-d4.png")
+    }
+
+    @Test func failedAssetFetchIsNegativelyCachedUntilForgotten() async throws {
+        let png = Self.pngBytes()
+        let fake = FakeConnectionManager()
+        fake.errorMap["note.readAsset"] = NSError(domain: "test", code: -1)
+        let loader = WorkspaceFileImageLoader(connection: fake)
+
+        _ = try? await loader.assetImage(workspaceId: "ws-1", assetId: "a1-b2.png")
+        await #expect(throws: LoadError.previouslyFailed) {
+            _ = try await loader.assetImage(workspaceId: "ws-1", assetId: "a1-b2.png")
+        }
+        #expect(fake.paramsForMethod("note.readAsset").count == 1)
+
+        // A user-initiated retry clears the negative entry and refetches.
+        fake.errorMap["note.readAsset"] = nil
+        fake.responseMap["note.readAsset"] = Self.assetResponse(png)
+        loader.forgetAssetFailure(workspaceId: "ws-1", assetId: "a1-b2.png")
+        let image = try await loader.assetImage(workspaceId: "ws-1", assetId: "a1-b2.png")
+        #expect(image.size.width > 0)
+        #expect(fake.paramsForMethod("note.readAsset").count == 2)
+    }
+
+    @Test func assetAndFileCachesDoNotCollide() async throws {
+        // The same string as a file path and as an asset id are different
+        // resources; a cached file image must not answer an asset request.
+        let png = Self.pngBytes()
+        let fake = FakeConnectionManager()
+        fake.responseMap["file.readChunk"] = Self.chunkResponse(png, size: png.count)
+        fake.responseMap["note.readAsset"] = Self.assetResponse(png, assetId: "pic.png")
+        let loader = WorkspaceFileImageLoader(connection: fake)
+
+        _ = try await loader.image(workspaceId: "ws-1", path: "pic.png")
+        _ = try await loader.assetImage(workspaceId: "ws-1", assetId: "pic.png")
+
+        #expect(fake.paramsForMethod("file.readChunk").count == 1)
+        #expect(fake.paramsForMethod("note.readAsset").count == 1)
     }
 }

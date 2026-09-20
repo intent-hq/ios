@@ -6,16 +6,16 @@ import UIKit
 /// mirror the UIKit case names used by call sites (dot-shorthand compatible).
 enum HapticManager {
     enum ImpactStyle {
-        case light, medium, heavy, soft, rigid
+        case heavy, light, medium, rigid, soft
     }
 
     enum NotificationType {
-        case success, warning, error
+        case error, success, warning
     }
 
-    static func impact(_ style: ImpactStyle = .medium) {}
+    static func impact(_: ImpactStyle = .medium) {}
 
-    static func notification(_ type: NotificationType) {}
+    static func notification(_: NotificationType) {}
 
     static func selection() {}
 }
@@ -34,4 +34,3 @@ enum HapticManager {
     }
 }
 #endif
-

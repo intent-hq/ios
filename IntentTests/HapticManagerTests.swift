@@ -1,6 +1,6 @@
+@testable import Intent
 import Testing
 import UIKit
-@testable import Intent
 
 /// HapticManager keeps the same call-site API on every platform (no-op bodies
 /// on visionOS, UIFeedbackGenerator elsewhere); exercising every entry point

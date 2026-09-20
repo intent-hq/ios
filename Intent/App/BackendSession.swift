@@ -19,13 +19,25 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     var certMismatchPublisher: AnyPublisher<Bool, Never> { get }
     /// Dialer used to probe a server certificate over a Tailcat tunnel.
     var tunnelDialer: any TunnelDialing { get }
+    /// Where the live socket's global event subscription stands; `.failed`
+    /// once its bounded retries are exhausted, which the window surfaces
+    /// with a retry action routed to `retryGlobalSubscription()` (ios#254).
+    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
+
+    func retryGlobalSubscription()
 
     func connect(
-        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        hosts: [String],
+        port: Int,
+        token: String,
+        certFingerprint: String?,
         tcAddress: String?
     ) async throws
     func updateCachedCredentials(
-        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        hosts: [String],
+        port: Int,
+        token: String,
+        certFingerprint: String?,
         tcAddress: String?
     )
     func refreshHostRoutes() async
@@ -55,6 +67,12 @@ final class BackendSession {
     let backendID: BackendID?
     let connection: any SessionConnectionManaging
     let workspaceStore: WorkspaceStore
+    /// Session-lifetime GitHub repo cache for the New Workspace repo step;
+    /// outlives the sheet so a reopen renders the cached list instantly.
+    let githubRepoStore: GitHubRepoStore
+    /// Session-lifetime specialist / provider / model cache for the New
+    /// Workspace final step; same reopen-instantly contract as the repo cache.
+    let creationOptionsStore: CreationOptionsStore
     let prMonitorsStore: WorkspacePrMonitorsStore
     let attachmentUploadService: AttachmentUploadService
     let workspaceFileImageLoader: WorkspaceFileImageLoader
@@ -69,6 +87,8 @@ final class BackendSession {
         connection: any SessionConnectionManaging,
         workspaceStore: WorkspaceStore,
         coordinatorFactory: @escaping CoordinatorFactory,
+        githubRepoStore: GitHubRepoStore,
+        creationOptionsStore: CreationOptionsStore,
         prMonitorsStore: WorkspacePrMonitorsStore,
         attachmentUploadService: AttachmentUploadService,
         workspaceFileImageLoader: WorkspaceFileImageLoader,
@@ -79,6 +99,8 @@ final class BackendSession {
         self.connection = connection
         self.workspaceStore = workspaceStore
         self.coordinatorFactory = coordinatorFactory
+        self.githubRepoStore = githubRepoStore
+        self.creationOptionsStore = creationOptionsStore
         self.prMonitorsStore = prMonitorsStore
         self.attachmentUploadService = attachmentUploadService
         self.workspaceFileImageLoader = workspaceFileImageLoader

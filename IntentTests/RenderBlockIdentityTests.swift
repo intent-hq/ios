@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Deterministic identities for parsed render blocks: `groupContentBlocks`
 /// derives synthetic-segment and group ids from their source block (block id
@@ -21,7 +21,7 @@ struct RenderBlockIdentityTests {
         let blocks = [
             textBlock("b1", "intro\n<group:Setup>\nreading\n</group>\nmiddle\n<group:Work>\ndoing\n</group>\ntail"),
             ContentBlock(id: "b2", type: .toolUse, name: "read_file"),
-            textBlock("b3", "outro"),
+            textBlock("b3", "outro")
         ]
         let first = ids(blocks)
         let second = ids(blocks)
@@ -31,7 +31,7 @@ struct RenderBlockIdentityTests {
 
     @Test func distinctSegmentsAndGroupsGetDistinctIds() {
         let blocks = [
-            textBlock("b1", "one\n<group:A>\ninside\n</group>\ntwo\n<group:A>\nagain\n</group>\nthree"),
+            textBlock("b1", "one\n<group:A>\ninside\n</group>\ntwo\n<group:A>\nagain\n</group>\nthree")
         ]
         let result = ids(blocks)
         #expect(result.count == 5)
@@ -41,7 +41,7 @@ struct RenderBlockIdentityTests {
     @Test func sameTextInDifferentSourceBlocksGetsDistinctIds() {
         let blocks = [
             textBlock("b1", "<group:A>\nx\n</group>\ntail"),
-            textBlock("b2", "<group:A>\nx\n</group>\ntail"),
+            textBlock("b2", "<group:A>\nx\n</group>\ntail")
         ]
         let result = ids(blocks)
         #expect(Set(result).count == result.count)
@@ -50,7 +50,7 @@ struct RenderBlockIdentityTests {
     @Test func passthroughBlocksKeepTheirOriginalId() {
         let blocks = [
             textBlock("b1", "no tags here"),
-            ContentBlock(id: "b2", type: .toolUse, name: "read_file"),
+            ContentBlock(id: "b2", type: .toolUse, name: "read_file")
         ]
         #expect(ids(blocks) == ["b1", "b2"])
     }
@@ -80,9 +80,12 @@ struct RenderBlockIdentityTests {
         // the same id from the opening tag, so the group view isn't torn down
         // when the close tag arrives.
         let open = MessageView.groupContentBlocks(
-            [textBlock("b1", "<group:Setup>\nworking")], isStreaming: true)
+            [textBlock("b1", "<group:Setup>\nworking")],
+            isStreaming: true
+        )
         let closed = MessageView.groupContentBlocks(
-            [textBlock("b1", "<group:Setup>\nworking\n</group>")])
+            [textBlock("b1", "<group:Setup>\nworking\n</group>")]
+        )
         guard case .group(let openGroup)? = open.last,
               case .group(let closedGroup)? = closed.last else {
             Issue.record("expected trailing groups")

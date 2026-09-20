@@ -1,6 +1,6 @@
-import SwiftUI
-import Observation
 import AudioToolbox
+import Observation
+import SwiftUI
 
 /// True when the workspace is asking for user input: a blocker/attention
 /// display status (blocker, discussion, question, plan approval) or the
@@ -49,6 +49,7 @@ struct WorkspaceAttentionCueTracker {
 @Observable
 final class WorkspaceAttentionCueCenter {
     static let shared = WorkspaceAttentionCueCenter()
+    private static let attentionSystemSoundID: SystemSoundID = 1152
 
     /// One attention-cue request for the session's window to emit. The
     /// fresh `id` distinguishes back-to-back cues.
@@ -94,7 +95,9 @@ final class WorkspaceAttentionCueCenter {
     }
 
     init(
-        playSound: @escaping () -> Void = { AudioServicesPlaySystemSound(1152) },
+        playSound: @escaping () -> Void = {
+            AudioServicesPlaySystemSound(WorkspaceAttentionCueCenter.attentionSystemSoundID)
+        },
         windowEmitsCueSound: Bool = WorkspaceAttentionCueCenter.platformWindowEmitsCueSound,
         now: @escaping () -> Date = Date.init
     ) {
@@ -156,7 +159,8 @@ extension View {
             .offset(z: active ? Constants.WorkspaceRow.attentionCueZOffset : 0)
             .animation(
                 .easeOut(duration: Constants.WorkspaceRow.attentionCueAnimationDuration),
-                value: active)
+                value: active
+            )
         #else
         self
         #endif

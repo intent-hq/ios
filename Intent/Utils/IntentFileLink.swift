@@ -19,13 +19,13 @@ nonisolated struct IntentFileLink: Equatable {
 
     /// Whether the linked file's extension is in the inline-image allowlist.
     var isImage: Bool {
-        Self.imageExtensions.contains((path as NSString).pathExtension.lowercased())
+        Self.imageExtensions.contains(URL(fileURLWithPath: path).pathExtension.lowercased())
     }
 
     /// Parse an intent:// URL into a file link; nil for anything that is not
     /// an `intent://local/[ws-id/]file/<path>` URL (note/task links, other
     /// schemes, missing path) or whose path looks traversal-shaped.
-    static func parse(_ url: URL) -> IntentFileLink? {
+    static func parse(_ url: URL) -> Self? {
         guard url.scheme == "intent", url.host == "local" else { return nil }
         // Split the raw (still percent-encoded) path so doubled slashes and
         // encoded slashes (%2F) stay visible, then decode each segment. The
@@ -58,7 +58,7 @@ nonisolated struct IntentFileLink: Equatable {
             return nil
         }
         guard !pathSegments.isEmpty else { return nil }
-        return IntentFileLink(workspaceId: workspaceId, path: pathSegments.joined(separator: "/"))
+        return Self(workspaceId: workspaceId, path: pathSegments.joined(separator: "/"))
     }
 
     /// Rejects post-decode segments that are empty (doubled/trailing slash),

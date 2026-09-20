@@ -7,10 +7,15 @@ struct QuestionWizardView: View {
     @Binding var collapsed: Bool
     let containerHeight: CGFloat
     let onComplete: ([QuestionAnswer]) -> Void
-    var onDismiss: (() -> Void)? = nil
+    var onDismiss: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    private static let backgroundIncreasedOpacity = 0.7
+    private static let backgroundOpacity = 0.4
+    private static let cornerRadius: CGFloat = 12
+    private static let standardBorderOpacity = 0.3
 
     private struct DraftAnswer {
         var sel: [Int] = []
@@ -44,75 +49,40 @@ struct QuestionWizardView: View {
     private var isLast: Bool { idx == questions.count - 1 }
     private var isMulti: Bool { current.multiSelect }
     private var multiStep: Bool { questions.count > 1 }
-    private var showNext: Bool { isMulti || isLast }
+    private var hasFreeText: Bool {
+        !drafts[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    private var showNext: Bool {
+        Self.showsNext(isMulti: isMulti, isLast: isLast, hasFreeText: hasFreeText)
+    }
     private var nextDisabled: Bool {
-        (isMulti || isLast) && drafts[idx].sel.isEmpty
-            && drafts[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        (isMulti || isLast) && drafts[idx].sel.isEmpty && !hasFreeText
+    }
+
+    /// Whether the footer Next/Send button is visible. Free text on a
+    /// single-select step has no advancing option tap, and Return inserts a
+    /// newline where ComposerSubmitPolicy says so (iPhone), so the button is
+    /// the submit path there.
+    static func showsNext(isMulti: Bool, isLast: Bool, hasFreeText: Bool) -> Bool {
+        isMulti || isLast || hasFreeText
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if questions.isEmpty {
-                EmptyView()
-            } else if collapsed {
-                QuestionWizardCollapsedBanner(
-                    questionCount: questions.count,
-                    showsDismiss: onDismiss != nil,
-                    dismissed: dismissed,
-                    onExpand: { collapsed = false },
-                    onDismiss: { confirmingDismiss = true }
-                )
-            } else {
-                QuestionWizardHeaderRow(
-                    questionCount: questions.count,
-                    index: idx,
-                    isMulti: isMulti,
-                    showsDismiss: onDismiss != nil,
-                    dismissed: dismissed,
-                    onIgnore: { collapsed = true },
-                    onDismiss: { confirmingDismiss = true }
-                )
-                QuestionStepView(
-                    step: idx,
-                    question: current,
-                    selectedIndices: $drafts[idx].sel,
-                    freeText: $drafts[idx].text,
-                    isMulti: isMulti,
-                    contentHeight: stepContentHeights[idx],
-                    maximumHeight: stepBodyMaxHeight,
-                    onContentHeight: { step, height in
-                        stepContentHeights[step] = height
-                    },
-                    onSelect: selectOption,
-                    onSubmit: handleNext,
-                    onTextChange: { drafts[idx].skipped = false }
-                )
-                    .id(idx)
-                    .transition(.opacity)
-                QuestionWizardFooterRow(
-                    index: idx,
-                    multiStep: multiStep,
-                    isMulti: isMulti,
-                    isLast: isLast,
-                    showNext: showNext,
-                    nextDisabled: nextDisabled,
-                    submitted: submitted,
-                    dismissed: dismissed,
-                    onBack: handleBack,
-                    onSkip: handleSkip,
-                    onNext: handleNext
-                )
-            }
+            wizardContent
         }
         .background(Theme.muted(for: colorScheme).opacity(
-            colorSchemeContrast == .increased ? 0.7 : 0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+            colorSchemeContrast == .increased ? Self.backgroundIncreasedOpacity : Self.backgroundOpacity
+        ))
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: Self.cornerRadius)
                 .strokeBorder(
                     Theme.border(for: colorScheme, contrast: colorSchemeContrast).opacity(
-                        colorSchemeContrast == .increased ? 1 : 0.3),
-                    lineWidth: colorSchemeContrast == .increased ? 2 : 1)
+                        colorSchemeContrast == .increased ? 1 : Self.standardBorderOpacity
+                    ),
+                    lineWidth: colorSchemeContrast == .increased ? 2 : 1
+                )
         )
         .frame(maxWidth: .infinity)
         .animation(.easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration), value: idx)
@@ -123,7 +93,7 @@ struct QuestionWizardView: View {
             titleVisibility: .visible
         ) {
             Button("Dismiss questions", role: .destructive) {
-                guard !dismissed && !submitted else { return }
+                guard !dismissed, !submitted else { return }
                 dismissed = true
                 onDismiss?()
             }
@@ -132,7 +102,63 @@ struct QuestionWizardView: View {
             Text(
                 "The agent's questions will be dismissed completely without "
                     + "answering. This is permanent — they won't come back, "
-                    + "even after a reload.")
+                    + "even after a reload."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var wizardContent: some View {
+        if questions.isEmpty {
+            EmptyView()
+        } else if collapsed {
+            QuestionWizardCollapsedBanner(
+                questionCount: questions.count,
+                showsDismiss: onDismiss != nil,
+                dismissed: dismissed,
+                onExpand: { collapsed = false },
+                onDismiss: { confirmingDismiss = true }
+            )
+        } else {
+            QuestionWizardHeaderRow(
+                questionCount: questions.count,
+                index: idx,
+                isMulti: isMulti,
+                showsDismiss: onDismiss != nil,
+                dismissed: dismissed,
+                onIgnore: { collapsed = true },
+                onDismiss: { confirmingDismiss = true }
+            )
+            QuestionStepView(
+                step: idx,
+                question: current,
+                selectedIndices: $drafts[idx].sel,
+                freeText: $drafts[idx].text,
+                isMulti: isMulti,
+                contentHeight: stepContentHeights[idx],
+                maximumHeight: stepBodyMaxHeight,
+                onContentHeight: { step, height in
+                    stepContentHeights[step] = height
+                },
+                onSelect: selectOption,
+                onSubmit: handleNext,
+                onTextChange: markCurrentDraftUnskipped
+            )
+                .id(idx)
+                .transition(.opacity)
+            QuestionWizardFooterRow(
+                index: idx,
+                multiStep: multiStep,
+                isMulti: isMulti,
+                isLast: isLast,
+                showNext: showNext,
+                nextDisabled: nextDisabled,
+                submitted: submitted,
+                dismissed: dismissed,
+                onBack: handleBack,
+                onSkip: handleSkip,
+                onNext: handleNext
+            )
         }
     }
 
@@ -149,7 +175,7 @@ struct QuestionWizardView: View {
 
     private func advance() {
         if idx >= questions.count - 1 {
-            guard !submitted && !dismissed else { return }
+            guard !submitted, !dismissed else { return }
             submitted = true
             onComplete(buildAnswers())
             return
@@ -157,17 +183,21 @@ struct QuestionWizardView: View {
         idx += 1
     }
 
-    private func selectOption(_ oi: Int) {
+    private func markCurrentDraftUnskipped() {
+        drafts[idx].skipped = false
+    }
+
+    private func selectOption(_ optionIndex: Int) {
         if isMulti {
-            if let pos = drafts[idx].sel.firstIndex(of: oi) {
-                drafts[idx].sel.remove(at: pos)
+            if let position = drafts[idx].sel.firstIndex(of: optionIndex) {
+                drafts[idx].sel.remove(at: position)
             } else {
-                drafts[idx].sel.append(oi)
+                drafts[idx].sel.append(optionIndex)
             }
             drafts[idx].skipped = false
             return
         }
-        drafts[idx].sel = drafts[idx].sel.contains(oi) ? [] : [oi]
+        drafts[idx].sel = drafts[idx].sel.contains(optionIndex) ? [] : [optionIndex]
         drafts[idx].skipped = false
         if isLast { return }
         advance()

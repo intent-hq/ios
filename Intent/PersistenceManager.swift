@@ -1,15 +1,14 @@
 import Foundation
-import Security
+
+struct ConnectionUpsertOutcome {
+    let connection: StoredConnection
+    let persisted: Bool
+    let registryUndecodable: Bool
+}
 
 class PersistenceManager {
-    /// Under `--demo-data` the shared manager runs over an ephemeral store so
-    /// a simulator's real pairing state can never bind the window or restore
-    /// a saved screen out from under the fixture flow (UI tests reuse
-    /// simulators that `scripts/xcodebuild.sh test-ios` does not erase).
     static let shared = DemoMode.isEnabled ? PersistenceManager.ephemeral() : PersistenceManager()
 
-    /// A manager over a demo defaults suite wiped on creation plus an
-    /// in-memory keychain: starts unpaired and leaves no state behind.
     static func ephemeral() -> PersistenceManager {
         let suiteName = "com.intent.companion.demo-data"
         let defaults = UserDefaults(suiteName: suiteName) ?? .standard
@@ -29,17 +28,29 @@ class PersistenceManager {
     /// between tests or into the real app container.
     let defaults: UserDefaults
 
-    init(defaults: UserDefaults = .standard,
-         keychainStorage: KeychainStorage = SecItemKeychainStorage()) {
+    /// Backend for Keychain-stored values. Tests substitute an in-memory
+    /// implementation (SecItem calls fail in headless CI simulators).
+    var keychainStorage: KeychainStorage
+
+    init(
+        defaults: UserDefaults = .standard,
+        keychainStorage: KeychainStorage = SecItemKeychainStorage()
+    ) {
         self.defaults = defaults
         self.keychainStorage = keychainStorage
     }
+}
 
+extension PersistenceManager {
     // MARK: - Connections
 
     func loadConnections() -> [StoredConnection] {
         migrateLegacyPairingIfNeeded()
         return loadConnectionsLocked()
+    }
+
+    func isConnectionRegistryUndecodable() -> Bool {
+        readConnectionsLocked() == nil
     }
 
     /// Inserts the connection, or updates the existing entry in place (preserving its
@@ -67,15 +78,22 @@ class PersistenceManager {
     @discardableResult
     func upsertConnectionWithOutcome(
         _ connection: StoredConnection
-    ) -> (connection: StoredConnection, persisted: Bool) {
+    ) -> ConnectionUpsertOutcome {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else {
+            return ConnectionUpsertOutcome(
+                connection: connection,
+                persisted: false,
+                registryUndecodable: true
+            )
+        }
         let stored: StoredConnection
-        if let index = connections.firstIndex(where: {
-            $0.server.port == connection.server.port
-                && (!Set($0.server.hosts).isDisjoint(with: connection.server.hosts)
+        let incomingHosts = Set(connection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
+        if let index = connections.firstIndex(where: { storedConnection in
+            storedConnection.server.port == connection.server.port
+                && (!incomingHosts.isDisjoint(with: storedConnection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
                     || (connection.server.tcAddress != nil
-                        && $0.server.tcAddress == connection.server.tcAddress))
+                        && storedConnection.server.tcAddress == connection.server.tcAddress))
         }) {
             let existing = connections[index]
             let server = connection.server
@@ -83,7 +101,9 @@ class PersistenceManager {
                 id: existing.id,
                 server: PairedServer(
                     hosts: Self.mergeHostLists(
-                        existing: existing.server.hosts, incoming: server.hosts),
+                        existing: existing.server.hosts,
+                        incoming: server.hosts
+                    ),
                     port: server.port,
                     name: server.name,
                     pairedAt: server.pairedAt,
@@ -106,17 +126,24 @@ class PersistenceManager {
             stored = connection
             connections.append(stored)
         }
-        return (stored, saveConnectionsLocked(connections))
+        return ConnectionUpsertOutcome(
+            connection: stored,
+            persisted: saveConnectionsLocked(connections),
+            registryUndecodable: false
+        )
     }
 
     /// Existing hosts keep their order and are never dropped; incoming hosts not
-    /// already present are appended, deduped.
+    /// already present are appended, deduped case-insensitively (DNS names and
+    /// IPv6 hex are case-insensitive — ios#341), keeping the first spelling seen.
     static func mergeHostLists(existing: [String], incoming: [String]) -> [String] {
         var merged = existing
-        var seen = Set(existing)
-        for host in incoming where !seen.contains(host) {
+        var seen = Set(existing.map(SyncedBackendConnectionMerge.normalizeHost))
+        for host in incoming {
+            let key = SyncedBackendConnectionMerge.normalizeHost(host)
+            guard !seen.contains(key) else { continue }
             merged.append(host)
-            seen.insert(host)
+            seen.insert(key)
         }
         return merged
     }
@@ -128,7 +155,7 @@ class PersistenceManager {
     @discardableResult
     func updateConnectionHosts(id: UUID, hosts: [String]) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         let server = connections[index].server
         connections[index].server = PairedServer(
@@ -149,7 +176,7 @@ class PersistenceManager {
     @discardableResult
     func updateConnectionTcAddress(id: UUID, tcAddress: String) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         let server = connections[index].server
         connections[index].server = PairedServer(
@@ -170,7 +197,7 @@ class PersistenceManager {
     @discardableResult
     func updateConnectionDisplayName(id: UUID, displayName: String) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         connections[index].displayName = displayName
         return saveConnectionsLocked(connections)
@@ -179,7 +206,7 @@ class PersistenceManager {
     @discardableResult
     func deleteConnection(id: UUID) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard connections.contains(where: { $0.id == id }) else { return true }
         connections.removeAll { $0.id == id }
         guard saveConnectionsLocked(connections) else { return false }
@@ -207,15 +234,15 @@ class PersistenceManager {
     /// else the most recently connected saved record.
     func lastUsedConnection() -> StoredConnection? {
         if let active = activeConnection() { return active }
-        return loadConnections().max {
-            ($0.lastConnectedAt ?? .distantPast) < ($1.lastConnectedAt ?? .distantPast)
+        return loadConnections().max { lhs, rhs in
+            (lhs.lastConnectedAt ?? .distantPast) < (rhs.lastConnectedAt ?? .distantPast)
         }
     }
 
     @discardableResult
     func touchLastConnected(id: UUID) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         connections[index].lastConnectedAt = Date()
         return saveConnectionsLocked(connections)
@@ -232,18 +259,28 @@ class PersistenceManager {
     @discardableResult
     func mergeSyncedBackends(records: [SyncedBackendRecord]) -> SyncedBackendMergeOutcome {
         migrateLegacyPairingIfNeeded()
-        let connections = loadConnectionsLocked()
+        guard let connections = readConnectionsLocked() else {
+            return SyncedBackendMergeOutcome(
+                addedIds: [],
+                updatedIds: [],
+                removedIds: [],
+                removedActiveConnection: false,
+                registryUndecodable: true
+            )
+        }
         let result = SyncedBackendConnectionMerge.merge(records: records, into: connections)
         var removedActive = false
         if result.changed {
             guard saveConnectionsLocked(result.connections) else {
                 return SyncedBackendMergeOutcome(
-                    addedIds: [], updatedIds: [], removedIds: [],
-                    removedActiveConnection: false)
+                    addedIds: [],
+                    updatedIds: [],
+                    removedIds: [],
+                    removedActiveConnection: false
+                )
             }
             if let activeId = activeConnectionIdLocked(),
-                result.removedIds.contains(activeId)
-            {
+                result.removedIds.contains(activeId) {
                 defaults.removeObject(forKey: activeConnectionIdKey)
                 removedActive = true
             }
@@ -252,15 +289,21 @@ class PersistenceManager {
             addedIds: result.addedIds,
             updatedIds: result.updatedIds,
             removedIds: result.removedIds,
-            removedActiveConnection: removedActive)
+            removedActiveConnection: removedActive
+        )
+    }
+
+    // nil distinguishes an undecodable registry from a valid empty registry.
+    // swiftlint:disable:next discouraged_optional_collection
+    private func readConnectionsLocked() -> [StoredConnection]? {
+        guard let data = loadDataFromKeychain(account: keychainAccountConnections) else {
+            return []
+        }
+        return try? JSONDecoder().decode([StoredConnection].self, from: data)
     }
 
     private func loadConnectionsLocked() -> [StoredConnection] {
-        guard let data = loadDataFromKeychain(account: keychainAccountConnections),
-              let connections = try? JSONDecoder().decode([StoredConnection].self, from: data) else {
-            return []
-        }
-        return connections
+        readConnectionsLocked() ?? []
     }
 
     @discardableResult
@@ -298,13 +341,13 @@ class PersistenceManager {
         deleteFromKeychain(account: keychainAccountToken)
         defaults.removeObject(forKey: serverKey)
     }
-
     // MARK: - Pairing (compatibility shims over the connections API)
 
     @discardableResult
     func savePairing(server: PairedServer, token: String) -> Bool {
         let outcome = upsertConnectionWithOutcome(
-            StoredConnection(server: server, token: token))
+            StoredConnection(server: server, token: token)
+        )
         guard outcome.persisted else { return false }
         setActiveConnection(id: outcome.connection.id)
         return true
@@ -328,158 +371,7 @@ class PersistenceManager {
         return true
     }
 
-    // MARK: - Draft Messages
-
-    private let draftPrefix = "draft_"
-
-    func saveDraft(_ text: String, workspaceId: String, agentId: String) {
-        let key = "\(draftPrefix)\(workspaceId)_\(agentId)"
-        if text.isEmpty {
-            defaults.removeObject(forKey: key)
-        } else {
-            defaults.set(text, forKey: key)
-        }
-    }
-
-    func loadDraft(workspaceId: String, agentId: String) -> String {
-        let key = "\(draftPrefix)\(workspaceId)_\(agentId)"
-        return defaults.string(forKey: key) ?? ""
-    }
-
-    func clearDraft(workspaceId: String, agentId: String) {
-        let key = "\(draftPrefix)\(workspaceId)_\(agentId)"
-        defaults.removeObject(forKey: key)
-    }
-
-    // MARK: - Last Viewed Screen (keyed per backend)
-
-    private let lastScreensKey = "lastScreens"
-    // Legacy single-slot keys (pre window model v2): read once as a
-    // migration fallback for the connection that was active when they were
-    // written, then cleaned up.
-    private let lastScreenKey = "lastScreen"
-    private let lastWorkspaceIdKey = "lastWorkspaceId"
-    private let lastAgentIdKey = "lastAgentId"
-    private let lastAgentNameKey = "lastAgentName"
-    private let lastNoteTitleKey = "lastNoteTitle"
-    private let lastNoteIdKey = "lastNoteId"
-
-    struct SavedScreen: Codable {
-        let screen: String  // "workspaceList", "workspaceDetail", "conversation", "note"
-        let workspaceId: String?
-        let agentId: String?
-        let agentName: String?
-        let noteId: String?
-        let noteTitle: String?
-    }
-
-    func saveLastScreen(_ screen: SavedScreen, for connectionID: UUID) {
-        var dict = loadLastScreensDict()
-        if let data = try? JSONEncoder().encode(screen) {
-            dict[connectionID.uuidString] = data
-        }
-        defaults.set(dict, forKey: lastScreensKey)
-    }
-
-    func loadLastScreen(for connectionID: UUID) -> SavedScreen? {
-        let dict = loadLastScreensDict()
-        if let data = dict[connectionID.uuidString] {
-            return try? JSONDecoder().decode(SavedScreen.self, from: data)
-        }
-        // Legacy migration: the old single-slot screen belonged to the
-        // connection that was active when it was saved.
-        guard let legacy = loadLegacyLastScreen(),
-              activeConnection()?.id == connectionID else { return nil }
-        saveLastScreen(legacy, for: connectionID)
-        clearLegacyLastScreen()
-        return legacy
-    }
-
-    func clearLastScreen(for connectionID: UUID) {
-        var dict = loadLastScreensDict()
-        dict.removeValue(forKey: connectionID.uuidString)
-        defaults.set(dict, forKey: lastScreensKey)
-        if activeConnection()?.id == connectionID {
-            clearLegacyLastScreen()
-        }
-    }
-
-    private func loadLastScreensDict() -> [String: Data] {
-        (defaults.dictionary(forKey: lastScreensKey) as? [String: Data]) ?? [:]
-    }
-
-    private func loadLegacyLastScreen() -> SavedScreen? {
-        guard let screen = defaults.string(forKey: lastScreenKey) else { return nil }
-        return SavedScreen(
-            screen: screen,
-            workspaceId: defaults.string(forKey: lastWorkspaceIdKey),
-            agentId: defaults.string(forKey: lastAgentIdKey),
-            agentName: defaults.string(forKey: lastAgentNameKey),
-            noteId: defaults.string(forKey: lastNoteIdKey),
-            noteTitle: defaults.string(forKey: lastNoteTitleKey)
-        )
-    }
-
-    private func clearLegacyLastScreen() {
-        defaults.removeObject(forKey: lastScreenKey)
-        defaults.removeObject(forKey: lastWorkspaceIdKey)
-        defaults.removeObject(forKey: lastAgentIdKey)
-        defaults.removeObject(forKey: lastAgentNameKey)
-        defaults.removeObject(forKey: lastNoteIdKey)
-        defaults.removeObject(forKey: lastNoteTitleKey)
-    }
-
-    // MARK: - Per-Workspace Screen
-
-    private let workspaceScreensKey = "workspaceScreens"
-
-    func saveWorkspaceScreen(workspaceId: String, screen: SavedScreen) {
-        var dict = loadWorkspaceScreensDict()
-        if let data = try? JSONEncoder().encode(screen) {
-            dict[workspaceId] = data
-        }
-        defaults.set(dict, forKey: workspaceScreensKey)
-    }
-
-    func loadWorkspaceScreen(workspaceId: String) -> SavedScreen? {
-        let dict = loadWorkspaceScreensDict()
-        guard let data = dict[workspaceId] else { return nil }
-        return try? JSONDecoder().decode(SavedScreen.self, from: data)
-    }
-
-    func clearWorkspaceScreen(workspaceId: String) {
-        var dict = loadWorkspaceScreensDict()
-        dict.removeValue(forKey: workspaceId)
-        defaults.set(dict, forKey: workspaceScreensKey)
-    }
-
-    private func loadWorkspaceScreensDict() -> [String: Data] {
-        return (defaults.dictionary(forKey: workspaceScreensKey) as? [String: Data]) ?? [:]
-    }
-
-    // MARK: - Per-Workspace Tab
-
-    private let workspaceTabsKey = "workspaceTabs"
-
-    func saveWorkspaceTab(workspaceId: String, tab: Int) {
-        var dict = loadWorkspaceTabsDict()
-        dict[workspaceId] = tab
-        defaults.set(dict, forKey: workspaceTabsKey)
-    }
-
-    func loadWorkspaceTab(workspaceId: String) -> Int? {
-        loadWorkspaceTabsDict()[workspaceId]
-    }
-
-    private func loadWorkspaceTabsDict() -> [String: Int] {
-        return (defaults.dictionary(forKey: workspaceTabsKey) as? [String: Int]) ?? [:]
-    }
-
     // MARK: - Keychain
-
-    /// Backend for Keychain-stored values. Tests substitute an in-memory
-    /// implementation (SecItem calls fail in headless CI simulators).
-    var keychainStorage: KeychainStorage
 
     @discardableResult
     func saveDataToKeychain(data: Data, account: String) -> Bool {
@@ -499,107 +391,3 @@ class PersistenceManager {
         keychainStorage.delete(service: keychainService, account: account)
     }
 }
-
-/// Abstraction over Keychain item storage so tests can run hermetically.
-protocol KeychainStorage {
-    @discardableResult
-    func save(data: Data, service: String, account: String) -> Bool
-    func load(service: String, account: String) -> Data?
-    func delete(service: String, account: String)
-}
-
-/// Process-local backend for `--demo-data`: never touches the real Keychain,
-/// so demo launches start unpaired regardless of the simulator's saved
-/// connections.
-final class EphemeralKeychainStorage: KeychainStorage, @unchecked Sendable {
-    private var items: [String: Data] = [:]
-    private let lock = NSLock()
-
-    private func key(_ service: String, _ account: String) -> String { "\(service)\u{1F}\(account)" }
-
-    @discardableResult
-    func save(data: Data, service: String, account: String) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        items[key(service, account)] = data
-        return true
-    }
-
-    func load(service: String, account: String) -> Data? {
-        lock.lock()
-        defer { lock.unlock() }
-        return items[key(service, account)]
-    }
-
-    func delete(service: String, account: String) {
-        lock.lock()
-        defer { lock.unlock() }
-        items.removeValue(forKey: key(service, account))
-    }
-}
-
-/// Production backend over the Security framework.
-struct SecItemKeychainStorage: KeychainStorage {
-    struct SecurityCalls {
-        let update: ([String: Any], [String: Any]) -> OSStatus
-        let add: ([String: Any]) -> OSStatus
-        let delete: ([String: Any]) -> OSStatus
-
-        static let live = SecurityCalls(
-            update: { query, attributes in
-                SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-            },
-            add: { query in SecItemAdd(query as CFDictionary, nil) },
-            delete: { query in SecItemDelete(query as CFDictionary) }
-        )
-    }
-
-    private let security: SecurityCalls
-
-    init(security: SecurityCalls = .live) {
-        self.security = security
-    }
-
-    @discardableResult
-    func save(data: Data, service: String, account: String) -> Bool {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        let updateStatus = security.update(query, [kSecValueData as String: data])
-        if updateStatus == errSecSuccess { return true }
-        guard updateStatus == errSecItemNotFound else { return false }
-
-        var addQuery = query
-        addQuery.merge([
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
-        ]) { _, new in new }
-        return security.add(addQuery) == errSecSuccess
-    }
-
-    func load(service: String, account: String) -> Data? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data else { return nil }
-        return data
-    }
-
-    func delete(service: String, account: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        _ = security.delete(query)
-    }
-}
-

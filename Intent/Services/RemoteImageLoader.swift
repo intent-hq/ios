@@ -24,12 +24,20 @@ final class RemoteImageLoader {
     /// workspace-file images.
     nonisolated static let maxFileBytes = WorkspaceFileImageLoader.maxFileBytes
 
+    // NSCache requires a reference-type key; NSString preserves that Foundation contract.
+    // swiftlint:disable:next legacy_objc_type
     private let cache = NSCache<NSString, UIImage>()
     /// Session-lifetime negative cache: URLs whose fetch/decode failed, so a
     /// persistently broken image doesn't refetch on every scroll-into-view.
-    private var failedKeys: Set<String> = []
+    /// Intentionally uncapped (ios#264): it grows only with distinct failed
+    /// URLs the transcript actually rendered, at ~140 B per entry measured
+    /// by `SessionCacheBoundsMeasurementTests`, so even a 10k-URL session
+    /// retains ~1.3 MiB — noise next to the decoded-image cost limit.
+    private(set) var failedKeys: Set<String> = []
     private var inFlight: [String: Task<UIImage, Error>] = [:]
     private let fetchData: DataFetcher
+    // The inclusive HTTP success range is defined by the protocol.
+    nonisolated private static let successfulHTTPStatusCodes: ClosedRange<Int> = 200...299
 
     init(
         fetchData: @escaping DataFetcher = { url in
@@ -43,6 +51,8 @@ final class RemoteImageLoader {
     /// Cached-or-fetched image for a remote http(s) URL.
     func image(for url: URL) async throws -> UIImage {
         let key = url.absoluteString
+        // NSString is the concrete reference key required by NSCache.
+        // swiftlint:disable:next legacy_objc_type
         if let cached = cache.object(forKey: key as NSString) {
             return cached
         }
@@ -57,8 +67,12 @@ final class RemoteImageLoader {
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
             cache.setObject(
-                image, forKey: key as NSString,
-                cost: WorkspaceFileImageLoader.decodedCost(of: image))
+                image,
+                // NSString is the concrete reference key required by NSCache.
+                // swiftlint:disable:next legacy_objc_type
+                forKey: key as NSString,
+                cost: WorkspaceFileImageLoader.decodedCost(of: image)
+            )
             return image
         }
         inFlight[key] = task
@@ -78,11 +92,13 @@ final class RemoteImageLoader {
     /// Explicitly concurrent so the download and image decode run on the
     /// global executor, keeping large decodes off the UI thread.
     @concurrent
-    private nonisolated static func fetchAndDecode(
-        fetchData: DataFetcher, url: URL
+    nonisolated private static func fetchAndDecode(
+        fetchData: DataFetcher,
+        url: URL
     ) async throws -> UIImage {
         let (data, response) = try await fetchData(url)
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+        if let http = response as? HTTPURLResponse,
+           !Self.successfulHTTPStatusCodes.contains(http.statusCode) {
             throw LoadError.badStatus(http.statusCode)
         }
         guard data.count <= maxFileBytes else { throw LoadError.fileTooLarge }
@@ -96,7 +112,7 @@ final class RemoteImageLoader {
     /// exceeds `maxFileBytes`, so a hostile or indefinitely streaming server
     /// cannot buffer unbounded data before the size guard runs.
     @concurrent
-    private nonisolated static func streamCappedBytes(
+    nonisolated private static func streamCappedBytes(
         from url: URL
     ) async throws -> (Data, URLResponse) {
         let (bytes, response) = try await URLSession.shared.bytes(from: url)

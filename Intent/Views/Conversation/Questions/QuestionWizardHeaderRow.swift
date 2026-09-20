@@ -12,66 +12,106 @@ struct QuestionWizardHeaderRow: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
+    private static let progressSegmentSpacing: CGFloat = 4
+    private static let multiSelectHorizontalPadding: CGFloat = 7
+    private static let multiSelectFillOpacity = 0.8
+    private static let minimumContentSpacing: CGFloat = 8
+    private static let topPadding: CGFloat = 10
+    private static let completedSegmentIncreasedOpacity = 0.7
+    private static let completedSegmentOpacity = 0.4
+    private static let pendingSegmentIncreasedOpacity = 0.55
+    private static let pendingSegmentOpacity = 0.25
+
     private var multiStep: Bool { questionCount > 1 }
 
     var body: some View {
         HStack(spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
-            Image(systemName: "questionmark.circle")
-                .font(.caption)
-                .foregroundStyle(Theme.primary(for: colorScheme))
-            Text("Questions")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Theme.foreground(for: colorScheme))
+            title
             if multiStep {
-                Text("\(index + 1) of \(questionCount)")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                HStack(spacing: 4) {
-                    ForEach(0..<questionCount, id: \.self) { i in
-                        RoundedRectangle(
-                            cornerRadius: Constants.Conversation.QuestionWizard.progressSegmentCornerRadius
-                        )
-                        .fill(segmentColor(i))
-                        .frame(
-                            width: Constants.Conversation.QuestionWizard.progressSegmentWidth,
-                            height: Constants.Conversation.QuestionWizard.progressSegmentHeight)
-                    }
-                }
+                progress
             }
             if isMulti {
-                Text("Select all that apply")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(Theme.muted(for: colorScheme).opacity(0.8)))
+                multiSelectBadge
             }
-            Spacer(minLength: 8)
-            Button(action: onIgnore) {
-                Text("Ignore")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .frame(
-                        minWidth: Constants.Accessibility.minimumTapTarget,
-                        minHeight: Constants.Accessibility.minimumTapTarget)
-            }
-            .buttonStyle(.plain)
+            Spacer(minLength: Self.minimumContentSpacing)
+            ignoreButton
             if showsDismiss {
                 QuestionWizardDismissButton(dismissed: dismissed, action: onDismiss)
             }
         }
         .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
-        .padding(.top, 10)
+        .padding(.top, Self.topPadding)
+    }
+
+    private var title: some View {
+        Group {
+            Image(systemName: "questionmark.circle")
+                .font(.caption)
+                .foregroundStyle(Theme.primary(for: colorScheme))
+                .accessibilityHidden(true)
+            Text("Questions")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+        }
+    }
+
+    private var progress: some View {
+        Group {
+            Text("\(index + 1) of \(questionCount)")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            HStack(spacing: Self.progressSegmentSpacing) {
+                ForEach(0..<questionCount, id: \.self) { segment in
+                    RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.progressSegmentCornerRadius)
+                        .fill(segmentColor(segment))
+                        .frame(
+                            width: Constants.Conversation.QuestionWizard.progressSegmentWidth,
+                            height: Constants.Conversation.QuestionWizard.progressSegmentHeight
+                        )
+                }
+            }
+        }
+    }
+
+    private var multiSelectBadge: some View {
+        Text("Select all that apply")
+            .font(.caption)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .padding(.horizontal, Self.multiSelectHorizontalPadding)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(Theme.muted(for: colorScheme).opacity(Self.multiSelectFillOpacity)))
+    }
+
+    private var ignoreButton: some View {
+        Button(action: onIgnore) {
+            Text("Ignore")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .frame(
+                    minWidth: Constants.Accessibility.minimumTapTarget,
+                    minHeight: Constants.Accessibility.minimumTapTarget
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private func segmentColor(_ segment: Int) -> Color {
         if segment < index {
             return Theme.primary(for: colorScheme).opacity(
-                colorSchemeContrast == .increased ? 0.7 : 0.4)
+                colorSchemeContrast == .increased
+                    ? Self.completedSegmentIncreasedOpacity
+                    : Self.completedSegmentOpacity
+            )
         }
         if segment == index { return Theme.primary(for: colorScheme) }
         return Theme.mutedForeground(
-            for: colorScheme, contrast: colorSchemeContrast).opacity(
-                colorSchemeContrast == .increased ? 0.55 : 0.25)
+            for: colorScheme,
+            contrast: colorSchemeContrast
+        )
+            .opacity(
+                colorSchemeContrast == .increased
+                    ? Self.pendingSegmentIncreasedOpacity
+                    : Self.pendingSegmentOpacity
+            )
     }
 }

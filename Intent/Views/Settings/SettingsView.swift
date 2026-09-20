@@ -11,85 +11,99 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Appearance") {
-                    Picker("Theme", selection: $themePreference) {
-                        Text("Light").tag("light")
-                        Text("Dark").tag("dark")
-                        Text("System").tag("system")
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                // Window-scoped: a pinned window shows (and logs off) its own
-                // backend, never the default session's active connection.
-                if let connection = coordinator.windowConnection {
-                    Section("Connected To") {
-                        connectionSummaryLayout {
-                            HStack(spacing: Constants.Settings.connectionRowSpacing) {
-                                Image(systemName: "desktopcomputer")
-                                    .font(.title2)
-                                    .foregroundStyle(Theme.primary(for: colorScheme))
-
-                                VStack(alignment: .leading, spacing: Constants.Settings.connectionTextSpacing) {
-                                    Text(connection.displayName)
-                                        .font(.body.weight(.medium))
-                                    Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
-                                        .font(.caption)
-                                        .foregroundStyle(Theme.mutedForeground(
-                                            for: colorScheme, contrast: colorSchemeContrast))
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                            HStack(spacing: Constants.Settings.statusSpacing) {
-                                Circle()
-                                    .fill(.green)
-                                    .frame(width: Constants.Settings.statusDotSize,
-                                           height: Constants.Settings.statusDotSize)
-                                Text("Connected")
-                                    .font(.caption)
-                            }
-                        }
-
-                        if !session.connection.certMismatches.isEmpty {
-                            CertMismatchListView(mismatches: session.connection.certMismatches)
-                        }
+            settingsForm
+                .navigationTitle("Settings")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { coordinator.onSettingsBack() }
                     }
                 }
+                .alert("Log Off?", isPresented: $showLogOffConfirmation) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Log Off", role: .destructive) { coordinator.onLogOff() }
+                } message: {
+                    Text("Are you sure? You'll need to pair again to reconnect.")
+                }
+        }
+    }
 
-                Section("Account") {
-                    Button(role: .destructive) {
-                        showLogOffConfirmation = true
-                    } label: {
-                        Label("Log Off", systemImage: "rectangle.portrait.and.arrow.right")
+    private var settingsForm: some View {
+        Form {
+            appearanceSection
+            connectionSection
+            accountSection
+            aboutSection
+        }
+        .scrollContentBackground(.hidden)
+        .background(Theme.background(for: colorScheme))
+    }
+
+    private var appearanceSection: some View {
+        Section("Appearance") {
+            Picker("Theme", selection: $themePreference) {
+                Text("Light").tag("light")
+                Text("Dark").tag("dark")
+                Text("System").tag("system")
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    @ViewBuilder
+    private var connectionSection: some View {
+        if let connection = coordinator.windowConnection {
+            Section("Connected To") {
+                connectionSummaryLayout {
+                    connectionIdentity(connection)
+                    HStack(spacing: Constants.Settings.statusSpacing) {
+                        Circle()
+                            .fill(.green)
+                            .frame(
+                                width: Constants.Settings.statusDotSize,
+                                height: Constants.Settings.statusDotSize
+                            )
+                        Text("Connected").font(.caption)
                     }
                 }
-
-                Section("About") {
-                    NavigationLink {
-                        AcknowledgementsView()
-                    } label: {
-                        Label("Acknowledgements", systemImage: "doc.text")
-                    }
+                if !session.connection.certMismatches.isEmpty {
+                    CertMismatchListView(mismatches: session.connection.certMismatches)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(Theme.background(for: colorScheme))
-            .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { coordinator.onSettingsBack() }
-                }
+        }
+    }
+
+    private func connectionIdentity(_ connection: StoredConnection) -> some View {
+        HStack(spacing: Constants.Settings.connectionRowSpacing) {
+            Image(systemName: "desktopcomputer")
+                .font(.title2)
+                .foregroundStyle(Theme.primary(for: colorScheme))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Constants.Settings.connectionTextSpacing) {
+                Text(connection.displayName).font(.body.weight(.medium))
+                Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(
+                        for: colorScheme,
+                        contrast: colorSchemeContrast
+                    ))
             }
-            .alert("Log Off?", isPresented: $showLogOffConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Log Off", role: .destructive) {
-                    coordinator.onLogOff()
-                }
-            } message: {
-                Text("Are you sure? You'll need to pair again to reconnect.")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var accountSection: some View {
+        Section("Account") {
+            Button(role: .destructive) { showLogOffConfirmation = true } label: {
+                Label("Log Off", systemImage: "rectangle.portrait.and.arrow.right")
+            }
+        }
+    }
+
+    private var aboutSection: some View {
+        Section("About") {
+            NavigationLink { AcknowledgementsView() } label: {
+                Label("Acknowledgements", systemImage: "doc.text")
             }
         }
     }
@@ -121,4 +135,3 @@ struct SettingsView: View {
         .environment(session.makeCoordinator())
         .preferredColorScheme(.dark)
 }
-

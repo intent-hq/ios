@@ -1,6 +1,6 @@
+@testable import Intent
 import SwiftUI
 import Testing
-@testable import Intent
 
 /// Tests for the desktop-parity agent avatar design selection (mirrors
 /// cloudlands-fe avatar-design.ts) and the ported glyph geometry.
@@ -17,7 +17,7 @@ struct AgentAvatarDesignTests {
             "pr-reviewer": .prReviewer,
             "ui-designer": .uiDesigner,
             "chief-of-staff": .chiefOfStaff,
-            "ralph": .ralph,
+            "ralph": .ralph
         ]
         for (specialist, design) in expected {
             #expect(AgentAvatarDesign.design(agentId: "agent-1", specialist: specialist) == design)
@@ -27,7 +27,8 @@ struct AgentAvatarDesignTests {
     @Test func builtinMappingIgnoresAgentId() {
         #expect(
             AgentAvatarDesign.design(agentId: "agent-a", specialist: "implementor")
-                == AgentAvatarDesign.design(agentId: "agent-b", specialist: "implementor"))
+                == AgentAvatarDesign.design(agentId: "agent-b", specialist: "implementor")
+        )
     }
 
     // MARK: - Icon resolution (PROTOCOL §5.11)
@@ -35,20 +36,35 @@ struct AgentAvatarDesignTests {
     @Test func iconResolvesAheadOfSpecialistMapAndFallback() {
         for icon in AgentAvatarDesign.builtinDesigns {
             #expect(AgentAvatarDesign.design(
-                agentId: "agent-a", specialist: "implementor", icon: icon.rawValue) == icon)
+                agentId: "agent-a",
+                specialist: "implementor",
+                icon: icon.rawValue
+            ) == icon)
             #expect(AgentAvatarDesign.design(
-                agentId: "agent-a", specialist: "custom-specialist", icon: icon.rawValue) == icon)
+                agentId: "agent-a",
+                specialist: "custom-specialist",
+                icon: icon.rawValue
+            ) == icon)
             #expect(AgentAvatarDesign.design(
-                agentId: "agent-a", specialist: nil, icon: icon.rawValue) == icon)
+                agentId: "agent-a",
+                specialist: nil,
+                icon: icon.rawValue
+            ) == icon)
         }
     }
 
     @Test func unknownOrAbsentIconsDegradeToIdMapThenFallback() {
         for icon in [nil, "", "not-a-design", "fallback-glasses"] {
             #expect(AgentAvatarDesign.design(
-                agentId: "agent-a", specialist: "implementor", icon: icon) == .implementor)
+                agentId: "agent-a",
+                specialist: "implementor",
+                icon: icon
+            ) == .implementor)
             #expect(AgentAvatarDesign.design(
-                agentId: "agent-a", specialist: "custom-specialist", icon: icon)
+                agentId: "agent-a",
+                specialist: "custom-specialist",
+                icon: icon
+            )
                 == AgentAvatarDesign.fallbackDesign(agentId: "agent-a"))
         }
     }
@@ -77,9 +93,9 @@ struct AgentAvatarDesignTests {
     @Test func fallbackIsDeterministicPerAgentId() {
         let ids = ["agent-123", "agent-456", "", "0d9c66aa-1c9e-4a09-b52f-1f6f7a10a1de", "AGENT-123"]
         for id in ids {
-            #expect(
-                AgentAvatarDesign.fallbackDesign(agentId: id)
-                    == AgentAvatarDesign.fallbackDesign(agentId: id))
+            let firstDesign = AgentAvatarDesign.fallbackDesign(agentId: id)
+            let secondDesign = AgentAvatarDesign.fallbackDesign(agentId: id)
+            #expect(firstDesign == secondDesign)
         }
     }
 
@@ -108,12 +124,13 @@ struct AgentAvatarDesignTests {
             // different design than exact integer math would — regression
             // coverage for the Double-based LCG step.
             ("agent-750158", .fallbackCrownMouth),
-            ("x2191079", .fallbackGlasses),
+            ("x2191079", .fallbackGlasses)
         ]
         for (agentId, expected) in fixtures {
             #expect(
                 AgentAvatarDesign.fallbackDesign(agentId: agentId) == expected,
-                "\(agentId)")
+                "\(agentId)"
+            )
         }
     }
 
@@ -125,11 +142,13 @@ struct AgentAvatarDesignTests {
             let glyph = design.glyph
             #expect(
                 !(glyph.strokePath.isEmpty && glyph.fillPath.isEmpty),
-                "\(design.rawValue) has no geometry")
+                "\(design.rawValue) has no geometry"
+            )
             for path in [glyph.strokePath, glyph.fillPath] where !path.isEmpty {
                 #expect(
                     limit.contains(path.boundingRect),
-                    "\(design.rawValue) outside 16×16 art bounds: \(path.boundingRect)")
+                    "\(design.rawValue) outside 16×16 art bounds: \(path.boundingRect)"
+                )
             }
         }
     }
@@ -140,5 +159,19 @@ struct AgentAvatarDesignTests {
         #expect(crown != inverted)
         #expect(abs(crown.width - inverted.width) < 0.001)
         #expect(abs(crown.height - inverted.height) < 0.001)
+    }
+
+    @Test func svgParserSupportsImplicitLinesAxisLinesAndCurves() {
+        let lines = Path(svgPathData: "M1 2,3 4H5V6")
+        #expect(lines.boundingRect == CGRect(x: 1, y: 2, width: 4, height: 4))
+
+        let curve = Path(svgPathData: "M0 0C1 2 3 4 5 6")
+        #expect(!curve.isEmpty)
+        #expect(curve.boundingRect == CGRect(x: 0, y: 0, width: 5, height: 6))
+    }
+
+    @Test func svgParserStopsAtUnsupportedCommandWithoutDiscardingPriorPath() {
+        let path = Path(svgPathData: "M0 0L2 2ZL10 10")
+        #expect(path.boundingRect == CGRect(x: 0, y: 0, width: 2, height: 2))
     }
 }

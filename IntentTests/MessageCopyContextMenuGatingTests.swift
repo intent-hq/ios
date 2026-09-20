@@ -1,7 +1,7 @@
+@testable import Intent
 import SwiftUI
 import Testing
 import UIKit
-@testable import Intent
 
 /// Availability gate for the copy-context-menu interaction
 /// (MessageCopyContextMenu): the overlay is applied unconditionally so the
@@ -89,7 +89,8 @@ struct CopyContextMenuOverlayHitTestTests {
         window.addSubview(host)
         let overlay = CopyContextMenuOverlay.OverlayView()
         let coordinator = CopyContextMenuOverlay.Coordinator(
-            text: "copy me", preview: AnyView(EmptyView())
+            text: "copy me",
+            preview: AnyView(EmptyView())
         )
         overlay.setInteractionEnabled(enabled, delegate: coordinator)
         if wrapped {
@@ -159,7 +160,8 @@ struct CopyContextMenuOverlayHitTestTests {
         // still claimed.
         let fixture = makeFixture(enabled: true)
         let marker = CopyContextMenuPassthroughMarker.MarkerView(
-            frame: CGRect(x: 0, y: 0, width: 50, height: 100))
+            frame: CGRect(x: 0, y: 0, width: 50, height: 100)
+        )
         fixture.host.insertSubview(marker, belowSubview: fixture.overlay)
         #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)
         #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
@@ -172,10 +174,295 @@ struct CopyContextMenuOverlayHitTestTests {
         let fixture = makeFixture(enabled: true)
         let wrapper = UIView(frame: .zero)
         let marker = CopyContextMenuPassthroughMarker.MarkerView(
-            frame: CGRect(x: 0, y: 0, width: 50, height: 100))
+            frame: CGRect(x: 0, y: 0, width: 50, height: 100)
+        )
         wrapper.addSubview(marker)
         fixture.host.insertSubview(wrapper, belowSubview: fixture.overlay)
         #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)
         #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
+    }
+}
+
+/// End-to-end hit-testing of a hosted `AssistantMessageView` (ios#344): a
+/// settled message carrying text AND a tool_use block enables the copy
+/// overlay over the whole row, and a tap on the tool row's header must still
+/// reach the header `Button` (expand / hydrate) instead of being claimed for
+/// the copy interaction. The text region keeps the copy long-press, and a
+/// tool-only message (no copy text, overlay inert) keeps expanding too.
+@MainActor
+struct AssistantMessageToolRowHitTestTests {
+    private static let hostWidth: CGFloat = 390
+    private static let hostHeight: CGFloat = 320
+    private static let bodyText = "Here is the file you asked for."
+    private static let toolInput: [String: AnyCodable] = [
+        "path": AnyCodable("Sources/Package.swift")
+    ]
+
+    private static func makeMessage(includeText: Bool) -> ConversationMessage {
+        var blocks: [ContentBlock] = []
+        if includeText {
+            blocks.append(ContentBlock(id: "b-text", type: .text, text: bodyText))
+        }
+        blocks.append(ContentBlock(id: "b-tool", type: .toolUse, name: "view", input: toolInput))
+        return ConversationMessage(
+            id: "m-344",
+            role: .assistant,
+            contentBlocks: blocks,
+            timestamp: "2025-01-01T00:00:00Z",
+            streamingState: .complete
+        )
+    }
+
+    private static func makeCoordinator() throws -> AppCoordinator {
+        _ = TestKeychainStorage.installed
+        let suiteName = "AssistantMessageToolRowHitTestTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        return AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: FakeConnectionManager(),
+            persistence: PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+        )
+    }
+
+    /// Every accessibility element reachable from `root`, depth-first. Unlike
+    /// `SyntheticBadgeHost.accessibilityElements(in:)` this also descends into
+    /// SwiftUI's non-`UIView` container nodes, which is where a nested row's
+    /// buttons and text live.
+    private static func allAccessibilityElements(
+        under root: NSObject,
+        visited: inout Set<ObjectIdentifier>,
+        maxDepth: Int = 12
+    ) -> [NSObject] {
+        guard maxDepth > 0, visited.insert(ObjectIdentifier(root)).inserted else { return [] }
+        var children = (root.accessibilityElements ?? []).compactMap { $0 as? NSObject }
+        let elementCount = root.accessibilityElementCount()
+        if elementCount != NSNotFound, elementCount > 0 {
+            children += (0..<elementCount).compactMap { root.accessibilityElement(at: $0) as? NSObject }
+        }
+        if let view = root as? UIView {
+            children += view.subviews
+        }
+        return [root] + children.flatMap { child in
+            allAccessibilityElements(under: child, visited: &visited, maxDepth: maxDepth - 1)
+        }
+    }
+
+    /// SwiftUI publishes a freshly hosted view's accessibility nodes
+    /// asynchronously (the first hosting in a test process may take a few
+    /// run-loop turns), so the lookup observes the run loop, bounded, until
+    /// the element appears — the same observation the rendered badge tests
+    /// perform, not a sleep.
+    private static let accessibilityObservationDeadline: TimeInterval = 3
+    private static let accessibilityObservationInterval: TimeInterval = 0.02
+
+    private static func labelledElement(
+        containing fragment: String,
+        under hostView: UIView
+    ) -> (element: NSObject?, seen: [String]) {
+        var visited: Set<ObjectIdentifier> = []
+        let elements = allAccessibilityElements(under: hostView, visited: &visited)
+        let match = elements.first { element in
+            element.accessibilityLabel?.contains(fragment) == true
+                || element.accessibilityValue?.contains(fragment) == true
+        }
+        let seen = elements.compactMap { element -> String? in
+            let text = element.accessibilityLabel ?? element.accessibilityValue
+            return text.map { "\(type(of: element))(\($0.prefix(60)))" }
+        }
+        return (match, seen)
+    }
+
+    /// Frame of the first accessibility element whose label (or value, for
+    /// UIKit-backed text views) contains `fragment`, in window coordinates.
+    private static func frame(
+        ofElementContaining fragment: String,
+        in hostView: UIView,
+        window: UIWindow
+    ) throws -> CGRect {
+        let deadline = Date(timeIntervalSinceNow: accessibilityObservationDeadline)
+        var found = labelledElement(containing: fragment, under: hostView)
+        while found.element == nil, Date() < deadline {
+            _ = RunLoop.current.run(
+                mode: .default,
+                before: Date(timeIntervalSinceNow: accessibilityObservationInterval)
+            )
+            hostView.layoutIfNeeded()
+            found = labelledElement(containing: fragment, under: hostView)
+        }
+        let element = try #require(
+            found.element,
+            Comment(
+                rawValue: "no accessibility element labelled with \(fragment) within "
+                    + "\(accessibilityObservationDeadline)s; saw: [\(found.seen.joined(separator: ", "))]"
+            )
+        )
+        let frame = window.convert(element.accessibilityFrame, from: nil)
+        try #require(!frame.isEmpty, "\(fragment) has an empty accessibility frame")
+        return frame
+    }
+
+    private static func firstDescendant<T: UIView>(of _: T.Type, in root: UIView) -> T? {
+        for subview in root.subviews {
+            if let match = subview as? T { return match }
+            if let match = firstDescendant(of: T.self, in: subview) { return match }
+        }
+        return nil
+    }
+
+    /// The row's single copy overlay, with its frame in window coordinates.
+    private static func copyOverlay(
+        in hostView: UIView,
+        window: UIWindow
+    ) throws -> (view: CopyContextMenuOverlay.OverlayView, frame: CGRect) {
+        let overlay = try #require(
+            firstDescendant(of: CopyContextMenuOverlay.OverlayView.self, in: hostView),
+            "hosted AssistantMessageView carries no copy overlay"
+        )
+        return (overlay, window.convert(overlay.bounds, from: overlay))
+    }
+
+    /// Window-level hit at `point`: must resolve to a non-nil view inside the
+    /// hosted row whose own bounds contain the point.
+    private static func requireHit(at point: CGPoint, in hostView: UIView, window: UIWindow) throws -> UIView {
+        let hit = try #require(window.hitTest(point, with: nil), "nothing hit-tests at \(point)")
+        try #require(hit.isDescendant(of: hostView), "hit \(hit) lies outside the hosted row")
+        try #require(
+            hit.point(inside: hit.convert(point, from: window), with: nil),
+            "hit \(hit) does not contain \(point) in its own bounds"
+        )
+        return hit
+    }
+
+    /// Asserts a tap at the centre of the tool row's header lands on a view
+    /// SwiftUI routes to the header `Button`: the header's own pass-through
+    /// marker (sitting inside the header's accessibility frame, so not some
+    /// other marker in the row) or — only where `allowingHostingView` —
+    /// the hosting view itself, which is how plain SwiftUI content receives
+    /// taps when no overlay competes for them. Never the copy overlay.
+    private static func expectHeaderTapReachesButton(
+        subject: String,
+        in hostView: UIView,
+        window: UIWindow,
+        allowingHostingView: Bool = false
+    ) throws {
+        let headerFrame = try frame(ofElementContaining: subject, in: hostView, window: window)
+        let point = CGPoint(x: headerFrame.midX, y: headerFrame.midY)
+        let hit = try requireHit(at: point, in: hostView, window: window)
+        #expect(!(hit is CopyContextMenuOverlay.OverlayView), "copy overlay swallowed the header tap")
+        if allowingHostingView, hit === hostView { return }
+        let marker = try #require(
+            hit as? CopyContextMenuPassthroughMarker.MarkerView,
+            "header tap resolved to \(hit) instead of the header's pass-through marker"
+        )
+        let markerFrame = window.convert(marker.bounds, from: marker)
+        #expect(
+            headerFrame.insetBy(dx: -1, dy: -1).contains(markerFrame),
+            "marker \(markerFrame) is not the header's own (header \(headerFrame))"
+        )
+    }
+
+    private func hitTest(
+        includeText: Bool,
+        probe: (_ hostView: UIView, _ window: UIWindow) throws -> Void
+    ) throws {
+        let coordinator = try Self.makeCoordinator()
+        let view = AssistantMessageView(
+            message: Self.makeMessage(includeText: includeText),
+            workspaceId: "ws-1",
+            onNavigateToNote: nil,
+            hydratingBlockIds: [],
+            onHydrateBlock: nil
+        )
+        .environment(coordinator)
+        try SyntheticBadgeHost.render(view, width: Self.hostWidth, height: Self.hostHeight, inspect: probe)
+    }
+
+    private var toolSubject: String {
+        get throws {
+            try #require(ToolClassifier.classify(name: "view", input: Self.toolInput).subject)
+        }
+    }
+
+    private static let accessibilityGate = Comment(
+        rawValue:
+            "SwiftUI publishes its accessibility tree only when accessibility is enabled "
+            + "for the process (scripts/xcodebuild.sh enables it on the simulator; a "
+            + "physical-device unit-test run needs VoiceOver or an XCUITest session)"
+    )
+
+    // Gated like the rendered badge tests: always true on the simulator, so a
+    // missing header element there is a real failure, not a skip.
+    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() })
+    func toolRowHeaderTapReachesButtonInTextBearingMessage() throws {
+        let subject = try toolSubject
+        try hitTest(includeText: true) { hostView, window in
+            // The copy interaction is live and spans the header: the overlay
+            // is what would otherwise claim the tap.
+            let overlay = try Self.copyOverlay(in: hostView, window: window)
+            #expect(overlay.view.interactions.contains { $0 is UIContextMenuInteraction })
+            let headerFrame = try Self.frame(ofElementContaining: subject, in: hostView, window: window)
+            #expect(overlay.frame.contains(CGPoint(x: headerFrame.midX, y: headerFrame.midY)))
+            try Self.expectHeaderTapReachesButton(subject: subject, in: hostView, window: window)
+        }
+    }
+
+    /// Minimum height of the text band above the tool row for the probe point
+    /// to be unambiguously inside the text block rather than on its edge.
+    private static let minimumTextBandHeight: CGFloat = 12
+
+    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() })
+    func textRegionKeepsCopyMenuInTextBearingMessage() throws {
+        let subject = try toolSubject
+        try hitTest(includeText: true) { hostView, window in
+            let overlay = try Self.copyOverlay(in: hostView, window: window)
+            #expect(
+                overlay.view.interactions.contains { $0 is UIContextMenuInteraction },
+                "copy interaction is not attached to a settled text-bearing message"
+            )
+            // Textual's text is not published as a labelled accessibility
+            // element, so locate the text block geometrically: the row lays
+            // the text block out above the tool row, so the band between the
+            // overlay's top edge and the header's top edge is text.
+            let headerFrame = try Self.frame(ofElementContaining: subject, in: hostView, window: window)
+            let textBandHeight = headerFrame.minY - overlay.frame.minY
+            try #require(
+                textBandHeight >= Self.minimumTextBandHeight,
+                "no text band above the tool header (overlay \(overlay.frame), header \(headerFrame))"
+            )
+            let point = CGPoint(x: headerFrame.midX, y: overlay.frame.minY + textBandHeight / 2)
+            #expect(overlay.frame.contains(point), "overlay \(overlay.frame) does not cover the text at \(point)")
+            // The overlay either claims the text touch itself or defers to
+            // Textual's UITextInput-conforming text view beneath it (which
+            // keeps its own selection / copy affordances); either way the
+            // tap must not land on a pass-through marker.
+            let hit = try Self.requireHit(at: point, in: hostView, window: window)
+            #expect(
+                hit === overlay.view || hit is UITextInput,
+                "text region resolved to \(hit), neither the copy overlay nor a text input"
+            )
+            #expect(!(hit is CopyContextMenuPassthroughMarker.MarkerView))
+        }
+    }
+
+    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() })
+    func toolRowHeaderTapReachesButtonInToolOnlyMessage() throws {
+        let subject = try toolSubject
+        try hitTest(includeText: false) { hostView, window in
+            // No copy text: the overlay is present but inert, so the tap
+            // reaches the header with or without the marker (this case
+            // already worked before ios#344 was fixed).
+            let overlay = try Self.copyOverlay(in: hostView, window: window)
+            #expect(
+                !overlay.view.interactions.contains { $0 is UIContextMenuInteraction },
+                "copy interaction attached to a message without copy text"
+            )
+            try Self.expectHeaderTapReachesButton(
+                subject: subject,
+                in: hostView,
+                window: window,
+                allowingHostingView: true
+            )
+        }
     }
 }

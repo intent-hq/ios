@@ -23,14 +23,17 @@ final class ConversationWatchedAgents {
         self.workspaceId = workspaceId
         do {
             guard let snapshot = try await commands.fetchSubscriptions(
-                agentId: agentId, workspaceId: workspaceId) else { return }
+                agentId: agentId,
+                workspaceId: workspaceId
+            ) else { return }
             watchedAgentIds = snapshot.watchedAgentIds
             isWaitingForAgents = !watchedAgentIds.isEmpty
             await fetchDetails()
             delegationGroupStatus = snapshot.delegationGroupStatus
         } catch {
             AppLog.conversation.error(
-                "[ConversationStore] Failed to fetch subscriptions: \(error)")
+                "[ConversationStore] Failed to fetch subscriptions: \(error)"
+            )
         }
     }
 
@@ -43,7 +46,8 @@ final class ConversationWatchedAgents {
             watchedAgents = []
         } catch {
             AppLog.conversation.error(
-                "[ConversationStore] Failed to cancel subscriptions: \(error)")
+                "[ConversationStore] Failed to cancel subscriptions: \(error)"
+            )
         }
     }
 
@@ -53,13 +57,17 @@ final class ConversationWatchedAgents {
     }
 
     func handleActivity(
-        agentId: String, lastAgentResponse: String?, digest: String?
+        agentId: String,
+        lastAgentResponse: String?,
+        digest: String?
     ) {
         guard watchedAgentIds.contains(agentId) else { return }
         if let index = watchedAgents.firstIndex(where: { $0.id == agentId }) {
             if lastAgentResponse != nil || digest != nil {
                 watchedAgents[index] = watchedAgents[index].applyingPreview(
-                    lastAgentResponse: lastAgentResponse, digest: digest)
+                    lastAgentResponse: lastAgentResponse,
+                    digest: digest
+                )
             }
             return
         }
@@ -78,21 +86,25 @@ final class ConversationWatchedAgents {
     }
 
     func stopAgents(
-        agentIds: [String], parentAgentId: String, workspaceId: String
+        agentIds: [String],
+        parentAgentId: String,
+        workspaceId: String
     ) async {
         await cancelSubscriptions(agentId: parentAgentId, workspaceId: workspaceId)
         do {
             try await commands.stop(agentId: parentAgentId)
         } catch {
             AppLog.conversation.error(
-                "[ConversationStore] Failed to stop parent agent: \(error)")
+                "[ConversationStore] Failed to stop parent agent: \(error)"
+            )
         }
         for agentId in agentIds {
             do {
                 try await commands.stop(agentId: agentId)
             } catch {
                 AppLog.conversation.error(
-                    "[ConversationStore] Failed to stop agent \(agentId): \(error)")
+                    "[ConversationStore] Failed to stop agent \(agentId): \(error)"
+                )
             }
         }
     }
@@ -123,10 +135,12 @@ final class ConversationWatchedAgents {
                 }
                 AppLog.conversation.debug(
                     "[ConversationStore] Updated watched agent: \(updated.name): "
-                        + "\(updated.displayMessage ?? "nil")")
+                        + "\(updated.displayMessage ?? "nil")"
+                )
             } catch {
                 AppLog.conversation.error(
-                    "[ConversationStore] Failed to fetch watched agent \(agentId): \(error)")
+                    "[ConversationStore] Failed to fetch watched agent \(agentId): \(error)"
+                )
             }
         }
     }
@@ -138,15 +152,20 @@ final class ConversationWatchedAgents {
             return
         }
         do {
-            guard let agents = try await commands.listAgents(
-                workspaceId: workspaceId, watchedAgentIds: watchedAgentIds) else { return }
+            let result = try await commands.listAgents(
+                workspaceId: workspaceId,
+                watchedAgentIds: watchedAgentIds
+            )
+            guard case let .sessions(agents) = result else { return }
             AppLog.conversation.debug(
                 "[ConversationStore] Fetched \(agents.count) watched agents: "
-                    + "\(agents.map { "\($0.name): \($0.displayMessage ?? "nil")" })")
+                    + "\(agents.map { "\($0.name): \($0.displayMessage ?? "nil")" })"
+            )
             watchedAgents = agents
         } catch {
             AppLog.conversation.error(
-                "[ConversationStore] Failed to fetch watched agent details: \(error)")
+                "[ConversationStore] Failed to fetch watched agent details: \(error)"
+            )
         }
     }
 }

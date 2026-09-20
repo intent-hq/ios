@@ -1,9 +1,54 @@
 import Foundation
+
+enum OutgoingImagePayload {
+    case attachments([[String: Any]])
+    case none
+
+    func apply(to params: inout [String: Any]) {
+        if case let .attachments(blocks) = self { params["imageBlocks"] = blocks }
+    }
+}
+
+enum OutgoingFilePayload {
+    case attachments([[String: Any]])
+    case none
+
+    func apply(to params: inout [String: Any]) {
+        if case let .attachments(blocks) = self { params["fileBlocks"] = blocks }
+    }
+}
+
+enum MessageSendMetadata {
+    case fields([String: Any])
+    case none
+
+    func apply(to params: inout [String: Any]) {
+        if case let .fields(fields) = self { params["messageMetadata"] = fields }
+    }
+
+    var optimisticFields: [String: AnyCodable] {
+        guard case let .fields(fields) = self else { return [:] }
+        return fields.mapValues(AnyCodable.init)
+    }
+
+    var wasProvided: Bool {
+        if case .fields = self { return true }
+        return false
+    }
+}
+
+enum AgentListFetchResult {
+    case sessions([AgentSession])
+    case unavailable
+}
 import Observation
 
 @MainActor
 @Observable
 final class ConversationCommands {
+    // JSON-RPC Invalid params, also used by the daemon for unknown entity ids.
+    private static let invalidParametersErrorCode = -32_602
+
     struct AgentState {
         let isStreaming: Bool
         let attentionRequest: PendingAttentionRequest?
@@ -20,6 +65,16 @@ final class ConversationCommands {
         let delegationGroupStatus: (completed: Int, total: Int)?
     }
 
+    struct SendRequest {
+        let agentId: String
+        let content: String
+        let workspaceId: String
+        let messageId: String
+        let imagePayload: OutgoingImagePayload
+        let filePayload: OutgoingFilePayload
+        let messageMetadata: MessageSendMetadata
+    }
+
     var queuedMessages: [QueuedMessage] = []
     var pendingQuestionsMessageId: String?
     var dismissedQuestionsMessageId: String?
@@ -31,10 +86,14 @@ final class ConversationCommands {
     init(connectionManager: ConnectionManagerRouting) {
         self.connectionManager = connectionManager
     }
+}
 
+extension ConversationCommands {
     func fetchAgentState(agentId: String) async throws -> AgentState? {
         let result = try await connectionManager.request(
-            "agent.get", params: ["agentId": agentId])
+            "agent.get",
+            params: ["agentId": agentId]
+        )
         guard let response = result as? [String: Any],
               let agent = response["agent"] as? [String: Any] else { return nil }
         let metadata = agent["metadata"] as? [String: Any]
@@ -55,13 +114,15 @@ final class ConversationCommands {
     /// served a page without it. An unknown id surfaces as the daemon's
     /// `-32602` (`unknown message id`) — the caller classifies it.
     func fetchMessage(
-        agentId: String, messageId: String, workspaceId: String?
+        agentId: String,
+        messageId: String,
+        workspaceId: String?
     ) async throws -> ConversationMessage? {
         var params: [String: Any] = [
             "agentId": agentId,
             "aroundMessageId": messageId,
             "limit": 1,
-            "projection": "slim",
+            "projection": "slim"
         ]
         if let workspaceId { params["workspaceId"] = workspaceId }
         let result = try await connectionManager.request("agent.getConversation", params: params)
@@ -75,13 +136,19 @@ final class ConversationCommands {
             "events.subscribe",
             params: [
                 "eventTypes": [
-                    "agent:stream:*", "agent:queue:*", "agent:user-message:*",
-                    "agent:subscribed", "agent:unsubscribed",
-                    "agent:status-changed", "agent:idle",
-                    "agent:woken-by-subscription", "agent:deleted", "agent:updated",
+                    "agent:stream:*",
+                    "agent:queue:*",
+                    "agent:user-message:*",
+                    "agent:subscribed",
+                    "agent:unsubscribed",
+                    "agent:status-changed",
+                    "agent:idle",
+                    "agent:woken-by-subscription",
+                    "agent:deleted",
+                    "agent:updated"
                 ],
                 "workspaceId": workspaceId,
-                "replaceGroup": "streaming-\(agentId)",
+                "replaceGroup": "streaming-\(agentId)"
             ]
         )
         return (result as? [String: Any])?["subscriptionId"] as? String
@@ -89,27 +156,21 @@ final class ConversationCommands {
 
     func unsubscribeEvents(subscriptionId: String) async throws {
         _ = try await connectionManager.request(
-            "events.unsubscribe", params: ["subscriptionId": subscriptionId])
+            "events.unsubscribe",
+            params: ["subscriptionId": subscriptionId]
+        )
     }
 
-    func sendMessage(
-        agentId: String,
-        content: String,
-        workspaceId: String,
-        messageId: String,
-        imageBlocks: [[String: Any]]?,
-        fileBlocks: [[String: Any]]?,
-        messageMetadata: [String: Any]?
-    ) async throws -> Bool {
+    func sendMessage(_ request: SendRequest) async throws -> Bool {
         var params: [String: Any] = [
-            "agentId": agentId,
-            "content": content,
-            "workspaceId": workspaceId,
-            "messageId": messageId,
+            "agentId": request.agentId,
+            "content": request.content,
+            "workspaceId": request.workspaceId,
+            "messageId": request.messageId
         ]
-        if let imageBlocks { params["imageBlocks"] = imageBlocks }
-        if let fileBlocks { params["fileBlocks"] = fileBlocks }
-        if let messageMetadata { params["messageMetadata"] = messageMetadata }
+        request.imagePayload.apply(to: &params)
+        request.filePayload.apply(to: &params)
+        request.messageMetadata.apply(to: &params)
         let result = try await connectionManager.request("agent.sendMessage", params: params)
         guard let response = result as? [String: Any],
               response["queued"] as? Bool == true else { return false }
@@ -126,7 +187,9 @@ final class ConversationCommands {
     }
 
     func dismissQuestions(
-        agentId: String, messageId: String, workspaceId: String
+        agentId: String,
+        messageId: String,
+        workspaceId: String
     ) async throws {
         let previousMarker = dismissedQuestionsMessageId
         dismissedQuestionsMessageId = messageId
@@ -136,7 +199,7 @@ final class ConversationCommands {
                 params: [
                     "agentId": agentId,
                     "messageId": messageId,
-                    "workspaceId": workspaceId,
+                    "workspaceId": workspaceId
                 ]
             )
             if let confirmedId = (result as? [String: Any])?["dismissedQuestionsMessageId"]
@@ -152,10 +215,12 @@ final class ConversationCommands {
     }
 
     func markSeen(
-        agentId: String, workspaceId: String, messages: [ConversationMessage]
+        agentId: String,
+        workspaceId: String,
+        messages: [ConversationMessage]
     ) async {
-        guard let messageId = messages.reversed().first(where: {
-            $0.isStreaming != true && !$0.id.isEmpty
+        guard let messageId = messages.reversed().first(where: { message in
+            message.isStreaming != true && !message.id.isEmpty
         })?.id else { return }
         if messageId == lastMarkSeenSentId || messageId == lastSeenMessageId { return }
         lastMarkSeenSentId = messageId
@@ -165,7 +230,7 @@ final class ConversationCommands {
                 params: [
                     "agentId": agentId,
                     "messageId": messageId,
-                    "workspaceId": workspaceId,
+                    "workspaceId": workspaceId
                 ]
             )
             if let confirmedId = (result as? [String: Any])?["lastSeenMessageId"] as? String {
@@ -180,12 +245,12 @@ final class ConversationCommands {
     func queueMessage(
         agentId: String,
         content: String,
-        imageBlocks: [[String: Any]]?,
-        fileBlocks: [[String: Any]]?
+        imagePayload: OutgoingImagePayload,
+        filePayload: OutgoingFilePayload
     ) async throws {
         var params: [String: Any] = ["agentId": agentId, "content": content]
-        if let imageBlocks { params["imageBlocks"] = imageBlocks }
-        if let fileBlocks { params["fileBlocks"] = fileBlocks }
+        imagePayload.apply(to: &params)
+        filePayload.apply(to: &params)
         let result = try await connectionManager.request("agent.queueMessage", params: params)
         guard let response = result as? [String: Any],
               let dictionary = response["queuedMessage"] as? [String: Any],
@@ -199,26 +264,107 @@ final class ConversationCommands {
         _ = try await connectionManager.request("agent.stop", params: ["agentId": agentId])
     }
 
+    /// Replaces the local queue with the daemon's `agent.getQueue` snapshot.
+    ///
+    /// Malformed-envelope policy: when the response is not an object carrying
+    /// a `queue` array, the previous local queue is kept unchanged — the
+    /// daemon told us nothing usable, so blanking would lose entries the user
+    /// can still see and act on. A well-formed empty `queue` is authoritative
+    /// and clears the queue. Elements are decoded one by one (see
+    /// `decodeQueueSnapshot`) so one malformed entry never blanks its siblings.
     func fetchQueue(agentId: String) async throws {
         let result = try await connectionManager.request(
-            "agent.getQueue", params: ["agentId": agentId])
+            "agent.getQueue",
+            params: ["agentId": agentId]
+        )
         guard let response = result as? [String: Any],
-              let items = response["queue"] as? [[String: Any]] else { return }
-        let data = try JSONSerialization.data(withJSONObject: items)
-        queuedMessages = (try? JSONDecoder().decode([QueuedMessage].self, from: data)) ?? []
+              let decoded = Self.decodeQueueSnapshot(response["queue"], source: "agent.getQueue")
+        else {
+            AppLog.conversation.error(
+                "[ConversationStore] agent.getQueue returned a malformed envelope; keeping the "
+                    + "previous queue (\(queuedMessages.count) entries)"
+            )
+            return
+        }
+        queuedMessages = decoded
+    }
+
+    /// Element-tolerant decoding shared by the `agent.getQueue` response and
+    /// the `agent:queue:updated` push (PROTOCOL §5.5). Returns `nil` when
+    /// `queue` is not an array (malformed envelope — callers decide the
+    /// policy); otherwise every element that fails to decode is dropped and
+    /// the valid siblings are returned in their original order with their
+    /// identities intact. Only safe metadata (position in the array, error
+    /// shape) is logged — never message content or metadata payloads.
+    static func decodeQueueSnapshot(
+        _ queue: Any?, source: String
+    ) -> [QueuedMessage]? { // swiftlint:disable:this discouraged_optional_collection
+        guard let items = queue as? [Any] else { return nil }
+        let decoder = JSONDecoder()
+        var messages: [QueuedMessage] = []
+        messages.reserveCapacity(items.count)
+        for (index, item) in items.enumerated() {
+            do {
+                guard let dictionary = item as? [String: Any] else {
+                    throw DecodingError.typeMismatch(
+                        [String: Any].self,
+                        DecodingError.Context(
+                            codingPath: [],
+                            debugDescription: "element is not an object"
+                        )
+                    )
+                }
+                let data = try JSONSerialization.data(withJSONObject: dictionary)
+                messages.append(try decoder.decode(QueuedMessage.self, from: data))
+            } catch {
+                AppLog.conversation.error(
+                    "[ConversationStore] Dropping undecodable queue element \(index + 1)/"
+                        + "\(items.count) from \(source): \(Self.describeDecodingFailure(error))"
+                )
+            }
+        }
+        return messages
+    }
+
+    /// Content-free description of a queue element decoding failure: the
+    /// `DecodingError` case and the coding path that failed, or the error
+    /// type for anything else.
+    private static func describeDecodingFailure(_ error: Error) -> String {
+        guard let decodingError = error as? DecodingError else {
+            return String(describing: type(of: error))
+        }
+        let path: (DecodingError.Context) -> String = { context in
+            context.codingPath.map(\.stringValue).joined(separator: ".")
+        }
+        if case let .keyNotFound(key, context) = decodingError {
+            return "keyNotFound(\(key.stringValue)) at [\(path(context))]"
+        }
+        if case let .typeMismatch(_, context) = decodingError {
+            return "typeMismatch at [\(path(context))]"
+        }
+        if case let .valueNotFound(_, context) = decodingError {
+            return "valueNotFound at [\(path(context))]"
+        }
+        if case .dataCorrupted(let context) = decodingError {
+            return "dataCorrupted at [\(path(context))]"
+        }
+        return "DecodingError"
     }
 
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {
         _ = try await connectionManager.request(
             "agent.editQueuedMessage",
-            params: ["agentId": agentId, "messageId": messageId, "content": content])
+            params: ["agentId": agentId, "messageId": messageId, "content": content]
+        )
         if let index = queuedMessages.firstIndex(where: { $0.id == messageId }) {
             queuedMessages[index].content = content
         }
     }
 
     func sendQueuedMessageNow(
-        agentId: String, messageId: String, workspaceId: String
+        agentId: String,
+        messageId: String,
+        workspaceId: String
     ) async throws {
         let result: Any
         do {
@@ -227,8 +373,9 @@ final class ConversationCommands {
                 params: [
                     "agentId": agentId,
                     "workspaceId": workspaceId,
-                    "messageId": messageId,
-                ])
+                    "messageId": messageId
+                ]
+            )
         } catch let error as NSError where error.isEntityNotFound {
             do {
                 try await fetchQueue(agentId: agentId)
@@ -236,11 +383,13 @@ final class ConversationCommands {
                 AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
             }
             throw error
-        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
+        } catch let error as NSError
+            where error.domain == "WebSocket" && error.code == Self.invalidParametersErrorCode {
             AppLog.conversation.error(
                 "[ConversationStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
                     + "queued message \(messageId) (data.code: \(error.intentErrorDataCode ?? "absent")): "
-                    + error.localizedDescription)
+                    + error.localizedDescription
+            )
             throw error
         }
         if (result as? [String: Any])?["queued"] as? Bool == true { return }
@@ -250,28 +399,34 @@ final class ConversationCommands {
     func removeQueuedMessage(agentId: String, messageId: String) async throws {
         _ = try await connectionManager.request(
             "agent.removeQueuedMessage",
-            params: ["agentId": agentId, "messageId": messageId])
+            params: ["agentId": agentId, "messageId": messageId]
+        )
         queuedMessages.removeAll { $0.id == messageId }
     }
 
     func getModels(agentId: String) async throws -> [[String: Any]] {
         let result = try await connectionManager.request(
-            "agent.getModels", params: ["agentId": agentId])
+            "agent.getModels",
+            params: ["agentId": agentId]
+        )
         return (result as? [String: Any])?["models"] as? [[String: Any]] ?? []
     }
 
     func setModel(agentId: String, modelId: String, workspaceId: String) async throws {
         _ = try await connectionManager.request(
             "agent.setModel",
-            params: ["agentId": agentId, "modelId": modelId, "workspaceId": workspaceId])
+            params: ["agentId": agentId, "modelId": modelId, "workspaceId": workspaceId]
+        )
     }
 
     func fetchSubscriptions(
-        agentId: String, workspaceId: String
+        agentId: String,
+        workspaceId: String
     ) async throws -> SubscriptionSnapshot? {
         let result = try await connectionManager.request(
             "agent.getSubscriptions",
-            params: ["agentId": agentId, "workspaceId": workspaceId])
+            params: ["agentId": agentId, "workspaceId": workspaceId]
+        )
         guard let response = result as? [String: Any] else { return nil }
         let subscriptions = response["subscriptions"] as? [[String: Any]] ?? []
         let groups = response["delegationGroups"] as? [[String: Any]] ?? []
@@ -293,30 +448,39 @@ final class ConversationCommands {
             status.total += (group["expectedAgentIds"] as? [String])?.count ?? 0
         }
         return SubscriptionSnapshot(
-            watchedAgentIds: Array(agentIds), delegationGroupStatus: status)
+            watchedAgentIds: Array(agentIds),
+            delegationGroupStatus: status
+        )
     }
 
     func cancelSubscriptions(agentId: String, workspaceId: String) async throws {
         _ = try await connectionManager.request(
             "agent.cancelSubscriptions",
-            params: ["agentId": agentId, "workspaceId": workspaceId])
+            params: ["agentId": agentId, "workspaceId": workspaceId]
+        )
     }
 
     func fetchAgent(agentId: String) async throws -> AgentSession? {
         let result = try await connectionManager.request(
-            "agent.get", params: ["agentId": agentId])
+            "agent.get",
+            params: ["agentId": agentId]
+        )
         guard let response = result as? [String: Any],
               let dictionary = response["agent"] as? [String: Any] else { return nil }
         return AgentSession.parseAgent(dictionary)
     }
 
-    func listAgents(workspaceId: String, watchedAgentIds: [String]) async throws -> [AgentSession]? {
+    func listAgents(workspaceId: String, watchedAgentIds: [String]) async throws -> AgentListFetchResult {
         let result = try await connectionManager.request(
-            "agent.list", params: ["workspaceId": workspaceId])
+            "agent.list",
+            params: ["workspaceId": workspaceId]
+        )
         guard let response = result as? [String: Any],
-              let dictionaries = response["agents"] as? [[String: Any]] else { return nil }
+              let dictionaries = response["agents"] as? [[String: Any]] else { return .unavailable }
         let watchedSet = Set(watchedAgentIds)
-        return dictionaries.compactMap(AgentSession.parseAgent).filter { watchedSet.contains($0.id) }
+        return .sessions(
+            dictionaries.compactMap(AgentSession.parseAgent).filter { watchedSet.contains($0.id) }
+        )
     }
 
     func reset() {

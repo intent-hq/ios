@@ -1,34 +1,50 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// All 8 agent lifecycle events (matching cloudlands-fe AGENT_LIFECYCLE_EVENTS).
 /// `nonisolated`: the `@Test(arguments:)` expansion reads this outside the main actor.
-private nonisolated let agentLifecycleEventTypes = [
-    "agent:started", "agent:completed", "agent:failed", "agent:created",
-    "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed",
+nonisolated private let kAgentLifecycleEventTypes = [
+    "agent:started",
+    "agent:completed",
+    "agent:failed",
+    "agent:created",
+    "agent:deleted",
+    "agent:idle",
+    "agent:status-changed",
+    "agent:renamed"
 ]
 
 @MainActor
 struct WorkspaceStoreAgentLifecycleTests {
-
     private func makeWorkspace(id: String, lastActivity: String?) -> Workspace {
         Workspace(
-            id: id, title: "Test", branch: nil, baseRef: nil,
-            status: nil, activity: nil, displayStatus: nil,
-            lastActivity: lastActivity, updatedAt: nil,
-            repositoryOwner: nil, repositoryName: nil, prStatus: nil,
-            prNumber: nil, diffSummaryTotalFiles: nil, taskStatsTotal: nil,
-            taskStatsCompleted: nil, taskStatsInProgress: nil,
-            agentSummaryCount: nil, agentSummaryAgents: nil
+            id: id,
+            title: "Test",
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: nil,
+            displayStatus: nil,
+            lastActivity: lastActivity,
+            updatedAt: nil,
+            repositoryOwner: nil,
+            repositoryName: nil,
+            prStatus: nil,
+            prNumber: nil,
+            diffSummaryTotalFiles: nil,
+            taskStatsTotal: nil,
+            taskStatsCompleted: nil,
+            taskStatsInProgress: nil,
+            agentSummaryCount: nil
         )
     }
 
     // MARK: - Agent lifecycle events never bump lastActivity locally
     // (lastActivity is intentd-derived; see docs/protocol/methods/workspace.md)
 
-    @Test(arguments: agentLifecycleEventTypes)
-    func agentLifecycleEventLeavesLastActivityUntouched(eventType: String) async throws {
+    @Test(arguments: kAgentLifecycleEventTypes)
+    func agentLifecycleEventLeavesLastActivityUntouched(eventType: String) async {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-07-17T10:00:00Z")]
 
@@ -42,7 +58,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.workspaces[0].lastActivity == "2026-07-17T10:00:00Z")
     }
 
-    @Test func agentEventForUnknownWorkspaceDoesNotCrash() async throws {
+    @Test func agentEventForUnknownWorkspaceDoesNotCrash() async {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
             "type": "agent:started",
@@ -55,7 +71,7 @@ struct WorkspaceStoreAgentLifecycleTests {
 
     // MARK: - Unknown agent events are logged but don't update state
 
-    @Test func unknownAgentEventLeavesLastActivityUntouched() async throws {
+    @Test func unknownAgentEventLeavesLastActivityUntouched() async {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-07-17T10:00:00Z")]
 
@@ -71,7 +87,7 @@ struct WorkspaceStoreAgentLifecycleTests {
 
     // MARK: - Subscription.push race condition prevention
 
-    @Test func snapshotPushBeforeSubscriptionIdReturnsIsProcessed() async throws {
+    @Test func snapshotPushBeforeSubscriptionIdReturnsIsProcessed() async {
         let store = WorkspaceStore(forTesting: true)
 
         // Initialize reconciler manually (simulates subscribeLiveState's synchronous init)
@@ -115,7 +131,7 @@ struct WorkspaceStoreAgentLifecycleTests {
     }
 
     private func deltaPush(seq: Int, added: [[String: Any]] = [], updated: [[String: Any]] = []) -> [String: Any] {
-        return [
+        [
             "subscriptionId": "sub-123",
             "kind": "delta",
             "seq": seq,
@@ -182,7 +198,9 @@ struct WorkspaceStoreAgentLifecycleTests {
         store.workspaces = [makeWorkspace(id: "ws-new", lastActivity: "2026-07-17T12:00:00Z")]
 
         let response = try #require(WorkspaceStore.parseWorkspace([
-            "id": "ws-new", "title": "<Untitled>", "lastActivity": "2026-07-17T11:00:00Z"
+            "id": "ws-new",
+            "title": "<Untitled>",
+            "lastActivity": "2026-07-17T11:00:00Z"
         ]))
         store.addOrUpdate(response)
 
@@ -190,7 +208,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.workspaces[0].lastActivity == "2026-07-17T11:00:00Z")
     }
 
-    @Test func liveDeltaCarryingLastActivityIsAppliedAsReceived() async throws {
+    @Test func liveDeltaCarryingLastActivityIsAppliedAsReceived() async {
         let store = await makeLiveStore(snapshot: [
             ["id": "ws-1", "title": "Existing", "lastActivity": "2026-07-17T12:00:00Z"]
         ])

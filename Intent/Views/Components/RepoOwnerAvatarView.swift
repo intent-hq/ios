@@ -24,8 +24,7 @@ struct RepoOwnerAvatarView: View {
                     switch phase {
                     case .success(let image):
                         image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
+                            .resizable().scaledToFill()
                     default:
                         fallbackIcon
                     }
@@ -38,14 +37,18 @@ struct RepoOwnerAvatarView: View {
         .clipShape(Circle())
         .overlay(
             Circle()
-                .stroke(Color.white.opacity(Constants.RepoOwnerAvatar.borderOpacity),
-                        lineWidth: Constants.RepoOwnerAvatar.borderWidth)
+                .stroke(
+                    Color.white.opacity(Constants.RepoOwnerAvatar.borderOpacity),
+                    lineWidth: Constants.RepoOwnerAvatar.borderWidth
+                )
         )
+        .accessibilityHidden(true)
     }
 
     private var fallbackIcon: some View {
         Image(systemName: fallbackSymbol)
             .font(.system(size: size * Constants.RepoOwnerAvatar.fallbackScale))
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .accessibilityHidden(true)
     }
 }

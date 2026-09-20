@@ -123,6 +123,8 @@ extension Constants.Conversation.QuestionWizard {
     static let progressSegmentCornerRadius: CGFloat = 2
     static let checkboxSide: CGFloat = 15
     static let checkboxCornerRadius: CGFloat = 4
+    // Free-text answer grows from one line up to this many, then scrolls.
+    static let freeTextMaximumLineCount = 6
 }
 
 extension Constants.Conversation.ResponseGroup {
@@ -281,6 +283,7 @@ extension Constants.WorkspaceList {
     static let emptyStateSpacing: CGFloat = 12
     static let bottomContentMargin: CGFloat = 60
     static let sidebarRowInset: CGFloat = 8
+    static let sidebarSelectionCornerRadius: CGFloat = 10
     static let sidebarSectionSpacing: CGFloat = 6
     static let sidebarSectionAvatarSize: CGFloat = 16
     static let sidebarTopContentMargin: CGFloat = 4
@@ -307,6 +310,7 @@ extension Constants.WorkspaceDetail {
     static let remainingProgressOpacity: Double = 0.2
     static let progressHeight: CGFloat = 4
     static let progressBottomPadding: CGFloat = 8
+    static let statusImageBottomPadding: CGFloat = 8
     static let emptyStateSpacing: CGFloat = 12
     static let tabVerticalPadding: CGFloat = 8
     // visionOS deliberate confirmation sheets for destructive/irreversible
@@ -479,7 +483,8 @@ extension Constants.QRScanner {
 }
 
 extension Constants.Loading {
-    static let phaseDuration: Duration = .milliseconds(1_200)
+    private static let phaseDurationMilliseconds = 1200
+    static let phaseDuration: Duration = .milliseconds(Self.phaseDurationMilliseconds)
 }
 
 extension Constants.Splash {

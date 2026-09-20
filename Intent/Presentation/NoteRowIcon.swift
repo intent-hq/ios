@@ -6,21 +6,21 @@ import Foundation
 /// its star and shows the progress ring alongside it when its content links
 /// task notes.
 enum NoteRowIcon: Equatable {
+    /// Any other note: muted doc icon (fe `getNoteIcon` fallback).
+    case document
+    /// Non-task note whose content links task notes: progress ring.
+    case progressRing(TaskStats)
     /// Spec/default note without linked tasks: star only.
     case star
     /// Spec/default note whose content links task notes: star + ring.
     case starWithProgressRing(TaskStats)
     /// Task note: icon for its metadata status.
     case taskStatus(TaskDisplayStatus)
-    /// Non-task note whose content links task notes: progress ring.
-    case progressRing(TaskStats)
-    /// Any other note: muted doc icon (fe `getNoteIcon` fallback).
-    case document
 
     /// Pick the treatment for `note`, resolving linked-task IDs in its
     /// content against `notes` (pass the store's full note list so the ring
     /// recomputes as task statuses change).
-    static func kind(for note: Note, notes: [Note]) -> NoteRowIcon {
+    static func kind(for note: Note, notes: [Note]) -> Self {
         if let status = note.taskDisplayStatus {
             return .taskStatus(childrenDerivedStatus(for: note, notes: notes) ?? status)
         }

@@ -9,7 +9,7 @@ struct ImageLightboxView: View {
     let image: UIImage
     /// Original encoded bytes when known (base64 image blocks) so the
     /// info rows show the real file size.
-    var data: Data? = nil
+    var data: Data?
     @Environment(\.dismiss) private var dismiss
 
     @State private var scale: CGFloat = 1
@@ -22,51 +22,17 @@ struct ImageLightboxView: View {
     private static let maxScale: CGFloat = 5
     private static let doubleTapScale: CGFloat = 2.5
     private static let dismissDragThreshold: CGFloat = 120
+    private static let zoomPercentageMultiplier: CGFloat = 100
+    private static let accessibilityPanDistance: CGFloat = 50
+    private static let actionSpacing: CGFloat = 8
+    private static let actionContainerPadding: CGFloat = 12
+    private static let actionButtonPadding: CGFloat = 10
+    private static let actionButtonBackgroundOpacity: Double = 0.15
 
     var body: some View {
         ZStack {
-            Button { dismiss() } label: {
-                Color.black
-                    .ignoresSafeArea()
-            }
-            .buttonStyle(.plain)
-            .accessibilityHidden(true)
-
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .scaleEffect(scale * gestureScale)
-                .offset(x: offset.width + dragTranslation.width,
-                        y: offset.height + dragTranslation.height)
-                .accessibilityLabel("Image preview")
-                .accessibilityValue("\(Int(scale * 100)) percent zoom")
-                .accessibilityAdjustableAction { direction in
-                    adjustZoom(direction, in: viewportSize)
-                }
-                .accessibilityActions {
-                    if scale > Self.minScale {
-                        Button("Pan left") {
-                            panImage(by: CGSize(width: -50, height: 0), in: viewportSize)
-                        }
-                        Button("Pan right") {
-                            panImage(by: CGSize(width: 50, height: 0), in: viewportSize)
-                        }
-                        Button("Pan up") {
-                            panImage(by: CGSize(width: 0, height: -50), in: viewportSize)
-                        }
-                        Button("Pan down") {
-                            panImage(by: CGSize(width: 0, height: 50), in: viewportSize)
-                        }
-                        Button("Reset zoom") {
-                            scale = Self.minScale
-                            gestureScale = 1
-                            offset = .zero
-                        }
-                    }
-                }
-                .gesture(doubleTapGesture)
-                .gesture(dragGesture(in: viewportSize))
-                .simultaneousGesture(magnifyGesture(in: viewportSize))
+            backdrop
+            imagePreview
         }
         .onGeometryChange(for: CGSize.self) { proxy in
             proxy.size
@@ -76,11 +42,65 @@ struct ImageLightboxView: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            HStack(spacing: 8) {
+            HStack(spacing: Self.actionSpacing) {
                 actionsMenu
                 closeButton
             }
-            .padding(12)
+            .padding(Self.actionContainerPadding)
+        }
+    }
+
+    private var backdrop: some View {
+        Button { dismiss() } label: {
+            Color.black
+                .ignoresSafeArea()
+        }
+        .buttonStyle(.plain)
+        .accessibilityHidden(true)
+    }
+
+    private var imagePreview: some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
+            .scaleEffect(scale * gestureScale)
+            .offset(
+                x: offset.width + dragTranslation.width,
+                y: offset.height + dragTranslation.height
+            )
+            .accessibilityLabel("Image preview")
+            .accessibilityValue("\(Int(scale * Self.zoomPercentageMultiplier)) percent zoom")
+            .accessibilityAdjustableAction { direction in
+                adjustZoom(direction, in: viewportSize)
+            }
+            .accessibilityActions {
+                imageAccessibilityActions
+            }
+            .gesture(doubleTapGesture)
+            .gesture(dragGesture(in: viewportSize))
+            .simultaneousGesture(magnifyGesture(in: viewportSize))
+    }
+
+    @ViewBuilder
+    private var imageAccessibilityActions: some View {
+        if scale > Self.minScale {
+            Button("Pan left") {
+                panImage(by: CGSize(width: -Self.accessibilityPanDistance, height: 0), in: viewportSize)
+            }
+            Button("Pan right") {
+                panImage(by: CGSize(width: Self.accessibilityPanDistance, height: 0), in: viewportSize)
+            }
+            Button("Pan up") {
+                panImage(by: CGSize(width: 0, height: -Self.accessibilityPanDistance), in: viewportSize)
+            }
+            Button("Pan down") {
+                panImage(by: CGSize(width: 0, height: Self.accessibilityPanDistance), in: viewportSize)
+            }
+            Button("Reset zoom") {
+                scale = Self.minScale
+                gestureScale = 1
+                offset = .zero
+            }
         }
     }
 
@@ -91,11 +111,12 @@ struct ImageLightboxView: View {
             Image(systemName: "ellipsis")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
-                .padding(10)
-                .background(.white.opacity(0.15), in: Circle())
+                .padding(Self.actionButtonPadding)
+                .background(.white.opacity(Self.actionButtonBackgroundOpacity), in: Circle())
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
-                    minHeight: Constants.Accessibility.minimumTapTarget)
+                    minHeight: Constants.Accessibility.minimumTapTarget
+                )
         }
         .accessibilityLabel("Image actions")
     }
@@ -105,11 +126,12 @@ struct ImageLightboxView: View {
             Image(systemName: "xmark")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
-                .padding(10)
-                .background(.white.opacity(0.15), in: Circle())
+                .padding(Self.actionButtonPadding)
+                .background(.white.opacity(Self.actionButtonBackgroundOpacity), in: Circle())
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
-                    minHeight: Constants.Accessibility.minimumTapTarget)
+                    minHeight: Constants.Accessibility.minimumTapTarget
+                )
         }
         .accessibilityLabel("Close image")
     }
@@ -145,7 +167,8 @@ struct ImageLightboxView: View {
     private func panImage(by delta: CGSize, in size: CGSize) {
         offset = clampedOffset(
             CGSize(width: offset.width + delta.width, height: offset.height + delta.height),
-            in: size)
+            in: size
+        )
     }
 
     private func magnifyGesture(in size: CGSize) -> some Gesture {
@@ -174,8 +197,10 @@ struct ImageLightboxView: View {
             }
             .onEnded { value in
                 if scale > Self.minScale {
-                    let raw = CGSize(width: offset.width + value.translation.width,
-                                     height: offset.height + value.translation.height)
+                    let raw = CGSize(
+                        width: offset.width + value.translation.width,
+                        height: offset.height + value.translation.height
+                    )
                     dragTranslation = .zero
                     withAnimation(.spring(duration: Constants.Conversation.ImageLightbox.springAnimationDuration)) {
                         offset = clampedOffset(raw, in: size)
@@ -199,7 +224,9 @@ struct ImageLightboxView: View {
         let fitted = CGSize(width: image.size.width * fitRatio, height: image.size.height * fitRatio)
         let maxX = max(0, (fitted.width * scale - container.width) / 2)
         let maxY = max(0, (fitted.height * scale - container.height) / 2)
-        return CGSize(width: min(max(proposed.width, -maxX), maxX),
-                      height: min(max(proposed.height, -maxY), maxY))
+        return CGSize(
+            width: min(max(proposed.width, -maxX), maxX),
+            height: min(max(proposed.height, -maxY), maxY)
+        )
     }
 }

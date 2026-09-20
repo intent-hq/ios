@@ -29,7 +29,7 @@ struct WorkspaceListView: View {
             ZStack {
                 Theme.background(for: colorScheme).ignoresSafeArea()
 
-                if viewModel.isLoading && viewModel.workspaces.isEmpty {
+                if viewModel.isLoading, viewModel.workspaces.isEmpty {
                     ProgressView("Loading workspaces...")
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 } else if viewModel.filteredWorkspaces.isEmpty {
@@ -95,61 +95,63 @@ struct WorkspaceListView: View {
         )
     }
 
-    @ViewBuilder
     private var workspaceList: some View {
-        List {
-            switch viewModel.viewMode {
-            case .recent:
-                ForEach(viewModel.filteredWorkspaces) { workspace in
-                    Button {
-                        searchFocused = false
-                        coordinator.onSelectWorkspace(workspace.id)
-                    } label: {
-                        WorkspaceRowView(workspace: workspace, colorScheme: colorScheme)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(Rectangle())
-                    .visionListRowHitTarget()
-                }
-            case .repo:
-                ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
-                    Section(header: Text(repoName)) {
-                        ForEach(workspaces) { workspace in
-                            Button {
-                                searchFocused = false
-                                coordinator.onSelectWorkspace(workspace.id)
-                            } label: {
-                                WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: false)
-                            }
-                            .buttonStyle(.plain)
-                            .contentShape(Rectangle())
-                            .visionListRowHitTarget()
-                        }
+        List { workspaceSections }
+            .scrollContentBackground(.hidden)
+            .listStyle(.plain)
+            #if !os(visionOS)
+            .scrollDismissesKeyboard(.immediately)
+            #endif
+    }
+
+    @ViewBuilder
+    private var workspaceSections: some View {
+        switch viewModel.viewMode {
+        case .recent:
+            ForEach(viewModel.filteredWorkspaces) { workspace in
+                workspaceButton(workspace)
+            }
+        case .repo:
+            ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
+                Section(header: Text(repoName)) {
+                    ForEach(workspaces) { workspace in
+                        workspaceButton(workspace, showRepo: false)
                     }
                 }
-            case .status:
-                ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
-                    Section(header: Text(statusLabel)) {
-                        ForEach(workspaces) { workspace in
-                            Button {
-                                searchFocused = false
-                                coordinator.onSelectWorkspace(workspace.id)
-                            } label: {
-                                WorkspaceRowView(workspace: workspace, colorScheme: colorScheme)
-                            }
-                            .buttonStyle(.plain)
-                            .contentShape(Rectangle())
-                        }
+            }
+        case .status:
+            ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
+                Section(header: Text(statusLabel)) {
+                    ForEach(workspaces) { workspace in
+                        workspaceButton(workspace, usesVisionHitTarget: false)
                     }
                 }
             }
         }
-        .scrollContentBackground(.hidden)
-        .listStyle(.plain)
-        #if !os(visionOS)
-        // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
-        .scrollDismissesKeyboard(.immediately)
-        #endif
+    }
+
+    @ViewBuilder
+    private func workspaceButton(
+        _ workspace: Workspace,
+        showRepo: Bool = true,
+        usesVisionHitTarget: Bool = true
+    ) -> some View {
+        if usesVisionHitTarget {
+            workspaceButtonContent(workspace, showRepo: showRepo)
+                .visionListRowHitTarget()
+        } else {
+            workspaceButtonContent(workspace, showRepo: showRepo)
+        }
+    }
+
+    private func workspaceButtonContent(_ workspace: Workspace, showRepo: Bool) -> some View {
+        Button {
+            searchFocused = false
+            coordinator.onSelectWorkspace(workspace.id)
+        } label: {
+            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
-

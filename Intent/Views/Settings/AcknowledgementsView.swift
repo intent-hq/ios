@@ -4,6 +4,14 @@ import SwiftUI
 /// reproduces the dependency's license text in full, as its terms
 /// require for binary distribution.
 struct AcknowledgementsView: View {
+    private enum Layout {
+        static let pageSpacing: CGFloat = 20
+        static let entrySpacing: CGFloat = 12
+        static let licenseSpacing: CGFloat = 8
+        static let cardPadding: CGFloat = 16
+        static let cardCornerRadius: CGFloat = 12
+    }
+
     @Environment(\.colorScheme) var colorScheme
 
     struct Entry: Identifiable {
@@ -49,50 +57,50 @@ struct AcknowledgementsView: View {
             OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
             OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             """
-        ),
+        )
     ]
 
     var body: some View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
-
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    ForEach(Self.entries) { entry in
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(entry.name)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                .textCase(.uppercase)
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(entry.licenseTitle)
-                                    .font(.body.weight(.medium))
-                                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                                Text(entry.url)
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                Text(entry.licenseText)
-                                    .font(.caption.monospaced())
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                    .textSelection(.enabled)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
-                            .background(Theme.card(for: colorScheme))
-                            .clipShape(.rect(cornerRadius: 12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Theme.border(for: colorScheme), lineWidth: 1)
-                            )
-                        }
-                    }
+                VStack(alignment: .leading, spacing: Layout.pageSpacing) {
+                    ForEach(Self.entries) { acknowledgementCard($0) }
                 }
-                .padding(20)
+                .padding(Layout.pageSpacing)
             }
         }
         .navigationTitle("Acknowledgements")
         .toolbarTitleDisplayMode(.inline)
+    }
+
+    private func acknowledgementCard(_ entry: Entry) -> some View {
+        VStack(alignment: .leading, spacing: Layout.entrySpacing) {
+            Text(entry.name)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .textCase(.uppercase)
+            VStack(alignment: .leading, spacing: Layout.licenseSpacing) {
+                Text(entry.licenseTitle)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                Text(entry.url)
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                Text(entry.licenseText)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Layout.cardPadding)
+            .background(Theme.card(for: colorScheme))
+            .clipShape(.rect(cornerRadius: Layout.cardCornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: Layout.cardCornerRadius)
+                    .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+            )
+        }
     }
 }
 

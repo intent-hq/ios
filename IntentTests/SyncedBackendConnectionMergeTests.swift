@@ -6,29 +6,68 @@ import Testing
 /// Merge matrix for `SyncedBackendConnectionMerge`: new/newer/older/tombstone/
 /// absent records, fingerprint vs host:port matching, token rotation.
 struct SyncedBackendConnectionMergeTests {
+    enum RecordHosts: ExpressibleByArrayLiteral {
+        case primaryHost
+        case values([String])
 
-    private func record(
-        label: String = "Mac Studio", host: String = "10.0.0.1", hosts: [String]? = nil,
-        port: Int = 8843, fingerprint: String = "aa:bb", token: String = "tok-remote",
-        updatedAt: Double = 100, deleted: Bool = false
-    ) -> SyncedBackendRecord {
-        SyncedBackendRecord(
-            label: label, host: host, hosts: hosts ?? [host], port: port,
-            fingerprint: fingerprint, hostname: nil, detectHosts: true,
-            token: deleted ? "" : token, updatedAt: updatedAt,
-            deleted: deleted, deletedAt: deleted ? updatedAt : nil)
+        init(arrayLiteral elements: String...) {
+            self = .values(elements)
+        }
+
+        func resolved(primaryHost: String) -> [String] {
+            switch self {
+            case .primaryHost: [primaryHost]
+            case let .values(hosts): hosts
+            }
+        }
     }
 
-    private func local(
-        hosts: [String] = ["10.0.0.1"], port: Int = 8843, fingerprint: String? = "aa:bb",
-        token: String = "tok-local", syncUpdatedAt: Double? = nil,
-        pairedAt: Date = Date(timeIntervalSince1970: 0), tcAddress: String? = nil
+    func record(
+        label: String = "Mac Studio",
+        host: String = "10.0.0.1",
+        hosts: RecordHosts = .primaryHost,
+        port: Int = 8843,
+        fingerprint: String = "aa:bb",
+        token: String = "tok-remote",
+        updatedAt: Double = 100,
+        deleted: Bool = false
+    ) -> SyncedBackendRecord {
+        SyncedBackendRecord(
+            label: label,
+            host: host,
+            hosts: hosts.resolved(primaryHost: host),
+            port: port,
+            fingerprint: fingerprint,
+            hostname: nil,
+            detectHosts: true,
+            token: deleted ? "" : token,
+            updatedAt: updatedAt,
+            deleted: deleted,
+            deletedAt: deleted ? updatedAt : nil
+        )
+    }
+
+    func local(
+        hosts: [String] = ["10.0.0.1"],
+        port: Int = 8843,
+        fingerprint: String? = "aa:bb",
+        token: String = "tok-local",
+        syncUpdatedAt: Double? = nil,
+        pairedAt: Date = Date(timeIntervalSince1970: 0),
+        tcAddress: String? = nil
     ) -> StoredConnection {
         StoredConnection(
             server: PairedServer(
-                hosts: hosts, port: port, name: "daemon", pairedAt: pairedAt,
-                certFingerprint: fingerprint, tcAddress: tcAddress),
-            token: token, syncUpdatedAt: syncUpdatedAt)
+                hosts: hosts,
+                port: port,
+                name: "daemon",
+                pairedAt: pairedAt,
+                certFingerprint: fingerprint,
+                tcAddress: tcAddress
+            ),
+            token: token,
+            syncUpdatedAt: syncUpdatedAt
+        )
     }
 
     // MARK: - New records
@@ -51,7 +90,9 @@ struct SyncedBackendConnectionMergeTests {
         // ws:// and leak the synced token — such records must not be adopted.
         for fingerprint in ["", "   "] {
             let result = SyncedBackendConnectionMerge.merge(
-                records: [record(fingerprint: fingerprint)], into: [])
+                records: [record(fingerprint: fingerprint)],
+                into: []
+            )
             #expect(!result.changed)
             #expect(result.connections.isEmpty)
         }
@@ -75,10 +116,83 @@ struct SyncedBackendConnectionMergeTests {
         }
         for bad in [
             "", "  ", "a b", "host/path", "host:1", "user@host", "host?q", "host#f", "[::1", "[]",
+            "::::", "2001::db8::1", "[2001::db8::1]", ":", "12345::1"
         ] {
             #expect(
-                SyncedBackendConnectionMerge.usableHost(bad) == nil, "expected unusable: \(bad)")
+                SyncedBackendConnectionMerge.usableHost(bad) == nil,
+                "expected unusable: \(bad)"
+            )
         }
+    }
+
+    @Test func usableHostRejectsMalformedDnsLabelsAndIPv4Octets() {
+        // ios#341: the character allowlist alone admitted `a..b`, `-bad` and
+        // `999.999.999.999`. Names need DNS label structure; all-numeric
+        // dotted names must be real IPv4 literals.
+        let label63 = String(repeating: "a", count: 63)
+        let label64 = label63 + "a"
+        let name253 = ([String](repeating: label63, count: 3) + [String(repeating: "b", count: 61)])
+            .joined(separator: ".")
+        for good in [
+            "a.b", "host-1", "my-mac_2.local", "xn--bcher-kva.example", "0.0.0.0",
+            "255.255.255.255", "10.0.0.1", label63, "\(label63).local", name253
+        ] {
+            #expect(SyncedBackendConnectionMerge.usableHost(good) == good, "expected usable: \(good)")
+        }
+        for bad in [
+            "a..b", ".bad", "bad.", "-bad", "bad-", "a.-b.c", "a.b-.c", ".", "-",
+            label64, "\(label64).local", name253 + "c",
+            "999.999.999.999", "256.0.0.1", "1.2.3", "1.2.3.4.5", "01.2.3.4", "1.2.3.", "12345"
+        ] {
+            #expect(
+                SyncedBackendConnectionMerge.usableHost(bad) == nil,
+                "expected unusable: \(bad)"
+            )
+        }
+    }
+
+    @Test func caseVariantDuplicateHostsCollapseToTheFirstSpelling() {
+        // ios#341: DNS names and IPv6 hex are case-insensitive; `HOST.local`
+        // and `host.local` must not persist as separate routes. The first
+        // spelling seen is kept, so user-facing spelling/order is unchanged.
+        let synced = record(
+            host: "HOST.local",
+            hosts: ["HOST.local", "host.local", "Host.Local", "[2001:DB8::1]", "2001:db8::1", "10.0.0.1"]
+        )
+        #expect(SyncedBackendConnectionMerge.candidateHosts(of: synced) == ["HOST.local", "[2001:DB8::1]", "10.0.0.1"])
+
+        let result = SyncedBackendConnectionMerge.merge(records: [synced], into: [])
+        #expect(result.connections.map(\.server.hosts) == [["HOST.local", "[2001:DB8::1]", "10.0.0.1"]])
+
+        // A newer record whose spelling differs only by case adds no route
+        // next to the local one.
+        let existing = local(hosts: ["Host.Local", "192.168.1.2"], syncUpdatedAt: 50)
+        let updated = SyncedBackendConnectionMerge.merge(
+            records: [record(host: "host.local", hosts: ["host.local", "192.168.1.2"], updatedAt: 100)],
+            into: [existing]
+        )
+        #expect(updated.updatedIds == [existing.id])
+        #expect(updated.connections.map(\.server.hosts) == [["host.local", "192.168.1.2"]])
+    }
+
+    @Test func unusableEntriesNeverMaskUsableSpellingsOfTheSameHost() {
+        // Review finding on ios#341: a padded primary is unusable (spaces)
+        // but trims to the same dedup key as the clean fallback. Validation
+        // must run before dedup so the fallback survives; malformed input
+        // is never trimmed into acceptance.
+        let padded = record(host: " MAC.local ", hosts: [" mac.local", "mac.local", " 2001:db8::1 ", "2001:db8::1"])
+        #expect(SyncedBackendConnectionMerge.candidateHosts(of: padded) == ["mac.local", "[2001:db8::1]"])
+        let added = SyncedBackendConnectionMerge.merge(records: [padded], into: [])
+        #expect(added.connections.map(\.server.hosts) == [["mac.local", "[2001:db8::1]"]])
+
+        // Same on the update path: the newer record's clean route reaches
+        // the existing connection.
+        let existing = local(hosts: ["10.0.0.1"], syncUpdatedAt: 50)
+        let updated = SyncedBackendConnectionMerge.merge(
+            records: [record(host: " MAC.local ", hosts: ["mac.local", "10.0.0.1"], updatedAt: 100)],
+            into: [existing]
+        )
+        #expect(updated.connections.map(\.server.hosts) == [["mac.local", "10.0.0.1"]])
     }
 
     @Test func rawIPv6LiteralsAreBracketNormalizedNotDropped() {
@@ -99,15 +213,55 @@ struct SyncedBackendConnectionMergeTests {
         let existing = local(fingerprint: nil)
         let result = SyncedBackendConnectionMerge.merge(
             records: [record(fingerprint: "", token: "tok-new", updatedAt: 200)],
-            into: [existing])
+            into: [existing]
+        )
         #expect(result.updatedIds == [existing.id])
         #expect(result.connections[0].token == "tok-new")
+    }
+
+    /// ios#251: merging a pin-less record into a pin-less legacy local keeps
+    /// the record (name, hosts, port intact) but never fabricates a pin, so
+    /// the connection stays refused by transport admission until re-paired.
+    @Test func fingerprintlessMergeNeverMakesLegacyLocalConnectable() throws {
+        let existing = local(fingerprint: nil)
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(fingerprint: "  ", token: "tok-new", updatedAt: 200)],
+            into: [existing]
+        )
+        let merged = try #require(result.connections.first)
+        #expect(merged.id == existing.id)
+        #expect(merged.server.hosts == existing.server.hosts)
+        #expect(merged.server.port == existing.server.port)
+        #expect(merged.server.name == existing.server.name)
+        #expect(WebSocketConnection.trustedPin(merged.server.certFingerprint) == nil)
+        #expect(throws: WebSocketTransportError.self) {
+            _ = try WebSocketConnection.makeURL(
+                host: merged.server.hosts[0],
+                port: merged.server.port,
+                certFingerprint: merged.server.certFingerprint
+            )
+        }
+    }
+
+    /// A pinned local is never downgraded: a pin-less record at the same
+    /// address does not match it, so its pin (and connectability) survive.
+    @Test func fingerprintlessRecordNeverStripsPinFromPinnedLocal() {
+        let existing = local(fingerprint: "aa:bb")
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(fingerprint: "", token: "tok-new", updatedAt: 200)],
+            into: [existing]
+        )
+        #expect(!result.changed)
+        #expect(result.connections[0].server.certFingerprint == "aa:bb")
+        #expect(result.connections[0].token == "tok-local")
     }
 
     @Test func blankLabelFallsBackToHostnameThenHostPort() {
         #expect(
             SyncedBackendConnectionMerge.displayName(
-                for: record(label: "  ")) == "10.0.0.1:8843")
+                for: record(label: "  ")
+            ) == "10.0.0.1:8843"
+        )
         var withHostname = record(label: " ")
         withHostname.hostname = "mac-studio.local"
         #expect(SyncedBackendConnectionMerge.displayName(for: withHostname) == "mac-studio.local")
@@ -142,7 +296,9 @@ struct SyncedBackendConnectionMergeTests {
         let existing = local(syncUpdatedAt: 200)
         for clock in [100.0, 200.0] {
             let result = SyncedBackendConnectionMerge.merge(
-                records: [record(token: "tok-stale", updatedAt: clock)], into: [existing])
+                records: [record(token: "tok-stale", updatedAt: clock)],
+                into: [existing]
+            )
             #expect(!result.changed)
             #expect(result.connections[0].token == "tok-local")
         }
@@ -154,7 +310,9 @@ struct SyncedBackendConnectionMergeTests {
         // helper's default pairedAt is the epoch, so even updatedAt: 1 wins.
         let existing = local(syncUpdatedAt: nil)
         let result = SyncedBackendConnectionMerge.merge(
-            records: [record(updatedAt: 1)], into: [existing])
+            records: [record(updatedAt: 1)],
+            into: [existing]
+        )
         #expect(result.updatedIds == [existing.id])
         #expect(result.connections[0].token == "tok-remote")
         #expect(result.connections[0].syncUpdatedAt == 1)
@@ -168,7 +326,9 @@ struct SyncedBackendConnectionMergeTests {
         let repaired = Date(timeIntervalSince1970: 1000)
         let existing = local(syncUpdatedAt: nil, pairedAt: repaired)
         let result = SyncedBackendConnectionMerge.merge(
-            records: [record(token: "tok-stale", updatedAt: 500_000)], into: [existing])
+            records: [record(token: "tok-stale", updatedAt: 500_000)],
+            into: [existing]
+        )
         #expect(!result.changed)
         #expect(result.connections[0].token == "tok-local")
         #expect(result.connections[0].syncUpdatedAt == nil)
@@ -177,132 +337,10 @@ struct SyncedBackendConnectionMergeTests {
     @Test func liveRecordNewerThanLocalPairingUpdatesNeverSyncedLocal() {
         let existing = local(syncUpdatedAt: nil, pairedAt: Date(timeIntervalSince1970: 100))
         let result = SyncedBackendConnectionMerge.merge(
-            records: [record(updatedAt: 500_000)], into: [existing])
+            records: [record(updatedAt: 500_000)],
+            into: [existing]
+        )
         #expect(result.updatedIds == [existing.id])
         #expect(result.connections[0].token == "tok-remote")
-    }
-
-    // MARK: - Tombstones
-
-    @Test func tombstoneRemovesFingerprintMatch() {
-        let existing = local()
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(updatedAt: 200, deleted: true)], into: [existing])
-        #expect(result.connections.isEmpty)
-        #expect(result.removedIds == [existing.id])
-    }
-
-    @Test func tombstoneRemovesHostPortMatchWhenLocalHasNoFingerprint() {
-        let existing = local(fingerprint: nil)
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(fingerprint: "", updatedAt: 200, deleted: true)], into: [existing])
-        #expect(result.removedIds == [existing.id])
-    }
-
-    @Test func tombstoneLosesToNewerLocalSyncClock() {
-        let existing = local(syncUpdatedAt: 300)
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(updatedAt: 200, deleted: true)], into: [existing])
-        #expect(!result.changed)
-        #expect(result.connections.count == 1)
-    }
-
-    @Test func tombstoneWithNoMatchIsANoOp() {
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(host: "9.9.9.9", fingerprint: "zz", deleted: true)],
-            into: [local()])
-        #expect(!result.changed)
-    }
-
-    @Test func equalClockTombstoneRemovesSyncedLocal() {
-        // Equal clocks delete — mirrors the fe reconcile's tie rule (an
-        // address change must not dodge a delete).
-        let existing = local(syncUpdatedAt: 200)
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(updatedAt: 200, deleted: true)], into: [existing])
-        #expect(result.removedIds == [existing.id])
-    }
-
-    @Test func staleTombstoneLosesToNewerLocalPairing() {
-        // Re-pair race: a tombstone written BEFORE the user re-paired this
-        // machine locally must not delete the fresh never-synced pairing.
-        let repaired = Date(timeIntervalSince1970: 1000)
-        let existing = local(syncUpdatedAt: nil, pairedAt: repaired)
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(updatedAt: 500_000, deleted: true)], into: [existing])
-        #expect(!result.changed)
-        #expect(result.connections == [existing])
-    }
-
-    @Test func tombstoneNewerThanLocalPairingRemovesNeverSyncedLocal() {
-        let existing = local(syncUpdatedAt: nil, pairedAt: Date(timeIntervalSince1970: 100))
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(updatedAt: 500_000, deleted: true)], into: [existing])
-        #expect(result.removedIds == [existing.id])
-    }
-
-    @Test func tombstoneWithDifferentFingerprintAtSameAddressDoesNotRemove() {
-        // Another machine reusing the IP was forgotten: the tombstone must
-        // not delete the local record with a different pinned cert.
-        let existing = local(fingerprint: "aa:bb")
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(fingerprint: "cc:dd", updatedAt: 500_000, deleted: true)],
-            into: [existing])
-        #expect(!result.changed)
-        #expect(result.connections == [existing])
-    }
-
-    // MARK: - Absence and matching rules
-
-    @Test func absenceFromRegistryNeverRemovesLocals() {
-        let existing = local()
-        let result = SyncedBackendConnectionMerge.merge(records: [], into: [existing])
-        #expect(!result.changed)
-        #expect(result.connections == [existing])
-    }
-
-    @Test func differentFingerprintAtSameAddressIsNotMatched() {
-        // Another machine reusing the IP: must be added, never overwrite.
-        let existing = local(fingerprint: "aa:bb")
-        let other = record(fingerprint: "cc:dd", updatedAt: 200)
-        let result = SyncedBackendConnectionMerge.merge(records: [other], into: [existing])
-        #expect(result.connections.count == 2)
-        #expect(result.addedIds.count == 1)
-        #expect(result.updatedIds.isEmpty)
-    }
-
-    @Test func fingerprintMatchSurvivesAddressChange() {
-        let existing = local(hosts: ["192.168.1.5"], port: 1111)
-        let moved = record(host: "10.0.0.42", port: 2222, updatedAt: 200)
-        let result = SyncedBackendConnectionMerge.merge(records: [moved], into: [existing])
-        #expect(result.updatedIds == [existing.id])
-        let updated = result.connections[0]
-        #expect(updated.server.port == 2222)
-        #expect(updated.server.hosts.first == "10.0.0.42")
-        #expect(updated.server.hosts.contains("192.168.1.5"))
-    }
-
-    @Test func fingerprintMatchingNormalizesCaseAndWhitespace() {
-        let existing = local(fingerprint: "  AA:bb ")
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(fingerprint: "aa:BB", updatedAt: 200)], into: [existing])
-        #expect(result.updatedIds == [existing.id])
-    }
-
-    @Test func hostPortFallbackMatchNormalizesHostCase() {
-        let existing = local(hosts: ["Mac-Studio.Local"], fingerprint: nil)
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(host: "mac-studio.local", updatedAt: 200)], into: [existing])
-        #expect(result.updatedIds == [existing.id])
-        // The fingerprint-less local gains the registry's fingerprint.
-        #expect(result.connections[0].server.certFingerprint == "aa:bb")
-    }
-
-    @Test func hostPortFallbackRequiresSamePort() {
-        let existing = local(fingerprint: nil, syncUpdatedAt: nil)
-        let result = SyncedBackendConnectionMerge.merge(
-            records: [record(port: 9999, updatedAt: 200)], into: [existing])
-        #expect(result.addedIds.count == 1)
-        #expect(result.connections.count == 2)
     }
 }

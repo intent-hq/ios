@@ -1,10 +1,10 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 // MARK: - Shared fixtures
 
-private let questionMime = "application/vnd.intent.question+json"
+private let kQuestionMime = "application/vnd.intent.question+json"
 
 private func questionJSON(
     attachmentId: String = "tar-0123456789ab",
@@ -23,7 +23,7 @@ private func decodeBlock(_ json: String) throws -> ContentBlock {
     try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
 }
 
-private func questionBlock(text: String, mimeType: String = questionMime) -> ContentBlock {
+private func questionBlock(text: String, mimeType: String = kQuestionMime) -> ContentBlock {
     ContentBlock(
         type: .resource,
         resource: ResourceContents(uri: "intent-question://q", mimeType: mimeType, text: text)
@@ -40,11 +40,11 @@ struct ResourceBlockDecodingTests {
     @Test func decodesResourceBlock() throws {
         let block = try decodeBlock("""
         {"type": "resource", "resource": {"uri": "intent-question://q", \
-        "mimeType": "\(questionMime)", "text": "{}"}}
+        "mimeType": "\(kQuestionMime)", "text": "{}"}}
         """)
         #expect(block.type == .resource)
         #expect(block.resource?.uri == "intent-question://q")
-        #expect(block.resource?.mimeType == questionMime)
+        #expect(block.resource?.mimeType == kQuestionMime)
         #expect(block.resource?.text == "{}")
     }
 
@@ -66,15 +66,19 @@ struct ResourceBlockDecodingTests {
     /// blocks survive the snapshot path.
     @Test func resourceBlockSurvivesParseMessage() throws {
         let dict: [String: Any] = [
-            "id": "msg-1", "role": "assistant", "timestamp": "2026-01-01T00:00:00Z",
+            "id": "msg-1",
+            "role": "assistant",
+            "timestamp": "2026-01-01T00:00:00Z",
             "contentBlocks": [
                 ["type": "text", "text": "hello"],
-                ["type": "resource",
-                 "resource": ["mimeType": questionMime, "text": questionJSON()]],
-            ],
+                [
+                    "type": "resource",
+                    "resource": ["mimeType": kQuestionMime, "text": questionJSON()]
+                ]
+            ]
         ]
         let msg = try #require(ConversationMessage.parseMessage(dict))
-        let blocks = try #require(msg.contentBlocks)
+        let blocks = msg.contentBlocks
         #expect(blocks.count == 2)
         #expect(blocks[1].type == .resource)
         #expect(Question.question(from: blocks[1])?.header == "Auth method")
@@ -85,24 +89,24 @@ struct ResourceBlockDecodingTests {
 
 struct QuestionValidationTests {
     @Test func decodesFullPayload() throws {
-        let q = try #require(parseQuestion("""
+        let question = try #require(parseQuestion("""
         {"attachmentId": "tar-0123456789ab", "header": "Auth", "question": "Which?", \
         "explanation": "Because", "multiSelect": true, "options": [\
         {"label": "A", "description": "first"}, {"label": "B"}]}
         """))
-        #expect(q.attachmentId == "tar-0123456789ab")
-        #expect(q.explanation == "Because")
-        #expect(q.multiSelect == true)
-        #expect(q.options == [
+        #expect(question.attachmentId == "tar-0123456789ab")
+        #expect(question.explanation == "Because")
+        #expect(question.multiSelect == true)
+        #expect(question.options == [
             QuestionOption(label: "A", description: "first"),
-            QuestionOption(label: "B"),
+            QuestionOption(label: "B")
         ])
     }
 
     @Test func minimalPayloadDefaultsMultiSelectFalse() throws {
-        let q = try #require(parseQuestion(questionJSON()))
-        #expect(q.explanation == nil)
-        #expect(q.multiSelect == false)
+        let question = try #require(parseQuestion(questionJSON()))
+        #expect(question.explanation == nil)
+        #expect(question.multiSelect == false)
     }
 
     @Test func extraKeysAreAllowed() {
@@ -172,7 +176,8 @@ struct QuestionValidationTests {
         #expect(parseQuestion(questionJSON()
             .replacingOccurrences(
                 of: "[{\"label\": \"OAuth\"}, {\"label\": \"API key\"}]",
-                with: "\"nope\"")) == nil)
+                with: "\"nope\""
+            )) == nil)
     }
 
     @Test func rejectsMalformedJSON() {
@@ -197,9 +202,9 @@ struct QuestionParsingHelperTests {
     }
 
     @Test func questionFromValidBlock() throws {
-        let q = try #require(Question.question(from: questionBlock(text: questionJSON())))
-        #expect(q.question == "Which auth method?")
-        #expect(q.options.count == 2)
+        let question = try #require(Question.question(from: questionBlock(text: questionJSON())))
+        #expect(question.question == "Which auth method?")
+        #expect(question.options.count == 2)
     }
 
     @Test func questionFromMalformedOrWrongMimeIsNil() {
@@ -210,359 +215,34 @@ struct QuestionParsingHelperTests {
 
     @Test func questionFromMetadataResourceFallback() throws {
         let block = ContentBlock(
-            id: "b1", type: .resource,
-            metadata: ["resource": AnyCodable([
-                "mimeType": questionMime, "text": questionJSON(),
-            ] as [String: Any])]
+            id: "b1",
+            type: .resource,
+            metadata: [
+                "resource": AnyCodable(
+                    [
+                        "mimeType": kQuestionMime,
+                        "text": questionJSON()
+                    ] as [String: Any]
+                )
+            ]
         )
-        let q = try #require(Question.question(from: block))
-        #expect(q.attachmentId == "tar-0123456789ab")
-    }
-}
-
-// MARK: - Pending derivation (FE `derivePendingQuestions` parity)
-
-struct PendingQuestionDerivationTests {
-    private func assistant(
-        id: String = "a1", blocks: [ContentBlock], isStreaming: Bool? = nil
-    ) -> ConversationMessage {
-        ConversationMessage(id: id, role: .assistant, contentBlocks: blocks, isStreaming: isStreaming)
+        let question = try #require(Question.question(from: block))
+        #expect(question.attachmentId == "tar-0123456789ab")
     }
 
-    private func user(id: String = "u1") -> ConversationMessage {
-        ConversationMessage(id: id, role: .user, contentBlocks: [ContentBlock(type: .text, text: "hi")])
-    }
-
-    /// A user row carrying the wizard's answer tag on the row `metadata`
-    /// (the shape the optimistic send row and the persisted row share).
-    private func answerRow(id: String = "u-ans", answering messageId: String) -> ConversationMessage {
-        ConversationMessage(
-            id: id, role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: "Q: Which auth method?\nA: OAuth")],
+    @Test func explicitResourceTakesPrecedenceOverLegacyMetadataFallback() {
+        let block = ContentBlock(
+            id: "b1",
+            type: .resource,
+            resource: ResourceContents(uri: "intent-question://q", mimeType: "text/plain", text: questionJSON()),
             metadata: [
-                "type": AnyCodable("question_answers"),
-                "answeredQuestionsMessageId": AnyCodable(messageId),
-            ])
-    }
+                "resource": AnyCodable(
+                    ["mimeType": kQuestionMime, "text": questionJSON()] as [String: Any]
+                )
+            ]
+        )
 
-    private func questionAssistant(id: String = "a1", isStreaming: Bool? = nil) -> ConversationMessage {
-        assistant(id: id, blocks: [questionBlock(text: questionJSON())], isStreaming: isStreaming)
-    }
-
-    @Test func derivesPendingSetFromLastAssistant() throws {
-        let messages = [
-            user(),
-            assistant(blocks: [
-                ContentBlock(type: .text, text: "done"),
-                questionBlock(text: questionJSON()),
-            ]),
-        ]
-        let set = try #require(PendingQuestionSet.derive(messages: messages, isTurnActive: false))
-        #expect(set.messageId == "a1")
-        #expect(set.questions.count == 1)
-        #expect(set.questions[0].attachmentId == "tar-0123456789ab")
-    }
-
-    @Test func nilWhenUserMessageSupersedes() {
-        let messages = [
-            assistant(blocks: [questionBlock(text: questionJSON())]),
-            user(),
-        ]
-        #expect(PendingQuestionSet.derive(messages: messages, isTurnActive: false) == nil)
-    }
-
-    @Test func nilWhileTurnActive() {
-        let messages = [assistant(blocks: [questionBlock(text: questionJSON())])]
-        #expect(PendingQuestionSet.derive(messages: messages, isTurnActive: true) == nil)
-    }
-
-    @Test func nilWhileShowingPendingUserMessage() {
-        let messages = [assistant(blocks: [questionBlock(text: questionJSON())])]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, showingPendingUserMessage: true) == nil)
-    }
-
-    @Test func nilWhileLastAssistantStreaming() {
-        let messages = [assistant(blocks: [questionBlock(text: questionJSON())], isStreaming: true)]
-        #expect(PendingQuestionSet.derive(messages: messages, isTurnActive: false) == nil)
-    }
-
-    @Test func nilWhenNoMessagesOrNoAssistant() {
-        #expect(PendingQuestionSet.derive(messages: [], isTurnActive: false) == nil)
-        let systemOnly = [ConversationMessage(id: "s1", role: .system, contentBlocks: [])]
-        #expect(PendingQuestionSet.derive(messages: systemOnly, isTurnActive: false) == nil)
-    }
-
-    @Test func nilWhenNoQuestionBlocks() {
-        let messages = [assistant(blocks: [ContentBlock(type: .text, text: "plain")])]
-        #expect(PendingQuestionSet.derive(messages: messages, isTurnActive: false) == nil)
-    }
-
-    @Test func malformedQuestionBlocksAreSkipped() {
-        let messages = [assistant(blocks: [
-            questionBlock(text: "garbage"),
-            questionBlock(text: questionJSON()),
-        ])]
-        let set = PendingQuestionSet.derive(messages: messages, isTurnActive: false)
-        #expect(set?.questions.count == 1)
-    }
-
-    @Test func dedupesByAttachmentId() {
-        let messages = [assistant(blocks: [
-            questionBlock(text: questionJSON(header: "First")),
-            questionBlock(text: questionJSON(header: "Duplicate")),
-            questionBlock(text: questionJSON(attachmentId: "tar-ba9876543210", header: "Second")),
-        ])]
-        let set = PendingQuestionSet.derive(messages: messages, isTurnActive: false)
-        #expect(set?.questions.map(\.header) == ["First", "Second"])
-    }
-
-    @Test func trailingSystemMessageDoesNotSupersede() throws {
-        let messages = [
-            assistant(blocks: [questionBlock(text: questionJSON())]),
-            ConversationMessage(id: "s1", role: .system, contentBlocks: []),
-        ]
-        let set = try #require(PendingQuestionSet.derive(messages: messages, isTurnActive: false))
-        #expect(set.messageId == "a1")
-    }
-
-    // MARK: - Dismissal marker (FE `wizard-gate.ts` parity)
-
-    @Test func nilWhenDismissalMarkerMatches() {
-        let messages = [assistant(id: "a1", blocks: [questionBlock(text: questionJSON())])]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false,
-            dismissedQuestionsMessageId: "a1") == nil)
-    }
-
-    @Test func newerQuestionSetPendsDespiteOlderDismissalMarker() throws {
-        let messages = [assistant(id: "a2", blocks: [questionBlock(text: questionJSON())])]
-        let set = try #require(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false,
-            dismissedQuestionsMessageId: "a1"))
-        #expect(set.messageId == "a2")
-    }
-
-    @Test func nilMarkerLeavesDerivationUnchanged() throws {
-        let messages = [assistant(id: "a1", blocks: [questionBlock(text: questionJSON())])]
-        let set = try #require(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false,
-            dismissedQuestionsMessageId: nil))
-        #expect(set.messageId == "a1")
-    }
-
-    // MARK: - Pending marker (FE `classifyPendingQuestionMarker` / marker authority parity)
-
-    @Test func markerSetPendsWhileTurnActive() throws {
-        let messages = [user(), questionAssistant(id: "a1")]
-        let set = try #require(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: true, pendingQuestionsMessageId: "a1"))
-        #expect(set.messageId == "a1")
-        #expect(set.questions.map(\.attachmentId) == ["tar-0123456789ab"])
-    }
-
-    @Test func markerSetPendsDespiteLaterPlainUserMessage() throws {
-        let messages = [questionAssistant(id: "a1"), user(id: "u2")]
-        let set = try #require(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1"))
-        #expect(set.messageId == "a1")
-    }
-
-    @Test func markerSetPendsDespiteLaterAssistantTurn() throws {
-        let messages = [
-            questionAssistant(id: "a1"),
-            user(id: "u2"),
-            assistant(id: "a2", blocks: [ContentBlock(type: .text, text: "later turn")], isStreaming: true),
-            ConversationMessage(id: "s1", role: .system, contentBlocks: []),
-        ]
-        let set = try #require(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: true, pendingQuestionsMessageId: "a1"))
-        #expect(set.messageId == "a1")
-    }
-
-    @Test func markerSetSelectsMarkedRowOverQuestionBearingTail() throws {
-        let messages = [
-            questionAssistant(id: "a1"),
-            user(id: "u2"),
-            assistant(id: "a2", blocks: [
-                questionBlock(text: questionJSON(attachmentId: "tar-ba9876543210", header: "Newer")),
-            ]),
-        ]
-        let set = try #require(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1"))
-        #expect(set.messageId == "a1")
-        #expect(set.questions.map(\.header) == ["Auth method"])
-    }
-
-    @Test func markerClearedIsNilEvenWithQuestionBearingTail() {
-        let messages = [user(), questionAssistant(id: "a1")]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "") == nil)
-    }
-
-    @Test func markerSetNilOnceTaggedAnswerRowNamesIt() {
-        let messages = [questionAssistant(id: "a1"), answerRow(answering: "a1")]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
-    }
-
-    @Test func markerSetNilWhenAnswerTagRidesTextBlockMessageMetadata() {
-        let tagged = ConversationMessage(
-            id: "u-ans", role: .user,
-            contentBlocks: [ContentBlock(
-                type: .text, text: "Q: Which auth method?\nA: OAuth",
-                messageMetadata: [
-                    "type": AnyCodable("question_answers"),
-                    "answeredQuestionsMessageId": AnyCodable("a1"),
-                ])])
-        let messages = [questionAssistant(id: "a1"), tagged]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
-    }
-
-    @Test func markerSetIgnoresAnswerRowNamingAnotherSet() throws {
-        let messages = [questionAssistant(id: "a1"), answerRow(answering: "a0")]
-        let set = try #require(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1"))
-        #expect(set.messageId == "a1")
-    }
-
-    @Test func markerSetNilWhenQueuedAnswerNamesIt() {
-        // The daemon auto-queued the tagged answer mid-turn: the optimistic
-        // row is gone and the only local tag lives on the queue entry.
-        let messages = [questionAssistant(id: "a1")]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: true, pendingQuestionsMessageId: "a1",
-            queuedAnsweredQuestionsMessageIds: ["a1"]) == nil)
-    }
-
-    @Test func markerSetPendsWhenQueuedAnswerNamesAnotherSet() throws {
-        let messages = [questionAssistant(id: "a1")]
-        let set = try #require(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1",
-            queuedAnsweredQuestionsMessageIds: ["a0"]))
-        #expect(set.messageId == "a1")
-    }
-
-    @Test func queuedMessageAnsweredQuestionsMessageIdReadsTagOnly() {
-        func queued(_ metadata: [String: AnyCodable]?) -> QueuedMessage {
-            QueuedMessage(id: "q", content: "x", queuedAt: "t", position: 0,
-                          imageBlocks: nil, messageMetadata: metadata)
-        }
-        #expect(queued([
-            "type": AnyCodable("question_answers"),
-            "answeredQuestionsMessageId": AnyCodable("a1"),
-        ]).answeredQuestionsMessageId == "a1")
-        #expect(queued(nil).answeredQuestionsMessageId == nil)
-        #expect(queued([
-            "type": AnyCodable("agent_message"),
-            "answeredQuestionsMessageId": AnyCodable("a1"),
-        ]).answeredQuestionsMessageId == nil)
-        #expect(queued([
-            "type": AnyCodable("question_answers"),
-            "answeredQuestionsMessageId": AnyCodable(""),
-        ]).answeredQuestionsMessageId == nil)
-    }
-
-    @Test func markerSetIgnoresAnswerTagOnNonUserRow() throws {
-        let taggedAssistant = ConversationMessage(
-            id: "a2", role: .assistant,
-            contentBlocks: [ContentBlock(type: .text, text: "echo")],
-            metadata: [
-                "type": AnyCodable("question_answers"),
-                "answeredQuestionsMessageId": AnyCodable("a1"),
-            ])
-        let messages = [questionAssistant(id: "a1"), taggedAssistant]
-        let set = try #require(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1"))
-        #expect(set.messageId == "a1")
-    }
-
-    @Test func markerSetNilWhenDismissalMarkerMatches() {
-        let messages = [questionAssistant(id: "a1")]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false,
-            dismissedQuestionsMessageId: "a1", pendingQuestionsMessageId: "a1") == nil)
-    }
-
-    @Test func markerSetPendsWhenDismissalMarkerNamesOlderSet() throws {
-        let messages = [questionAssistant(id: "a2")]
-        let set = try #require(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false,
-            dismissedQuestionsMessageId: "a1", pendingQuestionsMessageId: "a2"))
-        #expect(set.messageId == "a2")
-    }
-
-    @Test func markerSetNilWhileMarkedRowStreaming() {
-        let messages = [questionAssistant(id: "a1", isStreaming: true)]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
-    }
-
-    @Test func markerSetNilWhenMarkedRowMissing() {
-        let messages = [questionAssistant(id: "a1")]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a-gone") == nil)
-    }
-
-    @Test func markerSetNilWhenMarkedRowIsNotAssistant() {
-        let messages = [
-            ConversationMessage(id: "u1", role: .user, contentBlocks: [questionBlock(text: questionJSON())]),
-        ]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "u1") == nil)
-    }
-
-    @Test func markerSetNilWhenMarkedRowHasNoValidQuestions() {
-        let messages = [assistant(id: "a1", blocks: [
-            ContentBlock(type: .text, text: "plain"),
-            questionBlock(text: "garbage"),
-        ])]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
-    }
-
-    @Test func markerSetNilWhileShowingPendingUserMessage() {
-        let messages = [questionAssistant(id: "a1")]
-        #expect(PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, showingPendingUserMessage: true,
-            pendingQuestionsMessageId: "a1") == nil)
-    }
-
-    @Test func markerSetNilOnEmptyTranscript() {
-        #expect(PendingQuestionSet.derive(
-            messages: [], isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
-    }
-
-    @Test func markerSetDedupesByAttachmentId() {
-        let messages = [assistant(id: "a1", blocks: [
-            questionBlock(text: questionJSON(header: "First")),
-            questionBlock(text: questionJSON(header: "Duplicate")),
-            questionBlock(text: questionJSON(attachmentId: "tar-ba9876543210", header: "Second")),
-        ])]
-        let set = PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1")
-        #expect(set?.questions.map(\.header) == ["First", "Second"])
-    }
-
-    @Test func markerStateClassification() {
-        #expect(PendingQuestionSet.MarkerState(nil) == .absent)
-        #expect(PendingQuestionSet.MarkerState("") == .cleared)
-        #expect(PendingQuestionSet.MarkerState("a1") == .set(messageId: "a1"))
-    }
-
-    @Test func answeredQuestionsMessageIdRejectsWrongTypeOrEmptyId() {
-        let wrongType = ConversationMessage(
-            id: "u1", role: .user,
-            metadata: ["type": AnyCodable("questions_dismissed"),
-                       "answeredQuestionsMessageId": AnyCodable("a1")])
-        let emptyId = ConversationMessage(
-            id: "u2", role: .user,
-            metadata: ["type": AnyCodable("question_answers"),
-                       "answeredQuestionsMessageId": AnyCodable("")])
-        #expect(wrongType.answeredQuestionsMessageId == nil)
-        #expect(emptyId.answeredQuestionsMessageId == nil)
-        #expect(answerRow(answering: "a1").answeredQuestionsMessageId == "a1")
+        #expect(Question.question(from: block) == nil)
     }
 }
 
@@ -584,11 +264,15 @@ struct PendingQuestionRecoveryExclusivityTests {
     private var transcriptWithoutMarkedRow: [ConversationMessage] {
         [
             ConversationMessage(
-                id: "u1", role: .user,
-                contentBlocks: [ContentBlock(type: .text, text: "hi")]),
+                id: "u1",
+                role: .user,
+                contentBlocks: [ContentBlock(type: .text, text: "hi")]
+            ),
             ConversationMessage(
-                id: "a-other", role: .assistant,
-                contentBlocks: [questionBlock(text: questionJSON())]),
+                id: "a-other",
+                role: .assistant,
+                contentBlocks: [questionBlock(text: questionJSON())]
+            )
         ]
     }
 
@@ -598,7 +282,10 @@ struct PendingQuestionRecoveryExclusivityTests {
         var messages = transcriptWithoutMarkedRow
         if let recovered { messages.insert(recovered, at: 0) }
         return PendingQuestionSet.derive(
-            messages: messages, isTurnActive: false, pendingQuestionsMessageId: markedId)
+            messages: messages,
+            isTurnActive: false,
+            pendingQuestionsMessageId: markedId
+        )
     }
 
     /// Mirrors the recovery gate's derivation
@@ -606,7 +293,10 @@ struct PendingQuestionRecoveryExclusivityTests {
     /// while this is nil.
     private func recoveredWizard(_ recovered: ConversationMessage) -> PendingQuestionSet? {
         PendingQuestionSet.derive(
-            messages: [recovered], isTurnActive: false, pendingQuestionsMessageId: markedId)
+            messages: [recovered],
+            isTurnActive: false,
+            pendingQuestionsMessageId: markedId
+        )
     }
 
     @Test func noRecoveredCopyDerivesNilPendingSet() {
@@ -620,14 +310,21 @@ struct PendingQuestionRecoveryExclusivityTests {
         // nils the full derivation with the copy prepended.
         let nonRenderable: [ConversationMessage] = [
             ConversationMessage(
-                id: markedId, role: .assistant,
-                contentBlocks: [questionBlock(text: questionJSON())], isStreaming: true),
+                id: markedId,
+                role: .assistant,
+                contentBlocks: [questionBlock(text: questionJSON())],
+                streamingState: .streaming
+            ),
             ConversationMessage(
-                id: markedId, role: .user,
-                contentBlocks: [questionBlock(text: questionJSON())]),
+                id: markedId,
+                role: .user,
+                contentBlocks: [questionBlock(text: questionJSON())]
+            ),
             ConversationMessage(
-                id: markedId, role: .assistant,
-                contentBlocks: [questionBlock(text: "garbage")]),
+                id: markedId,
+                role: .assistant,
+                contentBlocks: [questionBlock(text: "garbage")]
+            )
         ]
         for recovered in nonRenderable {
             #expect(recoveredWizard(recovered) == nil)
@@ -639,8 +336,10 @@ struct PendingQuestionRecoveryExclusivityTests {
         // Converse sanity: once a wizard derives from the recovered copy the
         // gate stops loading, and the full derivation yields the same set.
         let recovered = ConversationMessage(
-            id: markedId, role: .assistant,
-            contentBlocks: [questionBlock(text: questionJSON())])
+            id: markedId,
+            role: .assistant,
+            contentBlocks: [questionBlock(text: questionJSON())]
+        )
         #expect(recoveredWizard(recovered) != nil)
         let set = try #require(fullDerivation(recovered: recovered))
         #expect(set.messageId == markedId)
@@ -651,17 +350,23 @@ struct PendingQuestionRecoveryExclusivityTests {
 
 struct AnswerFlatteningTests {
     private let question = Question(
-        attachmentId: "tar-0123456789ab", header: "Auth method",
+        attachmentId: "tar-0123456789ab",
+        header: "Auth method",
         question: "Which auth method?",
         options: [QuestionOption(label: "OAuth"), QuestionOption(label: "API key")]
     )
 
     private func answer(
-        selectedLabels: [String] = [], freeText: String = "", skipped: Bool = false
+        selectedLabels: [String] = [],
+        freeText: String = "",
+        skipped: Bool = false
     ) -> QuestionAnswer {
         QuestionAnswer(
-            question: question, selectedLabels: selectedLabels,
-            freeText: freeText, skipped: skipped)
+            question: question,
+            selectedLabels: selectedLabels,
+            freeText: freeText,
+            skipped: skipped
+        )
     }
 
     @Test func singleSelection() {
@@ -696,16 +401,62 @@ struct AnswerFlatteningTests {
 
     @Test func multipleAnswersJoinedByBlankLine() {
         let second = Question(
-            attachmentId: "tar-ba9876543210", header: "Region", question: "Which region?",
-            options: [QuestionOption(label: "US"), QuestionOption(label: "EU")], multiSelect: true)
+            attachmentId: "tar-ba9876543210",
+            header: "Region",
+            question: "Which region?",
+            options: [QuestionOption(label: "US"), QuestionOption(label: "EU")],
+            multiSelect: true
+        )
         let message = QuestionAnswer.flattenToMessage([
             answer(selectedLabels: ["OAuth"]),
-            QuestionAnswer(question: second, selectedLabels: ["US", "EU"], freeText: "", skipped: false),
+            QuestionAnswer(question: second, selectedLabels: ["US", "EU"], freeText: "", skipped: false)
         ])
         #expect(message == "Q: Which auth method?\nA: OAuth\n\nQ: Which region?\nA: US, EU")
     }
 
     @Test func emptyAnswerListIsEmptyMessage() {
-        #expect(QuestionAnswer.flattenToMessage([]) == "")
+        #expect(QuestionAnswer.flattenToMessage([]).isEmpty)
+    }
+}
+
+// MARK: - Free-text field auto-grow clamp
+
+struct QuestionStepFreeTextHeightTests {
+    private let insets = Constants.Conversation.Composer.textContainerInset * 2
+    private let lineHeight: CGFloat = 20
+
+    @Test func emptyFieldIsOneLineTall() {
+        #expect(QuestionStepView.clampedFreeTextHeight(0, lineHeight: lineHeight)
+            == lineHeight + insets)
+    }
+
+    @Test func wrappedContentGrowsWithItsHeight() {
+        let twoLines = lineHeight * 2 + insets
+        #expect(QuestionStepView.clampedFreeTextHeight(twoLines, lineHeight: lineHeight) == twoLines)
+    }
+
+    @Test func growthCapsAtMaximumLineCount() {
+        let cap = lineHeight * CGFloat(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount)
+            + insets
+        #expect(QuestionStepView.clampedFreeTextHeight(cap * 4, lineHeight: lineHeight) == cap)
+        #expect(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount == 6)
+    }
+}
+
+// MARK: - Wizard footer Next button visibility
+
+struct QuestionWizardShowsNextTests {
+    @Test func intermediateSingleSelectWithoutFreeTextHidesNext() {
+        #expect(!QuestionWizardView.showsNext(isMulti: false, isLast: false, hasFreeText: false))
+    }
+
+    @Test func intermediateSingleSelectWithFreeTextShowsNext() {
+        // Return inserts a newline on iPhone, so Next is the only submit path.
+        #expect(QuestionWizardView.showsNext(isMulti: false, isLast: false, hasFreeText: true))
+    }
+
+    @Test func multiSelectAndLastStepsAlwaysShowNext() {
+        #expect(QuestionWizardView.showsNext(isMulti: true, isLast: false, hasFreeText: false))
+        #expect(QuestionWizardView.showsNext(isMulti: false, isLast: true, hasFreeText: false))
     }
 }

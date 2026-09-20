@@ -22,24 +22,21 @@ struct CreateWorkspaceView: View {
     /// through its connection so pinned windows never hit the default backend.
     private let session: BackendSession
     @State private var navigationPath: [Route] = []
-    @State private var githubStore: GitHubRepoStore
     @State private var selectedRepo: GitHubRepo?
-    @State private var remoteBranches: [String] = []
-    @State private var defaultBranch: String?
-    @State private var isLoadingBranches = true
-    @State private var branchLoadError: String?
     @State private var selectedBranch: String?
     @State private var branchSearchText = ""
     @State private var completedBranchQuery: String?
     @State private var branchSearchResults: [String] = []
     @State private var branchSearchTask: Task<Void, Never>?
-    @State private var specialists: [SpecialistInfo] = []
-    @State private var isLoadingSpecialists = true
+    /// Which of this sheet's own loads returned (options; models per
+    /// provider), so a cold load that failed shows the empty state or falls
+    /// back to the daemon default instead of loading forever, while Create
+    /// stays disabled until the selected provider's catalog is resolved.
+    /// Published only for loads that returned in the store generation they
+    /// started in; a reconnect clear resets every marker.
+    @State private var settledLoads = SpecialistPickerView.SettledLoads()
     @State private var selectedSpecialist: SpecialistInfo?
-    @State private var providers: [ProviderInfo] = []
-    @State private var isLoadingProviders = true
     @State private var selectedProvider: ProviderInfo?
-    @State private var models: [ModelInfo] = []
     @State private var selectedModel: ModelInfo?
     @State private var messageText = ""
     @State private var isCreating = false
@@ -49,93 +46,226 @@ struct CreateWorkspaceView: View {
 
     init(session: BackendSession) {
         self.session = session
-        _githubStore = State(initialValue: GitHubRepoStore(connectionManager: session.connection))
+    }
+
+    /// The session-owned repo cache: it outlives this sheet so a reopen
+    /// renders the cached list instantly while it revalidates in the
+    /// background.
+    private var githubStore: GitHubRepoStore { session.githubRepoStore }
+    /// The session-owned specialist / provider / model cache, same contract.
+    private var optionsStore: CreationOptionsStore { session.creationOptionsStore }
+
+    /// Specialists offered by the picker: the modal-pickable set with the
+    /// orchestrator pinned first, then by name.
+    private var specialists: [SpecialistInfo] {
+        Self.pickerSpecialists(optionsStore.specialists)
+    }
+    private var providers: [ProviderInfo] { optionsStore.providers }
+    /// The selected provider's cached catalog; empty until loaded, which
+    /// hides the model row (the daemon default applies).
+    private var models: [ModelInfo] {
+        selectedProvider.flatMap { optionsStore.models(for: $0.id) } ?? []
+    }
+    /// Derived from the store, never a local snapshot: a cache that warms
+    /// between construction and the step's load (another sheet, a reconnect
+    /// reload) drops the loading state on its own, and a reconnect clear
+    /// drives it back on while the store reloads cold.
+    private var isLoadingOptions: Bool {
+        Self.showsOptionsLoading(
+            storeIsLoading: optionsStore.isLoading,
+            storeHasLoaded: optionsStore.hasLoaded,
+            settled: settledLoads.options
+        )
+    }
+    /// True while the selected provider's catalog is uncached and this
+    /// sheet's load for that provider has not settled: Create stays disabled
+    /// (as before the cache) so a workspace is never created before the
+    /// provider's model choices are known — per provider, so switching to an
+    /// uncached provider re-arms the gate. A warm catalog is instant and
+    /// never gates.
+    private var isLoadingSelectedModelCatalog: Bool {
+        Self.showsModelCatalogLoading(
+            catalogCached: selectedProvider.map { optionsStore.models(for: $0.id) != nil },
+            settled: selectedProvider.map { settledLoads.modelProviders.contains($0.id) } ?? false
+        )
+    }
+    /// The branch step's state for the selected repo, owned by the store
+    /// (authoritative listing, cached-first paint, cold-load error), never a
+    /// local snapshot: another sheet's load, a retry and the reconnect clear
+    /// all reach this sheet through it, and nothing here can outlive them.
+    private var branchState: GitHubBranchLoadState {
+        guard let repo = selectedRepo else { return GitHubBranchLoadState() }
+        return githubStore.branchState(owner: repo.owner, repo: repo.name)
+    }
+    /// Authoritative first (synchronous on a revisit), else the paint.
+    private var branchListing: GitHubBranchListing? { branchState.displayed }
+    private var branchLoadError: String? { branchState.error }
+    private var isLoadingBranches: Bool {
+        branchListing == nil && branchLoadError == nil
     }
 
     var body: some View {
-        NavigationStack(path: $navigationPath) {
-            CreateWorkspaceRepoStepView(
-                store: githubStore, selectedRepo: $selectedRepo,
-                onClose: { dismiss() },
-                onNext: { navigationPath.append(.branches) },
-                onRepoChanged: resetRepositoryState
-            )
-                .navigationDestination(for: Route.self) { route in
-                    switch route {
-                    case .branches:
-                        CreateWorkspaceBranchStepView(
-                            repositoryFullName: selectedRepo?.fullName ?? "",
-                            displayedBranches: displayedBranches, defaultBranch: defaultBranch,
-                            isLoading: isLoadingBranches, loadError: branchLoadError,
-                            selectedBranch: $selectedBranch, searchText: $branchSearchText,
-                            colorScheme: colorScheme,
-                            onRetry: { Task { await fetchBranches() } }, onNext: { navigationPath.append(.create) },
-                            onLoad: { await fetchBranches() },
-                            onBranchChanged: { idempotencyKey = UUID().uuidString },
-                            onSearchTextChanged: scheduleBranchSearch
-                        )
-                    case .create:
-                        CreateWorkspaceSpecialistStepView(
-                            repositoryFullName: selectedRepo?.fullName ?? "",
-                            branch: selectedBranch ?? "",
-                            specialists: specialists, isLoadingSpecialists: isLoadingSpecialists,
-                            selectedSpecialist: $selectedSpecialist,
-                            providers: providers, isLoadingProviders: isLoadingProviders,
-                            selectedProvider: $selectedProvider,
-                            models: models, selectedModel: $selectedModel,
-                            messageText: $messageText,
-                            isCreating: isCreating, errorMessage: errorMessage,
-                            showError: $showError,
-                            colorScheme: colorScheme,
-                            onSelectProvider: selectProvider,
-                            onCreate: createWorkspace,
-                            onLoad: { await fetchCreationOptions() }
-                        )
-                    }
-                }
+        navigationContent
+        // The cached-first paint, the authoritative listing replacing it and
+        // a background revalidation all land here: keep the selection if the
+        // new listing still has it, else fall back to default → first.
+        .onChange(of: branchListing) { _, listing in
+            if let listing { reconcileBranchSelection(with: listing) }
         }
+        // A reconnect hard-clears the store — every listing, paint, error,
+        // in-flight branch load and the warmed set — whatever this repo held
+        // (nothing yet, a paint, an error, a listing): reload and re-warm the
+        // selected repo while the branch step is open, so it never sits
+        // loading forever on a cleared cache.
+        .onChange(of: githubStore.loadGeneration) { _, _ in
+            reloadBranchesAfterInvalidation()
+        }
+        // A reconnect hard-clears the options store too: every settled
+        // marker belonged to the dropped cache, so drop them and, while the
+        // create step is open, reload (joining the store's own cold reload)
+        // and re-warm the selected provider's catalog so Create gates on the
+        // fresh load rather than staying enabled on a pre-reconnect one.
+        .onChange(of: optionsStore.loadGeneration) { _, _ in
+            reloadOptionsAfterInvalidation()
+        }
+    }
+
+    private var navigationContent: some View {
+        NavigationStack(path: $navigationPath) {
+            repositoryStep
+                .navigationDestination(for: Route.self) { destination(for: $0) }
+        }
+        // A background revalidation or reconnect reload swaps the cached
+        // lists under an open sheet: keep the selections valid against them.
+        // Observed by value, not by id, so a same-id metadata change (a
+        // provider signing out, a specialist turning hidden, a fresh default
+        // preview) reconciles too.
+        .onChange(of: optionsStore.specialists) { _, _ in
+            reconcileSpecialistSelection()
+        }
+        .onChange(of: optionsStore.providers) { _, _ in
+            Task { await reconcileProviderSelection() }
+        }
+        .onChange(of: models) { _, models in
+            selectedModel = Self.reconciledModel(current: selectedModel, models: models)
+        }
+    }
+
+    private func reloadBranchesAfterInvalidation() {
+        guard navigationPath.contains(.branches) else { return }
+        Task { await fetchBranches() }
+    }
+
+    private func reloadOptionsAfterInvalidation() {
+        settledLoads.reset()
+        guard navigationPath.contains(.create) else { return }
+        Task { await fetchCreationOptions() }
+    }
+
+    private var repositoryStep: some View {
+        CreateWorkspaceRepoStepView(
+            store: githubStore,
+            selectedRepo: $selectedRepo,
+            onClose: { dismiss() },
+            onNext: { navigationPath.append(.branches) },
+            onRepoChanged: resetRepositoryState
+        )
+    }
+
+    @ViewBuilder
+    private func destination(for route: Route) -> some View {
+        switch route {
+        case .branches:
+            CreateWorkspaceBranchStepView(
+                repositoryFullName: selectedRepo?.fullName ?? "",
+                displayedBranches: displayedBranches,
+                defaultBranch: branchListing?.defaultBranch,
+                isLoading: isLoadingBranches,
+                loadError: branchLoadError,
+                selectedBranch: $selectedBranch,
+                searchText: $branchSearchText,
+                colorScheme: colorScheme,
+                onRetry: { Task { await fetchBranches() } },
+                onNext: { navigationPath.append(.create) },
+                onLoad: { await fetchBranches() },
+                onBranchChanged: { idempotencyKey = UUID().uuidString },
+                onSearchTextChanged: scheduleBranchSearch
+            )
+        case .create:
+            CreateWorkspaceSpecialistStepView(
+                repositoryFullName: selectedRepo?.fullName ?? "",
+                branch: selectedBranch ?? "",
+                specialists: specialists,
+                isLoadingSpecialists: isLoadingOptions,
+                selectedSpecialist: $selectedSpecialist,
+                providers: providers,
+                isLoadingProviders: isLoadingOptions || isLoadingSelectedModelCatalog,
+                selectedProvider: $selectedProvider,
+                models: models,
+                selectedModel: $selectedModel,
+                messageText: $messageText,
+                isCreating: isCreating,
+                errorMessage: errorMessage,
+                showError: $showError,
+                colorScheme: colorScheme,
+                onSelectProvider: selectProvider,
+                onCreate: createWorkspace
+            ) {
+                await fetchCreationOptions()
+            }
+        }
+    }
+
+    private func reconcileBranchSelection(with listing: GitHubBranchListing) {
+        selectedBranch = Self.preselectedBranch(
+            current: selectedBranch,
+            branches: Self.orderedBranches(listing.branches, defaultBranch: listing.defaultBranch),
+            defaultBranch: listing.defaultBranch
+        )
     }
 
     private var displayedBranches: [String] {
         Self.displayedBranches(
-            loaded: remoteBranches, defaultBranch: defaultBranch,
-            query: branchSearchText, searchResults: branchSearchResults,
+            loaded: branchListing?.branches ?? [],
+            defaultBranch: branchListing?.defaultBranch,
+            query: branchSearchText,
+            searchResults: branchSearchResults,
             completedQuery: completedBranchQuery
         )
     }
+
     private func resetRepositoryState() {
         idempotencyKey = UUID().uuidString
         selectedBranch = nil
-        remoteBranches = []
-        defaultBranch = nil
-        isLoadingBranches = true
         branchSearchTask?.cancel()
         branchSearchText = ""
         completedBranchQuery = nil
         branchSearchResults = []
+        // Warm the daemon's repo cache now so the branch step's cached-first
+        // paint and the later workspace.create find it fresh (FE parity).
+        if let repo = selectedRepo {
+            githubStore.warmRepoCache(owner: repo.owner, repo: repo.name)
+        }
     }
+    /// Store hit: render synchronously and revalidate silently (a failed
+    /// refresh keeps the cached listing). Miss: the store paints the daemon's
+    /// local cache (`github.branches.listCached`) as soon as it answers while
+    /// the authoritative `github.branches.list` loads in parallel, and its
+    /// result — or error — wins once it settles. Every load (step open,
+    /// retry, reconnect) re-warms the repo cache; the store deduplicates
+    /// per connection. Outcomes live in the store, so a repo change simply
+    /// stops reading this repo's state.
     private func fetchBranches() async {
         guard let repo = selectedRepo else { return }
-        isLoadingBranches = true
-        branchLoadError = nil
-        do {
-            var resolvedDefault = repo.defaultBranch
-            if resolvedDefault == nil {
-                resolvedDefault = await githubStore.fetchDefaultBranch(owner: repo.owner, repo: repo.name)
-            }
-            let branches = try await githubStore.fetchRemoteBranches(owner: repo.owner, repo: repo.name)
-            defaultBranch = resolvedDefault
-            remoteBranches = branches
-            selectedBranch = Self.preselectedBranch(
-                current: selectedBranch,
-                branches: Self.orderedBranches(branches, defaultBranch: resolvedDefault),
-                defaultBranch: resolvedDefault
-            )
-        } catch {
-            remoteBranches = []
-            branchLoadError = error.localizedDescription
+        githubStore.warmRepoCache(owner: repo.owner, repo: repo.name)
+        if let cached = githubStore.cachedBranchListing(owner: repo.owner, repo: repo.name) {
+            // Explicit, not only via onChange: an equal listing for another
+            // repo (two repos with just `main`) never fires the observer.
+            reconcileBranchSelection(with: cached)
         }
-        isLoadingBranches = false
+        _ = try? await githubStore.loadBranchListing(
+            owner: repo.owner, repo: repo.name, defaultBranch: repo.defaultBranch
+        )
     }
 
     private func scheduleBranchSearch(for text: String) {
@@ -159,70 +289,151 @@ struct CreateWorkspaceView: View {
         }
     }
 
-    private func fetchSpecialists() async {
-        isLoadingSpecialists = true
-        let agentStore = AgentStore(connectionManager: session.connection)
-        var fetched = await agentStore.fetchSpecialists().modalPickable
-        let orchestratorId = fetched.orchestrator?.id
-        fetched.sort { a, b in
-            let aIsOrchestrator = a.id == orchestratorId
-            let bIsOrchestrator = b.id == orchestratorId
-            if aIsOrchestrator != bIsOrchestrator { return aIsOrchestrator }
-            return a.name < b.name
-        }
-        specialists = fetched
-        if selectedSpecialist == nil {
-            selectedSpecialist = specialists.orchestrator ?? specialists.first
-        }
-        isLoadingSpecialists = false
-    }
-
+    /// Cold (nothing cached): awaits the specialist/provider load while
+    /// `isLoadingOptions` shows, then the selected provider's model catalog
+    /// with Create disabled; each settles on its own (success or failure).
+    /// Cached: the pickers already render the cached lists — the store
+    /// revalidates in the background and neither loading state shows. A load
+    /// superseded by a reconnect clear publishes nothing: the
+    /// `loadGeneration` change starts a fresh load that settles and reconciles.
     private func fetchCreationOptions() async {
-        async let specialistsTask: () = fetchSpecialists()
-        async let providersTask: () = fetchProviders()
-        _ = await (specialistsTask, providersTask)
+        let generation = optionsStore.loadGeneration
+        await optionsStore.loadIfNeeded()
+        guard settledLoads.settleOptions(startedAt: generation, current: optionsStore.loadGeneration) else {
+            return
+        }
+        reconcileSpecialistSelection()
+        await reconcileProviderSelection()
     }
 
-    private func fetchProviders() async {
-        isLoadingProviders = true
-        defer { isLoadingProviders = false }
-        let agentStore = AgentStore(connectionManager: session.connection)
-        providers = await agentStore.fetchProviders()
-        let selectable = providers.filter { $0.authenticated != false }
-        let currentStillSelectable = selectedProvider.map { current in
-            selectable.contains(where: { $0.id == current.id })
-        } ?? false
-        if !currentStillSelectable {
-            selectedProvider = selectable.first(where: { $0.id == "auggie" }) ?? selectable.first
-        }
-        if let provider = selectedProvider {
-            await fetchModels(providerId: provider.id)
-        } else {
-            models = []
+    /// Defaults the specialist selection (orchestrator, else first) and
+    /// re-defaults or clears it when the selected specialist left the
+    /// pickable set.
+    private func reconcileSpecialistSelection() {
+        selectedSpecialist = Self.preselectedSpecialist(
+            current: selectedSpecialist,
+            catalog: optionsStore.specialists
+        )
+    }
+
+    /// Defaults the provider selection to a selectable provider (auggie
+    /// first) and loads the selected provider's model catalog — instant
+    /// when cached, awaited when cold. An explicit model never survives a
+    /// provider switch (the daemon default applies), even when the new
+    /// provider's catalog shares a bare model id with the old one.
+    private func reconcileProviderSelection() async {
+        let previousProviderId = selectedProvider?.id
+        selectedProvider = Self.preselectedProvider(
+            current: selectedProvider,
+            providers: providers
+        )
+        guard let provider = selectedProvider else {
             selectedModel = nil
+            return
         }
+        if provider.id != previousProviderId { selectedModel = nil }
+        await loadModels(for: provider)
     }
 
     private func selectProvider(_ provider: ProviderInfo) {
         guard provider.authenticated != false, provider.id != selectedProvider?.id else { return }
         selectedProvider = provider
         selectedModel = nil
-        models = []
-        Task {
-            await fetchModels(providerId: provider.id)
+        Task { await loadModels(for: provider) }
+    }
+
+    /// Loads the provider's catalog (instant when cached) and settles its
+    /// Create gate only when the load returned in the generation it started
+    /// in — a completion from before a reconnect clear settles nothing.
+    private func loadModels(for provider: ProviderInfo) async {
+        let generation = optionsStore.loadGeneration
+        await optionsStore.loadModelsIfNeeded(providerId: provider.id)
+        settledLoads.settleModels(
+            for: provider.id,
+            startedAt: generation,
+            current: optionsStore.loadGeneration
+        )
+    }
+}
+
+extension CreateWorkspaceView {
+    /// The picker's specialist list: the modal-pickable set (no hidden or
+    /// internal specialists) with the orchestrator pinned first, then by
+    /// name.
+    static func pickerSpecialists(_ specialists: [SpecialistInfo]) -> [SpecialistInfo] {
+        let pickable = specialists.modalPickable
+        let orchestratorId = pickable.orchestrator?.id
+        return pickable.sorted { firstSpecialist, secondSpecialist in
+            let firstIsOrchestrator = firstSpecialist.id == orchestratorId
+            let secondIsOrchestrator = secondSpecialist.id == orchestratorId
+            if firstIsOrchestrator != secondIsOrchestrator { return firstIsOrchestrator }
+            return firstSpecialist.name < secondSpecialist.name
         }
     }
 
-    private func fetchModels(providerId: String) async {
-        let agentStore = AgentStore(connectionManager: session.connection)
-        let fetched = await agentStore.fetchModels(providerId: providerId)
-        guard let outcome = Self.modelFetchOutcome(
-            fetched: fetched,
-            requestedProviderId: providerId,
-            selectedProviderId: selectedProvider?.id
-        ) else { return }
-        models = outcome.models
-        selectedModel = outcome.selectedModel
+    /// Keeps the selection while `current`'s id is still pickable in the
+    /// unfiltered `catalog`, rebound to the fresh entry so refreshed
+    /// metadata (default-model preview) is what the picker shows; otherwise
+    /// the orchestrator, else the first pickable specialist, else nil when
+    /// the catalog lists nothing pickable (a hidden id must never be
+    /// submitted). An empty catalog (cold load or reconnect clear) keeps
+    /// `current` so the selection survives the reload.
+    static func preselectedSpecialist(
+        current: SpecialistInfo?, catalog: [SpecialistInfo]
+    ) -> SpecialistInfo? {
+        guard !catalog.isEmpty else { return current }
+        let specialists = pickerSpecialists(catalog)
+        if let current, let fresh = specialists.first(where: { $0.id == current.id }) {
+            return fresh
+        }
+        return specialists.orchestrator ?? specialists.first
+    }
+
+    /// The pickers' loading state: shown while the store runs a cold load
+    /// (first load or reconnect reload) and before this sheet's first load
+    /// has settled on an empty cache; never for a warm cache revalidating,
+    /// and not after a settled load that failed (empty state instead).
+    static func showsOptionsLoading(
+        storeIsLoading: Bool, storeHasLoaded: Bool, settled: Bool
+    ) -> Bool {
+        storeIsLoading || (!storeHasLoaded && !settled)
+    }
+
+    // swiftlint:disable discouraged_optional_boolean
+    /// Create's model-catalog gate: on while the selected provider's catalog
+    /// is not cached (`catalogCached == false`) and this sheet's load for
+    /// that provider has not settled; never for a cached catalog (instant
+    /// path), no selected provider (nothing to wait on), or after that
+    /// provider's load settled — a failed catalog load then falls back to
+    /// the daemon default.
+    static func showsModelCatalogLoading(catalogCached: Bool?, settled: Bool) -> Bool {
+        catalogCached == false && !settled
+    }
+    // swiftlint:enable discouraged_optional_boolean
+
+    /// Keeps the selection while `current`'s id is still selectable, rebound
+    /// to the fresh entry; otherwise auggie when selectable, else the first
+    /// selectable provider, else nil (nothing selectable — the picker shows
+    /// setup guidance). An empty list keeps `current` so the selection
+    /// survives a reconnect reload.
+    static func preselectedProvider(
+        current: ProviderInfo?, providers: [ProviderInfo]
+    ) -> ProviderInfo? {
+        guard !providers.isEmpty else { return current }
+        let selectable = providers.filter(\.isSelectable)
+        if let current, let fresh = selectable.first(where: { $0.id == current.id }) {
+            return fresh
+        }
+        return selectable.first { $0.id == "auggie" } ?? selectable.first
+    }
+
+    /// Keeps an explicit model only while the displayed catalog still lists
+    /// it for the same provider (rebound to the fresh entry); anything else
+    /// — the model retired, the catalog cleared, or a provider switch whose
+    /// catalog reuses the bare id — falls back to the daemon default (nil).
+    static func reconciledModel(current: ModelInfo?, models: [ModelInfo]) -> ModelInfo? {
+        guard let current else { return nil }
+        return models.first { $0.id == current.id && $0.provider == current.provider }
     }
 
     static let createRequestTimeout: TimeInterval = 120
@@ -246,39 +457,43 @@ struct CreateWorkspaceView: View {
         guard !isCreating, let repo = selectedRepo, let branch = selectedBranch else { return }
         isCreating = true
 
-        Task {
-            do {
-                let params = Self.buildCreateWorkspaceParams(
-                    githubUrl: "https://github.com/\(repo.owner)/\(repo.name)",
-                    baseRef: branch,
-                    idempotencyKey: idempotencyKey,
+        Task { await performCreateWorkspace(repo: repo, branch: branch) }
+    }
+
+    private func performCreateWorkspace(repo: GitHubRepo, branch: String) async {
+        do {
+            let params = Self.buildCreateWorkspaceParams(
+                githubUrl: "https://github.com/\(repo.owner)/\(repo.name)",
+                baseRef: branch,
+                idempotencyKey: idempotencyKey,
+                initialAgent: InitialAgentInput(
                     specialist: selectedSpecialist,
                     provider: selectedProvider,
                     model: selectedModel,
                     message: messageText
                 )
-
-                let result = try await session.connection.request(
-                    "workspace.create", params: params, timeout: Self.createRequestTimeout)
-
-                if let dict = result as? [String: Any],
-                   let wsDict = dict["workspace"] as? [String: Any],
-                   let workspace = WorkspaceStore.parseWorkspace(wsDict) {
-                    session.workspaceStore.addOrUpdate(workspace)
-                    HapticManager.notification(.success)
-                    idempotencyKey = UUID().uuidString
-                    dismiss()
-                    coordinator.onSelectWorkspace(workspace.id)
-                } else {
-                    errorMessage = "Failed to parse workspace response."
-                    showError = true
-                }
-            } catch {
-                errorMessage = error.localizedDescription
+            )
+            let result = try await session.connection.request(
+                "workspace.create",
+                params: params,
+                timeout: Self.createRequestTimeout
+            )
+            if let dictionary = result as? [String: Any],
+               let workspaceDictionary = dictionary["workspace"] as? [String: Any],
+               let workspace = WorkspaceStore.parseWorkspace(workspaceDictionary) {
+                session.workspaceStore.addOrUpdate(workspace)
+                HapticManager.notification(.success)
+                idempotencyKey = UUID().uuidString
+                dismiss()
+                coordinator.onSelectWorkspace(workspace.id)
+            } else {
+                errorMessage = "Failed to parse workspace response."
                 showError = true
             }
-            isCreating = false
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
         }
+        isCreating = false
     }
-
 }
