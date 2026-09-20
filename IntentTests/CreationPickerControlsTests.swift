@@ -6,6 +6,9 @@ import UIKit
 
 @MainActor
 struct CreationPickerControlsTests {
+    // Both production forms scroll; this canvas keeps every measured row mounted at accessibility sizes.
+    private static let pickerHostHeight: CGFloat = 1200
+
     @Test func providerPickersKeepCallbacksIndependentAndUseHostPolicy() {
         let signedIn = ProviderInfo(id: "auggie", authenticated: .signedIn)
         let signedOut = ProviderInfo(id: "codex", authenticated: .signedOut)
@@ -185,7 +188,11 @@ struct CreationPickerControlsTests {
             PickerLayoutHost(layout: layout, isCreating: isCreating)
         }
         .environment(\.dynamicTypeSize, dynamicTypeSize)
-        return try SyntheticBadgeHost.render(content, width: 430, height: 900) { hostView, window in
+        return try SyntheticBadgeHost.render(
+            content,
+            width: 430,
+            height: Self.pickerHostHeight
+        ) { hostView, window in
             let provider = try Self.pickerElement(
                 identifier: "creation.providerPicker",
                 in: hostView

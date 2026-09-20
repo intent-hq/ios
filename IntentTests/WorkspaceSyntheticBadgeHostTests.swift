@@ -1,5 +1,6 @@
 @testable import Intent
 import SwiftUI
+import Testing
 import UIKit
 
 /// Hosts a SwiftUI view in a synthetic window for the rendered badge tests and
@@ -20,18 +21,13 @@ enum SyntheticBadgeHost {
             let rootView = content.frame(width: width, height: height, alignment: .topLeading)
             let controller = UIHostingController(rootView: rootView)
             let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
-            controller.view.frame = window.bounds
-            // This synthetic container owns attachment, so it must forward a matched lifecycle.
-            controller.beginAppearanceTransition(true, animated: false)
-            window.addSubview(controller.view)
+            window.rootViewController = controller
             window.isHidden = false
-            controller.endAppearanceTransition()
             defer {
-                controller.beginAppearanceTransition(false, animated: false)
-                controller.view.removeFromSuperview()
                 window.isHidden = true
-                controller.endAppearanceTransition()
+                window.rootViewController = nil
             }
+            window.layoutIfNeeded()
             controller.view.layoutIfNeeded()
             return try inspect(controller.view, window)
         }
@@ -83,5 +79,17 @@ enum SyntheticBadgeHost {
         let selector = #selector(getter: UIAccessibilityIdentification.accessibilityIdentifier)
         guard object.responds(to: selector) else { return nil }
         return object.value(forKey: "accessibilityIdentifier") as? String
+    }
+}
+
+@MainActor
+struct SyntheticBadgeHostTests {
+    @Test func renderUsesRootViewControllerContainment() throws {
+        try SyntheticBadgeHost.render(Text("content"), width: 200, height: 100) { hostView, window in
+            let controller = try #require(window.rootViewController)
+            #expect(controller.view === hostView)
+            #expect(hostView.window === window)
+            #expect(hostView.frame == window.bounds)
+        }
     }
 }
