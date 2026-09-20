@@ -312,3 +312,142 @@ struct WorkspaceStoreLastActivityTests {
         #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
     }
 }
+
+// MARK: - The virtual Chief of Staff workspace never reaches the list
+
+@MainActor
+struct WorkspaceStoreChiefFilterTests {
+    private let chiefId = Workspace.chiefWorkspaceId
+
+    private var chiefRow: [String: Any] {
+        ["id": chiefId, "title": "Chief of Staff", "activity": "agent_running"]
+    }
+
+    private var realRow: [String: Any] {
+        ["id": "ws-1", "title": "Real Workspace"]
+    }
+
+    private func makeLiveStore(snapshot: [[String: Any]]) async -> WorkspaceStore {
+        let store = WorkspaceStore(forTesting: true)
+        await store.setTestReconciler(DeltaReconciler<Workspace>(
+            getId: { dict in dict["id"] as? String },
+            normalize: { dict in WorkspaceStore.parseWorkspace(dict) }
+        ))
+        store.handleEvent("subscription.push", params: [
+            "subscriptionId": "sub-123",
+            "kind": "snapshot",
+            "seq": 0,
+            "snapshot": snapshot
+        ])
+        return store
+    }
+
+    private func deltaPush(seq: Int, added: [[String: Any]] = [], updated: [[String: Any]] = []) -> [String: Any] {
+        [
+            "subscriptionId": "sub-123",
+            "kind": "delta",
+            "seq": seq,
+            "delta": ["added": added, "updated": updated, "removedIds": [String]()] as [String: Any]
+        ]
+    }
+
+    @Test func chiefWorkspaceIdMatchesDaemonSentinel() {
+        #expect(chiefId == "__chief__")
+    }
+
+    @Test func parseWorkspaceReturnsNilForChief() {
+        #expect(WorkspaceStore.parseWorkspace(chiefRow) == nil)
+        #expect(WorkspaceStore.parseWorkspace(realRow) != nil)
+    }
+
+    @Test func parseWorkspacesDropsChiefFromListResponse() {
+        let parsed = WorkspaceStore.parseWorkspaces(from: ["workspaces": [chiefRow, realRow]])
+        #expect(parsed.map(\.id) == ["ws-1"])
+    }
+
+    @Test func snapshotContainingChiefPublishesWithoutIt() async {
+        let store = await makeLiveStore(snapshot: [chiefRow, realRow])
+        #expect(store.workspaces.map(\.id) == ["ws-1"])
+        #expect(store.lastUpdated != nil)
+    }
+
+    @Test func deltaUpdatedChiefDoesNotInsertIt() async {
+        // The daemon re-reads the workspace for every workspace:* event, so a
+        // Chief-scoped event arrives as `updated: [<chief>]` for an unknown id.
+        let store = await makeLiveStore(snapshot: [realRow])
+        store.handleEvent("subscription.push", params: deltaPush(seq: 1, updated: [chiefRow]))
+        #expect(store.workspaces.map(\.id) == ["ws-1"])
+
+        // The delta still advanced the sequence: the next one applies normally.
+        store.handleEvent("subscription.push", params: deltaPush(
+            seq: 2,
+            added: [["id": "ws-2", "title": "Second"]]
+        ))
+        #expect(store.workspaces.map(\.id) == ["ws-1", "ws-2"])
+    }
+
+    @Test func deltaAddedChiefDoesNotInsertIt() async {
+        let store = await makeLiveStore(snapshot: [realRow])
+        store.handleEvent("subscription.push", params: deltaPush(seq: 1, added: [chiefRow]))
+        #expect(store.workspaces.map(\.id) == ["ws-1"])
+    }
+
+    @Test func legacyWorkspaceUpdatedPatchForChiefDoesNotInsertIt() throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [try #require(WorkspaceStore.parseWorkspace(realRow))]
+
+        store.handleEvent("events.event", params: [
+            "event": [
+                "type": "workspace:updated",
+                "workspaceId": chiefId,
+                "data": [
+                    "workspaceId": chiefId,
+                    "changes": ["lastActivity": "2026-09-18T12:00:00Z"]
+                ] as [String: Any]
+            ] as [String: Any]
+        ])
+        #expect(store.workspaces.map(\.id) == ["ws-1"])
+    }
+
+    @Test func legacyWorkspaceUpdatedRefetchForChiefDoesNotInsertIt() async throws {
+        // Not live: a workspace:updated with a refetch-classified change triggers
+        // workspace.list; a list that still carries Chief is filtered too.
+        let fake = FakeConnectionManager()
+        fake.responseMap["workspace.list"] = ["workspaces": [chiefRow, realRow]]
+        let store = WorkspaceStore(connectionManager: fake)
+
+        store.handleEvent("events.event", params: [
+            "event": [
+                "type": "workspace:updated",
+                "workspaceId": chiefId,
+                "data": [
+                    "workspaceId": chiefId,
+                    "changes": ["statusMessage": "Working"]
+                ] as [String: Any]
+            ] as [String: Any]
+        ])
+        try await fake.waitForRequests("workspace.list")
+        try await waitUntil("workspace.list published") { store.lastUpdated != nil }
+        #expect(store.workspaces.map(\.id) == ["ws-1"])
+    }
+
+    @Test func addOrUpdateIgnoresChief() async {
+        let store = await makeLiveStore(snapshot: [realRow])
+        let chief = Workspace(
+            id: chiefId,
+            title: "Chief of Staff",
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: nil,
+            displayStatus: nil
+        )
+
+        store.addOrUpdate(chief)
+        #expect(store.workspaces.map(\.id) == ["ws-1"])
+
+        // Not seeded into the reconciler either: the next delta keeps it out.
+        store.handleEvent("subscription.push", params: deltaPush(seq: 1, updated: [realRow]))
+        #expect(store.workspaces.map(\.id) == ["ws-1"])
+    }
+}

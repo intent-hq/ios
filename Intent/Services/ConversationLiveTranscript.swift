@@ -43,6 +43,13 @@ final class ConversationLiveTranscript {
     /// cannot replace populated live state, but may still seed an empty
     /// transcript because the two sources share no revision.
     @ObservationIgnored var chatSnapshotGeneration = 0
+    /// Load windows held open by `holdingLoadWindow` (recovery refetches).
+    /// While one is open, a finishing initial fetch neither replays nor lowers
+    /// `isLoading`; the window does that when it closes.
+    @ObservationIgnored var heldLoadWindows = 0
+    /// Advances each time the live chat channel applies a snapshot or delta.
+    /// A streaming-state response captured before it moved is stale.
+    @ObservationIgnored var liveStateVersion = 0
     private var chatLive = false
     @ObservationIgnored private var chatSubscriptionId: String?
     private var chatChannelActive = false
@@ -285,6 +292,7 @@ extension ConversationLiveTranscript {
         chatLive = true
         chatSeeded = true
         chatExpectedSeq = push.seq + 1
+        liveStateVersion &+= 1
         // `parse` pre-decodes off MainActor; the fallback covers pushes built
         // directly from raw dictionaries (tests).
         messages = snapshotMessages
@@ -304,6 +312,7 @@ extension ConversationLiveTranscript {
     }
 
     private func applyDelta(_ delta: SubscriptionPush.DeltaPayload) {
+        liveStateVersion &+= 1
         var sawTerminal = false
         var sawUpsert = false
         let entities = delta.chatBlocks

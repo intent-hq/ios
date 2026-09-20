@@ -277,6 +277,7 @@ $(SRCROOT)/IntentTests/ConversationStoreQueueDecodingTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreQueueTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreSeenTests.swift
+$(SRCROOT)/IntentTests/ConversationStoreStreamEventBufferTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift
@@ -349,6 +350,7 @@ $(SRCROOT)/IntentTests/PersistenceKeychainAccessibilityTests.swift
 $(SRCROOT)/IntentTests/PersistenceManagerTests.swift
 $(SRCROOT)/IntentTests/PersistenceRegistryIntegrityTests.swift
 $(SRCROOT)/IntentTests/PlatformGuardAllowlistTests.swift
+$(SRCROOT)/IntentTests/PrivacyManifestDriftTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift
 $(SRCROOT)/IntentTests/QuestionTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
@@ -410,7 +412,9 @@ $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
+$(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Keyboard.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
+$(SRCROOT)/IntentUITests/WorkspaceEntryUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift
