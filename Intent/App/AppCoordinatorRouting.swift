@@ -15,10 +15,10 @@ enum IncomingDeepLink: Equatable {
 
     static func classify(_ url: URL) -> Self {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              components.scheme == "intent" else {
+              components.scheme?.lowercased() == "intent" else {
             return .unhandled
         }
-        if components.host == "invite" {
+        if components.host?.lowercased() == "invite" {
             return .invite
         }
         if let payload = PairingPayload.parse(url.absoluteString) {

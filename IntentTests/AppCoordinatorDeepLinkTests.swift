@@ -25,6 +25,8 @@ extension AppCoordinatorTests {
         // The host alone decides: iOS never parses the invite payload.
         #expect(IncomingDeepLink.classify(URL(string: "intent://invite")!) == .invite)
         #expect(IncomingDeepLink.classify(URL(string: "intent://invite?token=t&host=h&port=1")!) == .invite)
+        #expect(IncomingDeepLink.classify(URL(string: "INTENT://INVITE")!) == .invite)
+        #expect(IncomingDeepLink.classify(URL(string: "InTeNt://InViTe?secret=s")!) == .invite)
     }
 
     @Test func incomingDeepLink_classifiesOtherURLsAsUnhandled() {
@@ -48,7 +50,7 @@ extension AppCoordinatorTests {
         coordinator.onLoadComplete()
 
         let invite = URL(string:
-            "intent://invite?v=1&host=10.0.0.5&port=7443&fp=AB:CD&inviteId=inv-1&secret=s3cret")!
+            "InTeNt://InViTe?v=1&host=10.0.0.5&port=7443&fp=AB:CD&inviteId=inv-1&secret=s3cret")!
         coordinator.handleIncomingURL(invite)
 
         #expect(coordinator.isInviteNoticePresented)
@@ -71,7 +73,7 @@ extension AppCoordinatorTests {
         )
 
         // Cold start: multiple links coalesce into one notice.
-        coordinator.handleIncomingURL(URL(string: "intent://invite?inviteId=inv-1&secret=s")!)
+        coordinator.handleIncomingURL(URL(string: "INTENT://INVITE?inviteId=inv-1&secret=s")!)
         coordinator.handleIncomingURL(URL(string: "intent://invite?inviteId=inv-2&secret=s")!)
         #expect(!coordinator.isInviteNoticePresented)
 
