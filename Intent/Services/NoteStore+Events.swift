@@ -20,7 +20,7 @@ extension NoteStore {
     nonisolated static let refetchEventTypes: Set<String> = [
         "note:created", "note:updated", "note:deleted"
     ]
-    nonisolated static let ignoredEventTypes: Set<String> = []
+    nonisolated static let ignoredEventTypes: Set<String> = ["note:presence"]
 
     // Optional payload presence is part of the shared classification contract.
     // swiftlint:disable:next discouraged_optional_collection
