@@ -152,6 +152,7 @@ private final class SyntheticBadgeHostSession<Content: View> {
     let controller: SyntheticBadgeHostingController<Content>
     let window: UIWindow
     private let callbackTimeout: TimeInterval
+    private let afterShowingWindow: (() -> Void)?
     private var teardownStarted = false
 
     init(
@@ -159,6 +160,7 @@ private final class SyntheticBadgeHostSession<Content: View> {
         width: CGFloat,
         height: CGFloat,
         callbackTimeout: TimeInterval,
+        afterShowingWindow: (() -> Void)?,
         observeLifecycle: ((SyntheticBadgeHostLifecycleWaiter.Event) -> Void)?
     ) {
         controller = SyntheticBadgeHostingController(
@@ -167,6 +169,7 @@ private final class SyntheticBadgeHostSession<Content: View> {
         )
         window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
         self.callbackTimeout = callbackTimeout
+        self.afterShowingWindow = afterShowingWindow
         window.rootViewController = controller
     }
 
@@ -174,9 +177,10 @@ private final class SyntheticBadgeHostSession<Content: View> {
         try await controller.wait(
             for: .didAppear,
             timeout: callbackTimeout,
-            honoringCancellation: true
+            honoringCancellation: false
         ) {
             window.isHidden = false
+            afterShowingWindow?()
         }
         window.layoutIfNeeded()
         controller.view.layoutIfNeeded()
@@ -211,6 +215,10 @@ private struct SyntheticBadgeHostCombinedError: Error, CustomStringConvertible {
 enum SyntheticBadgeHost {
     typealias LifecycleEvent = SyntheticBadgeHostLifecycleWaiter.Event
 
+    struct LifecycleHooks {
+        let afterShowingWindow: () -> Void
+    }
+
     static let probeIdentifier = "workspaceRow.syntheticHost.probe"
     private static let probeWidth: CGFloat = 200
     private static let probeHeight: CGFloat = 100
@@ -220,6 +228,7 @@ enum SyntheticBadgeHost {
         _ content: Content,
         width: CGFloat,
         height: CGFloat,
+        lifecycleHooks: LifecycleHooks? = nil,
         observeLifecycle: ((LifecycleEvent) -> Void)? = nil,
         inspect: (_ hostView: UIView, _ window: UIWindow) throws -> Result
     ) async throws -> Result {
@@ -230,6 +239,7 @@ enum SyntheticBadgeHost {
                 width: width,
                 height: height,
                 callbackTimeout: callbackTimeout,
+                afterShowingWindow: lifecycleHooks?.afterShowingWindow,
                 observeLifecycle: observeLifecycle
             )
         }
@@ -355,7 +365,7 @@ struct SyntheticBadgeHostTests {
         #expect(events == [.didAppear, .didDisappear])
     }
 
-    @Test func cancellationStillCompletesDisappearance() async throws {
+    @Test func cancellationAfterInspectionStillCompletesDisappearance() async throws {
         var events: [SyntheticBadgeHost.LifecycleEvent] = []
         var renderTask: Task<Void, any Error>?
         renderTask = Task { @MainActor in
@@ -372,6 +382,31 @@ struct SyntheticBadgeHostTests {
             try await task.value
         }
         #expect(events == [.didAppear, .didDisappear])
+    }
+
+    @Test func cancellationDuringAppearanceStillCompletesLifecycle() async throws {
+        var stages: [String] = []
+        var didInspect = false
+        var renderTask: Task<Void, any Error>?
+        renderTask = Task { @MainActor in
+            try await SyntheticBadgeHost.render(
+                Text("content"),
+                width: 200,
+                height: 100,
+                lifecycleHooks: .init {
+                    stages.append("cancellationRequested")
+                    renderTask?.cancel()
+                }
+            ) { stages.append($0.rawValue) } inspect: { _, _ in
+                didInspect = true
+            }
+        }
+        let task = try #require(renderTask)
+        await #expect(throws: CancellationError.self) {
+            try await task.value
+        }
+        #expect(didInspect == false)
+        #expect(stages == ["cancellationRequested", "didAppear", "didDisappear"])
     }
 
     @Test func missingLifecycleCallbackFailsBoundedlyAndLeavesWaiterReusable() async throws {
