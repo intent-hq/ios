@@ -37,6 +37,7 @@ struct ResponseGroupView: View {
     /// Slim-projection hydration passthrough (PROTOCOL §5.5): in-flight block
     /// ids and the on-demand full-block fetch, forwarded to ContentBlockView.
     var hydratingBlockIds: Set<String> = []
+    var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded: Bool
@@ -60,6 +61,7 @@ struct ResponseGroupView: View {
         workspaceId: String,
         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil,
         hydratingBlockIds: Set<String> = [],
+        onLayoutChange: (() -> Void)? = nil,
         onHydrateBlock: ((_ blockId: String) -> Void)? = nil
     ) {
         self.group = group
@@ -67,6 +69,7 @@ struct ResponseGroupView: View {
         self.workspaceId = workspaceId
         self.onNavigateToNote = onNavigateToNote
         self.hydratingBlockIds = hydratingBlockIds
+        self.onLayoutChange = onLayoutChange
         self.onHydrateBlock = onHydrateBlock
         self._isExpanded = State(initialValue: isLast)
     }
@@ -81,6 +84,7 @@ struct ResponseGroupView: View {
 
     private var headerButton: some View {
         Button {
+            onLayoutChange?()
             withAnimation(.easeInOut(duration: Constants.Conversation.ResponseGroup.expansionAnimationDuration)) {
                 isExpanded.toggle()
             }
@@ -166,6 +170,7 @@ struct ResponseGroupView: View {
                     workspaceId: workspaceId,
                     onNavigateToNote: onNavigateToNote,
                     hydratingBlockIds: hydratingBlockIds,
+                    onLayoutChange: onLayoutChange,
                     onHydrateBlock: onHydrateBlock
                 )
             }

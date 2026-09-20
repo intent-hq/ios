@@ -3,10 +3,105 @@ import Foundation
 import Observation
 
 @Observable
+final class ConversationTranscriptRowHeightCache {
+    private struct Content: Equatable {
+        let message: ConversationMessage
+        let hydratingBlockIds: Set<String>
+    }
+
+    private struct Entry: Equatable {
+        let content: Content
+        let height: CGFloat
+    }
+
+    private struct PendingMeasurement {
+        let token: UUID
+        let task: Task<Void, Never>
+    }
+
+    private static let widthTolerance: CGFloat = 0.5
+
+    private let settleDelay: Duration
+    private var entries: [String: Entry] = [:]
+    @ObservationIgnored private var cacheGenerationWidth: CGFloat?
+    @ObservationIgnored private var pendingMeasurements: [String: PendingMeasurement] = [:]
+
+    init(settleDelay: Duration = .milliseconds(Constants.Conversation.Transcript.rowHeightSettleMilliseconds)) {
+        self.settleDelay = settleDelay
+    }
+
+    func height(for message: ConversationMessage, hydratingBlockIds: Set<String>) -> CGFloat? {
+        guard !message.isStreaming,
+              let entry = entries[message.id],
+              entry.content == Content(message: message, hydratingBlockIds: hydratingBlockIds)
+        else { return nil }
+        return entry.height
+    }
+
+    func record(
+        height: CGFloat,
+        for message: ConversationMessage,
+        hydratingBlockIds: Set<String>
+    ) {
+        guard !message.isStreaming, height.isFinite, height > 0 else {
+            invalidate(messageId: message.id)
+            return
+        }
+
+        let content = Content(message: message, hydratingBlockIds: hydratingBlockIds)
+        pendingMeasurements.removeValue(forKey: message.id)?.task.cancel()
+        if entries[message.id] == Entry(content: content, height: height) { return }
+
+        let token = UUID()
+        let task = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: settleDelay)
+            guard !Task.isCancelled else { return }
+            finishMeasurement(messageId: message.id, token: token, content: content, height: height)
+        }
+        pendingMeasurements[message.id] = PendingMeasurement(token: token, task: task)
+    }
+
+    func invalidate(messageId: String) {
+        pendingMeasurements.removeValue(forKey: messageId)?.task.cancel()
+        entries.removeValue(forKey: messageId)
+    }
+
+    func invalidateAll() {
+        pendingMeasurements.values.forEach { $0.task.cancel() }
+        pendingMeasurements.removeAll()
+        entries.removeAll()
+    }
+
+    func updateLayoutWidth(_ width: CGFloat) {
+        guard width.isFinite, width > 0 else { return }
+        guard let cacheGenerationWidth else {
+            self.cacheGenerationWidth = width
+            return
+        }
+        guard abs(cacheGenerationWidth - width) > Self.widthTolerance else { return }
+        self.cacheGenerationWidth = width
+        invalidateAll()
+    }
+
+    private func finishMeasurement(
+        messageId: String,
+        token: UUID,
+        content: Content,
+        height: CGFloat
+    ) {
+        guard pendingMeasurements[messageId]?.token == token else { return }
+        pendingMeasurements.removeValue(forKey: messageId)
+        entries[messageId] = Entry(content: content, height: height)
+    }
+}
+
+@Observable
 final class ConversationTranscriptScrollState {
     typealias Lifecycle = ConversationTranscriptRecoveryLifecycle
 
     let momentumProxy = ScrollViewMomentumProxy()
+    let rowHeightCache = ConversationTranscriptRowHeightCache()
     /// Who owns the viewport (a follow from its request to its terminal, an
     /// unrealized-end correction from its first scroll to its terminal), the
     /// recovery armed without owning, a give-up transferred to the owning

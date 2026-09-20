@@ -59,6 +59,7 @@ enum ConversationConstants {
         static let initialScrollSettleDelay: Double = 0.2
         static let dividerProbeDelay: Double = 0.15
         static let scrollDebounceMilliseconds = 100
+        static let rowHeightSettleMilliseconds = 120
         static let scrollCompletionMilliseconds = 300
         /// How many corrections a forced follow issues before giving up.
         static let followLandingRetries = 3

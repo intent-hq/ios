@@ -8,6 +8,7 @@ struct ContentBlockView: View {
     /// Block ids of this message with an agent.getMessageBlock hydration
     /// fetch in flight (slim projection, PROTOCOL §5.5).
     var hydratingBlockIds: Set<String> = []
+    var onLayoutChange: (() -> Void)?
     /// Fetch the full body of a slim-truncated block by id; absent → no
     /// hydration (bounded previews stay).
     var onHydrateBlock: ((_ blockId: String) -> Void)?
@@ -68,6 +69,7 @@ struct ContentBlockView: View {
                 toolResult: result,
                 isHydrating: hydratingBlockIds.contains(block.id)
                     || (result.map { hydratingBlockIds.contains($0.id) } ?? false),
+                onLayoutChange: onLayoutChange,
                 onHydrate: onHydrateBlock.map { hydrate in
                     {
                         // Hydrate whichever side of the row was truncated
@@ -101,7 +103,7 @@ struct ContentBlockView: View {
 
     @ViewBuilder
     private var thinkingView: some View {
-        DisclosureGroup(isExpanded: $thinkingExpanded) {
+        DisclosureGroup(isExpanded: thinkingExpansion) {
             Text(block.resolvedText ?? "")
                 .font(.callout)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -119,6 +121,16 @@ struct ContentBlockView: View {
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .tint(Theme.mutedForeground(for: colorScheme))
+    }
+
+    private var thinkingExpansion: Binding<Bool> {
+        Binding(
+            get: { thinkingExpanded },
+            set: { expanded in
+                onLayoutChange?()
+                thinkingExpanded = expanded
+            }
+        )
     }
 
     /// A slim-truncated image asks for the original on tap (PROTOCOL §5.5);

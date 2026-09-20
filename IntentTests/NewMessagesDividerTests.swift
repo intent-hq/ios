@@ -344,3 +344,95 @@ struct ConversationTranscriptScrollPolicyTests {
 
     typealias ContainerRePin = ConversationTranscriptScrollPolicy.ContainerRePinDecision
 }
+
+@Suite struct TranscriptRowHeightCacheTests {
+    private let settleWait = Duration.milliseconds(20)
+
+    @Test func cachesOnlyTheLatestSettledHeight() async {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let message = assistantMessage(text: "A completed response")
+
+        cache.record(height: 8, for: message, hydratingBlockIds: [])
+        cache.record(height: 291, for: message, hydratingBlockIds: [])
+        try? await Task.sleep(for: settleWait)
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == 291)
+    }
+
+    @Test func contentHydrationAndWidthChangesInvalidateTheHeight() async {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let message = assistantMessage(text: "Original")
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        try? await Task.sleep(for: settleWait)
+
+        #expect(cache.height(for: assistantMessage(text: "Updated"), hydratingBlockIds: []) == nil)
+        #expect(cache.height(for: message, hydratingBlockIds: ["block"]) == nil)
+        #expect(cache.height(for: message, hydratingBlockIds: []) == 100)
+
+        cache.updateLayoutWidth(320)
+        #expect(cache.height(for: message, hydratingBlockIds: []) == 100)
+        cache.updateLayoutWidth(400)
+        #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
+    }
+
+    @Test func streamingRowsAreNeverCached() async {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let message = assistantMessage(text: "Growing", streamingState: .streaming)
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        try? await Task.sleep(for: settleWait)
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
+    }
+
+    @Test func matchingSettledHeightCancelsObsoletePendingMeasurement() async {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let message = assistantMessage(text: "Settled")
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        try? await Task.sleep(for: settleWait)
+
+        cache.record(height: 200, for: message, hydratingBlockIds: [])
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        try? await Task.sleep(for: settleWait)
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == 100)
+    }
+
+    @Test func cumulativeWidthChangesInvalidateCommittedHeight() async {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let message = assistantMessage(text: "Wrapping")
+        cache.updateLayoutWidth(320)
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        try? await Task.sleep(for: settleWait)
+
+        cache.updateLayoutWidth(320.4)
+        #expect(cache.height(for: message, hydratingBlockIds: []) == 100)
+        cache.updateLayoutWidth(320.8)
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
+    }
+
+    @Test func cumulativeWidthChangesCancelPendingHeight() async {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(50))
+        let message = assistantMessage(text: "Pending wrapping")
+        cache.updateLayoutWidth(320)
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+
+        cache.updateLayoutWidth(320.4)
+        cache.updateLayoutWidth(320.8)
+        try? await Task.sleep(for: .milliseconds(80))
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
+    }
+
+    private func assistantMessage(
+        text: String,
+        streamingState: MessageStreamingState = .complete
+    ) -> ConversationMessage {
+        ConversationMessage(
+            id: "message",
+            role: .assistant,
+            contentBlocks: [ContentBlock(type: .text, text: text)],
+            streamingState: streamingState
+        )
+    }
+}

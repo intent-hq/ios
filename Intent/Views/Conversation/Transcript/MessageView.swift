@@ -12,6 +12,9 @@ struct MessageView: View {
     /// Block ids of this message with a slim-projection hydration fetch in
     /// flight (agent.getMessageBlock, PROTOCOL §5.5).
     var hydratingBlockIds: Set<String> = []
+    /// Invalidates the transcript's settled height before local disclosure
+    /// state changes the row's layout.
+    var onLayoutChange: (() -> Void)?
     /// Fetch the full body of a slim-truncated block of this message by id.
     var onHydrateBlock: ((_ blockId: String) -> Void)?
 
@@ -22,6 +25,7 @@ struct MessageView: View {
             onNavigateToNote: onNavigateToNote,
             onNavigateToAgent: onNavigateToAgent,
             hydratingBlockIds: hydratingBlockIds,
+            onLayoutChange: onLayoutChange,
             onHydrateBlock: onHydrateBlock
         )
         .equatable()
@@ -35,6 +39,7 @@ struct MessageRowContent: View, Equatable {
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
     var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
     var hydratingBlockIds: Set<String>
+    var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
     /// Agent-to-agent rows render as a collapsed disclosure card; the body
     /// is hidden until the header is tapped (FE parity: ChatMessage.svelte
@@ -77,7 +82,7 @@ struct MessageRowContent: View, Equatable {
                     message: message,
                     workspaceId: workspaceId,
                     onNavigateToAgent: onNavigateToAgent,
-                    isAgentMessageExpanded: $isAgentMessageExpanded
+                    isAgentMessageExpanded: agentMessageExpansion
                 )
             } else if message.role == .assistant {
                 AssistantMessageView(
@@ -85,6 +90,7 @@ struct MessageRowContent: View, Equatable {
                     workspaceId: workspaceId,
                     onNavigateToNote: onNavigateToNote,
                     hydratingBlockIds: hydratingBlockIds,
+                    onLayoutChange: onLayoutChange,
                     onHydrateBlock: onHydrateBlock
                 )
             } else if message.role == .error {
@@ -94,6 +100,16 @@ struct MessageRowContent: View, Equatable {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var agentMessageExpansion: Binding<Bool> {
+        Binding(
+            get: { isAgentMessageExpanded },
+            set: { expanded in
+                onLayoutChange?()
+                isAgentMessageExpanded = expanded
+            }
+        )
     }
 
     @ViewBuilder

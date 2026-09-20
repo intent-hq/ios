@@ -6,6 +6,8 @@ struct ToolCallView: View {
     /// True while a slim-truncated body (input or output) is being hydrated
     /// via agent.getMessageBlock (PROTOCOL §5.5).
     var isHydrating: Bool = false
+    /// Invalidates the transcript's settled row height before disclosure.
+    var onLayoutChange: (() -> Void)?
     /// Fetch the full bodies of this row's slim-truncated blocks; absent →
     /// no hydration (the bounded preview stays).
     var onHydrate: (() -> Void)?
@@ -70,6 +72,7 @@ struct ToolCallView: View {
 
     private var headerButton: some View {
         Button {
+            onLayoutChange?()
             withAnimation(.easeInOut(duration: Constants.Conversation.ToolCall.expansionAnimationDuration)) {
                 isExpanded.toggle()
             }

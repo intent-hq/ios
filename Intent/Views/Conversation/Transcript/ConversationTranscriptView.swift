@@ -42,6 +42,7 @@ struct ConversationTranscriptView: View {
     let onNavigateToAgent: (String, String, String) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private typealias Lifecycle = ConversationTranscriptRecoveryLifecycle
 
@@ -195,6 +196,11 @@ private extension ConversationTranscriptView {
             }
             .padding(.horizontal, Layout.transcriptHorizontalPadding)
             .padding(.top, Layout.transcriptTopPadding)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                scrollState.rowHeightCache.updateLayoutWidth(width)
+            }
             // Hosted on the stack itself, not a lazily realized row, so the
             // UIScrollView is found regardless of which rows exist.
             .background(ScrollViewFinder(proxy: scrollMomentumProxy))
@@ -215,6 +221,9 @@ private extension ConversationTranscriptView {
             onTrigger: withdrawEndRowForDemo,
             onGeometryChange: restoreDerealizedEndIfMoved
         )
+        .onChange(of: dynamicTypeSize) { _, _ in
+            scrollState.rowHeightCache.invalidateAll()
+        }
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
         // gesture here would starve Textual's UIKit link-tap recognizer.
         .onScrollGeometryChange(for: ScrolledAwayGeometry.self) { geometry in
@@ -840,21 +849,41 @@ private extension ConversationTranscriptView {
     }
 
     private func messageRow(for message: ConversationMessage) -> some View {
-        MessageView(
+        let hydratingBlockIds = viewModel.store.hydratingBlockIds(forMessage: message.id)
+        let cachedHeight = scrollState.rowHeightCache.height(
+            for: message,
+            hydratingBlockIds: hydratingBlockIds
+        )
+        return MessageView(
             message: message,
             workspaceId: viewModel.workspaceId,
             onNavigateToNote: onNavigateToNote,
             onNavigateToAgent: onNavigateToAgent,
-            hydratingBlockIds: viewModel.store.hydratingBlockIds(forMessage: message.id)
-        ) { blockId in
-            let messageId = message.id
-            Task {
-                await viewModel.store.hydrateBlock(
-                    messageId: messageId,
-                    blockId: blockId
+            hydratingBlockIds: hydratingBlockIds,
+            onLayoutChange: {
+                scrollState.rowHeightCache.invalidate(messageId: message.id)
+            },
+            onHydrateBlock: { blockId in
+                let messageId = message.id
+                Task {
+                    await viewModel.store.hydrateBlock(
+                        messageId: messageId,
+                        blockId: blockId
+                    )
+                }
+            }
+        )
+        .modifier(
+            ConversationTranscriptRowHeightFrame(
+                cachedHeight: cachedHeight
+            ) { height in
+                scrollState.rowHeightCache.record(
+                    height: height,
+                    for: message,
+                    hydratingBlockIds: hydratingBlockIds
                 )
             }
-        }
+        )
     }
 
     // MARK: - Demo-only controlled end derealization (#338)
@@ -1292,6 +1321,23 @@ private extension ConversationTranscriptView {
                 return
             }
         }
+    }
+}
+
+struct ConversationTranscriptRowHeightFrame: ViewModifier {
+    let cachedHeight: CGFloat?
+    let onNaturalHeightChange: (CGFloat) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                onNaturalHeightChange(height)
+            }
+            .frame(height: cachedHeight, alignment: .top)
+            .clipped()
     }
 }
 
