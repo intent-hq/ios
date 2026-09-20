@@ -112,10 +112,10 @@ struct CreationPickerControlsTests {
             await SyntheticBadgeHost.publishesAccessibilityTree()
         }
     )
-    func bothSurroundingLayoutsRenderReadablePickersAtDynamicTypeSizes() throws {
+    func bothSurroundingLayoutsRenderReadablePickersAtDynamicTypeSizes() async throws {
         for layout in PickerHostLayout.allCases {
-            let normal = try render(layout: layout, dynamicTypeSize: .large)
-            let accessibility = try render(layout: layout, dynamicTypeSize: .accessibility3)
+            let normal = try await render(layout: layout, dynamicTypeSize: .large)
+            let accessibility = try await render(layout: layout, dynamicTypeSize: .accessibility3)
             for snapshot in [normal, accessibility] {
                 #expect(snapshot.provider.label?.contains("Provider") == true)
                 #expect(snapshot.provider.label?.contains(PickerLayoutHost.provider.displayName) == true)
@@ -174,8 +174,8 @@ struct CreationPickerControlsTests {
             await SyntheticBadgeHost.publishesAccessibilityTree()
         }
     )
-    func addAgentLayoutDisablesProviderPickerDuringCreation() throws {
-        let snapshot = try render(layout: .agent, dynamicTypeSize: .large, isCreating: true)
+    func addAgentLayoutDisablesProviderPickerDuringCreation() async throws {
+        let snapshot = try await render(layout: .agent, dynamicTypeSize: .large, isCreating: true)
         #expect(snapshot.provider.traits.contains(.notEnabled))
     }
 
@@ -183,12 +183,12 @@ struct CreationPickerControlsTests {
         layout: PickerHostLayout,
         dynamicTypeSize: DynamicTypeSize,
         isCreating: Bool = false
-    ) throws -> PickerLayoutSnapshot {
+    ) async throws -> PickerLayoutSnapshot {
         let content = NavigationStack {
             PickerLayoutHost(layout: layout, isCreating: isCreating)
         }
         .environment(\.dynamicTypeSize, dynamicTypeSize)
-        return try SyntheticBadgeHost.render(
+        return try await SyntheticBadgeHost.render(
             content,
             width: 430,
             height: Self.pickerHostHeight
