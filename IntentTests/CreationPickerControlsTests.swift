@@ -201,6 +201,12 @@ struct CreationPickerControlsTests {
                 identifier: "creation.modelPicker",
                 in: hostView
             )
+            print(
+                "PICKER_DIAGNOSTIC layout=\(layout) size=\(dynamicTypeSize) "
+                    + "category=\(hostView.traitCollection.preferredContentSizeCategory.rawValue) "
+                    + "provider={\(Self.elementDiagnostics(provider, in: window))} "
+                    + "model={\(Self.elementDiagnostics(model, in: window))}"
+            )
             return PickerLayoutSnapshot(
                 hostFrame: window.bounds,
                 provider: Self.snapshot(provider, in: window),
@@ -216,6 +222,24 @@ struct CreationPickerControlsTests {
             frame: window.convert(element.accessibilityFrame, from: nil),
             traits: element.accessibilityTraits
         )
+    }
+
+    private static func elementDiagnostics(_ element: NSObject, in window: UIWindow) -> String {
+        var facts: [String] = []
+        var current: NSObject? = element
+        var visited: Set<ObjectIdentifier> = []
+        while let object = current,
+              facts.count < 6,
+              visited.insert(ObjectIdentifier(object)).inserted {
+            let frame = window.convert(object.accessibilityFrame, from: nil)
+            let viewFrame = (object as? UIView).map { window.convert($0.bounds, from: $0) }
+            facts.append(
+                "type=\(String(reflecting: type(of: object))) frame=\(frame) "
+                    + "viewFrame=\(String(describing: viewFrame)) isElement=\(object.isAccessibilityElement)"
+            )
+            current = (object as? UIAccessibilityElement)?.accessibilityContainer as? NSObject
+        }
+        return facts.joined(separator: " -> ")
     }
 
     private static func pickerElement(identifier: String, in hostView: UIView) throws -> NSObject {
