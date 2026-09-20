@@ -60,7 +60,12 @@ every PR in the merge-blocking `SwiftLint` job (the release is pinned by sha256 
 `.github/workflows/ci.yml`). `SWIFTLINT_REPORTER=<name>` overrides the config's
 reporter — CI sets `github-actions-logging` for PR annotations; leave it unset locally.
 `scripts/test-swiftlint.sh` (bash, stubbed swiftlint) covers the wrapper; run it after
-editing the wrapper — CI runs it on the Linux job too.
+editing the wrapper — CI runs it on the Linux job too. The Xcode lint phase
+(`scripts/swiftlint-xcode.sh`) reads `scripts/swiftlint-xcode-inputs.xcfilelist`; when a
+Swift source is added, removed or moved under `Intent/`, `IntentTests/` or
+`IntentUITests/`, update that list (sorted with `LC_ALL=C`) — the `SwiftLint` job runs
+`scripts/check-swiftlint-inputs.sh`, which fails on any drift from the tracked sources
+(`scripts/test-check-swiftlint-inputs.sh` covers the check; CI runs it on the Linux job).
 
 ## Releases
 

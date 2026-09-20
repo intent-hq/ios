@@ -198,6 +198,23 @@ struct WorkspaceRowPresentationTests {
         }
     }
 
+    // With a hardware keyboard attached, iPadOS draws the focused sidebar row's
+    // selection as an accent-coloured halo once the row background is
+    // customised (ios#339), so the sidebar List must keep the default focus
+    // effect disabled. Scans the packaged copy of the source (see
+    // TestSourceInputs), never the checkout.
+    @Test func sidebarListDisablesKeyboardFocusEffect() throws {
+        let source = try String(
+            contentsOf: TestSourceInputs.url(for: "Intent/Views/Workspaces/WorkspaceListSidebar.swift"),
+            encoding: .utf8
+        )
+        let listStyle = try #require(source.range(of: ".listStyle(.sidebar)"))
+        let rowHelper = try #require(source.range(of: "private func sidebarRow("))
+        let listModifiers = source[listStyle.upperBound..<rowHelper.lowerBound]
+
+        #expect(listModifiers.contains(".focusEffectDisabled()"))
+    }
+
     private struct RGBA {
         let red: CGFloat
         let green: CGFloat

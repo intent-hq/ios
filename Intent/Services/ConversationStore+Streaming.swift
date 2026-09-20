@@ -6,7 +6,12 @@ extension ConversationStore {
 
     func replayBufferedStreamEvents() {
         let buffer = streamEventBuffer
-        streamEventBuffer.removeAll()
+        let overflowed = streamEventBufferOverflowed
+        clearStreamEventBuffer()
+        if overflowed {
+            recoverFromLossyStreamEventBuffer()
+            return
+        }
         guard !buffer.isEmpty else { return }
 
         let hasTurnBoundary = buffer.contains { event in
@@ -31,6 +36,83 @@ extension ConversationStore {
 
         if buffer.contains(where: { $0.eventType == "agent:stream:activity" }) {
             isStreaming = true
+        }
+    }
+
+    /// The retained events stopped being a complete record of the load window,
+    /// so nothing is replayed: the daemon's `agent.get` settles streaming state
+    /// and, without a live chat channel to lean on, a full transcript refetch
+    /// recovers whatever the dropped events carried. The refetch runs inside a
+    /// load window held from this call (not from when its task runs) so events
+    /// arriving meanwhile are buffered and replayed on top of the page rather
+    /// than deleted by it. The streaming-state reply is authoritative — a
+    /// dropped `agent:stream:end` must be able to settle a stale `true` — so it
+    /// is fetched after the page has landed (a page whose last assistant row is
+    /// still marked streaming would otherwise re-raise the flag over an idle
+    /// answer that arrived first); it still yields to anything the live channel
+    /// applied while it was in flight, and work scheduled under a binding that
+    /// `reset()` or an agent switch has since replaced never runs.
+    private func recoverFromLossyStreamEventBuffer() {
+        guard let agentId else { return }
+        AppLog.conversation.warning(
+            "[ConversationStore] stream-event buffer overflowed during initial load "
+                + "for agent \(agentId) — reconciling from the daemon"
+        )
+        let generation = liveTranscript.bindingGeneration
+        let liveStateVersion = liveTranscript.liveStateVersion
+        guard liveTranscript.shouldRefetchAfterLegacyStreamEnd else {
+            Task {
+                guard generation == liveTranscript.bindingGeneration else { return }
+                await fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
+            }
+            return
+        }
+        liveTranscript.holdingLoadWindow { [self] in
+            await fetchRecoveryPage(agentId: agentId, generation: generation)
+            guard generation == liveTranscript.bindingGeneration else { return }
+            await fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
+        }
+    }
+
+    /// Entry point of the recovery page refetch: the generation is re-checked
+    /// in the same main-actor hop as the rebind inside `fetchConversation`, so
+    /// a `reset()` that landed after recovery was scheduled cannot bring the
+    /// replaced binding back.
+    func fetchRecoveryPage(agentId: String, generation: Int) async {
+        guard generation == liveTranscript.bindingGeneration else { return }
+        await fetchConversation(agentId: agentId)
+    }
+
+    func clearStreamEventBuffer() {
+        streamEventBuffer.removeAll()
+        streamEventBufferBytes = 0
+        streamEventBufferOverflowed = false
+    }
+
+    private func bufferStreamEvent(_ eventType: String, data: [String: Any]) {
+        if streamEventBufferOverflowed { return }
+        let bytes = Self.estimatedBytes(of: data) + eventType.utf8.count
+        let budget = streamEventBufferBudget
+        if streamEventBuffer.count >= budget.maxEvents || streamEventBufferBytes + bytes > budget.maxBytes {
+            streamEventBuffer.removeAll()
+            streamEventBufferBytes = 0
+            streamEventBufferOverflowed = true
+            return
+        }
+        streamEventBuffer.append((eventType: eventType, data: data))
+        streamEventBufferBytes += bytes
+    }
+
+    private static func estimatedBytes(of value: Any) -> Int {
+        switch value {
+        case let string as String:
+            return string.utf8.count
+        case let dictionary as [String: Any]:
+            return dictionary.reduce(0) { $0 + $1.key.utf8.count + estimatedBytes(of: $1.value) }
+        case let array as [Any]:
+            return array.reduce(0) { $0 + estimatedBytes(of: $1) }
+        default:
+            return MemoryLayout<Int64>.size
         }
     }
 
@@ -123,7 +205,7 @@ extension ConversationStore {
         }
 
         if isLoading {
-            streamEventBuffer.append((eventType: eventType, data: data))
+            bufferStreamEvent(eventType, data: data)
             return
         }
 

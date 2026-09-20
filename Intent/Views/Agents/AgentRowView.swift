@@ -32,6 +32,32 @@ extension AgentAvatarState {
     }
 }
 
+extension AgentSession {
+    /// Context-menu title of the per-agent notification mute toggle.
+    var notificationsMuteToggleTitle: String {
+        notificationsMuted ? "Unmute notifications" : "Mute notifications"
+    }
+
+    /// Context-menu symbol of the per-agent notification mute toggle.
+    var notificationsMuteToggleSymbol: String {
+        notificationsMuted ? "bell" : "bell.slash"
+    }
+}
+
+/// Context-menu toggle of the daemon-owned per-agent notification mute
+/// (`agent.update { changes: { notificationsMuted } }`). Rendered by the
+/// row's containing list so it composes with the row's selection button.
+struct AgentNotificationsMuteButton: View {
+    let agent: AgentSession
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(agent.notificationsMuteToggleTitle, systemImage: agent.notificationsMuteToggleSymbol)
+        }
+    }
+}
+
 struct AgentRowView: View {
     let agent: AgentSession
     let colorScheme: ColorScheme
@@ -40,6 +66,14 @@ struct AgentRowView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var avatarState: AgentAvatarState { AgentAvatarState.state(for: agent) }
+
+    /// The needs-user corner cue (question / discussion / blocker) is the
+    /// row's attention badge: a muted agent shows the `bell.slash` glyph by
+    /// its name instead. The running dot is activity, not attention, and is
+    /// unaffected.
+    private var cornerSymbol: String? {
+        agent.notificationsMuted ? nil : avatarState.cornerSymbol
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: Constants.AgentRow.rowSpacing) {
@@ -67,7 +101,7 @@ struct AgentRowView: View {
                         height: Constants.AgentRow.activeDotSize
                     )
                     .offset(x: Constants.AgentRow.activeDotOffset, y: -Constants.AgentRow.activeDotOffset)
-            } else if let symbol = avatarState.cornerSymbol {
+            } else if let symbol = cornerSymbol {
                 Image(systemName: symbol)
                     .font(.system(size: Constants.AgentRow.attentionIconSize))
                     .foregroundStyle(avatarState.cornerColor)
@@ -133,6 +167,21 @@ struct AgentRowView: View {
                 .layoutPriority(1)
 
             backgroundBadge
+            mutedGlyph
+        }
+    }
+
+    @ViewBuilder
+    private var mutedGlyph: some View {
+        if agent.notificationsMuted {
+            Image(systemName: "bell.slash")
+                .font(.system(size: Constants.AgentRow.badgeFontSize, weight: .semibold))
+                .foregroundStyle(Theme.mutedForeground(
+                    for: colorScheme,
+                    contrast: colorSchemeContrast
+                ))
+                .accessibilityLabel("Notifications muted")
+                .fixedSize()
         }
     }
 

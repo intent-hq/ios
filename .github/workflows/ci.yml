@@ -71,6 +71,12 @@ jobs:
       - name: swiftlint.sh self-tests
         run: scripts/test-swiftlint.sh
 
+      # Exercises the xcfilelist drift check in scripts/check-swiftlint-inputs.sh
+      # against a fixture git repo (missing, stale, unsorted, pruned entries);
+      # pure bash + git.
+      - name: check-swiftlint-inputs.sh self-tests
+        run: scripts/test-check-swiftlint-inputs.sh
+
   swiftlint:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
@@ -82,6 +88,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # The Xcode lint phase only warns and skips diagnostics when
+      # scripts/swiftlint-xcode-inputs.xcfilelist drifts from the tracked Swift
+      # sources; this strict check keeps that drift merge-blocking (ios#384).
+      - name: Check SwiftLint Xcode input list
+        run: scripts/check-swiftlint-inputs.sh
 
       # scripts/swiftlint.sh rejects any version but the pinned one, so
       # install exactly the official Linux release asset rather than whatever
@@ -202,26 +214,76 @@ jobs:
       # In-process tailcat echo server for the Swift smoke test; prints
       # its connection token on the first line of stdout. The token
       # reaches the simulator test process via the TEST_RUNNER_ prefix.
+      # Startup fetches the public DERP map (https://tailcat.dev/derpmap.json)
+      # under a 10 s deadline hard-coded inside tailcat; a single slow
+      # fetch used to fail the whole job (ios#388), so a start that exits
+      # early or produces no token within 30 s is retried with backoff
+      # (5 s, 15 s, 30 s) and the step fails only after the last attempt,
+      # naming the DERP-map fetch when tcecho's stderr blames it.
       - name: Start tailcat echo server
         working-directory: TailcatKit
+        env:
+          TCECHO_BIN: ./build/tcecho
+          TCECHO_BACKOFF: 5 15 30
         run: |
-          ./build/tcecho > /tmp/tcecho-token.txt 2>/tmp/tcecho-err.txt &
-          pid=$!
-          for i in $(seq 1 30); do
-            [ -s /tmp/tcecho-token.txt ] && break
-            if ! kill -0 "$pid" 2>/dev/null; then
-              echo "tcecho exited during startup:" >&2
-              cat /tmp/tcecho-err.txt >&2
+          derp_cause() {
+            grep -q 'fetching DERPMap' /tmp/tcecho-err.txt 2>/dev/null
+          }
+          start_once() {
+            : > /tmp/tcecho-token.txt
+            : > /tmp/tcecho-err.txt
+            "$TCECHO_BIN" > /tmp/tcecho-token.txt 2>/tmp/tcecho-err.txt &
+            pid=$!
+            for _ in $(seq 1 30); do
+              [ -s /tmp/tcecho-token.txt ] && return 0
+              if ! kill -0 "$pid" 2>/dev/null; then
+                wait "$pid" 2>/dev/null || true
+                echo "tcecho exited during startup:" >&2
+                sed 's/^/  /' /tmp/tcecho-err.txt >&2
+                return 1
+              fi
+              sleep 1
+            done
+            echo "tcecho produced no token within 30s; stopping it:" >&2
+            sed 's/^/  /' /tmp/tcecho-err.txt >&2
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            return 1
+          }
+          read -r -a backoff <<< "$TCECHO_BACKOFF"
+          attempts=$(( ${#backoff[@]} + 1 ))
+          derp_failures=0
+          for attempt in $(seq 1 "$attempts"); do
+            if start_once; then
+              break
+            fi
+            if derp_cause; then
+              derp_failures=$(( derp_failures + 1 ))
+              echo "attempt $attempt/$attempts failed: public DERP-map fetch timed out or failed (ios#388)" >&2
+            else
+              echo "attempt $attempt/$attempts failed" >&2
+            fi
+            if [ "$attempt" -eq "$attempts" ]; then
+              if [ "$derp_failures" -eq "$attempts" ]; then
+                echo "::error title=tcecho did not start::the public DERP-map fetch (https://tailcat.dev/derpmap.json) failed on all $attempts attempts; see ios#388"
+              elif [ "$derp_failures" -gt 0 ]; then
+                echo "::error title=tcecho did not start::tcecho failed to start after $attempts attempts; $derp_failures of them failed fetching the public DERP map (https://tailcat.dev/derpmap.json, ios#388), see the step log for the others"
+              else
+                echo "::error title=tcecho did not start::tcecho failed to start after $attempts attempts; see its stderr in the step log"
+              fi
               exit 1
             fi
-            sleep 1
+            delay=${backoff[attempt - 1]}
+            echo "retrying in ${delay}s" >&2
+            sleep "$delay"
           done
           token=$(head -n 1 /tmp/tcecho-token.txt)
           if [ -z "$token" ]; then
-            echo "tcecho failed to start" >&2
+            echo "tcecho started but printed an empty token" >&2
             cat /tmp/tcecho-err.txt >&2
             exit 1
           fi
+          [ "$attempt" -eq 1 ] || echo "tcecho started on attempt $attempt/$attempts"
           echo "::add-mask::$token"
           echo "TAILCAT_SMOKE_TOKEN=$token" >> "$GITHUB_ENV"
 
@@ -282,11 +344,12 @@ jobs:
           fi
 
       # InfoPlistSyncTests, PlatformGuardAllowlistTests,
-      # ObjCCallbackIsolationTests and ExternalLinkTests inspect repository
-      # files at runtime. They must read the copies packaged into
-      # IntentTests.xctest, never the checkout the bundle was compiled in: that
-      # path does not exist on a physical device (intent-hq/ios#320,
-      # intent-hq/ios#364, intent-hq/ios#373). Re-run just
+      # ObjCCallbackIsolationTests, ExternalLinkTests and
+      # PrivacyManifestDriftTests inspect repository files at runtime. They
+      # must read the copies packaged into IntentTests.xctest, never the
+      # checkout the bundle was compiled in: that path does not exist on a
+      # physical device (intent-hq/ios#320, intent-hq/ios#364,
+      # intent-hq/ios#373, intent-hq/ios#381). Re-run just
       # those suites against the same build with the source tree moved aside,
       # so they can only pass by reading the bundled copies. Empty stand-in
       # directories keep the project's synchronized folders resolvable for
@@ -295,7 +358,7 @@ jobs:
       - name: Source-independence check (ios#320)
         env:
           RESULT_BUNDLE: TestResults-source-moved
-          ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests IntentTests/ObjCCallbackIsolationTests IntentTests/ExternalLinkTests
+          ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests IntentTests/ObjCCallbackIsolationTests IntentTests/ExternalLinkTests IntentTests/PrivacyManifestDriftTests
         run: |
           moved="$RUNNER_TEMP/source-moved"
           mkdir -p "$moved"
