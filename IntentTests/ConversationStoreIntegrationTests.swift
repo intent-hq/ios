@@ -119,6 +119,7 @@ struct ConversationStoreIntegrationTests {
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
         #expect(fake.hasSubscriptionHandler(id: "sub-2"))
         #expect(store.liveTranscript.nextRetryDelay == nil, "an applied snapshot resets the backoff")
+        #expect(!fake.didCallMethod("agent.getConversation"), "the timeout retries the channel, it never fetches")
     }
 
     /// A rejected registration self-heals on the retry schedule, doubling
@@ -143,6 +144,7 @@ struct ConversationStoreIntegrationTests {
         try await waitUntil("the retried registration's snapshot") { store.messages.map(\.id) == ["msg-1"] }
         #expect(!store.isLoading)
         #expect(store.liveTranscript.nextRetryDelay == nil)
+        #expect(!fake.didCallMethod("agent.getConversation"), "a rejected registration retries, it never fetches")
     }
 
     /// A delayed empty snapshot over a populated transcript is rejected: the

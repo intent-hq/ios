@@ -111,9 +111,7 @@ struct DemoFixturesTests {
     }
 
     @Test func conversationFixtureParses() throws {
-        let result = DemoFixtures.response(for: "agent.getConversation", params: [:])
-        let dict = try #require(result as? [String: Any])
-        let items = try #require(dict["messages"] as? [[String: Any]])
+        let items = try conversationMessages(agentId: nil).items
         let messages = items.compactMap { ConversationMessage.parseMessage($0) }
         #expect(messages.count == items.count)
         #expect(messages.contains { $0.role == .user })
@@ -126,15 +124,16 @@ struct DemoFixturesTests {
 
     // MARK: - Per-agent conversation routing
 
+    /// The transcript as the app loads it: the `chat.subscribe` seq-0
+    /// snapshot push routed by `agentId`.
     private func conversationMessages(agentId: String?) throws -> (items: [[String: Any]], total: Int) {
         var params: [String: Any] = [:]
         if let agentId {
             params["agentId"] = agentId
         }
-        let result = DemoFixtures.response(for: "agent.getConversation", params: params)
-        let dict = try #require(result as? [String: Any])
-        let items = try #require(dict["messages"] as? [[String: Any]])
-        let total = try #require(dict["totalMessages"] as? Int)
+        let push = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: params))
+        let items = try #require(push.snapshot)
+        let total = try #require(push.snapshotMeta?["totalMessages"] as? Int)
         return (items, total)
     }
 
@@ -189,7 +188,7 @@ struct DemoFixturesTests {
 
     /// The transcript is loaded from the `chat.subscribe` seq-0 snapshot, so
     /// the long transcript the scroll UI tests run against must ride that
-    /// push — the same rows `agent.getConversation` serves the recovery seek.
+    /// push — the same rows the `agent.getConversation` recovery seek serves.
     @Test func chatSubscribeSnapshotCarriesTheRoutedTranscript() throws {
         let long = ["agentId": DemoFixtures.longConversationAgentId]
         let push = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: long))
@@ -199,12 +198,20 @@ struct DemoFixturesTests {
         #expect(push.subscriptionId == DemoFixtures.chatSubscriptionId(agentId: DemoFixtures.longConversationAgentId))
         #expect(ack["subscriptionId"] as? String == push.subscriptionId)
 
-        let expected = try conversationMessages(agentId: DemoFixtures.longConversationAgentId)
+        let expectedIds = DemoFixtures.longConversationMessages.compactMap { $0["id"] as? String }
         let rows = try #require(push.snapshot)
-        #expect(rows.compactMap { $0["id"] as? String } == expected.items.compactMap { $0["id"] as? String })
-        #expect(push.snapshotMeta?["totalMessages"] as? Int == expected.total)
+        let rowIds = rows.compactMap { $0["id"] as? String }
+        #expect(rowIds == expectedIds)
+        #expect(push.snapshotMeta?["totalMessages"] as? Int == expectedIds.count)
         #expect(push.snapshotMeta?["truncated"] as? Bool == false)
         #expect(push.snapshotMessages?.count == rows.count, "every long-transcript row decodes")
+
+        let seek: [String: Any] = [
+            "agentId": DemoFixtures.longConversationAgentId, "aroundMessageId": try #require(rowIds.first), "limit": 1,
+        ]
+        let served = DemoFixtures.response(for: "agent.getConversation", params: seek) as? [String: Any]
+        let seekRows = try #require(served?["messages"] as? [[String: Any]])
+        #expect(seekRows.compactMap { $0["id"] as? String } == rowIds, "the seek reads the transcript the push carries")
 
         let screenshot = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: [:]))
         #expect(screenshot.snapshot?.count == 4)
@@ -556,10 +563,10 @@ extension DemoFixturesTests {
             "--demo-long-slim-tool-rows=",
         ]) == .standalone)
         #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-long-slim-tool-rows=sideways"]) == .leading)
-        // `agent.getConversation` serves the process default.
-        let served = DemoFixtures.response(
-            for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId])
-        let items = (served as? [String: Any])?["messages"] as? [[String: Any]]
+        // The `chat.subscribe` snapshot serves the process default.
+        let push = DemoFixtures.subscriptionPush(
+            for: "chat.subscribe", params: ["agentId": DemoFixtures.longConversationAgentId])
+        let items = push?.snapshot
         let expected = DemoFixtures.longConversationMessages(slimToolRows: DemoFixtures.longConversationSlimToolRowLayout)
         #expect(items?.compactMap { $0["id"] as? String } == expected.compactMap { $0["id"] as? String })
         #expect(items?.count == expected.count)
@@ -682,11 +689,11 @@ extension DemoFixturesTests {
                 for: "agent.list",
                 params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]
             ),
-            DemoFixtures.response(for: "agent.getConversation", params: [:]),
-            DemoFixtures.response(
-                for: "agent.getConversation",
+            try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: [:])?.snapshot),
+            try #require(DemoFixtures.subscriptionPush(
+                for: "chat.subscribe",
                 params: ["agentId": DemoFixtures.longConversationAgentId]
-            ),
+            )?.snapshot),
             DemoFixtures.response(
                 for: "hook.list",
                 params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]
