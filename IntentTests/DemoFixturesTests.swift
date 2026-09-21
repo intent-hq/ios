@@ -187,6 +187,31 @@ struct DemoFixturesTests {
         #expect(long.items.filter { text(of: $0).contains(DemoFixtures.longConversationLastSentence) }.count == 1)
     }
 
+    /// The transcript is loaded from the `chat.subscribe` seq-0 snapshot, so
+    /// the long transcript the scroll UI tests run against must ride that
+    /// push — the same rows `agent.getConversation` serves the recovery seek.
+    @Test func chatSubscribeSnapshotCarriesTheRoutedTranscript() throws {
+        let long = ["agentId": DemoFixtures.longConversationAgentId]
+        let push = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: long))
+        let ack = try #require(DemoFixtures.response(for: "chat.subscribe", params: long) as? [String: Any])
+        #expect(push.kind == .snapshot)
+        #expect(push.seq == 0)
+        #expect(push.subscriptionId == DemoFixtures.chatSubscriptionId(agentId: DemoFixtures.longConversationAgentId))
+        #expect(ack["subscriptionId"] as? String == push.subscriptionId)
+
+        let expected = try conversationMessages(agentId: DemoFixtures.longConversationAgentId)
+        let rows = try #require(push.snapshot)
+        #expect(rows.compactMap { $0["id"] as? String } == expected.items.compactMap { $0["id"] as? String })
+        #expect(push.snapshotMeta?["totalMessages"] as? Int == expected.total)
+        #expect(push.snapshotMeta?["truncated"] as? Bool == false)
+        #expect(push.snapshotMessages?.count == rows.count, "every long-transcript row decodes")
+
+        let screenshot = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: [:]))
+        #expect(screenshot.snapshot?.count == 4)
+        #expect(DemoFixtures.subscriptionPush(for: "agent.getConversation", params: long) == nil)
+        #expect(DemoFixtures.subscriptionPush(for: "agent.get", params: long) == nil)
+    }
+
     /// The long transcript is coordinator-shaped (intent-hq/ios#304, #305):
     /// paired tool calls, agent-to-agent report rows attributed to the
     /// delegates the coordinator waits on, thinking blocks, and markdown
