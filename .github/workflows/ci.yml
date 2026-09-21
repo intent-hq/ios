@@ -80,10 +80,10 @@ jobs:
   swiftlint:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
-    # SwiftLint" step in build-and-test never sees a skipped job. Lint needs
-    # no Go, SPM or simulator work: just the checkout and the toolchain's
-    # SourceKit.
-    runs-on: macos-15
+    # SwiftLint" step in build-and-test never sees a skipped job. The official
+    # Linux release uses its in-process sourcekitd, so lint needs no macOS,
+    # Xcode, Go, SPM or simulator work.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -95,39 +95,22 @@ jobs:
       - name: Check SwiftLint Xcode input list
         run: scripts/check-swiftlint-inputs.sh
 
-      # Same Xcode selection logic as the iOS job below: SwiftLint uses
-      # SourceKit from the selected toolchain, so lint with the toolchain the
-      # build compiles with.
-      - name: Select Xcode
-        run: |
-          echo "Available Xcode bundles:"
-          ls -d /Applications/Xcode*.app 2>/dev/null || true
-          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
-          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
-            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-            echo "Selected $xcode"
-            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
-          else
-            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
-            xcodebuild -version
-          fi
-
       # scripts/swiftlint.sh rejects any version but the pinned one, so
-      # install exactly that release asset rather than `brew install
-      # swiftlint` (the formula floats) or whatever the image preinstalls.
+      # install exactly the official Linux release asset rather than whatever
+      # the image preinstalls.
       # The sha256 is the release asset's; recompute it from a fresh download
       # when bumping the version.
       - name: Install SwiftLint 0.65.1
         env:
           SWIFTLINT_VERSION: 0.65.1
-          SWIFTLINT_SHA256: c1e429b0599cf1b516f369a2d9ec04eaf0e436f3c12b637df8851fa52ff694d0
+          SWIFTLINT_SHA256: caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d
         run: |
           cd "$RUNNER_TEMP"
-          curl -fsSL -o portable_swiftlint.zip \
-            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
-          echo "${SWIFTLINT_SHA256}  portable_swiftlint.zip" | shasum -a 256 -c
+          curl -fsSL -o swiftlint_linux_amd64.zip \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/swiftlint_linux_amd64.zip"
+          echo "${SWIFTLINT_SHA256}  swiftlint_linux_amd64.zip" | sha256sum -c -
           mkdir -p swiftlint
-          unzip -q portable_swiftlint.zip -d swiftlint
+          unzip -q swiftlint_linux_amd64.zip -d swiftlint
           echo "$RUNNER_TEMP/swiftlint" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/swiftlint/swiftlint" version
 
@@ -343,18 +326,22 @@ jobs:
       # (xcodebuild refuses an existing path). xcodebuild forwards its
       # TEST_RUNNER_-prefixed environment variables into the test process
       # (minus the prefix), carrying the tcecho token to the TailcatKit
-      # smoke test. ONLY_TESTING is set only on a workflow_dispatch, so a
-      # pull_request run always executes the full bundle. On a filtered run the
-      # script resolves every selector against xcodebuild -enumerate-tests
-      # before testing and checks the result bundle afterwards: a selector that
-      # matches or executes nothing fails the step with exit 82, an unverifiable
-      # selection with 83, and the per-selector table is appended to the job
-      # summary (see the script header).
+      # smoke test. A pull_request (or unfiltered dispatch) uses the unit-only
+      # subcommand, which skips IntentUITests without selector enumeration. A
+      # filtered workflow_dispatch retains the regular verified-selector path:
+      # a selector that matches or executes nothing fails with exit 82, an
+      # unverifiable selection with 83, and the per-selector table is appended
+      # to the job summary (see the script header).
       - name: Run unit tests
         env:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
-        run: scripts/xcodebuild.sh test-without-building
+        run: |
+          if [ -n "$ONLY_TESTING" ]; then
+            scripts/xcodebuild.sh test-without-building
+          else
+            scripts/xcodebuild.sh test-without-building-unit
+          fi
 
       # InfoPlistSyncTests, PlatformGuardAllowlistTests,
       # ObjCCallbackIsolationTests, ExternalLinkTests and
@@ -391,23 +378,148 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: ios-test-results
+          name: ios-unit-test-results
           path: |
             TestResults
             TestResults-source-moved
 
+      # See the job comment: turns a go-test or swiftlint failure into a
+      # failure of this (the only ruleset-required) job. Both normally finish
+      # minutes before this step runs, so the wait is usually zero. A failing
+      # `gh api` call (transient network/API error) is retried like an
+      # empty conclusion rather than aborting under `set -e`; the 20-minute
+      # timeout below is the only hard failure besides a failed required job.
+      - name: Require Go unit tests and SwiftLint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 80); do
+            if ! jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "Go unit tests (TailcatKit)" or .name == "SwiftLint") | "\(.name)\t\(.conclusion // "")"'); then
+              echo "gh api failed (attempt $i/80); retrying in 15s" >&2
+              sleep 15
+              continue
+            fi
+            pending=0
+            for name in "Go unit tests (TailcatKit)" "SwiftLint"; do
+              c=$(printf '%s\n' "$jobs" | awk -F'\t' -v n="$name" '$1 == n { print $2 }')
+              case "$c" in
+                success) ;;
+                "") pending=1 ;;
+                *) echo "$name job concluded: $c" >&2; exit 1 ;;
+              esac
+            done
+            if [ "$pending" -eq 0 ]; then
+              echo "Go unit tests and SwiftLint passed"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "timed out waiting for the Go unit tests / SwiftLint jobs" >&2
+          exit 1
+
+  ios-ui-tests:
+    name: iOS UI Tests
+    # Pull requests and unfiltered manual runs exercise the complete UI bundle.
+    # Filtered dispatches already run their requested selector in build-and-test.
+    # A human adds this check to the ruleset after merge; build-and-test does not
+    # wait for it, so both macOS jobs release their runners independently.
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      GIT_TERMINAL_PROMPT: '0'
+      SPM_CLONE_DIR: build/SourcePackages
+      RESULT_BUNDLE: UITestResults
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          echo "Available Xcode bundles:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
+            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+            echo "Selected $xcode"
+            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+          else
+            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
+            xcodebuild -version
+          fi
+
+      - name: Pick simulator device
+        run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
+
+      - name: Pre-boot simulator
+        run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
+
+      - name: Cache TailcatKit.xcframework
+        id: tailcat-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            TailcatKit/build/TailcatKit.xcframework
+            TailcatKit/build/tcecho
+          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
+
+      - name: Set up Go
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache-dependency-path: TailcatKit/go.sum
+
+      - name: Build TailcatKit.xcframework
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        run: ./TailcatKit/build_xcframework.sh
+
+      # Populate the shared cache identically to build-and-test. This job never
+      # starts tcecho because IntentUITests do not consume its smoke token.
+      - name: Build tailcat echo server
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        working-directory: TailcatKit
+        run: go build -o build/tcecho ./cmd/tcecho
+
+      - name: Cache SPM packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve SPM packages
+        run: scripts/xcodebuild.sh resolve
+
+      - name: Build for testing
+        run: scripts/xcodebuild.sh build-for-testing
+
+      - name: Simulator state
+        run: |
+          echo "--- simctl boot output:"
+          cat /tmp/simboot.log 2>/dev/null || echo "(no output)"
+          echo "--- device:"
+          xcrun simctl list devices | grep -F "$SIM_UDID" || true
+
+      - name: Run UI tests
+        env:
+          ONLY_TESTING: IntentUITests
+        run: scripts/xcodebuild.sh test-without-building
+
+      - name: Upload UI test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ui-test-results
+          path: |
+            UITestResults
+            UITestResults-retry
+
       # ConversationTranscriptScrollUITests attaches one content-free JSON
-      # record per launch (transcript-recovery-evidence-<test>-<cycle>,
-      # keepAlways) proving the unrealized-end recovery ran. Keep just those
-      # on every run — the full bundle above stays failure-only — by
-      # exporting the bundle's attachments to a scratch dir and copying the
-      # prefix-matched ones. `xcresulttool export attachments` (Xcode 16+)
-      # writes a manifest.json naming each exported file; each bundle is
-      # symlinked under a .xcresult name since RESULT_BUNDLE has none. When
-      # scripts/xcodebuild.sh re-ran a crashed suite, its sibling bundle
-      # (RESULT_BUNDLE-retry) holds that suite's records; they land under
-      # retry/ so the artifact keeps both launches' evidence. No-op when the
-      # bundle is missing or the suite did not run (filtered lane).
+      # record per launch proving the unrealized-end recovery ran. Export only
+      # those records on every run; full result bundles remain failure-only.
       - name: Export transcript recovery evidence
         id: recovery-evidence
         if: always()
@@ -454,41 +566,6 @@ jobs:
           path: ${{ runner.temp }}/recovery-evidence
           retention-days: 14
           if-no-files-found: ignore
-
-      # See the job comment: turns a go-test or swiftlint failure into a
-      # failure of this (the only ruleset-required) job. Both normally finish
-      # minutes before this step runs, so the wait is usually zero. A failing
-      # `gh api` call (transient network/API error) is retried like an
-      # empty conclusion rather than aborting under `set -e`; the 20-minute
-      # timeout below is the only hard failure besides a failed required job.
-      - name: Require Go unit tests and SwiftLint
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for i in $(seq 1 80); do
-            if ! jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name == "Go unit tests (TailcatKit)" or .name == "SwiftLint") | "\(.name)\t\(.conclusion // "")"'); then
-              echo "gh api failed (attempt $i/80); retrying in 15s" >&2
-              sleep 15
-              continue
-            fi
-            pending=0
-            for name in "Go unit tests (TailcatKit)" "SwiftLint"; do
-              c=$(printf '%s\n' "$jobs" | awk -F'\t' -v n="$name" '$1 == n { print $2 }')
-              case "$c" in
-                success) ;;
-                "") pending=1 ;;
-                *) echo "$name job concluded: $c" >&2; exit 1 ;;
-              esac
-            done
-            if [ "$pending" -eq 0 ]; then
-              echo "Go unit tests and SwiftLint passed"
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "timed out waiting for the Go unit tests / SwiftLint jobs" >&2
-          exit 1
 
   visionos-build:
     name: visionOS Build
