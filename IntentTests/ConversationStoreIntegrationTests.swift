@@ -751,7 +751,7 @@ extension ConversationStoreIntegrationTests {
 
     /// Consecutive rejections cannot hold the initial load open forever: the
     /// wait settles at `snapshotTimeout` while the retry schedule goes on.
-    @Test func snapshotWaitIsBoundedAcrossRejectedRegistrations() async throws {
+    @Test func snapshotWaitIsBoundedAcrossRejectedRegistrations() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
         store.liveTranscript.snapshotTimeout = .milliseconds(50)

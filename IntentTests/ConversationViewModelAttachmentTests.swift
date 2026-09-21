@@ -293,6 +293,9 @@ extension ConversationViewModelTests {
 
     // MARK: - Missing-agent detection at load
 
+    /// Bound on load()'s snapshot wait for the never-served cases below.
+    private static let shortSnapshotTimeout: Duration = .milliseconds(50)
+
     /// Configure the fake with every response load() touches, then override
     /// selected methods with errors.
     private func makeLoadableVM(errors: [String: Error] = [:])
@@ -312,7 +315,7 @@ extension ConversationViewModelTests {
         viewModel.store = ConversationStore(connectionManager: fake)
         // load() holds its snapshot wait across a rejected registration up
         // to this bound; keep the never-served cases short.
-        viewModel.store.liveTranscript.snapshotTimeout = .milliseconds(50)
+        viewModel.store.liveTranscript.snapshotTimeout = Self.shortSnapshotTimeout
         return (viewModel, fake)
     }
 
