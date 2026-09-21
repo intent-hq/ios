@@ -61,46 +61,55 @@ struct ConversationStoreTests {
         #expect(store.lastFailedSend == nil)
     }
 
-    @Test func retryWithSameContentReusesMessageId() {
-        let store = ConversationStore()
-        // Simulate a previous failed send
-        store.lastFailedSend = (messageId: "failed-id-123", content: "Hello")
-        // Add a stale optimistic message from the failed attempt
-        let staleMessage = ConversationMessage(
-            id: "failed-id-123",
-            role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: "Hello")]
-        )
-        store.messages.append(staleMessage)
-        #expect(store.messages.count == 1)
+    @Test func retryWithSameContentReusesMessageId() async throws {
+        let fake = FakeConnectionManager()
+        fake.errorQueueMap["agent.sendMessage"] = [NSError(domain: "WebSocket", code: -32_000)]
+        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
 
-        // Simulate what sendMessage does: check lastFailedSend and reuse messageId
-        let content = "Hello"
-        let messageId: String
-        if let failed = store.lastFailedSend, failed.content == content {
-            messageId = failed.messageId
-            store.messages.removeAll { $0.id == failed.messageId }
-        } else {
-            messageId = UUID().uuidString
+        await #expect(throws: (any Error).self) {
+            try await store.sendMessage(agentId: "a", content: "Hello", workspaceId: "w")
         }
+        let failedRequest = try #require(fake.requestLog.first)
+        let failedMessageId = try #require(failedRequest.params["messageId"] as? String)
+        #expect(store.lastFailedSend?.messageId == failedMessageId)
 
-        #expect(messageId == "failed-id-123", "Should reuse the failed messageId")
-        #expect(store.messages.isEmpty, "Stale optimistic message should be removed")
+        try await store.sendMessage(agentId: "a", content: "Hello", workspaceId: "w")
+
+        let retryRequest = try #require(fake.requestLog.last)
+        #expect(retryRequest.params["messageId"] as? String == failedMessageId)
+        #expect(fake.requestLog.count == 2, "the failed send and its retry both reach the command path")
+        #expect(store.lastFailedSend == nil, "a successful retry clears failure tracking")
     }
 
-    @Test func retryWithDifferentContentGeneratesNewId() {
-        let store = ConversationStore()
-        store.lastFailedSend = (messageId: "failed-id-123", content: "Hello")
+    @Test func retryWithDifferentContentGeneratesNewId() async throws {
+        let fake = FakeConnectionManager()
+        fake.errorQueueMap["agent.sendMessage"] = [NSError(domain: "WebSocket", code: -32_000)]
+        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
 
-        let content = "Goodbye"
-        let messageId: String
-        if let failed = store.lastFailedSend, failed.content == content {
-            messageId = failed.messageId
-        } else {
-            messageId = UUID().uuidString
+        await #expect(throws: (any Error).self) {
+            try await store.sendMessage(agentId: "a", content: "Hello", workspaceId: "w")
         }
+        let failedRequest = try #require(fake.requestLog.first)
+        let failedMessageId = try #require(failedRequest.params["messageId"] as? String)
+        let otherMessage = ConversationMessage(
+            id: "other-msg",
+            role: .assistant,
+            contentBlocks: [ContentBlock(type: .text, text: "Response")]
+        )
+        store.messages.append(otherMessage)
 
-        #expect(messageId != "failed-id-123", "Should generate a new messageId for different content")
+        try await store.sendMessage(agentId: "a", content: "Goodbye", workspaceId: "w")
+
+        let retryRequest = try #require(fake.requestLog.last)
+        let retryMessageId = try #require(retryRequest.params["messageId"] as? String)
+        #expect(retryMessageId != failedMessageId, "different content must not reuse the failed send's identity")
+        #expect(
+            store.messages.map(\.id) == [failedMessageId, otherMessage.id, retryMessageId],
+            "a different send preserves the failed row and unrelated transcript rows"
+        )
+        #expect(store.lastFailedSend == nil, "the successful different send clears failure tracking")
     }
 
     @Test func resetClearsLastFailedSend() {
@@ -111,31 +120,35 @@ struct ConversationStoreTests {
         #expect(store.lastFailedSend == nil, "reset() should clear lastFailedSend")
     }
 
-    @Test func staleOptimisticMessageCleanedUpOnRetry() {
-        let store = ConversationStore()
-        // Simulate failed send left an optimistic message
-        store.lastFailedSend = (messageId: "msg-abc", content: "Test message")
-        let staleMsg = ConversationMessage(
-            id: "msg-abc",
-            role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: "Test message")]
-        )
-        let otherMsg = ConversationMessage(
+    @Test func staleOptimisticMessageCleanedUpOnRetry() async throws {
+        let fake = FakeConnectionManager()
+        fake.errorQueueMap["agent.sendMessage"] = [NSError(domain: "WebSocket", code: -32_000)]
+        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        await #expect(throws: (any Error).self) {
+            try await store.sendMessage(agentId: "a", content: "Test message", workspaceId: "w")
+        }
+        let failedRequest = try #require(fake.requestLog.first)
+        let failedMessageId = try #require(failedRequest.params["messageId"] as? String)
+        #expect(store.messages.map(\.id) == [failedMessageId], "the failed send leaves its optimistic row")
+        let otherMessage = ConversationMessage(
             id: "other-msg",
             role: .assistant,
             contentBlocks: [ContentBlock(type: .text, text: "Response")]
         )
-        store.messages = [staleMsg, otherMsg]
-        #expect(store.messages.count == 2)
+        store.messages.append(otherMessage)
 
-        // Simulate retry logic from sendMessage
-        let content = "Test message"
-        if let failed = store.lastFailedSend, failed.content == content {
-            store.messages.removeAll { $0.id == failed.messageId }
-        }
+        try await store.sendMessage(agentId: "a", content: "Test message", workspaceId: "w")
 
-        #expect(store.messages.count == 1, "Only the stale optimistic message should be removed")
-        #expect(store.messages[0].id == "other-msg", "Other messages should be preserved")
+        #expect(
+            store.messages.map(\.id) == [otherMessage.id, failedMessageId],
+            "the retry replaces only the stale failed row and preserves unrelated rows"
+        )
+        #expect(
+            store.messages.count { $0.id == failedMessageId } == 1,
+            "the replacement retry row must not coexist with its stale predecessor"
+        )
     }
 
     // MARK: - rollbackFailedSend (failed send must not supersede pending questions)
