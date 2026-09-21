@@ -1,11 +1,13 @@
 import Foundation
 
 extension ConversationViewModel {
+    /// The transcript comes only from the `chat.subscribe` seq-0 snapshot;
+    /// the load waits for it to apply (or its wait to time out), so the
+    /// new-messages divider anchors against the served rows.
     func load() async {
         await store.subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
-        await store.subscribeLiveChat(agentId: agentId)
 
-        async let conversation: () = store.fetchConversation(agentId: agentId, workspaceId: workspaceId)
+        async let conversation: () = loadTranscript()
         async let queue: () = store.fetchQueue(agentId: agentId)
         async let model: () = fetchCurrentModel()
         async let subscriptions: () = store.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
@@ -16,6 +18,11 @@ extension ConversationViewModel {
         _ = await (conversation, streamingState)
         latchNewMessagesDividerAnchorIfNeeded()
         _ = await (queue, model, subscriptions, hooks, monitors)
+    }
+
+    private func loadTranscript() async {
+        await store.subscribeLiveChat(agentId: agentId, workspaceId: workspaceId)
+        await store.awaitLiveChatSnapshot()
     }
 
     func latchNewMessagesDividerAnchorIfNeeded() {

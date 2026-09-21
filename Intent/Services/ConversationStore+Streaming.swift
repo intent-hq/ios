@@ -40,47 +40,24 @@ extension ConversationStore {
     }
 
     /// The retained events stopped being a complete record of the load window,
-    /// so nothing is replayed: the daemon's `agent.get` settles streaming state
-    /// and, without a live chat channel to lean on, a full transcript refetch
-    /// recovers whatever the dropped events carried. The refetch runs inside a
-    /// load window held from this call (not from when its task runs) so events
-    /// arriving meanwhile are buffered and replayed on top of the page rather
-    /// than deleted by it. The streaming-state reply is authoritative — a
-    /// dropped `agent:stream:end` must be able to settle a stale `true` — so it
-    /// is fetched after the page has landed (a page whose last assistant row is
-    /// still marked streaming would otherwise re-raise the flag over an idle
-    /// answer that arrived first); it still yields to anything the live channel
-    /// applied while it was in flight, and work scheduled under a binding that
-    /// `reset()` or an agent switch has since replaced never runs.
+    /// so nothing is replayed: the transcript itself came from the channel's
+    /// snapshot, and the daemon's `agent.get` settles the streaming state — a
+    /// dropped `agent:stream:end` must be able to settle a stale `true`. The
+    /// reply still yields to anything the live channel applied while it was in
+    /// flight, and work scheduled under a binding that `reset()` or an agent
+    /// switch has since replaced never runs.
     private func recoverFromLossyStreamEventBuffer() {
         guard let agentId else { return }
         AppLog.conversation.warning(
             "[ConversationStore] stream-event buffer overflowed during initial load "
-                + "for agent \(agentId) — reconciling from the daemon"
+                + "for agent \(agentId) — reconciling streaming state from the daemon"
         )
         let generation = liveTranscript.bindingGeneration
         let liveStateVersion = liveTranscript.liveStateVersion
-        guard liveTranscript.shouldRefetchAfterLegacyStreamEnd else {
-            Task {
-                guard generation == liveTranscript.bindingGeneration else { return }
-                await fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
-            }
-            return
-        }
-        liveTranscript.holdingLoadWindow { [self] in
-            await fetchRecoveryPage(agentId: agentId, generation: generation)
+        Task {
             guard generation == liveTranscript.bindingGeneration else { return }
             await fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
         }
-    }
-
-    /// Entry point of the recovery page refetch: the generation is re-checked
-    /// in the same main-actor hop as the rebind inside `fetchConversation`, so
-    /// a `reset()` that landed after recovery was scheduled cannot bring the
-    /// replaced binding back.
-    func fetchRecoveryPage(agentId: String, generation: Int) async {
-        guard generation == liveTranscript.bindingGeneration else { return }
-        await fetchConversation(agentId: agentId)
     }
 
     func clearStreamEventBuffer() {
@@ -151,8 +128,23 @@ extension ConversationStore {
 
     // MARK: - Live chat subscription
 
-    func subscribeLiveChat(agentId: String) async {
-        await liveTranscript.subscribe(agentId: agentId, workspaceId: workspaceId)
+    /// Opens the `chat.subscribe` channel that is the transcript's only
+    /// source; returns once the registration is acked. Its seq-0 snapshot
+    /// (or the snapshot timeout) is awaited via `awaitLiveChatSnapshot`.
+    func subscribeLiveChat(agentId: String, workspaceId: String? = nil) async {
+        bindAgent(agentId)
+        if let workspaceId {
+            self.workspaceId = workspaceId
+        }
+        await liveTranscript.subscribe(agentId: agentId, workspaceId: self.workspaceId)
+        reconcilePendingQuestionRecovery()
+    }
+
+    /// Parks until the pending `chat.subscribe` seq-0 snapshot applied, its
+    /// wait timed out, or the channel was torn down.
+    func awaitLiveChatSnapshot() async {
+        await liveTranscript.awaitSnapshot()
+        reconcilePendingQuestionRecovery()
     }
 
     func handleChatSubscriptionPush(_ push: SubscriptionPush) {
@@ -293,9 +285,6 @@ extension ConversationStore {
 
     private func handleAgentIdle() {
         isStreaming = false
-        if liveTranscript.shouldRefetchAfterLegacyStreamEnd, let agentId {
-            Task { await fetchConversation(agentId: agentId) }
-        }
         if let agentId {
             Task { await fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
         }
@@ -353,10 +342,6 @@ extension ConversationStore {
         if let lastIndex = messages.indices.last,
            messages[lastIndex].isStreaming == true {
             messages[lastIndex].isStreaming = false
-        }
-
-        if liveTranscript.shouldRefetchAfterLegacyStreamEnd, let agentId {
-            Task { await fetchConversation(agentId: agentId) }
         }
     }
 

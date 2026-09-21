@@ -9,38 +9,24 @@ private let kLargePayloadBurstSize = 3
 private struct LoadingStore {
     let store: ConversationStore
     let fake: FakeConnectionManager
-    let fetch: Task<Void, Never>
 }
 
-/// Shared fixture of the stream-event buffer suites below: a store parked in
-/// its initial `agent.getConversation`, plus event and page builders.
+/// Shared fixture of the stream-event buffer suites below: a store whose
+/// `chat.subscribe` registration is acked but whose seq-0 snapshot has not
+/// landed yet (`isLoading`), plus event and row builders.
 @MainActor
 private protocol StreamEventBufferSuite {}
 
 extension StreamEventBufferSuite {
-    func makeLoadingStore(chatLive: Bool = false) async throws -> LoadingStore {
+    func makeLoadingStore() async -> LoadingStore {
         let fake = FakeConnectionManager()
-        fake.pendingMethods.insert("agent.getConversation")
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat-123"]
+        fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
         fake.responseMap["agent.get"] = ["agent": ["id": "a", "isStreaming": false] as [String: Any]]
         let store = ConversationStore(connectionManager: fake)
-        if chatLive { seedLiveChatChannel(store) }
-        let fetch = Task { await store.fetchConversation(agentId: "a", workspaceId: "w") }
-        try await fake.waitForPendingRequests("agent.getConversation")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
         #expect(store.isLoading)
-        return LoadingStore(store: store, fake: fake, fetch: fetch)
-    }
-
-    /// `chatLive` only flips once a seq-0 snapshot is applied (PROTOCOL §7.1);
-    /// activating the channel alone leaves the store on the legacy path.
-    func seedLiveChatChannel(_ store: ConversationStore) {
-        store.setTestChatChannel(subscriptionId: "sub-chat-123")
-        store.handleStreamEvent("subscription.push", params: [
-            "subscriptionId": "sub-chat-123",
-            "kind": "snapshot",
-            "seq": 0,
-            "snapshot": ["agentId": "a", "messages": [] as [[String: Any]]] as [String: Any]
-        ] as [String: Any])
-        #expect(!store.liveTranscript.shouldRefetchAfterLegacyStreamEnd)
+        return LoadingStore(store: store, fake: fake)
     }
 
     func pushUserMessage(_ store: ConversationStore, id: String, content: String = "hi") {
@@ -109,74 +95,73 @@ extension StreamEventBufferSuite {
         ]
     }
 
-    func settleInitialFetch(
-        _ fake: FakeConnectionManager,
-        _ fetch: Task<Void, Never>,
-        page: [[String: Any]] = []
-    ) async {
-        fake.pendingMethods.remove("agent.getConversation")
-        fake.resolvePending("agent.getConversation", with: ["messages": page] as [String: Any])
-        await fetch.value
+    /// Lands the seq-0 snapshot the pending registration owes.
+    func settleInitialLoad(_ fake: FakeConnectionManager, rows: [[String: Any]] = []) {
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-chat-123",
+            seq: 0,
+            conversationSnapshot: rows,
+            metadata: ["truncated": false, "totalMessages": rows.count]
+        ))
     }
 }
 
-/// Retention bound on `streamEventBuffer` while the initial
-/// `agent.getConversation` is in flight (ios#380): a burst under budget
-/// replays in order; a burst over budget is not retained and the store
-/// reconciles from the daemon instead of replaying a lossy buffer.
+/// Retention bound on `streamEventBuffer` while the initial `chat.subscribe`
+/// snapshot is pending (ios#380): the snapshot that ends the load is the
+/// authoritative transcript, so a burst under budget is released without
+/// replaying over it; a burst over budget is not retained and the store
+/// reconciles its streaming state from the daemon instead.
 @MainActor
 struct ConversationStoreStreamEventBufferTests: StreamEventBufferSuite {
     // MARK: - Under budget
 
-    @Test func burstUnderBudgetReplaysInOrder() async throws {
-        let loading = try await makeLoadingStore()
+    @Test func burstUnderBudgetYieldsToTheSnapshot() async throws {
+        let loading = await makeLoadingStore()
         let store = loading.store
         let fake = loading.fake
-        let fetch = loading.fetch
         let ids = (1...8).map { "m\($0)" }
         pushStreamEvent(store, type: "agent:stream:start", extra: ["streamId": "s1"])
         for id in ids { pushUserMessage(store, id: id) }
         #expect(store.streamEventBuffer.count == ids.count + 1)
+        #expect(store.messages.isEmpty, "events are buffered, not applied, while the snapshot is pending")
 
-        await settleInitialFetch(fake, fetch)
+        settleInitialLoad(fake, rows: [userRow(id: "r1")])
 
         #expect(!store.isLoading)
         #expect(store.streamEventBuffer.isEmpty, "the buffer is released once the load settles")
-        #expect(store.messages.map(\.id) == ids, "buffered user messages replay in arrival order")
-        #expect(store.isStreaming)
-        #expect(store.currentStreamId == "s1")
+        #expect(store.messages.map(\.id) == ["r1"], "the snapshot is the transcript; nothing replays over it")
+        #expect(!store.isStreaming, "the idle snapshot settles the streaming state")
         try await expectNever("a recovery fetch for an under-budget burst") {
-            fake.paramsForMethod("agent.getConversation").count > 1 || !fake.paramsForMethod("agent.get").isEmpty
+            fake.paramsForMethod("chat.subscribe").count > 1 || !fake.paramsForMethod("agent.get").isEmpty
         }
     }
 
     // MARK: - Over budget
 
     @Test func burstOverCountBudgetIsBoundedAndReconcilesFromTheDaemon() async throws {
-        let loading = try await makeLoadingStore()
+        let loading = await makeLoadingStore()
         let store = loading.store
         let fake = loading.fake
-        let fetch = loading.fetch
         for index in 1...kCountBurstSize { pushUserMessage(store, id: "m\(index)") }
         #expect(
             store.streamEventBuffer.count < kCountBurstSize,
             "retention while loading must be bounded, not proportional to the burst"
         )
 
-        fake.responseMap["agent.getConversation"] = ["messages": [userRow(id: "r1"), userRow(id: "r2")]]
-        await settleInitialFetch(fake, fetch)
+        settleInitialLoad(fake, rows: [userRow(id: "r1"), userRow(id: "r2")])
 
         #expect(store.streamEventBuffer.isEmpty)
+        #expect(store.messages.map(\.id) == ["r1", "r2"])
         try await waitUntil("the authoritative state fetch") { fake.paramsForMethod("agent.get").count == 1 }
-        try await waitUntil("the recovery refetch to land") { store.messages.map(\.id) == ["r1", "r2"] }
-        #expect(fake.paramsForMethod("agent.getConversation").count == 2, "overflow forces one full refetch")
+        try await expectNever("a transcript re-registration while the live channel is authoritative") {
+            fake.paramsForMethod("chat.subscribe").count > 1
+        }
     }
 
     @Test func burstOverByteBudgetIsBoundedAndReconcilesFromTheDaemon() async throws {
-        let loading = try await makeLoadingStore()
+        let loading = await makeLoadingStore()
         let store = loading.store
         let fake = loading.fake
-        let fetch = loading.fetch
         let payload = String(repeating: "x", count: kLargePayloadBytes)
         for index in 1...kLargePayloadBurstSize {
             pushUserMessage(store, id: "m\(index)", content: payload)
@@ -186,19 +171,16 @@ struct ConversationStoreStreamEventBufferTests: StreamEventBufferSuite {
             "a few oversized events must trip the byte budget"
         )
 
-        fake.responseMap["agent.getConversation"] = ["messages": [userRow(id: "r1")]]
-        await settleInitialFetch(fake, fetch)
+        settleInitialLoad(fake, rows: [userRow(id: "r1")])
 
         #expect(store.streamEventBuffer.isEmpty)
+        #expect(store.messages.map(\.id) == ["r1"])
         try await waitUntil("the authoritative state fetch") { fake.paramsForMethod("agent.get").count == 1 }
-        try await waitUntil("the recovery refetch to land") { store.messages.map(\.id) == ["r1"] }
     }
 
-    @Test func overflowStateIsClearedByReset() async throws {
-        let loading = try await makeLoadingStore()
+    @Test func overflowStateIsClearedByReset() async {
+        let loading = await makeLoadingStore()
         let store = loading.store
-        let fake = loading.fake
-        let fetch = loading.fetch
         store.streamEventBufferBudget = StreamEventBufferBudget(maxEvents: 2, maxBytes: .max)
         pushUserMessage(store, id: "m1")
         pushUserMessage(store, id: "m2")
@@ -214,194 +196,43 @@ struct ConversationStoreStreamEventBufferTests: StreamEventBufferSuite {
         store.reset()
         #expect(!store.streamEventBufferOverflowed)
         #expect(store.streamEventBufferBytes == 0)
-        fake.failPending("agent.getConversation", with: CancellationError())
-        await fetch.value
-    }
-
-    @Test func overflowWithLiveChatChannelReconcilesStateWithoutRefetch() async throws {
-        let loading = try await makeLoadingStore(chatLive: true)
-        let store = loading.store
-        let fake = loading.fake
-        let fetch = loading.fetch
-        overflowBuffer(store)
-        #expect(store.streamEventBuffer.isEmpty)
-
-        await settleInitialFetch(fake, fetch)
-
-        try await waitUntil("the authoritative state fetch") { fake.paramsForMethod("agent.get").count == 1 }
-        try await expectNever("a transcript refetch while the live channel is authoritative") {
-            fake.paramsForMethod("agent.getConversation").count > 1
-        }
+        #expect(!store.isLoading)
     }
 }
 
-/// Lossy-buffer recovery (ios#380): the refetch runs inside a held load
-/// window so events arriving meanwhile survive the older page, the daemon's
-/// streaming state is the final authoritative step, and work scheduled under
-/// a binding that `reset()` replaced never runs.
+/// Lossy-buffer recovery (ios#380): the seq-0 snapshot is the transcript, so
+/// recovery only reconciles the streaming state from the daemon — that reply
+/// is the final authoritative step, yields to newer live-channel activity,
+/// and work scheduled under a binding that `reset()` replaced never runs.
 @MainActor
 struct ConversationStoreStreamRecoveryTests: StreamEventBufferSuite {
-    /// The recovery refetch lands on a populated transcript, where
-    /// `mergeFetchedMessages` deletes rows absent from the page. A user message
-    /// that arrives while that older page is pending must survive it.
-    @Test func recoveryRefetchPreservesMessagesArrivingWhileItIsPending() async throws {
-        let loading = try await makeLoadingStore()
-        let store = loading.store
-        let fake = loading.fake
-        overflowBuffer(store)
-
-        fake.resolvePending("agent.getConversation", with: ["messages": [userRow(id: "r1")]] as [String: Any])
-        await loading.fetch.value
-        #expect(store.messages.map(\.id) == ["r1"])
-
-        try await fake.waitForPendingRequests("agent.getConversation")
-        #expect(fake.paramsForMethod("agent.getConversation").count == 2, "overflow scheduled the recovery")
-        #expect(store.isLoading, "the recovery refetch holds the load window open")
-
-        pushUserMessage(store, id: "m-new")
-        #expect(store.streamEventBuffer.count == 1, "events during recovery are buffered, not applied")
-        #expect(store.messages.map(\.id) == ["r1"])
-
-        fake.pendingMethods.remove("agent.getConversation")
-        fake.resolvePending("agent.getConversation", with: ["messages": [userRow(id: "r1")]] as [String: Any])
-
-        try await waitUntil("the buffered message to replay on top of the recovery page") {
-            store.messages.map(\.id) == ["r1", "m-new"]
-        }
-        #expect(!store.isLoading)
-        #expect(store.streamEventBuffer.isEmpty)
-    }
-
-    /// The replay runs while the initial load is still finishing; the recovery
-    /// window must already be open when that finish lowers `isLoading`, or an
-    /// event landing before the scheduled recovery task runs is applied and
-    /// then deleted by the older recovery page.
-    @Test func recoveryHoldsTheLoadWindowBeforeItsTaskStarts() async throws {
-        let loading = try await makeLoadingStore()
-        let store = loading.store
-        let fake = loading.fake
-        await settleInitialFetch(fake, loading.fetch, page: [userRow(id: "r1")])
-        #expect(!store.isLoading)
-        #expect(store.messages.map(\.id) == ["r1"])
-
-        fake.pendingMethods.insert("agent.getConversation")
-        store.streamEventBufferOverflowed = true
-        store.replayBufferedStreamEvents()
-        #expect(store.isLoading, "the window opens synchronously, before the recovery task gets to run")
-
-        pushUserMessage(store, id: "m-gap")
-        #expect(store.streamEventBuffer.count == 1, "an event in the gap is buffered, not applied")
-        #expect(store.messages.map(\.id) == ["r1"])
-
-        try await fake.waitForPendingRequests("agent.getConversation")
-        fake.pendingMethods.remove("agent.getConversation")
-        fake.resolvePending("agent.getConversation", with: ["messages": [userRow(id: "r1")]] as [String: Any])
-
-        try await waitUntil("the gap message to replay on top of the recovery page") {
-            store.messages.map(\.id) == ["r1", "m-gap"]
-        }
-        #expect(!store.isLoading)
-    }
-
-    /// A recovery refetch that fails (or is cancelled) without a reset must
-    /// still close the held window: `isLoading` lowers, the transcript keeps
-    /// its rows, and events buffered meanwhile are applied rather than lost.
-    @Test func recoveryRefetchFailureClosesTheHeldWindowAndReplays() async throws {
-        let loading = try await makeLoadingStore()
-        let store = loading.store
-        let fake = loading.fake
-        await settleInitialFetch(fake, loading.fetch, page: [userRow(id: "r1")])
-
-        fake.pendingMethods.insert("agent.getConversation")
-        store.streamEventBufferOverflowed = true
-        store.replayBufferedStreamEvents()
-        #expect(store.isLoading)
-        pushUserMessage(store, id: "m-gap")
-
-        try await fake.waitForPendingRequests("agent.getConversation")
-        fake.pendingMethods.remove("agent.getConversation")
-        fake.failPending("agent.getConversation", with: CancellationError())
-
-        try await waitUntil("the failed recovery to close its window") { !store.isLoading }
-        #expect(store.liveTranscript.heldLoadWindows == 0)
-        #expect(store.messages.map(\.id) == ["r1", "m-gap"])
-        #expect(store.streamEventBuffer.isEmpty)
-        #expect(store.agentId == "a")
-    }
-
-    /// The page refetch runs as a child task that hops to the main actor on
-    /// its own; a reset landing between the recovery task's guard and that
-    /// hop must stop the child before it rebinds the old agent.
-    @Test func recoveryPageEntryDoesNotRebindAfterReset() async throws {
-        let loading = try await makeLoadingStore()
-        let store = loading.store
-        let fake = loading.fake
-        await settleInitialFetch(fake, loading.fetch, page: [userRow(id: "r1")])
-        let generation = store.liveTranscript.bindingGeneration
-
-        store.reset()
-        await store.fetchRecoveryPage(agentId: "a", generation: generation)
-
-        #expect(store.agentId == nil)
-        #expect(store.liveTranscript.agentId == nil)
-        #expect(fake.paramsForMethod("agent.getConversation").count == 1)
-        #expect(!store.isLoading)
-    }
-
-    /// Overflow can drop the `agent:stream:end`; when the initial page still
-    /// shows the turn in progress but the daemon reports idle and the recovery
-    /// page is complete, recovery must settle `isStreaming` back to false.
+    /// Overflow can drop the `agent:stream:end`; when the snapshot still shows
+    /// the turn in progress but the daemon reports idle, recovery must settle
+    /// `isStreaming` back to false.
     @Test func recoveryClearsStaleStreamingWhenTheDaemonIsIdle() async throws {
-        let loading = try await makeLoadingStore()
+        let loading = await makeLoadingStore()
         let store = loading.store
         let fake = loading.fake
         overflowBuffer(store)
 
-        fake.responseMap["agent.getConversation"] = ["messages": [assistantRow(id: "as1", streaming: false)]]
-        await settleInitialFetch(fake, loading.fetch, page: [assistantRow(id: "as1", streaming: true)])
+        settleInitialLoad(fake, rows: [assistantRow(id: "as1", streaming: true)])
+        #expect(store.messages.map(\.id) == ["as1"])
 
         try await waitUntil("the daemon's idle reply to clear the stale streaming flag") { !store.isStreaming }
         #expect(fake.paramsForMethod("agent.get").count == 1)
-        try await waitUntil("the recovery page to land") { fake.paramsForMethod("agent.getConversation").count == 2 }
-        try await expectNever("streaming to be raised again without a live event") { store.isStreaming }
-    }
-
-    /// The recovery page and the daemon's state reply must not race: a page
-    /// whose last assistant row is still marked streaming cannot be allowed to
-    /// override the authoritative idle answer, so the state reconcile is the
-    /// final step of recovery.
-    @Test func recoveryStateSettlesAfterAStaleStreamingPage() async throws {
-        let loading = try await makeLoadingStore()
-        let store = loading.store
-        let fake = loading.fake
-        await settleInitialFetch(fake, loading.fetch, page: [assistantRow(id: "as1", streaming: true)])
-        #expect(store.isStreaming)
-
-        fake.pendingMethods.insert("agent.getConversation")
-        store.streamEventBufferOverflowed = true
-        store.replayBufferedStreamEvents()
-        try await fake.waitForPendingRequests("agent.getConversation")
-        fake.pendingMethods.remove("agent.getConversation")
-        fake.resolvePending(
-            "agent.getConversation",
-            with: ["messages": [assistantRow(id: "as1", streaming: true)]] as [String: Any]
-        )
-
-        try await waitUntil("the daemon's idle reply to settle streaming after the stale page") { !store.isStreaming }
-        try await waitUntil("recovery to close its window") { !store.isLoading }
-        #expect(fake.paramsForMethod("agent.get").count == 1)
+        #expect(fake.paramsForMethod("chat.subscribe").count == 1, "recovery never re-registers the channel")
         try await expectNever("streaming to be raised again without a live event") { store.isStreaming }
     }
 
     /// A stale `agent.get` reply must not undo what the authoritative live
     /// channel applied while it was in flight — in either direction.
     @Test func recoveryStateFetchYieldsToNewerLiveChannelActivity() async throws {
-        let loading = try await makeLoadingStore(chatLive: true)
+        let loading = await makeLoadingStore()
         let store = loading.store
         let fake = loading.fake
         fake.pendingMethods.insert("agent.get")
         overflowBuffer(store)
-        await settleInitialFetch(fake, loading.fetch)
+        settleInitialLoad(fake)
         try await fake.waitForPendingRequests("agent.get")
 
         pushAssistantDelta(store, seq: 1, messageId: "as1", text: "Partial")
@@ -432,7 +263,7 @@ struct ConversationStoreStreamRecoveryTests: StreamEventBufferSuite {
     /// `reset()` replaced before it started: no requests for the old agent and
     /// no rebind of the reset store.
     @Test func resetBeforeScheduledRecoveryStartsInvalidatesIt() async throws {
-        let loading = try await makeLoadingStore()
+        let loading = await makeLoadingStore()
         let store = loading.store
         let fake = loading.fake
         store.streamEventBufferBudget = StreamEventBufferBudget(maxEvents: 2, maxBytes: .max)
@@ -443,12 +274,9 @@ struct ConversationStoreStreamRecoveryTests: StreamEventBufferSuite {
         store.reset()
         #expect(store.agentId == nil)
 
-        fake.failPending("agent.getConversation", with: CancellationError())
-        await loading.fetch.value
-
         try await expectNever("recovery work for the reset binding") {
             !fake.paramsForMethod("agent.get").isEmpty
-                || fake.paramsForMethod("agent.getConversation").count > 1
+                || fake.paramsForMethod("chat.subscribe").count > 1
                 || store.agentId != nil
                 || store.liveTranscript.agentId != nil
         }

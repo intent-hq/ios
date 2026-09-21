@@ -78,6 +78,7 @@ $(SRCROOT)/Intent/Services/ConnectionTypes.swift
 $(SRCROOT)/Intent/Services/ConversationAttachmentPipeline.swift
 $(SRCROOT)/Intent/Services/ConversationCommands.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Fetch.swift
+$(SRCROOT)/Intent/Services/ConversationLiveTranscript+Subscribe.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Commands.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Lifecycle.swift

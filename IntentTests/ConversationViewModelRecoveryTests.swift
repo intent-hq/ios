@@ -291,12 +291,10 @@ extension ConversationViewModelTests {
             "timestamp": "2024-01-01T00:00:00Z",
             "contentBlocks": [resourceBlock]
         ]
-        fake.responseQueueMap["agent.getConversation"] = [
-            ["messages": [pageRow]] as [String: Any],
-            ["messages": [markedRow]] as [String: Any]
-        ]
+        fake.stubChatSnapshot(messages: [pageRow])
+        fake.responseMap["agent.getConversation"] = ["messages": [markedRow]] as [String: Any]
         viewModel.store = ConversationStore(connectionManager: fake)
-        await viewModel.store.fetchConversation(agentId: "test-agent", workspaceId: "test-ws")
+        await viewModel.store.subscribeLiveChat(agentId: "test-agent", workspaceId: "test-ws")
         #expect(viewModel.isPendingQuestionRecoveryLoading == false)
 
         viewModel.store.handleStreamEvent("events.event", params: [

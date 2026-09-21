@@ -22,8 +22,10 @@ final class ConversationLiveTranscript {
     var hydratingBlockKeys: Set<String> = []
 
     @ObservationIgnored var onStreamingChanged: (@MainActor (Bool) -> Void)?
+    /// Fired when the seq-0 snapshot of an initial load (`isLoading`) applies.
     @ObservationIgnored var onInitialLoadCompleted: (@MainActor () -> Void)?
-    @ObservationIgnored var onFetchError: (@MainActor (Error) -> Void)?
+    /// Fired when `chat.subscribe` is rejected for the still-bound agent.
+    @ObservationIgnored var onSubscribeError: (@MainActor (Error) -> Void)?
     /// Fired after the live chat channel replaced (snapshot) or merged (delta)
     /// the transcript, so the owner can reconcile state keyed on row residency.
     @ObservationIgnored var onTranscriptReplaced: (@MainActor () -> Void)?
@@ -35,27 +37,32 @@ final class ConversationLiveTranscript {
     /// same-agent rebind. `whileBound` compares against it so work started
     /// under an earlier binding cannot publish into a later one.
     @ObservationIgnored var bindingGeneration = 0
-    /// Initial fetches (`isLoading = true`) still awaiting their page. A stale
-    /// initial fetch only finishes the load when none is left in flight.
-    @ObservationIgnored var inFlightInitialLoads = 0
-    /// Advances for every live snapshot arrival, including a rejected empty
-    /// snapshot, and whenever a delta changes transcript rows. Older fetches
-    /// cannot replace populated live state, but may still seed an empty
-    /// transcript because the two sources share no revision.
-    @ObservationIgnored var chatSnapshotGeneration = 0
-    /// Load windows held open by `holdingLoadWindow` (recovery refetches).
-    /// While one is open, a finishing initial fetch neither replays nor lowers
-    /// `isLoading`; the window does that when it closes.
-    @ObservationIgnored var heldLoadWindows = 0
     /// Advances each time the live chat channel applies a snapshot or delta.
     /// A streaming-state response captured before it moved is stale.
     @ObservationIgnored var liveStateVersion = 0
-    private var chatLive = false
-    @ObservationIgnored private var chatSubscriptionId: String?
-    private var chatChannelActive = false
-    private var chatSeeded = false
+    /// Ceiling on the seq-0 snapshot after a `chat.subscribe` ack; past it the
+    /// registration is presumed stale and replaced on the retry schedule.
+    @ObservationIgnored var snapshotTimeout: Duration = .seconds(5)
+    /// Self-heal backoff for a rejected registration or a missing seq-0
+    /// snapshot: one delayed re-registration, doubling per consecutive
+    /// failure up to `maxRetryDelay`, reset when a snapshot applies or the
+    /// transport reconnects (mirrors cloudlands-fe's `LiveChatClient`).
+    @ObservationIgnored var initialRetryDelay: Duration = .seconds(1)
+    @ObservationIgnored var maxRetryDelay: Duration = .seconds(30)
+    /// Delay of the next scheduled retry; `nil` until the first failure after
+    /// a reset, so it starts from `initialRetryDelay`.
+    @ObservationIgnored var nextRetryDelay: Duration?
+    @ObservationIgnored var snapshotTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored var retryTask: Task<Void, Never>?
+    /// `subscribe` calls parked until their registration's seq-0 snapshot
+    /// applies, times out, is rejected, or is superseded by another binding.
+    @ObservationIgnored var snapshotWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+    var chatLive = false
+    @ObservationIgnored var chatSubscriptionId: String?
+    var chatChannelActive = false
+    var chatSeeded = false
     private var chatExpectedSeq = 0
-    @ObservationIgnored private(set) var resnapshotInProgress = false
+    @ObservationIgnored var resnapshotInProgress = false
     /// One rejected empty snapshot gets a replacement subscription. If that
     /// replacement also reports empty after recovery completes, accept it as
     /// an authoritative deletion instead of resubscribing without a bound.
@@ -74,6 +81,11 @@ final class ConversationLiveTranscript {
     isolated deinit {
         if let subscriptionId = chatSubscriptionId {
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
+        }
+        snapshotTimeoutTask?.cancel()
+        retryTask?.cancel()
+        for waiter in snapshotWaiters.values {
+            waiter.resume()
         }
     }
 }
@@ -161,75 +173,6 @@ extension ConversationLiveTranscript {
         }
     }
 
-    func subscribe(agentId: String, workspaceId: String? = nil) async {
-        bind(agentId: agentId, workspaceId: workspaceId)
-        chatChannelActive = true
-        chatSeeded = false
-
-        // A reply (or failure) that lands after a rebind to another agent must
-        // leave the new binding's channel state untouched, so the error is
-        // carried as a value and only inspected on the still-bound path.
-        let outcome: Result<String?, Error>? = await whileBound {
-            do {
-                let result = try await connectionManager.request("chat.subscribe", params: [
-                    "agentId": agentId,
-                    "replaceGroup": "ios-chat-\(agentId)",
-                    "projection": "slim"
-                ])
-                return .success((result as? [String: Any])?["subscriptionId"] as? String)
-            } catch {
-                return .failure(error)
-            }
-        } onStale: { outcome in
-            if case .success(let orphanedId?) = outcome {
-                await releaseOrphanedSubscription(orphanedId)
-            }
-        }
-        guard let outcome else { return }
-
-        switch outcome {
-        case .success(let subscriptionId?):
-            if let previous = chatSubscriptionId, previous != subscriptionId {
-                connectionManager.unregisterSubscriptionHandler(id: previous)
-            }
-            chatSubscriptionId = subscriptionId
-            connectionManager.registerSubscriptionHandler(id: subscriptionId) { [weak self] push in
-                self?.handlePush(push)
-            }
-            AppLog.conversation.info(
-                "[ConversationStore] Subscribed to chat.subscribe: \(subscriptionId)"
-            )
-        case .success(nil):
-            clearChannelForLegacyFallback()
-        case .failure(let error):
-            clearChannelForLegacyFallback()
-            AppLog.conversation.warning(
-                "[ConversationStore] chat.subscribe failed: \(error), falling back to legacy"
-            )
-        }
-    }
-
-    /// Best-effort release of a subscription the daemon opened for a binding
-    /// we have since left, so it does not keep pushing for the old agent.
-    private func releaseOrphanedSubscription(_ subscriptionId: String) async {
-        guard subscriptionId != chatSubscriptionId else { return }
-        do {
-            _ = try await connectionManager.request("chat.unsubscribe", params: [
-                "subscriptionId": subscriptionId
-            ])
-        } catch {
-            AppLog.conversation.error(
-                "[ConversationStore] chat.unsubscribe of orphaned \(subscriptionId) failed: \(error)"
-            )
-        }
-    }
-
-    private func clearChannelForLegacyFallback() {
-        chatChannelActive = false
-        chatLive = false
-        chatSubscriptionId = nil
-    }
-
     func setTestChannel(subscriptionId: String) {
         chatChannelActive = true
         chatSeeded = false
@@ -266,7 +209,6 @@ extension ConversationLiveTranscript {
 
     private func applySnapshot(_ push: SubscriptionPush) {
         guard let items = push.snapshot else { return }
-        chatSnapshotGeneration &+= 1
         let snapshotMessages = push.snapshotMessages ?? ConversationMessage.parseMessages(items)
         if snapshotMessages.isEmpty, !messages.isEmpty {
             if emptySnapshotRecoveryAttempts >= Self.maxEmptySnapshotRecoveryAttempts,
@@ -279,6 +221,8 @@ extension ConversationLiveTranscript {
                 AppLog.conversation.warning(
                     "[ConversationStore] Rejecting empty chat snapshot over populated transcript, resubscribing..."
                 )
+                // The registration answered; only its content is in doubt.
+                resumeSnapshotWaiters()
                 if !resnapshotInProgress {
                     emptySnapshotRecoveryAttempts += 1
                     resnapshotInProgress = true
@@ -293,6 +237,7 @@ extension ConversationLiveTranscript {
         chatSeeded = true
         chatExpectedSeq = push.seq + 1
         liveStateVersion &+= 1
+        resetBackoff()
         // `parse` pre-decodes off MainActor; the fallback covers pushes built
         // directly from raw dictionaries (tests).
         messages = snapshotMessages
@@ -308,6 +253,11 @@ extension ConversationLiveTranscript {
             "[ConversationStore] Applied chat snapshot with \(items.count) messages, "
                 + "seq=\(push.seq), streaming=\(isStreaming)"
         )
+        if isLoading {
+            onInitialLoadCompleted?()
+            isLoading = false
+        }
+        resumeSnapshotWaiters()
         onTranscriptReplaced?()
     }
 
@@ -333,7 +283,6 @@ extension ConversationLiveTranscript {
         }
         remergeHydratedBlocks()
         if !entities.isEmpty || !delta.removedIds.isEmpty {
-            chatSnapshotGeneration &+= 1
             emptySnapshotRecoveryAttempts = 0
         }
 
@@ -410,54 +359,12 @@ extension ConversationLiveTranscript {
         return merged
     }
 
-    private func resnapshot() async {
-        resnapshotInProgress = true
-        defer { resnapshotInProgress = false }
-        chatLive = false
-        chatSeeded = false
-
-        if let subscriptionId = chatSubscriptionId {
-            connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
-            do {
-                _ = try await connectionManager.request("chat.unsubscribe", params: [
-                    "subscriptionId": subscriptionId
-                ])
-            } catch {
-                AppLog.conversation.error(
-                    "[ConversationStore] chat.unsubscribe failed: \(error)"
-                )
-            }
-        }
-        chatSubscriptionId = nil
-
-        if let agentId {
-            await subscribe(agentId: agentId, workspaceId: workspaceId)
-            await fetchConversation(agentId: agentId, workspaceId: workspaceId)
-        }
-    }
-
     func shouldSuppressFirehose(eventType: String) -> Bool {
         chatLive && eventType.hasPrefix("agent:stream:") && eventType != "agent:stream:end"
     }
 
     var shouldDiscardBufferedFirehose: Bool {
         chatLive
-    }
-
-    var shouldRefetchAfterLegacyStreamEnd: Bool {
-        !chatLive
-    }
-
-    func prepareForReconnect() {
-        chatLive = false
-        if let subscriptionId = chatSubscriptionId {
-            connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
-        }
-        chatSubscriptionId = nil
-        chatChannelActive = false
-        chatSeeded = false
-        resnapshotInProgress = false
-        emptySnapshotRecoveryAttempts = 0
     }
 
     func reset() {
@@ -481,8 +388,9 @@ extension ConversationLiveTranscript {
         chatChannelActive = false
         chatSeeded = false
         chatExpectedSeq = 0
-        chatSnapshotGeneration = 0
         resnapshotInProgress = false
         emptySnapshotRecoveryAttempts = 0
+        resetBackoff()
+        resumeSnapshotWaiters()
     }
 }

@@ -301,9 +301,8 @@ extension ConversationViewModelTests {
         let fake = FakeConnectionManager()
         fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-streaming"]
         fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
-        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
+        fake.stubChatSnapshot()
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
-        fake.responseMap["agent.getConversation"] = ["messages": []]
         fake.responseMap["agent.get"] = ["agent": ["id": "test-agent", "name": "Test"]] as [String: Any]
         fake.responseMap["agent.getQueue"] = ["queue": []]
         fake.responseMap["agent.getSubscriptions"] = ["subscriptions": [], "delegationGroups": []]
@@ -324,7 +323,7 @@ extension ConversationViewModelTests {
             ]
         )
         let (viewModel, _) = makeLoadableVM(errors: [
-            "agent.getConversation": notFound,
+            "chat.subscribe": notFound,
             "agent.get": notFound
         ])
 
@@ -342,7 +341,7 @@ extension ConversationViewModelTests {
             userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"]
         )
         let (viewModel, _) = makeLoadableVM(errors: [
-            "agent.getConversation": bare,
+            "chat.subscribe": bare,
             "agent.get": bare
         ])
 
@@ -358,7 +357,7 @@ extension ConversationViewModelTests {
             userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
         )
         let (viewModel, _) = makeLoadableVM(errors: [
-            "agent.getConversation": timeout,
+            "chat.subscribe": timeout,
             "agent.get": timeout
         ])
 
@@ -382,12 +381,10 @@ extension ConversationViewModelTests {
         // the transcript's onAppear against already-settled state: isLoading
         // false and the divider anchor latched by the time load() returns.
         let (viewModel, fake) = makeLoadableVM()
-        fake.responseMap["agent.getConversation"] = [
-            "messages": [
-                ["id": "m1", "role": "assistant", "contentBlocks": [["type": "text", "text": "old"]]],
-                ["id": "m2", "role": "assistant", "contentBlocks": [["type": "text", "text": "new"]]]
-            ]
-        ]
+        fake.stubChatSnapshot(messages: [
+            ["id": "m1", "role": "assistant", "contentBlocks": [["type": "text", "text": "old"]]],
+            ["id": "m2", "role": "assistant", "contentBlocks": [["type": "text", "text": "new"]]]
+        ])
         fake.responseMap["agent.get"] = [
             "agent": [
                 "id": "test-agent",

@@ -8,15 +8,15 @@ extension ConversationStoreTests {
         // agent.get for A that completed after the store started loading B
         // (no push in between) wrote A's pending/dismissed/seen markers into B.
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
         try await fake.waitForPendingRequests("agent.get")
 
-        await store.fetchConversation(agentId: "b", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "b", workspaceId: "w")
 
         fake.resolvePending("agent.get", with: [
             "agent": [
@@ -51,10 +51,10 @@ extension ConversationStoreTests {
 
     @Test func staleAgentGetReplyAfterResetDoesNotRestoreMarkers() async throws {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
         try await fake.waitForPendingRequests("agent.get")
@@ -81,18 +81,18 @@ extension ConversationStoreTests {
     }
 
     @Test func agentGetReplyStillAppliesMarkersWhenConversationBindsSameAgentWhileInFlight() async throws {
-        // View load issues fetchConversation and the raise-only agent.get
+        // View load issues subscribeLiveChat and the raise-only agent.get
         // concurrently: binding the same agent from nil must not make the
         // reply look stale.
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
         let store = ConversationStore(connectionManager: fake)
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true) }
         try await fake.waitForPendingRequests("agent.get")
 
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         fake.resolvePending("agent.get", with: [
             "agent": [
@@ -114,10 +114,10 @@ extension ConversationStoreTests {
         // An agent:updated for another agent is filtered out before the
         // metadata handler, so it must not make our in-flight reply look stale.
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
         try await fake.waitForPendingRequests("agent.get")
@@ -149,15 +149,15 @@ extension ConversationStoreTests {
         // the markers, so an agent.get for A that completed after the store
         // switched to B still wrote A's isStreaming into B.
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
         try await fake.waitForPendingRequests("agent.get")
 
-        await store.fetchConversation(agentId: "b", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "b", workspaceId: "w")
         store.isStreaming = false
 
         fake.resolvePending("agent.get", with: [
@@ -177,15 +177,15 @@ extension ConversationStoreTests {
 
     @Test func staleRaiseOnlyAgentGetReplyFromPreviousAgentDoesNotRaiseStreaming() async throws {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true) }
         try await fake.waitForPendingRequests("agent.get")
 
-        await store.fetchConversation(agentId: "b", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "b", workspaceId: "w")
         store.isStreaming = false
 
         fake.resolvePending("agent.get", with: [
@@ -204,7 +204,7 @@ extension ConversationStoreTests {
         // A definitive not-found for A arriving after the store switched to B
         // says nothing about B.
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
         let notFound = NSError(
             domain: "WebSocket",
@@ -215,12 +215,12 @@ extension ConversationStoreTests {
             ]
         )
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
         try await fake.waitForPendingRequests("agent.get")
 
-        await store.fetchConversation(agentId: "b", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "b", workspaceId: "w")
         fake.failPending("agent.get", with: notFound)
         await refresh.value
 
@@ -237,10 +237,10 @@ extension ConversationStoreTests {
         // unbound store used to accept any reply — so an agent.get issued
         // while bound to A restored A's isStreaming into the reset store.
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
         try await fake.waitForPendingRequests("agent.get")
@@ -261,7 +261,7 @@ extension ConversationStoreTests {
 
     @Test func staleNotFoundAfterResetDoesNotRaiseAgentNotFound() async throws {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
         let notFound = NSError(
             domain: "WebSocket",
@@ -272,7 +272,7 @@ extension ConversationStoreTests {
             ]
         )
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
         try await fake.waitForPendingRequests("agent.get")
@@ -293,10 +293,10 @@ extension ConversationStoreTests {
         // streaming state is not carried by the push and must still be taken
         // from the reply.
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
         try await fake.waitForPendingRequests("agent.get")
@@ -340,9 +340,9 @@ extension ConversationStoreTests {
         // land while isLoading are buffered but never replayed, so the
         // raiseOnly agent.get that raises the pending-questions marker at the
         // asking turn's end was skipped for a turn ending mid-load — the marker
-        // stayed nil (legacy fallback) and the wizard was not sticky.
+        // stayed nil and the wizard was not sticky.
         let fake = FakeConnectionManager()
-        fake.pendingMethods.insert("agent.getConversation")
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat"]
         fake.responseMap["agent.get"] = [
             "agent": [
                 "id": "a",
@@ -352,8 +352,7 @@ extension ConversationStoreTests {
         ] as [String: Any]
         let store = ConversationStore(connectionManager: fake)
 
-        let fetch = Task { await store.fetchConversation(agentId: "a", workspaceId: "w") }
-        try await fake.waitForPendingRequests("agent.getConversation")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
         #expect(store.isLoading)
 
         store.handleStreamEvent("events.event", params: [
@@ -367,11 +366,15 @@ extension ConversationStoreTests {
         ])
         #expect(
             store.pendingQuestionsMessageId == nil,
-            "turn boundaries are buffered while the fetch is in flight"
+            "turn boundaries are buffered while the snapshot is pending"
         )
 
-        fake.resolvePending("agent.getConversation", with: ["messages": []] as [String: Any])
-        await fetch.value
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-chat",
+            seq: 0,
+            conversationSnapshot: [],
+            metadata: ["agentId": "a"]
+        ))
         try await waitUntil("the buffered turn boundary to refresh the marker") {
             store.pendingQuestionsMessageId == "a1"
         }
@@ -390,9 +393,9 @@ extension ConversationStoreTests {
 
     @Test func agentUpdatedEventWithoutPendingMarkerLeavesItUntouched() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
         store.pendingQuestionsMessageId = "a1"
 
         store.handleStreamEvent("events.event", params: [
@@ -410,9 +413,9 @@ extension ConversationStoreTests {
 
     @Test func agentUpdatedEventForOtherAgentDoesNotMovePendingMarker() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
             "event": [

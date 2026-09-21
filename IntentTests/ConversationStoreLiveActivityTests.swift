@@ -264,8 +264,8 @@ extension ConversationStoreLiveStateTests {
     private func makeParentStore(watching childId: String) async -> (ConversationStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        fake.responseMap["agent.getConversation"] = ["messages": []]
-        await store.fetchConversation(agentId: "agent-parent", workspaceId: "ws-1")
+        fake.stubChatSnapshot()
+        await store.subscribeLiveChat(agentId: "agent-parent", workspaceId: "ws-1")
         store.watchedAgentIds = [childId]
         store.watchedAgents = [makeWatchedAgent(id: childId, lastAgentResponse: "Old preview")]
         store.isWaitingForAgents = true

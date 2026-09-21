@@ -14,7 +14,7 @@ import SwiftUI
     private static let defaultStreamEventBufferMaxEvents = 512
     private static let defaultStreamEventBufferMaxBytes = 2 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
     /// Aggregate retention ceiling for `streamEventBuffer` while the initial
-    /// `agent.getConversation` is in flight (ios#380). Exceeding either bound
+    /// `chat.subscribe` snapshot is pending (ios#380). Exceeding either bound
     /// marks the buffered replay lossy — see `replayBufferedStreamEvents`.
     static let defaultStreamEventBufferBudget = StreamEventBufferBudget(
         maxEvents: defaultStreamEventBufferMaxEvents,
@@ -121,7 +121,7 @@ import SwiftUI
         liveTranscript.onInitialLoadCompleted = { [weak self] in
             self?.replayBufferedStreamEvents()
         }
-        liveTranscript.onFetchError = { [weak self] error in
+        liveTranscript.onSubscribeError = { [weak self] error in
             self?.raiseAgentNotFoundIfDefinitive(error)
         }
         liveTranscript.onTranscriptReplaced = { [weak self] in

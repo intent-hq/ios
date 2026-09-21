@@ -371,48 +371,6 @@ extension ConversationStoreLiveStateTests {
         #expect(push == nil) // Should return nil for malformed push
     }
 
-    // MARK: - fetchConversation merge preserves in-flight message
-
-    @Test func fetchMergePreservesInFlightStreamingMessage() async {
-        let (store, fake) = makeStore()
-        fake.responseMap["agent.getConversation"] = [
-            "messages": [
-                [
-                    "id": "msg-1",
-                    "role": "user",
-                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
-                    "timestamp": "2026-06-27T01:00:00.000Z"
-                ]
-            ]
-        ]
-
-        // Seed the transcript, then stream an in-flight assistant message the
-        // server page does not yet contain (mid-turn content is not persisted).
-        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
-            [
-                "id": "msg-1",
-                "role": "user",
-                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
-                "timestamp": "2026-06-27T01:00:00.000Z"
-            ]
-        ]))
-        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(
-                messageId: "msg-2",
-                block: ["type": "text", "id": "msg-2:0", "text": "Working on it"]
-            )
-        ]))
-        #expect(store.messages.count == 2)
-
-        // Non-initial merge fetch must not wipe the in-flight message
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
-
-        #expect(store.messages.count == 2)
-        #expect(store.messages[0].id == "msg-1")
-        #expect(store.messages[1].id == "msg-2")
-        #expect(store.messages[1].isStreaming == true)
-    }
-
     @Test func idleSnapshotClearsStaleStreaming() async {
         let (store, _) = makeStore()
 
