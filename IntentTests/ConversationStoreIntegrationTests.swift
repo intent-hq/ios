@@ -718,22 +718,35 @@ extension ConversationStoreIntegrationTests {
 
     /// A rejected first registration does not settle the initial-load wait:
     /// the snapshot is still owed to the retry, which serves it within the
-    /// bound.
+    /// bound. Every step is held: the first registration's rejection, the
+    /// retry's ack and the snapshot are each released only once the wait is
+    /// seen still parked.
     @Test func snapshotWaitSurvivesARejectedRegistrationUntilTheRetrySnapshot() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        store.liveTranscript.initialRetryDelay = .milliseconds(20)
-        fake.errorQueueMap["chat.subscribe"] = [NSError(domain: "WebSocket", code: -32_000)]
-        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+        store.liveTranscript.initialRetryDelay = .milliseconds(10)
+        fake.pendingMethods = ["chat.subscribe"]
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
 
-        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
-        #expect(!store.liveTranscript.chatChannelActive)
-        #expect(store.isLoading)
-
+        let subscribe = Task { await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1") }
+        try await fake.waitForPendingRequests("chat.subscribe")
         let wait = Task { await store.awaitLiveChatSnapshot() }
         try await waitUntil("the snapshot wait to park") { !store.liveTranscript.snapshotWaiters.isEmpty }
-        try await fake.waitForRequests("chat.subscribe", count: 2)
+        #expect(store.isLoading)
+
+        fake.failPending("chat.subscribe", with: NSError(domain: "WebSocket", code: -32_000))
+        await subscribe.value
+        #expect(!store.liveTranscript.chatChannelActive)
+        #expect(store.isLoading)
+        #expect(!store.liveTranscript.snapshotWaiters.isEmpty, "the rejection does not settle the wait")
+
+        try await fake.waitForPendingRequests("chat.subscribe")
+        #expect(fake.paramsForMethod("chat.subscribe").count == 2, "the retry re-registers the same binding")
+        #expect(!store.liveTranscript.snapshotWaiters.isEmpty, "the wait parks across the held retry")
+
+        fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-1"])
+        try await waitUntil("the retried registration's handler") { fake.hasSubscriptionHandler(id: "sub-1") }
+        #expect(store.liveTranscript.chatChannelActive)
         #expect(store.isLoading, "the retried registration still awaits its seq-0 snapshot")
         #expect(!store.liveTranscript.snapshotWaiters.isEmpty, "the ack alone does not settle the wait")
 
@@ -747,6 +760,7 @@ extension ConversationStoreIntegrationTests {
         await wait.value
         #expect(store.messages.map(\.id) == ["msg-1"])
         #expect(!store.isLoading)
+        #expect(store.liveTranscript.snapshotWaiters.isEmpty)
     }
 
     /// Consecutive rejections cannot hold the initial load open forever: the

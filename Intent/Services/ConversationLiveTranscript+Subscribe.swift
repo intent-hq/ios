@@ -93,25 +93,27 @@ extension ConversationLiveTranscript {
         }
     }
 
-    /// Gap / rejected-empty-snapshot recovery: a fresh registration whose
-    /// seq-0 snapshot replaces the transcript. There is no page fetch to fall
-    /// back on; a registration that fails or stays silent self-heals on the
-    /// retry schedule inside `subscribe`.
-    func resnapshot() async {
-        resnapshotInProgress = true
-        defer { resnapshotInProgress = false }
+    /// Gap / rejected-empty-snapshot recovery of the registration `generation`:
+    /// a fresh registration whose seq-0 snapshot replaces the transcript.
+    /// There is no page fetch to fall back on; a registration that fails or
+    /// stays silent self-heals on the retry schedule inside `subscribe`. A
+    /// recovery whose registration was superseded before it ran, or while it
+    /// released the old subscription, does nothing: the newer registration
+    /// (or `reset` / reconnect) owns recovery now, and its own gaps schedule
+    /// a recovery of their own since `recoveryGeneration` no longer matches.
+    func resnapshot(for generation: Int) async {
+        guard generation == registrationGeneration else { return }
         // This recovery owns the channel: a timeout or retry armed for the
         // registration it replaces must not open a registration of its own.
         cancelSnapshotRecovery()
         chatLive = false
         chatSeeded = false
-        let generation = registrationGeneration
 
         await releaseCurrentSubscription()
 
-        // A reset, rebind, reconnect or explicit registration during the
-        // release owns recovery now.
         guard generation == registrationGeneration, let agentId else { return }
+        // Opening the replacement advances the generation, which ends this
+        // recovery's ownership.
         await subscribe(agentId: agentId, workspaceId: workspaceId)
     }
 
@@ -123,7 +125,7 @@ extension ConversationLiveTranscript {
         chatSubscriptionId = nil
         chatChannelActive = false
         chatSeeded = false
-        resnapshotInProgress = false
+        recoveryGeneration = nil
         emptySnapshotRecoveryAttempts = 0
         // The reconnect registration is the recovery: drop the outage's
         // in-flight replies and pending retry, and start the backoff over.

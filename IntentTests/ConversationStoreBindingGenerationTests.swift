@@ -2,6 +2,7 @@ import Foundation
 @testable import Intent
 import Testing
 
+// swiftlint:disable file_length
 // Extracted wire fixtures intentionally mirror the daemon payloads inline.
 // swiftlint:disable multiline_arguments multiline_call_arguments multiline_literal_brackets no_magic_numbers
 
@@ -459,6 +460,97 @@ extension ConversationStoreLiveStateTests {
         #expect(fake.hasSubscriptionHandler(id: "sub-2"))
         #expect(store.liveTranscript.retryTask == nil, "a superseded registration schedules no retry")
         #expect(fake.paramsForMethod("chat.unsubscribe").isEmpty)
+    }
+
+    private func gapDelta(subscriptionId: String, seq: Int) -> SubscriptionPush {
+        SubscriptionPush(
+            subscriptionId: subscriptionId,
+            kind: .delta,
+            seq: seq,
+            snapshot: nil,
+            delta: SubscriptionPush.DeltaPayload(added: [], updated: [], removedIds: [])
+        )
+    }
+
+    /// Seeds agent A, then parks A's gap recovery in the release of `sub-a`
+    /// (`chat.unsubscribe` suspended).
+    private func parkGapRecoveryOfAgentAInUnsubscribe() async throws -> (ConversationStore, FakeConnectionManager) {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.stubChatSnapshot(subscriptionId: "sub-a", messages: [agentARow])
+        fake.pendingMethods = ["chat.unsubscribe"]
+
+        await store.subscribeLiveChat(agentId: "agent-a", workspaceId: "ws-1")
+        #expect(store.messages.map(\.id) == ["msg-a1"])
+        fake.deliverSubscriptionPush(gapDelta(subscriptionId: "sub-a", seq: 5))
+        try await fake.waitForPendingRequests("chat.unsubscribe")
+        #expect(store.liveTranscript.resnapshotInProgress)
+        return (store, fake)
+    }
+
+    /// Recovery is owned per registration: agent A's gap recovery, parked in
+    /// the release of `sub-a`, neither blocks agent B's own gap recovery nor
+    /// touches B once A's release finishes.
+    @Test func gapOfTheNewBindingRecoversWhileTheOldBindingsRecoveryIsParked() async throws {
+        let (store, fake) = try await parkGapRecoveryOfAgentAInUnsubscribe()
+
+        fake.stubChatSnapshot(subscriptionId: "sub-b", messages: [agentBRow])
+        await store.subscribeLiveChat(agentId: "agent-b", workspaceId: "ws-1")
+        expectAgentBTranscriptIntact(store)
+        #expect(!store.liveTranscript.resnapshotInProgress, "A's recovery does not mark B's registration")
+
+        // B's gap must open B's own recovery: the release of sub-b parks
+        // behind A's still-suspended release.
+        fake.deliverSubscriptionPush(gapDelta(subscriptionId: "sub-b", seq: 7))
+        try await fake.waitForPendingRequests("chat.unsubscribe", count: 2)
+        #expect(store.liveTranscript.resnapshotInProgress)
+        #expect(fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-a", "sub-b"])
+        expectAgentBTranscriptIntact(store)
+
+        // A's release completes first: its recovery is superseded and does nothing.
+        fake.resolvePending("chat.unsubscribe", with: [String: Any]())
+        try await expectNever("a registration opened by agent A's superseded recovery") {
+            fake.paramsForMethod("chat.subscribe").count > 2
+        }
+        #expect(store.liveTranscript.resnapshotInProgress, "B's recovery still owns the channel")
+
+        // B's release completes: exactly one replacement registration for B follows.
+        fake.stubChatSnapshot(subscriptionId: "sub-b2", messages: [agentBRow])
+        fake.resolvePending("chat.unsubscribe", with: [String: Any]())
+        try await waitUntil("agent B's replacement registration") { fake.hasSubscriptionHandler(id: "sub-b2") }
+        #expect(fake.paramsForMethod("chat.subscribe").compactMap { $0["agentId"] as? String } == ["agent-a", "agent-b", "agent-b"])
+        #expect(!store.liveTranscript.resnapshotInProgress)
+        #expect(store.liveTranscript.chatLive)
+        expectAgentBTranscriptIntact(store)
+        try await expectNever("a further replacement registration") {
+            fake.paramsForMethod("chat.subscribe").count > 3
+        }
+    }
+
+    /// A recovery scheduled for agent A's registration that only runs after
+    /// agent B registered must not release, re-register or unseed B.
+    @Test func recoveryScheduledBeforeSupersessionDoesNothingWhenItRuns() async {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.unsubscribe"] = [String: Any]()
+        fake.stubChatSnapshot(subscriptionId: "sub-a", messages: [agentARow])
+        await store.subscribeLiveChat(agentId: "agent-a", workspaceId: "ws-1")
+        let staleRecovery = store.liveTranscript.registrationGeneration
+
+        fake.stubChatSnapshot(subscriptionId: "sub-b", messages: [agentBRow])
+        await store.subscribeLiveChat(agentId: "agent-b", workspaceId: "ws-1")
+        expectAgentBTranscriptIntact(store)
+        #expect(store.liveTranscript.chatLive)
+
+        await store.liveTranscript.resnapshot(for: staleRecovery)
+
+        #expect(store.liveTranscript.chatLive, "the stale recovery does not unseed B's channel")
+        #expect(store.liveTranscript.chatSeeded)
+        #expect(fake.hasSubscriptionHandler(id: "sub-b"))
+        #expect(store.liveTranscript.chatSubscriptionId == "sub-b")
+        #expect(fake.paramsForMethod("chat.unsubscribe").isEmpty, "B's registration is not released")
+        #expect(fake.paramsForMethod("chat.subscribe").count == 2)
+        expectAgentBTranscriptIntact(store)
     }
 }
 

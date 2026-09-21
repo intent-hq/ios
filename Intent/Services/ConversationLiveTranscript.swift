@@ -73,7 +73,17 @@ final class ConversationLiveTranscript {
     var chatChannelActive = false
     var chatSeeded = false
     private var chatExpectedSeq = 0
-    @ObservationIgnored var resnapshotInProgress = false
+    /// Registration whose gap / rejected-empty-snapshot recovery is scheduled
+    /// or in flight. Recovery is owned per registration: it validates this
+    /// token before every mutation and after every suspension, and the token
+    /// stops matching the moment a newer registration (its own replacement
+    /// included), `reset` or reconnect advances `registrationGeneration`, so
+    /// a superseded recovery can neither touch the newer channel nor block
+    /// its own recovery.
+    @ObservationIgnored var recoveryGeneration: Int?
+    var resnapshotInProgress: Bool {
+        recoveryGeneration == registrationGeneration
+    }
     /// One rejected empty snapshot gets a replacement subscription. If that
     /// replacement also reports empty after recovery completes, accept it as
     /// an authoritative deletion instead of resubscribing without a bound.
@@ -212,13 +222,20 @@ extension ConversationLiveTranscript {
             } else if chatSeeded, push.seq < chatExpectedSeq {
                 return
             } else if !resnapshotInProgress {
-                resnapshotInProgress = true
                 AppLog.conversation.warning(
                     "[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing..."
                 )
-                Task { await resnapshot() }
+                scheduleResnapshot()
             }
         }
+    }
+
+    /// Schedules recovery for the current registration; the token is taken
+    /// here, so a registration opened before the work runs supersedes it.
+    private func scheduleResnapshot() {
+        let generation = registrationGeneration
+        recoveryGeneration = generation
+        Task { [weak self] in await self?.resnapshot(for: generation) }
     }
 
     private func applySnapshot(_ push: SubscriptionPush) {
@@ -239,8 +256,7 @@ extension ConversationLiveTranscript {
                 resumeSnapshotWaiters()
                 if !resnapshotInProgress {
                     emptySnapshotRecoveryAttempts += 1
-                    resnapshotInProgress = true
-                    Task { await resnapshot() }
+                    scheduleResnapshot()
                 }
                 return
             }
@@ -405,7 +421,7 @@ extension ConversationLiveTranscript {
         chatSeeded = false
         snapshotPending = false
         chatExpectedSeq = 0
-        resnapshotInProgress = false
+        recoveryGeneration = nil
         emptySnapshotRecoveryAttempts = 0
         resetBackoff()
         resumeSnapshotWaiters()

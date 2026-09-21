@@ -410,20 +410,17 @@ extension ConversationViewModelTests {
         )
     }
 
-    @Test func loadWaitsForTheRetriedRegistrationsSnapshotBeforeLatching() async {
+    @Test func loadWaitsForTheRetriedRegistrationsSnapshotBeforeLatching() async throws {
         // A transient rejection of the first chat.subscribe must not settle
         // the load against the empty transcript: the divider anchor latches
-        // only once the retried registration's snapshot has applied.
+        // only once the retried registration's snapshot has applied. The
+        // rejection, the retry's ack and the snapshot are each held until
+        // load() is seen still parked with the divider unlatched.
         let (viewModel, fake) = makeLoadableVM()
-        viewModel.store.liveTranscript.snapshotTimeout = .seconds(2)
-        viewModel.store.liveTranscript.initialRetryDelay = .milliseconds(20)
-        fake.errorQueueMap["chat.subscribe"] = [
-            NSError(domain: "WebSocket", code: -2, userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
-        ]
-        fake.stubChatSnapshot(messages: [
-            ["id": "m1", "role": "assistant", "contentBlocks": [["type": "text", "text": "old"]]],
-            ["id": "m2", "role": "assistant", "contentBlocks": [["type": "text", "text": "new"]]]
-        ])
+        let transcript = viewModel.store.liveTranscript
+        transcript.snapshotTimeout = .seconds(5)
+        transcript.initialRetryDelay = .milliseconds(10)
+        fake.pendingMethods = ["chat.subscribe"]
         fake.responseMap["agent.get"] = [
             "agent": [
                 "id": "test-agent",
@@ -432,9 +429,41 @@ extension ConversationViewModelTests {
             ]
         ] as [String: Any]
 
-        await viewModel.load()
+        let load = Task { await viewModel.load() }
+        try await fake.waitForPendingRequests("chat.subscribe")
+        #expect(viewModel.isLoading)
+        #expect(!viewModel.hasLatchedNewMessagesDividerAnchor)
 
-        #expect(fake.paramsForMethod("chat.subscribe").count == 2, "the retry served the transcript")
+        // The rejection returns the registration; load() then parks on the
+        // snapshot still owed to the retry, whose registration is held too.
+        fake.failPending(
+            "chat.subscribe",
+            with: NSError(domain: "WebSocket", code: -2, userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+        )
+        try await fake.waitForPendingRequests("chat.subscribe")
+        try await waitUntil("load() to park on the snapshot") { !transcript.snapshotWaiters.isEmpty }
+        #expect(fake.paramsForMethod("chat.subscribe").count == 2, "the retry re-registers the same binding")
+        #expect(viewModel.isLoading)
+        #expect(!viewModel.hasLatchedNewMessagesDividerAnchor, "the divider stays unlatched across the rejection")
+
+        // "sub-2" has no stubbed snapshot: the ack lands without one.
+        fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-2"])
+        try await waitUntil("the retried registration's handler") { fake.hasSubscriptionHandler(id: "sub-2") }
+        #expect(!transcript.snapshotWaiters.isEmpty, "the ack alone does not settle load()")
+        #expect(viewModel.isLoading)
+        #expect(!viewModel.hasLatchedNewMessagesDividerAnchor, "the divider stays unlatched until the snapshot")
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-2",
+            seq: 0,
+            conversationSnapshot: [
+                ["id": "m1", "role": "assistant", "contentBlocks": [["type": "text", "text": "old"]]],
+                ["id": "m2", "role": "assistant", "contentBlocks": [["type": "text", "text": "new"]]]
+            ],
+            metadata: ["truncated": false, "totalMessages": 2]
+        ))
+        await load.value
+
         #expect(viewModel.filteredMessages.map(\.id) == ["m1", "m2"])
         #expect(!viewModel.isLoading)
         #expect(
