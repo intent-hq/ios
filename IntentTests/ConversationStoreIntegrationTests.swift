@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Combine
 import Foundation
 @testable import Intent
@@ -33,6 +34,8 @@ struct ConversationStoreIntegrationTests {
         // Start connected and fetch conversation (triggers onReconnected)
         fake.simulateConnect()
         await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        #expect(store.messages.isEmpty)
+        #expect(!store.isLoading)
 
         try await waitFor("chat.subscribe handler registration") {
             fake.hasSubscriptionHandler(id: "sub-1")
@@ -41,6 +44,254 @@ struct ConversationStoreIntegrationTests {
         // Verify chat.subscribe was called and handler registered
         #expect(fake.didCallMethod("chat.subscribe"))
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
+    }
+
+    // MARK: - First-open transcript races
+
+    @Test func firstOpenSlowEmptyFetchClobbersNewerSnapshotAndDoesNotRetry() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+        fake.pendingMethods.insert("agent.getConversation")
+
+        await store.subscribeLiveChat(agentId: "agent-1")
+        let fetch = Task {
+            await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        }
+        try await fake.waitForPendingRequests("agent.getConversation")
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            kind: .snapshot,
+            seq: 0,
+            snapshot: [
+                [
+                    "id": "msg-1",
+                    "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-09-18T00:00:00Z"
+                ]
+            ],
+            delta: nil
+        ))
+        #expect(store.messages.map(\.id) == ["msg-1"])
+        #expect(store.isLoading)
+
+        fake.resolvePending(
+            "agent.getConversation",
+            with: ["messages": [] as [[String: Any]]] as [String: Any]
+        )
+        await fetch.value
+
+        #expect(store.messages.map(\.id) == ["msg-1"])
+        #expect(!store.isLoading)
+        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
+        try await expectNever("an automatic conversation retry") {
+            fake.paramsForMethod("agent.getConversation").count > 1
+        }
+
+        fake.pendingMethods.remove("agent.getConversation")
+        fake.responseMap["agent.getConversation"] = [
+            "messages": [
+                [
+                    "id": "msg-1",
+                    "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-09-18T00:00:00Z"
+                ]
+            ]
+        ]
+        let reopenedStore = ConversationStore(connectionManager: fake)
+        await reopenedStore.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        #expect(reopenedStore.messages.map(\.id) == ["msg-1"])
+    }
+
+    @Test func populatedFetchRecoversAfterAcceptedEmptySnapshot() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+        fake.pendingMethods.insert("agent.getConversation")
+
+        await store.subscribeLiveChat(agentId: "agent-1")
+        let fetch = Task {
+            await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        }
+        try await fake.waitForPendingRequests("agent.getConversation")
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            kind: .snapshot,
+            seq: 0,
+            snapshot: [],
+            delta: nil
+        ))
+        #expect(store.messages.isEmpty)
+
+        fake.resolvePending("agent.getConversation", with: [
+            "messages": [
+                [
+                    "id": "msg-1",
+                    "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-09-18T00:00:00Z"
+                ]
+            ]
+        ] as [String: Any])
+        await fetch.value
+
+        #expect(store.messages.map(\.id) == ["msg-1"])
+        #expect(!store.isLoading)
+    }
+
+    @Test func firstOpenDelayedEmptySnapshotClobbersFetchedConversation() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+        fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["agent.getConversation"] = [
+            "messages": [
+                [
+                    "id": "msg-1",
+                    "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-09-18T00:00:00Z"
+                ]
+            ]
+        ]
+
+        await store.subscribeLiveChat(agentId: "agent-1")
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        #expect(store.messages.map(\.id) == ["msg-1"])
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            kind: .snapshot,
+            seq: 0,
+            snapshot: [],
+            delta: nil
+        ))
+
+        #expect(store.messages.map(\.id) == ["msg-1"])
+        #expect(!store.isLoading)
+        try await fake.waitForRequests("agent.getConversation", count: 2)
+        #expect(store.messages.map(\.id) == ["msg-1"])
+        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
+    }
+}
+
+extension ConversationStoreIntegrationTests {
+    private func conversationRow(id: String, text: String) -> [String: Any] {
+        [
+            "id": id,
+            "role": "user",
+            "contentBlocks": [["type": "text", "id": "\(id):0", "text": text]],
+            "timestamp": "2026-09-18T00:00:00Z"
+        ]
+    }
+
+    @Test func repeatedEmptySnapshotConfirmsDeletionAfterRecovery() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+        fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
+        fake.pendingMethods.insert("agent.getConversation")
+
+        await store.subscribeLiveChat(agentId: "agent-1")
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            kind: .snapshot,
+            seq: 0,
+            snapshot: [conversationRow(id: "msg-1", text: "Hello")],
+            delta: nil,
+            snapshotMeta: ["truncated": true, "totalMessages": 50]
+        ))
+        #expect(store.isTruncated && store.totalMessageCount == 50)
+
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-2"]
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            kind: .snapshot,
+            seq: 1,
+            snapshot: [],
+            delta: nil
+        ))
+        try await fake.waitForPendingRequests("agent.getConversation")
+        #expect(fake.hasSubscriptionHandler(id: "sub-2"))
+
+        fake.resolvePending(
+            "agent.getConversation",
+            with: ["messages": [] as [[String: Any]]] as [String: Any]
+        )
+        try await waitUntil("empty-snapshot recovery completion") {
+            !store.liveTranscript.resnapshotInProgress
+                && fake.paramsForMethod("chat.subscribe").count == 2
+        }
+        #expect(store.messages.map(\.id) == ["msg-1"])
+
+        fake.pendingMethods.remove("agent.getConversation")
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-2",
+            kind: .snapshot,
+            seq: 0,
+            snapshot: [],
+            delta: nil,
+            snapshotMeta: ["truncated": false, "totalMessages": 0]
+        ))
+        #expect(store.messages.isEmpty)
+        #expect(!store.isTruncated)
+        #expect(store.totalMessageCount == 0)
+        try await expectNever("another empty-snapshot recovery") {
+            fake.paramsForMethod("chat.subscribe").count > 2
+        }
+    }
+
+    @Test func deltaSupersedesPendingFetch() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+        fake.pendingMethods.insert("agent.getConversation")
+
+        await store.subscribeLiveChat(agentId: "agent-1")
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            kind: .snapshot,
+            seq: 0,
+            snapshot: [conversationRow(id: "msg-1", text: "Hello")],
+            delta: nil
+        ))
+        let fetch = Task {
+            await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        }
+        try await fake.waitForPendingRequests("agent.getConversation")
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            kind: .delta,
+            seq: 1,
+            snapshot: nil,
+            delta: SubscriptionPush.DeltaPayload(
+                added: [
+                    [
+                        "agentId": "agent-1",
+                        "messageId": "msg-2",
+                        "role": "assistant",
+                        "streamingComplete": true,
+                        "block": ["type": "text", "id": "msg-2:0", "text": "World"]
+                    ]
+                ],
+                updated: [],
+                removedIds: []
+            )
+        ))
+        #expect(store.messages.map(\.id) == ["msg-1", "msg-2"])
+
+        fake.resolvePending("agent.getConversation", with: [
+            "messages": [conversationRow(id: "msg-1", text: "Hello")]
+        ] as [String: Any])
+        await fetch.value
+
+        #expect(store.messages.map(\.id) == ["msg-1", "msg-2"])
     }
 
     // MARK: - contiguousDeltaAdvancesState

@@ -4,6 +4,7 @@ extension ConversationLiveTranscript {
     func bind(agentId newAgentId: String, workspaceId: String?) {
         if agentId != newAgentId {
             bindingGeneration &+= 1
+            emptySnapshotRecoveryAttempts = 0
         }
         agentId = newAgentId
         if let workspaceId {
@@ -32,6 +33,7 @@ extension ConversationLiveTranscript {
             isLoading = true
             inFlightInitialLoads += 1
         }
+        let snapshotGenerationAtIssue = chatSnapshotGeneration
 
         var params: [String: Any] = [
             "agentId": agentId,
@@ -59,13 +61,34 @@ extension ConversationLiveTranscript {
             }
         }
 
-        applyFetchOutcome(outcome)
+        applyFetchOutcome(outcome, snapshotGenerationAtIssue: snapshotGenerationAtIssue)
         finishInitialLoad(ifNeeded: isInitialLoad, outcomeWasCurrent: outcome != nil)
     }
 
-    private func applyFetchOutcome(_ outcome: Result<ConversationPage?, Error>?) {
+    private func applyFetchOutcome(
+        _ outcome: Result<ConversationPage?, Error>?,
+        snapshotGenerationAtIssue: Int
+    ) {
         switch outcome {
         case .success(let page?):
+            // An empty fetched page may complete an already-empty load, but
+            // cannot prune rows supplied by either live pushes or another fetch.
+            if page.messages.isEmpty, !messages.isEmpty {
+                AppLog.conversation.debug(
+                    "[ConversationStore] Dropped empty fetch reply over populated transcript"
+                )
+                return
+            }
+            // Preserve populated live state after any later live generation.
+            // An empty transcript deliberately admits a non-empty page despite
+            // a mismatch: without a shared revision, this is the recovery path
+            // for a delayed empty snapshot followed by a populated fetch.
+            if snapshotGenerationAtIssue != chatSnapshotGeneration, !messages.isEmpty {
+                AppLog.conversation.debug(
+                    "[ConversationStore] Dropped fetch reply after later live chat changes preserved populated state"
+                )
+                return
+            }
             isTruncated = page.truncated
             totalMessageCount = page.totalMessages ?? page.messages.count
             mergeFetchedMessages(page.messages)

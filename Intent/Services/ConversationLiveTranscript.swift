@@ -38,6 +38,11 @@ final class ConversationLiveTranscript {
     /// Initial fetches (`isLoading = true`) still awaiting their page. A stale
     /// initial fetch only finishes the load when none is left in flight.
     @ObservationIgnored var inFlightInitialLoads = 0
+    /// Advances for every live snapshot arrival, including a rejected empty
+    /// snapshot, and whenever a delta changes transcript rows. Older fetches
+    /// cannot replace populated live state, but may still seed an empty
+    /// transcript because the two sources share no revision.
+    @ObservationIgnored var chatSnapshotGeneration = 0
     /// Load windows held open by `holdingLoadWindow` (recovery refetches).
     /// While one is open, a finishing initial fetch neither replays nor lowers
     /// `isLoading`; the window does that when it closes.
@@ -50,12 +55,17 @@ final class ConversationLiveTranscript {
     private var chatChannelActive = false
     private var chatSeeded = false
     private var chatExpectedSeq = 0
-    private var resnapshotInProgress = false
+    @ObservationIgnored private(set) var resnapshotInProgress = false
+    /// One rejected empty snapshot gets a replacement subscription. If that
+    /// replacement also reports empty after recovery completes, accept it as
+    /// an authoritative deletion instead of resubscribing without a bound.
+    @ObservationIgnored var emptySnapshotRecoveryAttempts = 0
     private let timestampFormatter = ISO8601DateFormatter()
     @ObservationIgnored private var hydratedBlocks: [String: ContentBlock] = [:]
     @ObservationIgnored private var hydratedBlockOrder: [String] = []
 
     private static let maxHydratedBlocks = 30
+    private static let maxEmptySnapshotRecoveryAttempts = 1
 
     init(connectionManager: ConnectionManagerRouting) {
         self.connectionManager = connectionManager
@@ -256,13 +266,36 @@ extension ConversationLiveTranscript {
 
     private func applySnapshot(_ push: SubscriptionPush) {
         guard let items = push.snapshot else { return }
+        chatSnapshotGeneration &+= 1
+        let snapshotMessages = push.snapshotMessages ?? ConversationMessage.parseMessages(items)
+        if snapshotMessages.isEmpty, !messages.isEmpty {
+            if emptySnapshotRecoveryAttempts >= Self.maxEmptySnapshotRecoveryAttempts,
+               !resnapshotInProgress {
+                AppLog.conversation.warning(
+                    "[ConversationStore] Accepting repeated empty chat snapshot after recovery"
+                )
+                emptySnapshotRecoveryAttempts = 0
+            } else {
+                AppLog.conversation.warning(
+                    "[ConversationStore] Rejecting empty chat snapshot over populated transcript, resubscribing..."
+                )
+                if !resnapshotInProgress {
+                    emptySnapshotRecoveryAttempts += 1
+                    resnapshotInProgress = true
+                    Task { await resnapshot() }
+                }
+                return
+            }
+        } else if !snapshotMessages.isEmpty {
+            emptySnapshotRecoveryAttempts = 0
+        }
         chatLive = true
         chatSeeded = true
         chatExpectedSeq = push.seq + 1
         liveStateVersion &+= 1
         // `parse` pre-decodes off MainActor; the fallback covers pushes built
         // directly from raw dictionaries (tests).
-        messages = push.snapshotMessages ?? ConversationMessage.parseMessages(items)
+        messages = snapshotMessages
         remergeHydratedBlocks()
 
         isTruncated = push.snapshotMeta?["truncated"] as? Bool ?? false
@@ -299,6 +332,10 @@ extension ConversationLiveTranscript {
             }
         }
         remergeHydratedBlocks()
+        if !entities.isEmpty || !delta.removedIds.isEmpty {
+            chatSnapshotGeneration &+= 1
+            emptySnapshotRecoveryAttempts = 0
+        }
 
         if sawTerminal {
             isStreaming = false
@@ -420,6 +457,7 @@ extension ConversationLiveTranscript {
         chatChannelActive = false
         chatSeeded = false
         resnapshotInProgress = false
+        emptySnapshotRecoveryAttempts = 0
     }
 
     func reset() {
@@ -443,6 +481,8 @@ extension ConversationLiveTranscript {
         chatChannelActive = false
         chatSeeded = false
         chatExpectedSeq = 0
+        chatSnapshotGeneration = 0
         resnapshotInProgress = false
+        emptySnapshotRecoveryAttempts = 0
     }
 }
