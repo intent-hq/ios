@@ -752,6 +752,41 @@ extension ConversationStoreIntegrationTests {
         #expect(store.subscriptionId == "sub-new")
         #expect(!fake.didCallMethod("agent.getSubscriptions"))
     }
+
+    @Test func staleReconnectBeforeEventResubscribeCannotReplaceReappearance() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-initial"]
+        fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "chat-reconnect", "seq": 0, "snapshot": []]
+        fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["agent.get"] = ["agent": ["isStreaming": false]]
+        fake.responseMap["agent.getQueue"] = ["queue": []]
+        fake.responseMap["agent.getSubscriptions"] = ["subscriptions": [], "delegationGroups": []]
+        await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
+
+        fake.pendingMethods = ["agent.getQueue"]
+        fake.clearRequestLog()
+        let reconnect = Task { await store.onReconnected() }
+        try await fake.waitForPendingRequests("agent.getQueue")
+
+        store.deactivateStreaming()
+        fake.pendingMethods = []
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-new"]
+        await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
+        fake.resolvePending("agent.getQueue", with: ["queue": []])
+        await reconnect.value
+
+        #expect(store.subscriptionId == "sub-new")
+        #expect(fake.eventHandlerCount == 1)
+        #expect(fake.paramsForMethod("events.subscribe").count == 1)
+        #expect(!fake.didCallMethod("agent.getSubscriptions"))
+        #expect(
+            !fake.paramsForMethod("events.unsubscribe")
+                .compactMap { $0["subscriptionId"] as? String }
+                .contains("sub-new")
+        )
+    }
 }
 
 // MARK: - Recovery ownership and the bounded snapshot wait
