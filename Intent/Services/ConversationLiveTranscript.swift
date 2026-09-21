@@ -42,13 +42,13 @@ final class ConversationLiveTranscript {
     @ObservationIgnored var liveStateVersion = 0
     /// Ceiling on the seq-0 snapshot after a `chat.subscribe` ack; past it the
     /// registration is presumed stale and replaced on the retry schedule.
-    @ObservationIgnored var snapshotTimeout = Self.defaultSnapshotTimeout
+    @ObservationIgnored var snapshotTimeout = ConversationLiveTranscript.defaultSnapshotTimeout
     /// Self-heal backoff for a rejected registration or a missing seq-0
     /// snapshot: one delayed re-registration, doubling per consecutive
     /// failure up to `maxRetryDelay`, reset when a snapshot applies or the
     /// transport reconnects (mirrors cloudlands-fe's `LiveChatClient`).
-    @ObservationIgnored var initialRetryDelay = Self.defaultInitialRetryDelay
-    @ObservationIgnored var maxRetryDelay = Self.defaultMaxRetryDelay
+    @ObservationIgnored var initialRetryDelay = ConversationLiveTranscript.defaultInitialRetryDelay
+    @ObservationIgnored var maxRetryDelay = ConversationLiveTranscript.defaultMaxRetryDelay
     /// Delay of the next scheduled retry; `nil` until the first failure after
     /// a reset, so it starts from `initialRetryDelay`.
     @ObservationIgnored var nextRetryDelay: Duration?
