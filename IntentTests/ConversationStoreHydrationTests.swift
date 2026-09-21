@@ -135,7 +135,7 @@ extension ConversationStoreIntegrationTests {
         #expect(fake.paramsForMethod("agent.getMessageBlock").count == 1)
     }
 
-    @Test func hydratedBlockSurvivesSlimRefetchAndSnapshot() async {
+    @Test func hydratedBlockSurvivesSlimResnapshot() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 

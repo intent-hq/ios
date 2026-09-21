@@ -17,16 +17,10 @@ extension ConversationLiveTranscript {
     }
 
     /// Returns `work` only while the transcript remains on its original agent.
-    func whileBound<T: Sendable>(
-        _ work: () async throws -> T,
-        onStale: (T) async -> Void = { _ in }
-    ) async rethrows -> T? {
+    func whileBound<T: Sendable>(_ work: () async throws -> T) async rethrows -> T? {
         let generation = bindingGeneration
         let value = try await work()
-        guard generation == bindingGeneration else {
-            await onStale(value)
-            return nil
-        }
+        guard generation == bindingGeneration else { return nil }
         return value
     }
 

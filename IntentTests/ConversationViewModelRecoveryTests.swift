@@ -168,9 +168,9 @@ extension ConversationViewModelTests {
         #expect(viewModel.isPendingQuestionRecoveryLoading, "marker authority fails closed even before the seek starts")
     }
 
-    @Test func recoveryLoadingFalseWhileInitialFetchInFlight() {
+    @Test func recoveryLoadingFalseWhileInitialSnapshotInFlight() {
         // The row may simply not have loaded yet: no fail-closed gate (and no
-        // placeholder) until the initial transcript fetch has settled.
+        // placeholder) until the initial transcript snapshot has settled.
         let viewModel = makeVM()
         viewModel.store.messages = []
         viewModel.store.isLoading = true
@@ -179,7 +179,7 @@ extension ConversationViewModelTests {
         #expect(viewModel.isPendingQuestionRecoveryLoading == false)
 
         viewModel.store.isLoading = false
-        #expect(viewModel.isPendingQuestionRecoveryLoading, "settled fetch without the row fails closed")
+        #expect(viewModel.isPendingQuestionRecoveryLoading, "settled snapshot without the row fails closed")
     }
 
     @Test func recoveryLoadingFalseWhenMarkedRowIsResident() {

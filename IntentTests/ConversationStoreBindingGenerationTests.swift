@@ -181,7 +181,7 @@ extension ConversationStoreLiveStateTests {
 
     /// A `whileBound` body that suspends while the transcript is rebound to a
     /// different agent must have its result suppressed; a same-agent rebind in
-    /// the same window must not (concurrent same-agent fetches keep merging).
+    /// the same window must not (concurrent same-agent channel work keeps merging).
     @Test func whileBoundSuppressesResultOnlyWhenBoundAgentChanges() async {
         let fake = FakeConnectionManager()
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]

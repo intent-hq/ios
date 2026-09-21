@@ -31,7 +31,7 @@ struct ConversationStoreIntegrationTests {
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
 
-        // Start connected and fetch conversation (triggers onReconnected)
+        // Start connected and open the chat channel (triggers onReconnected)
         fake.simulateConnect()
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(store.messages.isEmpty)
