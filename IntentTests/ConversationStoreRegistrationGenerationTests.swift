@@ -233,7 +233,7 @@ extension ConversationStoreLiveStateTests {
     @Test func recoveryScheduledBeforeSupersessionDoesNothingWhenItRuns() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        fake.responseMap["chat.unsubscribe"] = [String: Any]()
+        fake.pendingMethods = ["chat.unsubscribe"]
         fake.stubChatSnapshot(subscriptionId: "sub-a", messages: [agentARow])
         await store.subscribeLiveChat(agentId: "agent-a", workspaceId: "ws-1")
         let staleRecovery = store.liveTranscript.registrationGeneration
@@ -249,11 +249,22 @@ extension ConversationStoreLiveStateTests {
         #expect(store.liveTranscript.chatSeeded)
         #expect(fake.hasSubscriptionHandler(id: "sub-b"))
         #expect(store.liveTranscript.chatSubscriptionId == "sub-b")
-        try await fake.waitForRequests("chat.unsubscribe")
+
+        // The rebind's release of A is parked in flight: B is untouched
+        // while it is pending and after it resolves.
+        try await fake.waitForPendingRequests("chat.unsubscribe")
         #expect(
             fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-a"],
             "only the rebind released A; B's registration is not released"
         )
+        fake.resolvePending("chat.unsubscribe", with: [String: Any]())
+        try await expectNever("a second release or a registration after A's release resolves") {
+            fake.paramsForMethod("chat.unsubscribe").count > 1 || fake.paramsForMethod("chat.subscribe").count > 2
+        }
+        expectAgentBTranscriptIntact(store)
+        #expect(store.liveTranscript.chatLive)
+        #expect(fake.hasSubscriptionHandler(id: "sub-b"))
+        #expect(store.liveTranscript.chatSubscriptionId == "sub-b")
         #expect(fake.paramsForMethod("chat.subscribe").count == 2)
         expectAgentBTranscriptIntact(store)
     }
