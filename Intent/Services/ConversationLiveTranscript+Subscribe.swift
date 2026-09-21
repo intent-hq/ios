@@ -44,10 +44,13 @@ extension ConversationLiveTranscript {
     /// let go without waiting), pending self-heal is dropped, and the token
     /// the new registration's reply, handler, timeout and retry validate
     /// against is returned. The recovery paths release before they get here,
-    /// so a registration they replace is released exactly once.
+    /// so a registration they replace is released exactly once. A released
+    /// channel no longer owns liveness: the firehose does until the new
+    /// registration's snapshot applies.
     private func openRegistration() -> Int {
         cancelSnapshotRecovery()
         releaseActiveRegistration()
+        chatLive = false
         registrationGeneration &+= 1
         return registrationGeneration
     }
@@ -85,6 +88,7 @@ extension ConversationLiveTranscript {
                 // The bound agent is gone: no snapshot will come, so the
                 // load settles now rather than at the wait's deadline.
                 snapshotPending = false
+                isLoading = false
                 resumeSnapshotWaiters()
             }
             scheduleRetry(generation: generation)

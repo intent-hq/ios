@@ -172,6 +172,36 @@ extension ConversationStoreLiveStateTests {
 
         #expect(store.agentNotFound, "a definitive not-found for the bound agent must raise agentNotFound")
         #expect(!store.liveTranscript.chatChannelActive, "a rejected registration leaves no live channel")
+        #expect(!store.liveTranscript.snapshotPending, "no snapshot is owed for a deleted agent")
+        #expect(!store.isLoading, "a definitive not-found settles the initial load")
+    }
+
+    /// Rebinding releases A's channel, which then no longer owns liveness:
+    /// until B's snapshot applies, the firehose alone raises the flag.
+    @Test func rebindHandsLivenessToTheFirehoseUntilTheNewSnapshotApplies() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.unsubscribe"] = [String: Any]()
+        fake.stubChatSnapshot(subscriptionId: "sub-a")
+        await store.subscribeLiveChat(agentId: "agent-a", workspaceId: "ws-1")
+        #expect(store.liveTranscript.chatLive)
+
+        fake.pendingMethods = ["chat.subscribe"]
+        let subscribeB = Task { await store.subscribeLiveChat(agentId: "agent-b", workspaceId: "ws-1") }
+        try await waitUntil("agent B's registration") { fake.paramsForMethod("chat.subscribe").count == 2 }
+        #expect(!store.liveTranscript.chatLive, "the released channel must not own B's liveness")
+
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:start", "data": ["agentId": "agent-b", "streamId": "s-b"]]
+        ])
+        #expect(store.isStreaming, "the firehose is B's only liveness signal while its snapshot is pending")
+
+        fake.stubChatSnapshot(subscriptionId: "sub-b", messages: [agentBRow])
+        fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-b"])
+        await subscribeB.value
+
+        #expect(store.liveTranscript.chatLive)
+        expectAgentBTranscriptIntact(store)
     }
 
     /// `-32602` with `data.code == "not-found"` (docs/PROTOCOL.md §3.3/§9).
