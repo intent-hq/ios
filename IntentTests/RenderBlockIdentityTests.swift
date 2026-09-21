@@ -143,13 +143,15 @@ struct BlockBodyEquatableTests {
         workspaceId: String = "ws-1",
         isHydrating: Bool = false
     ) -> ContentBlockBody {
-        ContentBlockBody(
+        let navigate: (String, String, String) -> Void = { _, _, _ in }
+        let hydrate: (String) -> Void = { _ in }
+        return ContentBlockBody(
             block: block,
             toolResult: toolResult,
             workspaceId: workspaceId,
-            onNavigateToNote: { _, _, _ in },
+            onNavigateToNote: navigate,
             isHydrating: isHydrating,
-            onHydrateBlock: { _ in }
+            onHydrateBlock: hydrate
         )
     }
 
@@ -160,22 +162,24 @@ struct BlockBodyEquatableTests {
         toolResults: [String: ContentBlock] = [:],
         hydratingBlockIds: Set<String> = []
     ) -> ResponseGroupBody {
-        ResponseGroupBody(
+        let navigate: (String, String, String) -> Void = { _, _, _ in }
+        let hydrate: (String) -> Void = { _ in }
+        return ResponseGroupBody(
             group: group,
             isLast: isLast,
             workspaceId: workspaceId,
-            onNavigateToNote: { _, _, _ in },
+            onNavigateToNote: navigate,
             toolResults: toolResults,
             hydratingBlockIds: hydratingBlockIds,
-            onHydrateBlock: { _ in }
+            onHydrateBlock: hydrate
         )
     }
 
     private func bodiesEqual(_ lhs: RenderBlock, _ rhs: RenderBlock) -> Bool {
         switch (lhs, rhs) {
-        case (.contentBlock(let left), .contentBlock(let right)):
+        case let (.contentBlock(left), .contentBlock(right)):
             return blockBody(left) == blockBody(right)
-        case (.group(let left), .group(let right)):
+        case let (.group(left), .group(right)):
             return groupBody(left) == groupBody(right)
         default:
             return false
@@ -186,7 +190,9 @@ struct BlockBodyEquatableTests {
 
     @Test func blockBodyIgnoresClosureIdentity() {
         let block = textBlock("b1", "Hello")
-        #expect(blockBody(block) == blockBody(block))
+        let first = blockBody(block)
+        let second = blockBody(block)
+        #expect(first == second)
         let withoutClosures = ContentBlockBody(
             block: block,
             toolResult: nil,
@@ -195,7 +201,7 @@ struct BlockBodyEquatableTests {
             isHydrating: false,
             onHydrateBlock: nil
         )
-        #expect(blockBody(block) == withoutClosures)
+        #expect(first == withoutClosures)
     }
 
     @Test func blockBodyTracksBlockText() {
@@ -204,8 +210,10 @@ struct BlockBodyEquatableTests {
 
     @Test func blockBodyTracksPairedToolResult() {
         let use = toolUse("u1")
-        #expect(blockBody(use, toolResult: toolResult("r1")) == blockBody(use, toolResult: toolResult("r1")))
-        #expect(blockBody(use) != blockBody(use, toolResult: toolResult("r1")))
+        let answered = blockBody(use, toolResult: toolResult("r1"))
+        let answeredAgain = blockBody(use, toolResult: toolResult("r1"))
+        #expect(answered == answeredAgain)
+        #expect(blockBody(use) != answered)
         #expect(
             blockBody(use, toolResult: toolResult("r1", output: "partial"))
                 != blockBody(use, toolResult: toolResult("r1", output: "done"))
@@ -226,9 +234,11 @@ struct BlockBodyEquatableTests {
 
     @Test func groupBodyIgnoresClosureIdentity() {
         let group = ResponseGroup(id: "g", name: "Setup", children: [textBlock("b1", "reading"), toolUse("u1")])
-        #expect(groupBody(group) == groupBody(group))
+        let first = groupBody(group)
+        let second = groupBody(group)
+        #expect(first == second)
         let withoutClosures = ResponseGroupBody(group: group, isLast: true, workspaceId: "ws-1")
-        #expect(groupBody(group) == withoutClosures)
+        #expect(first == withoutClosures)
     }
 
     @Test func groupBodyTracksChildChanges() {
@@ -249,9 +259,11 @@ struct BlockBodyEquatableTests {
         let group = ResponseGroup(id: "g", name: "Setup", children: [toolUse("u1")])
         let answered = ["u1": toolResult("r1")]
         let reanswered = ["u1": toolResult("r1", output: "done")]
-        #expect(groupBody(group, toolResults: answered) == groupBody(group, toolResults: answered))
-        #expect(groupBody(group) != groupBody(group, toolResults: answered))
-        #expect(groupBody(group, toolResults: answered) != groupBody(group, toolResults: reanswered))
+        let answeredBody = groupBody(group, toolResults: answered)
+        let answeredBodyAgain = groupBody(group, toolResults: answered)
+        #expect(answeredBody == answeredBodyAgain)
+        #expect(groupBody(group) != answeredBody)
+        #expect(answeredBody != groupBody(group, toolResults: reanswered))
         #expect(groupBody(group) != groupBody(group, hydratingBlockIds: ["u1"]))
         #expect(groupBody(group, hydratingBlockIds: ["u1"]) != groupBody(group, hydratingBlockIds: ["r1"]))
     }
