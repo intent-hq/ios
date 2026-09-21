@@ -37,6 +37,12 @@ final class ConversationLiveTranscript {
     /// same-agent rebind. `whileBound` compares against it so work started
     /// under an earlier binding cannot publish into a later one.
     @ObservationIgnored var bindingGeneration = 0
+    /// Advances on every `chat.subscribe` registration and channel teardown
+    /// (`reset`, reconnect), same-agent ones included. A reply, push, timeout
+    /// or retry that outlived its registration is validated against it after
+    /// each suspension and dropped, so it cannot replace or clear the newer
+    /// channel.
+    @ObservationIgnored var registrationGeneration = 0
     /// Advances each time the live chat channel applies a snapshot or delta.
     /// A streaming-state response captured before it moved is stale.
     @ObservationIgnored var liveStateVersion = 0
@@ -54,9 +60,14 @@ final class ConversationLiveTranscript {
     @ObservationIgnored var nextRetryDelay: Duration?
     @ObservationIgnored var snapshotTimeoutTask: Task<Void, Never>?
     @ObservationIgnored var retryTask: Task<Void, Never>?
-    /// `subscribe` calls parked until their registration's seq-0 snapshot
-    /// applies, times out, is rejected, or is superseded by another binding.
+    /// `awaitSnapshot` calls parked until the owed seq-0 snapshot applies,
+    /// the binding is torn down, or their own `snapshotTimeout` deadline.
     @ObservationIgnored var snapshotWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+    /// A registration's seq-0 snapshot is owed: raised by `subscribe`, held
+    /// across rejection, timeout, retry and reconnect (each re-registers for
+    /// the same binding), cleared when a snapshot applies or the binding is
+    /// torn down.
+    @ObservationIgnored var snapshotPending = false
     var chatLive = false
     @ObservationIgnored var chatSubscriptionId: String?
     var chatChannelActive = false
@@ -186,11 +197,8 @@ extension ConversationLiveTranscript {
     }
 
     func handlePush(_ push: SubscriptionPush) {
-        guard chatChannelActive else { return }
-        if let subscriptionId = chatSubscriptionId,
-           push.subscriptionId != subscriptionId {
-            return
-        }
+        guard chatChannelActive, let subscriptionId = chatSubscriptionId,
+              push.subscriptionId == subscriptionId else { return }
 
         switch push.kind {
         case .snapshot:
@@ -241,6 +249,7 @@ extension ConversationLiveTranscript {
         }
         chatLive = true
         chatSeeded = true
+        snapshotPending = false
         chatExpectedSeq = push.seq + 1
         liveStateVersion &+= 1
         resetBackoff()
@@ -383,6 +392,7 @@ extension ConversationLiveTranscript {
         agentId = nil
         workspaceId = nil
         bindingGeneration &+= 1
+        registrationGeneration &+= 1
         hydratingBlockKeys = []
         hydratedBlocks = [:]
         hydratedBlockOrder = []
@@ -393,6 +403,7 @@ extension ConversationLiveTranscript {
         chatSubscriptionId = nil
         chatChannelActive = false
         chatSeeded = false
+        snapshotPending = false
         chatExpectedSeq = 0
         resnapshotInProgress = false
         emptySnapshotRecoveryAttempts = 0

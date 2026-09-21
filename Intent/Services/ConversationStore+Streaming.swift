@@ -140,8 +140,9 @@ extension ConversationStore {
         reconcilePendingQuestionRecovery()
     }
 
-    /// Parks until the pending `chat.subscribe` seq-0 snapshot applied, its
-    /// wait timed out, or the channel was torn down.
+    /// Parks until the owed `chat.subscribe` seq-0 snapshot applied (a
+    /// rejected or silent registration keeps it owed to the retry), the
+    /// binding was torn down, or the wait's `snapshotTimeout` bound elapsed.
     func awaitLiveChatSnapshot() async {
         await liveTranscript.awaitSnapshot()
         reconcilePendingQuestionRecovery()

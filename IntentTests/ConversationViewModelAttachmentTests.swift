@@ -310,6 +310,9 @@ extension ConversationViewModelTests {
             fake.errorMap[method] = error
         }
         viewModel.store = ConversationStore(connectionManager: fake)
+        // load() holds its snapshot wait across a rejected registration up
+        // to this bound; keep the never-served cases short.
+        viewModel.store.liveTranscript.snapshotTimeout = .milliseconds(50)
         return (viewModel, fake)
     }
 
@@ -400,6 +403,39 @@ extension ConversationViewModelTests {
         #expect(
             viewModel.newMessagesDividerAnchorId == "m1",
             "the divider anchor is latched before the transcript can mount"
+        )
+    }
+
+    @Test func loadWaitsForTheRetriedRegistrationsSnapshotBeforeLatching() async {
+        // A transient rejection of the first chat.subscribe must not settle
+        // the load against the empty transcript: the divider anchor latches
+        // only once the retried registration's snapshot has applied.
+        let (viewModel, fake) = makeLoadableVM()
+        viewModel.store.liveTranscript.snapshotTimeout = .seconds(2)
+        viewModel.store.liveTranscript.initialRetryDelay = .milliseconds(20)
+        fake.errorQueueMap["chat.subscribe"] = [
+            NSError(domain: "WebSocket", code: -2, userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+        ]
+        fake.stubChatSnapshot(messages: [
+            ["id": "m1", "role": "assistant", "contentBlocks": [["type": "text", "text": "old"]]],
+            ["id": "m2", "role": "assistant", "contentBlocks": [["type": "text", "text": "new"]]]
+        ])
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "test-agent",
+                "name": "Test",
+                "metadata": ["lastSeenMessageId": "m1"]
+            ]
+        ] as [String: Any]
+
+        await viewModel.load()
+
+        #expect(fake.paramsForMethod("chat.subscribe").count == 2, "the retry served the transcript")
+        #expect(viewModel.filteredMessages.map(\.id) == ["m1", "m2"])
+        #expect(!viewModel.isLoading)
+        #expect(
+            viewModel.newMessagesDividerAnchorId == "m1",
+            "the divider anchors against the retried registration's snapshot"
         )
     }
 

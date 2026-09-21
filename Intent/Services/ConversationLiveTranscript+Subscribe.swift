@@ -9,36 +9,49 @@ extension ConversationLiveTranscript {
     /// transcript raises `isLoading` until its snapshot lands.
     func subscribe(agentId: String, workspaceId: String? = nil) async {
         bind(agentId: agentId, workspaceId: workspaceId)
-        // An explicit registration supersedes any pending self-heal.
-        cancelSnapshotRecovery()
+        let generation = openRegistration()
         chatChannelActive = true
         chatSeeded = false
+        snapshotPending = true
         if messages.isEmpty {
             isLoading = true
         }
-        let generation = bindingGeneration
 
-        // A reply (or failure) that lands after a rebind to another agent must
-        // leave the new binding's channel state untouched, so the error is
-        // carried as a value and only inspected on the still-bound path.
-        let outcome: Result<String?, Error>? = await whileBound {
-            do {
-                let result = try await connectionManager.request("chat.subscribe", params: [
-                    "agentId": agentId,
-                    "replaceGroup": "ios-chat-\(agentId)",
-                    "projection": "slim"
-                ])
-                return .success((result as? [String: Any])?["subscriptionId"] as? String)
-            } catch {
-                return .failure(error)
-            }
-        } onStale: { outcome in
+        let outcome: Result<String?, Error>
+        do {
+            let result = try await connectionManager.request("chat.subscribe", params: [
+                "agentId": agentId,
+                "replaceGroup": "ios-chat-\(agentId)",
+                "projection": "slim"
+            ])
+            outcome = .success((result as? [String: Any])?["subscriptionId"] as? String)
+        } catch {
+            outcome = .failure(error)
+        }
+        // A reply (or failure) that lands after a rebind, reset, reconnect or
+        // newer registration must leave the current channel untouched.
+        guard generation == registrationGeneration else {
             if case .success(let orphanedId?) = outcome {
                 await releaseOrphanedSubscription(orphanedId)
             }
+            return
         }
-        guard let outcome else { return }
         applySubscribeOutcome(outcome, generation: generation)
+    }
+
+    /// Opens a registration: the current channel is detached (its handler
+    /// no longer reaches `handlePush`, though its daemon-side release stays
+    /// with the recovery paths), pending self-heal is dropped, and the token
+    /// the new registration's reply, handler, timeout and retry validate
+    /// against is returned.
+    private func openRegistration() -> Int {
+        cancelSnapshotRecovery()
+        if let previous = chatSubscriptionId {
+            connectionManager.unregisterSubscriptionHandler(id: previous)
+            chatSubscriptionId = nil
+        }
+        registrationGeneration &+= 1
+        return registrationGeneration
     }
 
     /// Registers the acked subscription's handler and arms the seq-0 snapshot
@@ -47,12 +60,10 @@ extension ConversationLiveTranscript {
     private func applySubscribeOutcome(_ outcome: Result<String?, Error>, generation: Int) {
         switch outcome {
         case .success(let subscriptionId?):
-            if let previous = chatSubscriptionId, previous != subscriptionId {
-                connectionManager.unregisterSubscriptionHandler(id: previous)
-            }
             chatSubscriptionId = subscriptionId
             connectionManager.registerSubscriptionHandler(id: subscriptionId) { [weak self] push in
-                self?.handlePush(push)
+                guard let self, generation == registrationGeneration else { return }
+                handlePush(push)
             }
             AppLog.conversation.info(
                 "[ConversationStore] Subscribed to chat.subscribe: \(subscriptionId)"
@@ -72,6 +83,12 @@ extension ConversationLiveTranscript {
                 "[ConversationStore] chat.subscribe failed: \(error), retrying with backoff"
             )
             onSubscribeError?(error)
+            if (error as NSError).isEntityNotFound {
+                // The bound agent is gone: no snapshot will come, so the
+                // load settles now rather than at the wait's deadline.
+                snapshotPending = false
+                resumeSnapshotWaiters()
+            }
             scheduleRetry(generation: generation)
         }
     }
@@ -83,14 +100,19 @@ extension ConversationLiveTranscript {
     func resnapshot() async {
         resnapshotInProgress = true
         defer { resnapshotInProgress = false }
+        // This recovery owns the channel: a timeout or retry armed for the
+        // registration it replaces must not open a registration of its own.
+        cancelSnapshotRecovery()
         chatLive = false
         chatSeeded = false
+        let generation = registrationGeneration
 
         await releaseCurrentSubscription()
 
-        if let agentId {
-            await subscribe(agentId: agentId, workspaceId: workspaceId)
-        }
+        // A reset, rebind, reconnect or explicit registration during the
+        // release owns recovery now.
+        guard generation == registrationGeneration, let agentId else { return }
+        await subscribe(agentId: agentId, workspaceId: workspaceId)
     }
 
     func prepareForReconnect() {
@@ -103,23 +125,33 @@ extension ConversationLiveTranscript {
         chatSeeded = false
         resnapshotInProgress = false
         emptySnapshotRecoveryAttempts = 0
-        // The reconnect registration is the recovery: drop any pending retry
-        // and start the backoff over.
+        // The reconnect registration is the recovery: drop the outage's
+        // in-flight replies and pending retry, and start the backoff over.
+        // Snapshot waiters keep parking for that registration's snapshot.
+        registrationGeneration &+= 1
         resetBackoff()
-        resumeSnapshotWaiters()
     }
 
     // MARK: - Snapshot wait, timeout and backoff retry
 
-    /// Parks until the pending registration's seq-0 snapshot applies, its
-    /// wait times out, or the channel is torn down (rejection, rebind, reset,
-    /// reconnect). Returns at once when no registration is awaiting one.
+    /// Parks until the owed seq-0 snapshot applies, the binding is torn down
+    /// (rebind, reset), or `snapshotTimeout` elapses. A rejected or silent
+    /// registration and a reconnect keep the wait open: their re-registration
+    /// serves the snapshot within the bound. Returns at once when no snapshot
+    /// is owed.
     func awaitSnapshot() async {
-        guard chatChannelActive, !chatSeeded else { return }
+        guard snapshotPending else { return }
         let id = UUID()
+        let timeout = snapshotTimeout
+        let deadline = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard !Task.isCancelled else { return }
+            self?.snapshotWaiters.removeValue(forKey: id)?.resume()
+        }
         await withCheckedContinuation { continuation in
             snapshotWaiters[id] = continuation
         }
+        deadline.cancel()
     }
 
     func resumeSnapshotWaiters() {
@@ -130,20 +162,19 @@ extension ConversationLiveTranscript {
         }
     }
 
-    /// The registration acked but its seq-0 snapshot never came: release the
-    /// waiters (the load has settled as far as callers can tell) and replace
-    /// the presumed-stale registration on the retry schedule.
+    /// The registration acked but its seq-0 snapshot never came: replace the
+    /// presumed-stale registration on the retry schedule. Waiters keep
+    /// parking for the replacement, bounded by their own deadline.
     private func armSnapshotTimeout(generation: Int) {
         snapshotTimeoutTask?.cancel()
         let timeout = snapshotTimeout
         snapshotTimeoutTask = Task { [weak self] in
             try? await Task.sleep(for: timeout)
-            guard !Task.isCancelled, let self, generation == bindingGeneration, !chatSeeded else { return }
+            guard !Task.isCancelled, let self, generation == registrationGeneration, !chatSeeded else { return }
             snapshotTimeoutTask = nil
             AppLog.conversation.warning(
                 "[ConversationStore] chat.subscribe snapshot did not arrive within \(timeout), resubscribing..."
             )
-            resumeSnapshotWaiters()
             scheduleRetry(generation: generation)
         }
     }
@@ -154,11 +185,15 @@ extension ConversationLiveTranscript {
         nextRetryDelay = min(delay * 2, maxRetryDelay)
         retryTask = Task { [weak self] in
             try? await Task.sleep(for: delay)
-            guard !Task.isCancelled, let self, generation == bindingGeneration, let agentId else { return }
+            guard !Task.isCancelled, let self, generation == registrationGeneration else { return }
+            // Still cancellable through `retryTask` across the release; a
+            // reset, rebind, reconnect or explicit registration meanwhile
+            // owns recovery and this retry must not revive its binding.
+            await releaseCurrentSubscription()
+            guard !Task.isCancelled, generation == registrationGeneration, let agentId else { return }
             // Cleared before `subscribe` cancels pending recovery, so this
             // task's own `chat.subscribe` request is not cancelled midway.
             retryTask = nil
-            await releaseCurrentSubscription()
             await subscribe(agentId: agentId, workspaceId: workspaceId)
         }
     }
@@ -209,10 +244,11 @@ extension ConversationLiveTranscript {
         }
     }
 
+    /// A rejected registration leaves no channel; its snapshot stays owed to
+    /// the retry, so waiters are not released here.
     private func clearChannel() {
         chatChannelActive = false
         chatLive = false
         chatSubscriptionId = nil
-        resumeSnapshotWaiters()
     }
 }

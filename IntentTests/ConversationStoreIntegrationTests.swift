@@ -668,3 +668,128 @@ extension ConversationStoreIntegrationTests {
         #expect(fake.subscriptionHandlerCount == 0)
     }
 }
+
+// MARK: - Recovery ownership and the bounded snapshot wait
+
+extension ConversationStoreIntegrationTests {
+    private func emptyDelta(subscriptionId: String, seq: Int) -> SubscriptionPush {
+        SubscriptionPush(
+            subscriptionId: subscriptionId,
+            kind: .delta,
+            seq: seq,
+            snapshot: nil,
+            delta: SubscriptionPush.DeltaPayload(added: [], updated: [], removedIds: [])
+        )
+    }
+
+    /// A gap recovery parked in `chat.unsubscribe` owns the channel: the
+    /// snapshot timeout armed for the registration it replaces must not open
+    /// a registration of its own, and exactly one replacement follows.
+    @Test func resnapshotPendingInUnsubscribeCancelsTheOldSnapshotTimeout() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        store.liveTranscript.snapshotTimeout = .milliseconds(20)
+        store.liveTranscript.initialRetryDelay = .milliseconds(10)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+        fake.pendingMethods = ["chat.unsubscribe"]
+
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
+        #expect(store.liveTranscript.snapshotTimeoutTask != nil, "the ack arms the snapshot timeout")
+
+        // A delta ahead of the seq-0 snapshot is a gap: recovery starts and
+        // parks in the release of sub-1.
+        fake.deliverSubscriptionPush(emptyDelta(subscriptionId: "sub-1", seq: 3))
+        try await fake.waitForPendingRequests("chat.unsubscribe")
+        #expect(store.liveTranscript.resnapshotInProgress)
+        #expect(store.liveTranscript.snapshotTimeoutTask == nil)
+        try await expectNever("a retry registration while the recovery is pending") {
+            fake.paramsForMethod("chat.subscribe").count > 1
+        }
+
+        fake.stubChatSnapshot(subscriptionId: "sub-2", messages: [conversationRow(id: "msg-1", text: "Hello")])
+        fake.resolvePending("chat.unsubscribe", with: [String: Any]())
+        try await waitUntil("the replacement registration's snapshot") { store.messages.map(\.id) == ["msg-1"] }
+        #expect(fake.paramsForMethod("chat.subscribe").count == 2)
+        #expect(!store.liveTranscript.resnapshotInProgress)
+        try await expectNever("a second replacement registration") {
+            fake.paramsForMethod("chat.subscribe").count > 2
+        }
+    }
+
+    /// A rejected first registration does not settle the initial-load wait:
+    /// the snapshot is still owed to the retry, which serves it within the
+    /// bound.
+    @Test func snapshotWaitSurvivesARejectedRegistrationUntilTheRetrySnapshot() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        store.liveTranscript.initialRetryDelay = .milliseconds(20)
+        fake.errorQueueMap["chat.subscribe"] = [NSError(domain: "WebSocket", code: -32_000)]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+        fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
+
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
+        #expect(!store.liveTranscript.chatChannelActive)
+        #expect(store.isLoading)
+
+        let wait = Task { await store.awaitLiveChatSnapshot() }
+        try await waitUntil("the snapshot wait to park") { !store.liveTranscript.snapshotWaiters.isEmpty }
+        try await fake.waitForRequests("chat.subscribe", count: 2)
+        #expect(store.isLoading, "the retried registration still awaits its seq-0 snapshot")
+        #expect(!store.liveTranscript.snapshotWaiters.isEmpty, "the ack alone does not settle the wait")
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            kind: .snapshot,
+            seq: 0,
+            snapshot: [conversationRow(id: "msg-1", text: "Hello")],
+            delta: nil
+        ))
+        await wait.value
+        #expect(store.messages.map(\.id) == ["msg-1"])
+        #expect(!store.isLoading)
+    }
+
+    /// Consecutive rejections cannot hold the initial load open forever: the
+    /// wait settles at `snapshotTimeout` while the retry schedule goes on.
+    @Test func snapshotWaitIsBoundedAcrossRejectedRegistrations() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        store.liveTranscript.snapshotTimeout = .milliseconds(50)
+        store.liveTranscript.initialRetryDelay = .seconds(10)
+        fake.errorMap["chat.subscribe"] = NSError(domain: "WebSocket", code: -32_000)
+
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
+        let start = ContinuousClock.now
+        await store.awaitLiveChatSnapshot()
+
+        #expect(ContinuousClock.now - start >= .milliseconds(40), "the wait parks until its deadline")
+        #expect(store.liveTranscript.snapshotWaiters.isEmpty)
+        #expect(store.liveTranscript.retryTask != nil, "the retry schedule outlives the settled wait")
+        #expect(store.isLoading)
+        #expect(fake.paramsForMethod("chat.subscribe").count == 1)
+    }
+
+    /// A reconnect during the initial snapshot wait re-registers for the same
+    /// binding: the wait keeps parking and the reconnect registration's
+    /// snapshot settles it.
+    @Test func snapshotWaitSurvivesAReconnectUntilTheReconnectSnapshot() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
+        let wait = Task { await store.awaitLiveChatSnapshot() }
+        try await waitUntil("the snapshot wait to park") { !store.liveTranscript.snapshotWaiters.isEmpty }
+
+        store.liveTranscript.prepareForReconnect()
+        #expect(!store.liveTranscript.snapshotWaiters.isEmpty, "the outage does not settle the wait")
+        #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
+
+        fake.stubChatSnapshot(subscriptionId: "sub-2", messages: [conversationRow(id: "msg-1", text: "Hello")])
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
+        await wait.value
+        #expect(store.messages.map(\.id) == ["msg-1"])
+        #expect(!store.isLoading)
+        #expect(fake.hasSubscriptionHandler(id: "sub-2"))
+    }
+}

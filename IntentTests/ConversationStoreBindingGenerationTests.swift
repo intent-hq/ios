@@ -303,4 +303,163 @@ extension ConversationStoreLiveStateTests {
     }
 }
 
+// MARK: - Registration generation (recovery and replies outliving their registration)
+
+extension ConversationStoreLiveStateTests {
+    /// Agent A's seq-0 snapshot row.
+    private var agentARow: [String: Any] {
+        [
+            "id": "msg-a1", "role": "user",
+            "contentBlocks": [["type": "text", "id": "msg-a1:0", "text": "Stale A"]],
+            "timestamp": "2026-06-27T01:00:00.000Z"
+        ]
+    }
+
+    /// Acks agent A's registration without a snapshot; its timeout fires and
+    /// the retry parks releasing `sub-a` (`chat.unsubscribe` suspended).
+    private func parkRetryOfAgentAInUnsubscribe() async throws -> (ConversationStore, FakeConnectionManager) {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        store.liveTranscript.snapshotTimeout = .milliseconds(20)
+        store.liveTranscript.initialRetryDelay = .milliseconds(10)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-a"]
+        fake.pendingMethods = ["chat.unsubscribe"]
+
+        await store.subscribeLiveChat(agentId: "agent-a", workspaceId: "ws-1")
+        try await fake.waitForPendingRequests("chat.unsubscribe")
+        #expect(store.isLoading)
+        return (store, fake)
+    }
+
+    /// A retry parked in the release of agent A's stale registration must
+    /// not revive A once the transcript was rebound to agent B meanwhile.
+    @Test func retryParkedInUnsubscribeDoesNotReviveAgentAAfterRebind() async throws {
+        let (store, fake) = try await parkRetryOfAgentAInUnsubscribe()
+
+        fake.stubChatSnapshot(subscriptionId: "sub-b", messages: [agentBRow])
+        await store.subscribeLiveChat(agentId: "agent-b", workspaceId: "ws-1")
+        expectAgentBTranscriptIntact(store)
+
+        fake.resolvePending("chat.unsubscribe", with: [String: Any]())
+        try await expectNever("a revived registration for agent A") {
+            fake.paramsForMethod("chat.subscribe").count > 2
+        }
+        #expect(fake.paramsForMethod("chat.subscribe").compactMap { $0["agentId"] as? String } == ["agent-a", "agent-b"])
+        #expect(store.liveTranscript.agentId == "agent-b")
+        #expect(fake.hasSubscriptionHandler(id: "sub-b"))
+        expectAgentBTranscriptIntact(store)
+        #expect(store.isLoading == false)
+    }
+
+    /// Same retry, but the store was `reset()` while it waited: nothing may
+    /// re-register or restore the old binding's loading state.
+    @Test func retryParkedInUnsubscribeDoesNotReviveTheBindingAfterReset() async throws {
+        let (store, fake) = try await parkRetryOfAgentAInUnsubscribe()
+
+        store.reset()
+        #expect(store.isLoading == false)
+
+        fake.resolvePending("chat.unsubscribe", with: [String: Any]())
+        try await expectNever("a registration revived after reset") {
+            fake.paramsForMethod("chat.subscribe").count > 1
+        }
+        #expect(store.liveTranscript.agentId == nil)
+        #expect(store.isLoading == false)
+        #expect(!store.liveTranscript.chatChannelActive)
+        #expect(store.messages.isEmpty)
+    }
+
+    /// Agent A's acked registration is detached the moment agent B registers:
+    /// A's late snapshot reaches neither the handler nor the push gate, so it
+    /// cannot seed B's channel or settle B's in-flight initial load.
+    @Test func lateSnapshotOfPreviousRegistrationDoesNotSeedThePendingOne() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-a"]
+        fake.responseMap["chat.unsubscribe"] = [String: Any]()
+        await store.subscribeLiveChat(agentId: "agent-a", workspaceId: "ws-1")
+        #expect(fake.hasSubscriptionHandler(id: "sub-a"))
+
+        fake.pendingMethods = ["chat.subscribe"]
+        let subscribeB = Task { await store.subscribeLiveChat(agentId: "agent-b", workspaceId: "ws-1") }
+        try await fake.waitForPendingRequests("chat.subscribe")
+        #expect(!fake.hasSubscriptionHandler(id: "sub-a"), "B's registration detaches A's channel")
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-a", kind: .snapshot, seq: 0, snapshot: [agentARow], delta: nil
+        ))
+        var stalePush = snapshotParams(messages: [agentARow])
+        stalePush["subscriptionId"] = "sub-a"
+        store.handleStreamEvent("subscription.push", params: stalePush)
+        #expect(store.messages.isEmpty)
+        #expect(store.isLoading, "A's late snapshot must not settle B's initial load")
+        #expect(store.liveTranscript.chatSeeded == false)
+
+        fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-b"])
+        await subscribeB.value
+        #expect(store.liveTranscript.snapshotTimeoutTask != nil, "B's own snapshot is still awaited")
+
+        var livePush = snapshotParams(messages: [agentBRow])
+        livePush["subscriptionId"] = "sub-b"
+        store.handleStreamEvent("subscription.push", params: livePush)
+        #expect(store.messages.map(\.id) == ["msg-b1"])
+        #expect(store.isLoading == false)
+    }
+
+    /// Parks one same-agent registration, then resolves a newer one for the
+    /// same agent first (with its snapshot). Returns the parked task.
+    private func startSupersededSameAgentRegistration(
+        _ store: ConversationStore,
+        _ fake: FakeConnectionManager
+    ) async throws -> Task<Void, Never> {
+        fake.responseMap["chat.unsubscribe"] = [String: Any]()
+        fake.pendingMethods = ["chat.subscribe"]
+        let first = Task { await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1") }
+        try await fake.waitForPendingRequests("chat.subscribe")
+
+        fake.pendingMethods = []
+        fake.stubChatSnapshot(subscriptionId: "sub-2", messages: [agentBRow])
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
+        #expect(fake.hasSubscriptionHandler(id: "sub-2"))
+        #expect(store.messages.map(\.id) == ["msg-b1"])
+        #expect(store.liveTranscript.chatLive)
+        return first
+    }
+
+    /// An older same-agent ack that lands after the newer registration took
+    /// the channel is an orphan: released, never registered.
+    @Test func olderSameAgentAckAfterTheNewerDoesNotReplaceTheLiveChannel() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        let first = try await startSupersededSameAgentRegistration(store, fake)
+
+        fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-1"])
+        await first.value
+
+        #expect(fake.hasSubscriptionHandler(id: "sub-2"))
+        #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
+        #expect(store.liveTranscript.chatSubscriptionId == "sub-2")
+        #expect(store.liveTranscript.chatLive)
+        #expect(store.messages.map(\.id) == ["msg-b1"])
+        #expect(fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-1"])
+    }
+
+    /// An older same-agent failure that lands after the newer registration
+    /// took the channel must neither clear it nor schedule a retry.
+    @Test func olderSameAgentFailureAfterTheNewerDoesNotClearTheLiveChannel() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        let first = try await startSupersededSameAgentRegistration(store, fake)
+
+        fake.failPending("chat.subscribe", with: NSError(domain: "WebSocket", code: -32_000))
+        await first.value
+
+        #expect(store.liveTranscript.chatChannelActive)
+        #expect(store.liveTranscript.chatLive)
+        #expect(fake.hasSubscriptionHandler(id: "sub-2"))
+        #expect(store.liveTranscript.retryTask == nil, "a superseded registration schedules no retry")
+        #expect(fake.paramsForMethod("chat.unsubscribe").isEmpty)
+    }
+}
+
 // swiftlint:enable multiline_arguments multiline_call_arguments multiline_literal_brackets no_magic_numbers
