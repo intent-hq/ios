@@ -73,9 +73,12 @@ final class ConversationLiveTranscript {
 
     private static let maxHydratedBlocks = 30
     private static let maxEmptySnapshotRecoveryAttempts = 1
-    static let defaultSnapshotTimeout: Duration = .seconds(5)
-    static let defaultInitialRetryDelay: Duration = .seconds(1)
-    static let defaultMaxRetryDelay: Duration = .seconds(30)
+    private static let defaultSnapshotTimeoutSeconds = 5
+    private static let defaultInitialRetryDelaySeconds = 1
+    private static let defaultMaxRetryDelaySeconds = 30
+    static let defaultSnapshotTimeout: Duration = .seconds(defaultSnapshotTimeoutSeconds)
+    static let defaultInitialRetryDelay: Duration = .seconds(defaultInitialRetryDelaySeconds)
+    static let defaultMaxRetryDelay: Duration = .seconds(defaultMaxRetryDelaySeconds)
 
     init(connectionManager: ConnectionManagerRouting) {
         self.connectionManager = connectionManager
