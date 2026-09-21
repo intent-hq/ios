@@ -8,6 +8,8 @@ import UIKit
 struct CreationPickerControlsTests {
     // Both production forms scroll; this canvas keeps every measured row mounted at accessibility sizes.
     private static let pickerHostHeight: CGFloat = 1200
+    private static let pickerSettleTimeout: TimeInterval = 3
+    private static let requiredStableFrameSamples = 3
 
     @Test func providerPickersKeepCallbacksIndependentAndUseHostPolicy() {
         let signedIn = ProviderInfo(id: "auggie", authenticated: .signedIn)
@@ -149,17 +151,42 @@ struct CreationPickerControlsTests {
             lower: lowerFrame
         ))
 
-        let readable = PickerElementSnapshot(label: nil, value: nil, frame: lowerFrame, traits: [])
+        let readable = PickerElementSnapshot(
+            label: nil,
+            value: nil,
+            frame: lowerFrame,
+            controlFrame: lowerFrame,
+            traits: []
+        )
+        let labelInflated = PickerElementSnapshot(
+            label: nil,
+            value: nil,
+            frame: CGRect(x: 0, y: 0, width: 200, height: boundary + 8),
+            controlFrame: CGRect(x: 0, y: 0, width: 200, height: boundary),
+            traits: []
+        )
         let undersized = PickerElementSnapshot(
             label: nil,
             value: nil,
             frame: CGRect(x: 0, y: 0, width: 200, height: 43),
+            controlFrame: CGRect(x: 0, y: 0, width: 200, height: 43),
             traits: []
         )
-        let invalid = PickerElementSnapshot(label: nil, value: nil, frame: .zero, traits: [])
+        let invalid = PickerElementSnapshot(
+            label: nil,
+            value: nil,
+            frame: .zero,
+            controlFrame: .zero,
+            traits: []
+        )
         #expect(readable.hasMinimumInteractiveSize)
         #expect(!undersized.hasMinimumInteractiveSize)
         #expect(!invalid.hasFiniteNonemptyFrame)
+        #expect(PickerLayoutSnapshot(
+            hostFrame: CGRect(x: 0, y: 0, width: 200, height: 200),
+            provider: labelInflated,
+            model: readable
+        ).hasNoMeaningfulVerticalOverlap)
     }
 
     @Test(
@@ -193,53 +220,78 @@ struct CreationPickerControlsTests {
             width: 430,
             height: Self.pickerHostHeight
         ) { hostView, window in
-            let provider = try Self.pickerElement(
-                identifier: "creation.providerPicker",
-                in: hostView
-            )
-            let model = try Self.pickerElement(
-                identifier: "creation.modelPicker",
-                in: hostView
-            )
-            print(
-                "PICKER_DIAGNOSTIC layout=\(layout) size=\(dynamicTypeSize) "
-                    + "category=\(hostView.traitCollection.preferredContentSizeCategory.rawValue) "
-                    + "provider={\(Self.elementDiagnostics(provider, in: window))} "
-                    + "model={\(Self.elementDiagnostics(model, in: window))}"
-            )
+            let settled = try Self.settledPickerElements(in: hostView, window: window)
             return PickerLayoutSnapshot(
                 hostFrame: window.bounds,
-                provider: Self.snapshot(provider, in: window),
-                model: Self.snapshot(model, in: window)
+                provider: Self.snapshot(
+                    settled.provider,
+                    controlFrame: settled.providerFrame,
+                    in: window
+                ),
+                model: Self.snapshot(
+                    settled.model,
+                    controlFrame: settled.modelFrame,
+                    in: window
+                )
             )
         }
     }
 
-    private static func snapshot(_ element: NSObject, in window: UIWindow) -> PickerElementSnapshot {
+    private static func snapshot(
+        _ element: NSObject,
+        controlFrame: CGRect,
+        in window: UIWindow
+    ) -> PickerElementSnapshot {
         PickerElementSnapshot(
             label: element.accessibilityLabel,
             value: element.accessibilityValue,
             frame: window.convert(element.accessibilityFrame, from: nil),
+            controlFrame: controlFrame,
             traits: element.accessibilityTraits
         )
     }
 
-    private static func elementDiagnostics(_ element: NSObject, in window: UIWindow) -> String {
-        var facts: [String] = []
-        var current: NSObject? = element
-        var visited: Set<ObjectIdentifier> = []
-        while let object = current,
-              facts.count < 6,
-              visited.insert(ObjectIdentifier(object)).inserted {
-            let frame = window.convert(object.accessibilityFrame, from: nil)
-            let viewFrame = (object as? UIView).map { window.convert($0.bounds, from: $0) }
-            facts.append(
-                "type=\(String(reflecting: type(of: object))) frame=\(frame) "
-                    + "viewFrame=\(String(describing: viewFrame)) isElement=\(object.isAccessibilityElement)"
-            )
-            current = (object as? UIAccessibilityElement)?.accessibilityContainer as? NSObject
+    private static func settledPickerElements(
+        in hostView: UIView,
+        window: UIWindow
+    ) throws -> SettledPickerElements {
+        // SwiftUI can finish Dynamic Type reflow after the host appears.
+        let deadline = Date(timeIntervalSinceNow: pickerSettleTimeout)
+        var previousFrames: (provider: CGRect, model: CGRect)?
+        var stableFrameSamples = 0
+
+        while Date() < deadline {
+            _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
+            window.layoutIfNeeded()
+            hostView.layoutIfNeeded()
+
+            let provider = try pickerElement(identifier: "creation.providerPicker", in: hostView)
+            let model = try pickerElement(identifier: "creation.modelPicker", in: hostView)
+            let providerFrame = try controlFrame(of: provider, in: window)
+            let modelFrame = try controlFrame(of: model, in: window)
+            let framesMatch = previousFrames?.provider == providerFrame
+                && previousFrames?.model == modelFrame
+            stableFrameSamples = framesMatch ? stableFrameSamples + 1 : 1
+            if stableFrameSamples >= requiredStableFrameSamples {
+                return SettledPickerElements(
+                    provider: provider,
+                    providerFrame: providerFrame,
+                    model: model,
+                    modelFrame: modelFrame
+                )
+            }
+            previousFrames = (providerFrame, modelFrame)
         }
-        return facts.joined(separator: " -> ")
+
+        throw PickerInspectionError.framesDidNotSettle
+    }
+
+    private static func controlFrame(of element: NSObject, in window: UIWindow) throws -> CGRect {
+        let view = try #require(
+            element as? UIView,
+            "Hosted picker accessibility element did not expose its on-screen control view"
+        )
+        return window.convert(view.bounds, from: view)
     }
 
     private static func pickerElement(identifier: String, in hostView: UIView) throws -> NSObject {
@@ -273,6 +325,17 @@ struct CreationPickerControlsTests {
     }
 }
 
+private enum PickerInspectionError: Error {
+    case framesDidNotSettle
+}
+
+private struct SettledPickerElements {
+    let provider: NSObject
+    let providerFrame: CGRect
+    let model: NSObject
+    let modelFrame: CGRect
+}
+
 private enum PickerHostLayout: CaseIterable {
     case agent
     case workspace
@@ -297,6 +360,7 @@ private struct PickerElementSnapshot {
     let label: String?
     let value: String?
     let frame: CGRect
+    let controlFrame: CGRect
     let traits: UIAccessibilityTraits
 
     var hasFiniteNonemptyFrame: Bool {
@@ -316,7 +380,8 @@ private struct PickerLayoutSnapshot {
     let model: PickerElementSnapshot
 
     var hasNoMeaningfulVerticalOverlap: Bool {
-        Self.hasNoMeaningfulVerticalOverlap(upper: provider.frame, lower: model.frame)
+        // SwiftUI may fold a row caption into the accessibility frame above the visible control.
+        Self.hasNoMeaningfulVerticalOverlap(upper: provider.controlFrame, lower: model.controlFrame)
     }
 
     func horizontallyContains(_ frame: CGRect) -> Bool {
