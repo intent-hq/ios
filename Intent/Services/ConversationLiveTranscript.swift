@@ -22,8 +22,6 @@ final class ConversationLiveTranscript {
     var hydratingBlockKeys: Set<String> = []
 
     @ObservationIgnored var onStreamingChanged: (@MainActor (Bool) -> Void)?
-    /// Fired when the seq-0 snapshot of an initial load (`isLoading`) applies.
-    @ObservationIgnored var onInitialLoadCompleted: (@MainActor () -> Void)?
     /// Fired when `chat.subscribe` is rejected for the still-bound agent.
     @ObservationIgnored var onSubscribeError: (@MainActor (Error) -> Void)?
     /// Fired after the live chat channel replaced (snapshot) or merged (delta)
@@ -68,6 +66,9 @@ final class ConversationLiveTranscript {
     /// the same binding), cleared when a snapshot applies or the binding is
     /// torn down.
     @ObservationIgnored var snapshotPending = false
+    /// The channel applied a snapshot and owns the streaming flag; while it
+    /// is false (no channel yet, rejected registration, reconnect), the
+    /// content-free `agent:stream:*` firehose is the only liveness signal.
     var chatLive = false
     @ObservationIgnored var chatSubscriptionId: String?
     var chatChannelActive = false
@@ -284,10 +285,7 @@ extension ConversationLiveTranscript {
             "[ConversationStore] Applied chat snapshot with \(items.count) messages, "
                 + "seq=\(push.seq), streaming=\(isStreaming)"
         )
-        if isLoading {
-            onInitialLoadCompleted?()
-            isLoading = false
-        }
+        isLoading = false
         resumeSnapshotWaiters()
         onTranscriptReplaced?()
     }
@@ -388,14 +386,6 @@ extension ConversationLiveTranscript {
         }
         merged.metadata = metadata
         return merged
-    }
-
-    func shouldSuppressFirehose(eventType: String) -> Bool {
-        chatLive && eventType.hasPrefix("agent:stream:") && eventType != "agent:stream:end"
-    }
-
-    var shouldDiscardBufferedFirehose: Bool {
-        chatLive
     }
 
     func reset() {

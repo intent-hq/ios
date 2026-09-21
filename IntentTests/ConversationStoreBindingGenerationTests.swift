@@ -67,9 +67,9 @@ extension ConversationStoreLiveStateTests {
     }
 
     /// A stale registration for agent A must not finish agent B's own
-    /// in-flight initial load: `isLoading` stays up, and the firehose events
-    /// buffered meanwhile are released — not replayed — when B's snapshot,
-    /// the authoritative transcript, lands.
+    /// in-flight initial load: `isLoading` stays up, and the streaming flag
+    /// the firehose raised meanwhile is settled by B's snapshot, the
+    /// authoritative transcript.
     @Test func staleSubscribeDoesNotFinishNewAgentInFlightInitialLoad() async {
         let (store, fake) = makeStore()
         let subscribeA = await startPendingSubscribeForAgentA(store, fake)
@@ -81,18 +81,18 @@ extension ConversationStoreLiveStateTests {
         }
         #expect(store.isLoading)
 
-        // Buffered while loading; applying it would flip isStreaming.
+        // The channel has not seeded yet, so the firehose is the liveness signal.
         store.handleStreamEvent("events.event", params: [
             "event": ["type": "agent:stream:activity",
                       "data": ["agentId": "agent-b"]] as [String: Any]
         ])
-        #expect(store.isStreaming == false)
+        #expect(store.isStreaming, "activity raises the flag while the channel is not live")
+        #expect(store.messages.isEmpty, "activity never mutates the transcript")
 
         fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-a"])
         await subscribeA.value
 
         #expect(store.isLoading, "stale A must not clear B's in-flight initial load")
-        #expect(store.isStreaming == false, "the buffer must wait for B's snapshot")
         #expect(store.messages.isEmpty)
 
         fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-chat-123"])
@@ -101,8 +101,7 @@ extension ConversationStoreLiveStateTests {
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [agentBRow]))
 
         #expect(store.isLoading == false)
-        #expect(store.isStreaming == false, "the idle snapshot is authoritative over the buffered activity")
-        #expect(store.streamEventBuffer.isEmpty)
+        #expect(store.isStreaming == false, "the idle snapshot is authoritative over the firehose activity")
         #expect(store.messages.map(\.id) == ["msg-b1"])
     }
 
@@ -128,7 +127,6 @@ extension ConversationStoreLiveStateTests {
         await subscribeA.value
 
         #expect(store.isLoading, "a failed stale A must not clear B's in-flight initial load")
-        #expect(store.isStreaming == false, "the buffer must wait for B's snapshot")
         #expect(store.liveTranscript.chatChannelActive, "A's failure must not tear down B's channel")
 
         fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-chat-123"])
@@ -136,7 +134,7 @@ extension ConversationStoreLiveStateTests {
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [agentBRow]))
 
         #expect(store.isLoading == false)
-        #expect(store.isStreaming == false)
+        #expect(store.isStreaming == false, "the idle snapshot settles the flag the firehose raised")
         #expect(store.messages.map(\.id) == ["msg-b1"])
     }
 

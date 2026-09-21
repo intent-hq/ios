@@ -2,97 +2,6 @@ import Foundation
 import SwiftUI
 
 extension ConversationStore {
-    // MARK: - Stream event buffer replay
-
-    func replayBufferedStreamEvents() {
-        let buffer = streamEventBuffer
-        let overflowed = streamEventBufferOverflowed
-        clearStreamEventBuffer()
-        if overflowed {
-            recoverFromLossyStreamEventBuffer()
-            return
-        }
-        guard !buffer.isEmpty else { return }
-
-        let hasTurnBoundary = buffer.contains { event in
-            event.eventType == "agent:idle" || event.eventType == "agent:status-changed"
-        }
-        if hasTurnBoundary, let agentId = self.agentId {
-            Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
-        }
-
-        if liveTranscript.shouldDiscardBufferedFirehose { return }
-
-        for event in buffer where event.eventType == "agent:user-message:sent" {
-            handleUserMessageSent(event.data)
-        }
-
-        let hasStreamEnd = buffer.contains { $0.eventType == "agent:stream:end" }
-        if hasStreamEnd { return }
-
-        for event in buffer where event.eventType == "agent:stream:start" {
-            handleStreamStart(event.data)
-        }
-
-        if buffer.contains(where: { $0.eventType == "agent:stream:activity" }) {
-            isStreaming = true
-        }
-    }
-
-    /// The retained events stopped being a complete record of the load window,
-    /// so nothing is replayed: the transcript itself came from the channel's
-    /// snapshot, and the daemon's `agent.get` settles the streaming state — a
-    /// dropped `agent:stream:end` must be able to settle a stale `true`. The
-    /// reply still yields to anything the live channel applied while it was in
-    /// flight, and work scheduled under a binding that `reset()` or an agent
-    /// switch has since replaced never runs.
-    private func recoverFromLossyStreamEventBuffer() {
-        guard let agentId else { return }
-        AppLog.conversation.warning(
-            "[ConversationStore] stream-event buffer overflowed during initial load "
-                + "for agent \(agentId) — reconciling streaming state from the daemon"
-        )
-        let generation = liveTranscript.bindingGeneration
-        let liveStateVersion = liveTranscript.liveStateVersion
-        Task {
-            guard generation == liveTranscript.bindingGeneration else { return }
-            await fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
-        }
-    }
-
-    func clearStreamEventBuffer() {
-        streamEventBuffer.removeAll()
-        streamEventBufferBytes = 0
-        streamEventBufferOverflowed = false
-    }
-
-    private func bufferStreamEvent(_ eventType: String, data: [String: Any]) {
-        if streamEventBufferOverflowed { return }
-        let bytes = Self.estimatedBytes(of: data) + eventType.utf8.count
-        let budget = streamEventBufferBudget
-        if streamEventBuffer.count >= budget.maxEvents || streamEventBufferBytes + bytes > budget.maxBytes {
-            streamEventBuffer.removeAll()
-            streamEventBufferBytes = 0
-            streamEventBufferOverflowed = true
-            return
-        }
-        streamEventBuffer.append((eventType: eventType, data: data))
-        streamEventBufferBytes += bytes
-    }
-
-    private static func estimatedBytes(of value: Any) -> Int {
-        switch value {
-        case let string as String:
-            return string.utf8.count
-        case let dictionary as [String: Any]:
-            return dictionary.reduce(0) { $0 + $1.key.utf8.count + estimatedBytes(of: $1.value) }
-        case let array as [Any]:
-            return array.reduce(0) { $0 + estimatedBytes(of: $1) }
-        default:
-            return MemoryLayout<Int64>.size
-        }
-    }
-
     // MARK: - Streaming subscription
 
     func subscribeToStreaming(agentId: String, workspaceId: String) async {
@@ -190,15 +99,8 @@ extension ConversationStore {
             eventAgentId: eventAgentId
         ) else { return }
 
-        if liveTranscript.shouldSuppressFirehose(eventType: eventType) { return }
-
         if eventType == "agent:updated" {
             handleAgentUpdated(data)
-            return
-        }
-
-        if isLoading {
-            bufferStreamEvent(eventType, data: data)
             return
         }
 
@@ -248,14 +150,16 @@ extension ConversationStore {
         }
     }
 
+    /// `agent:stream:*` carries no transcript content: the `chat.subscribe`
+    /// channel is the transcript's only source and owns the streaming flag
+    /// once its snapshot applied (`chatLive`). Until then the firehose is the
+    /// only liveness signal, so it raises and lowers the flag alone.
     private func handleAgentStreamEvent(_ eventType: String, data: [String: Any]) {
         switch eventType {
-        case "agent:stream:start":
-            handleStreamStart(data)
-        case "agent:stream:activity":
-            handleStreamActivity()
+        case "agent:stream:start", "agent:stream:activity":
+            if !liveTranscript.chatLive { isStreaming = true }
         case "agent:stream:end":
-            handleStreamEnd(data)
+            if !liveTranscript.chatLive { isStreaming = false }
         case "agent:queue:updated":
             handleQueueUpdated(data)
         case "agent:queue:processing":
@@ -324,26 +228,6 @@ extension ConversationStore {
             lastSeenMessageId = seenId
         }
         reconcilePendingQuestionRecovery()
-    }
-
-    private func handleStreamStart(_ data: [String: Any]) {
-        currentStreamId = data["streamId"] as? String
-        isStreaming = true
-    }
-
-    private func handleStreamActivity() {
-        isStreaming = true
-    }
-
-    private func handleStreamEnd(_: [String: Any]) {
-        isStreaming = false
-        currentStreamId = nil
-        streamingUpdateCount = 0
-
-        if let lastIndex = messages.indices.last,
-           messages[lastIndex].isStreaming == true {
-            messages[lastIndex].isStreaming = false
-        }
     }
 
     private func handleQueueUpdated(_ data: [String: Any]) {

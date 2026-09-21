@@ -277,7 +277,6 @@ $(SRCROOT)/IntentTests/ConversationStoreQueueDecodingTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreQueueTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreSeenTests.swift
-$(SRCROOT)/IntentTests/ConversationStoreStreamEventBufferTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift

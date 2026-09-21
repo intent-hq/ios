@@ -73,7 +73,8 @@ extension ConversationStoreLiveStateTests {
     }
 
     @Test func firehoseActivityRaisesStreamingWhenChatNotLive() async {
-        // No chat.subscribe snapshot applied → chatLive is false (legacy fallback).
+        // No chat.subscribe snapshot applied → chatLive is false: the firehose
+        // is the only liveness signal until the channel seeds.
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
@@ -85,6 +86,37 @@ extension ConversationStoreLiveStateTests {
 
         #expect(store.messages.isEmpty)
         #expect(store.isStreaming == true)
+
+        // agent:stream:end lowers the flag it raised, still without content.
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:end", "data": ["streamId": "s-1"]]
+        ])
+        #expect(store.messages.isEmpty)
+        #expect(store.isStreaming == false)
+    }
+
+    @Test func firehoseStreamEndLeavesTheLiveChannelsRowsAlone() async {
+        let (store, _) = makeStore()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Partial"]
+            )
+        ]))
+        #expect(store.messages[0].isStreaming == true)
+        #expect(store.isStreaming == true)
+
+        // The channel owns the in-flight row and the streaming flag; only its
+        // terminal delta settles them.
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:end", "data": ["streamId": "s-1"]]
+        ])
+
+        #expect(store.messages[0].isStreaming == true)
+        #expect(store.isStreaming == true)
+        #expect(store.streamingUpdateCount == 1)
     }
 
     @Test func failedResubscribeClearsChatLiveSoFirehoseApplies() async {
