@@ -109,6 +109,7 @@ final class ConversationLiveTranscript {
     isolated deinit {
         if let subscriptionId = chatSubscriptionId {
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
+            Self.release(subscriptionId, via: connectionManager)
         }
         snapshotTimeoutTask?.cancel()
         retryTask?.cancel()
@@ -403,10 +404,7 @@ extension ConversationLiveTranscript {
         hydratedBlocks = [:]
         hydratedBlockOrder = []
         chatLive = false
-        if let subscriptionId = chatSubscriptionId {
-            connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
-        }
-        chatSubscriptionId = nil
+        releaseActiveRegistration()
         chatChannelActive = false
         chatSeeded = false
         snapshotPending = false

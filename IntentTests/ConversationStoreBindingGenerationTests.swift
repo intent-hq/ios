@@ -60,7 +60,12 @@ extension ConversationStoreLiveStateTests {
 
         expectAgentBTranscriptIntact(store)
         #expect(!fake.hasSubscriptionHandler(id: "sub-a"), "A's orphaned registration is not wired up")
-        #expect(fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-a"])
+        // A's registration released the test channel it replaced; B found
+        // nothing acked to release; A's late ack is released as an orphan.
+        #expect(
+            fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String }
+                == ["sub-chat-123", "sub-a"]
+        )
         // B's snapshot settled the shared loading flag A raised.
         #expect(store.isLoading == false)
     }

@@ -39,17 +39,15 @@ extension ConversationLiveTranscript {
         applySubscribeOutcome(outcome, generation: generation)
     }
 
-    /// Opens a registration: the current channel is detached (its handler
-    /// no longer reaches `handlePush`, though its daemon-side release stays
-    /// with the recovery paths), pending self-heal is dropped, and the token
+    /// Opens a registration: the current channel is released (its handler
+    /// no longer reaches `handlePush` and its daemon-side subscription is
+    /// let go without waiting), pending self-heal is dropped, and the token
     /// the new registration's reply, handler, timeout and retry validate
-    /// against is returned.
+    /// against is returned. The recovery paths release before they get here,
+    /// so a registration they replace is released exactly once.
     private func openRegistration() -> Int {
         cancelSnapshotRecovery()
-        if let previous = chatSubscriptionId {
-            connectionManager.unregisterSubscriptionHandler(id: previous)
-            chatSubscriptionId = nil
-        }
+        releaseActiveRegistration()
         registrationGeneration &+= 1
         return registrationGeneration
     }
@@ -228,6 +226,34 @@ extension ConversationLiveTranscript {
             AppLog.conversation.error(
                 "[ConversationStore] chat.unsubscribe failed: \(error)"
             )
+        }
+    }
+
+    /// Unbind (rebind, `reset`): detaches the acked registration and releases
+    /// it daemon-side without waiting. Nothing observes the reply, so a
+    /// release that resolves or fails late cannot touch a later binding. A
+    /// pending or rejected registration has nothing to release; its late ack
+    /// goes through `releaseOrphanedSubscription`.
+    func releaseActiveRegistration() {
+        guard let subscriptionId = chatSubscriptionId else { return }
+        connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
+        chatSubscriptionId = nil
+        Self.release(subscriptionId, via: connectionManager)
+    }
+
+    /// Fire-and-forget `chat.unsubscribe`. Static so `deinit` can release
+    /// the active registration without retaining `self`.
+    static func release(_ subscriptionId: String, via connectionManager: ConnectionManagerRouting) {
+        Task {
+            do {
+                _ = try await connectionManager.request("chat.unsubscribe", params: [
+                    "subscriptionId": subscriptionId
+                ])
+            } catch {
+                AppLog.conversation.error(
+                    "[ConversationStore] chat.unsubscribe of released \(subscriptionId) failed: \(error)"
+                )
+            }
         }
     }
 
