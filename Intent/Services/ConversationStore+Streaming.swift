@@ -183,15 +183,25 @@ extension ConversationStore {
         } else if status == "idle" || status == "completed" || status == "failed" || status == "error" {
             isStreaming = false
         }
-        if let agentId {
-            Task { await fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
-        }
+        refreshStateAfterTurnBoundary()
     }
 
     private func handleAgentIdle() {
         isStreaming = false
-        if let agentId {
-            Task { await fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
+        refreshStateAfterTurnBoundary()
+    }
+
+    /// A turn boundary re-reads the agent's state (streaming flag + markers)
+    /// via `agent.get`. The channel is authoritative for the flag: the version
+    /// is captured now, before the read is scheduled, so a reply that lands
+    /// after a snapshot or delta advanced the channel — including the seq-0
+    /// snapshot of an initial load the event raced — leaves the flag alone
+    /// while still applying the markers.
+    private func refreshStateAfterTurnBoundary() {
+        guard let agentId else { return }
+        let liveStateVersion = liveTranscript.liveStateVersion
+        Task {
+            await fetchAgentStreamingState(agentId: agentId, raiseOnly: true, liveStateVersion: liveStateVersion)
         }
     }
 
