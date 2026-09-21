@@ -309,9 +309,8 @@ enum ConversationTranscriptScrollPolicy {
     /// user dragged back, or Go to End landed) — provided the end row is
     /// realized: a viewport resting over an unrealized end row reads "at
     /// bottom" geometrically while showing nothing (#338), so that edge
-    /// keeps the current flag, and Go to End raised over the blank (see
-    /// `unrealizedEndRecoveryDrain`) stays until the row realizes and the
-    /// ordinary rule applies.
+    /// keeps the current flag until the row realizes and the ordinary rule
+    /// applies.
     static func scrolledAwayTransition(
         current: Bool,
         geometryAway: Bool,
@@ -540,8 +539,7 @@ enum ConversationTranscriptScrollPolicy {
     // swiftlint:enable sorted_enum_cases
 
     /// One poll of the landing loop: either a step the loop continues from
-    /// or the terminal that ends it, so a drain can be handed only the
-    /// latter.
+    /// or the terminal that ends it.
     enum FollowLandingStep: Equatable {
         case `continue`(FollowLandingContinuation)
         case finish(FollowLandingTerminal)
@@ -549,9 +547,8 @@ enum ConversationTranscriptScrollPolicy {
 
     // Outcome order follows the follow state machine rather than spelling.
     // swiftlint:disable sorted_enum_cases
-    /// Every way a follow ends once requested, terminal for the drain that
-    /// resolves a give-up the end recovery deferred to it (see
-    /// `shouldShowGoToEndAfterFollow`, `shouldArmUnrealizedEndRecoveryAfterFollow`).
+    /// Every way a follow ends once requested, consumed by the recovery
+    /// lifecycle when a give-up was transferred to that follow.
     enum FollowTerminal: Equatable {
         /// The follow scrolled; a forced one carries its landing terminal,
         /// an automatic one (which only waits out its animation) carries nil.
@@ -640,15 +637,15 @@ enum ConversationTranscriptScrollPolicy {
         case recover(pageOffsetY: CGFloat)
     }
 
-    /// How the unrealized-end recovery ends; the only outcomes its drain
-    /// (see `unrealizedEndRecoveryDrain`) and its report (see
-    /// `unrealizedEndRecoveryReport`) can be handed.
+    /// How the unrealized-end recovery ends, consumed by its lifecycle and
+    /// report (see `unrealizedEndRecoveryReport`).
     enum UnrealizedEndRecoveryTerminal: Equatable {
         /// The end row is realized, the viewport is not following, or the
         /// content is shorter than the container.
         case notNeeded
         /// Timed out, or the bounded corrections are spent, with the end row
-        /// still unrealized: show Go to End (see `unrealizedEndRecoveryDrain`).
+        /// still unrealized. The lifecycle surfaces Go to End or transfers
+        /// the give-up to a follow that owns the viewport.
         case giveUp
         /// A gesture, a rest away or a follow requested meanwhile claimed
         /// the viewport while a correction had it paged up: it is theirs.
@@ -657,8 +654,7 @@ enum ConversationTranscriptScrollPolicy {
     // swiftlint:enable sorted_enum_cases
 
     /// One poll of the recovery loop: either a step the loop continues from
-    /// or the terminal that ends it, so the drain can be handed only the
-    /// latter.
+    /// or the terminal that ends it.
     enum UnrealizedEndRecoveryStep: Equatable {
         case `continue`(UnrealizedEndRecoveryContinuation)
         case finish(UnrealizedEndRecoveryTerminal)
@@ -747,92 +743,6 @@ enum ConversationTranscriptScrollPolicy {
         isFollowing: Bool
     ) -> Bool {
         !isInteracting && !userIsScrolledAway && !isFollowing
-    }
-
-    // Drain order follows the recovery state machine rather than spelling.
-    // swiftlint:disable sorted_enum_cases
-    enum UnrealizedEndRecoveryDrain: Equatable {
-        /// Replay the live geometry edge with the follow flag released: the
-        /// end row is realized (or the viewport is a gesture's or a follow's),
-        /// so a viewport short of the end is re-pinned by the growth path.
-        case replayEdge
-        /// Show Go to End: the viewport is treated as scrolled away, with no
-        /// further scroll issued over it.
-        case showGoToEnd
-        /// A follow in flight owns the viewport: the give-up is deferred to
-        /// that follow's drain (see `shouldShowGoToEndAfterFollow`), and the
-        /// live edge is replayed meanwhile.
-        case deferToFollow
-    }
-    // swiftlint:enable sorted_enum_cases
-
-    /// How the recovery drains. Its follow flag suppressed the growth re-pin
-    /// while a correction landed, so the drain replays the live edge — the
-    /// automatic follow's drain does the same. A give-up is the exception:
-    /// the budget is spent and the end row is still unrealized, so a re-pin
-    /// from that edge would scroll blind to a row that is not there, with
-    /// no landing verified and nothing left to arm — the viewport would rest
-    /// short with Go to End hidden, the blank it set out to fix. It surfaces
-    /// Go to End instead: the tap follows through `scrollToBottom`, whose
-    /// drain verifies the landing and re-arms the recovery from the level.
-    /// A follow already in flight at the give-up owns the viewport; flagging
-    /// it away now would cancel that follow as a takeover, so the give-up is
-    /// deferred to the follow's drain, which re-arms the recovery if the
-    /// follow executed and shows Go to End if it did not.
-    static func unrealizedEndRecoveryDrain(
-        outcome: UnrealizedEndRecoveryTerminal,
-        isFollowing: Bool
-    ) -> UnrealizedEndRecoveryDrain {
-        switch outcome {
-        case .giveUp:
-            return isFollowing ? .deferToFollow : .showGoToEnd
-        case .notNeeded, .yieldToUser:
-            return .replayEdge
-        }
-    }
-
-    /// A give-up deferred to a follow in flight must not depend on that
-    /// follow executing: an automatic follow is dropped when the live
-    /// distance has left the band (see `shouldExecuteFollow`), a forced one
-    /// yields to a gesture, and a gesture cancels either — and a follow that
-    /// executed re-arms the recovery instead (see
-    /// `shouldArmUnrealizedEndRecoveryAfterFollow`). So a deferred give-up
-    /// whose follow did not execute, with the end row still unrealized,
-    /// shows Go to End as the undeferred give-up would have; a realized end
-    /// row needs nothing. Only `.executed` counts as executed.
-    static func shouldShowGoToEndAfterFollow(
-        terminal: FollowTerminal,
-        isEndRealized: Bool,
-        giveUpDeferred: Bool
-    ) -> Bool {
-        guard giveUpDeferred, !isEndRealized else { return false }
-        switch terminal {
-        case .executed:
-            return false
-        case .dropped, .yielded, .cancelled, .replaced:
-            return true
-        }
-    }
-
-    /// The recovery is armed by the end row derealizing — an edge — and an
-    /// explicit follow cancels one in flight, so a follow that executed and
-    /// drained onto a viewport whose end row is still unrealized arms it
-    /// again from the level: the row was already unrealized when the follow
-    /// claimed the viewport, and no new edge will come. A follow that
-    /// yielded to the user did not land anywhere; the viewport is theirs.
-    /// A realized end row needs nothing, and `unrealizedEndRecoveryStep`
-    /// bounds what an armed recovery may do from here.
-    static func shouldArmUnrealizedEndRecoveryAfterFollow(
-        terminal: FollowTerminal,
-        isEndRealized: Bool
-    ) -> Bool {
-        guard !isEndRealized else { return false }
-        switch terminal {
-        case .executed:
-            return true
-        case .dropped, .yielded, .cancelled, .replaced:
-            return false
-        }
     }
 
     /// The transcript's accessibility value under `--demo-data`: the last

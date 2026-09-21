@@ -50,6 +50,7 @@ enum DemoFixtures {
     nonisolated private static let statusImageToggleCornerRadius: CGFloat = 12
     private static let bytesPerKilobyte = 1_024.0
     private static let secondsPerMinute: TimeInterval = 60
+    @TaskLocal static var timestampAnchor = Date()
     private static let defaultHookListDelaySeconds = 4
     private static let defaultBlockHydrationDelaySeconds = 4
     private static let triggerFilePollMilliseconds = 100
@@ -440,8 +441,12 @@ enum DemoFixtures {
     /// ISO 8601 timestamp relative to now, so relative-time labels
     /// ("12m ago") always look fresh in screenshots.
     static func iso(minutesAgo: Double) -> String {
+        iso(minutesAgo: minutesAgo, relativeTo: timestampAnchor)
+    }
+
+    static func iso(minutesAgo: Double, relativeTo anchor: Date) -> String {
         ISO8601DateFormatter().string(
-            from: Date(timeIntervalSinceNow: -minutesAgo * secondsPerMinute)
+            from: anchor.addingTimeInterval(-minutesAgo * secondsPerMinute)
         )
     }
 }

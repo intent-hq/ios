@@ -224,6 +224,36 @@ struct DemoFixturesTests {
         #expect(DemoFixtures.subscriptionPush(for: "agent.get", params: long) == nil)
     }
 
+    @Test func routedTimestampAnchorIsStableAcrossASecondBoundary() throws {
+        let formatter = ISO8601DateFormatter()
+        let boundary = try #require(formatter.date(from: "2026-09-21T15:26:16Z"))
+        let before = boundary.addingTimeInterval(-0.5)
+        let after = boundary.addingTimeInterval(0.5)
+        let params = ["agentId": DemoFixtures.longConversationAgentId]
+        let push = try DemoFixtures.$timestampAnchor.withValue(before) {
+            try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: params))
+        }
+        let rows = try #require(push.snapshot)
+        let pushed = try #require(rows.first)
+        let soughtId = try #require(pushed["id"] as? String)
+        let seek: [String: Any] = ["agentId": DemoFixtures.longConversationAgentId, "aroundMessageId": soughtId]
+        let served = DemoFixtures.$timestampAnchor.withValue(before) {
+            DemoFixtures.response(for: "agent.getConversation", params: seek) as? [String: Any]
+        }
+        let seekRows = try #require(served?["messages"] as? [[String: Any]])
+        let sought = try #require(seekRows.first { ($0["id"] as? String) == soughtId })
+        let expected = DemoFixtures.iso(minutesAgo: 240, relativeTo: before)
+        let independentlySampledAfter = DemoFixtures.iso(minutesAgo: 240, relativeTo: after)
+
+        #expect(expected == "2026-09-21T11:26:15Z")
+        #expect(independentlySampledAfter == "2026-09-21T11:26:16Z")
+        #expect(pushed["timestamp"] as? String == expected)
+        #expect(sought["id"] as? String == pushed["id"] as? String)
+        #expect(text(of: sought) == text(of: pushed))
+        #expect(sought["role"] as? String == pushed["role"] as? String)
+        #expect(sought["timestamp"] as? String == pushed["timestamp"] as? String)
+    }
+
     /// The long transcript is coordinator-shaped (intent-hq/ios#304, #305):
     /// paired tool calls, agent-to-agent report rows attributed to the
     /// delegates the coordinator waits on, thinking blocks, and markdown

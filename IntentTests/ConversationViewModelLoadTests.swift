@@ -13,8 +13,15 @@ extension ConversationViewModelTests {
     /// selected methods with errors.
     private func makeLoadableVM(errors: [String: Error] = [:])
         -> (viewModel: ConversationViewModel, fake: FakeConnectionManager) {
-        let viewModel = makeVM()
         let fake = FakeConnectionManager()
+        let viewModel = ConversationViewModel(
+            agentId: "test-agent",
+            workspaceId: "test-ws",
+            agentName: "Test",
+            connection: fake,
+            uploadService: AttachmentUploadService(connection: fake),
+            optionsStore: CreationOptionsStore(connectionManager: fake)
+        )
         fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-streaming"]
         fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
         fake.stubChatSnapshot()
@@ -22,10 +29,11 @@ extension ConversationViewModelTests {
         fake.responseMap["agent.get"] = ["agent": ["id": "test-agent", "name": "Test"]] as [String: Any]
         fake.responseMap["agent.getQueue"] = ["queue": []]
         fake.responseMap["agent.getSubscriptions"] = ["subscriptions": [], "delegationGroups": []]
+        fake.responseMap["hook.list"] = ["hooks": [] as [[String: Any]]]
+        fake.responseMap["prMonitor.list"] = ["monitors": [] as [[String: Any]]]
         for (method, error) in errors {
             fake.errorMap[method] = error
         }
-        viewModel.store = ConversationStore(connectionManager: fake)
         // load() holds its snapshot wait across a rejected registration up
         // to this bound; keep the never-served cases short.
         viewModel.store.liveTranscript.snapshotTimeout = Self.shortSnapshotTimeout
@@ -95,6 +103,23 @@ extension ConversationViewModelTests {
         await viewModel.load()
 
         #expect(!viewModel.agentNotFound)
+    }
+
+    @Test func cancelledLoadDoesNotStartLaterLiveStores() async throws {
+        let (viewModel, fake) = makeLoadableVM()
+        fake.pendingMethods = ["events.subscribe"]
+        let load = Task { await viewModel.load() }
+        try await fake.waitForPendingRequests("events.subscribe")
+
+        load.cancel()
+        viewModel.conversationDisappeared()
+        await load.value
+
+        #expect(fake.paramsForMethod("events.subscribe").count == 1)
+        #expect(!fake.didCallMethod("chat.subscribe"))
+        #expect(!fake.didCallMethod("hook.list"))
+        #expect(!fake.didCallMethod("prMonitor.list"))
+        #expect(fake.eventHandlerCount == 0)
     }
 
     @Test func loadSettlesBeforeTranscriptCanMount() async {

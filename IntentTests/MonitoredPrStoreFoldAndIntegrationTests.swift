@@ -291,6 +291,30 @@ extension MonitoredPrStoreTests {
         #expect(fake.eventHandlerCount == 0)
     }
 
+    @Test func lateSubscribeAckCannotReplaceReappearedSubscription() async throws {
+        let fake = FakeConnectionManager()
+        fake.pendingMethods = ["events.subscribe"]
+        fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["prMonitor.list"] = ["monitors": [] as [[String: Any]]]
+        let store = MonitoredPrStore(connectionManager: fake)
+        let first = Task { await store.subscribe(workspaceId: "ws-abc", agentId: "agent-1") }
+        try await fake.waitForPendingRequests("events.subscribe")
+
+        store.deactivate()
+        fake.pendingMethods = []
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-new"]
+        await store.subscribe(workspaceId: "ws-abc", agentId: "agent-1")
+        fake.resolvePending("events.subscribe", with: ["subscriptionId": "sub-old"])
+        await first.value
+
+        try await fake.waitForRequests("events.unsubscribe")
+        #expect(fake.eventHandlerCount == 1)
+        #expect(fake.paramsForMethod("prMonitor.list").count == 1)
+        #expect(
+            fake.paramsForMethod("events.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-old"]
+        )
+    }
+
     @Test func staleListResponseAfterCancelledFoldIsDiscarded() async throws {
         let fake = FakeConnectionManager()
         let store = await makeSubscribedStore(fake, monitors: [makeMonitorDict()])

@@ -365,7 +365,8 @@ extension ConversationStoreIntegrationTests {
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
 
-        // Initial setup - simulate connected and subscribe
+        // Initial setup - activate this screen's event lifecycle, then connect and subscribe
+        await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
         fake.simulateConnect()
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
@@ -669,10 +670,87 @@ extension ConversationStoreIntegrationTests {
 
         store = nil
         try await waitFor("deinit handler removal") {
-            fake.eventHandlerCount == 0 && fake.subscriptionHandlerCount == 0
+            fake.eventHandlerCount == 0
+                && fake.subscriptionHandlerCount == 0
+                && fake.paramsForMethod("events.unsubscribe").count == 1
         }
         #expect(fake.eventHandlerCount == 0)
         #expect(fake.subscriptionHandlerCount == 0)
+        #expect(fake.paramsForMethod("events.unsubscribe").first?["subscriptionId"] as? String == "sub-streaming")
+    }
+
+    @Test func streamingDeactivationIsIdempotentAndBackendLocal() async throws {
+        let fakeA = FakeConnectionManager()
+        let fakeB = FakeConnectionManager()
+        fakeA.responseMap["events.subscribe"] = ["subscriptionId": "sub-a"]
+        fakeA.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        fakeB.responseMap["events.subscribe"] = ["subscriptionId": "sub-b"]
+        fakeB.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        let storeA = ConversationStore(connectionManager: fakeA)
+        let storeB = ConversationStore(connectionManager: fakeB)
+        await storeA.subscribeToStreaming(agentId: "agent-a", workspaceId: "ws-a")
+        await storeB.subscribeToStreaming(agentId: "agent-b", workspaceId: "ws-b")
+
+        storeA.deactivateStreaming()
+        storeA.deactivateStreaming()
+
+        try await fakeA.waitForRequests("events.unsubscribe")
+        #expect(fakeA.paramsForMethod("events.unsubscribe").count == 1)
+        #expect(fakeA.paramsForMethod("events.unsubscribe").first?["subscriptionId"] as? String == "sub-a")
+        #expect(fakeA.eventHandlerCount == 0)
+        #expect(fakeB.eventHandlerCount == 1)
+        #expect(fakeB.paramsForMethod("events.unsubscribe").isEmpty)
+    }
+
+    @Test func lateStreamingAckIsReleasedWithoutReplacingReappearance() async throws {
+        let fake = FakeConnectionManager()
+        fake.pendingMethods = ["events.subscribe"]
+        fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+        let first = Task { await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1") }
+        try await fake.waitForPendingRequests("events.subscribe")
+
+        store.deactivateStreaming()
+        fake.pendingMethods = []
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-new"]
+        await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
+        fake.resolvePending("events.subscribe", with: ["subscriptionId": "sub-old"])
+        await first.value
+
+        try await fake.waitForRequests("events.unsubscribe")
+        #expect(store.subscriptionId == "sub-new")
+        #expect(fake.eventHandlerCount == 1)
+        #expect(
+            fake.paramsForMethod("events.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-old"]
+        )
+    }
+
+    @Test func staleReconnectDoesNotFetchSubscriptionsAfterReappearance() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-initial"]
+        fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "chat-reconnect", "seq": 0, "snapshot": []]
+        fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["agent.get"] = ["agent": ["isStreaming": false]]
+        fake.responseMap["agent.getQueue"] = ["queue": []]
+        fake.responseMap["agent.getSubscriptions"] = ["subscriptions": [], "delegationGroups": []]
+        await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
+
+        fake.pendingMethods = ["events.subscribe"]
+        fake.clearRequestLog()
+        let reconnect = Task { await store.onReconnected() }
+        try await fake.waitForPendingRequests("events.subscribe")
+
+        store.deactivateStreaming()
+        fake.pendingMethods = []
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-new"]
+        await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
+        fake.resolvePending("events.subscribe", with: ["subscriptionId": "sub-old"])
+        await reconnect.value
+
+        #expect(store.subscriptionId == "sub-new")
+        #expect(!fake.didCallMethod("agent.getSubscriptions"))
     }
 }
 
