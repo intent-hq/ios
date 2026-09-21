@@ -155,28 +155,28 @@ struct CreationPickerControlsTests {
             label: nil,
             value: nil,
             frame: lowerFrame,
-            controlFrame: lowerFrame,
+            visibleControlFrame: lowerFrame,
             traits: []
         )
         let labelInflated = PickerElementSnapshot(
             label: nil,
             value: nil,
             frame: CGRect(x: 0, y: 0, width: 200, height: boundary + 8),
-            controlFrame: CGRect(x: 0, y: 0, width: 200, height: boundary),
+            visibleControlFrame: CGRect(x: 0, y: 0, width: 200, height: boundary),
             traits: []
         )
         let undersized = PickerElementSnapshot(
             label: nil,
             value: nil,
             frame: CGRect(x: 0, y: 0, width: 200, height: 43),
-            controlFrame: CGRect(x: 0, y: 0, width: 200, height: 43),
+            visibleControlFrame: CGRect(x: 0, y: 0, width: 200, height: 43),
             traits: []
         )
         let invalid = PickerElementSnapshot(
             label: nil,
             value: nil,
             frame: .zero,
-            controlFrame: .zero,
+            visibleControlFrame: .zero,
             traits: []
         )
         #expect(readable.hasMinimumInteractiveSize)
@@ -225,12 +225,12 @@ struct CreationPickerControlsTests {
                 hostFrame: window.bounds,
                 provider: Self.snapshot(
                     settled.provider,
-                    controlFrame: settled.providerFrame,
+                    visibleControlFrame: settled.providerVisibleFrame,
                     in: window
                 ),
                 model: Self.snapshot(
                     settled.model,
-                    controlFrame: settled.modelFrame,
+                    visibleControlFrame: settled.modelVisibleFrame,
                     in: window
                 )
             )
@@ -239,14 +239,14 @@ struct CreationPickerControlsTests {
 
     private static func snapshot(
         _ element: NSObject,
-        controlFrame: CGRect,
+        visibleControlFrame: CGRect,
         in window: UIWindow
     ) -> PickerElementSnapshot {
         PickerElementSnapshot(
             label: element.accessibilityLabel,
             value: element.accessibilityValue,
             frame: window.convert(element.accessibilityFrame, from: nil),
-            controlFrame: controlFrame,
+            visibleControlFrame: visibleControlFrame,
             traits: element.accessibilityTraits
         )
     }
@@ -267,17 +267,17 @@ struct CreationPickerControlsTests {
 
             let provider = try pickerElement(identifier: "creation.providerPicker", in: hostView)
             let model = try pickerElement(identifier: "creation.modelPicker", in: hostView)
-            let providerFrame = try controlFrame(of: provider, in: window)
-            let modelFrame = try controlFrame(of: model, in: window)
+            let providerFrame = try visibleControlFrame(of: provider, in: window)
+            let modelFrame = try visibleControlFrame(of: model, in: window)
             let framesMatch = previousFrames?.provider == providerFrame
                 && previousFrames?.model == modelFrame
             stableFrameSamples = framesMatch ? stableFrameSamples + 1 : 1
             if stableFrameSamples >= requiredStableFrameSamples {
                 return SettledPickerElements(
                     provider: provider,
-                    providerFrame: providerFrame,
+                    providerVisibleFrame: providerFrame,
                     model: model,
-                    modelFrame: modelFrame
+                    modelVisibleFrame: modelFrame
                 )
             }
             previousFrames = (providerFrame, modelFrame)
@@ -286,12 +286,12 @@ struct CreationPickerControlsTests {
         throw PickerInspectionError.framesDidNotSettle
     }
 
-    private static func controlFrame(of element: NSObject, in window: UIWindow) throws -> CGRect {
+    private static func visibleControlFrame(of element: NSObject, in window: UIWindow) throws -> CGRect {
         let view = try #require(
             element as? UIView,
             "Hosted picker accessibility element did not expose its on-screen control view"
         )
-        return window.convert(view.bounds, from: view)
+        return view.visibleFrame(in: window)
     }
 
     private static func pickerElement(identifier: String, in hostView: UIView) throws -> NSObject {
@@ -331,9 +331,9 @@ private enum PickerInspectionError: Error {
 
 private struct SettledPickerElements {
     let provider: NSObject
-    let providerFrame: CGRect
+    let providerVisibleFrame: CGRect
     let model: NSObject
-    let modelFrame: CGRect
+    let modelVisibleFrame: CGRect
 }
 
 private enum PickerHostLayout: CaseIterable {
@@ -360,7 +360,7 @@ private struct PickerElementSnapshot {
     let label: String?
     let value: String?
     let frame: CGRect
-    let controlFrame: CGRect
+    let visibleControlFrame: CGRect
     let traits: UIAccessibilityTraits
 
     var hasFiniteNonemptyFrame: Bool {
@@ -380,8 +380,12 @@ private struct PickerLayoutSnapshot {
     let model: PickerElementSnapshot
 
     var hasNoMeaningfulVerticalOverlap: Bool {
-        // SwiftUI may fold a row caption into the accessibility frame above the visible control.
-        Self.hasNoMeaningfulVerticalOverlap(upper: provider.controlFrame, lower: model.controlFrame)
+        // SwiftUI may fold a row caption into the accessibility frame, while List clips a
+        // menu button whose raw UIView bounds extend beyond its row. Compare what is visible.
+        Self.hasNoMeaningfulVerticalOverlap(
+            upper: provider.visibleControlFrame,
+            lower: model.visibleControlFrame
+        )
     }
 
     func horizontallyContains(_ frame: CGRect) -> Bool {
@@ -392,6 +396,18 @@ private struct PickerLayoutSnapshot {
         // Coordinate arithmetic can round a shared boundary by one representable value.
         let tolerance = max(upper.maxY.ulp, lower.minY.ulp)
         return upper.maxY <= lower.minY + tolerance
+    }
+}
+
+private extension UIView {
+    func visibleFrame(in window: UIWindow) -> CGRect {
+        var frame = window.convert(bounds, from: self)
+        var ancestor = superview
+        while let view = ancestor {
+            if view.clipsToBounds { frame = frame.intersection(window.convert(view.bounds, from: view)) }
+            ancestor = view.superview
+        }
+        return frame
     }
 }
 
