@@ -78,6 +78,7 @@ $(SRCROOT)/Intent/Services/ConnectionTypes.swift
 $(SRCROOT)/Intent/Services/ConversationAttachmentPipeline.swift
 $(SRCROOT)/Intent/Services/ConversationCommands.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Fetch.swift
+$(SRCROOT)/Intent/Services/ConversationLiveTranscript+Subscribe.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Commands.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Lifecycle.swift
@@ -275,15 +276,17 @@ $(SRCROOT)/IntentTests/ConversationStoreQuestionTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreQueueDecodingTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreQueueTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreRecoveryTests.swift
+$(SRCROOT)/IntentTests/ConversationStoreRegistrationGenerationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreSeenTests.swift
-$(SRCROOT)/IntentTests/ConversationStoreStreamEventBufferTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreTests.swift
+$(SRCROOT)/IntentTests/ConversationStoreTurnBoundaryTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part3.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part4.swift
 $(SRCROOT)/IntentTests/ConversationViewModelAttachmentTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelDividerLatchTests.swift
+$(SRCROOT)/IntentTests/ConversationViewModelLoadTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelModelCatalogTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelQuestionTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelRecoveryTests.swift

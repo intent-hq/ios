@@ -107,10 +107,10 @@ extension ConversationStoreIntegrationTests {
     /// directly, without falling back to a re-fetch.
     @Test func queueUpdatedEventKeepsValidSiblingsWhenOneElementIsMalformed() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.responseMap["agent.getQueue"] = ["queue": [] as [Any]]
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
         fake.requestLog.removeAll()
 
         store.handleStreamEvent("events.event", params: [
@@ -133,10 +133,10 @@ extension ConversationStoreIntegrationTests {
 
     @Test func queueUpdatedEventKeepsValidNestedImageSiblingsWithoutRefetch() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.responseMap["agent.getQueue"] = ["queue": [] as [Any]]
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
         fake.requestLog.removeAll()
 
         store.handleStreamEvent("events.event", params: [
@@ -154,10 +154,10 @@ extension ConversationStoreIntegrationTests {
     /// queue directly.
     @Test func queueUpdatedEventEmptyArrayClearsQueue() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.responseMap["agent.getQueue"] = ["queue": [] as [Any]]
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
         store.queuedMessages = [
             QueuedMessage(id: "q-1", content: "first", queuedAt: "2025-01-01T00:00:00Z", position: 0)
         ]

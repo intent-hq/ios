@@ -20,17 +20,21 @@ extension ConversationStore {
             }
     }
 
+    /// The reconnect registration of `chat.subscribe` is the transcript
+    /// recovery: its seq-0 snapshot replaces whatever the outage left behind.
+    /// The `agent.get` streaming-state read runs alongside and yields to the
+    /// snapshot when the channel lands first.
     private func onReconnected() async {
         liveTranscript.prepareForReconnect()
 
         guard let agentId else { return }
-        async let conv: () = fetchConversation(agentId: agentId, workspaceId: workspaceId)
+        let liveStateVersion = liveTranscript.liveStateVersion
+        async let chat: () = subscribeLiveChat(agentId: agentId)
         async let queue: () = fetchQueue(agentId: agentId)
-        async let streaming: () = fetchAgentStreamingState(agentId: agentId)
-        _ = await (conv, queue, streaming)
+        async let streaming: () = fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
+        _ = await (chat, queue, streaming)
         if let workspaceId {
             await subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
-            await subscribeLiveChat(agentId: agentId)
             await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
         }
     }
@@ -46,7 +50,7 @@ extension ConversationStore {
     /// `reset()` since the request was issued — is dropped entirely: it must
     /// not touch the new conversation's streaming state, nor mark
     /// the new agent deleted on a not-found for the previous one. A request
-    /// issued while still unbound (view load, before `fetchConversation`
+    /// issued while still unbound (view load, before `subscribeLiveChat`
     /// binds the same agent) stays valid.
     /// The session-metadata markers are additionally skipped when an
     /// `agent:updated` push landed, or the bound agent changed (agent switch /
@@ -120,22 +124,13 @@ extension ConversationStore {
         }
     }
 
-    // MARK: - Fetch conversation
+    // MARK: - Binding
 
     func bindAgent(_ agentId: String?) {
         if let bound = self.agentId, bound != agentId {
             sessionMetadataGeneration += 1
         }
         self.agentId = agentId
-    }
-
-    func fetchConversation(agentId: String, workspaceId: String? = nil) async {
-        bindAgent(agentId)
-        if let workspaceId {
-            self.workspaceId = workspaceId
-        }
-        await liveTranscript.fetchConversation(agentId: agentId, workspaceId: workspaceId)
-        reconcilePendingQuestionRecovery()
     }
 
     // MARK: - Marked question recovery (aroundMessageId seek, PROTOCOL §5.5)

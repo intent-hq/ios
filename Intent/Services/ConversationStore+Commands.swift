@@ -194,9 +194,7 @@ extension ConversationStore {
         bindAgent(nil)
         workspaceId = nil
         subscriptionId = nil
-        currentStreamId = nil
         isSubscribing = false
-        clearStreamEventBuffer()
         lastFailedSend = nil
         agentNotFound = false
         clearPendingQuestionRecovery()

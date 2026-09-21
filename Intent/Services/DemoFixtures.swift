@@ -60,10 +60,17 @@ enum DemoFixtures {
     /// workspace, not part of App Store screenshots 02–04).
     static let longConversationWorkspaceId = "demo-ws-flaky-tests"
 
-    /// Agent whose `agent.getConversation` returns `longConversationMessages`
-    /// ("Test Stabilizer", idle). Every other agent keeps the 4-message
-    /// `conversationMessages` used by App Store screenshot 03.
+    /// Agent whose `chat.subscribe` snapshot (and `agent.getConversation`
+    /// seek) serves `longConversationMessages` ("Test Stabilizer", idle).
+    /// Every other agent keeps the 4-message `conversationMessages` used by
+    /// App Store screenshot 03.
     static let longConversationAgentId = "demo-agent-deflake"
+
+    /// `subscriptionId` a demo `chat.subscribe` acks with; the seq-0 snapshot
+    /// it owes is routed through `subscriptionPush(for:params:)`.
+    static func chatSubscriptionId(agentId: String?) -> String {
+        "demo-chat-\(agentId ?? "unknown")"
+    }
 
     /// Sub-agents delegated by `longConversationAgentId`, in the order they
     /// appear in the transcript's agent-to-agent rows. `agent.getSubscriptions`
@@ -339,6 +346,25 @@ enum DemoFixtures {
         }
     }
 
+    /// The subscription push a fixture method owes alongside its response:
+    /// `chat.subscribe` answers with the seq-0 transcript snapshot the
+    /// transcript is loaded from. Nil for every other method.
+    static func subscriptionPush(for method: String, params: [String: Any]) -> SubscriptionPush? {
+        guard method == "chat.subscribe" else { return nil }
+        let agentId = params["agentId"] as? String
+        let messages = transcriptMessages(agentId: agentId)
+        return SubscriptionPush(
+            subscriptionId: chatSubscriptionId(agentId: agentId),
+            seq: 0,
+            conversationSnapshot: messages,
+            metadata: ["truncated": false, "totalMessages": messages.count]
+        )
+    }
+
+    static func transcriptMessages(agentId: String?) -> [[String: Any]] {
+        agentId == longConversationAgentId ? longConversationMessages : conversationMessages
+    }
+
     /// Fixture response for a JSON-RPC method. Unknown methods return an
     /// empty dictionary, which every call site parses as "no data" safely.
     static func response(for method: String, params: [String: Any]) -> Any {
@@ -382,13 +408,14 @@ enum DemoFixtures {
             let agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
             return ["agent": agent]
         case "agent.getConversation":
-            let agentId = params["agentId"] as? String
-            let messages = agentId == longConversationAgentId ? longConversationMessages : conversationMessages
+            let messages = transcriptMessages(agentId: params["agentId"] as? String)
             return [
                 "messages": messages,
                 "truncated": false,
                 "totalMessages": messages.count
             ] as [String: Any]
+        case "chat.subscribe":
+            return ["subscriptionId": chatSubscriptionId(agentId: params["agentId"] as? String)]
         case "agent.getMessageBlock":
             let blockId = params["blockId"] as? String
             guard let block = longConversationFullBlock(id: blockId) else { return [String: Any]() }
