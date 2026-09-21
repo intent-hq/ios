@@ -250,3 +250,66 @@ struct AgentMessagePreviewTests {
         #expect(MessageView.agentMessagePreview(from: []).isEmpty)
     }
 }
+
+/// `AssistantMessageView` pairs tool results once per message so each block
+/// row's equatable gate compares only its own tool result, not the whole
+/// block array.
+struct ToolResultPairingTests {
+    @Test func pairsResultsByToolUseId() {
+        let blocks = [
+            ContentBlock(id: "u1", type: .toolUse, name: "read_file", toolUseId: "call-1"),
+            ContentBlock(id: "r1", type: .toolResult, toolUseId: "call-1", output: AnyCodable("ok")),
+            ContentBlock(id: "u2", type: .toolUse, name: "grep", toolUseId: "call-2"),
+            ContentBlock(id: "r2", type: .toolResult, toolUseId: "call-2", output: AnyCodable("hit"))
+        ]
+        let paired = MessageBlockPartitioning.pairToolResults(blocks)
+        #expect(paired.count == 2)
+        #expect(paired["u1"]?.id == "r1")
+        #expect(paired["u2"]?.id == "r2")
+    }
+
+    @Test func unansweredToolUseHasNoEntry() {
+        let blocks = [
+            ContentBlock(id: "u1", type: .toolUse, name: "read_file", toolUseId: "call-1"),
+            ContentBlock(id: "r9", type: .toolResult, toolUseId: "call-9", output: AnyCodable("stale"))
+        ]
+        let paired = MessageBlockPartitioning.pairToolResults(blocks)
+        #expect(paired.isEmpty)
+    }
+
+    @Test func nonToolBlocksAreIgnored() {
+        let blocks = [
+            ContentBlock(id: "t1", type: .text, text: "hello"),
+            ContentBlock(id: "c1", type: .code, text: "let x = 1")
+        ]
+        #expect(MessageBlockPartitioning.pairToolResults(blocks).isEmpty)
+        #expect(MessageBlockPartitioning.pairToolResults([]).isEmpty)
+    }
+
+    @Test func pairsToolUseInsideGroupWithResultOutsideIt() {
+        // Pairing runs over the whole raw message, not per render row: a
+        // tool_use parsed into a group child still finds its tool_result
+        // when that result lands after the closing tag.
+        let blocks = [
+            ContentBlock(id: "t1", type: .text, text: "<group:Setup>"),
+            ContentBlock(id: "u1", type: .toolUse, name: "read_file", toolUseId: "call-1"),
+            ContentBlock(id: "t2", type: .text, text: "</group>"),
+            ContentBlock(id: "r1", type: .toolResult, toolUseId: "call-1", output: AnyCodable("ok"))
+        ]
+        let rows = MessageBlockPartitioning.groupContentBlocks(blocks)
+        guard case .group(let group)? = rows.first,
+              case .contentBlock(let trailing)? = rows.last,
+              let child = group.children.first else {
+            Issue.record("expected a group followed by the standalone tool result")
+            return
+        }
+        #expect(rows.count == 2)
+        #expect(child.id == "u1")
+        #expect(child.type == .toolUse)
+        #expect(trailing.id == "r1")
+
+        let paired = MessageBlockPartitioning.pairToolResults(blocks)
+        #expect(paired[child.id]?.id == "r1")
+        #expect(paired.count == 1)
+    }
+}
