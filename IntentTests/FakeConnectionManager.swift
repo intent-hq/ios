@@ -384,14 +384,14 @@ class FakeConnectionManager: SessionConnectionManaging {
     func stubChatSnapshot(
         subscriptionId: String = "sub-1",
         messages: [[String: Any]] = [],
-        meta: [String: Any]? = nil
+        meta: [String: Any] = [:]
     ) {
         responseMap["chat.subscribe"] = ["subscriptionId": subscriptionId]
         chatSnapshotMap[subscriptionId] = messages
-        if let meta {
-            chatSnapshotMetaMap[subscriptionId] = meta
-        } else {
+        if meta.isEmpty {
             chatSnapshotMetaMap.removeValue(forKey: subscriptionId)
+        } else {
+            chatSnapshotMetaMap[subscriptionId] = meta
         }
     }
 

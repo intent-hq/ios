@@ -38,7 +38,13 @@ extension ConversationLiveTranscript {
             }
         }
         guard let outcome else { return }
+        applySubscribeOutcome(outcome, generation: generation)
+    }
 
+    /// Registers the acked subscription's handler and arms the seq-0 snapshot
+    /// timeout, or clears the channel and schedules a backoff retry when the
+    /// registration was rejected.
+    private func applySubscribeOutcome(_ outcome: Result<String?, Error>, generation: Int) {
         switch outcome {
         case .success(let subscriptionId?):
             if let previous = chatSubscriptionId, previous != subscriptionId {

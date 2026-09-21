@@ -282,7 +282,7 @@ extension ConversationStoreTests {
         )
     }
 
-    @Test func agentUpdatedEventDuringInitialLoadIsAppliedNotDropped() async throws {
+    @Test func agentUpdatedEventDuringInitialLoadIsAppliedNotDropped() async {
         // Regression (PR #210 review): the isLoading buffer only replays
         // user-message/stream events, so a marker clear pushed while the
         // initial chat.subscribe snapshot was pending used to be dropped —
