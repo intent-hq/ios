@@ -294,7 +294,8 @@ extension ConversationViewModelTests {
     // MARK: - Missing-agent detection at load
 
     /// Bound on load()'s snapshot wait for the never-served cases below.
-    private static let shortSnapshotTimeout: Duration = .milliseconds(50)
+    private static let shortSnapshotTimeoutMilliseconds = 50
+    private static let shortSnapshotTimeout: Duration = .milliseconds(shortSnapshotTimeoutMilliseconds)
 
     /// Configure the fake with every response load() touches, then override
     /// selected methods with errors.
