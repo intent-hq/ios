@@ -3,7 +3,7 @@ import Foundation
 import Testing
 
 // Extracted wire fixtures intentionally mirror the daemon payloads inline.
-// swiftlint:disable multiline_arguments multiline_call_arguments multiline_literal_brackets no_magic_numbers
+// swiftlint:disable no_magic_numbers
 
 // MARK: - Registration generation (recovery and replies outliving their registration)
 
@@ -255,4 +255,4 @@ extension ConversationStoreLiveStateTests {
     }
 }
 
-// swiftlint:enable multiline_arguments multiline_call_arguments multiline_literal_brackets no_magic_numbers
+// swiftlint:enable no_magic_numbers
