@@ -76,6 +76,7 @@ extension ConversationStoreTests {
     @Test func seekPageWithoutTheRowSettlesNotFound() async throws {
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
         let store = ConversationStore(connectionManager: fake)
         await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 

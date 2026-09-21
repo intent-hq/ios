@@ -102,14 +102,15 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages.count == 1)
 
         // A re-subscribe fails (no response configured → request throws).
-        // The legacy-fallback cleanup must clear chatLive so firehose events apply.
+        // The failed registration must clear chatLive so firehose events apply
+        // until the backoff retry lands a channel again.
         await store.subscribeLiveChat(agentId: "agent-1")
 
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:start", "data": ["streamId": "s-1"]]
+            "event": ["type": "agent:stream:start", "data": ["agentId": "agent-1", "streamId": "s-1"]]
         ])
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:activity", "data": ["messageId": "m-1"]]
+            "event": ["type": "agent:stream:activity", "data": ["agentId": "agent-1", "messageId": "m-1"]]
         ])
 
         #expect(store.messages.count == 1)
