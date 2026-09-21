@@ -335,12 +335,12 @@ extension ConversationStoreTests {
         )
     }
 
-    @Test func turnBoundaryBufferedDuringInitialFetchTriggersOneMarkerRefresh() async throws {
-        // Regression (PR #210 review): agent:idle / agent:status-changed that
-        // land while isLoading are buffered but never replayed, so the
-        // raiseOnly agent.get that raises the pending-questions marker at the
-        // asking turn's end was skipped for a turn ending mid-load — the marker
-        // stayed nil and the wizard was not sticky.
+    @Test func turnBoundaryDuringInitialLoadRefreshesTheMarkerWithoutReplay() async throws {
+        // Regression (PR #210 review): a turn ending mid-load must still raise
+        // the pending-questions marker. There is no stream-event buffer any
+        // more: agent:idle / agent:status-changed refresh the marker as they
+        // land, one raiseOnly agent.get each, and the seq-0 snapshot neither
+        // replays them nor issues a refresh of its own.
         let fake = FakeConnectionManager()
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat"]
         fake.responseMap["agent.get"] = [
@@ -364,10 +364,13 @@ extension ConversationStoreTests {
         store.handleStreamEvent("events.event", params: [
             "event": ["type": "agent:idle", "data": ["agentId": "a"]] as [String: Any]
         ])
-        #expect(
-            store.pendingQuestionsMessageId == nil,
-            "turn boundaries are buffered while the snapshot is pending"
-        )
+        try await waitUntil("the mid-load turn boundaries to refresh the marker") {
+            store.pendingQuestionsMessageId == "a1"
+        }
+        try await waitUntil("one agent.get per turn boundary") {
+            fake.requestLog.filter { $0.method == "agent.get" }.count == 2
+        }
+        #expect(store.isLoading, "the marker refresh does not finish the initial load")
 
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-chat",
@@ -375,20 +378,16 @@ extension ConversationStoreTests {
             conversationSnapshot: [],
             metadata: ["agentId": "a"]
         ))
-        try await waitUntil("the buffered turn boundary to refresh the marker") {
-            store.pendingQuestionsMessageId == "a1"
-        }
-        // One refresh regardless of how many boundaries were buffered.
-        try await expectNever("a second agent.get for the buffered boundaries") {
-            fake.requestLog.filter { $0.method == "agent.get" }.count > 1
-        }
-
         #expect(!store.isLoading)
+        // The snapshot is the transcript; it neither replays the boundaries
+        // nor adds a refresh of its own.
+        try await expectNever("an agent.get issued by the snapshot") {
+            fake.requestLog.filter { $0.method == "agent.get" }.count > 2
+        }
         #expect(
             store.pendingQuestionsMessageId == "a1",
-            "the buffered turn boundary still refreshes the marker after load"
+            "the marker raised mid-load survives the snapshot"
         )
-        #expect(fake.requestLog.filter { $0.method == "agent.get" }.count == 1)
     }
 
     @Test func agentUpdatedEventWithoutPendingMarkerLeavesItUntouched() async {
