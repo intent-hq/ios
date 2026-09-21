@@ -49,7 +49,7 @@ extension ConversationStoreLiveStateTests {
         #expect(store.totalMessageCount == 1)
     }
 
-    @Test func staleSubscribeResolvedAfterRebindDoesNotOverwriteNewAgent() async {
+    @Test func staleSubscribeResolvedAfterRebindDoesNotOverwriteNewAgent() async throws {
         let (store, fake) = makeStore()
         let subscribeA = await startPendingSubscribeForAgentA(store, fake)
 
@@ -62,6 +62,7 @@ extension ConversationStoreLiveStateTests {
         #expect(!fake.hasSubscriptionHandler(id: "sub-a"), "A's orphaned registration is not wired up")
         // A's registration released the test channel it replaced; B found
         // nothing acked to release; A's late ack is released as an orphan.
+        try await fake.waitForRequests("chat.unsubscribe", count: 2)
         #expect(
             fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String }
                 == ["sub-chat-123", "sub-a"]

@@ -230,7 +230,7 @@ extension ConversationStoreLiveStateTests {
 
     /// A recovery scheduled for agent A's registration that only runs after
     /// agent B registered must not release, re-register or unseed B.
-    @Test func recoveryScheduledBeforeSupersessionDoesNothingWhenItRuns() async {
+    @Test func recoveryScheduledBeforeSupersessionDoesNothingWhenItRuns() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
         fake.responseMap["chat.unsubscribe"] = [String: Any]()
@@ -249,6 +249,7 @@ extension ConversationStoreLiveStateTests {
         #expect(store.liveTranscript.chatSeeded)
         #expect(fake.hasSubscriptionHandler(id: "sub-b"))
         #expect(store.liveTranscript.chatSubscriptionId == "sub-b")
+        try await fake.waitForRequests("chat.unsubscribe")
         #expect(
             fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-a"],
             "only the rebind released A; B's registration is not released"
@@ -276,6 +277,12 @@ extension ConversationStoreLiveStateTests {
 
     private func unsubscribedIds(_ fake: FakeConnectionManager) -> [String] {
         fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String }
+    }
+
+    /// What `ConnectionManager.request` throws on a dead connection, before
+    /// any frame is built.
+    private var notConnected: NSError {
+        NSError(domain: "WebSocket", code: -4, userInfo: [NSLocalizedDescriptionKey: "Not connected"])
     }
 
     /// `reset()` releases the acked registration once, without waiting; the
@@ -382,6 +389,53 @@ extension ConversationStoreLiveStateTests {
         #expect(fake.hasSubscriptionHandler(id: "sub-a2"))
         #expect(!fake.hasSubscriptionHandler(id: "sub-a"))
         try await expectNever("a release of the outage's registration") { fake.didCallMethod("chat.unsubscribe") }
+    }
+
+    /// `reset()` during an outage: the release meets the dead connection's
+    /// "Not connected" (thrown before any frame is built, so nothing reaches
+    /// the wire) and is neither retried nor followed by a registration.
+    @Test func resetWhileDisconnectedDoesNotRetryTheRelease() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.stubChatSnapshot(subscriptionId: "sub-a", messages: [agentARow])
+        await store.subscribeLiveChat(agentId: "agent-a", workspaceId: "ws-1")
+        #expect(store.liveTranscript.chatSubscriptionId == "sub-a")
+
+        fake.simulateDisconnect()
+        fake.errorMap["chat.unsubscribe"] = notConnected
+        store.reset()
+        #expect(store.liveTranscript.chatSubscriptionId == nil)
+        #expect(!fake.hasSubscriptionHandler(id: "sub-a"))
+
+        try await fake.waitForRequests("chat.unsubscribe")
+        try await expectNever("a retry of the failed release or a registration") {
+            fake.paramsForMethod("chat.unsubscribe").count > 1 || fake.paramsForMethod("chat.subscribe").count > 1
+        }
+        #expect(store.liveTranscript.chatSubscriptionId == nil)
+        #expect(!store.liveTranscript.chatLive)
+    }
+
+    /// Disposal during an outage: the release fails on the dead connection
+    /// and nothing outlives the transcript to retry it.
+    @Test func deinitWhileDisconnectedDoesNotRetryTheRelease() async throws {
+        let fake = FakeConnectionManager()
+        var store: ConversationStore? = ConversationStore(connectionManager: fake)
+        weak var transcript = store?.liveTranscript
+        fake.stubChatSnapshot(subscriptionId: "sub-a", messages: [agentARow])
+        await store?.subscribeLiveChat(agentId: "agent-a", workspaceId: "ws-1")
+        #expect(store?.liveTranscript.chatSubscriptionId == "sub-a")
+
+        fake.simulateDisconnect()
+        fake.errorMap["chat.unsubscribe"] = notConnected
+        store = nil
+        #expect(!fake.hasSubscriptionHandler(id: "sub-a"))
+
+        try await fake.waitForRequests("chat.unsubscribe")
+        #expect(transcript == nil)
+        try await expectNever("a retry of the failed release or a registration") {
+            fake.paramsForMethod("chat.unsubscribe").count > 1 || fake.paramsForMethod("chat.subscribe").count > 1
+        }
+        #expect(fake.subscriptionHandlerCount == 0)
     }
 
     /// Disposing the transcript releases its acked registration; the release
