@@ -114,6 +114,22 @@ struct ContentBlockBody: View, Equatable {
     private static let fileBackgroundOpacity: Double = 0.5
     private static let fileCornerRadius: CGFloat = 6
 
+    init(
+        block: ContentBlock,
+        toolResult: ContentBlock?,
+        workspaceId: String,
+        onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil,
+        isHydrating: Bool = false,
+        onHydrateBlock: ((_ blockId: String) -> Void)? = nil
+    ) {
+        self.block = block
+        self.toolResult = toolResult
+        self.workspaceId = workspaceId
+        self.onNavigateToNote = onNavigateToNote
+        self.isHydrating = isHydrating
+        self.onHydrateBlock = onHydrateBlock
+    }
+
     var body: some View {
         switch block.type {
         case .text:
