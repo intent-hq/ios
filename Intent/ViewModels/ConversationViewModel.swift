@@ -20,7 +20,6 @@ import SwiftUI
 
     var isTruncated: Bool { store.isTruncated }
     var totalMessageCount: Int { store.totalMessageCount }
-    var attentionRequest: PendingAttentionRequest? { store.attentionRequest }
     var agentNotFound: Bool { store.agentNotFound }
     var activeAgentHooks: [BackgroundHook] {
         hookStore.activeHooks.filter { $0.agentId == agentId }

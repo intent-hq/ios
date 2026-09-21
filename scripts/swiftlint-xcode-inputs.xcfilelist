@@ -167,7 +167,6 @@ $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileAttachmentLoader.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MarkdownTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AgentMessageAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AttentionNoticeView.swift
-$(SRCROOT)/Intent/Views/Conversation/Notices/AttentionRequestBanner.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/EventWakeBannerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/HookWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/ModelChangeNoticeView.swift

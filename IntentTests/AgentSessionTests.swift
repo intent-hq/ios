@@ -169,57 +169,6 @@ struct AgentSessionTests {
         #expect(agent?.attentionRequestReason == nil)
     }
 
-    // MARK: - parsePendingAttentionRequest (partial payloads)
-
-    @Test func parsePendingAttentionRequestWithoutIdOrName() {
-        // Raise/clear must not depend on the full session parse (id/name).
-        let dict: [String: Any] = [
-            "attentionRequestKind": "blocker",
-            "attentionRequestReason": "sandbox is broken",
-            "attentionRequestTimestamp": "2026-07-30T10:00:00Z"
-        ]
-        let pending = AgentSession.parsePendingAttentionRequest(dict)
-        #expect(pending?.kind == .blocker)
-        #expect(pending?.reason == "sandbox is broken")
-        #expect(pending?.raisedAt == ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
-    }
-
-    @Test func parsePendingAttentionRequestTimestampWithFractionalSeconds() throws {
-        let dict: [String: Any] = [
-            "attentionRequestKind": "discussion",
-            "attentionRequestTimestamp": "2026-07-30T10:00:00.500Z"
-        ]
-        let pending = AgentSession.parsePendingAttentionRequest(dict)
-        let expected = try #require(ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
-        #expect(pending?.raisedAt == expected.addingTimeInterval(0.5))
-    }
-
-    @Test func parsePendingAttentionRequestNilRaisedAtWhenTimestampAbsentOrInvalid() {
-        let absent = AgentSession.parsePendingAttentionRequest([
-            "attentionRequestKind": "blocker"
-        ])
-        #expect(absent != nil)
-        #expect(absent?.raisedAt == nil)
-
-        let invalid = AgentSession.parsePendingAttentionRequest([
-            "attentionRequestKind": "blocker",
-            "attentionRequestTimestamp": "not-a-date"
-        ])
-        #expect(invalid != nil)
-        #expect(invalid?.raisedAt == nil)
-    }
-
-    @Test func parsePendingAttentionRequestFromMetadataSurface() {
-        let dict: [String: Any] = [
-            "metadata": ["attentionRequestKind": "discussion"] as [String: Any]
-        ]
-        #expect(AgentSession.parsePendingAttentionRequest(dict)?.kind == .discussion)
-    }
-
-    @Test func parsePendingAttentionRequestNilWhenAbsent() {
-        #expect(AgentSession.parsePendingAttentionRequest(["id": "agent-6c"]) == nil)
-    }
-
     // MARK: - pendingAttentionRequest derivation
 
     @Test func pendingAttentionRequestNilWhenNoKind() {

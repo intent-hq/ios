@@ -72,11 +72,6 @@ struct ConversationColumnView: View {
 
     @ViewBuilder
     private var columnContent: some View {
-        if let attention = viewModel.attentionRequest {
-            AttentionRequestBanner(attention: attention)
-            Divider()
-        }
-
         if viewModel.isLoading, viewModel.filteredMessages.isEmpty {
             ConversationLoadingView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

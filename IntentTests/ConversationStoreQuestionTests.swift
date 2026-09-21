@@ -144,10 +144,10 @@ extension ConversationStoreTests {
         #expect(store.pendingQuestionsMessageId == "a1")
     }
 
-    @Test func staleAgentGetReplyFromPreviousAgentDoesNotTouchStreamingOrAttention() async throws {
+    @Test func staleAgentGetReplyFromPreviousAgentDoesNotTouchStreaming() async throws {
         // Regression (PR #213 review): the agent-mismatch guard covered only
         // the markers, so an agent.get for A that completed after the store
-        // switched to B still wrote A's isStreaming/attentionRequest into B.
+        // switched to B still wrote A's isStreaming into B.
         let fake = FakeConnectionManager()
         fake.responseMap["agent.getConversation"] = ["messages": []]
         fake.pendingMethods.insert("agent.get")
@@ -159,15 +159,12 @@ extension ConversationStoreTests {
 
         await store.fetchConversation(agentId: "b", workspaceId: "w")
         store.isStreaming = false
-        store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "b needs input")
 
         fake.resolvePending("agent.get", with: [
             "agent": [
                 "id": "a",
                 "name": "A",
-                "isStreaming": true,
-                "attentionRequestKind": "blocker",
-                "attentionRequestReason": "a is stuck"
+                "isStreaming": true
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
@@ -176,11 +173,6 @@ extension ConversationStoreTests {
             !store.isStreaming,
             "A's streaming state must not land in B's conversation"
         )
-        #expect(
-            store.attentionRequest?.kind == .discussion,
-            "A's attention request must not replace B's"
-        )
-        #expect(store.attentionRequest?.reason == "b needs input")
     }
 
     @Test func staleRaiseOnlyAgentGetReplyFromPreviousAgentDoesNotRaiseStreaming() async throws {
@@ -195,20 +187,17 @@ extension ConversationStoreTests {
 
         await store.fetchConversation(agentId: "b", workspaceId: "w")
         store.isStreaming = false
-        store.attentionRequest = nil
 
         fake.resolvePending("agent.get", with: [
             "agent": [
                 "id": "a",
                 "name": "A",
-                "isStreaming": true,
-                "attentionRequestKind": "blocker"
+                "isStreaming": true
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
 
         #expect(!store.isStreaming, "raiseOnly must not raise B's streaming flag from A's reply")
-        #expect(store.attentionRequest == nil, "A's attention request must not be raised on B")
     }
 
     @Test func staleNotFoundForPreviousAgentDoesNotMarkSwitchedAgentDeleted() async throws {
@@ -243,11 +232,10 @@ extension ConversationStoreTests {
 }
 
 extension ConversationStoreTests {
-    @Test func staleAgentGetReplyAfterResetDoesNotRestoreStreamingOrAttention() async throws {
+    @Test func staleAgentGetReplyAfterResetDoesNotRestoreStreaming() async throws {
         // Regression (PR #215 review): reset() unbinds the store, and an
         // unbound store used to accept any reply — so an agent.get issued
-        // while bound to A restored A's isStreaming/attentionRequest into the
-        // store reset() had just cleared.
+        // while bound to A restored A's isStreaming into the reset store.
         let fake = FakeConnectionManager()
         fake.responseMap["agent.getConversation"] = ["messages": []]
         fake.pendingMethods.insert("agent.get")
@@ -263,15 +251,12 @@ extension ConversationStoreTests {
             "agent": [
                 "id": "a",
                 "name": "A",
-                "isStreaming": true,
-                "attentionRequestKind": "blocker",
-                "attentionRequestReason": "a is stuck"
+                "isStreaming": true
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
 
         #expect(!store.isStreaming, "a stale reply must not restore streaming state after reset")
-        #expect(store.attentionRequest == nil, "a stale reply must not restore the attention request after reset")
     }
 
     @Test func staleNotFoundAfterResetDoesNotRaiseAgentNotFound() async throws {
@@ -302,17 +287,16 @@ extension ConversationStoreTests {
         )
     }
 
-    @Test func agentGetReplyAfterMarkerPushStillAppliesStreamingAndAttention() async throws {
+    @Test func agentGetReplyAfterMarkerPushStillAppliesStreaming() async throws {
         // Pins the split: a generation bump without an agent change (an
         // agent:updated push for the same agent) skips only the markers —
-        // streaming/attention state is not carried by the push and must still
-        // be taken from the reply.
+        // streaming state is not carried by the push and must still be taken
+        // from the reply.
         let fake = FakeConnectionManager()
         fake.responseMap["agent.getConversation"] = ["messages": []]
         fake.pendingMethods.insert("agent.get")
         let store = ConversationStore(connectionManager: fake)
         await store.fetchConversation(agentId: "a", workspaceId: "w")
-        store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "stale")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
         try await fake.waitForPendingRequests("agent.get")
@@ -332,8 +316,6 @@ extension ConversationStoreTests {
                 "id": "a",
                 "name": "A",
                 "isStreaming": true,
-                "attentionRequestKind": "blocker",
-                "attentionRequestReason": "sandbox is broken",
                 "metadata": [
                     "pendingQuestionsMessageId": "a1",
                     "lastSeenMessageId": "m3"
@@ -343,10 +325,6 @@ extension ConversationStoreTests {
         await refresh.value
 
         #expect(store.isStreaming, "streaming state is applied despite the marker push")
-        #expect(
-            store.attentionRequest?.kind == .blocker,
-            "attention state is applied despite the marker push"
-        )
         #expect(
             store.pendingQuestionsMessageId == "a2",
             "the pushed marker wins over the stale reply"

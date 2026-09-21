@@ -51,7 +51,6 @@ final class ConversationCommands {
 
     struct AgentState {
         let isStreaming: Bool
-        let attentionRequest: PendingAttentionRequest?
         /// PROTOCOL §5.5 three-state marker: `nil` when absent from the
         /// response (legacy daemon), `""` when written-empty (nothing
         /// pending), else the question-bearing message id. Never coerced.
@@ -101,7 +100,6 @@ extension ConversationCommands {
             isStreaming: (agent["isStreaming"] as? Bool ?? false)
                 || (agent["isResponding"] as? Bool ?? false)
                 || (agent["turnInFlight"] as? Bool ?? false),
-            attentionRequest: AgentSession.parsePendingAttentionRequest(agent),
             pendingQuestionsMessageId: metadata?["pendingQuestionsMessageId"] as? String,
             dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String,
             lastSeenMessageId: metadata?["lastSeenMessageId"] as? String
