@@ -175,71 +175,6 @@ struct ConversationStoreTests {
         #expect(store.isStreaming)
     }
 
-    // MARK: - attention request raise/retire (PROTOCOL §5.5)
-
-    @Test func fetchAgentStreamingStateRaisesAttentionRequest() async {
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.get"] = [
-            "agent": [
-                "id": "a",
-                "name": "A",
-                "attentionRequestKind": "blocker",
-                "attentionRequestReason": "sandbox is broken",
-                "attentionRequestTimestamp": "2026-07-30T10:00:00Z"
-            ] as [String: Any]
-        ] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-
-        await store.fetchAgentStreamingState(agentId: "a")
-
-        #expect(store.attentionRequest?.kind == .blocker)
-        #expect(store.attentionRequest?.reason == "sandbox is broken")
-        #expect(store.attentionRequest?.raisedAt == ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
-    }
-
-    @Test func fetchAgentStreamingStateClearsWhenServerHasNone() async {
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.get"] = [
-            "agent": ["id": "a", "name": "A"] as [String: Any]
-        ] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-        store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "stale")
-
-        // Attention state is server-authoritative even with raiseOnly (which
-        // only guards isStreaming).
-        await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true)
-
-        #expect(store.attentionRequest == nil)
-    }
-
-    @Test func fetchAgentStreamingStateUpdatesAttentionOnPartialPayload() async {
-        // Attention state must raise/clear even when the payload lacks the
-        // name required by the full session parse.
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.get"] = [
-            "agent": [
-                "id": "a",
-                "attentionRequestKind": "blocker"
-            ] as [String: Any]
-        ] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-
-        await store.fetchAgentStreamingState(agentId: "a")
-
-        #expect(store.attentionRequest?.kind == .blocker)
-    }
-
-    @Test func sendMessageRetiresAttentionRequest() async throws {
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-        store.attentionRequest = PendingAttentionRequest(kind: .blocker, reason: "why")
-
-        try await store.sendMessage(agentId: "a", content: "unblocking you", workspaceId: "w")
-
-        #expect(store.attentionRequest == nil, "sending a message retires the indicator immediately")
-    }
-
     // MARK: - sendMessage messageMetadata threading (intent-hq/monorepo#1789)
 }
 
@@ -276,33 +211,13 @@ extension ConversationStoreTests {
         #expect(sent.params["messageMetadata"] == nil, "plain sends stay untagged")
     }
 
-    @Test func failedSendKeepsAttentionRequest() async {
-        let fake = FakeConnectionManager()
-        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
-        let store = ConversationStore(connectionManager: fake)
-        store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "input needed")
-
-        await #expect(throws: (any Error).self) {
-            try await store.sendMessage(agentId: "a", content: "hi", workspaceId: "w")
-        }
-
-        #expect(store.attentionRequest != nil, "a failed send must not retire the indicator")
-    }
-
-    @Test func resetClearsAttentionRequest() {
-        let store = ConversationStore()
-        store.attentionRequest = PendingAttentionRequest(kind: .blocker, reason: "why")
-        store.reset()
-        #expect(store.attentionRequest == nil)
-    }
-
     // MARK: - agentNotFound (missing-agent fallback)
 
-    @Test func fetchConversationNotFoundRaisesAgentNotFound() async {
+    @Test func subscribeLiveChatNotFoundRaisesAgentNotFound() async {
         let fake = FakeConnectionManager()
-        // agent.getConversation answers -32602 with data.code == "not-found" for a
+        // chat.subscribe answers -32602 with data.code == "not-found" for a
         // nonexistent agent (docs/PROTOCOL.md §3.3/§9)
-        fake.errorMap["agent.getConversation"] = NSError(
+        fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -32_602,
             userInfo: [
@@ -312,30 +227,30 @@ extension ConversationStoreTests {
         )
         let store = ConversationStore(connectionManager: fake)
 
-        await store.fetchConversation(agentId: "gone", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "gone", workspaceId: "w")
 
         #expect(store.agentNotFound, "a definitive not-found must raise agentNotFound")
     }
 
-    @Test func fetchConversationBare32602DoesNotRaiseAgentNotFound() async {
+    @Test func subscribeLiveChatBare32602DoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
         // -32602 without data.code == "not-found" (invalid-params or a legacy
         // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
-        fake.errorMap["agent.getConversation"] = NSError(
+        fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -32_602,
             userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"]
         )
         let store = ConversationStore(connectionManager: fake)
 
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         #expect(!store.agentNotFound, "a -32602 without data.code == \"not-found\" must not raise agentNotFound")
     }
 
-    @Test func fetchConversationInvalidParams32602DoesNotRaiseAgentNotFound() async {
+    @Test func subscribeLiveChatInvalidParams32602DoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
-        fake.errorMap["agent.getConversation"] = NSError(
+        fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -32_602,
             userInfo: [
@@ -345,22 +260,22 @@ extension ConversationStoreTests {
         )
         let store = ConversationStore(connectionManager: fake)
 
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         #expect(!store.agentNotFound, "data.code == \"invalid-params\" must not raise agentNotFound")
     }
 
-    @Test func fetchConversationTransientErrorDoesNotRaiseAgentNotFound() async {
+    @Test func subscribeLiveChatTransientErrorDoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
         // Transport-level timeout must not read as deletion
-        fake.errorMap["agent.getConversation"] = NSError(
+        fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -2,
             userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
         )
         let store = ConversationStore(connectionManager: fake)
 
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         #expect(!store.agentNotFound, "a transient transport error must not raise agentNotFound")
     }
@@ -384,9 +299,9 @@ extension ConversationStoreTests {
 
     @Test func agentDeletedEventForOpenAgentRaisesAgentNotFound() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
         #expect(!store.agentNotFound)
 
         store.handleStreamEvent("events.event", params: [
@@ -398,9 +313,9 @@ extension ConversationStoreTests {
 
     @Test func agentDeletedEventForOtherAgentDoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
             "event": ["type": "agent:deleted", "data": ["agentId": "someone-else"]] as [String: Any]

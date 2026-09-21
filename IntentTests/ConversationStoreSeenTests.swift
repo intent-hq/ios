@@ -45,9 +45,9 @@ extension ConversationStoreTests {
 
     @Test func agentUpdatedEventAppliesSeenMarkerPushStyle() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
             "event": [
@@ -67,9 +67,9 @@ extension ConversationStoreTests {
 
     @Test func agentUpdatedEventForOtherAgentDoesNotMoveSeenMarker() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
             "event": [

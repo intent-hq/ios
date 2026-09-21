@@ -2,6 +2,12 @@ import Foundation
 @testable import Intent
 import Testing
 
+private enum NestedImageQueueFixture {
+    static let expectedImageCount = 2
+    static let malformedType = 42
+    static let position = 4
+}
+
 // Extracted wire fixtures intentionally keep protocol dictionaries compact.
 // swiftlint:disable multiline_literal_brackets
 
@@ -42,6 +48,17 @@ extension ConversationStoreIntegrationTests {
         await store.fetchQueue(agentId: "agent-1")
 
         #expect(store.queuedMessages.map(\.id) == ["q-1", "q-4"])
+    }
+
+    @Test func fetchQueueKeepsValidNestedImageSiblings() async {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["agent.getQueue"] = ["queue": [nestedImageQueueRow]]
+
+        await store.fetchQueue(agentId: "agent-1")
+
+        expectNestedImageQueue(store.queuedMessages)
+        #expect(fake.paramsForMethod("agent.getQueue").count == 1)
     }
 
     /// A well-formed empty `queue` is an authoritative snapshot and clears
@@ -90,10 +107,10 @@ extension ConversationStoreIntegrationTests {
     /// directly, without falling back to a re-fetch.
     @Test func queueUpdatedEventKeepsValidSiblingsWhenOneElementIsMalformed() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.responseMap["agent.getQueue"] = ["queue": [] as [Any]]
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
         fake.requestLog.removeAll()
 
         store.handleStreamEvent("events.event", params: [
@@ -114,14 +131,33 @@ extension ConversationStoreIntegrationTests {
         #expect(!fake.didCallMethod("agent.getQueue"))
     }
 
+    @Test func queueUpdatedEventKeepsValidNestedImageSiblingsWithoutRefetch() async {
+        let fake = FakeConnectionManager()
+        fake.stubChatSnapshot()
+        fake.responseMap["agent.getQueue"] = ["queue": [] as [Any]]
+        let store = ConversationStore(connectionManager: fake)
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
+        fake.requestLog.removeAll()
+
+        store.handleStreamEvent("events.event", params: [
+            "event": [
+                "type": "agent:queue:updated",
+                "data": ["agentId": "a", "queue": [nestedImageQueueRow]] as [String: Any]
+            ] as [String: Any]
+        ])
+
+        expectNestedImageQueue(store.queuedMessages)
+        #expect(!fake.didCallMethod("agent.getQueue"))
+    }
+
     /// An `agent:queue:updated` push with an empty `queue` clears the local
     /// queue directly.
     @Test func queueUpdatedEventEmptyArrayClearsQueue() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         fake.responseMap["agent.getQueue"] = ["queue": [] as [Any]]
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
         store.queuedMessages = [
             QueuedMessage(id: "q-1", content: "first", queuedAt: "2025-01-01T00:00:00Z", position: 0)
         ]
@@ -136,6 +172,33 @@ extension ConversationStoreIntegrationTests {
 
         #expect(store.queuedMessages.isEmpty)
         #expect(!fake.didCallMethod("agent.getQueue"))
+    }
+
+    private var nestedImageQueueRow: [String: Any] {
+        [
+            "id": "q-images",
+            "content": "unchanged text",
+            "queuedAt": "2025-01-01T00:00:04Z",
+            "position": NestedImageQueueFixture.position,
+            "imageBlocks": [
+                ["type": "image", "data": "inline", "mimeType": "image/png"],
+                ["type": NestedImageQueueFixture.malformedType],
+                ["type": "image", "attachmentId": "att-2"]
+            ],
+            "messageMetadata": ["userAppMessageId": "uam-1"]
+        ]
+    }
+
+    private func expectNestedImageQueue(_ messages: [QueuedMessage]) {
+        #expect(messages.count == 1)
+        #expect(messages.first?.id == "q-images")
+        #expect(messages.first?.content == "unchanged text")
+        #expect(messages.first?.queuedAt == "2025-01-01T00:00:04Z")
+        #expect(messages.first?.position == NestedImageQueueFixture.position)
+        #expect(messages.first?.imageBlocks.count == NestedImageQueueFixture.expectedImageCount)
+        #expect(messages.first?.imageBlocks.first?.data == "inline")
+        #expect(messages.first?.imageBlocks.last?.attachmentId == "att-2")
+        #expect(messages.first?.messageMetadata["userAppMessageId"]?.stringValue == "uam-1")
     }
 }
 

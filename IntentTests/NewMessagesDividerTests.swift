@@ -3,6 +3,8 @@ import Foundation
 import Testing
 import UIKit
 
+// swiftlint:disable file_length
+
 struct ConversationTranscriptScrollPolicyTests {
     private typealias Step = ConversationTranscriptScrollPolicy.InitialScrollStep
 
@@ -39,6 +41,70 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(initialStep(alreadyPerformed: true, scrollViewResolved: true) == .skip)
         #expect(initialStep(alreadyPerformed: true, scrollViewWaitElapsed: true) == .skip)
         #expect(initialStep(alreadyPerformed: true) == .skip)
+    }
+
+    /// A live replacement can empty a transcript after its entry scroll and
+    /// while Go to End is showing. The empty state clears that flag and every
+    /// entry latch; its next non-empty snapshot enters through a fresh scroll.
+    @Test func emptyReplacementRearmsEntryScrollForTheNextSnapshot() {
+        let state = ConversationTranscriptScrollState()
+        state.userIsScrolledAway = true
+        state.hasInitiallyScrolled = true
+        state.initialScrollScheduled = true
+        state.initialScrollAwaitingScrollView = true
+        state.initialScrollPerformed = true
+        state.isScrollingToBottom = true
+        let generation = state.initialScrollGeneration
+
+        #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: 12,
+            to: 0,
+            hasInitiallyScrolled: true
+        ) == .rearmEntryScroll)
+        state.rearmAfterTranscriptEmptied()
+        #expect(!state.userIsScrolledAway)
+        #expect(!state.hasInitiallyScrolled)
+        #expect(!state.initialScrollScheduled)
+        #expect(!state.initialScrollAwaitingScrollView)
+        #expect(!state.initialScrollPerformed)
+        #expect(!state.isScrollingToBottom)
+        #expect(state.initialScrollGeneration == generation + 1)
+        #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: 0,
+            to: 8,
+            hasInitiallyScrolled: state.hasInitiallyScrolled
+        ) == .runEntryScroll)
+    }
+
+    @Test func emptyReplacementInvalidatesPendingDividerProbe() {
+        let state = ConversationTranscriptScrollState()
+        let staleGeneration = state.initialScrollGeneration
+
+        state.rearmAfterTranscriptEmptied()
+        state.applyDividerProbe(distanceToBottom: 100, generation: staleGeneration)
+
+        #expect(!state.userIsScrolledAway)
+    }
+
+    @Test func matchingGenerationDividerProbeMarksScrolledAway() {
+        let state = ConversationTranscriptScrollState()
+
+        state.applyDividerProbe(
+            distanceToBottom: 100,
+            generation: state.initialScrollGeneration
+        )
+
+        #expect(state.userIsScrolledAway)
+    }
+
+    /// Regression (#350): replacing a scrolled-away transcript with a shorter
+    /// snapshot can strand UIKit's old offset beyond the new content end.
+    @Test func shorterReplacementRechecksForPastEndRePin() {
+        #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: 40,
+            to: 10,
+            hasInitiallyScrolled: true
+        ) == .rePinIfPastEnd)
     }
 
     /// The hosting wait must outlast the entry timer it replaces, and the
@@ -345,7 +411,8 @@ struct ConversationTranscriptScrollPolicyTests {
     typealias ContainerRePin = ConversationTranscriptScrollPolicy.ContainerRePinDecision
 }
 
-@Suite struct TranscriptRowHeightCacheTests {
+@Suite @MainActor
+struct TranscriptRowHeightCacheTests {
     private let settleWait = Duration.milliseconds(20)
 
     @Test func cachesOnlyTheLatestSettledHeight() async {

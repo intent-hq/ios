@@ -29,6 +29,11 @@ extension ConnectionManager {
             if let gate = DemoFixtures.responseGate(for: method, params: params) {
                 try await DemoFixtures.wait(for: gate)
             }
+            // Routed ahead of the ack: the router buffers it until the caller
+            // registers its handler, the same order a live daemon can produce.
+            if let push = DemoFixtures.subscriptionPush(for: method, params: params) {
+                subscriptionRouter.route(push)
+            }
             return DemoFixtures.response(for: method, params: params)
         }
         guard let currentSocket = socket else {

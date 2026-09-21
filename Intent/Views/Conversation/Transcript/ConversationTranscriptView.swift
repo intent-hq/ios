@@ -157,6 +157,32 @@ private extension ConversationTranscriptView {
     }
 
     private func handleMessageCountChange(from oldCount: Int, to newCount: Int, proxy: ScrollViewProxy) {
+        switch ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: oldCount,
+            to: newCount,
+            hasInitiallyScrolled: hasInitiallyScrolled
+        ) {
+        case .rearmEntryScroll:
+            cancelPastEndRePin()
+            cancelDeferredContainerRePin()
+            cancelBottomBandRePin()
+            // The lifecycle and its tasks live in the parent-owned scroll
+            // state, so they survive the empty view replacing this transcript.
+            // Reuse the all-owner cancellation before resetting the entry
+            // latches; the reset clears its gesture-specific fallback state.
+            cancelPendingFollowOnTakeover(proxy: proxy)
+            scrollState.rearmAfterTranscriptEmptied()
+            return
+        case .rePinIfPastEnd:
+            scheduleRePinIfRestingPastEnd(proxy: proxy)
+        case .runEntryScroll:
+            if !viewModel.isLoading {
+                runInitialScrollIfNeeded(proxy: proxy)
+            }
+            return
+        case .none:
+            break
+        }
         let appendedUserMessage = newCount > oldCount
             && viewModel.filteredMessages.last?.role == .user
         if appendedUserMessage {
@@ -875,7 +901,8 @@ private extension ConversationTranscriptView {
         )
         .modifier(
             ConversationTranscriptRowHeightFrame(
-                cachedHeight: cachedHeight
+                cachedHeight: cachedHeight,
+                isStreaming: message.isStreaming
             ) { height in
                 scrollState.rowHeightCache.record(
                     height: height,
@@ -1042,8 +1069,13 @@ private extension ConversationTranscriptView {
     private func runInitialScrollIfNeeded(proxy: ScrollViewProxy) {
         guard !initialScrollScheduled else { return }
         initialScrollScheduled = true
+        let generation = scrollState.initialScrollGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
-            performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: false)
+            performInitialScrollWhenReady(
+                proxy: proxy,
+                scrollViewWaitElapsed: false,
+                generation: generation
+            )
         }
     }
 
@@ -1052,6 +1084,7 @@ private extension ConversationTranscriptView {
     /// LazyVStack's first layout pass, so the resolved path gets the same
     /// `initialScrollDelay` the loading triggers get before it scrolls.
     private func handleScrollViewResolved(proxy: ScrollViewProxy) {
+        let generation = scrollState.initialScrollGeneration
         guard scrollState.initialScrollAwaitingScrollView else {
             // Defensive: onAppear / isLoading already schedule the entry
             // scroll, so this only matters if the edge ever precedes both.
@@ -1061,7 +1094,11 @@ private extension ConversationTranscriptView {
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
-            performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: false)
+            performInitialScrollWhenReady(
+                proxy: proxy,
+                scrollViewWaitElapsed: false,
+                generation: generation
+            )
         }
     }
 
@@ -1070,7 +1107,12 @@ private extension ConversationTranscriptView {
     /// during the push transition) the scroll waits for the finder's edge —
     /// bounded by `initialScrollHostingTimeout` so a finder that never
     /// resolves still scrolls. Performs at most once across all paths.
-    private func performInitialScrollWhenReady(proxy: ScrollViewProxy, scrollViewWaitElapsed: Bool) {
+    private func performInitialScrollWhenReady(
+        proxy: ScrollViewProxy,
+        scrollViewWaitElapsed: Bool,
+        generation: Int
+    ) {
+        guard generation == scrollState.initialScrollGeneration else { return }
         switch ConversationTranscriptScrollPolicy.initialScrollStep(
             alreadyPerformed: scrollState.initialScrollPerformed,
             scrollViewResolved: scrollMomentumProxy.hasResolvedScrollView,
@@ -1083,15 +1125,20 @@ private extension ConversationTranscriptView {
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollHostingTimeout
             ) {
-                performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: true)
+                performInitialScrollWhenReady(
+                    proxy: proxy,
+                    scrollViewWaitElapsed: true,
+                    generation: generation
+                )
             }
         case .perform:
             scrollState.initialScrollPerformed = true
             scrollState.initialScrollAwaitingScrollView = false
-            performInitialScroll(proxy: proxy)
+            performInitialScroll(proxy: proxy, generation: generation)
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollSettleDelay
             ) {
+                guard generation == scrollState.initialScrollGeneration else { return }
                 hasInitiallyScrolled = true
             }
         }
@@ -1099,7 +1146,7 @@ private extension ConversationTranscriptView {
 
     /// Without an unread divider the entry scroll is a forced follow, so its
     /// landing is verified from the live geometry like any other.
-    private func performInitialScroll(proxy: ScrollViewProxy) {
+    private func performInitialScroll(proxy: ScrollViewProxy, generation: Int) {
         guard viewModel.newMessagesDividerAnchorId != nil else {
             scrollToBottom(proxy: proxy, forced: true, animated: false)
             return
@@ -1108,11 +1155,10 @@ private extension ConversationTranscriptView {
         // Runs before `hasInitiallyScrolled` flips (probe < settle delay), so
         // no automatic follow can be queued ahead of this decision.
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.dividerProbeDelay) {
-            if NewMessagesDivider.followDisabledAfterEntryScroll(
-                distanceToBottom: scrollMomentumProxy.distanceToBottom
-            ) {
-                userIsScrolledAway = true
-            }
+            scrollState.applyDividerProbe(
+                distanceToBottom: scrollMomentumProxy.distanceToBottom,
+                generation: generation
+            )
         }
     }
 
@@ -1326,7 +1372,9 @@ private extension ConversationTranscriptView {
 
 struct ConversationTranscriptRowHeightFrame: ViewModifier {
     let cachedHeight: CGFloat?
+    var isStreaming = false
     let onNaturalHeightChange: (CGFloat) -> Void
+    @State private var lastNaturalHeight: CGFloat?
 
     func body(content: Content) -> some View {
         content
@@ -1334,10 +1382,24 @@ struct ConversationTranscriptRowHeightFrame: ViewModifier {
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.height
             } action: { height in
+                lastNaturalHeight = height
                 onNaturalHeightChange(height)
             }
             .frame(height: cachedHeight, alignment: .top)
             .clipped()
+            .onChange(of: isStreaming) { _, isStreaming in
+                guard !isStreaming, let lastNaturalHeight else { return }
+                onNaturalHeightChange(lastNaturalHeight)
+            }
+    }
+}
+
+extension ConversationTranscriptScrollState {
+    func applyDividerProbe(distanceToBottom: CGFloat?, generation: Int) {
+        guard generation == initialScrollGeneration else { return }
+        if NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: distanceToBottom) {
+            userIsScrolledAway = true
+        }
     }
 }
 

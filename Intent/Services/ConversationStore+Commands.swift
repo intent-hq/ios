@@ -56,7 +56,6 @@ extension ConversationStore {
         }
 
         lastFailedSend = nil
-        attentionRequest = nil
 
         if queued {
             isStreaming = false
@@ -195,11 +194,8 @@ extension ConversationStore {
         bindAgent(nil)
         workspaceId = nil
         subscriptionId = nil
-        currentStreamId = nil
         isSubscribing = false
-        clearStreamEventBuffer()
         lastFailedSend = nil
-        attentionRequest = nil
         agentNotFound = false
         clearPendingQuestionRecovery()
     }

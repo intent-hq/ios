@@ -77,10 +77,6 @@ enum ConversationConstants {
         static let pastEndSettleMilliseconds = 150
     }
 
-    enum AttentionRequest {
-        static let reasonLineLimit = 6
-    }
-
     enum CodeBlock {
         static let copyConfirmationDuration: Double = 2
     }

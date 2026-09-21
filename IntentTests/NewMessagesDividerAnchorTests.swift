@@ -251,6 +251,25 @@ struct TranscriptRowHeightFrameTests {
         #expect(recorder.rowHeight == Self.cachedHeight)
     }
 
+    @Test func stableNaturalHeightIsReportedWhenStreamingCompletes() async throws {
+        let source = HostedTranscriptHeightSource(height: Self.cachedHeight, isStreaming: true)
+        let recorder = HostedTranscriptHeightRecorder()
+        let host = HostedTranscriptHeightProbe(source: source, recorder: recorder)
+        defer { host.tearDown() }
+
+        try await waitUntil("initial streaming measurement") {
+            recorder.naturalHeightChanges > 0
+        }
+        let streamingMeasurements = recorder.naturalHeightChanges
+
+        source.isStreaming = false
+        host.layout()
+        try await waitUntil("terminal-state measurement") {
+            recorder.naturalHeightChanges > streamingMeasurements
+        }
+        #expect(recorder.naturalHeight == Self.cachedHeight)
+    }
+
     private func waitUntil(
         _ what: String,
         timeout: TimeInterval = 2,
@@ -269,9 +288,11 @@ struct TranscriptRowHeightFrameTests {
     @Observable
     final class HeightSource {
         var height: CGFloat
+        var isStreaming: Bool
 
-        init(height: CGFloat) {
+        init(height: CGFloat, isStreaming: Bool = false) {
             self.height = height
+            self.isStreaming = isStreaming
         }
     }
 
@@ -280,6 +301,7 @@ struct TranscriptRowHeightFrameTests {
     private final class HeightRecorder {
         var contentHeight: CGFloat?
         var naturalHeight: CGFloat?
+        var naturalHeightChanges = 0
         var rowHeight: CGFloat?
     }
 
@@ -297,9 +319,11 @@ struct TranscriptRowHeightFrameTests {
                 }
                 .modifier(
                     ConversationTranscriptRowHeightFrame(
-                        cachedHeight: TranscriptRowHeightFrameTests.cachedHeight
+                        cachedHeight: TranscriptRowHeightFrameTests.cachedHeight,
+                        isStreaming: source.isStreaming
                     ) { height in
                         recorder.naturalHeight = height
+                        recorder.naturalHeightChanges += 1
                     }
                 )
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in

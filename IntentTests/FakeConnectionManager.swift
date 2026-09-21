@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Combine
 import Foundation
 @testable import Intent
@@ -370,8 +371,40 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     private var subscriptionHandlers: [String: @MainActor (SubscriptionPush) -> Void] = [:]
 
+    /// Seq-0 conversation snapshot rows (and optional `snapshotMeta`) pushed
+    /// to a handler the moment it registers for that subscriptionId — the
+    /// fake's stand-in for the snapshot a live `chat.subscribe` owes after
+    /// its ack. Persistent like `responseMap`: every registration for the id
+    /// receives it. See `stubChatSnapshot`.
+    var chatSnapshotMap: [String: [[String: Any]]] = [:]
+    var chatSnapshotMetaMap: [String: [String: Any]] = [:]
+
+    /// Stubs `chat.subscribe` to ack with `subscriptionId` and push `messages`
+    /// as its seq-0 snapshot as soon as the store registers its handler.
+    func stubChatSnapshot(
+        subscriptionId: String = "sub-1",
+        messages: [[String: Any]] = [],
+        meta: [String: Any] = [:]
+    ) {
+        responseMap["chat.subscribe"] = ["subscriptionId": subscriptionId]
+        chatSnapshotMap[subscriptionId] = messages
+        if meta.isEmpty {
+            chatSnapshotMetaMap.removeValue(forKey: subscriptionId)
+        } else {
+            chatSnapshotMetaMap[subscriptionId] = meta
+        }
+    }
+
     func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
         subscriptionHandlers[id] = handler
+        if let rows = chatSnapshotMap[id] {
+            handler(SubscriptionPush(
+                subscriptionId: id,
+                seq: 0,
+                conversationSnapshot: rows,
+                metadata: chatSnapshotMetaMap[id] ?? ["truncated": false, "totalMessages": rows.count]
+            ))
+        }
     }
 
     func unregisterSubscriptionHandler(id: String) {

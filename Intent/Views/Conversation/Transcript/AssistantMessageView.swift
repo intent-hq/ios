@@ -14,10 +14,10 @@ struct AssistantMessageView: View {
     var onHydrateBlock: ((_ blockId: String) -> Void)?
 
     /// Derived once per message value in `init` rather than on every `body`
-    /// evaluation: the raw blocks, the prompt-stripped blocks grouped into
-    /// render blocks, and the copy-menu text.
-    private let blocks: [ContentBlock]
+    /// evaluation: the prompt-stripped blocks grouped into render blocks,
+    /// the tool_use → tool_result pairing, and the copy-menu text.
     private let renderBlocks: [RenderBlock]
+    private let toolResults: [String: ContentBlock]
     private let copyText: String
 
     init(
@@ -35,13 +35,34 @@ struct AssistantMessageView: View {
         self.onLayoutChange = onLayoutChange
         self.onHydrateBlock = onHydrateBlock
         let blocks = message.contentBlocks
-        self.blocks = blocks
         let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
         self.renderBlocks = MessageBlockPartitioning.groupContentBlocks(
             strippedBlocks,
             isStreaming: message.isStreaming
         )
+        self.toolResults = MessageBlockPartitioning.pairToolResults(blocks)
         self.copyText = MessageBlockPartitioning.assistantCopyText(from: blocks)
+    }
+
+    /// True while `block` or its paired tool result is being hydrated.
+    private func isHydrating(_ block: ContentBlock) -> Bool {
+        hydratingBlockIds.contains(block.id)
+            || (toolResults[block.id].map { hydratingBlockIds.contains($0.id) } ?? false)
+    }
+
+    /// The pairing and hydration set narrowed to one group's children, so the
+    /// group's equatable gate only sees changes that concern its own rows.
+    private func groupInputs(_ group: ResponseGroup) -> (toolResults: [String: ContentBlock], hydrating: Set<String>) {
+        var scopedResults: [String: ContentBlock] = [:]
+        var hydrating: Set<String> = []
+        for child in group.children {
+            if let result = toolResults[child.id] {
+                scopedResults[child.id] = result
+                if hydratingBlockIds.contains(result.id) { hydrating.insert(result.id) }
+            }
+            if hydratingBlockIds.contains(child.id) { hydrating.insert(child.id) }
+        }
+        return (scopedResults, hydrating)
     }
 
     var body: some View {
@@ -51,10 +72,10 @@ struct AssistantMessageView: View {
                 case .contentBlock(let block):
                     ContentBlockView(
                         block: block,
-                        allBlocks: blocks,
+                        toolResult: toolResults[block.id],
                         workspaceId: workspaceId,
                         onNavigateToNote: onNavigateToNote,
-                        hydratingBlockIds: hydratingBlockIds,
+                        isHydrating: isHydrating(block),
                         onLayoutChange: onLayoutChange,
                         onHydrateBlock: onHydrateBlock
                     )
@@ -63,12 +84,14 @@ struct AssistantMessageView: View {
                         if case .group = candidate { return true }
                         return false
                     }
+                    let inputs = groupInputs(group)
                     ResponseGroupView(
                         group: group,
                         isLast: isLastGroup,
                         workspaceId: workspaceId,
                         onNavigateToNote: onNavigateToNote,
-                        hydratingBlockIds: hydratingBlockIds,
+                        toolResults: inputs.toolResults,
+                        hydratingBlockIds: inputs.hydrating,
                         onLayoutChange: onLayoutChange,
                         onHydrateBlock: onHydrateBlock
                     )

@@ -6,8 +6,8 @@ import Foundation
 ///
 /// The daemon persists a per-session `lastSeenMessageId` marker (PROTOCOL
 /// §5.5, `agent.markSeen`), served in AgentLite / `agent.get` metadata and
-/// converged via `agent:updated`. On conversation entry (initial `load()`
-/// transcript fetch) the ConversationViewModel derives the anchor ONCE via
+/// converged via `agent:updated`. On conversation entry (the `chat.subscribe`
+/// seq-0 snapshot) the ConversationViewModel derives the anchor ONCE via
 /// `resolveAnchor` and latches it for the lifetime of the view model;
 /// rendering then uses only the latched anchor (`resolveLatchedAnchor`), so
 /// later marker convergence never moves the divider.
