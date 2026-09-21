@@ -206,12 +206,17 @@ struct DemoFixturesTests {
         #expect(push.snapshotMeta?["truncated"] as? Bool == false)
         #expect(push.snapshotMessages?.count == rows.count, "every long-transcript row decodes")
 
-        let seek: [String: Any] = [
-            "agentId": DemoFixtures.longConversationAgentId, "aroundMessageId": try #require(rowIds.first), "limit": 1,
-        ]
+        // The recovery seek resolves the sought row to the same row the push
+        // carries (the fixture serves the seek from the same transcript).
+        let soughtId = try #require(rowIds.first)
+        let seek: [String: Any] = ["agentId": DemoFixtures.longConversationAgentId, "aroundMessageId": soughtId, "limit": 1]
         let served = DemoFixtures.response(for: "agent.getConversation", params: seek) as? [String: Any]
         let seekRows = try #require(served?["messages"] as? [[String: Any]])
-        #expect(seekRows.compactMap { $0["id"] as? String } == rowIds, "the seek reads the transcript the push carries")
+        let sought = try #require(seekRows.first { ($0["id"] as? String) == soughtId })
+        let pushed = try #require(rows.first { ($0["id"] as? String) == soughtId })
+        #expect(text(of: sought) == text(of: pushed))
+        #expect(sought["timestamp"] as? String == pushed["timestamp"] as? String)
+        #expect(sought["role"] as? String == pushed["role"] as? String)
 
         let screenshot = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: [:]))
         #expect(screenshot.snapshot?.count == 4)

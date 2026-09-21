@@ -107,11 +107,16 @@ struct ConversationStoreIntegrationTests {
 
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(store.isLoading)
+        // Park the retry's registration so the intermediate state is observed
+        // before its snapshot can land.
+        fake.pendingMethods.insert("chat.subscribe")
         fake.stubChatSnapshot(subscriptionId: "sub-2", messages: [conversationRow(id: "msg-1", text: "Hello")])
 
         await store.awaitLiveChatSnapshot()
+        try await fake.waitForPendingRequests("chat.subscribe")
         #expect(store.isLoading, "the load stays open across the retry")
 
+        fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-2"])
         try await waitUntil("the replacement registration's snapshot") { store.messages.map(\.id) == ["msg-1"] }
         #expect(!store.isLoading)
         #expect(fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-1"])
