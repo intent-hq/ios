@@ -185,8 +185,8 @@ nonisolated struct QueuedMessage: Identifiable, Codable {
         content = try container.decode(String.self, forKey: .content)
         queuedAt = try container.decode(String.self, forKey: .queuedAt)
         position = try container.decode(Int.self, forKey: .position)
-        if let decodedImageBlocks = try? container.decode([ImageBlock].self, forKey: .imageBlocks) {
-            imageBlocks = decodedImageBlocks
+        if var imageBlocksContainer = try? container.nestedUnkeyedContainer(forKey: .imageBlocks) {
+            imageBlocks = Self.decodeLenientArray(ImageBlock.self, from: &imageBlocksContainer)
             imageBlocksWereProvided = true
         } else {
             imageBlocks = []
@@ -199,6 +199,20 @@ nonisolated struct QueuedMessage: Identifiable, Codable {
             messageMetadata = [:]
             messageMetadataWasProvided = false
         }
+    }
+
+    private static func decodeLenientArray<Element: Decodable>(
+        _: Element.Type,
+        from container: inout UnkeyedDecodingContainer
+    ) -> [Element] {
+        var items: [Element] = []
+        while !container.isAtEnd {
+            guard let elementDecoder = try? container.superDecoder() else { break }
+            if let item = try? Element(from: elementDecoder) {
+                items.append(item)
+            }
+        }
+        return items
     }
 
     func encode(to encoder: Encoder) throws {

@@ -353,6 +353,8 @@ $(SRCROOT)/IntentTests/PlatformGuardAllowlistTests.swift
 $(SRCROOT)/IntentTests/PrivacyManifestDriftTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift
 $(SRCROOT)/IntentTests/QuestionTests.swift
+$(SRCROOT)/IntentTests/QueuedImageDecodingMeasurementTests.swift
+$(SRCROOT)/IntentTests/QueuedMessageImageDecodingTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
