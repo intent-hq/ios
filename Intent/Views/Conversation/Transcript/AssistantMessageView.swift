@@ -10,6 +10,7 @@ struct AssistantMessageView: View {
     let workspaceId: String
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
     var hydratingBlockIds: Set<String>
+    var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
 
     /// Derived once per message value in `init` rather than on every `body`
@@ -24,12 +25,14 @@ struct AssistantMessageView: View {
         workspaceId: String,
         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?,
         hydratingBlockIds: Set<String>,
+        onLayoutChange: (() -> Void)? = nil,
         onHydrateBlock: ((_ blockId: String) -> Void)?
     ) {
         self.message = message
         self.workspaceId = workspaceId
         self.onNavigateToNote = onNavigateToNote
         self.hydratingBlockIds = hydratingBlockIds
+        self.onLayoutChange = onLayoutChange
         self.onHydrateBlock = onHydrateBlock
         let blocks = message.contentBlocks
         let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
@@ -73,6 +76,7 @@ struct AssistantMessageView: View {
                         workspaceId: workspaceId,
                         onNavigateToNote: onNavigateToNote,
                         isHydrating: isHydrating(block),
+                        onLayoutChange: onLayoutChange,
                         onHydrateBlock: onHydrateBlock
                     )
                 case .group(let group):
@@ -88,6 +92,7 @@ struct AssistantMessageView: View {
                         onNavigateToNote: onNavigateToNote,
                         toolResults: inputs.toolResults,
                         hydratingBlockIds: inputs.hydrating,
+                        onLayoutChange: onLayoutChange,
                         onHydrateBlock: onHydrateBlock
                     )
                 }

@@ -1,6 +1,9 @@
 import Foundation
 @testable import Intent
+import Observation
+import SwiftUI
 import Testing
+import UIKit
 
 /// ios#258 measurement harness for transcript decoding. Every chat snapshot
 /// page and every block delta arrives as `[[String: Any]]` from the inbound
@@ -161,5 +164,282 @@ private extension Duration {
 
     var milliString: String {
         String(format: "%.3f ms", Double(microseconds) / Self.microsecondsPerMillisecond)
+    }
+}
+
+@Suite @MainActor
+struct TranscriptRowHeightIntegrationTests {
+    private static let rowWidth: CGFloat = 220
+    private static let viewportHeight: CGFloat = 480
+    private static let retainedHeight: CGFloat = 24
+    private static let heightTolerance: CGFloat = 0.5
+    private static let cacheDelay = Duration.milliseconds(100)
+    private static let shortText = "Short response."
+    private static let longText = String(repeating: "A proposal-sensitive wrapped response needs room. ", count: 18)
+
+    @Test func lazyRowCacheConvergesAfterLateGrowthAndShrinkWithoutRecreation() async throws {
+        let message = Self.message(id: "stable-cache-row", text: "Stable cache key")
+        let source = TranscriptLateTextSource(text: Self.shortText)
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let recorder = TranscriptHeightRecorder()
+        cache.updateLayoutWidth(Self.rowWidth)
+        let host = TranscriptGeometryHost(
+            CacheIntegratedTextProbe(
+                source: source,
+                message: message,
+                cache: cache,
+                recorder: recorder,
+                width: Self.rowWidth
+            ),
+            size: CGSize(width: Self.rowWidth, height: Self.viewportHeight)
+        )
+        defer { host.tearDown() }
+
+        try await waitUntil("initial cache and row convergence") {
+            Self.cacheAndOuterConverged(cache: cache, message: message, recorder: recorder)
+        }
+        let initialHeight = try #require(recorder.naturalHeights.last)
+        let instanceID = try #require(recorder.instanceID)
+
+        source.text = Self.longText
+        host.layout()
+        try await waitUntil("late multiline growth convergence") {
+            guard let natural = recorder.naturalHeights.last, natural > initialHeight else { return false }
+            return Self.cacheAndOuterConverged(cache: cache, message: message, recorder: recorder)
+        }
+        let grownHeight = try #require(recorder.naturalHeights.last)
+
+        source.text = Self.shortText
+        host.layout()
+        try await waitUntil("late multiline shrink convergence") {
+            guard let natural = recorder.naturalHeights.last, natural < grownHeight else { return false }
+            return Self.cacheAndOuterConverged(cache: cache, message: message, recorder: recorder)
+        }
+        #expect(recorder.appearances == 1)
+        #expect(recorder.instanceID == instanceID)
+    }
+
+    @Test func messageViewRetainsThenConvergesAtNarrowWidth() async throws {
+        let message = Self.message(id: "message-view-row", text: Self.longText)
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: Self.cacheDelay)
+        let recorder = TranscriptHeightRecorder()
+        cache.updateLayoutWidth(Self.rowWidth)
+        cache.record(height: Self.retainedHeight, for: message, hydratingBlockIds: [])
+        try await waitUntil("retained height cache seed") {
+            Self.equal(cache.height(for: message, hydratingBlockIds: []), Self.retainedHeight)
+        }
+        let coordinator = try Self.makeCoordinator()
+        let host = TranscriptGeometryHost(
+            MessageViewHeightProbe(
+                message: message,
+                cache: cache,
+                recorder: recorder,
+                width: Self.rowWidth
+            )
+            .environment(coordinator),
+            size: CGSize(width: Self.rowWidth, height: Self.viewportHeight)
+        )
+        defer { host.tearDown() }
+
+        try await waitUntil("natural MessageView height while retained") {
+            guard let natural = recorder.naturalHeights.last else { return false }
+            return natural > Self.retainedHeight
+                && recorder.outerHeights.contains { Self.equal($0, Self.retainedHeight) }
+        }
+        try await waitUntil("MessageView cache and outer convergence") {
+            Self.cacheAndOuterConverged(cache: cache, message: message, recorder: recorder)
+        }
+        #expect(Self.equal(recorder.widths.last, Self.rowWidth))
+        #expect(recorder.appearances == 1)
+    }
+
+    private static func message(id: String, text: String) -> ConversationMessage {
+        ConversationMessage(
+            id: id,
+            role: .assistant,
+            contentBlocks: [ContentBlock(id: "text", type: .text, text: text)],
+            streamingState: .complete
+        )
+    }
+
+    private static func cacheAndOuterConverged(
+        cache: ConversationTranscriptRowHeightCache,
+        message: ConversationMessage,
+        recorder: TranscriptHeightRecorder
+    ) -> Bool {
+        guard let natural = recorder.naturalHeights.last else { return false }
+        return equal(cache.height(for: message, hydratingBlockIds: []), natural)
+            && equal(recorder.outerHeights.last, natural)
+    }
+
+    private static func equal(_ lhs: CGFloat?, _ rhs: CGFloat?) -> Bool {
+        guard let lhs, let rhs else { return false }
+        return abs(lhs - rhs) <= heightTolerance
+    }
+
+    private static func makeCoordinator() throws -> AppCoordinator {
+        _ = TestKeychainStorage.installed
+        let suiteName = "TranscriptRowHeightIntegrationTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        return AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: FakeConnectionManager(),
+            persistence: PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+        )
+    }
+
+    private func waitUntil(
+        _ what: String,
+        timeout: TimeInterval = 3,
+        _ condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() >= deadline {
+                Issue.record("timed out waiting for \(what)")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+}
+
+@Observable
+final class TranscriptLateTextSource {
+    var text: String
+
+    init(text: String) {
+        self.text = text
+    }
+}
+
+@MainActor
+final class TranscriptHeightRecorder {
+    var naturalHeights: [CGFloat] = []
+    var outerHeights: [CGFloat] = []
+    var widths: [CGFloat] = []
+    var appearances = 0
+    var instanceID: UUID?
+}
+
+private struct CacheIntegratedTextProbe: View {
+    let source: TranscriptLateTextSource
+    let message: ConversationMessage
+    let cache: ConversationTranscriptRowHeightCache
+    let recorder: TranscriptHeightRecorder
+    let width: CGFloat
+    @State private var instanceID = UUID()
+
+    var body: some View {
+        ScrollView {
+            LazyVStack {
+                Text(source.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .modifier(rowHeightFrame)
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                        recordOuterGeometry(size)
+                    }
+                    .onAppear(perform: recordAppearance)
+                    .id(message.id)
+            }
+        }
+        .frame(width: width)
+    }
+
+    private var rowHeightFrame: ConversationTranscriptRowHeightFrame {
+        ConversationTranscriptRowHeightFrame(
+            cachedHeight: cache.height(for: message, hydratingBlockIds: [])
+        ) { height in
+            recorder.naturalHeights.append(height)
+            cache.record(height: height, for: message, hydratingBlockIds: [])
+        }
+    }
+
+    private func recordOuterGeometry(_ size: CGSize) {
+        recorder.outerHeights.append(size.height)
+        recorder.widths.append(size.width)
+    }
+
+    private func recordAppearance() {
+        recorder.appearances += 1
+        recorder.instanceID = instanceID
+    }
+}
+
+private struct MessageViewHeightProbe: View {
+    let message: ConversationMessage
+    let cache: ConversationTranscriptRowHeightCache
+    let recorder: TranscriptHeightRecorder
+    let width: CGFloat
+
+    var body: some View {
+        ScrollView {
+            LazyVStack {
+                MessageView(
+                    message: message,
+                    workspaceId: "workspace",
+                    onNavigateToNote: nil,
+                    onNavigateToAgent: nil,
+                    hydratingBlockIds: [],
+                    onHydrateBlock: nil
+                )
+                .modifier(rowHeightFrame)
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                    recordOuterGeometry(size)
+                }
+                .onAppear { recorder.appearances += 1 }
+                .id(message.id)
+            }
+        }
+        .frame(width: width)
+    }
+
+    private var rowHeightFrame: ConversationTranscriptRowHeightFrame {
+        ConversationTranscriptRowHeightFrame(
+            cachedHeight: cache.height(for: message, hydratingBlockIds: [])
+        ) { height in
+            recorder.naturalHeights.append(height)
+            cache.record(height: height, for: message, hydratingBlockIds: [])
+        }
+    }
+
+    private func recordOuterGeometry(_ size: CGSize) {
+        recorder.outerHeights.append(size.height)
+        recorder.widths.append(size.width)
+    }
+}
+
+@MainActor
+private final class TranscriptGeometryHost {
+    private var controller: UIHostingController<AnyView>?
+    private var window: UIWindow?
+
+    init<Content: View>(_ content: Content, size: CGSize) {
+        let controller = UIHostingController(rootView: AnyView(content))
+        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        controller.view.frame = window.bounds
+        controller.beginAppearanceTransition(true, animated: false)
+        window.addSubview(controller.view)
+        window.isHidden = false
+        controller.endAppearanceTransition()
+        self.controller = controller
+        self.window = window
+        layout()
+    }
+
+    func layout() {
+        controller?.view.setNeedsLayout()
+        controller?.view.layoutIfNeeded()
+    }
+
+    func tearDown() {
+        guard let controller, let window else { return }
+        controller.beginAppearanceTransition(false, animated: false)
+        controller.view.removeFromSuperview()
+        window.isHidden = true
+        controller.endAppearanceTransition()
+        self.controller = nil
+        self.window = nil
     }
 }

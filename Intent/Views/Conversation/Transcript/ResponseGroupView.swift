@@ -47,6 +47,7 @@ struct ResponseGroupView: View {
     /// ids (restricted to this group's children and their paired results)
     /// and the on-demand full-block fetch, forwarded to ContentBlockView.
     var hydratingBlockIds: Set<String> = []
+    var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
 
     var body: some View {
@@ -57,6 +58,7 @@ struct ResponseGroupView: View {
             onNavigateToNote: onNavigateToNote,
             toolResults: toolResults,
             hydratingBlockIds: hydratingBlockIds,
+            onLayoutChange: onLayoutChange,
             onHydrateBlock: onHydrateBlock
         )
         .equatable()
@@ -71,6 +73,7 @@ struct ResponseGroupBody: View, Equatable {
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
     let toolResults: [String: ContentBlock]
     let hydratingBlockIds: Set<String>
+    var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded: Bool
@@ -105,6 +108,7 @@ struct ResponseGroupBody: View, Equatable {
         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil,
         toolResults: [String: ContentBlock] = [:],
         hydratingBlockIds: Set<String> = [],
+        onLayoutChange: (() -> Void)? = nil,
         onHydrateBlock: ((_ blockId: String) -> Void)? = nil
     ) {
         self.group = group
@@ -113,6 +117,7 @@ struct ResponseGroupBody: View, Equatable {
         self.onNavigateToNote = onNavigateToNote
         self.toolResults = toolResults
         self.hydratingBlockIds = hydratingBlockIds
+        self.onLayoutChange = onLayoutChange
         self.onHydrateBlock = onHydrateBlock
         self._isExpanded = State(initialValue: isLast)
     }
@@ -127,6 +132,7 @@ struct ResponseGroupBody: View, Equatable {
 
     private var headerButton: some View {
         Button {
+            onLayoutChange?()
             withAnimation(.easeInOut(duration: Constants.Conversation.ResponseGroup.expansionAnimationDuration)) {
                 isExpanded.toggle()
             }
@@ -214,6 +220,7 @@ struct ResponseGroupBody: View, Equatable {
                     onNavigateToNote: onNavigateToNote,
                     isHydrating: hydratingBlockIds.contains(block.id)
                         || (toolResult.map { hydratingBlockIds.contains($0.id) } ?? false),
+                    onLayoutChange: onLayoutChange,
                     onHydrateBlock: onHydrateBlock
                 )
             }

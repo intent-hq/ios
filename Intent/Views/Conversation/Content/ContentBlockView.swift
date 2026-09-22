@@ -1,5 +1,7 @@
 import SwiftUI
 
+// swiftlint:disable file_length
+
 /// One rendered block of an assistant message. A thin shell over
 /// `ContentBlockBody`: the message hands every block fresh closures on each
 /// evaluation, so the block body is gated by `.equatable()` and only
@@ -16,6 +18,7 @@ struct ContentBlockView: View {
     /// agent.getMessageBlock hydration fetch in flight (slim projection,
     /// PROTOCOL §5.5).
     var isHydrating = false
+    var onLayoutChange: (() -> Void)?
     /// Fetch the full body of a slim-truncated block by id; absent → no
     /// hydration (bounded previews stay).
     var onHydrateBlock: ((_ blockId: String) -> Void)?
@@ -27,6 +30,7 @@ struct ContentBlockView: View {
             workspaceId: workspaceId,
             onNavigateToNote: onNavigateToNote,
             isHydrating: isHydrating,
+            onLayoutChange: onLayoutChange,
             onHydrateBlock: onHydrateBlock
         )
         .equatable()
@@ -85,6 +89,7 @@ struct ContentBlockBody: View, Equatable {
     let workspaceId: String
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
     let isHydrating: Bool
+    var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
@@ -120,6 +125,7 @@ struct ContentBlockBody: View, Equatable {
         workspaceId: String,
         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil,
         isHydrating: Bool = false,
+        onLayoutChange: (() -> Void)? = nil,
         onHydrateBlock: ((_ blockId: String) -> Void)? = nil
     ) {
         self.block = block
@@ -127,6 +133,7 @@ struct ContentBlockBody: View, Equatable {
         self.workspaceId = workspaceId
         self.onNavigateToNote = onNavigateToNote
         self.isHydrating = isHydrating
+        self.onLayoutChange = onLayoutChange
         self.onHydrateBlock = onHydrateBlock
     }
 
@@ -166,6 +173,7 @@ struct ContentBlockBody: View, Equatable {
                 block: block,
                 toolResult: toolResult,
                 isHydrating: isHydrating,
+                onLayoutChange: onLayoutChange,
                 onHydrate: onHydrateBlock.map { hydrate in
                     {
                         // Hydrate whichever side of the row was truncated
@@ -199,7 +207,7 @@ struct ContentBlockBody: View, Equatable {
 
     @ViewBuilder
     private var thinkingView: some View {
-        DisclosureGroup(isExpanded: $thinkingExpanded) {
+        DisclosureGroup(isExpanded: thinkingExpansion) {
             Text(block.resolvedText ?? "")
                 .font(.callout)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -217,6 +225,16 @@ struct ContentBlockBody: View, Equatable {
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .tint(Theme.mutedForeground(for: colorScheme))
+    }
+
+    private var thinkingExpansion: Binding<Bool> {
+        Binding(
+            get: { thinkingExpanded },
+            set: { expanded in
+                onLayoutChange?()
+                thinkingExpanded = expanded
+            }
+        )
     }
 
     /// A slim-truncated image asks for the original on tap (PROTOCOL §5.5);
