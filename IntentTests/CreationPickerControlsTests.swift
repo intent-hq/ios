@@ -4,6 +4,9 @@ import SwiftUI
 import Testing
 import UIKit
 
+// Hosted picker inspection and its geometry fixtures intentionally live together.
+// swiftlint:disable file_length type_body_length
+
 @MainActor
 struct CreationPickerControlsTests {
     // Both production forms scroll; this canvas keeps every measured row mounted at accessibility sizes.
@@ -125,14 +128,20 @@ struct CreationPickerControlsTests {
                 #expect(snapshot.model.label?.contains("Model") == true)
                 #expect(snapshot.model.label?.contains(layout.expectedModelValue) == true)
                 #expect(snapshot.model.value == nil)
-                #expect(snapshot.provider.hasFiniteNonemptyFrame)
-                #expect(snapshot.model.hasFiniteNonemptyFrame)
-                #expect(snapshot.provider.hasMinimumInteractiveSize)
-                #expect(snapshot.model.hasMinimumInteractiveSize)
+                #expect(snapshot.provider.hasFiniteNonemptyAccessibilityFrame)
+                #expect(snapshot.model.hasFiniteNonemptyAccessibilityFrame)
+                #expect(snapshot.provider.hasMinimumAccessibilityFrameSize)
+                #expect(snapshot.model.hasMinimumAccessibilityFrameSize)
                 #expect(snapshot.horizontallyContains(snapshot.provider.frame))
                 #expect(snapshot.horizontallyContains(snapshot.model.frame))
                 #expect(snapshot.hostFrame.intersects(snapshot.provider.frame))
                 #expect(snapshot.hostFrame.intersects(snapshot.model.frame))
+                #expect(snapshot.provider.hasFiniteNonemptyVisibleControlFrame)
+                #expect(snapshot.model.hasFiniteNonemptyVisibleControlFrame)
+                #expect(snapshot.provider.hasReadableVisibleControlSize)
+                #expect(snapshot.model.hasReadableVisibleControlSize)
+                #expect(snapshot.hostFrame.contains(snapshot.provider.visibleControlFrame))
+                #expect(snapshot.hostFrame.contains(snapshot.model.visibleControlFrame))
                 #expect(snapshot.hasNoMeaningfulVerticalOverlap)
             }
         }
@@ -165,7 +174,7 @@ struct CreationPickerControlsTests {
             visibleControlFrame: CGRect(x: 0, y: 0, width: 200, height: boundary),
             traits: []
         )
-        let undersized = PickerElementSnapshot(
+        let accessibilityUndersized = PickerElementSnapshot(
             label: nil,
             value: nil,
             frame: CGRect(x: 0, y: 0, width: 200, height: 43),
@@ -179,14 +188,77 @@ struct CreationPickerControlsTests {
             visibleControlFrame: .zero,
             traits: []
         )
-        #expect(readable.hasMinimumInteractiveSize)
-        #expect(!undersized.hasMinimumInteractiveSize)
-        #expect(!invalid.hasFiniteNonemptyFrame)
+        #expect(readable.hasMinimumAccessibilityFrameSize)
+        #expect(readable.hasReadableVisibleControlSize)
+        #expect(!accessibilityUndersized.hasMinimumAccessibilityFrameSize)
+        #expect(accessibilityUndersized.hasReadableVisibleControlSize)
+        #expect(!invalid.hasFiniteNonemptyAccessibilityFrame)
+        #expect(!invalid.hasFiniteNonemptyVisibleControlFrame)
         #expect(PickerLayoutSnapshot(
             hostFrame: CGRect(x: 0, y: 0, width: 200, height: 200),
             provider: labelInflated,
             model: readable
         ).hasNoMeaningfulVerticalOverlap)
+    }
+
+    // swiftlint:disable:next function_body_length
+    @Test func pickerGeometryContractRejectsInvalidClippedVisibleFrames() {
+        let hostFrame = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let validAccessibilityFrame = CGRect(x: 40, y: 20, width: 120, height: 60)
+        let lowerAccessibilityFrame = validAccessibilityFrame.offsetBy(dx: 0, dy: 100)
+        let upper = Self.geometrySnapshot(
+            accessibilityFrame: validAccessibilityFrame,
+            visibleControlFrame: CGRect(x: 40, y: 20, width: 120, height: 44)
+        )
+        let lower = Self.geometrySnapshot(
+            accessibilityFrame: lowerAccessibilityFrame,
+            visibleControlFrame: CGRect(x: 40, y: 120, width: 120, height: 44)
+        )
+        let providerStrip = Self.geometrySnapshot(
+            accessibilityFrame: validAccessibilityFrame,
+            visibleControlFrame: CGRect(x: 40, y: 20, width: 120, height: 1)
+        )
+        let modelStrip = Self.geometrySnapshot(
+            accessibilityFrame: lowerAccessibilityFrame,
+            visibleControlFrame: CGRect(x: 40, y: 120, width: 120, height: 1)
+        )
+        #expect(providerStrip.hasFiniteNonemptyAccessibilityFrame)
+        #expect(providerStrip.hasMinimumAccessibilityFrameSize)
+        #expect(providerStrip.hasFiniteNonemptyVisibleControlFrame)
+        #expect(!providerStrip.hasReadableVisibleControlSize)
+        #expect(modelStrip.hasFiniteNonemptyAccessibilityFrame)
+        #expect(modelStrip.hasMinimumAccessibilityFrameSize)
+        #expect(modelStrip.hasFiniteNonemptyVisibleControlFrame)
+        #expect(!modelStrip.hasReadableVisibleControlSize)
+        #expect(!PickerLayoutSnapshot(
+            hostFrame: hostFrame,
+            provider: providerStrip,
+            model: lower
+        ).hasValidVisibleControlGeometry)
+        #expect(!PickerLayoutSnapshot(
+            hostFrame: hostFrame,
+            provider: upper,
+            model: modelStrip
+        ).hasValidVisibleControlGeometry)
+
+        let invalidVisible = Self.geometrySnapshot(
+            accessibilityFrame: validAccessibilityFrame,
+            visibleControlFrame: .null
+        )
+        let outsideHost = Self.geometrySnapshot(
+            accessibilityFrame: validAccessibilityFrame,
+            visibleControlFrame: CGRect(x: -1, y: 20, width: 120, height: 44)
+        )
+        #expect(!PickerLayoutSnapshot(
+            hostFrame: hostFrame,
+            provider: invalidVisible,
+            model: lower
+        ).hasValidVisibleControlGeometry)
+        #expect(!PickerLayoutSnapshot(
+            hostFrame: hostFrame,
+            provider: outsideHost,
+            model: lower
+        ).hasValidVisibleControlGeometry)
     }
 
     @Test(
@@ -248,6 +320,19 @@ struct CreationPickerControlsTests {
             frame: window.convert(element.accessibilityFrame, from: nil),
             visibleControlFrame: visibleControlFrame,
             traits: element.accessibilityTraits
+        )
+    }
+
+    private static func geometrySnapshot(
+        accessibilityFrame: CGRect,
+        visibleControlFrame: CGRect
+    ) -> PickerElementSnapshot {
+        PickerElementSnapshot(
+            label: nil,
+            value: nil,
+            frame: accessibilityFrame,
+            visibleControlFrame: visibleControlFrame,
+            traits: []
         )
     }
 
@@ -354,8 +439,10 @@ private enum PickerHostLayout: CaseIterable {
 }
 
 private struct PickerElementSnapshot {
-    // Apple's minimum tappable target is 44 points in each dimension.
-    private static let minimumInteractiveDimension: CGFloat = 44
+    private static let minimumAccessibilityFrameDimension: CGFloat = 44
+    // The hosted menu chrome renders about 34 points high. This floor detects clipping without
+    // claiming that the measured visible rectangle is the control's complete hit target.
+    private static let minimumReadableVisibleControlDimension: CGFloat = 32
 
     let label: String?
     let value: String?
@@ -363,14 +450,31 @@ private struct PickerElementSnapshot {
     let visibleControlFrame: CGRect
     let traits: UIAccessibilityTraits
 
-    var hasFiniteNonemptyFrame: Bool {
+    var hasFiniteNonemptyAccessibilityFrame: Bool {
         let values = [frame.minX, frame.minY, frame.width, frame.height]
         return values.allSatisfy { $0.isFinite } && frame.width > 0 && frame.height > 0
     }
 
-    var hasMinimumInteractiveSize: Bool {
-        frame.width >= Self.minimumInteractiveDimension
-            && frame.height >= Self.minimumInteractiveDimension
+    var hasMinimumAccessibilityFrameSize: Bool {
+        frame.width >= Self.minimumAccessibilityFrameDimension
+            && frame.height >= Self.minimumAccessibilityFrameDimension
+    }
+
+    var hasFiniteNonemptyVisibleControlFrame: Bool {
+        let values = [
+            visibleControlFrame.minX,
+            visibleControlFrame.minY,
+            visibleControlFrame.width,
+            visibleControlFrame.height
+        ]
+        return values.allSatisfy { $0.isFinite }
+            && visibleControlFrame.width > 0
+            && visibleControlFrame.height > 0
+    }
+
+    var hasReadableVisibleControlSize: Bool {
+        visibleControlFrame.width >= Self.minimumReadableVisibleControlDimension
+            && visibleControlFrame.height >= Self.minimumReadableVisibleControlDimension
     }
 }
 
@@ -386,6 +490,14 @@ private struct PickerLayoutSnapshot {
             upper: provider.visibleControlFrame,
             lower: model.visibleControlFrame
         )
+    }
+
+    var hasValidVisibleControlGeometry: Bool {
+        [provider, model].allSatisfy { element in
+            element.hasFiniteNonemptyVisibleControlFrame
+                && element.hasReadableVisibleControlSize
+                && hostFrame.contains(element.visibleControlFrame)
+        } && hasNoMeaningfulVerticalOverlap
     }
 
     func horizontallyContains(_ frame: CGRect) -> Bool {
@@ -489,3 +601,4 @@ private struct PickerLayoutHost: View {
         selectedModel = nil
     }
 }
+// swiftlint:enable file_length type_body_length

@@ -216,14 +216,7 @@ struct DemoFixturesTests {
         let sought = try #require(seekRows.first { ($0["id"] as? String) == soughtId })
         let pushed = try #require(rows.first { ($0["id"] as? String) == soughtId })
         #expect(text(of: sought) == text(of: pushed))
-        let formatter = ISO8601DateFormatter()
-        let soughtTimestampText = try #require(sought["timestamp"] as? String)
-        let pushedTimestampText = try #require(pushed["timestamp"] as? String)
-        let soughtTimestamp = try #require(formatter.date(from: soughtTimestampText))
-        let pushedTimestamp = try #require(formatter.date(from: pushedTimestampText))
-        // Each route rebuilds the relative-time fixture independently. Whole-second formatting
-        // can put otherwise equivalent rows one second apart at a clock boundary (ios#412).
-        #expect(abs(soughtTimestamp.timeIntervalSince(pushedTimestamp)) <= 1)
+        #expect(sought["timestamp"] as? String == pushed["timestamp"] as? String)
         #expect(sought["role"] as? String == pushed["role"] as? String)
 
         let screenshot = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: [:]))
