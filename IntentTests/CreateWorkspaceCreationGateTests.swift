@@ -288,16 +288,28 @@ extension CreateWorkspaceParamsTests {
 
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
 
+    @Test(arguments: [WorkspaceProviderOptions.State.idle, .loading])
+    func pendingWorkspacePolicyKeepsDraftSelection(state: WorkspaceProviderOptions.State) {
+        var provider: ProviderInfo? = makeProvider(id: "codex")
+        var model: ModelInfo? = makeModel(id: "named-model", provider: "codex")
+        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: state)
+        #expect(provider == makeProvider(id: "codex"))
+        #expect(model == makeModel(id: "named-model", provider: "codex"))
+        #expect(CreateWorkspaceView.isCreateDisabled(
+            isCreating: false, isLoadingProviders: true, providers: [], selectedProvider: provider
+        ))
+    }
+
     @Test func disabledWorkspaceProviderDropsItsExplicitModel() {
         var provider: ProviderInfo? = makeProvider(id: "codex")
         var model: ModelInfo? = makeModel(id: "shared-id", provider: "codex")
         CreationSelectionPolicy.reconcileWorkspaceProvider(
-            provider: &provider, model: &model, providers: [makeProvider()]
+            provider: &provider, model: &model, state: .loaded([makeProvider()])
         )
         #expect(provider?.id == "auggie")
         #expect(model == nil)
         model = makeModel()
-        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, providers: [])
+        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: .loaded([]))
         #expect(provider == nil)
         #expect(model == nil)
         // Agent creation intentionally retains its prior empty-list policy.
@@ -308,7 +320,7 @@ extension CreateWorkspaceParamsTests {
         var provider: ProviderInfo? = makeProvider()
         var model: ModelInfo? = makeModel()
         CreationSelectionPolicy.reconcileWorkspaceProvider(
-            provider: &provider, model: &model, providers: [makeProvider()]
+            provider: &provider, model: &model, state: .loaded([makeProvider()])
         )
         #expect(model == makeModel())
         #expect(CreateWorkspaceView.isCreateDisabled(
