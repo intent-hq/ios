@@ -23,6 +23,10 @@ struct WorkspaceAssetMarkdownTests {
         #expect(WorkspaceAssetLink.parse(url) == WorkspaceAssetLink(
             workspaceId: "ws-1", assetId: "chart #?.png"
         ))
+        let doubleEncoded = try #require(URL(string: "workspace-asset://ws-1/chart%252Epng"))
+        #expect(WorkspaceAssetLink.parse(doubleEncoded) == WorkspaceAssetLink(
+            workspaceId: "ws-1", assetId: "chart%2Epng"
+        ))
     }
 
     @Test(arguments: [

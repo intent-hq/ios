@@ -364,7 +364,11 @@ enum DemoFixtures {
     }
 
     static func transcriptMessages(agentId: String?) -> [[String: Any]] {
-        agentId == longConversationAgentId ? longConversationMessages : conversationMessages
+        if inlineImageConversationRequested(by: ProcessInfo.processInfo.arguments),
+           agentId == inlineImageAgentId {
+            return inlineImageConversationMessages
+        }
+        return agentId == longConversationAgentId ? longConversationMessages : conversationMessages
     }
 
     /// Fixture response for a JSON-RPC method. Unknown methods return an

@@ -1,0 +1,46 @@
+import Foundation
+
+extension DemoFixtures {
+    static let inlineImageAgentId = "demo-agent-implementor"
+
+    /// Opt-in so existing demo screenshots and transcript fixtures stay unchanged.
+    static func inlineImageConversationRequested(by arguments: [String]) -> Bool {
+        DemoMode.demoDataRequested(by: arguments) && arguments.contains("--demo-inline-images")
+    }
+
+    /// One real assistant text block, served through both chat.subscribe and
+    /// agent.getConversation. The existing note.readAsset fixture supplies the
+    /// PNG; the unknown asset returns an empty payload. Neither needs a network.
+    /// The linked workspace intentionally differs from the conversation's.
+    static var inlineImageConversationMessages: [[String: Any]] {
+        [
+            [
+                "id": "demo-inline-images-user",
+                "role": "user",
+                "timestamp": transcriptIso(minutesAgo: 2),
+                "contentBlocks": [["type": "text", "text": "Show the saved previews."]]
+            ],
+            [
+                "id": "demo-inline-images-assistant",
+                "role": "assistant",
+                "timestamp": transcriptIso(minutesAgo: 1),
+                "contentBlocks": [["type": "text", "text": inlineImageResponseText]]
+            ]
+        ]
+    }
+
+    static var inlineImageResponseText: String {
+        // Explicit hard breaks keep each caption and its attachment in one
+        // paragraph, whose real layout bounds are observable by XCUITest even
+        // though Textual draws the attachment body as a Canvas symbol.
+        let savedURL = "workspace-asset://\(statusImageWorkspaceId)/\(statusImageAssetId)"
+        let missingURL = "workspace-asset://\(statusImageWorkspaceId)/missing-preview.png"
+        return [
+            "Before the saved image.",
+            "Saved preview:  \n![Saved settings preview](\(savedURL))",
+            "After the saved image, before the missing image.",
+            "Missing preview:  \n![Missing settings preview](\(missingURL))",
+            "After the missing image. The response is still readable."
+        ].joined(separator: "\n\n")
+    }
+}
