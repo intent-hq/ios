@@ -19,6 +19,7 @@ struct MonitoredPrsRowTests {
         title: String? = "Add review wire surface",
         url: String? = "https://github.com/octo/repo/pull/12",
         pendingChanges: [String] = [],
+        hasPendingChanges: Bool = false,
         lastChangeAt: String? = nil,
         snapshot: MonitoredPr.Snapshot? = nil
     ) -> MonitoredPr {
@@ -30,7 +31,7 @@ struct MonitoredPrsRowTests {
             prNumber: prNumber,
             state: .active,
             pendingChanges: pendingChanges,
-            hasPendingChanges: !pendingChanges.isEmpty,
+            hasPendingChanges: hasPendingChanges,
             createdAt: nil,
             updatedAt: nil,
             pendingSince: nil,
@@ -41,6 +42,39 @@ struct MonitoredPrsRowTests {
             url: url,
             lastSnapshot: snapshot
         )
+    }
+}
+
+extension MonitoredPrsRowTests {
+    private func makeRow(monitors: [MonitoredPr]) -> some View {
+        let connection = FakeConnectionManager()
+        let workspaceStore = WorkspaceStore(forTesting: true)
+        workspaceStore.workspaces = [
+            Workspace(
+                id: "ws-abc",
+                title: "Test",
+                branch: nil,
+                baseRef: nil,
+                status: nil,
+                activity: nil,
+                displayStatus: nil,
+                repositoryOwner: "octo",
+                repositoryName: "repo"
+            )
+        ]
+        let viewModel = ConversationViewModel(
+            agentId: "agent-1",
+            workspaceId: "ws-abc",
+            agentName: "Test",
+            connection: connection,
+            uploadService: AttachmentUploadService(connection: connection),
+            optionsStore: CreationOptionsStore(connectionManager: connection)
+        )
+        let monitoredPrStore = MonitoredPrStore(connectionManager: connection)
+        monitoredPrStore.monitors = monitors
+        let session = makeSession(connection: connection, workspaceStore: workspaceStore)
+        return MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: monitoredPrStore)
+            .environment(session)
     }
 
     private func makeSession(
@@ -105,38 +139,24 @@ struct MonitoredPrsRowTests {
         }
     )
     func renderedChipsExposePendingStateAndPreserveMenuRole() throws {
-        let connection = FakeConnectionManager()
-        let workspaceStore = WorkspaceStore(forTesting: true)
-        workspaceStore.workspaces = [
-            Workspace(
-                id: "ws-abc",
-                title: "Test",
-                branch: nil,
-                baseRef: nil,
-                status: nil,
-                activity: nil,
-                displayStatus: nil,
-                repositoryOwner: "octo",
-                repositoryName: "repo"
-            )
-        ]
-        let viewModel = ConversationViewModel(
-            agentId: "agent-1",
-            workspaceId: "ws-abc",
-            agentName: "Test",
-            connection: connection,
-            uploadService: AttachmentUploadService(connection: connection),
-            optionsStore: CreationOptionsStore(connectionManager: connection)
-        )
-        let monitoredPrStore = MonitoredPrStore(connectionManager: connection)
-        monitoredPrStore.monitors = [
-            makeMonitor(monitorId: "prm-pending", pendingChanges: ["checks changed"]),
+        let row = makeRow(monitors: [
+            makeMonitor(
+                monitorId: "prm-pending",
+                pendingChanges: ["checks changed"],
+                hasPendingChanges: true
+            ),
+            makeMonitor(
+                monitorId: "prm-pending-without-details",
+                prNumber: 23,
+                hasPendingChanges: true
+            ),
             makeMonitor(monitorId: "prm-current", repo: "other/repo", prNumber: 34)
+        ])
+        let identifiers = [
+            "monitoredPr.prm-pending",
+            "monitoredPr.prm-pending-without-details",
+            "monitoredPr.prm-current"
         ]
-        let session = makeSession(connection: connection, workspaceStore: workspaceStore)
-        let row = MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: monitoredPrStore)
-            .environment(session)
-        let identifiers = ["monitoredPr.prm-pending", "monitoredPr.prm-current"]
 
         try SyntheticBadgeHost.render(
             row,
@@ -147,8 +167,11 @@ struct MonitoredPrsRowTests {
                 identifiedBy: identifiers,
                 in: hostView
             )
-            #expect(elements.map(\.accessibilityLabel) == ["#12", "other/repo: #34"])
-            #expect(elements.map(\.accessibilityValue) == ["1 pending change", "No pending changes"])
+            #expect(elements.map(\.accessibilityLabel) == ["#12", "#23", "other/repo: #34"])
+            #expect(
+                elements.map(\.accessibilityValue)
+                    == ["1 pending change", "Pending changes", "No pending changes"]
+            )
             #expect(elements.allSatisfy { $0.accessibilityTraits.contains(.button) })
         }
     }
@@ -263,15 +286,24 @@ struct MonitoredPrsRowTests {
 
     @Test func pendingSummaryPluralizes() {
         #expect(MonitoredPrsRow.pendingSummary(makeMonitor()) == "No pending changes")
-        #expect(MonitoredPrsRow.pendingSummary(makeMonitor(pendingChanges: ["a"]))
+        #expect(MonitoredPrsRow.pendingSummary(makeMonitor(hasPendingChanges: true))
+            == "Pending changes")
+        #expect(MonitoredPrsRow.pendingSummary(makeMonitor(
+            pendingChanges: ["a"],
+            hasPendingChanges: true
+        ))
             == "1 pending change")
-        #expect(MonitoredPrsRow.pendingSummary(makeMonitor(pendingChanges: ["a", "b"]))
+        #expect(MonitoredPrsRow.pendingSummary(makeMonitor(
+            pendingChanges: ["a", "b"],
+            hasPendingChanges: true
+        ))
             == "2 pending changes")
     }
 
     @Test func detailLinesWithFullSnapshot() {
         let monitor = makeMonitor(
             pendingChanges: ["check ci: pending → failed"],
+            hasPendingChanges: true,
             snapshot: makeSnapshot(
                 checks: .init(total: 3, passed: 2, failed: 1, pending: 0),
                 approvals: .init(decision: "approved", have: 1, needed: 1, changesRequested: 0),

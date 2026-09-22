@@ -228,6 +228,7 @@ struct MonitoredPrsRow: View {
     /// Pending-emit status line for the detail header.
     static func pendingSummary(_ monitor: MonitoredPr) -> String {
         guard monitor.hasPendingChanges else { return "No pending changes" }
+        guard !monitor.pendingChanges.isEmpty else { return "Pending changes" }
         return monitor.pendingChanges.count == 1
             ? "1 pending change"
             : "\(monitor.pendingChanges.count) pending changes"
