@@ -159,11 +159,16 @@ The wrapper supports these subcommands:
 
 For a focused run, set `ONLY_TESTING` to one or more whitespace-separated
 `Target[/Suite[/test]]` selectors. Selectors are test identifiers, not Swift file
-names; the wrapper verifies that each selector resolves and executes:
+names. The wrapper validates each selector before the run, then reports resolved,
+executed, skipped, and failed counts per selector:
 
 ```bash
 ONLY_TESTING='IntentTests/DemoFixturesTests' scripts/xcodebuild.sh test-ios-unit
 ```
+
+A selector whose tests were all skipped at runtime exits 0 with a notice. Inspect
+the per-selector summary and confirm a nonzero executed count before claiming that
+a green focused run executed the intended tests.
 
 For repeated focused runs, build once and reuse that build:
 
