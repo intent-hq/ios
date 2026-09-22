@@ -154,6 +154,7 @@ $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
 $(SRCROOT)/Intent/Services/DemoFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixturesData.swift
+$(SRCROOT)/Intent/Services/DemoFixturesInlineImages.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
@@ -198,6 +199,7 @@ $(SRCROOT)/Intent/Utils/PairingPayload.swift
 $(SRCROOT)/Intent/Utils/TaskStats.swift
 $(SRCROOT)/Intent/Utils/TcAddressDisplay.swift
 $(SRCROOT)/Intent/Utils/WorkspaceActivityTime.swift
+$(SRCROOT)/Intent/Utils/WorkspaceAssetLink.swift
 $(SRCROOT)/Intent/ViewModels
 $(SRCROOT)/Intent/ViewModels/AgentListViewModel.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Commands.swift
@@ -388,6 +390,7 @@ $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesTests.swift
+$(SRCROOT)/IntentTests/DemoInlineImageFixtureTests.swift
 $(SRCROOT)/IntentTests/DictationTranscriptTests.swift
 $(SRCROOT)/IntentTests/EventCatalogCoverageTests.swift
 $(SRCROOT)/IntentTests/EventWakeAttributionTests.swift
@@ -483,6 +486,7 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
+$(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift
