@@ -1,9 +1,9 @@
 import SwiftUI
 import Textual
 
-/// Routing decision for a markdown-image URL: intent-file links are served
-/// from the daemon, remote http(s) URLs from `RemoteImageLoader`, everything
-/// else from the wrapped fallback loader.
+/// Routes intent-file and saved-asset Markdown images through the daemon,
+/// remote http(s) URLs through `RemoteImageLoader`, and everything else
+/// through the wrapped fallback loader.
 ///
 /// Cleartext `http` is claimed deliberately: ATS (`NSAllowsLocalNetworking`
 /// only) permits local-network http — e.g. images served by the daemon at
@@ -15,8 +15,14 @@ nonisolated enum MarkdownImageRoute: Equatable {
     case fallback
     case intentFile(IntentFileLink)
     case remote
+    case workspaceAsset(WorkspaceAssetLink?)
 
     static func route(for url: URL) -> Self {
+        // Claim malformed saved-asset URLs too, so they fail locally instead
+        // of reaching Textual's network fallback.
+        if url.scheme?.lowercased() == "workspace-asset" {
+            return .workspaceAsset(WorkspaceAssetLink.parse(url))
+        }
         if let link = IntentFileLink.parse(url) {
             return .intentFile(link)
         }
@@ -28,13 +34,13 @@ nonisolated enum MarkdownImageRoute: Equatable {
 }
 
 /// Textual image-attachment loader that renders `![alt](intent://local/[ws-id/]file/<path>)`
-/// images by fetching the file's bytes from the daemon and remote http(s)
-/// images via `RemoteImageLoader`, so both open the lightbox on tap; every
-/// other URL falls through to the wrapped fallback loader (Textual's default
-/// network loader).
+/// images and `workspace-asset://` images by fetching bytes from the daemon,
+/// and remote http(s) images via `RemoteImageLoader`. All open the lightbox
+/// on tap; other URLs fall through to the wrapped fallback loader
+/// (Textual's default network loader).
 ///
-/// Never throws for intent-file links — one failed attachment must not break
-/// the surrounding text, so failures degrade to a placeholder attachment.
+/// Never throws for intent-file or saved-asset links — failures degrade to
+/// a placeholder attachment without breaking the surrounding text.
 /// Failed remote loads fall through to the fallback loader, preserving its
 /// behavior for broken URLs.
 struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader {
@@ -50,6 +56,10 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     /// shared (default-backend) loader.
     var fileImage: @Sendable (_ workspaceId: String, _ path: String) async throws -> UIImage = { workspaceId, path in
         try await WorkspaceFileImageLoader.shared.image(workspaceId: workspaceId, path: path)
+    }
+    /// Saved assets use the same session-bound loader, cache and decode limits.
+    var assetImage: @Sendable (_ workspaceId: String, _ assetId: String) async throws -> UIImage = { workspaceId, assetId in
+        try await WorkspaceFileImageLoader.shared.assetImage(workspaceId: workspaceId, assetId: assetId)
     }
 
     func attachment(
@@ -80,6 +90,13 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         fallback: () async throws -> AnyAttachment
     ) async throws -> AnyAttachment {
         switch MarkdownImageRoute.route(for: url) {
+        case .workspaceAsset(let link):
+            if let link, let image = try? await assetImage(link.workspaceId, link.assetId) {
+                return AnyAttachment(
+                    IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment
+                )
+            }
+            return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
         case .intentFile(let link):
             guard link.isImage, let resolvedWorkspaceId = link.workspaceId ?? workspaceId else {
                 return AnyAttachment(
@@ -118,7 +135,7 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     }
 }
 
-/// A loaded markdown image (intent-file or remote http(s)) embedded in text;
+/// A loaded markdown image (intent-file, saved asset or remote http(s)) embedded in text;
 /// taps are routed by `MarkdownTextView`'s attachment tap handler to open the
 /// lightbox.
 struct IntentFileImageAttachment: Attachment {

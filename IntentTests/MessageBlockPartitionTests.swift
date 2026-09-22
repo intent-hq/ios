@@ -203,6 +203,15 @@ struct MessagePlainTextContentTests {
         ]
         #expect(MessageView.assistantCopyText(from: blocks) == "intro\n\nlet x = 1")
     }
+
+    @Test func assistantCopyRemovesEmptyRepeatedPromptOpenersAfterImage() {
+        let body = "Before\n![Preview](workspace-asset://ws/image.png)\nAfter"
+        let blocks = [
+            ContentBlock(type: .text, text: body + "\n<!-- suggested-prompts\n<!-- suggested-"),
+            ContentBlock(type: .text, text: "prompts\nShow the recording screen.\nShow the mobile layout.\n-->")
+        ]
+        #expect(MessageView.assistantCopyText(from: blocks) == body)
+    }
 }
 
 /// One-line preview shown in the collapsed agent-to-agent disclosure header:
