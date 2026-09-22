@@ -14,7 +14,7 @@ struct MarkdownTextView: View {
     /// also re-runs on lightbox state changes).
     private let markdownSource: String
     @Environment(\.colorScheme) var colorScheme
-    /// The window's session, when present: intent-file images then load over
+    /// The window's session, when present: workspace images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
@@ -47,6 +47,14 @@ struct MarkdownTextView: View {
         }
     }
 
+    /// Bind saved images to the window's session, never to URL backend hints.
+    static func assetImageFetcher(session: BackendSession?) -> @Sendable (String, String) async throws -> UIImage {
+        let fileLoader = session?.workspaceFileImageLoader ?? .shared
+        return { workspaceId, assetId in
+            try await fileLoader.assetImage(workspaceId: workspaceId, assetId: assetId)
+        }
+    }
+
     var body: some View {
         let markdownView = StructuredText(markdown: markdownSource)
             .textual.structuredTextStyle(.compact)
@@ -54,7 +62,8 @@ struct MarkdownTextView: View {
                 IntentFileAttachmentLoader(
                     workspaceId: workspaceId,
                     fallback: .image(),
-                    fileImage: fileImageFetcher
+                    fileImage: fileImageFetcher,
+                    assetImage: Self.assetImageFetcher(session: session)
                 )
             )
             .textual.listItemSpacing(
@@ -84,7 +93,7 @@ struct MarkdownTextView: View {
         }
     }
 
-    /// Routes attachment taps: only loaded markdown images (intent-file and
+    /// Routes attachment taps: only loaded markdown images (intent-file, saved assets and
     /// remote http(s)) open the lightbox; every other attachment (e.g.
     /// failure placeholders) is inert.
     static func lightboxImage(for attachment: AnyAttachment) -> UIImage? {
