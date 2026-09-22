@@ -907,7 +907,8 @@ private extension ConversationTranscriptView {
                 scrollState.rowHeightCache.record(
                     height: height,
                     for: message,
-                    hydratingBlockIds: hydratingBlockIds
+                    hydratingBlockIds: hydratingBlockIds,
+                    retainingMessagesWithIDs: Set(viewModel.filteredMessages.map(\.id))
                 )
             }
         )

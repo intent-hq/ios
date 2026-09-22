@@ -542,6 +542,46 @@ struct TranscriptRowHeightCacheTests {
         #expect(cache.height(for: retired, hydratingBlockIds: []) == nil)
     }
 
+    @Test func measurementEdgeReconcilesNewAndReappearingMessages() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let survivor = assistantMessage(text: "Survivor", id: "survivor")
+        let appended = assistantMessage(text: "Appended", id: "appended")
+        cache.retainMessages(withIDs: [survivor.id])
+        cache.record(height: 100, for: survivor, hydratingBlockIds: [])
+        try await waitUntil("survivor height settles") {
+            cache.height(for: survivor, hydratingBlockIds: []) == 100
+        }
+
+        #expect(cache.record(
+            height: 200,
+            for: appended,
+            hydratingBlockIds: [],
+            retainingMessagesWithIDs: [survivor.id, appended.id]
+        ))
+        try await waitUntil("first appended measurement settles") {
+            cache.height(for: appended, hydratingBlockIds: []) == 200
+        }
+        #expect(cache.height(for: survivor, hydratingBlockIds: []) == 100)
+
+        cache.retainMessages(withIDs: [])
+        #expect(cache.record(
+            height: 300,
+            for: appended,
+            hydratingBlockIds: [],
+            retainingMessagesWithIDs: [appended.id]
+        ))
+        #expect(!cache.record(
+            height: 400,
+            for: survivor,
+            hydratingBlockIds: [],
+            retainingMessagesWithIDs: [appended.id]
+        ))
+        try await waitUntil("first reappearing measurement settles") {
+            cache.height(for: appended, hydratingBlockIds: []) == 300
+        }
+        #expect(cache.height(for: survivor, hydratingBlockIds: []) == nil)
+    }
+
     @Test func emptyTranscriptRetiresSettledAndPendingHeight() async throws {
         let settleDelay = Duration.milliseconds(20)
         let cache = ConversationTranscriptRowHeightCache(settleDelay: settleDelay)

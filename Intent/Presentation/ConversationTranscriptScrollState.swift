@@ -71,6 +71,17 @@ final class ConversationTranscriptRowHeightCache {
         return true
     }
 
+    @discardableResult
+    func record(
+        height: CGFloat,
+        for message: ConversationMessage,
+        hydratingBlockIds: Set<String>,
+        retainingMessagesWithIDs messageIDs: Set<String>
+    ) -> Bool {
+        retainMessages(withIDs: messageIDs)
+        return record(height: height, for: message, hydratingBlockIds: hydratingBlockIds)
+    }
+
     func invalidate(messageId: String) {
         pendingMeasurements.removeValue(forKey: messageId)?.task.cancel()
         entries.removeValue(forKey: messageId)
