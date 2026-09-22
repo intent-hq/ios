@@ -327,6 +327,8 @@ enum DemoFixtures {
     /// immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
         switch method {
+        case "settings.get" where params["path"] as? String == "providers.enabled":
+            return workspaceProviderGate(from: ProcessInfo.processInfo.arguments)
         case "hook.list" where params["workspaceId"] as? String == longConversationWorkspaceId:
             return longConversationHookListGate
         case "agent.getMessageBlock" where params["agentId"] as? String == longConversationAgentId:
@@ -334,6 +336,12 @@ enum DemoFixtures {
         default:
             return nil
         }
+    }
+
+    /// Holds workspace policy validation until the UI test releases it (#446).
+    /// Without the argument, ordinary demo requests still answer immediately.
+    static func workspaceProviderGate(from arguments: [String]) -> ResponseGate? {
+        triggerFile(from: arguments, prefix: "--demo-workspace-provider-trigger-file=").map(ResponseGate.triggerFile)
     }
 
     /// Suspends until `gate` opens; cancellation propagates from `Task.sleep`.
@@ -445,7 +453,7 @@ enum DemoFixtures {
         case "specialist.list":
             return ["specialists": specialists]
         default:
-            return [String: Any]()
+            return workspaceCreationResponse(for: method, params: params)
         }
     }
 

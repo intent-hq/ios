@@ -1,5 +1,33 @@
 /// Stateless selection rules shared by the workspace and agent creation flows.
 enum CreationSelectionPolicy {
+    /// Workspace enablement is authoritative even when empty or unavailable;
+    /// never retain a provider that is no longer offered by this host.
+    static func preselectedWorkspaceProvider(
+        current: ProviderInfo?, providers: [ProviderInfo]
+    ) -> ProviderInfo? {
+        guard !providers.isEmpty else { return nil }
+        return preselectedProvider(current: current, providers: providers)
+    }
+
+    /// Pending validation preserves the draft, not permission to submit it.
+    /// Only a completed policy result can replace or clear the selection.
+    static func reconcileWorkspaceProvider(
+        provider: inout ProviderInfo?, model: inout ModelInfo?, state: WorkspaceProviderOptions.State
+    ) {
+        let providers: [ProviderInfo]
+        switch state {
+        case .idle, .loading:
+            return
+        case .failed:
+            providers = []
+        case let .loaded(loadedProviders):
+            providers = loadedProviders
+        }
+        let previousId = provider?.id
+        provider = preselectedWorkspaceProvider(current: provider, providers: providers)
+        if provider == nil || provider?.id != previousId { model = nil }
+    }
+
     /// The workspace picker's specialist list: the modal-pickable set (no
     /// hidden or internal specialists) with the orchestrator pinned first,
     /// then by name.

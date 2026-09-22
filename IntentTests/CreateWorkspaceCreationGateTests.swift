@@ -288,6 +288,46 @@ extension CreateWorkspaceParamsTests {
 
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
 
+    @Test(arguments: [WorkspaceProviderOptions.State.idle, .loading])
+    func pendingWorkspacePolicyKeepsDraftSelection(state: WorkspaceProviderOptions.State) {
+        var provider: ProviderInfo? = makeProvider(id: "codex")
+        var model: ModelInfo? = makeModel(id: "named-model", provider: "codex")
+        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: state)
+        #expect(provider == makeProvider(id: "codex"))
+        #expect(model == makeModel(id: "named-model", provider: "codex"))
+        #expect(CreateWorkspaceView.isCreateDisabled(
+            isCreating: false, isLoadingProviders: true, providers: [], selectedProvider: provider
+        ))
+    }
+
+    @Test func disabledWorkspaceProviderDropsItsExplicitModel() {
+        var provider: ProviderInfo? = makeProvider(id: "codex")
+        var model: ModelInfo? = makeModel(id: "shared-id", provider: "codex")
+        CreationSelectionPolicy.reconcileWorkspaceProvider(
+            provider: &provider, model: &model, state: .loaded([makeProvider()])
+        )
+        #expect(provider?.id == "auggie")
+        #expect(model == nil)
+        model = makeModel()
+        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: .loaded([]))
+        #expect(provider == nil)
+        #expect(model == nil)
+        // Agent creation intentionally retains its prior empty-list policy.
+        #expect(CreationSelectionPolicy.preselectedProvider(current: makeProvider(), providers: []) != nil)
+    }
+
+    @Test func unchangedWorkspaceProviderKeepsItsModelAndNilSelectionCannotSubmit() {
+        var provider: ProviderInfo? = makeProvider()
+        var model: ModelInfo? = makeModel()
+        CreationSelectionPolicy.reconcileWorkspaceProvider(
+            provider: &provider, model: &model, state: .loaded([makeProvider()])
+        )
+        #expect(model == makeModel())
+        #expect(CreateWorkspaceView.isCreateDisabled(
+            isCreating: false, isLoadingProviders: false, providers: [makeProvider()], selectedProvider: nil
+        ))
+    }
+
     func isCreateDisabled(
         providers: [ProviderInfo],
         isCreating: Bool = false,
@@ -296,7 +336,8 @@ extension CreateWorkspaceParamsTests {
         CreateWorkspaceView.isCreateDisabled(
             isCreating: isCreating,
             isLoadingProviders: isLoadingProviders,
-            providers: providers
+            providers: providers,
+            selectedProvider: providers.first(where: \.isSelectable)
         )
     }
 
@@ -314,9 +355,9 @@ extension CreateWorkspaceParamsTests {
         #expect(!isCreateDisabled(providers: [makeProvider(id: "grok", authenticated: .unknown)]))
     }
 
-    @Test func createEnabledWhenProviderListEmptyAfterLoad() {
-        // Empty list after load is not the guidance state: the daemon default is used
-        #expect(!isCreateDisabled(providers: []))
+    @Test func createDisabledWhenProviderListEmptyAfterLoad() {
+        // An empty enabled set must never submit the daemon's fallback provider.
+        #expect(isCreateDisabled(providers: []))
     }
 
     @Test func createDisabledWhileCreatingOrLoadingProviders() {
