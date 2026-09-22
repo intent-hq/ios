@@ -2,6 +2,7 @@ import Foundation
 
 extension DemoFixtures {
     static let inlineImageAgentId = "demo-agent-implementor"
+    static let inlineImageSuggestedPrompts = ["Show the recording screen.", "Show the mobile layout."]
 
     /// Opt-in so existing demo screenshots and transcript fixtures stay unchanged.
     static func inlineImageConversationRequested(by arguments: [String]) -> Bool {
@@ -40,7 +41,11 @@ extension DemoFixtures {
             "Saved preview:  \n![Saved settings preview](\(savedURL))",
             "After the saved image, before the missing image.",
             "Missing preview:  \n![Missing settings preview](\(missingURL))",
-            "After the missing image. The response is still readable."
+            "After the missing image. The response is still readable.",
+            // Reproduces a raw opener beside otherwise valid prompt buttons.
+            // The original report has no raw payload; this is a controlled case.
+            "<!-- suggested-prompts\n<!-- suggested-prompts\n"
+                + inlineImageSuggestedPrompts.joined(separator: "\n") + "\n-->"
         ].joined(separator: "\n\n")
     }
 }

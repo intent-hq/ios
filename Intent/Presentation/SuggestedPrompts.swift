@@ -9,10 +9,13 @@ import Foundation
 /// only the last one supplies prompts — it yields nothing when any captured line
 /// is body-text-shaped (heading, fence, table row, Mermaid edge), so response
 /// body text can never render as chips.
+/// Empty repeated opener lines immediately before a closed block are treated
+/// as part of that block. Unclosed openers with intervening body text survive.
 ///
-/// Mirrors `scanSuggestedPrompts` / `parseSuggestedPrompts` in the desktop
-/// app's `messageParser.ts`, including `Label|` / `delay:N|` stripping, the
-/// four-chip cap, and dropping individually invalid lines.
+/// Base syntax mirrors `scanSuggestedPrompts` / `parseSuggestedPrompts` in the
+/// desktop app's `messageParser.ts`, including `Label|` / `delay:N|` stripping,
+/// the four-chip cap, and dropping individually invalid lines. Empty duplicate
+/// opener recovery also removes the otherwise visible leftover marker on iOS.
 enum SuggestedPrompts {
     private static let markdownMarkerLength = 3
     private static let maximumFenceIndent = 3
@@ -190,10 +193,12 @@ enum SuggestedPrompts {
             }
             var body = Array(lines[(index + 1)..<closer])
             if let remainder = closerSearch.closerRemainder { body.append(remainder) }
+            let prefix = String(line[line.startIndex..<openerRange.lowerBound])
+            let start = redundantOpenerStart(in: lines, before: index, prefix: prefix)
             result.append(Block(
-                openerLine: index,
+                openerLine: start,
                 closerLine: closer,
-                openerPrefix: String(line[line.startIndex..<openerRange.lowerBound]),
+                openerPrefix: start == index ? prefix : "",
                 body: body
             ))
             index = closer + 1
@@ -307,5 +312,25 @@ enum SuggestedPrompts {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return promptPart.isEmpty || promptPart.utf16.count > maxPromptLength ? nil : promptPart
+    }
+}
+
+private extension SuggestedPrompts {
+    /// Only absorb standalone openers separated by whitespace, and only after
+    /// a closed block has been found. Stop at any prose or fence so an earlier
+    /// unclosed example cannot consume response text (ios#445).
+    static func redundantOpenerStart(in lines: [String], before index: Int, prefix: String) -> Int {
+        guard prefix.trimmingCharacters(in: .whitespaces).isEmpty else { return index }
+        var start = index
+        var previous = index
+        while previous > 0 {
+            previous -= 1
+            let candidate = lines[previous].trimmingCharacters(in: .whitespacesAndNewlines)
+            if candidate.isEmpty { continue }
+            guard let range = candidate.range(of: openerPattern, options: .regularExpression),
+                  range.lowerBound == candidate.startIndex else { break }
+            start = previous
+        }
+        return start
     }
 }

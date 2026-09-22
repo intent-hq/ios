@@ -11,6 +11,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         static let after = "After the missing image. The response is still readable."
         static let savedCaption = "Saved preview:"
         static let missingCaption = "Missing preview:"
+        static let prompts = ["Show the recording screen.", "Show the mobile layout."]
         static let timeout: TimeInterval = 15
         static let launchTimeout: TimeInterval = 30
         static let inertTapTimeout: TimeInterval = 2
@@ -48,6 +49,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             assertLightbox(in: app, transcript: transcript)
             assertMissingImageIsInert(in: app, transcript: transcript)
             assertResponse(in: app, transcript: transcript)
+            assertPrompts(in: app, transcript: transcript)
 
             let screenshot = XCTAttachment(screenshot: app.screenshot())
             screenshot.name = "Inline image response, entry \(entry)"
@@ -60,6 +62,47 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             XCTAssertTrue(app.buttons["Context"].waitForExistence(timeout: Fixture.timeout))
             XCTAssertTrue(transcript.waitForNonExistence(timeout: Fixture.timeout))
         }
+    }
+
+    @MainActor
+    func testBothImageResponsePromptsSendTheirDisplayedText() {
+        for (index, expected) in Fixture.prompts.enumerated() {
+            let app = XCUIApplication()
+            app.launchArguments += ["--demo-data", "--demo-inline-images"]
+            app.launch()
+            openWorkspace(in: app)
+            let agent = app.staticTexts[Fixture.agentName].firstMatch
+            XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+            agent.tap()
+            let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+            XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+            assertPrompts(in: app, transcript: transcript)
+            let prompt = app.buttons["transcript.suggestedPrompt.\(index)"].firstMatch
+            reveal(prompt, in: transcript)
+            prompt.tap()
+            XCTAssertTrue(prompt.waitForNonExistence(timeout: Fixture.timeout))
+            let sent = message(in: app, containing: expected)
+            XCTAssertTrue(sent.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertEqual(sent.label, expected)
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    private func assertPrompts(in app: XCUIApplication, transcript: XCUIElement) {
+        for (index, expected) in Fixture.prompts.enumerated() {
+            let prompt = app.buttons["transcript.suggestedPrompt.\(index)"].firstMatch
+            XCTAssertTrue(prompt.waitForExistence(timeout: Fixture.timeout))
+            reveal(prompt, in: transcript)
+            XCTAssertEqual(prompt.label, expected)
+        }
+        let rawMarker = transcript.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@",
+            "suggested-prompts",
+            "<!--",
+            "-->"
+        ))
+        XCTAssertEqual(rawMarker.count, 0, "Prompt control markup must not appear beside the buttons")
     }
 
     @MainActor

@@ -315,4 +315,35 @@ extension ConversationViewModelTests {
         let viewModel = makeVM()
         #expect(viewModel.suggestedPrompts.isEmpty)
     }
+
+    @Test func repeatedImagePromptOpenerUpdatesWhenStreamCloses() throws {
+        let viewModel = makeVM()
+        let partial = "![Preview](workspace-asset://ws/image.png)\n<!-- suggested-prompts\n<!-- suggested-"
+        let block = ContentBlock(type: .text, text: partial)
+        var message = ConversationMessage(id: "image-response", role: .assistant, contentBlocks: [block])
+        message.isStreaming = true
+        viewModel.store.messages = [message]
+        #expect(viewModel.suggestedPrompts.isEmpty)
+        let before = SuggestedPrompts.parse(contentBlocks: message.contentBlocks).contentBlocks
+        #expect(before.first?.resolvedText == partial)
+
+        message.contentBlocks.append(ContentBlock(
+            type: .text,
+            text: "prompts\nShow the recording screen.\nShow the mobile layout.\n-->"
+        ))
+        message.isStreaming = false
+        viewModel.store.messages = [message]
+        #expect(viewModel.suggestedPrompts == DemoFixtures.inlineImageSuggestedPrompts)
+        let after = SuggestedPrompts.parse(contentBlocks: message.contentBlocks).contentBlocks
+        let oldBlock = try #require(before.first)
+        let newBlock = try #require(after.first)
+        #expect(oldBlock.id == newBlock.id)
+        #expect(newBlock.resolvedText == "![Preview](workspace-asset://ws/image.png)\n")
+        #expect(ContentBlockBody(block: oldBlock, toolResult: nil, workspaceId: "ws")
+            != ContentBlockBody(block: newBlock, toolResult: nil, workspaceId: "ws"))
+
+        viewModel.store.messages = []
+        viewModel.store.messages = [message]
+        #expect(viewModel.suggestedPrompts == DemoFixtures.inlineImageSuggestedPrompts)
+    }
 }

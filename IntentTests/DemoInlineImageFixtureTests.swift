@@ -23,6 +23,12 @@ struct DemoInlineImageFixtureTests {
         #expect(text == DemoFixtures.inlineImageResponseText)
         #expect(!text.contains("https://"))
         #expect(!text.contains("http://"))
+        let parsed = SuggestedPrompts.parse(contentBlocks: assistant.contentBlocks)
+        #expect(parsed.prompts == DemoFixtures.inlineImageSuggestedPrompts)
+        let displayed = try #require(parsed.contentBlocks.first?.resolvedText)
+        #expect(!displayed.contains("suggested-prompts"))
+        #expect(displayed.contains("After the missing image. The response is still readable."))
+        #expect(displayed.matches(of: /!\[/).count == 2)
 
         let imagePattern = /!\[[^\]]*\]\(([^)]+)\)/
         let links = try text.matches(of: imagePattern).map { match in

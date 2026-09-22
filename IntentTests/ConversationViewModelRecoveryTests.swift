@@ -318,6 +318,18 @@ extension ConversationViewModelTests {
 
     // MARK: - Suggested-prompt send (draft retention)
 
+    @Test func imageResponsePromptsSendExactDisplayedText() async throws {
+        for expected in DemoFixtures.inlineImageSuggestedPrompts {
+            let (viewModel, fake) = makeFakeBackedVM()
+            viewModel.store.messages = [textMessage(role: .assistant, text: DemoFixtures.inlineImageResponseText)]
+            let prompt = try #require(viewModel.suggestedPrompts.first { $0 == expected })
+            await viewModel.sendSuggestedPrompt(prompt)
+            let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+            #expect(sent.params["content"] as? String == expected)
+            #expect(sent.params["imageBlocks"] == nil)
+        }
+    }
+
     @Test func sendSuggestedPromptDoesNotAttachPendingImages() async throws {
         // Regression: draft attachments must not silently ride a suggested
         // prompt — the prompt sends text only.
