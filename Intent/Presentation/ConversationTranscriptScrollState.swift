@@ -25,6 +25,8 @@ final class ConversationTranscriptRowHeightCache {
     private let settleDelay: Duration
     private var entries: [String: Entry] = [:]
     @ObservationIgnored private var cacheGenerationWidth: CGFloat?
+    @ObservationIgnored private var currentMessageIDs: Set<String> = []
+    @ObservationIgnored private var hasEstablishedCurrentMessages = false
     @ObservationIgnored private var pendingMeasurements: [String: PendingMeasurement] = [:]
 
     init(settleDelay: Duration = .milliseconds(Constants.Conversation.Transcript.rowHeightSettleMilliseconds)) {
@@ -39,19 +41,24 @@ final class ConversationTranscriptRowHeightCache {
         return entry.height
     }
 
+    @discardableResult
     func record(
         height: CGFloat,
         for message: ConversationMessage,
         hydratingBlockIds: Set<String>
-    ) {
+    ) -> Bool {
+        guard !hasEstablishedCurrentMessages || currentMessageIDs.contains(message.id) else {
+            invalidate(messageId: message.id)
+            return false
+        }
         guard !message.isStreaming, height.isFinite, height > 0 else {
             invalidate(messageId: message.id)
-            return
+            return false
         }
 
         let content = Content(message: message, hydratingBlockIds: hydratingBlockIds)
         pendingMeasurements.removeValue(forKey: message.id)?.task.cancel()
-        if entries[message.id] == Entry(content: content, height: height) { return }
+        if entries[message.id] == Entry(content: content, height: height) { return true }
 
         let token = UUID()
         let task = Task { [weak self] in
@@ -61,6 +68,7 @@ final class ConversationTranscriptRowHeightCache {
             finishMeasurement(messageId: message.id, token: token, content: content, height: height)
         }
         pendingMeasurements[message.id] = PendingMeasurement(token: token, task: task)
+        return true
     }
 
     func invalidate(messageId: String) {
@@ -69,6 +77,8 @@ final class ConversationTranscriptRowHeightCache {
     }
 
     func retainMessages(withIDs messageIDs: Set<String>) {
+        currentMessageIDs = messageIDs
+        hasEstablishedCurrentMessages = true
         let retiredMessageIDs = Set(entries.keys)
             .union(Set(pendingMeasurements.keys))
             .subtracting(messageIDs)
@@ -100,7 +110,9 @@ final class ConversationTranscriptRowHeightCache {
         content: Content,
         height: CGFloat
     ) {
-        guard pendingMeasurements[messageId]?.token == token else { return }
+        guard !hasEstablishedCurrentMessages || currentMessageIDs.contains(messageId),
+              pendingMeasurements[messageId]?.token == token
+        else { return }
         pendingMeasurements.removeValue(forKey: messageId)
         entries[messageId] = Entry(content: content, height: height)
     }

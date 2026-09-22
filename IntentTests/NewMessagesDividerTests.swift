@@ -507,6 +507,7 @@ struct TranscriptRowHeightCacheTests {
         let retired = assistantMessage(text: "Retired", id: "retired")
         let survivor = assistantMessage(text: "Survivor", id: "survivor")
         let replacement = assistantMessage(text: "Replacement", id: "replacement")
+        cache.retainMessages(withIDs: [retired.id, survivor.id])
         cache.record(height: 100, for: retired, hydratingBlockIds: [])
         cache.record(height: 200, for: survivor, hydratingBlockIds: [])
         try await waitUntil("original heights settle") {
@@ -516,7 +517,8 @@ struct TranscriptRowHeightCacheTests {
 
         cache.record(height: 300, for: retired, hydratingBlockIds: [])
         cache.retainMessages(withIDs: [survivor.id, replacement.id])
-        cache.record(height: 400, for: replacement, hydratingBlockIds: [])
+        #expect(!cache.record(height: 350, for: retired, hydratingBlockIds: []))
+        #expect(cache.record(height: 400, for: replacement, hydratingBlockIds: []))
         try await waitUntil("replacement height settles after stale work") {
             cache.height(for: replacement, hydratingBlockIds: []) == 400
         }
@@ -544,6 +546,7 @@ struct TranscriptRowHeightCacheTests {
         let settleDelay = Duration.milliseconds(20)
         let cache = ConversationTranscriptRowHeightCache(settleDelay: settleDelay)
         let message = assistantMessage(text: "Removed")
+        cache.retainMessages(withIDs: [message.id])
         cache.record(height: 100, for: message, hydratingBlockIds: [])
         try await waitUntil("height settles before emptying") {
             cache.height(for: message, hydratingBlockIds: []) == 100
@@ -551,11 +554,12 @@ struct TranscriptRowHeightCacheTests {
         cache.record(height: 200, for: message, hydratingBlockIds: [])
 
         cache.retainMessages(withIDs: [])
-        let fenceCache = ConversationTranscriptRowHeightCache(settleDelay: settleDelay)
-        let fence = assistantMessage(text: "Fence", id: "fence")
-        fenceCache.record(height: 1, for: fence, hydratingBlockIds: [])
-        try await waitUntil("retired pending work drains") {
-            fenceCache.height(for: fence, hydratingBlockIds: []) == 1
+        #expect(!cache.record(height: 300, for: message, hydratingBlockIds: []))
+        let replacement = assistantMessage(text: "Replacement", id: "replacement")
+        cache.retainMessages(withIDs: [replacement.id])
+        #expect(cache.record(height: 1, for: replacement, hydratingBlockIds: []))
+        try await waitUntil("replacement settles after emptying") {
+            cache.height(for: replacement, hydratingBlockIds: []) == 1
         }
 
         #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
