@@ -567,6 +567,7 @@ private struct PickerLayoutHost: View {
                 selectedSpecialist: $selectedSpecialist,
                 providers: [Self.provider],
                 isLoadingProviders: false,
+                providerGuidance: nil,
                 selectedProvider: $selectedProvider,
                 models: [Self.model],
                 selectedModel: $selectedModel,
@@ -576,6 +577,7 @@ private struct PickerLayoutHost: View {
                 showError: $showError,
                 colorScheme: .light,
                 onSelectProvider: selectWorkspaceProvider,
+                onRetryProviders: {},
                 onCreate: {},
                 onLoad: {}
             )

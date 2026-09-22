@@ -60,7 +60,8 @@ struct CreateWorkspaceView: View {
     private var specialists: [SpecialistInfo] {
         CreationSelectionPolicy.workspacePickerSpecialists(optionsStore.specialists)
     }
-    private var providers: [ProviderInfo] { optionsStore.providers }
+    private var providerOptions: WorkspaceProviderOptions { optionsStore.workspaceProviderOptions }
+    private var providers: [ProviderInfo] { providerOptions.providers }
     /// The selected provider's cached catalog; empty until loaded, which
     /// hides the model row (the daemon default applies).
     private var models: [ModelInfo] {
@@ -143,7 +144,7 @@ struct CreateWorkspaceView: View {
         .onChange(of: optionsStore.specialists) { _, _ in
             reconcileSpecialistSelection()
         }
-        .onChange(of: optionsStore.providers) { _, _ in
+        .onChange(of: providers) { _, _ in
             Task { await reconcileProviderSelection() }
         }
         .onChange(of: models) { _, models in
@@ -199,7 +200,8 @@ struct CreateWorkspaceView: View {
                 isLoadingSpecialists: isLoadingOptions,
                 selectedSpecialist: $selectedSpecialist,
                 providers: providers,
-                isLoadingProviders: isLoadingOptions || isLoadingSelectedModelCatalog,
+                isLoadingProviders: isLoadingOptions || providerOptions.isLoading || isLoadingSelectedModelCatalog,
+                providerGuidance: providerOptions.guidance,
                 selectedProvider: $selectedProvider,
                 models: models,
                 selectedModel: $selectedModel,
@@ -209,6 +211,7 @@ struct CreateWorkspaceView: View {
                 showError: $showError,
                 colorScheme: colorScheme,
                 onSelectProvider: selectProvider,
+                onRetryProviders: { Task { await fetchCreationOptions() } },
                 onCreate: createWorkspace
             ) {
                 await fetchCreationOptions()
@@ -298,7 +301,9 @@ struct CreateWorkspaceView: View {
     /// `loadGeneration` change starts a fresh load that settles and reconciles.
     private func fetchCreationOptions() async {
         let generation = optionsStore.loadGeneration
+        async let providerLoad: Void = providerOptions.load()
         await optionsStore.loadIfNeeded()
+        await providerLoad
         guard settledLoads.settleOptions(startedAt: generation, current: optionsStore.loadGeneration) else {
             return
         }
@@ -322,21 +327,17 @@ struct CreateWorkspaceView: View {
     /// provider switch (the daemon default applies), even when the new
     /// provider's catalog shares a bare model id with the old one.
     private func reconcileProviderSelection() async {
-        let previousProviderId = selectedProvider?.id
-        selectedProvider = CreationSelectionPolicy.preselectedProvider(
-            current: selectedProvider,
+        CreationSelectionPolicy.reconcileWorkspaceProvider(
+            provider: &selectedProvider,
+            model: &selectedModel,
             providers: providers
         )
-        guard let provider = selectedProvider else {
-            selectedModel = nil
-            return
-        }
-        if provider.id != previousProviderId { selectedModel = nil }
+        guard let provider = selectedProvider else { return }
         await loadModels(for: provider)
     }
 
     private func selectProvider(_ provider: ProviderInfo) {
-        guard provider.authenticated != false, provider.id != selectedProvider?.id else { return }
+        guard providers.contains(provider), provider.isSelectable, provider.id != selectedProvider?.id else { return }
         selectedProvider = provider
         selectedModel = nil
         Task { await loadModels(for: provider) }
@@ -397,13 +398,19 @@ extension CreateWorkspaceView {
     }
 
     private func createWorkspace() {
-        guard !isCreating, let repo = selectedRepo, let branch = selectedBranch else { return }
+        guard !isCreating, canSubmitProvider, let repo = selectedRepo, let branch = selectedBranch else { return }
         isCreating = true
 
         Task { await performCreateWorkspace(repo: repo, branch: branch) }
     }
 
     private func performCreateWorkspace(repo: GitHubRepo, branch: String) async {
+        // Recheck at the request boundary: a refresh may have removed the
+        // selection after the button was tapped but before this task ran.
+        guard canSubmitProvider else {
+            isCreating = false
+            return
+        }
         do {
             let params = Self.buildCreateWorkspaceParams(
                 githubUrl: "https://github.com/\(repo.owner)/\(repo.name)",
@@ -438,5 +445,14 @@ extension CreateWorkspaceView {
             showError = true
         }
         isCreating = false
+    }
+
+    private var canSubmitProvider: Bool {
+        !Self.isCreateDisabled(
+            isCreating: false,
+            isLoadingProviders: isLoadingOptions || providerOptions.isLoading || isLoadingSelectedModelCatalog,
+            providers: providers,
+            selectedProvider: selectedProvider
+        )
     }
 }

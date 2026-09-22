@@ -114,6 +114,7 @@ $(SRCROOT)/Intent/Services/WebSocketTransportError.swift
 $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
+$(SRCROOT)/Intent/Services/WorkspaceProviderOptions.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
 $(SRCROOT)/Intent/Utils/AppLog.swift
 $(SRCROOT)/Intent/Utils/BackgroundTaskManager.swift
@@ -406,6 +407,7 @@ $(SRCROOT)/IntentTests/WorkspaceListViewModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceParsingTests.swift
 $(SRCROOT)/IntentTests/WorkspacePrMonitorsStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspacePrPillTests.swift
+$(SRCROOT)/IntentTests/WorkspaceProviderOptionsTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowAccessibilitySupportTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowLayoutPolicyTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPrIndicatorTests.swift

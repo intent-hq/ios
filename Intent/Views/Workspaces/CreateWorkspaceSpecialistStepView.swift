@@ -8,6 +8,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     @Binding var selectedSpecialist: SpecialistInfo?
     let providers: [ProviderInfo]
     let isLoadingProviders: Bool
+    let providerGuidance: String?
     @Binding var selectedProvider: ProviderInfo?
     let models: [ModelInfo]
     @Binding var selectedModel: ModelInfo?
@@ -17,6 +18,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     @Binding var showError: Bool
     let colorScheme: ColorScheme
     let onSelectProvider: (ProviderInfo) -> Void
+    let onRetryProviders: () -> Void
     let onCreate: () -> Void
     let onLoad: () async -> Void
 
@@ -44,7 +46,8 @@ struct CreateWorkspaceSpecialistStepView: View {
                     .disabled(CreateWorkspaceView.isCreateDisabled(
                         isCreating: isCreating,
                         isLoadingProviders: isLoadingProviders,
-                        providers: providers
+                        providers: providers,
+                        selectedProvider: selectedProvider
                     ))
             }
         }
@@ -83,13 +86,19 @@ struct CreateWorkspaceSpecialistStepView: View {
     private var agentSection: some View {
         Section("Agent") {
             adaptiveField("Specialist") { specialistPicker }
-            if providers.noneSelectable {
+            if let providerGuidance {
+                Text(providerGuidance)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                Button("Retry", action: onRetryProviders)
+            } else if isLoadingProviders && providers.isEmpty {
+                ProgressView("Loading providers...")
+            } else if providers.noneSelectable {
                 noProvidersSignedInPlaceholder
                     .listRowBackground(Theme.card(for: colorScheme))
             } else if !providers.isEmpty {
                 adaptiveField("Provider") { providerPicker }
             }
-            if !models.isEmpty {
+            if !providers.isEmpty, !models.isEmpty {
                 adaptiveField("Model") { modelPicker }
             }
         }
@@ -236,8 +245,14 @@ extension CreateWorkspaceView {
         "\(row.label): \(row.value.isEmpty ? "Not specified" : row.value)"
     }
 
-    static func isCreateDisabled(isCreating: Bool, isLoadingProviders: Bool, providers: [ProviderInfo]) -> Bool {
-        isCreating || isLoadingProviders || providers.noneSelectable
+    static func isCreateDisabled(
+        isCreating: Bool,
+        isLoadingProviders: Bool,
+        providers: [ProviderInfo],
+        selectedProvider: ProviderInfo?
+    ) -> Bool {
+        guard !isCreating, !isLoadingProviders, let selectedProvider else { return true }
+        return !providers.contains { $0.id == selectedProvider.id && $0.isSelectable }
     }
 
     static func buildCreateWorkspaceParams(
@@ -251,13 +266,14 @@ extension CreateWorkspaceView {
             "baseRef": baseRef,
             "idempotencyKey": idempotencyKey
         ]
-        let isNonAuggieProvider = initialAgent.provider.map { $0.id != "auggie" } ?? false
         let trimmedMessage = initialAgent.message.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasMessage = !trimmedMessage.isEmpty
-        if initialAgent.specialist != nil || hasMessage || initialAgent.model != nil || isNonAuggieProvider {
+        if initialAgent.specialist != nil || hasMessage || initialAgent.model != nil || initialAgent.provider != nil {
             var initialAgentParams: [String: Any] = [:]
             if let specialist = initialAgent.specialist { initialAgentParams["specialist"] = specialist.id }
-            if isNonAuggieProvider, let provider = initialAgent.provider {
+            // Always send the enabled selection, including Auggie. The host's
+            // default (or specialist default) may name a disabled provider.
+            if let provider = initialAgent.provider {
                 initialAgentParams["provider"] = provider.id
             }
             if let model = initialAgent.model { initialAgentParams["model"] = model.id }
