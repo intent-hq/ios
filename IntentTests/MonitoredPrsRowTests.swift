@@ -138,7 +138,7 @@ extension MonitoredPrsRowTests {
             await SyntheticBadgeHost.publishesAccessibilityTree()
         }
     )
-    func renderedChipsExposePendingStateAndPreserveMenuRole() throws {
+    func renderedChipsExposePendingStateAndPreserveMenuRole() async throws {
         let row = makeRow(monitors: [
             makeMonitor(
                 monitorId: "prm-pending",
@@ -158,7 +158,7 @@ extension MonitoredPrsRowTests {
             "monitoredPr.prm-current"
         ]
 
-        try SyntheticBadgeHost.render(
+        try await SyntheticBadgeHost.render(
             row,
             width: Self.hostWidth,
             height: Self.hostHeight
