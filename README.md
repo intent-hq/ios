@@ -75,22 +75,24 @@ Live updates combine domain subscriptions for workspaces, notes, tasks, comments
 
 ## Quickstart
 
+### Xcode GUI
+
+A fresh checkout does not contain the gitignored `TailcatKit.xcframework` required
+by iOS builds. On macOS with Xcode and the version of Go declared in
+`TailcatKit/go.mod`, build it before opening the project:
+
 ```bash
-# 1. Open in Xcode
+TailcatKit/build_xcframework.sh
 open Intent.xcodeproj
-
-# 2. Select a simulator or device target (iPhone, iPad, or Apple Vision Pro)
-
-# 3. Build and run (Cmd+R)
-#    - The app will show the pairing screen
-#    - On your Mac, run: intentd serve --listen tcp
-
-# 4. Scan the QR code from the desktop app or enter the token manually
-
-# 5. Once paired, the app shows the workspace list
 ```
 
-The app requires an `intentd` instance with its TCP WebSocket listener enabled:
+Xcode resolves the Swift package dependencies. Select an iPhone, iPad, or Apple
+Vision Pro destination and use **Cmd+R**. The app opens to the pairing screen.
+GUI builds run through Xcode itself; command-line builds and tests instead use the
+repository wrapper documented below.
+
+Run an `intentd` instance with its TCP WebSocket listener enabled, then scan its QR
+code or enter the pairing details manually:
 
 ```bash
 intentd serve --listen tcp
@@ -104,7 +106,34 @@ Managed via Swift Package Manager (integrated in Xcode):
 
 ## Development
 
+### Clean-checkout prerequisites
+
+- macOS with Xcode and its command-line tools. Tests require an available iPhone
+  simulator.
+- Network access for the first Swift package resolution and pinned Go tool download.
+- A Go toolchain compatible with the version in `TailcatKit/go.mod`. iOS commands
+  automatically run `TailcatKit/build_xcframework.sh` when the gitignored framework
+  is missing and Go is on `PATH`; otherwise they stop with the manual command to run.
+  Set `TAILCATKIT_AUTOBUILD=0` to require a prebuilt framework.
+- The visionOS platform component for visionOS builds. Install it with
+  `xcodebuild -downloadPlatform visionOS` if the wrapper reports that it is missing.
+
+Use `scripts/xcodebuild.sh` for every command-line build and test. It fixes the
+project, scheme, signing flags, and destinations, and deliberately rejects extra
+arguments such as `-sdk`.
+
 ```bash
+# Resolve Swift package dependencies
+scripts/xcodebuild.sh resolve
+
+# Build the app
+scripts/xcodebuild.sh build-ios
+scripts/xcodebuild.sh build-visionos
+
+# Run unit tests while iterating, or the complete pre-PR test gate
+scripts/xcodebuild.sh test-ios-unit
+scripts/xcodebuild.sh test-ios
+
 # Lint (requires SwiftLint 0.65.1; the wrapper enforces the version).
 # CI runs this on every PR as the merge-blocking SwiftLint job;
 # SWIFTLINT_REPORTER=<name> overrides the config's reporter.
@@ -112,18 +141,49 @@ scripts/swiftlint.sh
 
 # Smoke-test the lint wrapper
 scripts/test-swiftlint.sh
-
-# Build in Xcode (Cmd+B) or via xcodebuild
-xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'platform=iOS Simulator,name=iPhone 16' build
-
-# Run tests
-xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'platform=iOS Simulator,name=iPhone 16' test
-
-# Build for visionOS
-xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'generic/platform=visionOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
 
-Always verify visionOS with the `generic/platform=visionOS Simulator` destination, **never** with `-sdk xros26.5` (or `-sdk xrsimulator26.5`): when the visionOS platform component is not installed, `-sdk xros...` **silently falls back to building against iphoneos** (`PLATFORM_NAME = iphoneos`), producing a bogus "build succeeded". Install the platform first with `xcodebuild -downloadPlatform visionOS`; the destination form then resolves correctly (and errors out instead of falling back when the platform is missing).
+The wrapper supports these subcommands:
+
+| Subcommand | Purpose |
+| --- | --- |
+| `resolve` | Resolve Swift package dependencies. |
+| `build-ios` | Build for the generic iOS Simulator destination. |
+| `build-visionos` | Build for the generic visionOS Simulator destination. |
+| `build-for-testing` | Build the iOS test bundles for a later test-only run. |
+| `test-without-building` | Run previously built unit and UI tests. |
+| `test-without-building-unit` | Run previously built tests without `IntentUITests`. |
+| `test-ios` | Build and run the complete unit and UI test gate. |
+| `test-ios-unit` | Build and run tests without `IntentUITests`. |
+| `pick-simulator` | Print the automatically selected iPhone simulator UDID. |
+
+For a focused run, set `ONLY_TESTING` to one or more whitespace-separated
+`Target[/Suite[/test]]` selectors. Selectors are test identifiers, not Swift file
+names. The wrapper validates each selector before the run, then reports resolved,
+executed, skipped, and failed counts per selector:
+
+```bash
+ONLY_TESTING='IntentTests/DemoFixturesTests' scripts/xcodebuild.sh test-ios-unit
+```
+
+A selector whose tests were all skipped at runtime exits 0 with a notice. Inspect
+the per-selector summary and confirm a nonzero executed count before claiming that
+a green focused run executed the intended tests.
+
+For repeated focused runs, build once and reuse that build:
+
+```bash
+scripts/xcodebuild.sh build-for-testing
+ONLY_TESTING='IntentTests/DemoFixturesTests' scripts/xcodebuild.sh test-without-building-unit
+```
+
+Use the non-unit variants when selecting `IntentUITests`. `SIM_UDID` selects a
+specific simulator; otherwise the wrapper chooses one and serializes test runs on
+that device.
+
+The `build-visionos` command always uses the generic visionOS Simulator destination,
+never `-sdk`: an `-sdk xros...` invocation can silently fall back to `iphoneos` when
+the visionOS platform is absent and produce a bogus successful build.
 
 Tests run **serially** by default — the shared `Intent` scheme pins `parallelizable = "NO"`, so no extra flags are needed. Parallel simulator clone runners mass-flake the suite locally (see [intent-hq/intent#759](https://github.com/intent-hq/intent/issues/759)).
 
@@ -131,8 +191,12 @@ Tests run **serially** by default — the shared `Intent` scheme pins `paralleli
 
 ## Related Repositories
 
-- [intent-hq/intent](https://github.com/intent-hq/intent) — engineering monorepo that mounts this repo at `packages/ios`, holds the cross-cutting docs and tooling, and hosts the central [issue tracker](https://github.com/intent-hq/intent/issues).
+- [intent-hq/intent](https://github.com/intent-hq/intent) — engineering monorepo that mounts this repo at `packages/ios` and holds cross-cutting docs and tooling.
 - [intent-hq/intentd](https://github.com/intent-hq/intentd) — Rust backend daemon this app connects to.
+
+Report bugs and limitations in the iOS app to the
+[intent-hq/ios issue tracker](https://github.com/intent-hq/ios/issues), not the
+monorepo issue tracker.
 
 ## License
 

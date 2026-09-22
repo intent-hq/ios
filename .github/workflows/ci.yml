@@ -77,6 +77,11 @@ jobs:
       - name: check-swiftlint-inputs.sh self-tests
         run: scripts/test-check-swiftlint-inputs.sh
 
+      # Exercises source-input generation and validation on Linux; the script's
+      # sandbox-exec cases remain conditional and run only on macOS.
+      - name: generate-test-inputs.sh self-tests
+        run: scripts/test-generate-test-inputs.sh
+
   swiftlint:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
