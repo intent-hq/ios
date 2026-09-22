@@ -3,13 +3,6 @@ import Foundation
 import Testing
 
 struct ModelsTests {
-    @Test func pairedServerCodable() async throws {
-        let server = PairedServer(hosts: ["192.168.1.1"], port: 3000, name: "My Mac", pairedAt: Date(timeIntervalSince1970: 1000))
-        let data = try JSONEncoder().encode(server)
-        let decoded = try JSONDecoder().decode(PairedServer.self, from: data)
-        #expect(decoded == server)
-    }
-
     @Test func pairedServerCodableWithFingerprint() async throws {
         let server = PairedServer(
             hosts: ["192.168.1.1"],

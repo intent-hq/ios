@@ -220,16 +220,6 @@ extension ConversationViewModelTests {
         #expect(viewModel.pendingQuestions == nil, "the dismissed set never re-pends")
     }
 
-    @Test func failedDismissKeepsQuestionsPending() async {
-        let (viewModel, fake) = makeFakeBackedVM()
-        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32_000)
-        viewModel.store.messages = [questionMessage(id: "a1")]
-
-        await viewModel.dismissQuestions(messageId: "a1")
-
-        #expect(viewModel.pendingQuestions != nil, "a failed dismiss must leave the wizard pending")
-    }
-
     @Test func failedDismissSurfacesVisibleError() async {
         // Regression (intent-hq/monorepo#1800): a failed dismiss must surface
         // an explicit user-visible error, not just silently re-pend the

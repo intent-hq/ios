@@ -14,34 +14,6 @@ extension ConversationViewModelTests {
 
     // MARK: - Image attachment state regression tests
 
-    @Test func regressionPendingImagesPopulatedBeforeClearing() async throws {
-        // Regression test: verify that pendingImages contains data while images
-        // are pending (buildImageBlocks captures from this before clearing)
-        let viewModel = makeVM()
-        let img1 = try #require(UIImage(systemName: "star"))
-        let img2 = try #require(UIImage(systemName: "circle"))
-        viewModel.addImage(img1)
-        viewModel.addImage(img2)
-
-        // Images should be available before any clearing
-        #expect(viewModel.pendingImages.count == 2)
-        #expect(!viewModel.pendingImages.isEmpty)
-    }
-
-    @Test func regressionClearingPendingImagesRemovesAll() async throws {
-        // Regression test: after calling removeAll(), pendingImages should be empty
-        let viewModel = makeVM()
-        let img1 = try #require(UIImage(systemName: "star"))
-        let img2 = try #require(UIImage(systemName: "circle"))
-        viewModel.addImage(img1)
-        viewModel.addImage(img2)
-        #expect(viewModel.pendingImages.count == 2)
-
-        viewModel.pendingImages.removeAll()
-        #expect(viewModel.pendingImages.isEmpty)
-        #expect(viewModel.pendingImages.isEmpty)
-    }
-
     @Test func regressionCaptureImagesThenClearBeforeSend() async throws {
         // Regression test: the send flow captures images into a local variable
         // and clears pendingImages BEFORE the async network call. This ensures

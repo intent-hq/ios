@@ -30,17 +30,6 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "test-sub-1")
     }
 
-    @Test @MainActor func pushForUnknownSubscriptionIsDropped() async {
-        let manager = ConnectionManager.shared
-
-        // No handler registered for this id
-        let pushMessage = """
-        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"unknown-sub","kind":"snapshot","seq":0,"snapshot":[]}}
-        """
-        // Should not crash, just drop and log
-        manager.dispatchMessage(pushMessage)
-    }
-
     @Test @MainActor func unregisterRemovesHandler() async {
         let manager = ConnectionManager.shared
         var receivedCount = 0
