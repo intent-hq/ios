@@ -135,12 +135,12 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
     /// off the connect critical path; the log lines below measure it.
     nonisolated final class DialHandle: @unchecked Sendable {
         private let lock = NSLock()
-        private var client: TailcatkitClient?
+        private var client: (any TunnelClientHandle)?
         private var cancelledAtLocked: CFAbsoluteTime?
 
         /// Registers the dialing client; returns false when the dial was
         /// already cancelled (the caller must close it and bail).
-        func register(_ client: TailcatkitClient) -> Bool {
+        func register(_ client: any TunnelClientHandle) -> Bool {
             lock.lock()
             defer { lock.unlock() }
             if cancelledAtLocked != nil { return false }
