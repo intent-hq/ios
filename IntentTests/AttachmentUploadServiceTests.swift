@@ -69,30 +69,60 @@ struct AttachmentUploadServiceTests {
         #expect(stoppedCount.withLock { $0 } == 3)
     }
 
-    @Test func attachmentPipelineFailureRetainsFileAndScopeUntilClear() async {
+    @Test func attachmentPipelineFailureRetainsFileAndScopeUntilClear() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("attachment-pipeline-failure-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer {
+            #expect(throws: Never.self) {
+                try FileManager.default.removeItem(at: directory)
+            }
+        }
+        let payload = Data("pending attachment".utf8)
+        let file = directory.appendingPathComponent("pending.txt")
+        try payload.write(to: file)
+
         let fake = FakeConnectionManager()
-        fake.errorMap["file.placeAttachment"] = NSError(domain: "test", code: -1)
-        let stoppedCount = Mutex(0)
+        let uploadError = NSError(domain: "AttachmentPipelineUploadFailure", code: -1)
+        fake.errorMap["file.placeAttachment"] = uploadError
+        let startedURLs = Mutex<[URL]>([])
+        let stoppedURLs = Mutex<[URL]>([])
         let pipeline = ConversationAttachmentPipeline(
             uploadService: AttachmentUploadService(connection: fake),
-            startSecurityScopedAccess: { _ in true },
-            stopSecurityScopedAccess: { _ in stoppedCount.withLock { $0 += 1 } }
+            startSecurityScopedAccess: { url in
+                startedURLs.withLock { $0.append(url) }
+                return true
+            },
+            stopSecurityScopedAccess: { url in stoppedURLs.withLock { $0.append(url) } }
         )
-        let file = URL(fileURLWithPath: "/tmp/pending.txt")
+        defer { pipeline.clearPendingFiles() }
         pipeline.addFiles([file])
+        let pendingFile = try #require(pipeline.pendingFiles.first)
+        #expect(pendingFile.url == file)
+        #expect(startedURLs.withLock { $0 } == [file])
 
-        await #expect(throws: (any Error).self) {
-            _ = try await pipeline.buildFileBlocks(
-                from: pipeline.pendingFiles,
-                workspaceId: "ws-1"
-            )
+        do {
+            _ = try await pipeline.buildFileBlocks(from: pipeline.pendingFiles, workspaceId: "ws-1")
+            Issue.record("Expected the configured attachment upload failure")
+        } catch let ConversationAttachmentPipeline.FilePlacementError.placementFailed(name, underlying) {
+            #expect(name == "pending.txt")
+            #expect(underlying as NSError == uploadError)
+        } catch {
+            Issue.record("Expected a placement failure wrapping the upload error, received \(error)")
         }
 
-        #expect(pipeline.pendingFiles.count == 1)
+        #expect(fake.requestLog.map(\.method) == ["file.placeAttachment"])
+        let params = try #require(fake.paramsForMethod("file.placeAttachment").first)
+        #expect(params["workspaceId"] as? String == "ws-1")
+        #expect(params["fileName"] as? String == "pending.txt")
+        #expect(params["data"] as? String == payload.base64EncodedString())
+        #expect(pipeline.pendingFiles == [pendingFile])
+        #expect(try Data(contentsOf: file) == payload)
         #expect(pipeline.fileUploadProgress.isEmpty)
-        #expect(stoppedCount.withLock { $0 } == 0)
+        #expect(stoppedURLs.withLock { $0 }.isEmpty)
         pipeline.clearPendingFiles()
-        #expect(stoppedCount.withLock { $0 } == 1)
+        #expect(pipeline.pendingFiles.isEmpty)
+        #expect(stoppedURLs.withLock { $0 } == [file])
     }
 
     // MARK: - Single-shot path

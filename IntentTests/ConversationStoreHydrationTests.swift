@@ -22,6 +22,17 @@ extension ConversationStoreIntegrationTests {
         ]
     }
 
+    private func hydrationResponse(output: String) -> [String: Any] {
+        [
+            "block": [
+                "type": "tool_result",
+                "id": "b-1",
+                "toolUseId": "tc-1",
+                "output": output
+            ] as [String: Any]
+        ]
+    }
+
     private func seedLiveConversation(
         _ store: ConversationStore,
         through fake: FakeConnectionManager,
@@ -96,43 +107,65 @@ extension ConversationStoreIntegrationTests {
         #expect(store.hydratingBlockKeys.isEmpty)
     }
 
-    @Test func hydrateBlockIsSingleFlightAndCached() async {
+    @Test func hydrateBlockIsSingleFlightAndCached() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
         fake.stubChatSnapshot(messages: [
-            [
-                "id": "msg-1",
-                "role": "assistant",
-                "timestamp": "2024-01-01T00:00:00Z",
-                "contentBlocks": [
-                    [
-                        "type": "tool_result",
-                        "id": "b-1",
-                        "toolUseId": "tc-1",
-                        "output": "preview…",
-                        "outputTruncated": true
-                    ]
-                ]
-            ]
-        ])
-        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
-
-        fake.responseMap["agent.getMessageBlock"] = [
-            "block": [
+            slimMessage(containing: [
                 "type": "tool_result",
                 "id": "b-1",
                 "toolUseId": "tc-1",
-                "output": "full"
-            ] as [String: Any]
-        ]
-        // Two concurrent + one repeat hydration: only ONE wire fetch.
-        async let first: () = store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
-        async let second: () = store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
-        _ = await (first, second)
+                "output": "preview…",
+                "outputTruncated": true
+            ])
+        ])
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
+
+        // The first fetch stays suspended until the overlapping caller has
+        // returned. Completed caching cannot mask broken in-flight coalescing.
+        fake.pendingMethods.insert("agent.getMessageBlock")
+        var firstFinished = false
+        let first = Task {
+            await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+            firstFinished = true
+        }
+        defer { first.cancel() }
+        try await fake.waitForPendingRequests("agent.getMessageBlock")
+
+        var secondFinished = false
+        let second = Task {
+            await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+            secondFinished = true
+        }
+        defer { second.cancel() }
+        try await waitUntil("the overlapping hydration to return or issue a duplicate RPC") {
+            secondFinished || fake.pendingRequestCount("agent.getMessageBlock") > 1
+        }
+        #expect(fake.paramsForMethod("agent.getMessageBlock").count == 1)
+        try #require(secondFinished, "an in-flight duplicate must return without another fetch")
+        #expect(!firstFinished)
+        #expect(fake.pendingRequestCount("agent.getMessageBlock") == 1)
+        #expect(store.hydratingBlockIds(forMessage: "msg-1") == ["b-1"])
+        #expect(!store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
+        #expect(store.messages.first?.contentBlocks.first?.outputTruncation == .truncated)
+
+        fake.resolvePending("agent.getMessageBlock", with: hydrationResponse(output: "full"))
+        try await waitUntil("both hydration callers to finish") { firstFinished && secondFinished }
+        _ = await (first.value, second.value)
+        #expect((store.messages.first?.contentBlocks.first?.output?.value as? String) == "full")
+        #expect(store.messages.first?.contentBlocks.first?.outputTruncation == .unreported)
+        #expect(store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
+        #expect(store.hydratingBlockKeys.isEmpty)
+
+        // A later request must use completed cache, not fetch a different body.
+        fake.pendingMethods.remove("agent.getMessageBlock")
+        fake.responseMap["agent.getMessageBlock"] = hydrationResponse(output: "unexpected refetch")
         await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
 
         #expect(fake.paramsForMethod("agent.getMessageBlock").count == 1)
+        #expect((store.messages.first?.contentBlocks.first?.output?.value as? String) == "full")
+        #expect(store.hydratingBlockKeys.isEmpty)
     }
 
     @Test func hydratedBlockSurvivesSlimResnapshot() async {
