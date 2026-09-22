@@ -82,6 +82,8 @@ import SwiftUI
     var connectionObserver: AnyCancellable?
     var isSubscribing = false
     @ObservationIgnored var eventHandlerId: UUID?
+    @ObservationIgnored var eventRegistrationGeneration = 0
+    @ObservationIgnored var streamingEventsActive = false
     @ObservationIgnored var sessionMetadataGeneration = 0
     @ObservationIgnored var pendingQuestionRecoveryTask: Task<Void, Never>?
     @ObservationIgnored var markedQuestionRetryDelays: [Duration] =
@@ -113,6 +115,9 @@ import SwiftUI
     isolated deinit {
         if let handlerId = eventHandlerId {
             connectionManager.removeEventHandler(id: handlerId)
+        }
+        if let subscriptionId {
+            Self.releaseStreamingSubscription(subscriptionId, via: connectionManager)
         }
     }
 }

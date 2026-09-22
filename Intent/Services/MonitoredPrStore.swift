@@ -59,6 +59,8 @@ enum PrMonitorFlushMode {
     private var agentId: String?
     @ObservationIgnored private var subscriptionId: String?
     @ObservationIgnored private var eventHandlerId: UUID?
+    @ObservationIgnored private var registrationGeneration = 0
+    @ObservationIgnored private var subscriptionActive = false
     private var cancellables = Set<AnyCancellable>()
     private let connectionManager: ConnectionManagerRouting
 
@@ -97,21 +99,15 @@ enum PrMonitorFlushMode {
             connectionManager.removeEventHandler(id: handlerId)
         }
         if let subscriptionId {
-            let connectionManager = self.connectionManager
-            Task { @MainActor in
-                _ = try? await connectionManager.request("events.unsubscribe", params: [
-                    "subscriptionId": subscriptionId
-                ])
-            }
+            Self.release(subscriptionId, via: connectionManager)
         }
     }
 
     private func onConnected() async {
         // Subscriptions are per-connection (§6.1) — replay and re-seed
+        guard subscriptionActive, let wsId = workspaceId, let agentId else { return }
         subscriptionId = nil
-        if let wsId = workspaceId, let agentId {
-            await subscribe(workspaceId: wsId, agentId: agentId)
-        }
+        await subscribe(workspaceId: wsId, agentId: agentId)
     }
 
     // MARK: - Public API
@@ -123,28 +119,51 @@ enum PrMonitorFlushMode {
     /// mounted same-workspace conversations don't supersede each other's
     /// subscription.
     func subscribe(workspaceId: String, agentId: String) async {
+        guard !Task.isCancelled else { return }
+        registrationGeneration &+= 1
+        let registration = registrationGeneration
+        subscriptionActive = true
         self.workspaceId = workspaceId
         self.agentId = agentId
 
-        if eventHandlerId == nil {
-            eventHandlerId = connectionManager.onEvent { [weak self] method, params in
-                Task { @MainActor in
-                    self?.handleEvent(method, params: params)
-                }
+        if let handlerId = eventHandlerId {
+            connectionManager.removeEventHandler(id: handlerId)
+        }
+        let previousSubscriptionId = subscriptionId
+        subscriptionId = nil
+        if let previousSubscriptionId {
+            await release(previousSubscriptionId)
+        }
+        guard owns(registration), !Task.isCancelled else { return }
+
+        eventHandlerId = connectionManager.onEvent { [weak self] method, params in
+            Task { @MainActor [weak self] in
+                guard let self, owns(registration) else { return }
+                handleEvent(method, params: params)
             }
         }
 
+        let outcome: Result<String?, Error>
         do {
             let result = try await connectionManager.request("events.subscribe", params: [
                 "eventTypes": ["prMonitor:*"],
                 "workspaceId": workspaceId,
                 "replaceGroup": "ios-pr-monitors-\(workspaceId)-\(agentId)"
             ])
-            if let dict = result as? [String: Any],
-               let subId = dict["subscriptionId"] as? String {
-                subscriptionId = subId
-            }
+            outcome = .success((result as? [String: Any])?["subscriptionId"] as? String)
         } catch {
+            outcome = .failure(error)
+        }
+        guard owns(registration), !Task.isCancelled else {
+            if case .success(let orphanedId?) = outcome {
+                Self.release(orphanedId, via: connectionManager)
+            }
+            return
+        }
+        switch outcome {
+        case .success(let subscriptionId):
+            self.subscriptionId = subscriptionId
+        case .failure(let error):
             AppLog.prs.error("[MonitoredPrStore] events.subscribe (prMonitor:*) failed: \(error)")
         }
         // Without a subscription still serve the one-shot snapshot
@@ -152,24 +171,59 @@ enum PrMonitorFlushMode {
     }
 
     func unsubscribe() async {
+        if let subscriptionId = detachSubscription() {
+            await release(subscriptionId)
+        }
+    }
+
+    /// Synchronously invalidates ownership for a disappearing screen, then
+    /// releases the captured remote id without retaining mutable store state.
+    func deactivate() {
+        if let subscriptionId = detachSubscription() {
+            Self.release(subscriptionId, via: connectionManager)
+        }
+    }
+
+    private func detachSubscription() -> String? {
+        registrationGeneration &+= 1
+        subscriptionActive = false
         if let handlerId = eventHandlerId {
             connectionManager.removeEventHandler(id: handlerId)
             eventHandlerId = nil
         }
-        if let subId = subscriptionId {
-            subscriptionId = nil
+        let detachedSubscriptionId = subscriptionId
+        subscriptionId = nil
+        workspaceId = nil
+        agentId = nil
+        generation += 1
+        monitors = []
+        return detachedSubscriptionId
+    }
+
+    private func owns(_ registration: Int) -> Bool {
+        subscriptionActive && registration == registrationGeneration
+    }
+
+    private func release(_ subscriptionId: String) async {
+        do {
+            _ = try await connectionManager.request("events.unsubscribe", params: [
+                "subscriptionId": subscriptionId
+            ])
+        } catch {
+            AppLog.prs.error("[MonitoredPrStore] events.unsubscribe failed: \(error)")
+        }
+    }
+
+    private static func release(_ subscriptionId: String, via connectionManager: ConnectionManagerRouting) {
+        Task { @MainActor in
             do {
                 _ = try await connectionManager.request("events.unsubscribe", params: [
-                    "subscriptionId": subId
+                    "subscriptionId": subscriptionId
                 ])
             } catch {
                 AppLog.prs.error("[MonitoredPrStore] events.unsubscribe failed: \(error)")
             }
         }
-        workspaceId = nil
-        agentId = nil
-        generation += 1
-        monitors = []
     }
 
     /// `prMonitor.flush` (§5.42) — delivers a monitor's pending consolidated
@@ -286,6 +340,7 @@ enum PrMonitorFlushMode {
     // MARK: - Event handling
 
     func handleEvent(_: String, params: Any) {
+        guard subscriptionActive else { return }
         guard let dict = params as? [String: Any] else { return }
 
         // Events from the event bridge are wrapped:

@@ -24,19 +24,21 @@ extension ConversationStore {
     /// recovery: its seq-0 snapshot replaces whatever the outage left behind.
     /// The `agent.get` streaming-state read runs alongside and yields to the
     /// snapshot when the channel lands first.
-    private func onReconnected() async {
+    func onReconnected() async {
+        guard let agentId else { return }
+        let activeEventGeneration = eventRegistrationGeneration
+        guard ownsStreamingRegistration(activeEventGeneration) else { return }
         liveTranscript.prepareForReconnect()
 
-        guard let agentId else { return }
         let liveStateVersion = liveTranscript.liveStateVersion
         async let chat: () = subscribeLiveChat(agentId: agentId)
         async let queue: () = fetchQueue(agentId: agentId)
         async let streaming: () = fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
         _ = await (chat, queue, streaming)
-        if let workspaceId {
-            await subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
-            await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
-        }
+        guard ownsStreamingRegistration(activeEventGeneration), let workspaceId else { return }
+        guard let generation = await subscribeToStreaming(agentId: agentId, workspaceId: workspaceId),
+              ownsStreamingRegistration(generation) else { return }
+        await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
     }
 
     /// Fetch the agent's current state via `agent.get` and restore `isStreaming`.

@@ -389,6 +389,12 @@ extension ConversationStoreLiveStateTests {
     @Test func reconnectDoesNotReleaseTheOutagesRegistration() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "events-a"]
+        fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["agent.get"] = ["agent": ["isStreaming": false]]
+        fake.responseMap["agent.getQueue"] = ["queue": []]
+        fake.responseMap["agent.getSubscriptions"] = ["subscriptions": [], "delegationGroups": []]
+        await store.subscribeToStreaming(agentId: "agent-a", workspaceId: "ws-1")
         fake.stubChatSnapshot(subscriptionId: "sub-a", messages: [agentARow])
         await store.subscribeLiveChat(agentId: "agent-a")
         #expect(store.messages.map(\.id) == ["msg-a1"])

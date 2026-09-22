@@ -188,13 +188,12 @@ extension ConversationStore {
     // MARK: - Cleanup
 
     func reset() {
+        deactivateStreaming()
         liveTranscript.reset()
         commands.reset()
         watchedAgentCoordinator.reset()
         bindAgent(nil)
         workspaceId = nil
-        subscriptionId = nil
-        isSubscribing = false
         lastFailedSend = nil
         agentNotFound = false
         clearPendingQuestionRecovery()

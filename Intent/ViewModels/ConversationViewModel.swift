@@ -89,6 +89,8 @@ import SwiftUI
     @ObservationIgnored var isAppActive = true
     @ObservationIgnored var previousIsStreaming = false
     @ObservationIgnored var markSeenDebounceTask: Task<Void, Never>?
+    @ObservationIgnored var liveStoreActivationGeneration = 0
+    @ObservationIgnored var activeLiveStoreActivation: Int?
 
     init(
         agentId: String,

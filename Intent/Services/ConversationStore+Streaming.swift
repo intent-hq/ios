@@ -4,34 +4,71 @@ import SwiftUI
 extension ConversationStore {
     // MARK: - Streaming subscription
 
-    func subscribeToStreaming(agentId: String, workspaceId: String) async {
-        guard !isSubscribing else { return }
+    @discardableResult
+    func subscribeToStreaming(agentId: String, workspaceId: String) async -> Int? {
+        guard !Task.isCancelled, !isSubscribing else { return nil }
+        eventRegistrationGeneration &+= 1
+        let generation = eventRegistrationGeneration
+        streamingEventsActive = true
         isSubscribing = true
-        defer { isSubscribing = false }
+        defer {
+            if generation == eventRegistrationGeneration {
+                isSubscribing = false
+            }
+        }
 
         bindAgent(agentId)
         self.workspaceId = workspaceId
 
-        await unsubscribePrevious()
-
-        if let handlerId = eventHandlerId {
-            connectionManager.removeEventHandler(id: handlerId)
+        let previousSubscriptionId = detachStreamingRegistration()
+        if let previousSubscriptionId {
+            await releaseStreamingSubscription(previousSubscriptionId)
         }
+        guard ownsStreamingRegistration(generation), !Task.isCancelled else { return nil }
 
         eventHandlerId = connectionManager.onEvent { [weak self] method, params in
             Task { @MainActor [weak self] in
-                self?.handleStreamEvent(method, params: params)
+                guard let self, ownsStreamingRegistration(generation) else { return }
+                handleStreamEvent(method, params: params)
             }
         }
 
+        let outcome: Result<String?, Error>
         do {
-            subscriptionId = try await commands.subscribeToEvents(
+            outcome = .success(try await commands.subscribeToEvents(
                 agentId: agentId,
                 workspaceId: workspaceId
-            )
-            AppLog.conversation.info("[ConversationStore] Subscribed to streaming events")
+            ))
         } catch {
+            outcome = .failure(error)
+        }
+
+        guard ownsStreamingRegistration(generation), !Task.isCancelled else {
+            if case .success(let orphanedId?) = outcome {
+                Self.releaseStreamingSubscription(orphanedId, via: connectionManager)
+            }
+            return nil
+        }
+
+        switch outcome {
+        case .success(let subscriptionId):
+            self.subscriptionId = subscriptionId
+            AppLog.conversation.info("[ConversationStore] Subscribed to streaming events")
+        case .failure(let error):
             AppLog.conversation.error("[ConversationStore] Failed to subscribe: \(error)")
+        }
+        return generation
+    }
+
+    /// Invalidates this screen activation before remote cleanup begins. A late
+    /// acknowledgement is released by its generation check instead of being
+    /// installed into a later activation.
+    func deactivateStreaming() {
+        eventRegistrationGeneration &+= 1
+        streamingEventsActive = false
+        isSubscribing = false
+        if let subscriptionId = detachStreamingRegistration() {
+            Self.releaseStreamingSubscription(subscriptionId, via: connectionManager)
         }
     }
 
@@ -61,14 +98,43 @@ extension ConversationStore {
         liveTranscript.handlePush(push)
     }
 
-    private func unsubscribePrevious() async {
-        guard let subId = subscriptionId else { return }
+    private func detachStreamingRegistration() -> String? {
+        if let handlerId = eventHandlerId {
+            connectionManager.removeEventHandler(id: handlerId)
+            eventHandlerId = nil
+        }
+        let subId = subscriptionId
         subscriptionId = nil
+        return subId
+    }
+
+    func ownsStreamingRegistration(_ generation: Int) -> Bool {
+        streamingEventsActive && generation == eventRegistrationGeneration
+    }
+
+    private func releaseStreamingSubscription(_ subscriptionId: String) async {
         do {
-            try await commands.unsubscribeEvents(subscriptionId: subId)
-            AppLog.conversation.debug("[ConversationStore] Unsubscribed previous subscription: \(subId)")
+            try await commands.unsubscribeEvents(subscriptionId: subscriptionId)
+            AppLog.conversation.debug("[ConversationStore] Unsubscribed streaming subscription: \(subscriptionId)")
         } catch {
             AppLog.conversation.error("[ConversationStore] Failed to unsubscribe: \(error)")
+        }
+    }
+
+    static func releaseStreamingSubscription(
+        _ subscriptionId: String,
+        via connectionManager: ConnectionManagerRouting
+    ) {
+        Task { @MainActor in
+            do {
+                _ = try await connectionManager.request("events.unsubscribe", params: [
+                    "subscriptionId": subscriptionId
+                ])
+            } catch {
+                AppLog.conversation.error(
+                    "[ConversationStore] Failed to release streaming subscription \(subscriptionId): \(error)"
+                )
+            }
         }
     }
 

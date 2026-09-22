@@ -5,7 +5,10 @@ extension ConversationViewModel {
     /// the load waits for it to apply (or its wait to time out), so the
     /// new-messages divider anchors against the served rows.
     func load() async {
+        guard !Task.isCancelled else { return }
+        let activation = activateLiveStores()
         await store.subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
+        guard ownsLiveStoreActivation(activation), !Task.isCancelled else { return }
 
         async let conversation: () = loadTranscript()
         async let queue: () = store.fetchQueue(agentId: agentId)
@@ -16,8 +19,19 @@ extension ConversationViewModel {
         async let monitors: () = monitoredPrStore.subscribe(workspaceId: workspaceId, agentId: agentId)
 
         _ = await (conversation, streamingState)
+        guard ownsLiveStoreActivation(activation), !Task.isCancelled else { return }
         latchNewMessagesDividerAnchorIfNeeded()
         _ = await (queue, model, subscriptions, hooks, monitors)
+    }
+
+    private func activateLiveStores() -> Int {
+        liveStoreActivationGeneration &+= 1
+        activeLiveStoreActivation = liveStoreActivationGeneration
+        return liveStoreActivationGeneration
+    }
+
+    private func ownsLiveStoreActivation(_ activation: Int) -> Bool {
+        activeLiveStoreActivation == activation
     }
 
     private func loadTranscript() async {
@@ -60,6 +74,7 @@ extension ConversationViewModel {
 
     func conversationDisappeared() {
         isOnScreen = false
+        teardownLiveStores()
         fireMarkSeenNow()
     }
 

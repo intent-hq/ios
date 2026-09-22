@@ -50,6 +50,8 @@ enum DemoFixtures {
     nonisolated private static let statusImageToggleCornerRadius: CGFloat = 12
     private static let bytesPerKilobyte = 1_024.0
     private static let secondsPerMinute: TimeInterval = 60
+    @TaskLocal static var transcriptTimestampAnchor = Date()
+    @TaskLocal private static var snapshotTimestampAnchor: Date?
     private static let defaultHookListDelaySeconds = 4
     private static let defaultBlockHydrationDelaySeconds = 4
     private static let triggerFilePollMilliseconds = 100
@@ -367,20 +369,26 @@ enum DemoFixtures {
 
     /// Fixture response for a JSON-RPC method. Unknown methods return an
     /// empty dictionary, which every call site parses as "no data" safely.
-    static func response(for method: String, params: [String: Any]) -> Any {
-        switch method {
-        case "workspace.list":
-            return ["workspaces": workspaces]
-        case "note.list":
-            return ["notes": notes]
-        case "note.get":
-            let noteId = params["noteId"] as? String
-            let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]
-            return ["note": note]
-        case "note.readAsset":
-            return assetResponse(params: params)
-        default:
-            return agentAndTaskResponse(for: method, params: params)
+    static func response(
+        for method: String,
+        params: [String: Any],
+        snapshotAnchor: Date = Date()
+    ) -> Any {
+        $snapshotTimestampAnchor.withValue(snapshotAnchor) {
+            switch method {
+            case "workspace.list":
+                return ["workspaces": workspaces]
+            case "note.list":
+                return ["notes": notes]
+            case "note.get":
+                let noteId = params["noteId"] as? String
+                let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]
+                return ["note": note]
+            case "note.readAsset":
+                return assetResponse(params: params)
+            default:
+                return agentAndTaskResponse(for: method, params: params)
+            }
         }
     }
 
@@ -437,11 +445,21 @@ enum DemoFixtures {
         }
     }
 
-    /// ISO 8601 timestamp relative to now, so relative-time labels
-    /// ("12m ago") always look fresh in screenshots.
+    /// Non-transcript timestamp relative to one response's snapshot time, so
+    /// relative-time labels and future events refresh together on each request.
     static func iso(minutesAgo: Double) -> String {
+        iso(minutesAgo: minutesAgo, relativeTo: snapshotTimestampAnchor ?? Date())
+    }
+
+    /// Transcript timestamp relative to the process-stable message anchor, so
+    /// independently rebuilt snapshots preserve immutable message identity.
+    static func transcriptIso(minutesAgo: Double) -> String {
+        iso(minutesAgo: minutesAgo, relativeTo: transcriptTimestampAnchor)
+    }
+
+    static func iso(minutesAgo: Double, relativeTo anchor: Date) -> String {
         ISO8601DateFormatter().string(
-            from: Date(timeIntervalSinceNow: -minutesAgo * secondsPerMinute)
+            from: anchor.addingTimeInterval(-minutesAgo * secondsPerMinute)
         )
     }
 }
