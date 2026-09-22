@@ -15,6 +15,9 @@ import Observation
 /// survive a connection flap.
 @MainActor
 @Observable class CreationOptionsStore {
+    /// Host enablement applies only to workspace creation, not the shared
+    /// agent picker or conversation model menus.
+    let workspaceProviderOptions: WorkspaceProviderOptions
     /// Unfiltered specialist catalog; pickers apply `modalPickable`.
     var specialists: [SpecialistInfo] = []
     var providers: [ProviderInfo] = []
@@ -52,11 +55,15 @@ import Observation
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
+        workspaceProviderOptions = WorkspaceProviderOptions(connectionManager: connectionManager)
         connectionObserver = connectionManager.connectionStatePublisher
+            .dropFirst() // The initial state is already represented by the cold cache.
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {
                     Task { await self?.onConnected() }
+                } else {
+                    self?.workspaceProviderOptions.invalidate()
                 }
             }
     }
@@ -85,6 +92,7 @@ import Observation
     /// their completions are dropped (see `loadGeneration`) and they are no
     /// longer joined, so the next call starts a fresh flight.
     func invalidate() {
+        workspaceProviderOptions.invalidate()
         loadGeneration &+= 1
         loadTask = nil
         modelLoadTasks = [:]
@@ -131,12 +139,14 @@ import Observation
     /// no load ever requested there is nothing to re-warm until the picker
     /// asks; a models-only cache is cleared but reloaded by its consumer.
     private func onConnected() async {
-        guard hasAttemptedLoad || hasAttemptedModelLoad else { return }
+        guard hasAttemptedLoad || hasAttemptedModelLoad || workspaceProviderOptions.hasAttemptedLoad else { return }
         let reloadOptions = hasAttemptedLoad
         invalidate()
+        async let workspaceReload: Void = workspaceProviderOptions.reloadIfNeeded()
         if reloadOptions {
             await loadIfNeeded()
         }
+        await workspaceReload
     }
 
     /// `specialist.list` (PROTOCOL §5.11). Returns false on transport
