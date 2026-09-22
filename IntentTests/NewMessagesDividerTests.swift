@@ -413,24 +413,24 @@ struct ConversationTranscriptScrollPolicyTests {
 
 @Suite @MainActor
 struct TranscriptRowHeightCacheTests {
-    private let settleWait = Duration.milliseconds(20)
-
-    @Test func cachesOnlyTheLatestSettledHeight() async {
+    @Test func cachesOnlyTheLatestSettledHeight() async throws {
         let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
         let message = assistantMessage(text: "A completed response")
 
         cache.record(height: 8, for: message, hydratingBlockIds: [])
         cache.record(height: 291, for: message, hydratingBlockIds: [])
-        try? await Task.sleep(for: settleWait)
-
-        #expect(cache.height(for: message, hydratingBlockIds: []) == 291)
+        try await waitUntil("latest height settles") {
+            cache.height(for: message, hydratingBlockIds: []) == 291
+        }
     }
 
-    @Test func contentHydrationAndWidthChangesInvalidateTheHeight() async {
+    @Test func contentHydrationAndWidthChangesInvalidateTheHeight() async throws {
         let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
         let message = assistantMessage(text: "Original")
         cache.record(height: 100, for: message, hydratingBlockIds: [])
-        try? await Task.sleep(for: settleWait)
+        try await waitUntil("original height settles") {
+            cache.height(for: message, hydratingBlockIds: []) == 100
+        }
 
         #expect(cache.height(for: assistantMessage(text: "Updated"), hydratingBlockIds: []) == nil)
         #expect(cache.height(for: message, hydratingBlockIds: ["block"]) == nil)
@@ -442,34 +442,41 @@ struct TranscriptRowHeightCacheTests {
         #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
     }
 
-    @Test func streamingRowsAreNeverCached() async {
+    @Test func streamingRowsAreNeverCached() {
         let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
         let message = assistantMessage(text: "Growing", streamingState: .streaming)
         cache.record(height: 100, for: message, hydratingBlockIds: [])
-        try? await Task.sleep(for: settleWait)
 
         #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
     }
 
-    @Test func matchingSettledHeightCancelsObsoletePendingMeasurement() async {
+    @Test func matchingSettledHeightCancelsObsoletePendingMeasurement() async throws {
         let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
         let message = assistantMessage(text: "Settled")
         cache.record(height: 100, for: message, hydratingBlockIds: [])
-        try? await Task.sleep(for: settleWait)
+        try await waitUntil("initial height settles") {
+            cache.height(for: message, hydratingBlockIds: []) == 100
+        }
 
         cache.record(height: 200, for: message, hydratingBlockIds: [])
         cache.record(height: 100, for: message, hydratingBlockIds: [])
-        try? await Task.sleep(for: settleWait)
+        let fence = assistantMessage(text: "Fence", id: "fence")
+        cache.record(height: 1, for: fence, hydratingBlockIds: [])
+        try await waitUntil("stale measurement window passes") {
+            cache.height(for: fence, hydratingBlockIds: []) == 1
+        }
 
         #expect(cache.height(for: message, hydratingBlockIds: []) == 100)
     }
 
-    @Test func cumulativeWidthChangesInvalidateCommittedHeight() async {
+    @Test func cumulativeWidthChangesInvalidateCommittedHeight() async throws {
         let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
         let message = assistantMessage(text: "Wrapping")
         cache.updateLayoutWidth(320)
         cache.record(height: 100, for: message, hydratingBlockIds: [])
-        try? await Task.sleep(for: settleWait)
+        try await waitUntil("committed height settles") {
+            cache.height(for: message, hydratingBlockIds: []) == 100
+        }
 
         cache.updateLayoutWidth(320.4)
         #expect(cache.height(for: message, hydratingBlockIds: []) == 100)
@@ -478,7 +485,7 @@ struct TranscriptRowHeightCacheTests {
         #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
     }
 
-    @Test func cumulativeWidthChangesCancelPendingHeight() async {
+    @Test func cumulativeWidthChangesCancelPendingHeight() async throws {
         let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(50))
         let message = assistantMessage(text: "Pending wrapping")
         cache.updateLayoutWidth(320)
@@ -486,17 +493,96 @@ struct TranscriptRowHeightCacheTests {
 
         cache.updateLayoutWidth(320.4)
         cache.updateLayoutWidth(320.8)
-        try? await Task.sleep(for: .milliseconds(80))
+        let fence = assistantMessage(text: "Fence", id: "fence")
+        cache.record(height: 1, for: fence, hydratingBlockIds: [])
+        try await waitUntil("stale width measurement window passes") {
+            cache.height(for: fence, hydratingBlockIds: []) == 1
+        }
 
         #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
     }
 
+    @Test func sameCountReplacementRetiresSettledAndPendingHeight() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(20))
+        let retired = assistantMessage(text: "Retired", id: "retired")
+        let survivor = assistantMessage(text: "Survivor", id: "survivor")
+        let replacement = assistantMessage(text: "Replacement", id: "replacement")
+        cache.record(height: 100, for: retired, hydratingBlockIds: [])
+        cache.record(height: 200, for: survivor, hydratingBlockIds: [])
+        try await waitUntil("original heights settle") {
+            cache.height(for: retired, hydratingBlockIds: []) == 100
+                && cache.height(for: survivor, hydratingBlockIds: []) == 200
+        }
+
+        cache.record(height: 300, for: retired, hydratingBlockIds: [])
+        cache.retainMessages(withIDs: [survivor.id, replacement.id])
+        cache.record(height: 400, for: replacement, hydratingBlockIds: [])
+        try await waitUntil("replacement height settles after stale work") {
+            cache.height(for: replacement, hydratingBlockIds: []) == 400
+        }
+
+        #expect(cache.height(for: retired, hydratingBlockIds: []) == nil)
+        #expect(cache.height(for: survivor, hydratingBlockIds: []) == 200)
+    }
+
+    @Test func pendingOnlyRetirementCannotRestoreHeight() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(20))
+        let retired = assistantMessage(text: "Retired", id: "retired")
+        let replacement = assistantMessage(text: "Replacement", id: "replacement")
+        cache.record(height: 100, for: retired, hydratingBlockIds: [])
+
+        cache.retainMessages(withIDs: [replacement.id])
+        cache.record(height: 200, for: replacement, hydratingBlockIds: [])
+        try await waitUntil("replacement settles after retired pending work") {
+            cache.height(for: replacement, hydratingBlockIds: []) == 200
+        }
+
+        #expect(cache.height(for: retired, hydratingBlockIds: []) == nil)
+    }
+
+    @Test func emptyTranscriptRetiresSettledAndPendingHeight() async throws {
+        let settleDelay = Duration.milliseconds(20)
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: settleDelay)
+        let message = assistantMessage(text: "Removed")
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        try await waitUntil("height settles before emptying") {
+            cache.height(for: message, hydratingBlockIds: []) == 100
+        }
+        cache.record(height: 200, for: message, hydratingBlockIds: [])
+
+        cache.retainMessages(withIDs: [])
+        let fenceCache = ConversationTranscriptRowHeightCache(settleDelay: settleDelay)
+        let fence = assistantMessage(text: "Fence", id: "fence")
+        fenceCache.record(height: 1, for: fence, hydratingBlockIds: [])
+        try await waitUntil("retired pending work drains") {
+            fenceCache.height(for: fence, hydratingBlockIds: []) == 1
+        }
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
+    }
+
+    private func waitUntil(
+        _ what: String,
+        timeout: TimeInterval = 2,
+        _ condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() >= deadline {
+                Issue.record("timed out waiting for \(what)")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
     private func assistantMessage(
         text: String,
-        streamingState: MessageStreamingState = .complete
+        streamingState: MessageStreamingState = .complete,
+        id: String = "message"
     ) -> ConversationMessage {
         ConversationMessage(
-            id: "message",
+            id: id,
             role: .assistant,
             contentBlocks: [ContentBlock(type: .text, text: text)],
             streamingState: streamingState

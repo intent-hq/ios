@@ -68,6 +68,15 @@ final class ConversationTranscriptRowHeightCache {
         entries.removeValue(forKey: messageId)
     }
 
+    func retainMessages(withIDs messageIDs: Set<String>) {
+        let retiredMessageIDs = Set(entries.keys)
+            .union(Set(pendingMeasurements.keys))
+            .subtracting(messageIDs)
+        for messageID in retiredMessageIDs {
+            invalidate(messageId: messageID)
+        }
+    }
+
     func invalidateAll() {
         pendingMeasurements.values.forEach { $0.task.cancel() }
         pendingMeasurements.removeAll()

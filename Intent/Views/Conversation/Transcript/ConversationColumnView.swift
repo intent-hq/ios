@@ -47,6 +47,9 @@ struct ConversationColumnView: View {
             questionSheetPresented = newId != nil
             #endif
         }
+        .onChange(of: viewModel.filteredMessages.map(\.id), initial: true) { _, messageIDs in
+            transcriptScrollState.rowHeightCache.retainMessages(withIDs: Set(messageIDs))
+        }
         #if os(visionOS)
         .onAppear {
             questionSheetPresented = viewModel.pendingQuestions != nil
