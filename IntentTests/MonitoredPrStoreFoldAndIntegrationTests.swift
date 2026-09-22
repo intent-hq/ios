@@ -269,14 +269,33 @@ extension MonitoredPrStoreTests {
     @Test func reconnectResubscribesAndReseeds() async throws {
         let fake = FakeConnectionManager()
         let store = await makeSubscribedStore(fake, monitors: [makeMonitorDict()])
+        try #require(store.monitors.map(\.monitorId) == ["prm-1"])
+        try #require(store.monitors.first?.hasPendingChanges == true)
         fake.clearRequestLog()
+
+        // The old monitor disappeared and a different one was registered while
+        // disconnected. Reissuing the RPC without applying its reply must fail.
+        var freshRow = makeMinimalMonitorDict()
+        freshRow["title"] = "Registered while disconnected"
+        let freshMonitor = try #require(MonitoredPr.parseMonitor(freshRow))
+        fake.responseMap["prMonitor.list"] = ["monitors": [freshRow]]
 
         fake.simulateDisconnect()
         fake.simulateConnect()
         try await fake.waitForRequests("prMonitor.list")
+        try await waitUntil("the reconnect monitor list to finish loading") { !store.isLoading }
 
-        #expect(fake.didCallMethod("events.subscribe"))
-        #expect(store.monitors.count == 1)
+        let registrations = fake.paramsForMethod("events.subscribe")
+        #expect(registrations.count == 1)
+        #expect(registrations.first?["eventTypes"] as? [String] == ["prMonitor:*"])
+        #expect(registrations.first?["workspaceId"] as? String == "ws-abc")
+        #expect(registrations.first?["replaceGroup"] as? String == "ios-pr-monitors-ws-abc-agent-1")
+        #expect(fake.eventHandlerCount == 1)
+        #expect(fake.paramsForMethod("prMonitor.list").count == 1)
+        #expect(fake.paramsForMethod("prMonitor.list").first?["workspaceId"] as? String == "ws-abc")
+        #expect(store.monitors == [freshMonitor])
+        #expect(store.activeMonitors == [freshMonitor])
+        #expect(!store.monitors.contains { $0.monitorId == "prm-1" })
     }
 
     @Test func unsubscribeClearsStateAndReleasesSubscription() async throws {

@@ -27,14 +27,18 @@ struct BackgroundTaskManagerTests {
         #expect(application.endedIdentifiers == [application.identifier, application.identifier])
     }
 
-    @Test func expirationEndsTask() {
+    @Test func expirationEndsTask() throws {
         let application = FakeBackgroundTaskApplication()
         let manager = application.makeManager()
 
         manager.beginIfNeeded()
-        application.expirationHandler?()
-        manager.endIfNeeded()
+        let expire = try #require(application.expirationHandler)
+        #expect(application.endedIdentifiers.isEmpty)
 
+        expire()
+        #expect(application.endedIdentifiers == [application.identifier])
+
+        manager.endIfNeeded()
         #expect(application.endedIdentifiers == [application.identifier])
     }
 

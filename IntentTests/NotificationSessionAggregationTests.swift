@@ -103,12 +103,21 @@ final class NotificationSessionAggregationTests {
         ]
     }
 
-    /// Poll (bounded) until the condition holds.
-    private func waitFor(_ condition: () -> Bool) async throws {
+    /// Poll (bounded) until the condition holds; fail at the call site on timeout.
+    private func waitFor(
+        _ description: String,
+        sourceLocation: SourceLocation = #_sourceLocation,
+        _ condition: () -> Bool
+    ) async throws {
         for _ in 0..<200 {
             if condition() { return }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
+        try #require(
+            condition(),
+            "Timed out waiting for \(description) after 200 polls at 10 ms intervals",
+            sourceLocation: sourceLocation
+        )
     }
 
     /// Drain the MainActor queue so spawned handler Tasks have run before
@@ -166,7 +175,7 @@ final class NotificationSessionAggregationTests {
             method: "event",
             params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
         )
-        try await waitFor { manager.currentToast != nil }
+        try await waitFor("idle toast from the source backend") { manager.currentToast != nil }
 
         #expect(manager.currentToast?.agentId == "agent-p")
         #expect(manager.currentToast?.sourceBackendID == backendID)
@@ -193,7 +202,7 @@ final class NotificationSessionAggregationTests {
             method: "event",
             params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
         )
-        try await waitFor { !center.requests.isEmpty }
+        try await waitFor("background idle notification") { !center.requests.isEmpty }
 
         #expect(center.requests.map(\.identifier) == [
             "agent-idle-\(backendID.connectionID.uuidString)-agent-p"
@@ -213,7 +222,7 @@ final class NotificationSessionAggregationTests {
             method: "event",
             params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
         )
-        try await waitFor { manager.currentToast != nil }
+        try await waitFor("idle toast from the last-used backend") { manager.currentToast != nil }
 
         #expect(
             connection.didCallMethod("agent.list"),
@@ -293,7 +302,12 @@ final class NotificationSessionAggregationTests {
             method: "event",
             params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
         )
-        try await waitFor { manager.windowFeedbackEvent != nil }
+        try await waitFor("first idle-alert audible feedback") { manager.windowFeedbackEvent != nil }
+        let feedbackEvent = try #require(
+            manager.windowFeedbackEvent,
+            "The first alert must request a chime before duplicate suppression is tested"
+        )
+        #expect(feedbackEvent.sourceBackendID == backendID)
 
         cueCenter.observe(workspaces: [makeCueWorkspace(id: "ws-p", attention: "unread")])
         #expect(
@@ -330,7 +344,7 @@ final class NotificationSessionAggregationTests {
             method: "event",
             params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
         )
-        try await waitFor { manager.currentToast != nil }
+        try await waitFor("idle toast after the attention cue") { manager.currentToast != nil }
 
         #expect(
             manager.windowFeedbackEvent == nil,
