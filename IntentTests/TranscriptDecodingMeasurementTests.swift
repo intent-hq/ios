@@ -174,7 +174,6 @@ struct TranscriptRowHeightIntegrationTests {
     private static let retainedHeight: CGFloat = 24
     private static let heightTolerance: CGFloat = 0.5
     private static let cacheDelay = Duration.milliseconds(100)
-    private static let cacheWait = Duration.milliseconds(130)
     private static let shortText = "Short response."
     private static let longText = String(repeating: "A proposal-sensitive wrapped response needs room. ", count: 18)
 
@@ -226,7 +225,9 @@ struct TranscriptRowHeightIntegrationTests {
         let recorder = TranscriptHeightRecorder()
         cache.updateLayoutWidth(Self.rowWidth)
         cache.record(height: Self.retainedHeight, for: message, hydratingBlockIds: [])
-        try await Task.sleep(for: Self.cacheWait)
+        try await waitUntil("retained height cache seed") {
+            Self.equal(cache.height(for: message, hydratingBlockIds: []), Self.retainedHeight)
+        }
         let coordinator = try Self.makeCoordinator()
         let host = TranscriptGeometryHost(
             MessageViewHeightProbe(
