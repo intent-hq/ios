@@ -90,6 +90,9 @@ struct MonitoredPrsRow: View {
             chipLabel(monitor)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("monitoredPr.\(monitor.monitorId)")
+        .accessibilityLabel(Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo)))
+        .accessibilityValue(Text(Self.pendingSummary(monitor)))
     }
 
     @ViewBuilder
@@ -102,6 +105,7 @@ struct MonitoredPrsRow: View {
                 Circle()
                     .fill(Color.orange.opacity(Self.pendingIndicatorOpacity))
                     .frame(width: Self.pendingIndicatorSide, height: Self.pendingIndicatorSide)
+                    .accessibilityHidden(true)
             }
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))

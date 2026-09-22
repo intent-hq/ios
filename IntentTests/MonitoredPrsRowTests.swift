@@ -1,12 +1,19 @@
 import Foundation
 @testable import Intent
+import SwiftUI
 import Testing
+import UIKit
 
-/// Display-helper tests for the monitored-PRs chip row (the pure static
-/// funcs on `MonitoredPrsRow`; the SwiftUI body itself is not under test).
+/// Display-helper and hosted accessibility tests for the monitored-PRs chip row.
 @MainActor
 struct MonitoredPrsRowTests {
+    private static let hostWidth: CGFloat = 600
+    private static let hostHeight: CGFloat = 80
+    private static let accessibilityObservationDeadline: TimeInterval = 3
+    private static let accessibilityObservationInterval: TimeInterval = 0.02
+
     private func makeMonitor(
+        monitorId: String = "prm-1",
         repo: String = "octo/repo",
         prNumber: Int = 12,
         title: String? = "Add review wire surface",
@@ -16,7 +23,7 @@ struct MonitoredPrsRowTests {
         snapshot: MonitoredPr.Snapshot? = nil
     ) -> MonitoredPr {
         MonitoredPr(
-            monitorId: "prm-1",
+            monitorId: monitorId,
             workspaceId: "ws-abc",
             agentId: "agent-1",
             repo: repo,
@@ -34,6 +41,116 @@ struct MonitoredPrsRowTests {
             url: url,
             lastSnapshot: snapshot
         )
+    }
+
+    private func makeSession(
+        connection: FakeConnectionManager,
+        workspaceStore: WorkspaceStore
+    ) -> BackendSession {
+        let fileLoader = WorkspaceFileImageLoader(connection: connection)
+        return BackendSession(
+            backendID: BackendID(UUID()),
+            connection: connection,
+            workspaceStore: workspaceStore,
+            coordinatorFactory: { _ in fatalError("coordinator is not built in these tests") },
+            githubRepoStore: GitHubRepoStore(connectionManager: connection),
+            creationOptionsStore: CreationOptionsStore(connectionManager: connection),
+            prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
+            attachmentUploadService: AttachmentUploadService(connection: connection),
+            workspaceFileImageLoader: fileLoader,
+            attachmentImageLoader: AttachmentImageLoader(
+                connection: connection,
+                fileLoader: fileLoader
+            ),
+            attentionCueCenter: WorkspaceAttentionCueCenter {}
+        )
+    }
+
+    private static func accessibilityElements(
+        identifiedBy identifiers: [String],
+        in hostView: UIView
+    ) throws -> [NSObject] {
+        let deadline = Date(timeIntervalSinceNow: accessibilityObservationDeadline)
+        var elements: [NSObject] = []
+        while Date() < deadline {
+            let renderedElements = SyntheticBadgeHost.accessibilityElements(in: hostView)
+            elements = identifiers.compactMap { identifier in
+                renderedElements.first { element in
+                    SyntheticBadgeHost.accessibilityIdentifier(of: element) == identifier
+                }
+            }
+            if elements.count == identifiers.count { return elements }
+            _ = RunLoop.current.run(
+                mode: .default,
+                before: Date(timeIntervalSinceNow: accessibilityObservationInterval)
+            )
+            hostView.layoutIfNeeded()
+        }
+        let renderedIdentifiers = SyntheticBadgeHost.accessibilityElements(in: hostView)
+            .compactMap(SyntheticBadgeHost.accessibilityIdentifier(of:))
+        throw ConditionWaitFailure(
+            description: "Timed out waiting for \(identifiers); rendered \(renderedIdentifiers)"
+        )
+    }
+
+    @Test(
+        .enabled(
+            Comment(
+                rawValue:
+                    "SwiftUI publishes its accessibility tree only when accessibility is enabled "
+                    + "for the process (scripts/xcodebuild.sh enables it on the simulator)"
+            )
+        ) {
+            await SyntheticBadgeHost.publishesAccessibilityTree()
+        }
+    )
+    func renderedChipsExposePendingStateAndPreserveMenuRole() throws {
+        let connection = FakeConnectionManager()
+        let workspaceStore = WorkspaceStore(forTesting: true)
+        workspaceStore.workspaces = [
+            Workspace(
+                id: "ws-abc",
+                title: "Test",
+                branch: nil,
+                baseRef: nil,
+                status: nil,
+                activity: nil,
+                displayStatus: nil,
+                repositoryOwner: "octo",
+                repositoryName: "repo"
+            )
+        ]
+        let viewModel = ConversationViewModel(
+            agentId: "agent-1",
+            workspaceId: "ws-abc",
+            agentName: "Test",
+            connection: connection,
+            uploadService: AttachmentUploadService(connection: connection),
+            optionsStore: CreationOptionsStore(connectionManager: connection)
+        )
+        let monitoredPrStore = MonitoredPrStore(connectionManager: connection)
+        monitoredPrStore.monitors = [
+            makeMonitor(monitorId: "prm-pending", pendingChanges: ["checks changed"]),
+            makeMonitor(monitorId: "prm-current", repo: "other/repo", prNumber: 34)
+        ]
+        let session = makeSession(connection: connection, workspaceStore: workspaceStore)
+        let row = MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: monitoredPrStore)
+            .environment(session)
+        let identifiers = ["monitoredPr.prm-pending", "monitoredPr.prm-current"]
+
+        try SyntheticBadgeHost.render(
+            row,
+            width: Self.hostWidth,
+            height: Self.hostHeight
+        ) { hostView, _ in
+            let elements = try Self.accessibilityElements(
+                identifiedBy: identifiers,
+                in: hostView
+            )
+            #expect(elements.map(\.accessibilityLabel) == ["#12", "other/repo: #34"])
+            #expect(elements.map(\.accessibilityValue) == ["1 pending change", "No pending changes"])
+            #expect(elements.allSatisfy { $0.accessibilityTraits.contains(.button) })
+        }
     }
 
     private func makeSnapshot(
