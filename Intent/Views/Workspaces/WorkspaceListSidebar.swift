@@ -151,8 +151,18 @@ struct WorkspaceListSidebar: View {
 
     /// Shared row modifiers for every view mode. The explicit row background
     /// replaces the sidebar list's accent-tinted selection with a neutral grey.
+    /// On visionOS that custom background also replaces the system row
+    /// background that drew the gaze highlight (ios#339), so the hover effect
+    /// is reapplied to the row content in the selection's rounded shape.
     private func sidebarRow(_ workspace: Workspace, showRepo: Bool = true) -> some View {
         WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
+            #if os(visionOS)
+            .contentShape(
+                .hoverEffect,
+                .rect(cornerRadius: Constants.WorkspaceList.sidebarSelectionCornerRadius)
+            )
+            .hoverEffect()
+            #endif
             .tag(workspace.id)
             .listRowInsets(EdgeInsets(
                 top: Constants.WorkspaceList.sidebarRowInset,
