@@ -144,7 +144,9 @@ struct CreateWorkspaceView: View {
         .onChange(of: optionsStore.specialists) { _, _ in
             reconcileSpecialistSelection()
         }
-        .onChange(of: providers) { _, _ in
+        // Loading, loaded-empty and failed all project to an empty list;
+        // observe the policy state so completed validation still reconciles.
+        .onChange(of: providerOptions.state) { _, _ in
             Task { await reconcileProviderSelection() }
         }
         .onChange(of: models) { _, models in
@@ -329,9 +331,9 @@ struct CreateWorkspaceView: View {
         CreationSelectionPolicy.reconcileWorkspaceProvider(
             provider: &selectedProvider,
             model: &selectedModel,
-            providers: providers
+            state: providerOptions.state
         )
-        guard let provider = selectedProvider else { return }
+        guard !providerOptions.isLoading, let provider = selectedProvider else { return }
         await loadModels(for: provider)
     }
 

@@ -122,37 +122,108 @@ struct WorkspaceProviderOptionsTests {
         }
     }
 
-    @Test func refreshHidesChoicesAndReconcilesDisabledSelection() async throws {
-        let fake = configuredHost()
+    @Test(arguments: ["unchanged", "disabled", "signed-out", "empty"])
+    func refreshReconcilesDraftOnlyAfterPolicySettles(outcome: String) async throws {
+        let fake = configuredHost(enabled: ["codex": true, "auggie": true])
         let options = WorkspaceProviderOptions(connectionManager: fake)
         await options.load()
-        let previous = options.providers.first
+        let pickedProvider = ProviderInfo(id: "codex", authenticated: .signedIn)
+        let pickedModel = ModelInfo(id: "named-model", name: "Named Model", provider: "codex")
+        var provider: ProviderInfo? = pickedProvider
+        var model: ModelInfo? = pickedModel
+        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: options.state)
+        #expect(provider == pickedProvider)
+        #expect(model == pickedModel)
+        if outcome == "signed-out" {
+            fake.responseMap["host.providerAuthStatus"] = [
+                "providers": [["id": "codex", "authenticated": false], ["id": "auggie", "authenticated": true]]
+            ]
+        }
         fake.pendingMethods = ["settings.get"]
         let refresh = Task { await options.load() }
-        try await waitUntil("refresh settings read") { fake.paramsForMethod("settings.get").count == 2 }
+        try await fake.waitForPendingRequests("settings.get")
+        expectPendingDraft(options, provider: &provider, model: &model)
+        let enabled = outcome == "empty" ? [:] : ["auggie": true, "codex": outcome != "disabled"]
+        fake.resolvePending("settings.get", with: settings(enabled))
+        await refresh.value
+        #expect(options.state == .loaded(options.providers))
+        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: options.state)
+        let expectedProvider = outcome == "empty" ? nil : ProviderInfo(
+            id: outcome == "unchanged" ? "codex" : "auggie", authenticated: .signedIn
+        )
+        #expect(provider == expectedProvider)
+        #expect(model == (outcome == "unchanged" ? pickedModel : nil))
+        #expect(CreateWorkspaceView.isCreateDisabled(
+            isCreating: false,
+            isLoadingProviders: options.isLoading,
+            providers: options.providers,
+            selectedProvider: provider
+        ) == (outcome == "empty"))
+        #expect(CreateWorkspaceView.isCreateDisabled(
+            isCreating: false,
+            isLoadingProviders: options.isLoading,
+            providers: options.providers,
+            selectedProvider: pickedProvider
+        ) == (outcome != "unchanged"))
+    }
+
+    @Test(arguments: ["providers.catalog", "settings.get", "host.providerAuthStatus"])
+    func failedRefreshClearsDraftAndRetryRevalidatesSelection(method: String) async throws {
+        let fake = configuredHost(enabled: ["codex": true, "auggie": true])
+        let options = WorkspaceProviderOptions(connectionManager: fake)
+        await options.load()
+        var provider: ProviderInfo? = ProviderInfo(id: "codex", authenticated: .signedIn)
+        var model: ModelInfo? = ModelInfo(id: "named-model", name: "Named Model", provider: "codex")
+        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: options.state)
+        fake.pendingMethods = [method]
+        let refresh = Task { await options.load() }
+        try await fake.waitForPendingRequests(method)
+        expectPendingDraft(options, provider: &provider, model: &model)
+        fake.failPending(method, with: NSError(domain: "test", code: -1))
+        await refresh.value
+        #expect(options.state == .failed)
+        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: options.state)
+        #expect(provider == nil)
+        #expect(model == nil)
+        #expect(options.providers.isEmpty)
+        #expect(CreateWorkspaceView.isCreateDisabled(
+            isCreating: false,
+            isLoadingProviders: options.isLoading,
+            providers: options.providers,
+            selectedProvider: ProviderInfo(id: "codex")
+        ))
+        let retry = Task { await options.load() }
+        try await fake.waitForPendingRequests(method)
+        expectPendingDraft(options, provider: &provider, model: &model)
+        fake.resolvePending(method, with: try #require(fake.responseMap[method]))
+        await retry.value
+        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: options.state)
+        #expect(provider == ProviderInfo(id: "auggie", authenticated: .signedIn))
+        #expect(model == nil)
+        #expect(!CreateWorkspaceView.isCreateDisabled(
+            isCreating: false,
+            isLoadingProviders: options.isLoading,
+            providers: options.providers,
+            selectedProvider: provider
+        ))
+    }
+
+    private func expectPendingDraft(
+        _ options: WorkspaceProviderOptions, provider: inout ProviderInfo?, model: inout ModelInfo?
+    ) {
+        let previousProvider = provider
+        let previousModel = model
+        #expect(options.state == .loading)
+        CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: options.state)
+        #expect(provider == previousProvider)
+        #expect(model == previousModel)
         #expect(options.isLoading)
         #expect(options.providers.isEmpty)
         #expect(CreateWorkspaceView.isCreateDisabled(
             isCreating: false,
             isLoadingProviders: options.isLoading,
             providers: options.providers,
-            selectedProvider: previous
-        ))
-        fake.resolvePending("settings.get", with: settings(["auggie": true]))
-        await refresh.value
-        let selection = CreationSelectionPolicy.preselectedWorkspaceProvider(current: previous, providers: options.providers)
-        #expect(selection?.id == "auggie")
-        #expect(CreateWorkspaceView.isCreateDisabled(
-            isCreating: false,
-            isLoadingProviders: false,
-            providers: options.providers,
-            selectedProvider: previous
-        ))
-        #expect(!CreateWorkspaceView.isCreateDisabled(
-            isCreating: false,
-            isLoadingProviders: false,
-            providers: options.providers,
-            selectedProvider: selection
+            selectedProvider: provider
         ))
     }
 
@@ -211,5 +282,33 @@ struct WorkspaceProviderOptionsTests {
         #expect(store.workspaceProviderOptions.providers.isEmpty)
         #expect(store.providers.map(\.id) == ["codex", "auggie"])
         #expect(store.models(for: "codex")?.map(\.id) == ["model"])
+    }
+}
+
+extension WorkspaceProviderOptionsTests {
+    @Test func demoCreationFixturesLoadSelectableProvidersAndNamedModels() async {
+        let fake = FakeConnectionManager()
+        for method in ["providers.catalog", "host.providerAuthStatus", "specialist.list"] {
+            fake.responseMap[method] = DemoFixtures.response(for: method, params: [:])
+        }
+        fake.responseMap["settings.get"] = DemoFixtures.response(for: "settings.get", params: ["path": "providers.enabled"])
+        fake.responseMap["models.list"] = DemoFixtures.response(for: "models.list", params: ["providerId": "codex"])
+        let store = CreationOptionsStore(connectionManager: fake)
+        await store.workspaceProviderOptions.load()
+        await store.loadModelsIfNeeded(providerId: "codex")
+        #expect(store.workspaceProviderOptions.providers.map(\.id) == ["auggie", "codex"])
+        let allSelectable = store.workspaceProviderOptions.providers.allSatisfy(\.isSelectable)
+        #expect(allSelectable)
+        #expect(store.models(for: "codex")?.last == ModelInfo(id: "named-model", name: "Named Model", provider: "codex"))
+    }
+
+    @Test func demoProviderGateIsOptInAndDoesNotPermitWorkspaceCreation() throws {
+        #expect(DemoFixtures.workspaceProviderGate(from: ["--demo-data"]) == nil)
+        #expect(DemoFixtures.workspaceProviderGate(from: ["--demo-workspace-provider-trigger-file="]) == nil)
+        #expect(DemoFixtures.workspaceProviderGate(from: ["--demo-workspace-provider-trigger-file=/tmp/provider.trigger"])
+            == .triggerFile(URL(fileURLWithPath: "/tmp/provider.trigger")))
+        #expect(DemoFixtures.responseGate(for: "settings.get", params: ["path": "providers.enabled"]) == nil)
+        let create = try #require(DemoFixtures.response(for: "workspace.create", params: [:]) as? [String: Any])
+        #expect(create.isEmpty)
     }
 }

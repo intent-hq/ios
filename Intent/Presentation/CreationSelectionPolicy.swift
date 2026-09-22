@@ -9,9 +9,20 @@ enum CreationSelectionPolicy {
         return preselectedProvider(current: current, providers: providers)
     }
 
+    /// Pending validation preserves the draft, not permission to submit it.
+    /// Only a completed policy result can replace or clear the selection.
     static func reconcileWorkspaceProvider(
-        provider: inout ProviderInfo?, model: inout ModelInfo?, providers: [ProviderInfo]
+        provider: inout ProviderInfo?, model: inout ModelInfo?, state: WorkspaceProviderOptions.State
     ) {
+        let providers: [ProviderInfo]
+        switch state {
+        case .idle, .loading:
+            return
+        case .failed:
+            providers = []
+        case let .loaded(loadedProviders):
+            providers = loadedProviders
+        }
         let previousId = provider?.id
         provider = preselectedWorkspaceProvider(current: provider, providers: providers)
         if provider == nil || provider?.id != previousId { model = nil }
