@@ -5,9 +5,9 @@ import Testing
 /// Tests for the SpecialistPickerView selection helpers: specialist
 /// reconciliation against the cached catalog, the loading states derived
 /// from `CreationOptionsStore` (cached and cold paths), and the
-/// provider/model params sent on agent.create. Provider defaulting and
-/// model reconciliation reuse `CreateWorkspaceView`'s helpers (covered in
-/// `CreateWorkspaceParamsTests`).
+/// provider/model params sent on agent.create. Shared provider defaulting and
+/// model reconciliation use `CreationSelectionPolicy` (covered in this suite's
+/// loading tests and `CreateWorkspaceParamsTests`).
 struct SpecialistPickerSelectionTests {
     func makeSpecialist(resolvedModel: String? = nil, resolvedProvider: String? = nil) -> SpecialistInfo {
         SpecialistInfo(

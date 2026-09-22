@@ -48,6 +48,7 @@ $(SRCROOT)/Intent/PersistenceManager.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollState.swift
+$(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
@@ -210,7 +211,9 @@ $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceView.swift
 $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
+$(SRCROOT)/Intent/Views/Workspaces/ModelPicker.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderModelStepView.swift
+$(SRCROOT)/Intent/Views/Workspaces/ProviderPicker.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAttentionCue.swift
@@ -222,6 +225,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSearchBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusIconView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusImageView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceTab.swift
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
 $(SRCROOT)/IntentTests/AgentListViewModelTests.swift
 $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
@@ -298,6 +302,7 @@ $(SRCROOT)/IntentTests/CreateWorkspaceCreationGateTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceParamsTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreModelTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
+$(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesTests.swift
 $(SRCROOT)/IntentTests/DictationTranscriptTests.swift
@@ -414,6 +419,7 @@ $(SRCROOT)/IntentTests/WorkspaceStoreStatusImageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTabTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Keyboard.swift

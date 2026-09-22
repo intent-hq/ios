@@ -38,7 +38,7 @@ extension WorkspaceRowPresentationTests {
     // Badges are located by their stable accessibility identifier; the spoken
     // label is asserted separately so a copy change cannot masquerade as a
     // missing element.
-    func renderBadges(width: CGFloat) throws -> RenderedBadges {
+    func renderBadges(width: CGFloat) async throws -> RenderedBadges {
         let indicator = WorkspaceRowView.PrIndicatorModel(
             pill: .init(status: .merged, number: Self.mergedPullRequestNumber),
             otherMonitorCount: Self.additionalPullRequestCount
@@ -50,7 +50,7 @@ extension WorkspaceRowPresentationTests {
             expanded: true
         )
         .environment(\.dynamicTypeSize, .accessibility3)
-        return try SyntheticBadgeHost.render(
+        return try await SyntheticBadgeHost.render(
             rootView,
             width: width,
             height: Self.renderedBadgeHostHeight

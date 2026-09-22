@@ -167,7 +167,7 @@ extension CreateWorkspaceParamsTests {
             makeProvider(id: "codex", authenticated: .signedIn),
             makeProvider(id: "auggie", authenticated: .signedIn)
         ]
-        #expect(CreateWorkspaceView.preselectedProvider(current: nil, providers: providers)?.id == "auggie")
+        #expect(CreationSelectionPolicy.preselectedProvider(current: nil, providers: providers)?.id == "auggie")
         let auggieSignedOut = [
             makeProvider(id: "auggie", authenticated: .signedOut),
             makeProvider(id: "grok", authenticated: .unknown),
@@ -175,7 +175,7 @@ extension CreateWorkspaceParamsTests {
         ]
         // nil (unknown) stays selectable since probes can fail transiently
         #expect(
-            CreateWorkspaceView.preselectedProvider(
+            CreationSelectionPolicy.preselectedProvider(
                 current: nil,
                 providers: auggieSignedOut
             )?.id == "grok"
@@ -188,7 +188,7 @@ extension CreateWorkspaceParamsTests {
             makeProvider(id: "codex", authenticated: .signedIn)
         ]
         #expect(
-            CreateWorkspaceView.preselectedProvider(
+            CreationSelectionPolicy.preselectedProvider(
                 current: makeProvider(id: "codex"),
                 providers: providers
             )?.id == "codex"
@@ -199,7 +199,7 @@ extension CreateWorkspaceParamsTests {
             makeProvider(id: "codex", authenticated: .signedOut)
         ]
         #expect(
-            CreateWorkspaceView.preselectedProvider(
+            CreationSelectionPolicy.preselectedProvider(
                 current: makeProvider(id: "codex"),
                 providers: codexSignedOut
             )?.id == "auggie"
@@ -220,7 +220,7 @@ extension CreateWorkspaceParamsTests {
         ]
         #expect(cached.map(\.id) == refreshed.map(\.id))
         #expect(cached != refreshed)
-        let kept = CreateWorkspaceView.preselectedProvider(current: cached[1], providers: refreshed)
+        let kept = CreationSelectionPolicy.preselectedProvider(current: cached[1], providers: refreshed)
         #expect(kept == refreshed[1])
         #expect(kept?.authenticated == true)
     }
@@ -231,18 +231,18 @@ extension CreateWorkspaceParamsTests {
             makeProvider(id: "codex", authenticated: .signedOut)
         ]
         #expect(
-            CreateWorkspaceView.preselectedProvider(
+            CreationSelectionPolicy.preselectedProvider(
                 current: makeProvider(id: "codex"),
                 providers: allSignedOut
             ) == nil
         )
         #expect(
-            CreateWorkspaceView.preselectedProvider(
+            CreationSelectionPolicy.preselectedProvider(
                 current: makeProvider(id: "codex"),
                 providers: []
             )?.id == "codex"
         )
-        #expect(CreateWorkspaceView.preselectedProvider(current: nil, providers: []) == nil)
+        #expect(CreationSelectionPolicy.preselectedProvider(current: nil, providers: []) == nil)
     }
 
     // MARK: - reconciledModel (explicit model vs. the displayed catalog)
@@ -252,25 +252,25 @@ extension CreateWorkspaceParamsTests {
             makeModel(id: "sonnet4.5", provider: "auggie"),
             ModelInfo(id: "opus4.6", name: "opus4.6 (renamed)", provider: "auggie", isDefault: true)
         ]
-        let kept = CreateWorkspaceView.reconciledModel(
+        let kept = CreationSelectionPolicy.reconciledModel(
             current: makeModel(id: "opus4.6", provider: "auggie"),
             models: refreshed
         )
         #expect(kept == refreshed[1])
         #expect(kept?.name == "opus4.6 (renamed)")
-        #expect(CreateWorkspaceView.reconciledModel(current: nil, models: refreshed) == nil)
+        #expect(CreationSelectionPolicy.reconciledModel(current: nil, models: refreshed) == nil)
     }
 
     @Test func reconciledModelDropsRetiredOrClearedCatalogEntries() {
         let current = makeModel(id: "opus4.6", provider: "auggie")
         #expect(
-            CreateWorkspaceView.reconciledModel(
+            CreationSelectionPolicy.reconciledModel(
                 current: current,
                 models: [makeModel(id: "sonnet4.5", provider: "auggie")]
             ) == nil
         )
         // Reconnect clear / catalog not loaded yet: daemon default applies.
-        #expect(CreateWorkspaceView.reconciledModel(current: current, models: []) == nil)
+        #expect(CreationSelectionPolicy.reconciledModel(current: current, models: []) == nil)
     }
 
     @Test func reconciledModelDropsExplicitModelAcrossProviderSwitchWithSharedBareId() {
@@ -281,9 +281,9 @@ extension CreateWorkspaceParamsTests {
         let auggieCatalog = [makeModel(id: "sonnet4.5", provider: "auggie")]
         #expect(codexCatalog.map(\.id).contains("sonnet4.5") && auggieCatalog.map(\.id).contains("sonnet4.5"))
         let pickedOnCodex = codexCatalog[0]
-        #expect(CreateWorkspaceView.reconciledModel(current: pickedOnCodex, models: auggieCatalog) == nil)
+        #expect(CreationSelectionPolicy.reconciledModel(current: pickedOnCodex, models: auggieCatalog) == nil)
         // Staying on the same provider keeps it.
-        #expect(CreateWorkspaceView.reconciledModel(current: pickedOnCodex, models: codexCatalog) == pickedOnCodex)
+        #expect(CreationSelectionPolicy.reconciledModel(current: pickedOnCodex, models: codexCatalog) == pickedOnCodex)
     }
 
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)

@@ -21,8 +21,8 @@ struct WorkspaceRowPresentationTests {
             await SyntheticBadgeHost.publishesAccessibilityTree()
         }
     )
-    func renderedPrBadgesFitThenFallBackInsideSyntheticHost() throws {
-        let fit = try renderBadges(width: 600)
+    func renderedPrBadgesFitThenFallBackInsideSyntheticHost() async throws {
+        let fit = try await renderBadges(width: 600)
         let combinedIdealWidth = fit.badges[0].frame.union(fit.badges[1].frame).width
         let largestBadgeWidth = fit.badges.map { $0.frame.width }.max() ?? 0
         let fallbackWidth = ceil(largestBadgeWidth) + 1
@@ -39,7 +39,7 @@ struct WorkspaceRowPresentationTests {
         #expect(fit.badges.allSatisfy { fit.hostFrame.contains($0.frame) })
         #expect(fit.badges.map { $0.label } == Self.badgeLabels)
 
-        let fallback = try renderBadges(width: fallbackWidth)
+        let fallback = try await renderBadges(width: fallbackWidth)
 
         #expect(fallback.badges[0].frame.minX == fallback.badges[1].frame.minX)
         #expect(fallback.badges[0].frame.maxY < fallback.badges[1].frame.minY)
