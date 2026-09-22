@@ -21,12 +21,14 @@ extension ConversationViewModel {
         store.queuedMessages.filter { $0.isUserMessage }
     }
 
-    /// Tears down the live-store subscriptions (background hooks + PR
-    /// monitors) when the conversation leaves the screen (`load()`
-    /// re-subscribes on the next appearance).
-    func teardownLiveStores() async {
-        await hookStore.unsubscribe()
-        await monitoredPrStore.unsubscribe()
+    /// Synchronously invalidates this screen activation and detaches every
+    /// local event handler before captured remote ids are released.
+    func teardownLiveStores() {
+        liveStoreActivationGeneration &+= 1
+        activeLiveStoreActivation = nil
+        store.deactivateStreaming()
+        hookStore.deactivate()
+        monitoredPrStore.deactivate()
     }
 
     func cancelWait() async {

@@ -329,7 +329,7 @@ extension DemoFixtures {
             var message: [String: Any] = [
                 "id": "demo-long-msg-\(ordinal + 1)",
                 "role": row.role,
-                "timestamp": iso(minutesAgo: firstMinutesAgo - step * Double(ordinal)),
+                "timestamp": transcriptIso(minutesAgo: firstMinutesAgo - step * Double(ordinal)),
                 "contentBlocks": row.contentBlocks
             ]
             if !row.metadata.isEmpty { message["metadata"] = row.metadata }
