@@ -90,7 +90,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                 Text(providerGuidance)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 Button("Retry", action: onRetryProviders)
-            } else if isLoadingProviders && providers.isEmpty {
+            } else if isLoadingProviders, providers.isEmpty {
                 ProgressView("Loading providers...")
             } else if providers.noneSelectable {
                 noProvidersSignedInPlaceholder

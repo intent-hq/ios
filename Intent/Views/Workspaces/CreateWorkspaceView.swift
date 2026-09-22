@@ -212,10 +212,9 @@ struct CreateWorkspaceView: View {
                 colorScheme: colorScheme,
                 onSelectProvider: selectProvider,
                 onRetryProviders: { Task { await fetchCreationOptions() } },
-                onCreate: createWorkspace
-            ) {
-                await fetchCreationOptions()
-            }
+                onCreate: createWorkspace,
+                onLoad: fetchCreationOptions
+            )
         }
     }
 

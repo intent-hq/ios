@@ -70,7 +70,9 @@ struct WorkspaceProviderOptionsTests {
             current: ProviderInfo(id: "auggie"), providers: options.providers
         ) == nil)
         #expect(CreateWorkspaceView.isCreateDisabled(
-            isCreating: false, isLoadingProviders: false, providers: options.providers,
+            isCreating: false,
+            isLoadingProviders: false,
+            providers: options.providers,
             selectedProvider: ProviderInfo(id: "auggie")
         ))
     }
@@ -131,20 +133,26 @@ struct WorkspaceProviderOptionsTests {
         #expect(options.isLoading)
         #expect(options.providers.isEmpty)
         #expect(CreateWorkspaceView.isCreateDisabled(
-            isCreating: false, isLoadingProviders: options.isLoading,
-            providers: options.providers, selectedProvider: previous
+            isCreating: false,
+            isLoadingProviders: options.isLoading,
+            providers: options.providers,
+            selectedProvider: previous
         ))
         fake.resolvePending("settings.get", with: settings(["auggie": true]))
         await refresh.value
         let selection = CreationSelectionPolicy.preselectedWorkspaceProvider(current: previous, providers: options.providers)
         #expect(selection?.id == "auggie")
         #expect(CreateWorkspaceView.isCreateDisabled(
-            isCreating: false, isLoadingProviders: false,
-            providers: options.providers, selectedProvider: previous
+            isCreating: false,
+            isLoadingProviders: false,
+            providers: options.providers,
+            selectedProvider: previous
         ))
         #expect(!CreateWorkspaceView.isCreateDisabled(
-            isCreating: false, isLoadingProviders: false,
-            providers: options.providers, selectedProvider: selection
+            isCreating: false,
+            isLoadingProviders: false,
+            providers: options.providers,
+            selectedProvider: selection
         ))
     }
 

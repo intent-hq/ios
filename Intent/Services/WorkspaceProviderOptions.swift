@@ -97,11 +97,13 @@ import Observation
               catalog.providers.allSatisfy({ !$0.id.isEmpty }) else {
             throw CocoaError(.coderReadCorrupt)
         }
-        return catalog.providers.filter { entry in
+        let enabledProviders = catalog.providers.filter { entry in
             entry.visible && (!entry.canBeDisabled || settings.value[entry.id] == true)
-        }.map { entry in
+        }
+        return enabledProviders.map { entry in
             let status: ProviderAuthentication
-            switch authentication.providers.first(where: { $0.id == entry.id })?.authenticated {
+            let authenticationEntry = authentication.providers.first { $0.id == entry.id }
+            switch authenticationEntry?.authenticated {
             case true: status = .signedIn
             case false: status = .signedOut
             case nil: status = .unknown
@@ -113,25 +115,21 @@ import Observation
 
 private extension WorkspaceProviderOptions {
     struct Catalog: Decodable {
-        struct Entry: Decodable {
-            let id: String
-            let visible: Bool
-            let canBeDisabled: Bool
-        }
-        let providers: [Entry]
+        let providers: [CatalogEntry]
+    }
+
+    struct CatalogEntry: Decodable {
+        let id: String
+        let visible: Bool
+        let canBeDisabled: Bool
     }
 
     struct Enablement: Decodable {
         let path: String
         let value: [String: Bool]
 
-        private enum CodingKeys: String, CodingKey {
-            case path
-            case value
-        }
-
         init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let container = try decoder.container(keyedBy: EnablementCodingKeys.self)
             path = try container.decode(String.self, forKey: .path)
             // The host returns null for an unset map, but a missing value is
             // an invalid response. Strict Bool decoding rejects numeric flags.
@@ -139,12 +137,18 @@ private extension WorkspaceProviderOptions {
         }
     }
 
+    enum EnablementCodingKeys: String, CodingKey {
+        case path
+        case value
+    }
+
     struct Authentication: Decodable {
-        struct Entry: Decodable {
-            let id: String
-            // swiftlint:disable:next discouraged_optional_boolean
-            let authenticated: Bool?
-        }
-        let providers: [Entry]
+        let providers: [AuthenticationEntry]
+    }
+
+    struct AuthenticationEntry: Decodable {
+        let id: String
+        // swiftlint:disable:next discouraged_optional_boolean
+        let authenticated: Bool?
     }
 }
