@@ -69,7 +69,7 @@ struct WorkspaceRowView: View {
     }
 
     nonisolated static func titleLineLimit(for size: DynamicTypeSize) -> Int? {
-        usesExpandedMetadataLayout(for: size) ? nil : 2
+        usesExpandedMetadataLayout(for: size) ? nil : Constants.WorkspaceRow.titleLineLimit
     }
 
     nonisolated static func additionalPullRequestsAccessibilityLabel(_ count: Int) -> String {
@@ -200,7 +200,9 @@ struct WorkspaceRowView: View {
                             for: colorScheme,
                             contrast: colorSchemeContrast
                         ),
-                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                        lineWidth: colorSchemeContrast == .increased
+                            ? Constants.WorkspaceRow.increasedContrastPillBorderWidth
+                            : Constants.WorkspaceRow.pillBorderWidth
                     )
                 }
                 .accessibilityElement(children: .ignore)
@@ -229,7 +231,9 @@ struct WorkspaceRowView: View {
                                 for: colorScheme,
                                 contrast: colorSchemeContrast
                             ),
-                            lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                            lineWidth: colorSchemeContrast == .increased
+                                ? Constants.WorkspaceRow.increasedContrastPillBorderWidth
+                                : Constants.WorkspaceRow.pillBorderWidth
                         )
                     }
                     .accessibilityLabel(WorkspaceRowView.additionalPullRequestsAccessibilityLabel(

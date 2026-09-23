@@ -6,7 +6,7 @@ import SwiftUI
 /// avatar treatment in the desktop `RepoSelector`.
 struct RepoOwnerAvatarView: View {
     let owner: String?
-    var size: CGFloat = 28
+    var size: CGFloat = Constants.RepoOwnerAvatar.defaultSize
     var fallbackSymbol: String = "folder.fill"
 
     @Environment(\.colorScheme) private var colorScheme

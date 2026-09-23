@@ -92,7 +92,7 @@ struct CreateWorkspaceBranchStepView: View {
                 Text(branch)
                     .font(.body)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.CreateWorkspace.branchNameLineLimit)
                     .fixedSize(horizontal: false, vertical: true)
                     .layoutPriority(1)
                 Spacer()
@@ -136,7 +136,7 @@ struct CreateWorkspaceBranchStepView: View {
                 Text(row.value)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .multilineTextAlignment(.trailing)
-                    .lineLimit(2)
+                    .lineLimit(Constants.CreateWorkspace.contextValueLineLimit)
                     .truncationMode(.middle)
             }
         }
