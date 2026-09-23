@@ -27,7 +27,8 @@ struct ComponentVisualLayoutTests {
         let ring = TaskProgressRingView(stats: TaskStats(total: 4, completed: 1, inProgress: 2), size: 56)
         let standard = try pixels(ring.environment(\._colorSchemeContrast, .standard))
         let increased = try pixels(ring.environment(\._colorSchemeContrast, .increased))
-        let differentiated = try pixels(ring.environment(\.accessibilityDifferentiateWithoutColor, true))
+        // The public accessibility value is also read-only; override its backing key for rendering.
+        let differentiated = try pixels(ring.environment(\._accessibilityDifferentiateWithoutColor, true))
         let rightToLeft = try pixels(ring.environment(\.layoutDirection, .rightToLeft))
         #expect(standard.width == 56 && standard.height == 56)
         #expect(increased.width == standard.width && increased.height == standard.height)
