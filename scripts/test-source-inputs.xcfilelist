@@ -7,6 +7,7 @@ $(SRCROOT)/Intent/App/BackendID.swift
 $(SRCROOT)/Intent/App/BackendSession.swift
 $(SRCROOT)/Intent/App/BackendSessionRegistry.swift
 $(SRCROOT)/Intent/App/BackendWindowSession.swift
+$(SRCROOT)/Intent/App/ConnectionLossPresentation.swift
 $(SRCROOT)/Intent/App/IntentApp.swift
 $(SRCROOT)/Intent/App/NavigationDestinations.swift
 $(SRCROOT)/Intent/App/RootCompactNavigationView.swift
@@ -350,6 +351,7 @@ $(SRCROOT)/IntentTests/AgentSessionTests.swift
 $(SRCROOT)/IntentTests/AgentStoreTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorAutoOpenTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorBackendRegistryTests.swift
+$(SRCROOT)/IntentTests/AppCoordinatorBackgroundRecoveryTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorConnectionFailureTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorConnectionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorIPadReselectionTests.swift
