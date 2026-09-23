@@ -4,6 +4,9 @@ import CoreGraphics
 /// state machine is in ConversationTranscriptScrollPolicy+Recovery.swift (#350).
 extension ConversationTranscriptScrollPolicy {
     // Outcome order follows the landing state machine rather than spelling.
+    // Pinned SwiftLint 0.65.1's sorted_enum_cases does not traverse extensions.
+    // Restoring its directives fails strict lint with superfluous_disable_command,
+    // so they remain absent.
     /// An intermediate step of a forced follow's landing loop: the loop
     /// polls again after it.
     enum FollowLandingContinuation: Equatable {
