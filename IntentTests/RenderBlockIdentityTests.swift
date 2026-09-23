@@ -230,6 +230,39 @@ struct BlockBodyEquatableTests {
         #expect(blockBody(block, isHydrating: false) != blockBody(block, isHydrating: true))
     }
 
+    @Test func imageBlockBodyTracksPayloadAndHydrationChanges() {
+        let preview = ContentBlock(
+            id: "image-1",
+            type: .image,
+            data: "preview",
+            mimeType: "image/png",
+            dataTruncation: .truncated,
+            dataRepresentation: .thumbnail
+        )
+        let previewBody = blockBody(preview)
+        #expect(previewBody == blockBody(preview))
+        #expect(previewBody != blockBody(preview, isHydrating: true))
+
+        var changedPayload = preview
+        changedPayload.data = "full image"
+        #expect(previewBody != blockBody(changedPayload))
+
+        var clearedTruncation = preview
+        clearedTruncation.dataTruncation = .full
+        #expect(previewBody != blockBody(clearedTruncation))
+    }
+
+    @Test func attachmentBlockBodyTracksAttachmentAndWorkspaceIdentity() {
+        let block = ContentBlock(id: "image-1", type: .image, attachmentId: "attachment-1")
+        let body = blockBody(block)
+        #expect(body == blockBody(block))
+        #expect(blockBody(block, workspaceId: "ws-1") != blockBody(block, workspaceId: "ws-2"))
+
+        var changedAttachment = block
+        changedAttachment.attachmentId = "attachment-2"
+        #expect(body != blockBody(changedAttachment))
+    }
+
     // MARK: ResponseGroupBody
 
     @Test func groupBodyIgnoresClosureIdentity() {
