@@ -112,10 +112,17 @@ final class BackendSession {
     /// the session share connection + stores but navigate independently
     /// (spec "State split"); the coordinator claims last-screen restoration
     /// lazily via `claimScreenRestoration()`.
-    func makeCoordinator() -> AppCoordinator {
-        coordinatorFactory { [weak self] in
+    /// `startingAtSavedMachines` skips the launch splash after an explicit
+    /// return Home, including in demo mode. No connection attempt is started.
+    func makeCoordinator(startingAtSavedMachines: Bool = false) -> AppCoordinator {
+        let coordinator = coordinatorFactory { [weak self] in
             self?.claimScreenRestoration() ?? false
         }
+        if startingAtSavedMachines {
+            coordinator.routingState.hasLoadCompleted = true
+            coordinator.onReconnect()
+        }
+        return coordinator
     }
 
     /// Grants last-screen restoration to this session's first claimant only:

@@ -9,8 +9,7 @@ import os
 /// below — the SHA-256 certificate fingerprint is the sole trust decision.
 actor WebSocketConnection {
     nonisolated let host: String
-    /// The socket's path at handshake completion, used as the path-monitor baseline.
-    nonisolated let establishedPath: NetworkPathSnapshot?
+    nonisolated let pathObservation: SocketPathObservation
 
     private let connection: NWConnection
     private let queue: DispatchQueue
@@ -34,16 +33,17 @@ actor WebSocketConnection {
         connection: NWConnection,
         queue: DispatchQueue,
         didOpen: OSAllocatedUnfairLock<Bool>,
-        establishedPath: NetworkPathSnapshot?
+        pathObservation: SocketPathObservation
     ) {
         self.host = host
         self.connection = connection
         self.queue = queue
         self.didOpen = didOpen
-        self.establishedPath = establishedPath
+        self.pathObservation = pathObservation
     }
 
     deinit {
+        pathObservation.stop()
         Self.close(connection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
     }
 
@@ -106,34 +106,42 @@ actor WebSocketConnection {
         _ connection: NWConnection,
         host: String,
         didOpen: OSAllocatedUnfairLock<Bool>,
+        pathObservation: SocketPathObservation,
         continuation: AsyncThrowingStream<Void, Error>.Continuation
     ) {
-        connection.stateUpdateHandler = { state in
+        connection.pathUpdateHandler = { @Sendable path in
+            pathObservation.pathChanged(NetworkPathSnapshot(path))
+        }
+        connection.viabilityUpdateHandler = { @Sendable isViable in
+            pathObservation.viabilityChanged(isViable)
+        }
+        connection.stateUpdateHandler = { @Sendable [weak connection] state in
             switch state {
             case .setup, .preparing:
                 AppLog.connection.debug("[WebSocket] \(host): \(String(describing: state))")
             case .ready:
                 AppLog.connection.debug("[WebSocket] \(host): ready")
+                pathObservation.ready(path: connection?.currentPath.map { NetworkPathSnapshot($0) })
                 didOpen.withLock { $0 = true }
                 continuation.yield()
                 continuation.finish()
             case .waiting(let error):
+                pathObservation.viabilityChanged(false)
                 AppLog.connection.error("[WebSocket] \(host): waiting (\(String(describing: error)))")
                 continuation.finish(throwing: WebSocketTransportError.failed(
-                    host: host,
-                    message: String(describing: error)
+                    host: host, message: String(describing: error)
                 ))
             case .failed(let error):
+                pathObservation.viabilityChanged(false)
                 AppLog.connection.error("[WebSocket] \(host): failed (\(String(describing: error)))")
                 continuation.finish(throwing: WebSocketTransportError.failed(
-                    host: host,
-                    message: String(describing: error)
+                    host: host, message: String(describing: error)
                 ))
             case .cancelled:
+                pathObservation.stop()
                 AppLog.connection.debug("[WebSocket] \(host): cancelled")
                 continuation.finish(throwing: WebSocketTransportError.failed(
-                    host: host,
-                    message: "Connection cancelled before opening"
+                    host: host, message: "Connection cancelled before opening"
                 ))
             @unknown default:
                 break
@@ -189,6 +197,7 @@ actor WebSocketConnection {
         let url = try makeURL(host: host, port: port, certFingerprint: certFingerprint)
         let mismatchFingerprint = OSAllocatedUnfairLock<String?>(initialState: nil)
         let didOpen = OSAllocatedUnfairLock(initialState: false)
+        let pathObservation = SocketPathObservation()
         let queue = DispatchQueue(label: "WebSocketConnection.\(host)")
         let (lifecycleEvents, lifecycleContinuation) = AsyncThrowingStream<Void, Error>.makeStream()
         let parameters = makeParameters(
@@ -203,6 +212,7 @@ actor WebSocketConnection {
             nwConnection,
             host: host,
             didOpen: didOpen,
+            pathObservation: pathObservation,
             continuation: lifecycleContinuation
         )
         do {
@@ -219,9 +229,10 @@ actor WebSocketConnection {
                 connection: nwConnection,
                 queue: queue,
                 didOpen: didOpen,
-                establishedPath: nwConnection.currentPath.map { NetworkPathSnapshot($0) }
+                pathObservation: pathObservation
             )
         } catch {
+            pathObservation.stop()
             Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
             throw WebSocketPingSupport.mappedConnectionError(
                 error,
@@ -417,6 +428,7 @@ extension WebSocketConnection {
     }
 
     func disconnect() {
+        pathObservation.stop()
         Self.close(connection, didOpen: didOpen, code: .protocolCode(.normalClosure), queue: queue)
     }
 
@@ -430,6 +442,8 @@ extension WebSocketConnection {
         code: NWProtocolWebSocket.CloseCode,
         queue: DispatchQueue
     ) {
+        connection.pathUpdateHandler = nil
+        connection.viabilityUpdateHandler = nil
         guard didOpen.withLock({ $0 }) else {
             connection.cancel()
             return

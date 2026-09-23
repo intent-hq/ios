@@ -13,6 +13,15 @@ enum AppScreen {
     case settings
     case workspaceDetail(workspaceId: String)
     case workspaceList
+
+    var supportsConnectionLossOverlay: Bool {
+        switch self {
+        case .workspaceList, .workspaceDetail, .agentConversation, .noteDetail, .settings:
+            return true
+        case .loading, .connecting, .pairing, .connectionFailed, .disconnected:
+            return false
+        }
+    }
 }
 
 enum ConnectionFailureRetryPolicy: Equatable {
@@ -40,15 +49,27 @@ struct AppCoordinatorDependencies {
 }
 
 final class AppCoordinatorLifecycleState {
-    var hasEverConnected = false
+    var hasEnteredRemoteUI = false
+    var hasCompletedInitialRouting = false
+    var workspaceDataAtInitialFlowStart: Date?
+    var hasReturnedToSavedMachines = false
 }
 
 @MainActor
 @Observable
 class AppCoordinator {
-    var currentScreen: AppScreen = .loading
+    var currentScreen: AppScreen = .loading {
+        didSet {
+            if !currentScreen.supportsConnectionLossOverlay {
+                resetConnectionLossEligibility()
+            }
+        }
+    }
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false
+    var showsConnectionLossOverlay: Bool {
+        currentScreen.supportsConnectionLossOverlay && isDisconnected
+    }
     /// True when the pairing surface should also offer the remaining saved
     /// connections (e.g. after logging off the active connection while others
     /// are still saved). The Connect to… screen reads this flag.
@@ -80,6 +101,7 @@ class AppCoordinator {
     }
 
     @ObservationIgnored private var connectionObserver: AnyCancellable?
+    @ObservationIgnored private var connectionObservationID: UUID?
     @ObservationIgnored private var certMismatchObserver: AnyCancellable?
     @ObservationIgnored private var reconnectLoadingObservationID: UUID?
     /// Intentionally tracked so mutating it consumes the current one-shot
@@ -103,6 +125,9 @@ class AppCoordinator {
     /// previews), switch/pair actions fall back to in-place routing over
     /// this session's connection.
     @ObservationIgnored var retargetWindow: ((BackendID) -> Void)?
+    /// Detaches only this window and supplies a fresh pairing session. The
+    /// root, not the coordinator, owns the registry's attachment count.
+    @ObservationIgnored var returnWindowToSavedMachines: (() -> Void)?
 
     init(
         workspaceStore: WorkspaceStore,
@@ -126,6 +151,7 @@ class AppCoordinator {
             claimScreenRestoration: claimScreenRestoration
         )
         self.backendID = backendID
+        lifecycleState.workspaceDataAtInitialFlowStart = workspaceStore.lastUpdated
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
@@ -139,6 +165,7 @@ class AppCoordinator {
 
     /// Applies retry ownership before exposing the corresponding failure screen.
     func routeToConnectionFailure(error: String, retryPolicy: ConnectionFailureRetryPolicy) {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
         connectionFailureRetryPolicy = retryPolicy
         currentScreen = .connectionFailed(error: error)
     }
@@ -150,22 +177,69 @@ class AppCoordinator {
 }
 
 extension AppCoordinator {
+    /// A timed-out initial data wait still uses the normal navigation fallback,
+    /// but cannot arm the blocking overlay. Require data fetched in this flow.
+    func establishConnectionLossEligibility() {
+        guard !lifecycleState.hasEnteredRemoteUI,
+              lifecycleState.hasCompletedInitialRouting,
+              currentScreen.supportsConnectionLossOverlay,
+              dependencies.connection.connectionState == .connected,
+              let lastUpdated = dependencies.workspaceStore.lastUpdated,
+              lastUpdated != lifecycleState.workspaceDataAtInitialFlowStart else { return }
+        lifecycleState.hasEnteredRemoteUI = true
+        // Retire only deliveries queued before entry became usable.
+        startObservingConnection()
+    }
+
+    /// A new initial flow must not inherit a previous session's loss or delayed recovery work.
+    func resetConnectionLossEligibility() {
+        lifecycleState.hasEnteredRemoteUI = false
+        lifecycleState.hasCompletedInitialRouting = false
+        lifecycleState.workspaceDataAtInitialFlowStart = dependencies.workspaceStore.lastUpdated
+        isDisconnected = false
+        cancelReconnectLoadingObservation()
+        reconnectOverlayTimeoutTask?.cancel()
+        reconnectOverlayTimeoutTask = nil
+    }
+
+    /// Retire callbacks before the root releases the session: queued publisher
+    /// deliveries and old ConnectingView completions must not leave Home.
+    func stopConnectionLifecycleForReturnHome() {
+        lifecycleState.hasReturnedToSavedMachines = true
+        resetConnectionLossEligibility()
+        connectionObserver = nil
+        certMismatchObserver = nil
+        dependencies.backgroundTaskManager.endIfNeeded()
+    }
+
+    /// Standalone coordinators (tests/previews) reuse their connection on an
+    /// explicit saved-machine selection; the live root creates a new one.
+    func resumeConnectionLifecycleIfNeeded() {
+        guard lifecycleState.hasReturnedToSavedMachines else { return }
+        lifecycleState.hasReturnedToSavedMachines = false
+        startObservingConnection()
+        startObservingCertMismatch()
+    }
+
     private func startObservingConnection() {
+        let observationID = UUID()
+        connectionObservationID = observationID
         connectionObserver = dependencies.connection.connectionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
-                guard let self else { return }
+                guard let self, !lifecycleState.hasReturnedToSavedMachines,
+                      connectionObservationID == observationID else { return }
                 switch state {
                 case .reconnecting, .disconnected:
                     cancelReconnectLoadingObservation()
                     reconnectOverlayTimeoutTask?.cancel()
                     reconnectOverlayTimeoutTask = nil
-                    if lifecycleState.hasEverConnected {
+                    if lifecycleState.hasEnteredRemoteUI, currentScreen.supportsConnectionLossOverlay {
                         isDisconnected = true
                     }
                 case .connected:
+                    establishConnectionLossEligibility()
                     let wasDisconnected = isDisconnected
-                    lifecycleState.hasEverConnected = true
                     if wasDisconnected {
                         // On reconnection, wait for workspace data to load before
                         // clearing the overlay so the UI doesn't flash blank metadata.
@@ -251,7 +325,7 @@ extension AppCoordinator {
         certMismatchObserver = dependencies.connection.certMismatchPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] mismatch in
-                guard let self, mismatch else { return }
+                guard let self, !lifecycleState.hasReturnedToSavedMachines, mismatch else { return }
                 routeToConnectionFailure(
                     error: "Server certificate has changed. Please re-pair your device.",
                     retryPolicy: .automaticConnection
@@ -269,6 +343,8 @@ extension AppCoordinator {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 startObservingWorkspaceList()
+                guard !lifecycleState.hasReturnedToSavedMachines else { return }
+                establishConnectionLossEligibility()
                 // Only validate after workspaces have been fetched at least once
                 guard dependencies.workspaceStore.lastUpdated != nil else { return }
                 validateCurrentWorkspaceExists(in: dependencies.workspaceStore.workspaces)

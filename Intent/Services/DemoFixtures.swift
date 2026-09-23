@@ -329,6 +329,8 @@ enum DemoFixtures {
         switch method {
         case "settings.get" where params["path"] as? String == "providers.enabled":
             return workspaceProviderGate(from: ProcessInfo.processInfo.arguments)
+        case "workspace.list":
+            return DemoConnectionLoss.initialDataGate
         case "hook.list" where params["workspaceId"] as? String == longConversationWorkspaceId:
             return longConversationHookListGate
         case "agent.getMessageBlock" where params["agentId"] as? String == longConversationAgentId:
@@ -456,7 +458,9 @@ enum DemoFixtures {
             return workspaceCreationResponse(for: method, params: params)
         }
     }
+}
 
+extension DemoFixtures {
     /// Non-transcript timestamp relative to one response's snapshot time, so
     /// relative-time labels and future events refresh together on each request.
     static func iso(minutesAgo: Double) -> String {

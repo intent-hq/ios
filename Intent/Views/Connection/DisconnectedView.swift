@@ -30,7 +30,7 @@ struct DisconnectedView: View {
             attemptDescription
             certificateMismatches
             Spacer()
-            logOffButton
+            homeButton
         }
     }
 
@@ -79,19 +79,17 @@ struct DisconnectedView: View {
         }
     }
 
-    private var logOffButton: some View {
-        Button(action: {
-            session.connection.disconnect()
-            coordinator.onLogOff()
-        }, label: {
-            Text("Log Off")
-                .font(.body.weight(.medium))
-                .foregroundStyle(.red)
+    private var homeButton: some View {
+        Button(action: coordinator.onReturnToSavedMachines) {
+            Text("Back to Home")
+                .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Constants.Disconnected.buttonVerticalPadding)
-                .background(Color.red.opacity(Constants.Disconnected.buttonBackgroundOpacity))
-                .clipShape(RoundedRectangle(cornerRadius: Constants.Disconnected.buttonCornerRadius))
-        })
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .accessibilityHint("Return to your saved machines without forgetting this connection.")
+        .accessibilityIdentifier("disconnected.home")
         .padding(.horizontal, Constants.Disconnected.horizontalPadding)
         .padding(.bottom, Constants.Disconnected.bottomPadding)
     }

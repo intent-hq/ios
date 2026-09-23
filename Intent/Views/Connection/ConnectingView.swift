@@ -7,12 +7,21 @@ import SwiftUI
 struct ConnectingView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
+    var networkStatus: NetworkAvailability.Status = .unknown
 
     private typealias Layout = Constants.Connecting
 
     var body: some View {
         VStack {
             Spacer()
+            if DemoConnectionLoss.initialDataGate != nil {
+                Text(verbatim: String(describing: session.connection.connectionState))
+                    .accessibilityIdentifier("demo-connection-startup")
+            }
+            if ConnectionNetworkMessage(status: networkStatus).isUnavailable {
+                ConnectionNetworkStatusView(status: networkStatus)
+                    .padding(.horizontal, Layout.mismatchHorizontalPadding)
+            }
             // Passive per-host cert-mismatch list: hosts that presented a
             // wrong certificate while the race continues on the others.
             if !session.connection.certMismatches.isEmpty {
@@ -30,6 +39,8 @@ struct ConnectingView: View {
     }
 
     private func attemptConnection() async {
+        guard !coordinator.lifecycleState.hasReturnedToSavedMachines else { return }
+        let attemptID = coordinator.connectionAttemptId
         if DemoMode.pretendPaired {
             // Demo/screenshot mode: no daemon. Mark the connection live so the
             // stores run their normal on-connected fetches (served from
@@ -76,6 +87,9 @@ struct ConnectingView: View {
         // WorkspaceStore auto-fetches on .connected and sets lastUpdated
         // when done. Poll with a 5-second timeout to avoid getting stuck.
         do {
+            if let gate = DemoConnectionLoss.initialRoutingGate {
+                try await DemoFixtures.wait(for: gate)
+            }
             try await waitForWorkspaceData(timeout: Constants.Connecting.workspaceLoadTimeout)
         } catch {
             // Cancelled mid-wait (attempt restarted or view dismissed): the
@@ -83,7 +97,7 @@ struct ConnectingView: View {
             // replacement owns either (ios#230).
             return
         }
-        coordinator.onConnectionSuccess()
+        coordinator.onInitialWorkspaceLoadComplete(attemptID: attemptID)
     }
 
     /// Waits for the session's `WorkspaceStore.lastUpdated` to become

@@ -415,8 +415,21 @@ extension ConnectionManager {
         stopPathMonitor()
         pathMonitorID += 1
         let monitorID = pathMonitorID
-        if let socket, let path = readSocketPath(socket), path.isOnPhysicalInterface {
-            socketInterface = path.primaryInterface
+        if let socket {
+            let observation = readSocketPath(socket)
+            socketPathObservation = observation
+            let path = observation.current?.path
+            socketInterface = path?.isOnPhysicalInterface == true ? path?.primaryInterface : nil
+            let generation = connectionGeneration
+            observation.observe { @Sendable [weak self, weak socket, weak observation] in
+                Task { @MainActor in
+                    guard let self, let socket, let observation,
+                          self.socket === socket, self.connectionGeneration == generation,
+                          self.pathMonitorID == monitorID, self.socketPathObservation === observation,
+                          self.connectionState == .connected, observation.current?.isLost == true else { return }
+                    self.handleDisconnection()
+                }
+            }
         }
         let monitor = makePathMonitor()
         pathMonitor = monitor
@@ -426,6 +439,8 @@ extension ConnectionManager {
     }
 
     func stopPathMonitor() {
+        socketPathObservation?.removeObserver()
+        socketPathObservation = nil
         pathMonitor?.cancel()
         pathMonitor = nil
         lastPathSnapshot = nil
@@ -436,22 +451,22 @@ extension ConnectionManager {
         guard pathMonitorID == monitorID, pathMonitor != nil else { return }
         let previous = lastPathSnapshot
         lastPathSnapshot = snapshot
-        guard connectionState == .connected, socket != nil else { return }
+        // An embedded tunnel's local socket cannot observe its remote underlay.
+        // Direct sockets (including system VPNs) use only their endpoint evidence.
+        guard connectionState == .connected, socket != nil, activeTunnel != nil else { return }
 
         let pathDied: Bool
-        let interfaceChanged: Bool
         if let previous {
             pathDied = previous.isSatisfied && !snapshot.isSatisfied
-            interfaceChanged = snapshot.isSatisfied
-                && snapshot.primaryInterface != previous.primaryInterface
         } else {
             pathDied = !snapshot.isSatisfied
-            interfaceChanged = false
         }
-        let socketInterfaceLost = socketInterface.map { interface in
+        // Preference/virtual-name changes alone do not invalidate a serving tunnel.
+        let previousPhysicalInterface = previous?.physicalInterfaces.first
+        let physicalInterfaceLost = previousPhysicalInterface.map { interface in
             snapshot.isSatisfied && !snapshot.availableInterfaces.contains(interface)
         } ?? false
-        guard pathDied || interfaceChanged || socketInterfaceLost else { return }
+        guard pathDied || physicalInterfaceLost else { return }
         AppLog.connection.debug(
             "[ConnectionManager] Network path changed (\(String(describing: previous)) -> "
                 + "\(String(describing: snapshot))), reconnecting"
