@@ -441,6 +441,16 @@ struct QuestionStepFreeTextHeightTests {
         #expect(QuestionStepView.clampedFreeTextHeight(cap * 4, lineHeight: lineHeight) == cap)
         #expect(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount == 6)
     }
+
+    @Test func largerTextPreservesOneToSixLineGrowth() {
+        let scaledLineHeight: CGFloat = 48
+        let cap = scaledLineHeight * 6 + insets
+        let wrappedHeight = scaledLineHeight * 2 + insets
+        #expect(QuestionStepView.clampedFreeTextHeight(0, lineHeight: scaledLineHeight)
+            == scaledLineHeight + insets)
+        #expect(QuestionStepView.clampedFreeTextHeight(wrappedHeight, lineHeight: scaledLineHeight) == wrappedHeight)
+        #expect(QuestionStepView.clampedFreeTextHeight(cap * 2, lineHeight: scaledLineHeight) == cap)
+    }
 }
 
 // MARK: - Wizard footer Next button visibility

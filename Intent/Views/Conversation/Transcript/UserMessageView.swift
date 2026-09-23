@@ -1,23 +1,7 @@
 import SwiftUI
 
 struct UserMessageView: View {
-    private enum Layout {
-        static let contentSpacing: CGFloat = 4
-        static let attachmentGridSpacing: CGFloat = 6
-        static let attachmentSectionTopPadding: CGFloat = 4
-        static let fileAttachmentListSpacing: CGFloat = 4
-        static let containerPadding: CGFloat = 12
-        static let backgroundOpacity: Double = 0.4
-        static let cornerRadius: CGFloat = 8
-        static let textRowSpacing: CGFloat = 6
-        static let mentionChipSpacing: CGFloat = 6
-        static let textOpacity: Double = 0.85
-        static let fileChipSpacing: CGFloat = 6
-        static let fileChipHorizontalPadding: CGFloat = 8
-        static let fileChipVerticalPadding: CGFloat = 5
-        static let fileChipBackgroundOpacity: Double = 0.6
-        static let fileChipCornerRadius: CGFloat = 8
-    }
+    private typealias Layout = Constants.Conversation.UserMessage
 
     let message: ConversationMessage
     let workspaceId: String

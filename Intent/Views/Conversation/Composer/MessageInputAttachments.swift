@@ -46,7 +46,9 @@ extension MessageInputView {
                 Image(systemName: "xmark.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.white)
-                    .background(Circle().fill(.black.opacity(0.5)))
+                    .background(Circle().fill(.black.opacity(
+                        Constants.Conversation.Composer.imageRemoveButtonBackgroundOpacity
+                    )))
                     .frame(
                         minWidth: Constants.Conversation.Composer.controlTarget,
                         minHeight: Constants.Conversation.Composer.controlTarget,
@@ -84,7 +86,7 @@ extension MessageInputView {
         .padding(.horizontal, Constants.Conversation.Composer.pendingFileHorizontalPadding)
         .padding(.vertical, Constants.Conversation.Composer.pendingFileVerticalPadding)
         .frame(maxWidth: Constants.Conversation.Composer.pendingFileMaximumWidth)
-        .background(Theme.muted(for: colorScheme).opacity(0.5))
+        .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.Composer.pendingFileBackgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.pendingFileCornerRadius))
     }
 

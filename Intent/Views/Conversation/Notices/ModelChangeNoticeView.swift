@@ -12,8 +12,6 @@ struct ModelChangeNoticeView: View {
     let fallbackText: String
     @Environment(\.colorScheme) var colorScheme
 
-    private static let minimumLineWidth: CGFloat = 16
-
     private var label: String {
         notice.label(fallbackText: fallbackText)
     }
@@ -42,6 +40,6 @@ struct ModelChangeNoticeView: View {
         Rectangle()
             .fill(Theme.border(for: colorScheme))
             .frame(height: Constants.Conversation.DividerNotice.lineHeight)
-            .frame(minWidth: Self.minimumLineWidth, maxWidth: .infinity)
+            .frame(minWidth: Constants.Conversation.DividerNotice.minimumLineWidth, maxWidth: .infinity)
     }
 }

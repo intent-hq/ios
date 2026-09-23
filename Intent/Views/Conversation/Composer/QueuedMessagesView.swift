@@ -4,13 +4,7 @@ struct QueuedMessagesView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) var colorScheme
 
-    private static let headerHorizontalPadding: CGFloat = 16
-    private static let headerTopPadding: CGFloat = 8
-    private static let headerBottomPadding: CGFloat = 4
-    private static let backgroundOpacity = 0.8
-    private static let rowSpacing: CGFloat = 8
-    private static let rowHorizontalPadding: CGFloat = 16
-    private static let rowVerticalPadding: CGFloat = 6
+    private typealias Layout = Constants.Conversation.QueuedMessage
 
     @State private var editingId: String?
     @State private var editText = ""
@@ -27,28 +21,28 @@ struct QueuedMessagesView: View {
                 Spacer()
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .padding(.horizontal, Self.headerHorizontalPadding)
-            .padding(.top, Self.headerTopPadding)
-            .padding(.bottom, Self.headerBottomPadding)
+            .padding(.horizontal, Layout.headerHorizontalPadding)
+            .padding(.top, Layout.headerTopPadding)
+            .padding(.bottom, Layout.headerBottomPadding)
 
             ForEach(viewModel.queuedMessages) { message in
                 queuedMessageRow(message)
             }
         }
-        .background(Theme.card(for: colorScheme).opacity(Self.backgroundOpacity))
+        .background(Theme.card(for: colorScheme).opacity(Layout.backgroundOpacity))
     }
 
     @ViewBuilder
     private func queuedMessageRow(_ message: QueuedMessage) -> some View {
-        HStack(spacing: Self.rowSpacing) {
+        HStack(spacing: Layout.rowSpacing) {
             if editingId == message.id {
                 editingRow(message)
             } else {
                 displayRow(message)
             }
         }
-        .padding(.horizontal, Self.rowHorizontalPadding)
-        .padding(.vertical, Self.rowVerticalPadding)
+        .padding(.horizontal, Layout.rowHorizontalPadding)
+        .padding(.vertical, Layout.rowVerticalPadding)
     }
 
     @ViewBuilder
@@ -66,7 +60,7 @@ struct QueuedMessagesView: View {
         Text(message.content)
             .font(.subheadline)
             .foregroundStyle(Theme.foreground(for: colorScheme))
-            .lineLimit(2)
+            .lineLimit(Layout.contentLineLimit)
             .frame(maxWidth: .infinity, alignment: .leading)
         sendNowButton(message)
         editButton(message)

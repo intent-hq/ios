@@ -1,10 +1,7 @@
 import SwiftUI
 
 struct AssistantMessageView: View {
-    private enum Layout {
-        static let contentSpacing: CGFloat = 8
-        static let verticalPadding: CGFloat = 4
-    }
+    private typealias Layout = Constants.Conversation.AssistantMessage
 
     let message: ConversationMessage
     let workspaceId: String
@@ -108,12 +105,7 @@ struct AssistantMessageView: View {
 }
 
 struct ErrorMessageView: View {
-    private enum Layout {
-        static let spacing: CGFloat = 6
-        static let padding: CGFloat = 10
-        static let backgroundOpacity: Double = 0.1
-        static let cornerRadius: CGFloat = 8
-    }
+    private typealias Layout = Constants.Conversation.ErrorMessage
 
     let message: ConversationMessage
     @Environment(\.colorScheme) private var colorScheme

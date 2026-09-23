@@ -15,37 +15,30 @@ struct QuestionWizardFooterRow: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
-    private static let contentSpacing: CGFloat = 8
-    private static let buttonLabelSpacing: CGFloat = 4
-    private static let disabledBackOpacity = 0.4
-    private static let instructionOpacity = 0.6
-    private static let minimumContentSpacing: CGFloat = 8
-    private static let nextButtonHorizontalPadding: CGFloat = 12
-    private static let nextButtonVerticalPadding: CGFloat = 6
-    private static let bottomPadding: CGFloat = 12
+    private typealias Layout = Constants.Conversation.QuestionWizard.Footer
 
     var body: some View {
-        HStack(spacing: Self.contentSpacing) {
+        HStack(spacing: Layout.contentSpacing) {
             if multiStep {
                 backButton
             }
             if !isMulti, !isLast {
                 selectionInstruction
             }
-            Spacer(minLength: Self.minimumContentSpacing)
+            Spacer(minLength: Layout.minimumContentSpacing)
             skipButton
             if showNext {
                 nextButton
             }
         }
         .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
-        .padding(.top, 2)
-        .padding(.bottom, Self.bottomPadding)
+        .padding(.top, Layout.topPadding)
+        .padding(.bottom, Layout.bottomPadding)
     }
 
     private var backButton: some View {
         Button(action: onBack) {
-            HStack(spacing: Self.buttonLabelSpacing) {
+            HStack(spacing: Layout.buttonLabelSpacing) {
                 Image(systemName: "chevron.left")
                     .font(.caption.weight(.semibold))
                     .accessibilityHidden(true)
@@ -54,7 +47,7 @@ struct QuestionWizardFooterRow: View {
             }
             .foregroundStyle(
                 Theme.mutedForeground(for: colorScheme)
-                    .opacity(index == 0 ? Self.disabledBackOpacity : 1)
+                    .opacity(index == 0 ? Layout.disabledBackOpacity : 1)
             )
             .frame(
                 minWidth: Constants.Accessibility.minimumTapTarget,
@@ -68,7 +61,7 @@ struct QuestionWizardFooterRow: View {
     private var selectionInstruction: some View {
         Text("Selecting an option advances")
             .font(.caption)
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Self.instructionOpacity))
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.instructionOpacity))
     }
 
     private var skipButton: some View {
@@ -86,7 +79,7 @@ struct QuestionWizardFooterRow: View {
 
     private var nextButton: some View {
         Button(action: onNext) {
-            HStack(spacing: Self.buttonLabelSpacing) {
+            HStack(spacing: Layout.buttonLabelSpacing) {
                 Text(isLast ? "Send" : "Next")
                     .font(.caption.weight(.semibold))
                 Image(systemName: isLast ? "arrow.up" : "arrow.right")
@@ -94,8 +87,8 @@ struct QuestionWizardFooterRow: View {
                     .accessibilityHidden(true)
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, Self.nextButtonHorizontalPadding)
-            .padding(.vertical, Self.nextButtonVerticalPadding)
+            .padding(.horizontal, Layout.nextButtonHorizontalPadding)
+            .padding(.vertical, Layout.nextButtonVerticalPadding)
             .background(Capsule().fill(Theme.primary(for: colorScheme)))
             .frame(
                 minWidth: Constants.Accessibility.minimumTapTarget,
@@ -105,6 +98,6 @@ struct QuestionWizardFooterRow: View {
         }
         .buttonStyle(.plain)
         .disabled(nextDisabled || submitted || dismissed)
-        .opacity(nextDisabled || submitted || dismissed ? 0.5 : 1)
+        .opacity(nextDisabled || submitted || dismissed ? Layout.nextButtonDisabledOpacity : 1)
     }
 }

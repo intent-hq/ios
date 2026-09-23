@@ -195,7 +195,7 @@ private extension MessageInputView {
                     .allowsHitTesting(false)
             }
         }
-        .background(Theme.muted(for: colorScheme).opacity(0.5))
+        .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.Composer.fieldBackgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius))
     }
 
@@ -337,7 +337,7 @@ private extension MessageInputView {
                                 .accessibilityHidden(true)
                             Text(prompt)
                                 .font(.body)
-                                .lineLimit(2)
+                                .lineLimit(Constants.Conversation.Composer.suggestedPromptLineLimit)
                                 .foregroundStyle(Theme.foreground(for: colorScheme))
                         }
                         .padding(.horizontal, Constants.Conversation.Composer.suggestedPromptHorizontalPadding)
