@@ -253,6 +253,44 @@ struct TranscriptRowHeightIntegrationTests {
         #expect(recorder.appearances == 1)
     }
 
+    /// The extracted modifier must keep its natural-height state when only
+    /// streaming changes, and replay it without recreating the lazy row.
+    @Test func streamingCompletionReplaysNaturalHeightWithoutRecreation() async throws {
+        let message = Self.message(id: "streaming-completion-row", text: Self.shortText)
+        let source = TranscriptLateTextSource(text: Self.shortText)
+        source.isStreaming = true
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let recorder = TranscriptHeightRecorder()
+        cache.updateLayoutWidth(Self.rowWidth)
+        let host = TranscriptGeometryHost(
+            CacheIntegratedTextProbe(
+                source: source,
+                message: message,
+                cache: cache,
+                recorder: recorder,
+                width: Self.rowWidth
+            ),
+            size: CGSize(width: Self.rowWidth, height: Self.viewportHeight)
+        )
+        defer { host.tearDown() }
+
+        try await waitUntil("streaming row convergence") {
+            Self.cacheAndOuterConverged(cache: cache, message: message, recorder: recorder)
+        }
+        let naturalHeight = try #require(recorder.naturalHeights.last)
+        let instanceID = try #require(recorder.instanceID)
+        let samplesBeforeCompletion = recorder.naturalHeights.count
+
+        source.isStreaming = false
+        host.layout()
+        try await waitUntil("natural height replay on streaming completion") {
+            recorder.naturalHeights.count > samplesBeforeCompletion
+        }
+        #expect(Self.equal(recorder.naturalHeights.last, naturalHeight))
+        #expect(recorder.appearances == 1)
+        #expect(recorder.instanceID == instanceID)
+    }
+
     private static func message(id: String, text: String) -> ConversationMessage {
         ConversationMessage(
             id: id,
@@ -308,6 +346,7 @@ struct TranscriptRowHeightIntegrationTests {
 @Observable
 final class TranscriptLateTextSource {
     var text: String
+    var isStreaming = false
 
     init(text: String) {
         self.text = text
@@ -349,7 +388,8 @@ private struct CacheIntegratedTextProbe: View {
 
     private var rowHeightFrame: ConversationTranscriptRowHeightFrame {
         ConversationTranscriptRowHeightFrame(
-            cachedHeight: cache.height(for: message, hydratingBlockIds: [])
+            cachedHeight: cache.height(for: message, hydratingBlockIds: []),
+            isStreaming: source.isStreaming
         ) { height in
             recorder.naturalHeights.append(height)
             cache.record(height: height, for: message, hydratingBlockIds: [])

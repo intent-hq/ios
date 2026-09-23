@@ -29,7 +29,7 @@ struct PlatformGuardAllowlistTests {
         "Intent/Views/Conversation/Composer/MessageInputView.swift",
         "Intent/Views/Conversation/Composer/SubmittableTextView.swift",
         "Intent/Views/Conversation/Transcript/ConversationColumnView.swift",
-        "Intent/Views/Conversation/Transcript/ConversationTranscriptView.swift",
+        "Intent/Views/Conversation/Transcript/ConversationTranscriptView+Presentation.swift",
         "Intent/Views/Onboarding/ManualTokenEntryView.swift",
         "Intent/Views/Onboarding/PairingView.swift",
         "Intent/Views/Onboarding/QRScannerView.swift",
