@@ -12,10 +12,16 @@ $(SRCROOT)/Intent/App/RootView.swift
 $(SRCROOT)/Intent/Constants.swift
 $(SRCROOT)/Intent/DesignSystem/AgentAvatarDesign.swift
 $(SRCROOT)/Intent/DesignSystem/Colors.swift
+$(SRCROOT)/Intent/DesignSystem/ComponentLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ComposerLayout.swift
+$(SRCROOT)/Intent/DesignSystem/ConversationMediaLayout.swift
+$(SRCROOT)/Intent/DesignSystem/ConversationTranscriptLayout.swift
 $(SRCROOT)/Intent/DesignSystem/Layout.swift
+$(SRCROOT)/Intent/DesignSystem/MarkdownLayout.swift
+$(SRCROOT)/Intent/DesignSystem/QuestionWizardLayout.swift
 $(SRCROOT)/Intent/DesignSystem/Theme.swift
 $(SRCROOT)/Intent/DesignSystem/VisionHitTarget.swift
+$(SRCROOT)/Intent/DesignSystem/WorkspaceChromeLayout.swift
 $(SRCROOT)/Intent/Models.swift
 $(SRCROOT)/Intent/Models/AgentMessageAttribution.swift
 $(SRCROOT)/Intent/Models/AgentSession.swift

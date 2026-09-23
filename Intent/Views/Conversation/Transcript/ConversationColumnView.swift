@@ -10,17 +10,7 @@ struct ConversationColumnView: View {
     @State private var conversationHeight: CGFloat = 0
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
 
-    private enum Layout {
-        static let questionBannerBackgroundOpacity: Double = 0.4
-        static let questionBannerCornerRadius: CGFloat = 12
-        static let questionBannerHorizontalPadding: CGFloat = 8
-        static let questionBannerVerticalPadding: CGFloat = 8
-        static let questionWizardHorizontalPadding: CGFloat = 8
-        static let questionWizardTopPadding: CGFloat = 8
-        static let collapsedQuestionWizardBottomPadding: CGFloat = 4
-        static let expandedQuestionWizardBottomPadding: CGFloat = 8
-        static let questionSheetPadding: CGFloat = 24
-    }
+    private typealias Layout = Constants.Conversation.Column
 
     #if os(visionOS)
     // visionOS presents structured questions as a deliberate sheet instead
@@ -248,10 +238,7 @@ struct ConversationColumnView: View {
 private struct PendingQuestionRecoveryPlaceholder: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 8
-        static let verticalPadding: CGFloat = 12
-    }
+    private typealias Layout = Constants.Conversation.Column.PendingQuestionRecovery
 
     var body: some View {
         HStack(spacing: Layout.contentSpacing) {
@@ -270,9 +257,7 @@ private struct PendingQuestionRecoveryPlaceholder: View {
 private struct ConversationLoadingView: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 12
-    }
+    private typealias Layout = Constants.Conversation.Column.Loading
 
     var body: some View {
         VStack(spacing: Layout.contentSpacing) {
@@ -288,12 +273,7 @@ private struct ConversationEmptyView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 12
-        static let descriptionHorizontalPadding: CGFloat = 32
-        static let modelCaptionOpacity: Double = 0.7
-        static let modelCaptionTopPadding: CGFloat = 4
-    }
+    private typealias Layout = Constants.Conversation.Column.Empty
 
     var body: some View {
         if let name = viewModel.specialistName {

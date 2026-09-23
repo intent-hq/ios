@@ -12,15 +12,6 @@ nonisolated enum WorkspaceStatusImageLayout {
         case detail
     }
 
-    /// Row thumbnail side (matches the list's status-icon scale).
-    static let cardThumbnailSide: CGFloat = 44
-    /// Detail banner cap — the desktop card's `max-h-48`.
-    static let detailMaxHeight: CGFloat = 192
-    static let cornerRadius: CGFloat = 8
-    static let borderWidth: CGFloat = 0.5
-    static let detailPlaceholderHeight: CGFloat = 44
-    static let placeholderSpacing: CGFloat = 6
-
     /// The daemon omits the field until set and folds blanks to a clear;
     /// mirror that so an empty id never reaches the loader.
     static func normalizedAssetId(_ raw: String?) -> String? {
@@ -197,7 +188,7 @@ struct WorkspaceStatusImageView: View {
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         .frame(maxWidth: .infinity)
         .frame(height: Layout.detailPlaceholderHeight)
-        .background(Theme.muted(for: colorScheme).opacity(0.5))
+        .background(Theme.muted(for: colorScheme).opacity(Layout.placeholderOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
     }
 }

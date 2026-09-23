@@ -6,12 +6,7 @@ struct AgentWaitingView: View {
     let onNavigateToAgent: ((String, String, String) -> Void)?
     @Environment(\.colorScheme) var colorScheme
 
-    private static let headerSpacing: CGFloat = 8
-    private static let horizontalPadding: CGFloat = 16
-    private static let headerVerticalPadding: CGFloat = 8
-    private static let fallbackRowSpacing: CGFloat = 10
-    private static let rowVerticalPadding: CGFloat = 6
-    private static let agentRowSpacing: CGFloat = 8
+    private typealias Layout = Constants.Conversation.AgentWaiting
 
     init(
         viewModel: ConversationViewModel,
@@ -38,7 +33,7 @@ struct AgentWaitingView: View {
     }
 
     private var waitingHeader: some View {
-        HStack(spacing: Self.headerSpacing) {
+        HStack(spacing: Layout.headerSpacing) {
             ProgressView()
                 .scaleEffect(Constants.Conversation.AgentWaiting.progressScale)
             Text(headerText)
@@ -46,15 +41,15 @@ struct AgentWaitingView: View {
                 .foregroundStyle(Theme.foreground(for: colorScheme))
             Spacer()
         }
-        .padding(.horizontal, Self.horizontalPadding)
-        .padding(.vertical, Self.headerVerticalPadding)
+        .padding(.horizontal, Layout.horizontalPadding)
+        .padding(.vertical, Layout.headerVerticalPadding)
     }
 
     @ViewBuilder
     private var waitingList: some View {
         if !store.watchedAgents.isEmpty {
             Divider()
-                .padding(.horizontal, Self.horizontalPadding)
+                .padding(.horizontal, Layout.horizontalPadding)
             watchedAgentsList
         } else if !store.watchedAgentIds.isEmpty {
             watchedAgentIdsList
@@ -106,7 +101,7 @@ struct AgentWaitingView: View {
     }
 
     private func fallbackRow(_ agentId: String) -> some View {
-        HStack(spacing: Self.fallbackRowSpacing) {
+        HStack(spacing: Layout.fallbackRowSpacing) {
             ProgressView()
                 .scaleEffect(Constants.Conversation.AgentWaiting.fallbackProgressScale)
             Text(agentId.prefix(Constants.Conversation.AgentWaiting.fallbackAgentIdMaximumLength) + "...")
@@ -114,13 +109,13 @@ struct AgentWaitingView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             Spacer()
         }
-        .padding(.horizontal, Self.horizontalPadding)
-        .padding(.vertical, Self.rowVerticalPadding)
+        .padding(.horizontal, Layout.horizontalPadding)
+        .padding(.vertical, Layout.rowVerticalPadding)
     }
 
     @ViewBuilder
     private func agentRow(_ agent: AgentSession, showChevron: Bool = false) -> some View {
-        HStack(spacing: Self.agentRowSpacing) {
+        HStack(spacing: Layout.agentRowSpacing) {
             agentAvatar(agent)
             agentDescription(agent)
             Spacer()
@@ -131,8 +126,8 @@ struct AgentWaitingView: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.horizontal, Self.horizontalPadding)
-        .padding(.vertical, Self.rowVerticalPadding)
+        .padding(.horizontal, Layout.horizontalPadding)
+        .padding(.vertical, Layout.rowVerticalPadding)
         .contentShape(Rectangle())
     }
 
@@ -190,7 +185,7 @@ struct AgentWaitingView: View {
     }
 
     private func agentDescription(_ agent: AgentSession) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Layout.descriptionSpacing) {
             Text(agent.name)
                 .font(.caption)
                 .foregroundStyle(Theme.foreground(for: colorScheme))

@@ -7,7 +7,7 @@ import SwiftUI
 /// (`AgentAvatarWithState.svelte`); the default `.idle` keeps the neutral tile.
 struct AgentAvatarView: View {
     let agentId: String
-    var size: CGFloat = 20
+    var size: CGFloat = Constants.AgentAvatar.defaultSize
     var specialist: String?
     var icon: String?  // Specialist icon metadata (PROTOCOL §5.11)
     var isActive: Bool = false

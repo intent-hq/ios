@@ -19,8 +19,6 @@ struct MarkdownTextView: View {
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
 
-    private static let taskListTopSpacing: CGFloat = 2
-    private static let taskListBottomSpacing: CGFloat = 4
     private static let maximumBlockIndent = 3
     private static let minimumFenceLength = 3
     private static let indentedCodeWidth = 4
@@ -68,8 +66,8 @@ struct MarkdownTextView: View {
             )
             .textual.listItemSpacing(
                 .fontScaled(
-                    top: Self.taskListTopSpacing / CompactMarkdownStyle.baseFontSize,
-                    bottom: Self.taskListBottomSpacing / CompactMarkdownStyle.baseFontSize
+                    top: Constants.Markdown.taskListTopSpacing / Constants.Markdown.baseFontSize,
+                    bottom: Constants.Markdown.taskListBottomSpacing / Constants.Markdown.baseFontSize
                 )
             )
             .textual.textSelection(.enabled)

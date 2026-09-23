@@ -18,10 +18,7 @@ struct MonitoredPrsRow: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 
-    private static let pendingIndicatorOpacity = 0.8
-    private static let pendingIndicatorSide: CGFloat = 6
-    private static let chipVerticalPadding: CGFloat = 5
-    private static let chipBackgroundOpacity = 0.3
+    private typealias Layout = Constants.Conversation.StatusStrip.MonitoredPrs
 
     init(viewModel: ConversationViewModel, monitoredPrStore: MonitoredPrStore) {
         self.viewModel = viewModel
@@ -103,15 +100,15 @@ struct MonitoredPrsRow: View {
                 .lineLimit(1)
             if monitor.hasPendingChanges {
                 Circle()
-                    .fill(Color.orange.opacity(Self.pendingIndicatorOpacity))
-                    .frame(width: Self.pendingIndicatorSide, height: Self.pendingIndicatorSide)
+                    .fill(Color.orange.opacity(Layout.pendingIndicatorOpacity))
+                    .frame(width: Layout.pendingIndicatorSide, height: Layout.pendingIndicatorSide)
                     .accessibilityHidden(true)
             }
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         .padding(.horizontal, Constants.Conversation.StatusStrip.chipHorizontalPadding)
-        .padding(.vertical, Self.chipVerticalPadding)
-        .background(Theme.muted(for: colorScheme).opacity(Self.chipBackgroundOpacity))
+        .padding(.vertical, Layout.chipVerticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Layout.chipBackgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius)

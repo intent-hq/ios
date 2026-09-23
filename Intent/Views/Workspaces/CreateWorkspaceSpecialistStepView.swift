@@ -192,7 +192,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                     Text(row.value)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .multilineTextAlignment(.trailing)
-                        .lineLimit(2)
+                        .lineLimit(Constants.CreateWorkspace.contextValueLineLimit)
                         .truncationMode(.middle)
                 }
             }

@@ -211,7 +211,7 @@ struct NoteRowView: View {
                 starIcon
                 TaskProgressRingView(stats: stats)
             case .taskStatus(let status):
-                TaskStatusIconView(status: status, size: NoteRowLayout.leadingIconSize)
+                TaskStatusIconView(status: status, size: Constants.Notes.List.leadingIconSize)
             case .progressRing(let stats):
                 TaskProgressRingView(stats: stats)
             case .document:
@@ -249,7 +249,7 @@ struct NoteRowView: View {
                 Text(preview)
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .lineLimit(NoteRowLayout.previewLineLimit)
+                    .lineLimit(Constants.Notes.List.previewLineLimit)
             }
         }
     }
@@ -263,8 +263,6 @@ struct NoteRowView: View {
 }
 
 enum NoteRowLayout {
-    static let leadingIconSize: CGFloat = 14
-    static let previewLineLimit = 2
     static let firstLineIconTopPadding = Constants.Notes.List.titleSpacing
 
     static var disclosureTargetSize: CGFloat {
@@ -273,7 +271,7 @@ enum NoteRowLayout {
 
     static func indentation(for depth: Int, usesAccessibilityLayout: Bool) -> CGFloat {
         let width = usesAccessibilityLayout
-            ? Constants.Notes.List.contentSpacing * 2
+            ? Constants.Notes.List.contentSpacing * Constants.Notes.List.accessibilityIndentSpacingMultiplier
             : Constants.Notes.List.indentationWidth
         return CGFloat(max(0, depth)) * width
     }
@@ -308,7 +306,7 @@ enum NoteRowLayout {
     }
 
     static func titleLineLimit(usesAccessibilityLayout: Bool) -> Int? {
-        usesAccessibilityLayout ? nil : 2
+        usesAccessibilityLayout ? nil : Constants.Notes.List.titleLineLimit
     }
 
     static func visibleTags(for note: Note) -> [String] {

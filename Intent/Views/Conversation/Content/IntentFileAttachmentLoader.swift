@@ -172,8 +172,6 @@ struct IntentFileImageAttachment: Attachment {
 struct IntentFileFailureAttachment: Attachment {
     let altText: String
 
-    private static let iconLabelSpacing: CGFloat = 4
-
     var description: String { altText }
 
     var body: some View {
@@ -189,7 +187,7 @@ struct IntentFileFailureAttachment: Attachment {
         let font = UIFont.preferredFont(forTextStyle: .caption1, compatibleWith: traits)
         let label = "Image".size(withAttributes: [.font: font])
         return CGSize(
-            width: (label.width + font.lineHeight + Self.iconLabelSpacing).rounded(.up),
+            width: (label.width + font.lineHeight + Constants.Conversation.ImagePlaceholder.failureLabelSpacing).rounded(.up),
             height: font.lineHeight.rounded(.up)
         )
     }

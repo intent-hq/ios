@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct RootView: View {
-    private static let reconnectPanelMaximumWidth: CGFloat = 320
-
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.horizontalSizeClass) var sizeClass
@@ -201,7 +199,7 @@ struct RootView: View {
             // race, while retries continue on the remaining hosts.
             if !session.connection.certMismatches.isEmpty {
                 CertMismatchListView(mismatches: session.connection.certMismatches)
-                    .frame(maxWidth: Self.reconnectPanelMaximumWidth)
+                    .frame(maxWidth: Constants.Root.reconnectPanelMaximumWidth)
             }
 
             Button("Log Off") {

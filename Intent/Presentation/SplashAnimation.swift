@@ -8,8 +8,6 @@ struct SplashAnimation {
         Bundle.main.url(forResource: resourceName, withExtension: "gif")
     }
 
-    private static let fallbackFrameDuration: TimeInterval = 0.1
-
     let frames: [CGImage]
     let frameDurations: [TimeInterval]
     let duration: TimeInterval
@@ -60,12 +58,12 @@ struct SplashAnimation {
             let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil)
                 as? [CFString: Any],
             let gif = properties[kCGImagePropertyGIFDictionary] as? [CFString: Any]
-        else { return fallbackFrameDuration }
+        else { return Constants.Splash.fallbackFrameDuration }
 
         let value = gif[kCGImagePropertyGIFUnclampedDelayTime] as? Double
             ?? gif[kCGImagePropertyGIFDelayTime] as? Double
-        let duration = value ?? fallbackFrameDuration
-        return duration > 0 ? duration : fallbackFrameDuration
+        let duration = value ?? Constants.Splash.fallbackFrameDuration
+        return duration > 0 ? duration : Constants.Splash.fallbackFrameDuration
     }
 
     private static func loopCount(in source: CGImageSource) -> Int? {
