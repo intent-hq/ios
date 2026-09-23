@@ -57,10 +57,11 @@ struct TranscriptVisualLayoutTests {
         increasedContrast: Bool = false,
         displayScale: CGFloat = 2
     ) throws -> UIImage {
+        // ImageRenderer needs the SDK's writable backing key; colorSchemeContrast is read-only.
         let renderer = ImageRenderer(content: content
             .environment(\.dynamicTypeSize, textSize)
             .environment(\.colorScheme, dark ? .dark : .light)
-            .environment(\.colorSchemeContrast, increasedContrast ? .increased : .standard)
+            .environment(\._colorSchemeContrast, increasedContrast ? .increased : .standard)
             .environment(\.displayScale, displayScale)
             .environment(\.locale, Locale(identifier: "en_US")))
         renderer.scale = displayScale

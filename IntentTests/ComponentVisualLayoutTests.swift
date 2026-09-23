@@ -9,8 +9,9 @@ struct ComponentVisualLayoutTests {
     @Test(arguments: [24.0, 48.0], [false, true])
     func taskStatusKeepsItsRightHalfFillAtEveryScale(size: Double, increasedContrast: Bool) throws {
         let contrast: ColorSchemeContrast = increasedContrast ? .increased : .standard
+        // ImageRenderer needs the SDK's writable backing key; colorSchemeContrast is read-only.
         let icon = TaskStatusIconView(status: .inProgress, size: CGFloat(size))
-            .environment(\.colorSchemeContrast, contrast)
+            .environment(\._colorSchemeContrast, contrast)
         let leftToRight = try pixels(icon.environment(\.layoutDirection, .leftToRight))
         let rightToLeft = try pixels(icon.environment(\.layoutDirection, .rightToLeft))
         #expect(leftToRight.width == Int(size))
@@ -24,8 +25,8 @@ struct ComponentVisualLayoutTests {
 
     @Test func progressRingPreservesContrastAndNonColorCues() throws {
         let ring = TaskProgressRingView(stats: TaskStats(total: 4, completed: 1, inProgress: 2), size: 56)
-        let standard = try pixels(ring.environment(\.colorSchemeContrast, .standard))
-        let increased = try pixels(ring.environment(\.colorSchemeContrast, .increased))
+        let standard = try pixels(ring.environment(\._colorSchemeContrast, .standard))
+        let increased = try pixels(ring.environment(\._colorSchemeContrast, .increased))
         let differentiated = try pixels(ring.environment(\.accessibilityDifferentiateWithoutColor, true))
         let rightToLeft = try pixels(ring.environment(\.layoutDirection, .rightToLeft))
         #expect(standard.width == 56 && standard.height == 56)

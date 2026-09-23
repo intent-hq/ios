@@ -88,10 +88,11 @@ struct QuestionWizardRenderingTests {
         dark: Bool = false,
         increasedContrast: Bool = false
     ) throws -> CGSize {
+        // ImageRenderer needs the SDK's writable backing key; colorSchemeContrast is read-only.
         let styledContent = content
             .environment(\.dynamicTypeSize, textSize)
             .environment(\.colorScheme, dark ? .dark : .light)
-            .environment(\.colorSchemeContrast, increasedContrast ? .increased : .standard)
+            .environment(\._colorSchemeContrast, increasedContrast ? .increased : .standard)
             .environment(\.locale, Locale(identifier: "en_US"))
         let renderer = ImageRenderer(content: styledContent)
         renderer.scale = 1
