@@ -2,66 +2,54 @@ import Foundation
 import Network
 
 nonisolated struct NetworkPathSnapshot: Equatable, Sendable {
-    let isSatisfied: Bool
+    let status: NWPath.Status
+    /// Meaningful only for an unsatisfied path; not a diagnosis of Airplane Mode.
+    let unsatisfiedReason: NWPath.UnsatisfiedReason?
     let primaryInterface: String?
     let availableInterfaces: [String]
-    let isOnPhysicalInterface: Bool
+    /// Physical members in NWPath's preference order, even under a virtual primary.
+    let physicalInterfaces: [String]
+
+    /// Preserve the transport's existing satisfied/not-satisfied interpretation.
+    var isSatisfied: Bool { status == .satisfied }
+
+    var isOnPhysicalInterface: Bool {
+        primaryInterface.map { physicalInterfaces.contains($0) } ?? false
+    }
 
     init(
         isSatisfied: Bool,
-        primaryInterface: String?,
-        availableInterfaces: [String],
-        isOnPhysicalInterface: Bool
+        interfaces: [(name: String, type: NWInterface.InterfaceType)]
     ) {
-        self.isSatisfied = isSatisfied
-        self.primaryInterface = primaryInterface
-        self.availableInterfaces = availableInterfaces
-        self.isOnPhysicalInterface = isOnPhysicalInterface
+        self.init(status: isSatisfied ? .satisfied : .unsatisfied, interfaces: interfaces)
     }
 
-    init(isSatisfied: Bool, primaryInterface: String?) {
-        self.init(
-            isSatisfied: isSatisfied,
-            primaryInterface: primaryInterface,
-            availableInterfaces: [primaryInterface].compactMap { $0 },
-            isOnPhysicalInterface: primaryInterface != nil
-        )
-    }
-
-    init(isSatisfied: Bool, primaryInterface: String?, availableInterfaces: [String]) {
-        self.init(
-            isSatisfied: isSatisfied,
-            primaryInterface: primaryInterface,
-            availableInterfaces: availableInterfaces,
-            isOnPhysicalInterface: primaryInterface != nil
-        )
-    }
-
-    init(isSatisfied: Bool, primaryInterface: String?, isOnPhysicalInterface: Bool) {
-        self.init(
-            isSatisfied: isSatisfied,
-            primaryInterface: primaryInterface,
-            availableInterfaces: [primaryInterface].compactMap { $0 },
-            isOnPhysicalInterface: isOnPhysicalInterface
-        )
+    init(
+        status: NWPath.Status,
+        interfaces: [(name: String, type: NWInterface.InterfaceType)],
+        unsatisfiedReason: NWPath.UnsatisfiedReason? = nil
+    ) {
+        self.status = status
+        self.unsatisfiedReason = status == .unsatisfied ? unsatisfiedReason : nil
+        primaryInterface = interfaces.first?.name
+        availableInterfaces = interfaces.map(\.name)
+        physicalInterfaces = interfaces.compactMap { interface in
+            switch interface.type {
+            case .wifi, .cellular, .wiredEthernet:
+                interface.name
+            case .loopback, .other:
+                nil
+            @unknown default:
+                nil
+            }
+        }
     }
 
     init(_ path: NWPath) {
-        let interfaces = path.availableInterfaces
-        let isPhysical: Bool
-        switch interfaces.first?.type {
-        case .wifi, .cellular, .wiredEthernet:
-            isPhysical = true
-        case .loopback, .other, nil:
-            isPhysical = false
-        @unknown default:
-            isPhysical = false
-        }
         self.init(
-            isSatisfied: path.status == .satisfied,
-            primaryInterface: interfaces.first?.name,
-            availableInterfaces: interfaces.map(\.name),
-            isOnPhysicalInterface: isPhysical
+            status: path.status,
+            interfaces: path.availableInterfaces.map { (name: $0.name, type: $0.type) },
+            unsatisfiedReason: path.status == .unsatisfied ? path.unsatisfiedReason : nil
         )
     }
 }

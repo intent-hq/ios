@@ -7,6 +7,7 @@ struct ConnectionFailureView: View {
     let errorMessage: String
     var isCertMismatch: Bool = false
     var retryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
+    var networkStatus: NetworkAvailability.Status = .unknown
     @State private var isRetrying = false
     @State private var attemptNumber = 0
     @State private var retryTask: Task<Void, Never>?
@@ -56,19 +57,6 @@ struct ConnectionFailureView: View {
                 .font(.system(size: Constants.ConnectionFailure.iconSize))
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .accessibilityHidden(true)
-        }
-    }
-
-    private var failureTitle: some View {
-        VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
-            Text(retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can't Connect")
-                .font(.title2.bold())
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-            Text(errorMessage)
-                .font(.subheadline)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)
         }
     }
 
@@ -292,6 +280,9 @@ struct ConnectionFailureView: View {
 
             try? await Task.sleep(for: backoff(attempt))
             if Task.isCancelled { break }
+            // Home retires the coordinator synchronously, before SwiftUI
+            // delivers onDisappear and cancels this view-owned retry task.
+            guard !coordinator.lifecycleState.hasReturnedToSavedMachines else { return }
 
             // Dial this window's own bound record (re-read each
             // attempt so rotated tokens synced mid-retry are used);
@@ -359,6 +350,23 @@ struct ConnectionFailureView: View {
                     isRetrying = true
                 }
             )
+        }
+    }
+}
+
+extension ConnectionFailureView {
+    private var failureTitle: some View {
+        VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
+            Text(retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can't Connect")
+                .font(.title2.bold())
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+            Text(errorMessage)
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)
+            ConnectionNetworkStatusView(status: networkStatus, showsReconnecting: false)
+                .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)
         }
     }
 }

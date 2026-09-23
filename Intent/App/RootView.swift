@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct RootView: View {
-    private static let reconnectPanelMaximumWidth: CGFloat = 320
-
+    var networkAvailability: NetworkAvailability = .shared
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.horizontalSizeClass) var sizeClass
@@ -147,12 +146,13 @@ struct RootView: View {
             case .pairing:
                 PairingView()
             case .connecting:
-                ConnectingView()
+                ConnectingView(networkStatus: networkAvailability.status)
             case .connectionFailed(let error):
                 ConnectionFailureView(
                     errorMessage: error,
                     isCertMismatch: ConnectionFailureView.isCertificateMismatchMessage(error),
-                    retryPolicy: coordinator.connectionFailureRetryPolicy
+                    retryPolicy: coordinator.connectionFailureRetryPolicy,
+                    networkStatus: networkAvailability.status
                 )
             case .settings:
                 SettingsView()
@@ -162,59 +162,6 @@ struct RootView: View {
                 EmptyView()
             }
         }
-    }
-
-    @ViewBuilder private var reconnectOverlay: some View {
-        if coordinator.isDisconnected {
-            ZStack {
-                // Light tinted backdrop — lets blurred content show through
-                Color.black.opacity(Constants.Root.reconnectBackdropOpacity)
-                    .ignoresSafeArea()
-                    .background(.ultraThinMaterial)
-                reconnectPanel
-            }
-            .transition(.opacity)
-            .animation(
-                .easeInOut(duration: Constants.Root.screenAnimationDuration),
-                value: coordinator.isDisconnected
-            )
-        }
-    }
-
-    private var reconnectPanel: some View {
-        VStack(spacing: Constants.Root.reconnectPanelSpacing) {
-            ProgressView()
-                .scaleEffect(Constants.Root.reconnectProgressScale)
-                .tint(.primary)
-
-            Text("Reconnecting...")
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            Text("Connection to desktop app was lost")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            // Passive per-host cert-mismatch list: hosts that
-            // presented a wrong certificate during the reconnect
-            // race, while retries continue on the remaining hosts.
-            if !session.connection.certMismatches.isEmpty {
-                CertMismatchListView(mismatches: session.connection.certMismatches)
-                    .frame(maxWidth: Self.reconnectPanelMaximumWidth)
-            }
-
-            Button("Log Off") {
-                coordinator.onLogOff()
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-            .padding(.top, Constants.Root.reconnectButtonTopPadding)
-        }
-        .padding(Constants.Root.reconnectPanelPadding)
-        .background(.regularMaterial, in: RoundedRectangle(
-            cornerRadius: Constants.Root.reconnectPanelCornerRadius
-        ))
     }
 
     var body: some View {
@@ -290,9 +237,23 @@ struct RootView: View {
             // platforms, which keep the global sounds.
             windowFeedbackEmitter
         }
-        .overlay {
-            reconnectOverlay
+        .background {
+            ConnectionLossPresenter(
+                isPresented: coordinator.showsConnectionLossOverlay,
+                mismatches: session.connection.certMismatches,
+                networkStatus: networkAvailability.status,
+                onHome: coordinator.onReturnToSavedMachines
+            )
         }
+        .safeAreaInset(edge: .bottom) {
+            if isWorkspaceFlow, !coordinator.lifecycleState.hasEnteredRemoteUI,
+               session.workspaceStore.lastUpdated == nil,
+               ConnectionNetworkMessage(status: networkAvailability.status).isUnavailable {
+                ConnectionNetworkStatusView(status: networkAvailability.status)
+                    .padding()
+            }
+        }
+        .task { await DemoConnectionLoss.run(connection: session.connection, coordinator: coordinator) }
         // intent://pair deep-link confirmation — presented over whichever
         // screen is current (first-run pairing or an existing connection).
         .sheet(item: $coordinator.pendingDeepLinkPairing) { request in

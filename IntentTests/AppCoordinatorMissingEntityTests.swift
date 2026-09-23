@@ -25,8 +25,9 @@ extension AppCoordinatorTests {
         // Seed the store so the reconnect overlay clears immediately.
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
 
-        coordinator.onSelectAgent("agent-gone", workspaceId: wsId, agentName: "Worker")
         fake.simulateConnect()
+        coordinator.onConnectionSuccess()
+        coordinator.onSelectAgent("agent-gone", workspaceId: wsId, agentName: "Worker")
         fake.simulateDisconnect()
         fake.simulateConnect()
         // Reconnect must re-validate the open conversation's agent.
@@ -46,8 +47,9 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
 
-        coordinator.onSelectAgent("agent-live", workspaceId: wsId, agentName: "Worker")
         fake.simulateConnect()
+        coordinator.onConnectionSuccess()
+        coordinator.onSelectAgent("agent-live", workspaceId: wsId, agentName: "Worker")
         fake.simulateDisconnect()
         fake.simulateConnect()
         try await fake.waitForRequests("agent.get")
@@ -72,8 +74,9 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
 
-        coordinator.onSelectAgent("agent-live", workspaceId: wsId, agentName: "Worker")
         fake.simulateConnect()
+        coordinator.onConnectionSuccess()
+        coordinator.onSelectAgent("agent-live", workspaceId: wsId, agentName: "Worker")
         fake.simulateDisconnect()
         fake.simulateConnect()
         try await fake.waitForRequests("agent.get")
@@ -99,8 +102,9 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
 
-        coordinator.onSelectAgent("agent-live", workspaceId: wsId, agentName: "Worker")
         fake.simulateConnect()
+        coordinator.onConnectionSuccess()
+        coordinator.onSelectAgent("agent-live", workspaceId: wsId, agentName: "Worker")
         fake.simulateDisconnect()
         fake.simulateConnect()
         try await fake.waitForRequests("agent.get")
@@ -119,8 +123,9 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
 
-        coordinator.onSelectWorkspace(wsId)
         fake.simulateConnect()
+        coordinator.onConnectionSuccess()
+        coordinator.onSelectWorkspace(wsId)
         fake.simulateDisconnect()
         fake.simulateConnect()
 

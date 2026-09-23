@@ -77,10 +77,11 @@ import os
     @ObservationIgnored var pathMonitor: (any NetworkPathMonitoring)?
     @ObservationIgnored var pathMonitorID = 0
     @ObservationIgnored var lastPathSnapshot: NetworkPathSnapshot?
-    /// Injectable socket-path reader; loopback tests override this baseline.
-    @ObservationIgnored var readSocketPath: (WebSocketConnection) -> NetworkPathSnapshot? = { socket in
-        socket.establishedPath
+    /// Injectable endpoint evidence; general path reports cannot disprove a direct route.
+    @ObservationIgnored var readSocketPath: (WebSocketConnection) -> SocketPathObservation = { socket in
+        socket.pathObservation
     }
+    @ObservationIgnored var socketPathObservation: SocketPathObservation?
     @ObservationIgnored var socketInterface: String?
     @ObservationIgnored var lastSuccessfulConnectAt: CFAbsoluteTime?
     @ObservationIgnored var lastReconnectAttempt = 0

@@ -68,7 +68,7 @@ final class BackendSessionRegistryTests {
         )
     }
 
-    private func makeRegistry() -> BackendSessionRegistry {
+    func makeRegistry() -> BackendSessionRegistry {
         BackendSessionRegistry { [self] backendID in
             let connection = SessionFakeConnectionManager()
             createdBackendIDs.append(backendID)
