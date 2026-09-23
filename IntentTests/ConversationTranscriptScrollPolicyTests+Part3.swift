@@ -170,6 +170,50 @@ extension ConversationTranscriptScrollPolicyTests {
         ))
     }
 
+    /// The extracted policies share live inset-aware geometry and production
+    /// defaults: the past-end band, landing tolerance, and automatic-follow
+    /// band must still agree at their exact boundaries (#271, #304, #338).
+    @Test(arguments: [
+        (CGFloat(-51), false, LandingStep.continue(.clampPastEnd), RecoveryStep.continue(.settling)),
+        (-50, false, .finish(.landed), .continue(.recover(pageOffsetY: -20))),
+        (1, false, .finish(.landed), .continue(.recover(pageOffsetY: -20))),
+        (2, true, .continue(.scrollAgain), .continue(.followToEnd)),
+        (50, true, .continue(.scrollAgain), .continue(.followToEnd)),
+        (51, false, .continue(.scrollAgain), .continue(.settling))
+    ])
+    func geometryDefaultsAgreeAcrossFollowLandingAndRecovery(
+        distance: CGFloat,
+        follows: Bool,
+        landingStep: LandingStep,
+        recoveryStep: RecoveryStep
+    ) {
+        let viewport = geometry(offsetY: 334 - distance, topInset: 20, bottomInset: 34)
+        #expect(viewport.distanceToBottom == distance)
+        #expect(ConversationTranscriptScrollPolicy.shouldExecuteFollow(
+            forced: false,
+            userIsScrolledAway: false,
+            distanceToBottom: viewport.distanceToBottom
+        ) == follows)
+        #expect(ConversationTranscriptScrollPolicy.followLandingStep(
+            geometry: viewport,
+            previous: viewport,
+            isInteracting: false,
+            correctionsLeft: 1,
+            timedOut: false
+        ) == landingStep)
+        #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoveryStep(
+            geometry: viewport,
+            previous: viewport,
+            isEndRealized: false,
+            isInteracting: false,
+            isFollowing: false,
+            hasInitiallyScrolled: true,
+            userIsScrolledAway: false,
+            correctionsLeft: 1,
+            timedOut: false
+        ) == recoveryStep)
+    }
+
     @Test func streamingFollowConstantsAreDocumentedDefaults() {
         #expect(Constants.Conversation.Transcript.streamingFollowMinimumInterval > 0)
         #expect(Constants.Conversation.Transcript.streamingFollowDriftTolerance >= 0)
