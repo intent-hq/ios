@@ -5,17 +5,10 @@ import SwiftUI
 /// arc for the in-progress fraction drawn immediately after the completed
 /// one. Arcs start at 12 o'clock and run clockwise.
 struct TaskProgressRingView: View {
-    private enum Geometry {
-        static let referenceSize: CGFloat = 14
-        static let standardStrokeWidth: CGFloat = 2.5
-        static let increasedStrokeWidth: CGFloat = 3.25
-        static let increasedTrackOpacity = 0.65
-        static let differentiatedDashMultiplier: CGFloat = 1.5
-        static let startAngle = Angle.radians(-.pi / 2)
-    }
+    private typealias Geometry = Constants.TaskProgressRing
 
     let stats: TaskStats
-    var size: CGFloat = 14
+    var size: CGFloat = Geometry.defaultSize
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 

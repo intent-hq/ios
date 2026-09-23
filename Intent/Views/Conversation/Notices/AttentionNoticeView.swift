@@ -10,7 +10,7 @@ struct AttentionNoticeView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
-    private static let increasedContrastBackgroundMultiplier: Double = 1.75
+    private typealias Layout = Constants.Conversation.NoticeCard
 
     private var tint: Color {
         switch notice.kind {
@@ -44,7 +44,7 @@ struct AttentionNoticeView: View {
                 .accessibilityHidden(true)
                 .padding(.top, Constants.Conversation.NoticeCard.iconTopPadding)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Layout.attentionTextSpacing) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -62,7 +62,7 @@ struct AttentionNoticeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(tint.opacity(
             colorSchemeContrast == .increased
-                ? Constants.Conversation.NoticeCard.backgroundOpacity * Self.increasedContrastBackgroundMultiplier
+                ? Constants.Conversation.NoticeCard.backgroundOpacity * Layout.increasedContrastBackgroundMultiplier
                 : Constants.Conversation.NoticeCard.backgroundOpacity
         ))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius))
@@ -73,7 +73,7 @@ struct AttentionNoticeView: View {
                         ? 1
                         : Constants.Conversation.NoticeCard.borderOpacity),
                     lineWidth: colorSchemeContrast == .increased
-                        ? Constants.Conversation.NoticeCard.borderWidth * 2
+                        ? Constants.Conversation.NoticeCard.borderWidth * Layout.increasedContrastBorderWidthMultiplier
                         : Constants.Conversation.NoticeCard.borderWidth
                 )
         )

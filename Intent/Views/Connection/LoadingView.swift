@@ -32,10 +32,7 @@ struct LoadingView: View {
 
 /// The Intent burst mark, matching cloudlands-fe's Logo.svelte vector.
 nonisolated struct IntentLogo: Shape {
-    private enum Metrics {
-        static let viewBoxSize: CGFloat = 24
-        static let strokeWidth: CGFloat = 2.06
-    }
+    private typealias Metrics = Constants.IntentLogo
 
     func path(in rect: CGRect) -> Path {
         var path = Path()

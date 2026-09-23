@@ -9,10 +9,7 @@ struct ConnectingView: View {
     @Environment(BackendSession.self) var session
     var networkStatus: NetworkAvailability.Status = .unknown
 
-    private enum Layout {
-        static let mismatchHorizontalPadding: CGFloat = 32
-        static let contentBottomPadding: CGFloat = 24
-    }
+    private typealias Layout = Constants.Connecting
 
     var body: some View {
         VStack {

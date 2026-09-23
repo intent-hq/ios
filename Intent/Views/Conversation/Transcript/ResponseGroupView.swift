@@ -88,18 +88,7 @@ struct ResponseGroupBody: View, Equatable {
             && lhs.hydratingBlockIds == rhs.hydratingBlockIds
     }
 
-    private enum Layout {
-        static let groupSpacing: CGFloat = 4
-        static let headerSpacing: CGFloat = 6
-        static let iconOpacity: Double = 0.6
-        static let countHorizontalPadding: CGFloat = 5
-        static let countVerticalPadding: CGFloat = 1
-        static let disclosureOpacity: Double = 0.4
-        static let headerVerticalPadding: CGFloat = 4
-        static let railOpacity: Double = 0.15
-        static let bottomPadding: CGFloat = 8
-        static let childSpacing: CGFloat = 8
-    }
+    private typealias Layout = Constants.Conversation.ResponseGroup
 
     init(
         group: ResponseGroup,

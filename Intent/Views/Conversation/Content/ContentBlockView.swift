@@ -1,7 +1,5 @@
 import SwiftUI
 
-// swiftlint:disable file_length
-
 /// One rendered block of an assistant message. A thin shell over
 /// `ContentBlockBody`: the message hands every block fresh closures on each
 /// evaluation, so the block body is gated by `.equatable()` and only
@@ -108,17 +106,6 @@ struct ContentBlockBody: View, Equatable {
             && lhs.isHydrating == rhs.isHydrating
     }
 
-    private static let thinkingTopPadding: CGFloat = 4
-    private static let thinkingLabelSpacing: CGFloat = 4
-    private static let hydratingImageOpacity: Double = 0.6
-    private static let loadedImageOpacity: Double = 1
-    private static let loadingLabelSpacing: CGFloat = 4
-    private static let fileLabelSpacing: CGFloat = 6
-    private static let fileHorizontalPadding: CGFloat = 10
-    private static let fileVerticalPadding: CGFloat = 6
-    private static let fileBackgroundOpacity: Double = 0.5
-    private static let fileCornerRadius: CGFloat = 6
-
     init(
         block: ContentBlock,
         toolResult: ContentBlock?,
@@ -213,9 +200,9 @@ struct ContentBlockBody: View, Equatable {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .italic()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, Self.thinkingTopPadding)
+                .padding(.top, Constants.Conversation.ContentBlock.thinkingTopPadding)
         } label: {
-            HStack(spacing: Self.thinkingLabelSpacing) {
+            HStack(spacing: Constants.Conversation.ContentBlock.thinkingLabelSpacing) {
                 Image(systemName: "brain")
                     .font(.caption)
                     .accessibilityHidden(true)
@@ -268,8 +255,8 @@ struct ContentBlockBody: View, Equatable {
             } label: {
                 SquareImageThumbnail(image: uiImage, side: SquareImageThumbnail.transcriptSide)
                     .opacity(isHydrating
-                        ? Self.hydratingImageOpacity
-                        : Self.loadedImageOpacity)
+                        ? Constants.Conversation.ContentBlock.hydratingImageOpacity
+                        : Constants.Conversation.ContentBlock.loadedImageOpacity)
                     .copyContextMenuPassthrough()
             }
             .buttonStyle(.plain)
@@ -308,7 +295,7 @@ struct ContentBlockBody: View, Equatable {
             Button {
                 onHydrateBlock?(block.id)
             } label: {
-                HStack(spacing: Self.loadingLabelSpacing) {
+                HStack(spacing: Constants.Conversation.ContentBlock.loadingLabelSpacing) {
                     if isHydrating {
                         ProgressView()
                             .controlSize(.mini)
@@ -332,7 +319,7 @@ struct ContentBlockBody: View, Equatable {
 
     @ViewBuilder
     private var fileView: some View {
-        HStack(spacing: Self.fileLabelSpacing) {
+        HStack(spacing: Constants.Conversation.ContentBlock.fileLabelSpacing) {
             Image(systemName: "doc")
                 .font(.caption)
                 .accessibilityHidden(true)
@@ -340,10 +327,10 @@ struct ContentBlockBody: View, Equatable {
                 .font(.caption.monospaced())
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        .padding(.horizontal, Self.fileHorizontalPadding)
-        .padding(.vertical, Self.fileVerticalPadding)
-        .background(Theme.muted(for: colorScheme).opacity(Self.fileBackgroundOpacity))
-        .clipShape(RoundedRectangle(cornerRadius: Self.fileCornerRadius))
+        .padding(.horizontal, Constants.Conversation.ContentBlock.fileHorizontalPadding)
+        .padding(.vertical, Constants.Conversation.ContentBlock.fileVerticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.ContentBlock.fileBackgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ContentBlock.fileCornerRadius))
     }
 }
 
@@ -351,10 +338,8 @@ struct ContentBlockBody: View, Equatable {
 struct ImageDecodeFailureView: View {
     @Environment(\.colorScheme) var colorScheme
 
-    private static let labelSpacing: CGFloat = 4
-
     var body: some View {
-        HStack(spacing: Self.labelSpacing) {
+        HStack(spacing: Constants.Conversation.ImagePlaceholder.failureLabelSpacing) {
             Image(systemName: "photo")
                 .accessibilityHidden(true)
             Text("Image")
@@ -371,7 +356,7 @@ struct ImageAttachmentThumbnail: View {
     let workspaceId: String
     @State private var lightboxPresented = false
 
-    static let side: CGFloat = 60
+    static let side: CGFloat = Constants.Conversation.ImageThumbnail.attachmentSide
 
     var body: some View {
         if block.data == nil, let attachmentId = block.attachmentId {
@@ -501,11 +486,11 @@ struct AttachmentReferenceImageView: View {
 
     /// Placeholder square sized to match the eventual rendering.
     private func placeholder<Content: View>(@ViewBuilder _ label: () -> Content) -> some View {
-        VStack(spacing: 2) { label() }
+        VStack(spacing: Constants.Conversation.ImagePlaceholder.loadingLabelSpacing) { label() }
             .font(.caption)
             .frame(width: side, height: side)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .background(Theme.muted(for: colorScheme).opacity(0.5))
+            .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.ImagePlaceholder.backgroundOpacity))
             .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
     }
 }

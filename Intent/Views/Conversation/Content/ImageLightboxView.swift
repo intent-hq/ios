@@ -24,10 +24,6 @@ struct ImageLightboxView: View {
     private static let dismissDragThreshold: CGFloat = 120
     private static let zoomPercentageMultiplier: CGFloat = 100
     private static let accessibilityPanDistance: CGFloat = 50
-    private static let actionSpacing: CGFloat = 8
-    private static let actionContainerPadding: CGFloat = 12
-    private static let actionButtonPadding: CGFloat = 10
-    private static let actionButtonBackgroundOpacity: Double = 0.15
 
     var body: some View {
         ZStack {
@@ -42,11 +38,11 @@ struct ImageLightboxView: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            HStack(spacing: Self.actionSpacing) {
+            HStack(spacing: Constants.Conversation.ImageLightbox.actionSpacing) {
                 actionsMenu
                 closeButton
             }
-            .padding(Self.actionContainerPadding)
+            .padding(Constants.Conversation.ImageLightbox.actionContainerPadding)
         }
     }
 
@@ -111,8 +107,8 @@ struct ImageLightboxView: View {
             Image(systemName: "ellipsis")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
-                .padding(Self.actionButtonPadding)
-                .background(.white.opacity(Self.actionButtonBackgroundOpacity), in: Circle())
+                .padding(Constants.Conversation.ImageLightbox.actionButtonPadding)
+                .background(.white.opacity(Constants.Conversation.ImageLightbox.actionButtonBackgroundOpacity), in: Circle())
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
                     minHeight: Constants.Accessibility.minimumTapTarget
@@ -126,8 +122,8 @@ struct ImageLightboxView: View {
             Image(systemName: "xmark")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
-                .padding(Self.actionButtonPadding)
-                .background(.white.opacity(Self.actionButtonBackgroundOpacity), in: Circle())
+                .padding(Constants.Conversation.ImageLightbox.actionButtonPadding)
+                .background(.white.opacity(Constants.Conversation.ImageLightbox.actionButtonBackgroundOpacity), in: Circle())
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
                     minHeight: Constants.Accessibility.minimumTapTarget

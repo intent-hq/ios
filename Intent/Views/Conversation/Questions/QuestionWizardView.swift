@@ -12,10 +12,7 @@ struct QuestionWizardView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
-    private static let backgroundIncreasedOpacity = 0.7
-    private static let backgroundOpacity = 0.4
-    private static let cornerRadius: CGFloat = 12
-    private static let standardBorderOpacity = 0.3
+    private typealias Layout = Constants.Conversation.QuestionWizard.Surface
 
     private struct DraftAnswer {
         var sel: [Int] = []
@@ -72,16 +69,16 @@ struct QuestionWizardView: View {
             wizardContent
         }
         .background(Theme.muted(for: colorScheme).opacity(
-            colorSchemeContrast == .increased ? Self.backgroundIncreasedOpacity : Self.backgroundOpacity
+            colorSchemeContrast == .increased ? Layout.backgroundIncreasedOpacity : Layout.backgroundOpacity
         ))
-        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
+        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: Self.cornerRadius)
+            RoundedRectangle(cornerRadius: Layout.cornerRadius)
                 .strokeBorder(
                     Theme.border(for: colorScheme, contrast: colorSchemeContrast).opacity(
-                        colorSchemeContrast == .increased ? 1 : Self.standardBorderOpacity
+                        colorSchemeContrast == .increased ? 1 : Layout.standardBorderOpacity
                     ),
-                    lineWidth: colorSchemeContrast == .increased ? 2 : 1
+                    lineWidth: colorSchemeContrast == .increased ? Layout.increasedBorderWidth : Layout.borderWidth
                 )
         )
         .frame(maxWidth: .infinity)

@@ -4,37 +4,7 @@ import SwiftUI
 // debounce, and landing state machine can be reviewed as one unit.
 // swiftlint:disable file_length
 struct ConversationTranscriptView: View {
-    private enum Layout {
-        static let transcriptRowSpacing: CGFloat = 16
-        static let transcriptHorizontalPadding: CGFloat = 16
-        static let transcriptTopPadding: CGFloat = 24
-        static let bottomAnchorHeight: CGFloat = 8
-        static let bottomAnchorPadding: CGFloat = 12
-        static let goToEndSpacing: CGFloat = 4
-        static let goToEndHorizontalPadding: CGFloat = 14
-        static let goToEndVerticalPadding: CGFloat = 8
-        static let goToEndShadowOpacity = 0.15
-        static let goToEndShadowRadius: CGFloat = 4
-        static let goToEndShadowYOffset: CGFloat = 2
-        static let goToEndBottomPadding: CGFloat = 8
-        static let thinkingIndicatorSpacing: CGFloat = 6
-        static let thinkingIndicatorScale = 0.7
-        static let thinkingIndicatorSide: CGFloat = 16
-        static let thinkingIndicatorHorizontalPadding: CGFloat = 12
-        static let thinkingIndicatorVerticalPadding: CGFloat = 4
-        static let suggestedPromptSpacing: CGFloat = 8
-        static let suggestedPromptHorizontalPadding: CGFloat = 14
-        static let suggestedPromptVerticalPadding: CGFloat = 10
-        static let suggestedPromptBackgroundOpacity = 0.4
-        static let suggestedPromptCornerRadius: CGFloat = 10
-        static let suggestedPromptBorderOpacity = 0.3
-        static let suggestedPromptBorderWidth: CGFloat = 1
-        static let truncationBannerSpacing: CGFloat = 8
-        static let truncationBannerHorizontalPadding: CGFloat = 16
-        static let truncationBannerVerticalPadding: CGFloat = 12
-        static let truncationBannerBackgroundOpacity = 0.5
-        static let truncationBannerCornerRadius: CGFloat = 10
-    }
+    private typealias Layout = Constants.Conversation.Transcript
 
     let viewModel: ConversationViewModel
     let scrollState: ConversationTranscriptScrollState

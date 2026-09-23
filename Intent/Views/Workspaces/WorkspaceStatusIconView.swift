@@ -1,9 +1,6 @@
 import SwiftUI
 
 struct WorkspaceStatusIconView: View {
-    private static let increasedStrokeScale: CGFloat = 1.5
-    private static let differentiatedIdleGlyphScale: CGFloat = 0.35
-
     let workspace: Workspace
     let colorScheme: ColorScheme
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
@@ -61,7 +58,7 @@ struct WorkspaceStatusIconView: View {
 
     private var statusStrokeWidth: CGFloat {
         Constants.WorkspaceRow.statusStrokeWidth
-            * (colorSchemeContrast == .increased ? Self.increasedStrokeScale : 1)
+            * (colorSchemeContrast == .increased ? Constants.WorkspaceRow.increasedStatusStrokeScale : 1)
     }
 
     private var statusCueSize: CGFloat {
@@ -154,7 +151,7 @@ struct WorkspaceStatusIconView: View {
                     .strokeBorder(color, lineWidth: statusStrokeWidth)
                 if differentiateWithoutColor {
                     Image(systemName: "pause.fill")
-                        .font(.system(size: size * Self.differentiatedIdleGlyphScale, weight: .bold))
+                        .font(.system(size: size * Constants.WorkspaceRow.differentiatedIdleGlyphScale, weight: .bold))
                         .foregroundStyle(color)
                         .accessibilityHidden(true)
                 }

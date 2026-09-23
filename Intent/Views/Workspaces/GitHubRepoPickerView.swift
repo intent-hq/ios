@@ -114,7 +114,7 @@ struct GitHubRepoPickerView: View {
                     Text(repo.name)
                         .font(.headline)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.GitHubRepoPicker.repositoryNameLineLimit)
                     Text(repo.fullName)
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))

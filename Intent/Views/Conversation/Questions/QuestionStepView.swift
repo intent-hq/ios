@@ -24,21 +24,9 @@ struct QuestionStepView: View {
         lineHeight: Self.freeTextLineHeight
     )
 
-    private enum Layout {
-        static let titleSpacing: CGFloat = 3
-        static let contentTopPadding: CGFloat = 10
-        static let contentBottomPadding: CGFloat = 8
-        static let secondaryLabelOpacity = 0.6
-        static let selectedHighContrastOpacity = 0.2
-        static let selectedOpacity = 0.1
-        static let optionBackgroundOpacity = 0.6
-        static let standardBorderOpacity = 0.4
-        static let otherFieldSpacing: CGFloat = 8
-        static let otherFieldBackgroundOpacity = 0.7
-        static let returnHintOpacity = 0.5
-        static let lineFragmentPadding: CGFloat = 5
-        static let textContainerVerticalInsetMultiplier: CGFloat = 2
-    }
+    private typealias Layout = Constants.Conversation.QuestionWizard.Step
+    // The text container has a top and a bottom inset; this is not a visual scale.
+    private static let textContainerVerticalInsetMultiplier: CGFloat = 2
 
     var body: some View {
         ScrollView {
@@ -46,7 +34,7 @@ struct QuestionStepView: View {
                 VStack(alignment: .leading, spacing: Layout.titleSpacing) {
                     Text(question.header.uppercased())
                         .font(.caption.weight(.semibold))
-                        .kerning(0.5)
+                        .kerning(Layout.headerKerning)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .fixedSize(horizontal: false, vertical: true)
                     Text(question.question)
@@ -106,7 +94,7 @@ struct QuestionStepView: View {
             if isMulti {
                 checkbox(selected)
             }
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: Layout.optionLabelSpacing) {
                 Text(option.label)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -144,7 +132,8 @@ struct QuestionStepView: View {
                     ? Theme.primary(for: colorScheme)
                     : Theme.border(for: colorScheme, contrast: colorSchemeContrast)
                         .opacity(colorSchemeContrast == .increased ? 1 : Layout.standardBorderOpacity),
-                lineWidth: selected || colorSchemeContrast == .increased ? 2 : 1
+                lineWidth: selected || colorSchemeContrast == .increased
+                    ? Layout.optionEmphasizedBorderWidth : Layout.optionBorderWidth
             )
     }
 
@@ -164,8 +153,9 @@ struct QuestionStepView: View {
                                 for: colorScheme,
                                 contrast: colorSchemeContrast
                             )
-                                .opacity(colorSchemeContrast == .increased ? 1 : Layout.returnHintOpacity),
-                        lineWidth: colorSchemeContrast == .increased ? 2 : 1
+                                .opacity(colorSchemeContrast == .increased ? 1 : Layout.checkboxBorderOpacity),
+                        lineWidth: colorSchemeContrast == .increased
+                            ? Layout.checkboxIncreasedBorderWidth : Layout.checkboxBorderWidth
                     )
             )
             .overlay {
@@ -191,7 +181,7 @@ struct QuestionStepView: View {
     /// insets); past the cap the text view scrolls.
     static func clampedFreeTextHeight(_ contentHeight: CGFloat, lineHeight: CGFloat) -> CGFloat {
         let insets = Constants.Conversation.Composer.textContainerInset
-            * Layout.textContainerVerticalInsetMultiplier
+            * textContainerVerticalInsetMultiplier
         let minimum = lineHeight + insets
         let maximum = lineHeight
             * CGFloat(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount) + insets
