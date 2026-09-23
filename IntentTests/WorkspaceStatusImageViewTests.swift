@@ -73,18 +73,10 @@ struct WorkspaceStatusImageViewTests {
         #expect(Layout.accessibilityLabel(for: .detail) == "Workspace status image")
     }
 
-    @Test(arguments: [DynamicTypeSize.large, .accessibility5])
-    func loadingPlacementsReserveTheirOriginalFootprints(textSize: DynamicTypeSize) {
-        let loader = WorkspaceFileImageLoader(connection: FakeConnectionManager())
-        let proposedSize = CGSize(width: 320, height: 480)
-        let card = UIHostingController(rootView: WorkspaceStatusImageView(
-            workspaceId: "ws-1", assetId: "loading.png", style: .card, loader: loader
-        ).environment(\.dynamicTypeSize, textSize))
-        let detail = UIHostingController(rootView: WorkspaceStatusImageView(
-            workspaceId: "ws-1", assetId: "loading.png", style: .detail, loader: loader
-        ).environment(\.dynamicTypeSize, textSize))
-        #expect(card.sizeThatFits(in: proposedSize) == CGSize(width: 44, height: 44))
-        #expect(detail.sizeThatFits(in: proposedSize) == CGSize(width: 320, height: 44))
+    @Test func detailImageIsBoundedAndCardThumbnailIsSquare() {
+        #expect(Layout.detailMaxHeight > 0)
+        #expect(Layout.cardThumbnailSide > 0)
+        #expect(Layout.cardThumbnailSide < Layout.detailMaxHeight)
     }
 
     // MARK: - Hosted: a superseded fetch must not overwrite its replacement

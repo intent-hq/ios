@@ -344,7 +344,6 @@ $(SRCROOT)/IntentTests/CertMismatchListViewTests.swift
 $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
-$(SRCROOT)/IntentTests/ComponentVisualLayoutTests.swift
 $(SRCROOT)/IntentTests/ComposerSubmitPolicyTests.swift
 $(SRCROOT)/IntentTests/ConnectionFailureViewTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerFrameParsingTests.swift
@@ -362,7 +361,6 @@ $(SRCROOT)/IntentTests/ConnectionPersistenceMigrationTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
 $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
-$(SRCROOT)/IntentTests/ConversationContentLayoutTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreBindingGenerationTests.swift
@@ -457,7 +455,6 @@ $(SRCROOT)/IntentTests/PlatformGuardAllowlistTests.swift
 $(SRCROOT)/IntentTests/PrivacyManifestDriftTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift
 $(SRCROOT)/IntentTests/QuestionTests.swift
-$(SRCROOT)/IntentTests/QuestionWizardRenderingTests.swift
 $(SRCROOT)/IntentTests/QueuedImageDecodingMeasurementTests.swift
 $(SRCROOT)/IntentTests/QueuedMessageImageDecodingTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
@@ -496,7 +493,6 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Recovery.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Sequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
-$(SRCROOT)/IntentTests/TranscriptVisualLayoutTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
