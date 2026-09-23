@@ -10,13 +10,6 @@ struct ContextMentionChipView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 
-    private static let labelSpacing: CGFloat = 4
-    private static let iconOpacity: Double = 0.6
-    private static let horizontalPadding: CGFloat = 8
-    private static let verticalPadding: CGFloat = 3
-    private static let backgroundOpacity: Double = 0.7
-    private static let cornerRadius: CGFloat = 5
-
     var body: some View {
         if let url = ExternalLink.url(from: mention.url) {
             Button {
@@ -31,20 +24,20 @@ struct ContextMentionChipView: View {
     }
 
     private var chipLabel: some View {
-        HStack(spacing: Self.labelSpacing) {
+        HStack(spacing: Constants.Conversation.ContextMention.labelSpacing) {
             Image(systemName: Self.iconName(for: mention.provider))
                 .font(.caption2)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Self.iconOpacity))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Constants.Conversation.ContextMention.iconOpacity))
                 .accessibilityHidden(true)
             Text(Self.displayTitle(mention.title))
                 .font(.caption.weight(.medium))
                 .lineLimit(1)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
-        .padding(.horizontal, Self.horizontalPadding)
-        .padding(.vertical, Self.verticalPadding)
-        .background(Theme.muted(for: colorScheme).opacity(Self.backgroundOpacity))
-        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
+        .padding(.horizontal, Constants.Conversation.ContextMention.horizontalPadding)
+        .padding(.vertical, Constants.Conversation.ContextMention.verticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.ContextMention.backgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ContextMention.cornerRadius))
     }
 
     /// Chip label: the decoded title hard-truncated to ~30 characters (the
@@ -73,7 +66,7 @@ struct ContextMentionChipView: View {
 /// subviews left-to-right at their ideal size and wraps to a new line when
 /// the proposed width is exceeded.
 struct ChipFlowLayout: Layout {
-    var spacing: CGFloat = 6
+    var spacing: CGFloat = Constants.Conversation.ContextMention.flowSpacing
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
         let maxWidth = proposal.width ?? .infinity
