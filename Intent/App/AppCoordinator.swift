@@ -15,6 +15,11 @@ enum AppScreen {
     case workspaceList
 }
 
+enum AppSection: Hashable {
+    case assistant
+    case workspaces
+}
+
 enum ConnectionFailureRetryPolicy: Equatable {
     case automaticConnection
     case manualLogOff
@@ -47,6 +52,8 @@ final class AppCoordinatorLifecycleState {
 @Observable
 class AppCoordinator {
     var currentScreen: AppScreen = .loading
+    var selectedSection: AppSection = .workspaces
+    var assistantAgentId: String?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false
     /// True when the pairing surface should also offer the remaining saved

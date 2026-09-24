@@ -114,6 +114,19 @@ struct RootView: View {
     }
 
     @ViewBuilder private var workspaceFlowContent: some View {
+        @Bindable var coordinator = coordinator
+        TabView(selection: $coordinator.selectedSection) {
+            workspaceNavigationContent
+                .tabItem { Label("Workspaces", systemImage: "rectangle.stack") }
+                .tag(AppSection.workspaces)
+
+            AssistantView(session: session)
+                .tabItem { Label("Assistant", systemImage: "sparkles") }
+                .tag(AppSection.assistant)
+        }
+    }
+
+    @ViewBuilder private var workspaceNavigationContent: some View {
         if sizeClass == .compact {
             // iPhone: standard NavigationStack with push/pop
             compactNavigationView

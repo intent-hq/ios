@@ -376,13 +376,18 @@ enum DemoFixtures {
         switch method {
         case "agent.list":
             let workspaceId = params["workspaceId"] as? String
+            if workspaceId == Workspace.chiefWorkspaceId { return ["agents": assistantAgents] }
             return ["agents": workspaceId == longConversationWorkspaceId ? longConversationAgents : agents]
         case "agent.get":
             let agentId = params["agentId"] as? String
+            if agentId == assistantAgentId { return ["agent": assistantAgents[0]] }
             let agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
             return ["agent": agent]
         case "agent.getConversation":
             let agentId = params["agentId"] as? String
+            if agentId == assistantAgentId {
+                return ["messages": assistantMessages, "truncated": false, "totalMessages": assistantMessages.count]
+            }
             let messages = agentId == longConversationAgentId ? longConversationMessages : conversationMessages
             return [
                 "messages": messages,

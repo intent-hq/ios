@@ -3,13 +3,16 @@ import UIKit
 
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
+    var onAgentUnavailable: (() -> Void)?
 
     init(
         agentId: String,
         workspaceId: String,
         agentName: String,
-        session: BackendSession
+        session: BackendSession,
+        onAgentUnavailable: (() -> Void)? = nil
     ) {
+        self.onAgentUnavailable = onAgentUnavailable
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
             workspaceId: workspaceId,
@@ -21,12 +24,13 @@ struct ConversationView: View {
     }
 
     var body: some View {
-        ConversationViewContent(viewModel: viewModel)
+        ConversationViewContent(viewModel: viewModel, onAgentUnavailable: onAgentUnavailable)
     }
 }
 
 private struct ConversationViewContent: View {
     let viewModel: ConversationViewModel
+    var onAgentUnavailable: (() -> Void)?
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
@@ -286,7 +290,11 @@ private struct ConversationViewContent: View {
                         "workspaceId": viewModel.workspaceId
                     ]
                 )
-                dismiss()
+                if let onAgentUnavailable {
+                    onAgentUnavailable()
+                } else {
+                    dismiss()
+                }
             } catch {
                 selfInitiatedDelete = false
                 AppLog.userInterface.error("[ConversationView] Failed to delete agent: \(error)")
@@ -312,6 +320,10 @@ private struct ConversationViewContent: View {
     /// Skipped for a self-initiated delete (the Delete button already dismisses).
     private func handleAgentNotFoundIfNeeded() {
         guard viewModel.agentNotFound, !selfInitiatedDelete else { return }
+        if let onAgentUnavailable {
+            onAgentUnavailable()
+            return
+        }
         coordinator.handleMissingAgent(agentId: viewModel.agentId, workspaceId: viewModel.workspaceId)
     }
 

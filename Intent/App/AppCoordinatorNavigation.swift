@@ -46,6 +46,11 @@ extension AppCoordinator {
             guard let agentId = saved.agentId,
                   let workspaceId = saved.workspaceId,
                   let agentName = saved.agentName else { return false }
+            if workspaceId == Workspace.chiefWorkspaceId {
+                currentScreen = .workspaceList
+                onSelectAgent(agentId, workspaceId: workspaceId, agentName: agentName)
+                return true
+            }
             markWorkspaceSeen(workspaceId)
             navigationState.suppressWorkspaceNavigation = true
             selectedWorkspaceId = workspaceId
@@ -95,6 +100,11 @@ extension AppCoordinator {
     /// (`restoreLastScreenIfAvailable`); explicit agent/note selection and
     /// notification routing go through `onSelectAgent` / `onSelectNote`.
     func onSelectWorkspace(_ workspaceId: String) {
+        if workspaceId == Workspace.chiefWorkspaceId {
+            onSelectAssistant()
+            return
+        }
+        selectedSection = .workspaces
         markWorkspaceSeen(workspaceId)
         selectedWorkspaceId = workspaceId
         currentScreen = .workspaceDetail(workspaceId: workspaceId)
@@ -147,6 +157,11 @@ extension AppCoordinator {
     }
 
     func onSelectAgent(_ agentId: String, workspaceId: String, agentName: String) {
+        if workspaceId == Workspace.chiefWorkspaceId {
+            onSelectAssistant(agentId: agentId)
+            return
+        }
+        selectedSection = .workspaces
         navigationState.suppressWorkspaceNavigation = true
         selectedWorkspaceId = workspaceId
         navigationState.suppressWorkspaceNavigation = false
@@ -155,7 +170,23 @@ extension AppCoordinator {
         saveCurrentScreen()
     }
 
+    func onSelectAssistant(agentId: String? = nil) {
+        if let agentId { assistantAgentId = agentId }
+        selectedSection = .assistant
+        switch currentScreen {
+        case .workspaceList, .workspaceDetail, .agentConversation, .noteDetail:
+            break
+        default:
+            if let selectedWorkspaceId {
+                currentScreen = .workspaceDetail(workspaceId: selectedWorkspaceId)
+            } else {
+                currentScreen = .workspaceList
+            }
+        }
+    }
+
     func onSelectNote(_ noteId: String, workspaceId: String, noteTitle: String) {
+        selectedSection = .workspaces
         currentScreen = .noteDetail(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
         saveCurrentScreen()
     }

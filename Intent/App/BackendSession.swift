@@ -67,6 +67,7 @@ final class BackendSession {
     let backendID: BackendID?
     let connection: any SessionConnectionManaging
     let workspaceStore: WorkspaceStore
+    let assistantStore: AssistantStore
     /// Session-lifetime GitHub repo cache for the New Workspace repo step;
     /// outlives the sheet so a reopen renders the cached list instantly.
     let githubRepoStore: GitHubRepoStore
@@ -98,6 +99,7 @@ final class BackendSession {
         self.backendID = backendID
         self.connection = connection
         self.workspaceStore = workspaceStore
+        self.assistantStore = AssistantStore(connection: connection)
         self.coordinatorFactory = coordinatorFactory
         self.githubRepoStore = githubRepoStore
         self.creationOptionsStore = creationOptionsStore
