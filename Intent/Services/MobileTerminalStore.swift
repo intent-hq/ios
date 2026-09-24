@@ -9,7 +9,9 @@ final class MobileTerminalStore {
     private(set) var creatingWorkspaces: Set<String> = []
     private(set) var connectionGeneration = 0
     private(set) var isConnected: Bool
-    private(set) var errorMessage: String?
+    /// Errors are keyed by workspace so a background refresh of one workspace
+    /// never surfaces on another workspace's screen.
+    private(set) var errors: [String: String] = [:]
 
     @ObservationIgnored let connection: ConnectionManagerRouting
     @ObservationIgnored private let persistence: MobileTerminalPersistence
@@ -48,7 +50,9 @@ final class MobileTerminalStore {
         terminals.contains(terminal) && verifiedIds.contains(terminal.id)
     }
 
-    func clearError() { errorMessage = nil }
+    func errorMessage(workspaceId: String) -> String? { errors[workspaceId] }
+
+    func clearError(workspaceId: String) { errors[workspaceId] = nil }
 
     func refresh(workspaceId: String) async {
         observedWorkspaces.insert(workspaceId)
@@ -56,9 +60,9 @@ final class MobileTerminalStore {
         do {
             try await ensureSubscribed()
             _ = try await reconcile(workspaceId: workspaceId)
-            errorMessage = nil
+            errors[workspaceId] = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errors[workspaceId] = error.localizedDescription
         }
     }
 
@@ -66,7 +70,7 @@ final class MobileTerminalStore {
         guard creatingWorkspaces.insert(workspaceId).inserted else { return nil }
         observedWorkspaces.insert(workspaceId)
         defer { creatingWorkspaces.remove(workspaceId) }
-        errorMessage = nil
+        errors[workspaceId] = nil
         let generation = connectionGeneration
         do {
             try await ensureSubscribed()
@@ -77,7 +81,8 @@ final class MobileTerminalStore {
                 "cols": MobileTerminalConnection.initialColumns,
                 "rows": MobileTerminalConnection.initialRows
             ])
-            try checkConnection(generation)
+            // A returned id means the shell is running on the daemon, so record it even
+            // if the connection changed meanwhile; dropping it would orphan the PTY.
             guard let result = response as? [String: Any],
                   let id = result["terminalId"] as? String, !id.isEmpty else {
                 throw MobileTerminalError.invalidResponse
@@ -91,16 +96,19 @@ final class MobileTerminalStore {
             terminals.append(terminal)
             verifiedIds.insert(id)
             changed(workspaceId)
+            if generation != connectionGeneration, isConnected {
+                Task { [weak self] in await self?.refresh(workspaceId: workspaceId) }
+            }
             return terminal
         } catch {
-            errorMessage = error.localizedDescription
+            errors[workspaceId] = error.localizedDescription
             return nil
         }
     }
 
     func close(_ terminal: MobileTerminal) async -> Bool {
         let generation = connectionGeneration
-        errorMessage = nil
+        errors[terminal.workspaceId] = nil
         do {
             try await validate(terminal)
             try checkConnection(generation)
@@ -111,7 +119,7 @@ final class MobileTerminalStore {
             remove(terminal)
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errors[terminal.workspaceId] = error.localizedDescription
             return false
         }
     }

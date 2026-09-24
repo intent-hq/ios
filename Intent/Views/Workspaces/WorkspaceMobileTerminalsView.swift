@@ -14,7 +14,7 @@ struct WorkspaceMobileTerminalsView: View {
                 .padding(.vertical)
             ForEach(terminals) { terminal in
                 Button {
-                    store.clearError()
+                    store.clearError(workspaceId: workspaceId)
                     onSelect(terminal)
                 } label: {
                     HStack {

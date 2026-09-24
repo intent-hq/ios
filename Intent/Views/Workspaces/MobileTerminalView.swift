@@ -80,7 +80,7 @@ struct MobileTerminalView: View {
             status("Session ended. Use New terminal to start another.")
         } else if !store.isConnected {
             status("Disconnected. Your terminal stays on the server.")
-        } else if let error = connection.errorMessage ?? store.errorMessage {
+        } else if let error = connection.errorMessage ?? store.errorMessage(workspaceId: terminal.workspaceId) {
             status(error)
         } else if !connection.isReady {
             ProgressView("Connecting to terminal…")

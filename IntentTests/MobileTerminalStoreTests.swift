@@ -64,8 +64,35 @@ struct MobileTerminalStoreTests {
         fixture.fake.errorMap["terminal.list"] = MobileTerminalError.disconnected
         await fixture.store.refresh(workspaceId: "workspace")
         #expect(fixture.store.activeTerminals(workspaceId: "workspace") == [terminal])
-        #expect(fixture.store.errorMessage != nil)
+        #expect(fixture.store.errorMessage(workspaceId: "workspace") != nil)
         #expect(!fixture.fake.didCallMethod("terminal.create"))
+    }
+
+    @Test func errorsAreScopedToTheirWorkspace() async throws {
+        let fixture = try MobileTerminalFixture()
+        _ = try await fixture.create()
+        fixture.fake.errorMap["terminal.list"] = MobileTerminalError.disconnected
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.errorMessage(workspaceId: "workspace") != nil)
+        #expect(fixture.store.errorMessage(workspaceId: "other") == nil)
+        fixture.store.clearError(workspaceId: "workspace")
+        #expect(fixture.store.errorMessage(workspaceId: "workspace") == nil)
+    }
+
+    @Test func aShellCreatedAcrossAReconnectIsKeptRatherThanOrphaned() async throws {
+        let fixture = try MobileTerminalFixture()
+        fixture.fake.pendingMethods.insert("terminal.create")
+        let creation = Task { await fixture.store.create(workspaceId: "workspace") }
+        try await fixture.fake.waitForPendingRequests("terminal.create")
+        fixture.fake.connectionState = .disconnected
+        fixture.fake.connectionState = .connected
+        fixture.list(ids: ["mobile"])
+        fixture.fake.resolvePending("terminal.create", with: ["terminalId": "mobile"])
+        let terminal = try #require(await creation.value)
+        #expect(terminal.id == "mobile")
+        #expect(fixture.store.activeTerminals(workspaceId: "workspace") == [terminal])
+        #expect(fixture.persistence.load() == [terminal])
+        #expect(fixture.store.errorMessage(workspaceId: "workspace") == nil)
     }
 
     @Test func exitingRemovesTheMobileRowAndItsSavedIdentity() async throws {
