@@ -242,6 +242,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorRegistryCorruptionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorRoutingTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorWorkspaceValidationTests.swift
+$(SRCROOT)/IntentTests/AssistantPromptRenderingTests.swift
 $(SRCROOT)/IntentTests/AssistantStoreTests.swift
 $(SRCROOT)/IntentTests/AttachmentImageLoaderTests.swift
 $(SRCROOT)/IntentTests/AttachmentUploadServiceTests.swift

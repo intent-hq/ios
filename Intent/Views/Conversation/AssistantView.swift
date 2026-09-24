@@ -18,6 +18,10 @@ struct AssistantView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     conversationMenu
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    newConversationButton
+                        .accessibilityIdentifier("assistant.newConversation")
+                }
             }
             .safeAreaInset(edge: .top) {
                 if let error = store.errorMessage {
@@ -73,6 +77,8 @@ struct AssistantView: View {
 
     private var conversationMenu: some View {
         Menu {
+            newConversationButton
+            Divider()
             ForEach(store.threads) { thread in
                 Button {
                     coordinator.assistantAgentId = thread.id
@@ -84,13 +90,15 @@ struct AssistantView: View {
                     }
                 }
             }
-            Divider()
-            Button("New Conversation", systemImage: "square.and.pencil", action: createThread)
-                .disabled(store.isCreating || !store.hasLoaded)
         } label: {
             Label("Assistant conversations", systemImage: "bubble.left.and.bubble.right")
         }
         .accessibilityIdentifier("assistant.conversations")
+    }
+
+    private var newConversationButton: some View {
+        Button("New Conversation", systemImage: "square.and.pencil", action: createThread)
+            .disabled(store.isCreating || !store.hasLoaded)
     }
 
     private func createThread() {

@@ -46,4 +46,32 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(history.exists)
     }
+
+    @MainActor
+    func testNewConversationIsAvailableWithoutScrollingHistory() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-assistant-history"]
+        app.launch()
+        let assistantTab = app.buttons["Assistant"].firstMatch
+        XCTAssertTrue(assistantTab.waitForExistence(timeout: Fixture.timeout))
+        assistantTab.tap()
+
+        let greeting = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "I can help you plan and follow up")
+        ).firstMatch
+        XCTAssertTrue(greeting.waitForExistence(timeout: Fixture.timeout))
+        let newConversation = app.buttons["assistant.newConversation"]
+        XCTAssertTrue(newConversation.isHittable)
+        newConversation.tap()
+        XCTAssertTrue(greeting.waitForNonExistence(timeout: Fixture.timeout))
+
+        let history = app.buttons["assistant.conversations"]
+        history.tap()
+        let menuAction = app.buttons["New Conversation"].firstMatch
+        XCTAssertTrue(menuAction.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(menuAction.isHittable)
+        menuAction.tap()
+        XCTAssertTrue(newConversation.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(newConversation.isHittable)
+    }
 }

@@ -374,19 +374,26 @@ enum DemoFixtures {
     // swiftlint:disable:next cyclomatic_complexity
     private static func agentAndTaskResponse(for method: String, params: [String: Any]) -> Any {
         switch method {
+        case "agent.create" where params["workspaceId"] as? String == Workspace.chiefWorkspaceId:
+            return createAssistantAgent()
         case "agent.list":
             let workspaceId = params["workspaceId"] as? String
             if workspaceId == Workspace.chiefWorkspaceId { return ["agents": assistantAgents] }
             return ["agents": workspaceId == longConversationWorkspaceId ? longConversationAgents : agents]
         case "agent.get":
             let agentId = params["agentId"] as? String
-            if agentId == assistantAgentId { return ["agent": assistantAgents[0]] }
+            if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) {
+                return ["agent": assistant]
+            }
             let agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
             return ["agent": agent]
         case "agent.getConversation":
             let agentId = params["agentId"] as? String
             if agentId == assistantAgentId {
                 return ["messages": assistantMessages, "truncated": false, "totalMessages": assistantMessages.count]
+            }
+            if assistantAgents.contains(where: { ($0["id"] as? String) == agentId }) {
+                return ["messages": [[String: Any]](), "truncated": false, "totalMessages": 0]
             }
             let messages = agentId == longConversationAgentId ? longConversationMessages : conversationMessages
             return [

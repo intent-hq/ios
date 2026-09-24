@@ -18,6 +18,7 @@ struct AssistantMessageView: View {
     private let blocks: [ContentBlock]
     private let renderBlocks: [RenderBlock]
     private let copyText: String
+    private let hasStrippedPrompts: Bool
 
     init(
         message: ConversationMessage,
@@ -34,6 +35,7 @@ struct AssistantMessageView: View {
         let blocks = message.contentBlocks
         self.blocks = blocks
         let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
+        self.hasStrippedPrompts = strippedBlocks != blocks
         self.renderBlocks = MessageBlockPartitioning.groupContentBlocks(
             strippedBlocks,
             isStreaming: message.isStreaming
@@ -69,6 +71,8 @@ struct AssistantMessageView: View {
                     )
                 }
             }
+            // Rebuild cached markdown when a streamed prompt block closes and disappears.
+            .id(hasStrippedPrompts)
         }
         .padding(.vertical, Layout.verticalPadding)
         .modifier(MessageCopyContextMenu(
