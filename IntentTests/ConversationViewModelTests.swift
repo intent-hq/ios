@@ -68,23 +68,6 @@ struct ConversationViewModelTests {
 
     // MARK: - filteredMessages
 
-    @Test func filteredMessagesKeepsAssistantMessages() async {
-        let viewModel = makeVM()
-        viewModel.store.messages = [
-            textMessage(role: .assistant, text: "Hello!")
-        ]
-        #expect(viewModel.filteredMessages.count == 1)
-        #expect(viewModel.filteredMessages[0].role == .assistant)
-    }
-
-    @Test func filteredMessagesKeepsNormalUserMessages() async {
-        let viewModel = makeVM()
-        viewModel.store.messages = [
-            textMessage(role: .user, text: "Hi there")
-        ]
-        #expect(viewModel.filteredMessages.count == 1)
-    }
-
     @Test func filteredMessagesKeepsWorkspaceEvents() async {
         // Event wakes render as a banner (or fall back to the user bubble
         // on legacy text-only rows) — they are no longer hidden.

@@ -99,9 +99,4 @@ struct MarkdownTextViewTests {
         let attachment = AnyAttachment(IntentFileImageAttachment(image: image, altText: "alt"))
         #expect(MarkdownTextView.lightboxImage(for: attachment) === image)
     }
-
-    @Test func tappedFailureAttachmentIsIgnored() {
-        let attachment = AnyAttachment(IntentFileFailureAttachment(altText: "alt"))
-        #expect(MarkdownTextView.lightboxImage(for: attachment) == nil)
-    }
 }

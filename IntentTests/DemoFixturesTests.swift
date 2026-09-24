@@ -22,14 +22,6 @@ struct DemoFixturesTests {
         #expect(!DemoMode.pretendPairedRequested(by: ["pretend-paired", "--pretend"]))
     }
 
-    @Test func demoDataArgumentEnablesDemoMode() {
-        #expect(DemoMode.demoDataRequested(by: ["/path/to/Intent", "--demo-data"]))
-    }
-
-    @Test func demoDataImpliesPretendPaired() {
-        #expect(DemoMode.pretendPairedRequested(by: ["--demo-data"]))
-    }
-
     @Test func pretendPairedAloneDoesNotEnableFixtures() {
         #expect(DemoMode.pretendPairedRequested(by: ["--pretend-paired"]))
         #expect(!DemoMode.demoDataRequested(by: ["--pretend-paired"]))

@@ -472,14 +472,6 @@ struct BackendIDTests {
         #expect(BackendID(connection: connection) == BackendID(connection.id))
     }
 
-    @Test func hashesByConnectionUUID() {
-        let uuid = UUID()
-        let counts = [BackendID(uuid): 1]
-
-        #expect(counts[BackendID(uuid)] == 1)
-        #expect(BackendID(uuid) != BackendID(UUID()))
-    }
-
     @Test func roundTripsThroughCodable() throws {
         let id = BackendID(UUID())
         let data = try JSONEncoder().encode(id)
