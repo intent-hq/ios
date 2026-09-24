@@ -1,6 +1,6 @@
 import XCTest
 
-final class AssistantNavigationUITests: XCTestCase {
+nonisolated final class AssistantNavigationUITests: XCTestCase {
     private enum Fixture {
         static let timeout: TimeInterval = 30
         static let workspaceTitle = "Deflake payment integration tests"
