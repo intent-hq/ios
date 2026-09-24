@@ -68,10 +68,10 @@ struct PairingView: View {
                 .frame(width: Constants.Pairing.logoSize, height: Constants.Pairing.logoSize)
                 .foregroundStyle(Theme.primary(for: colorScheme))
             Text("Connect to Intent")
-                .font(.title2.bold())
+                .font(Constants.Typography.heading2.font)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
             Text("Pair with your desktop app to manage workspaces and chat with agents")
-                .font(.subheadline)
+                .font(Constants.Typography.bodyS.font)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Constants.Pairing.descriptionHorizontalPadding)
@@ -141,10 +141,10 @@ struct PairingOptionButton: View {
 
                 VStack(alignment: .leading, spacing: Constants.Pairing.optionTextSpacing) {
                     Text(title)
-                        .font(.body.weight(.medium))
+                        .font(Constants.Typography.bodySEmphasized.font)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                     Text(subtitle)
-                        .font(.caption)
+                        .font(Constants.Typography.bodyS.font)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.leading)
                 }

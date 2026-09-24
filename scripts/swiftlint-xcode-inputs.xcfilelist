@@ -25,6 +25,7 @@ $(SRCROOT)/Intent/DesignSystem/MarkdownLayout.swift
 $(SRCROOT)/Intent/DesignSystem/QuestionWizardLayout.swift
 $(SRCROOT)/Intent/DesignSystem/TerminalAppearance.swift
 $(SRCROOT)/Intent/DesignSystem/Theme.swift
+$(SRCROOT)/Intent/DesignSystem/Typography.swift
 $(SRCROOT)/Intent/DesignSystem/VisionHitTarget.swift
 $(SRCROOT)/Intent/DesignSystem/WorkspaceChromeLayout.swift
 $(SRCROOT)/Intent/Models.swift
@@ -509,6 +510,7 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Sequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
+$(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
