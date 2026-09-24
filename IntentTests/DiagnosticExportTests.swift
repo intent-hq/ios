@@ -8,6 +8,9 @@ struct DiagnosticExportTests {
         store.record(DiagnosticFixtures.event())
         let reviewed = await store.snapshot()
         store.record(DiagnosticFixtures.event(operation: .workspaceCreate))
+        let current = await store.snapshot()
+        #expect(current.metadata.retainedRecords == 2)
+        #expect(current.historyRevision == reviewed.historyRevision)
         guard case .ready(let report) = await store.prepareExport(reviewing: reviewed) else {
             Issue.record("Expected a report for the reviewed snapshot")
             return
@@ -32,6 +35,158 @@ struct DiagnosticExportTests {
         }
         #expect(updated.jsonLines.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: storage.files.directory.appendingPathComponent("report").path))
+    }
+}
+
+extension DiagnosticExportTests {
+    @Test func expiryPurgeThenRollbackNeverResurrectsReviewedEvents() async throws {
+        let clock = DiagnosticTestClock()
+        let storage = DiagnosticTestStorage()
+        let store = DiagnosticStore(storage: storage) { clock.now() }
+        store.record(DiagnosticFixtures.event())
+        let reviewed = await store.snapshot()
+        #expect(reviewed.metadata.retainedRecords == 1)
+        clock.advance(DiagnosticLimits.maximumAge)
+        let purged = await store.snapshot()
+        #expect(purged.jsonLines.isEmpty)
+        #expect(purged.historyRevision != reviewed.historyRevision)
+        clock.advance(-DiagnosticLimits.maximumAge)
+        guard case .needsReview(let updated) = await store.prepareExport(reviewing: reviewed) else {
+            Issue.record("Returning to the preview time must not resurrect expired records")
+            return
+        }
+        #expect(updated.metadata.generatedAt == reviewed.metadata.generatedAt)
+        #expect(updated.jsonLines.isEmpty)
+        #expect(try storage.files.readHistory(maximumBytes: DiagnosticLimits.maximumHistoryBytes).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: storage.files.directory.appendingPathComponent("report").path))
+        guard case .needsReview = await store.prepareExport(reviewing: reviewed) else {
+            Issue.record("An invalidated preview must remain invalid on retry")
+            return
+        }
+        guard case .ready(let report) = await store.prepareExport(reviewing: updated) else {
+            Issue.record("A fresh empty preview must be exportable after rollback")
+            return
+        }
+        let entries = try DiagnosticZIPTestReader.extract(Data(contentsOf: report.archiveURL))
+        #expect(entries["events.jsonl"] == Data())
+        #expect(await store.endReport(report))
+    }
+
+    @Test func futureRecordPurgeInvalidatesReviewWithoutObservedClockRollback() async {
+        let clock = DiagnosticTestClock()
+        let forward: TimeInterval = 10
+        let storage = DiagnosticTestStorage()
+        let limits = DiagnosticLimits()
+        let intake = DiagnosticIntake(limits: limits) { clock.now() }
+        let writer = DiagnosticWriter(storage: storage, intake: intake, limits: limits) { clock.now() }
+        #expect(intake.append(DiagnosticFixtures.event(), scope: nil))
+        let reviewed = await writer.snapshot()
+        clock.advance(forward)
+        #expect(intake.append(DiagnosticFixtures.event(operation: .workspaceCreate), scope: nil))
+        clock.advance(-forward)
+        // No worker ran at the future time: removal itself must rotate the revision.
+        let purged = await writer.snapshot()
+        #expect(purged.jsonLines == reviewed.jsonLines)
+        #expect(purged.metadata.loss.expiredRecords == 1)
+        #expect(purged.historyRevision != reviewed.historyRevision)
+        clock.advance(forward)
+        guard case .needsReview(let updated) = await writer.prepareExport(reviewing: reviewed) else {
+            Issue.record("A future-record purge must permanently invalidate older reviews")
+            return
+        }
+        #expect(updated.jsonLines == reviewed.jsonLines)
+        #expect(!FileManager.default.fileExists(atPath: storage.files.directory.appendingPathComponent("report").path))
+    }
+
+    @Test(arguments: [false, true])
+    func observedForwardTimeThenPartialRollbackRequiresReview(observeByExport: Bool) async {
+        let clock = DiagnosticTestClock()
+        let forward: TimeInterval = 10
+        let rollback: TimeInterval = 5
+        let storage = DiagnosticTestStorage()
+        let store = DiagnosticStore(storage: storage) { clock.now() }
+        store.record(DiagnosticFixtures.event())
+        let reviewed = await store.snapshot()
+        clock.advance(forward)
+        if observeByExport {
+            guard case .ready(let report) = await store.prepareExport(reviewing: reviewed) else {
+                Issue.record("Normal forward time must not invalidate the review")
+                return
+            }
+            #expect(await store.endReport(report))
+        } else {
+            _ = await store.snapshot()
+        }
+        clock.advance(-rollback)
+        guard case .needsReview(let updated) = await store.prepareExport(reviewing: reviewed) else {
+            Issue.record("Rollback must invalidate even when still later than the preview time")
+            return
+        }
+        #expect(updated.metadata.generatedAt > reviewed.metadata.generatedAt)
+        #expect(updated.jsonLines == reviewed.jsonLines)
+        #expect(updated.historyRevision != reviewed.historyRevision)
+        #expect(!FileManager.default.fileExists(atPath: storage.files.directory.appendingPathComponent("report").path))
+        clock.advance(rollback)
+        guard case .needsReview = await store.prepareExport(reviewing: reviewed) else {
+            Issue.record("Catching up to the old clock time must not restore an invalidated review")
+            return
+        }
+    }
+
+    @Test func freshSnapshotAfterPartialRollbackCanBeSharedImmediately() async throws {
+        let clock = DiagnosticTestClock()
+        let forward: TimeInterval = 10
+        let rollback: TimeInterval = 5
+        let store = DiagnosticStore(storage: DiagnosticTestStorage()) { clock.now() }
+        store.record(DiagnosticFixtures.event())
+        let original = await store.snapshot()
+        clock.advance(forward)
+        _ = await store.snapshot()
+        clock.advance(-rollback)
+        store.record(DiagnosticFixtures.event(operation: .workspaceCreate))
+        let fresh = await store.snapshot()
+        #expect(fresh.historyRevision != original.historyRevision)
+        #expect(fresh.metadata.retainedRecords == 2)
+        guard case .ready(let report) = await store.prepareExport(reviewing: fresh) else {
+            Issue.record("A new review must work before the clock reaches its former high-water mark")
+            return
+        }
+        let entries = try DiagnosticZIPTestReader.extract(Data(contentsOf: report.archiveURL))
+        #expect(entries["events.jsonl"] == fresh.jsonLines)
+        #expect(await store.endReport(report))
+    }
+
+    @Test func clockObservationsAreCoherentAndDetectSubsecondRollback() async {
+        let clock = DiagnosticTestClock()
+        let forward: TimeInterval = 0.75
+        let storage = DiagnosticTestStorage()
+        let limits = DiagnosticLimits()
+        let intake = DiagnosticIntake(limits: limits) { clock.now() }
+        let writer = DiagnosticWriter(storage: storage, intake: intake, limits: limits) { clock.now() }
+        let reviewed = await writer.snapshot()
+        #expect(clock.readCount == 1)
+        clock.advance(forward)
+        guard case .ready(let report) = await writer.prepareExport(reviewing: reviewed) else {
+            Issue.record("A valid export should use one clock observation before and after writing")
+            return
+        }
+        #expect(clock.readCount == 3)
+        #expect(await writer.endReport(report))
+        clock.advance(-0.5)
+        guard case .needsReview(let fresh) = await writer.prepareExport(reviewing: reviewed) else {
+            Issue.record("Clock rollback within one encoded second must also invalidate the review")
+            return
+        }
+        // One validation observation and one fresh snapshot/flush observation.
+        #expect(clock.readCount == 5)
+        #expect(fresh.metadata.generatedAt == reviewed.metadata.generatedAt)
+        #expect(fresh.historyRevision != reviewed.historyRevision)
+        guard case .ready(let freshReport) = await writer.prepareExport(reviewing: fresh) else {
+            Issue.record("A stable clock after a subsecond rollback must allow a fresh review")
+            return
+        }
+        #expect(clock.readCount == 7)
+        #expect(await writer.endReport(freshReport))
     }
 
     @Test func anotherWindowClearInvalidatesReviewButPreservesActiveConsumer() async throws {
@@ -152,5 +307,38 @@ struct DiagnosticExportTests {
         }
         #expect(updated.jsonLines.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: storage.files.directory.appendingPathComponent("report").path))
+    }
+
+    @Test(arguments: [-1.0, 5.0])
+    func rollbackDuringFilePreparationRemovesArchiveAndAllowsFreshReview(offset: TimeInterval) async {
+        let clock = DiagnosticTestClock()
+        let forward: TimeInterval = 10
+        let storage = DiagnosticTestStorage()
+        let store = DiagnosticStore(storage: storage) { clock.now() }
+        store.record(DiagnosticFixtures.event())
+        let reviewed = await store.snapshot()
+        clock.advance(forward)
+        storage.state.withLock { state in
+            state.afterReportWrite = { clock.advance(offset - forward) }
+        }
+        guard case .needsReview(let updated) = await store.prepareExport(reviewing: reviewed) else {
+            Issue.record("Rollback during ZIP writing must invalidate the archive, including partial rollback")
+            return
+        }
+        #expect(updated.historyRevision != reviewed.historyRevision)
+        #expect(updated.metadata.generatedAt == reviewed.metadata.generatedAt.addingTimeInterval(offset))
+        #expect(updated.jsonLines == (offset < 0 ? Data() : reviewed.jsonLines))
+        #expect(!FileManager.default.fileExists(atPath: storage.files.directory.appendingPathComponent("report").path))
+        storage.state.withLock { $0.afterReportWrite = nil }
+        guard case .ready(let report) = await store.prepareExport(reviewing: updated) else {
+            Issue.record("A fresh review must work immediately after rejecting the stale archive")
+            return
+        }
+        #expect(await store.endReport(report))
+        clock.advance(forward - offset)
+        guard case .needsReview = await store.prepareExport(reviewing: reviewed) else {
+            Issue.record("The invalidated preparation must stay invalid after clock recovery")
+            return
+        }
     }
 }

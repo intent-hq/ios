@@ -13,6 +13,7 @@ actor DiagnosticWriter {
     private var loss = DiagnosticLoss()
     private var activeReport: DiagnosticReport?
     private var historyRevision = UUID()
+    private var lastObservedTime: Date?
 
     init(
         storage: any DiagnosticStorage,
@@ -36,12 +37,11 @@ actor DiagnosticWriter {
     }
 
     func snapshot() -> DiagnosticSnapshot {
-        flushBatch()
+        let timestamp = flushBatch()
         let counts = intake.losses()
         loss.queueOverflow = counts.overflow
         loss.invalidScope = counts.invalidScope
         let data = encodedHistory()
-        let timestamp = now
         let first = records.map(\.firstTimestamp).min() ?? timestamp
         return DiagnosticSnapshot(
             jsonLines: data,
@@ -77,18 +77,24 @@ actor DiagnosticWriter {
 
     func prepareExport(reviewing snapshot: DiagnosticSnapshot) -> DiagnosticExportResult {
         guard !Task.isCancelled else { return .unavailable }
-        guard snapshot.historyRevision == historyRevision,
-              snapshot.metadata.generatedAt <= now, now < snapshot.expiresAt else {
+        let startedAt = observeTime()
+        guard isValid(snapshot, at: startedAt) else {
             return .needsReview(self.snapshot())
         }
         guard let report = beginReport(snapshot: snapshot) else { return .unavailable }
-        // File preparation may cross the retention boundary. Never hand that
-        // stale archive to a new consumer; let the person review refreshed data.
-        guard now < snapshot.expiresAt, snapshot.metadata.generatedAt <= now else {
+        // File preparation may cross the retention boundary or a clock rollback.
+        // Use one observation for both time bounds and the revision check.
+        let finishedAt = observeTime()
+        guard isValid(snapshot, at: finishedAt) else {
             _ = endReport(report)
             return .needsReview(self.snapshot())
         }
         return .ready(report)
+    }
+
+    private func isValid(_ snapshot: DiagnosticSnapshot, at timestamp: Date) -> Bool {
+        snapshot.historyRevision == historyRevision
+            && snapshot.metadata.generatedAt <= timestamp && timestamp < snapshot.expiresAt
     }
 
     private func beginReport(snapshot: DiagnosticSnapshot) -> DiagnosticReport? {
@@ -123,17 +129,24 @@ actor DiagnosticWriter {
         }
     }
 
-    private var now: Date {
-        Date(timeIntervalSince1970: clock().timeIntervalSince1970.rounded(.down))
+    private func observeTime() -> Date {
+        let timestamp = clock()
+        if let lastObservedTime, timestamp < lastObservedTime {
+            historyRevision = UUID()
+        }
+        // Track the latest observation, not a high-water mark: a fresh review
+        // after rollback must be usable without waiting for the clock to catch up.
+        lastObservedTime = timestamp
+        return Date(timeIntervalSince1970: timestamp.timeIntervalSince1970.rounded(.down))
     }
 
-    private func flushBatch() {
+    @discardableResult
+    private func flushBatch() -> Date {
         loadIfNeeded()
         let batch = intake.take()
-        let timestamp = now
-        let previousCount = records.count
+        let timestamp = observeTime()
         expire(at: timestamp)
-        needsPersistence = needsPersistence || !batch.isEmpty || records.count != previousCount
+        needsPersistence = needsPersistence || !batch.isEmpty
         for record in batch {
             guard record.isValid else { loss.malformedRecords += 1; continue }
             if let last = records.last, last.canMerge(record),
@@ -145,15 +158,16 @@ actor DiagnosticWriter {
             }
         }
         expire(at: timestamp)
-        guard needsPersistence else { return }
+        guard needsPersistence else { return timestamp }
         let data = boundedHistory()
-        guard loaded else { return }
+        guard loaded else { return timestamp }
         do {
             try storage.replaceHistory(data)
             needsPersistence = false
         } catch {
             loss.storageUnavailable = true
         }
+        return timestamp
     }
 
     private func loadIfNeeded() {
@@ -200,6 +214,10 @@ actor DiagnosticWriter {
         // future records instead of extending their retention indefinitely.
         records.removeAll { $0.firstTimestamp <= cutoff || $0.lastTimestamp > timestamp }
         loss.expiredRecords += UInt64(previous - records.count)
+        if records.count != previous {
+            historyRevision = UUID()
+            needsPersistence = true
+        }
     }
 
     private func boundedHistory() -> Data {

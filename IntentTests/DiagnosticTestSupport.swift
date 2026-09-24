@@ -4,10 +4,23 @@ import Synchronization
 
 nonisolated final class DiagnosticTestClock: Sendable {
     private static let epoch: TimeInterval = 1_800_000_000
-    private let value = Mutex(Date(timeIntervalSince1970: epoch))
+    private struct State {
+        var date: Date
+        var reads = 0
+    }
 
-    func now() -> Date { value.withLock { $0 } }
-    func advance(_ seconds: TimeInterval) { value.withLock { $0.addTimeInterval(seconds) } }
+    private let value = Mutex(State(date: Date(timeIntervalSince1970: epoch)))
+
+    var readCount: Int { value.withLock { $0.reads } }
+
+    func now() -> Date {
+        value.withLock { state in
+            state.reads += 1
+            return state.date
+        }
+    }
+
+    func advance(_ seconds: TimeInterval) { value.withLock { $0.date.addTimeInterval(seconds) } }
 }
 
 nonisolated final class DiagnosticTestStorage: DiagnosticStorage, Sendable {
