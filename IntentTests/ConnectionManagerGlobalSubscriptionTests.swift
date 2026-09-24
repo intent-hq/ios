@@ -22,7 +22,8 @@ extension ConnectionManagerTests {
     @Test @MainActor func globalSubscriptionRetriesUntilTheDaemonAccepts() async throws {
         let previous = Self.enablePlaintextLoopback()
         defer { Self.restorePlaintextLoopback(previous) }
-        let manager = ConnectionManager.shared
+        let diagnostics = DiagnosticStore(storage: DiagnosticTestStorage())
+        let manager = ConnectionManager(diagnostics: diagnostics)
         let clock = ManualHeartbeatClock()
         let server = try await RecoveryWebSocketServer.start()
         server.failNextRequests(2, method: Self.subscribeMethod)
@@ -49,12 +50,17 @@ extension ConnectionManagerTests {
         #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
         #expect(disconnects.count == .zero)
         #expect(manager.connectionState == .connected)
+        let records = try DiagnosticFixtures.records(await diagnostics.snapshot())
+            .filter { $0.event.operation == .subscriptionGlobal }
+        #expect(records.map(\.event.outcome) == [.retrying, .recovered])
+        #expect(records.map(\.count) == [2, 1])
     }
 
     @Test @MainActor func globalSubscriptionExhaustionSurfacesFailureAndRetriesOnRequest() async throws {
         let previous = Self.enablePlaintextLoopback()
         defer { Self.restorePlaintextLoopback(previous) }
-        let manager = ConnectionManager.shared
+        let diagnostics = DiagnosticStore(storage: DiagnosticTestStorage())
+        let manager = ConnectionManager(diagnostics: diagnostics)
         let clock = ManualHeartbeatClock()
         let server = try await RecoveryWebSocketServer.start()
         let maxAttempts = ConnectionManager.globalSubscriptionMaxAttempts
@@ -94,6 +100,10 @@ extension ConnectionManagerTests {
         sessionConnection.retryGlobalSubscription()
         try await Self.settle { manager.globalSubscriptionState == .subscribed }
         #expect(server.requestCount(method: Self.subscribeMethod) == maxAttempts + 1)
+        let records = try DiagnosticFixtures.records(await diagnostics.snapshot())
+            .filter { $0.event.operation == .subscriptionGlobal }
+        #expect(records.map(\.event.outcome) == [.retrying, .exhausted, .succeeded])
+        #expect(records.map(\.count) == [UInt64(maxAttempts - 1), 1, 1])
     }
 }
 

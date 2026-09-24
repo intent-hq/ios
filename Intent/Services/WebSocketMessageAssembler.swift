@@ -23,6 +23,7 @@ extension WebSocketConnection {
     /// Pure and unit-testable; text is UTF-8-decoded only once the message is
     /// complete so multi-byte characters split across fragments stay intact.
     nonisolated struct MessageAssembler {
+        var diagnostics: DiagnosticStore = .shared
         private var pendingKind = PendingMessageKind.none
         private var buffer = Data()
 
@@ -41,7 +42,10 @@ extension WebSocketConnection {
             case .continuation:
                 // A continuation with no message in progress is a protocol
                 // violation; drop it rather than fabricate a message.
-                guard pendingKind != .none else { return nil }
+                guard pendingKind != .none else {
+                    recordFailure()
+                    return nil
+                }
                 buffer.append(data)
             }
             guard isComplete, pendingKind != .none else { return nil }
@@ -52,6 +56,7 @@ extension WebSocketConnection {
             switch pendingKind {
             case .text:
                 guard let text = String(bytes: buffer, encoding: .utf8) else {
+                    recordFailure()
                     throw MessageAssemblyError.invalidTextEncoding
                 }
                 return .string(text)
@@ -60,6 +65,17 @@ extension WebSocketConnection {
             case .none:
                 return nil
             }
+        }
+
+        private func recordFailure() {
+            diagnostics.record(DiagnosticEvent(
+                kind: .operationFailed,
+                operation: .protocolMessageAssembly,
+                site: .webSocket,
+                stage: .decode,
+                outcome: .failed,
+                failure: DiagnosticFailure(origin: .transport, classification: .malformedResponse)
+            ))
         }
     }
 }

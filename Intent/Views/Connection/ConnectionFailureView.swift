@@ -297,13 +297,15 @@ struct ConnectionFailureView: View {
             }
 
             do {
-                try await connection.connect(
-                    hosts: record.server.hosts,
-                    port: record.server.port,
-                    token: record.token,
-                    certFingerprint: record.server.certFingerprint,
-                    tcAddress: record.server.tcAddress
-                )
+                try await DiagnosticConnectContext.$origin.withValue(.failureScreenRetry) {
+                    try await connection.connect(
+                        hosts: record.server.hosts,
+                        port: record.server.port,
+                        token: record.token,
+                        certFingerprint: record.server.certFingerprint,
+                        tcAddress: record.server.tcAddress
+                    )
+                }
                 // A cancelled retry must never route: the user may have
                 // switched to another saved connection while this connect
                 // was in flight, and a stale success would restore the

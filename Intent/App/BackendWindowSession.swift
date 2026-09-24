@@ -12,6 +12,7 @@ final class BackendWindowSession {
     private let registry: BackendSessionRegistry
     let networkAvailability: NetworkAvailability
     @ObservationIgnored private var networkLease: NetworkAvailability.Lease?
+    @ObservationIgnored private let lifecycleDiagnostics = LifecycleDiagnostics()
 
     init(registry: BackendSessionRegistry = .shared, networkAvailability: NetworkAvailability = .shared) {
         self.registry = registry
@@ -28,9 +29,11 @@ final class BackendWindowSession {
         #if DEBUG
         NetworkCopyDiagnostics.current?.record(.scene(.init(phase), lease: networkLease != nil))
         #endif
+        lifecycleDiagnostics.scene(phase)
     }
 
     func stopNetworkObservation() {
+        lifecycleDiagnostics.stopped()
         networkLease?.cancel()
         networkLease = nil
         #if DEBUG

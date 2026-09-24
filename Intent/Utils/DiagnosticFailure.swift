@@ -45,6 +45,17 @@ nonisolated struct DiagnosticFailure: Codable, Equatable, Sendable {
     }
 
     enum Code: String, Codable, CaseIterable, Sendable {
+        case abnormalClose = "abnormal_close"
+        case connectionRefused = "connection_refused"
+        case connectionReset = "connection_reset"
+        case dns, tls, unreachable
+        case goingAway = "going_away"
+        case invalidPayload = "invalid_payload"
+        case messageTooLarge = "message_too_large"
+        case normalClose = "normal_close"
+        case policyViolation = "policy_violation"
+        case protocolError = "protocol_error"
+        case timedOut = "timed_out"
         case authentication, cancelled, decode, duplicate
         case interactionNotAllowed = "interaction_not_allowed"
         case internalError = "internal_error"

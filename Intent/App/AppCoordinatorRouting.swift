@@ -43,6 +43,7 @@ extension AppCoordinator {
     /// The URL itself is never logged — pair payloads carry the auth token.
     func handleIncomingURL(_ url: URL) {
         guard let payload = PairingPayload.parse(url.absoluteString) else {
+            if url.scheme == "intent", url.host == "pair" { PairingDiagnostics.invalidInput() }
             AppLog.app.info("[AppCoordinator] Ignoring non-pairing deep link")
             return
         }

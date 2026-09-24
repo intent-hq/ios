@@ -6,7 +6,12 @@ struct DiagnosticCoverageTests {
     @Test func registerAccountsForEveryOperationFamilyWithoutClaimingProducersExist() throws {
         #expect(Set(DiagnosticCoverage.entries.map(\.family)) == Set(DiagnosticFamily.allCases))
         #expect(Set(DiagnosticOperation.allCases.map(\.family)) == Set(DiagnosticFamily.allCases))
-        #expect(DiagnosticCoverage.entries.allSatisfy { $0.status == .pending })
+        let instrumented: Set<DiagnosticFamily> = [.app, .connection, .network, .scanner, .trust]
+        #expect(Set(DiagnosticCoverage.entries.filter { $0.status == .instrumented }.map(\.family)) == instrumented)
+        #expect(Set(DiagnosticCoverage.pendingFamilies) == Set(DiagnosticFamily.allCases).subtracting(instrumented))
+        #expect(DiagnosticCoverage.entries.first { $0.family == .conversation }?.status == .pending)
+        #expect(DiagnosticCoverage.entries.first { $0.family == .subscription }?.status == .partial)
+        #expect(!DiagnosticCoverage.transportBoundaries.isEmpty)
         for entry in DiagnosticCoverage.entries {
             _ = try TestSourceInputs.url(for: "Intent/\(entry.source)")
             _ = try TestSourceInputs.url(for: "IntentTests/\(entry.test)")

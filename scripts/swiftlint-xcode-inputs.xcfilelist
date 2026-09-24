@@ -79,6 +79,7 @@ $(SRCROOT)/Intent/Services/AttachmentUploadService.swift
 $(SRCROOT)/Intent/Services/BackgroundHookStore.swift
 $(SRCROOT)/Intent/Services/CertFingerprintProbe.swift
 $(SRCROOT)/Intent/Services/CommentStore.swift
+$(SRCROOT)/Intent/Services/ConnectionDiagnostics.swift
 $(SRCROOT)/Intent/Services/ConnectionHostRacing.swift
 $(SRCROOT)/Intent/Services/ConnectionManager.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerHeartbeat.swift
@@ -109,6 +110,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
+$(SRCROOT)/Intent/Services/LifecycleDiagnostics.swift
 $(SRCROOT)/Intent/Services/MonitoredPrStore.swift
 $(SRCROOT)/Intent/Services/NetworkAvailability.swift
 $(SRCROOT)/Intent/Services/NetworkCopyDiagnostics.swift
@@ -116,6 +118,7 @@ $(SRCROOT)/Intent/Services/NetworkPathMonitoring.swift
 $(SRCROOT)/Intent/Services/NoteStore+Events.swift
 $(SRCROOT)/Intent/Services/NoteStore.swift
 $(SRCROOT)/Intent/Services/NoteStoreCollections.swift
+$(SRCROOT)/Intent/Services/PairingDiagnostics.swift
 $(SRCROOT)/Intent/Services/PairingFlow.swift
 $(SRCROOT)/Intent/Services/RemoteImageLoader.swift
 $(SRCROOT)/Intent/Services/SocketPathObservation.swift
@@ -124,6 +127,7 @@ $(SRCROOT)/Intent/Services/SyncedBackendConnectionMerge.swift
 $(SRCROOT)/Intent/Services/SyncedBackendRegistry.swift
 $(SRCROOT)/Intent/Services/TailcatTunnel.swift
 $(SRCROOT)/Intent/Services/TaskStore.swift
+$(SRCROOT)/Intent/Services/TransportDiagnosticFailure.swift
 $(SRCROOT)/Intent/Services/WebSocketConnection.swift
 $(SRCROOT)/Intent/Services/WebSocketConnectionSecurity.swift
 $(SRCROOT)/Intent/Services/WebSocketMessageAssembler.swift
@@ -138,6 +142,7 @@ $(SRCROOT)/Intent/Utils/AppLog.swift
 $(SRCROOT)/Intent/Utils/BackgroundTaskManager.swift
 $(SRCROOT)/Intent/Utils/Date+Relative.swift
 $(SRCROOT)/Intent/Utils/DiagnosticCoverage.swift
+$(SRCROOT)/Intent/Utils/DiagnosticErrorOwnership.swift
 $(SRCROOT)/Intent/Utils/DiagnosticEvent.swift
 $(SRCROOT)/Intent/Utils/DiagnosticFailure.swift
 $(SRCROOT)/Intent/Utils/DiagnosticFileStorage.swift
@@ -405,6 +410,7 @@ $(SRCROOT)/IntentTests/NotificationManagerWindowRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationSessionAggregationTests.swift
 $(SRCROOT)/IntentTests/ObjCCallbackIsolationTests.swift
 $(SRCROOT)/IntentTests/PairingFlowTests.swift
+$(SRCROOT)/IntentTests/PairingLifecycleDiagnosticTests.swift
 $(SRCROOT)/IntentTests/PairingOptionTests.swift
 $(SRCROOT)/IntentTests/PairingPayloadTests.swift
 $(SRCROOT)/IntentTests/PendingQuestionDerivationTests.swift
@@ -454,6 +460,7 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Recovery.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Sequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
+$(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
