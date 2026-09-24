@@ -388,7 +388,10 @@ enum DemoFixtures {
         params: [String: Any],
         snapshotAnchor: Date = Date()
     ) -> Any {
-        $snapshotTimestampAnchor.withValue(snapshotAnchor) {
+        if let terminalResponse = DemoTerminalFixtures.response(for: method, params: params) {
+            return terminalResponse
+        }
+        return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
             switch method {
             case "workspace.list":
                 return ["workspaces": workspaces]

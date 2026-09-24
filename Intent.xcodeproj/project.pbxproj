@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AD000003AAAA000000000003 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = AD000001AAAA000000000001 /* SwiftTerm */; };
 		AB000003AAAA000000000003 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */; platformFilter = ios; };
 		AB000004AAAA000000000004 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */; platformFilter = ios; };
 		AC000011AAAA000000000011 /* Intent in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000001AAAA000000000001 /* Intent */; };
@@ -95,6 +96,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */,
+				AD000003AAAA000000000003 /* SwiftTerm in Frameworks */,
 				AB000004AAAA000000000004 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -171,6 +173,7 @@
 			name = Intent;
 			packageProductDependencies = (
 				AA000001AAAA000000000001 /* Textual */,
+				AD000001AAAA000000000001 /* SwiftTerm */,
 			);
 			productName = Intent;
 			productReference = EB655EC92F669E6B00176730 /* Intent.app */;
@@ -258,6 +261,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */,
+				AD000002AAAA000000000002 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = EB655ECA2F669E6B00176730 /* Products */;
@@ -748,6 +752,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AD000002AAAA000000000002 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = exactVersion;
+				version = 1.20.0;
+			};
+		};
 		AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/intent-hq/textual";
@@ -759,6 +771,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AD000001AAAA000000000001 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD000002AAAA000000000002 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
 		AA000001AAAA000000000001 /* Textual */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */;
