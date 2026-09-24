@@ -50,12 +50,11 @@ struct AssistantView: View {
                 agentId: thread.id,
                 workspaceId: Workspace.chiefWorkspaceId,
                 agentName: thread.name,
-                session: session,
-                onAgentUnavailable: {
-                    store.removeThread(thread.id)
-                    coordinator.assistantAgentId = store.threads.first?.id
-                }
-            )
+                session: session
+            ) {
+                store.removeThread(thread.id)
+                coordinator.assistantAgentId = store.threads.first?.id
+            }
             .id(thread.id)
         } else if store.isLoading || (!store.hasLoaded && store.errorMessage == nil) {
             ProgressView("Loading Assistant…")

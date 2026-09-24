@@ -43,27 +43,7 @@ extension AppCoordinator {
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             return true
         case "conversation":
-            guard let agentId = saved.agentId,
-                  let workspaceId = saved.workspaceId,
-                  let agentName = saved.agentName else { return false }
-            if workspaceId == Workspace.chiefWorkspaceId {
-                currentScreen = .workspaceList
-                onSelectAgent(agentId, workspaceId: workspaceId, agentName: agentName)
-                return true
-            }
-            markWorkspaceSeen(workspaceId)
-            navigationState.suppressWorkspaceNavigation = true
-            selectedWorkspaceId = workspaceId
-            navigationState.suppressWorkspaceNavigation = false
-            currentScreen = .agentConversation(
-                agentId: agentId,
-                workspaceId: workspaceId,
-                agentName: agentName
-            )
-            Task { @MainActor in
-                await self.validateRestoredAgent(agentId: agentId, workspaceId: workspaceId)
-            }
-            return true
+            return restoreConversation(saved)
         case "note":
             guard let noteId = saved.noteId,
                   let workspaceId = saved.workspaceId,
@@ -84,6 +64,26 @@ extension AppCoordinator {
         default:
             return false
         }
+    }
+
+    private func restoreConversation(_ saved: PersistenceManager.SavedScreen) -> Bool {
+        guard let agentId = saved.agentId,
+              let workspaceId = saved.workspaceId,
+              let agentName = saved.agentName else { return false }
+        if workspaceId == Workspace.chiefWorkspaceId {
+            currentScreen = .workspaceList
+            onSelectAgent(agentId, workspaceId: workspaceId, agentName: agentName)
+            return true
+        }
+        markWorkspaceSeen(workspaceId)
+        navigationState.suppressWorkspaceNavigation = true
+        selectedWorkspaceId = workspaceId
+        navigationState.suppressWorkspaceNavigation = false
+        currentScreen = .agentConversation(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
+        Task { @MainActor in
+            await self.validateRestoredAgent(agentId: agentId, workspaceId: workspaceId)
+        }
+        return true
     }
 
     /// After a reconnect, re-run agent validation if the current screen is a conversation.

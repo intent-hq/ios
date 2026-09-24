@@ -12,9 +12,9 @@ struct AssistantStoreTests {
         let connection = FakeConnectionManager()
         var child = thread("child")
         child["metadata"] = ["createdByAgentId": "parent"]
-        connection.responseMap["agent.list"] = ["agents": [
-            thread("older", date: "2026-09-23T10:00:00Z"), child, thread("latest")
-        ]]
+        connection.responseMap["agent.list"] = [
+            "agents": [thread("older", date: "2026-09-23T10:00:00Z"), child, thread("latest")]
+        ]
         let store = AssistantStore(connection: connection)
 
         await store.refresh()
@@ -110,9 +110,9 @@ struct AssistantStoreTests {
         let store = AssistantStore(connection: connection)
         await store.refresh()
         connection.responseMap["agent.list"] = ["agents": [thread("remaining")]]
-        connection.deliverEvent(method: "workspace.event", params: ["event": [
-            "type": "agent:deleted", "workspaceId": Workspace.chiefWorkspaceId
-        ]])
+        connection.deliverEvent(method: "workspace.event", params: [
+            "event": ["type": "agent:deleted", "workspaceId": Workspace.chiefWorkspaceId]
+        ])
         try await waitUntil("updated Assistant history") { store.threads.map(\.id) == ["remaining"] }
     }
 
