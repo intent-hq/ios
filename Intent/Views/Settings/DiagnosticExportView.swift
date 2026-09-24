@@ -11,7 +11,6 @@ struct DiagnosticExportView: View {
         NavigationStack {
             List {
                 DiagnosticExportActions(model: model, confirmsClear: $confirmsClear)
-                DiagnosticPrivacySection()
                 if let preview = model.preview {
                     DiagnosticPreviewSection(preview: preview)
                 }
@@ -25,11 +24,6 @@ struct DiagnosticExportView: View {
             .confirmationDialog("Clear local diagnostic logs?", isPresented: $confirmsClear, titleVisibility: .visible) {
                 Button("Clear logs", role: .destructive) { model.clearHistory() }
                 Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("""
-                    This removes local diagnostic history, not your saved connections or conversations. New events can still be recorded.
-                    Files in an open share sheet are kept until sharing ends. Copies already shared cannot be recalled.
-                    """)
             }
             .sheet(item: $model.share) { lease in
                 DiagnosticShareSheet(lease: lease) { id, failed, cleaned in
@@ -45,19 +39,6 @@ struct DiagnosticExportView: View {
                 if value == nil { model.refreshIfExpired() }
             }
             .onDisappear { model.cancelPreparation() }
-        }
-    }
-}
-
-private struct DiagnosticPrivacySection: View {
-    var body: some View {
-        Section("About these logs") {
-            Text("Intent records selected diagnostic events on this device for up to 48 hours, with a 5 MiB history limit. Older events may rotate out sooner.")
-            Text("The ZIP contains only events.jsonl and metadata.json: typed events and app, build, and OS versions.")
-            Text("No conversation text, attachments, server addresses, credentials, or raw error messages are included.")
-            Text("Coverage is partial: connection and lifecycle diagnostics are available, but some feature failures are not yet recorded. The metadata lists unfinished categories and exclusions.")
-            Text("This is not crash capture. Abrupt termination can lose recent events.")
-            Text("Nothing is uploaded automatically. Review the snapshot below, then choose Share ZIP and a destination. Newer events are included when the preview refreshes.")
         }
     }
 }

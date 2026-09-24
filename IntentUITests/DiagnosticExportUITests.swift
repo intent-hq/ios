@@ -26,6 +26,10 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         // Opening the entry presents our readable screen, not UIKit sharing.
         app.buttons["diagnosticClear"].tap()
         XCTAssertTrue(app.buttons["Clear logs"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Clear local diagnostic logs?"].exists)
+        XCTAssertTrue(app.buttons["Cancel"].exists)
+        let oldMessage = NSPredicate(format: "label CONTAINS %@", "This removes local diagnostic history")
+        XCTAssertFalse(app.staticTexts.matching(oldMessage).firstMatch.exists)
         app.buttons["Cancel"].tap()
         assertPreview(app)
         app.navigationBars["Export logs"].buttons["Done"].tap()
@@ -79,5 +83,9 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.timeout), .completed)
         XCTAssertTrue(app.buttons["diagnosticClear"].exists)
         XCTAssertTrue(app.buttons["Refresh"].exists)
+        XCTAssertTrue(app.navigationBars["Export logs"].buttons["Done"].exists)
+        XCTAssertTrue(app.buttons["Metadata and coverage"].exists)
+        let removedSection = NSPredicate(format: "label ==[c] %@", "About these logs")
+        XCTAssertFalse(app.staticTexts.matching(removedSection).firstMatch.exists)
     }
 }
