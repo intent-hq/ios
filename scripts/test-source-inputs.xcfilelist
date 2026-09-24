@@ -38,6 +38,9 @@ $(SRCROOT)/Intent/Assets.xcassets/CodeBlockAction.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockBackground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockForeground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockSecondaryLabel.colorset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectManual.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectQR.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectSaved.imageset
 $(SRCROOT)/Intent/Assets.xcassets/LaunchBackground.imageset
 $(SRCROOT)/Intent/Assets.xcassets/MarkdownCodeBlockBackground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/MarkdownInlineCodeBackground.colorset
@@ -83,6 +86,7 @@ $(SRCROOT)/Intent/DesignSystem/ConversationMediaLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationTranscriptLayout.swift
 $(SRCROOT)/Intent/DesignSystem/Layout.swift
 $(SRCROOT)/Intent/DesignSystem/MarkdownLayout.swift
+$(SRCROOT)/Intent/DesignSystem/PairingColors.swift
 $(SRCROOT)/Intent/DesignSystem/QuestionWizardLayout.swift
 $(SRCROOT)/Intent/DesignSystem/TerminalAppearance.swift
 $(SRCROOT)/Intent/DesignSystem/Theme.swift
@@ -540,6 +544,7 @@ $(SRCROOT)/IntentTests/NotificationManagerTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerWindowRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationSessionAggregationTests.swift
 $(SRCROOT)/IntentTests/ObjCCallbackIsolationTests.swift
+$(SRCROOT)/IntentTests/PairingDesignTests.swift
 $(SRCROOT)/IntentTests/PairingFlowTests.swift
 $(SRCROOT)/IntentTests/PairingLifecycleDiagnosticTests.swift
 $(SRCROOT)/IntentTests/PairingOptionTests.swift

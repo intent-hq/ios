@@ -49,7 +49,7 @@ struct PairingOptionTests {
         let source = try pairingSource()
         let mappings = [
             (#"Text("Connect to Intent")"#, "heading2"),
-            (#"Text("Pair with your desktop app to manage workspaces and chat with agents")"#, "bodyS"),
+            (#"Text("Pair with your desktop app to manage workspaces and chat with agents.")"#, "bodyS"),
             ("Text(title)", "bodySEmphasized"),
             ("Text(subtitle)", "bodyS")
         ]
@@ -59,10 +59,8 @@ struct PairingOptionTests {
         #expect(source.components(separatedBy: ".font(Constants.Typography.").count - 1 == mappings.count)
     }
 
-    @Test func connectKeepsSymbolAndVisionHintFonts() throws {
+    @Test func connectKeepsVisionHintFont() throws {
         let source = try pairingSource()
-        #expect(source.contains("Image(systemName: icon) .font(.title3)"))
-        #expect(source.contains(#"Image(systemName: "chevron.right") .font(.caption)"#))
         let hint = "Pair from your iPhone or Mac: open the intent://pair link shown in the Intent desktop app."
         #expect(source.contains("Text(\"\(hint)\") .font(.caption)"))
     }

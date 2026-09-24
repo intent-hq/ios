@@ -22,6 +22,7 @@ $(SRCROOT)/Intent/DesignSystem/ConversationMediaLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationTranscriptLayout.swift
 $(SRCROOT)/Intent/DesignSystem/Layout.swift
 $(SRCROOT)/Intent/DesignSystem/MarkdownLayout.swift
+$(SRCROOT)/Intent/DesignSystem/PairingColors.swift
 $(SRCROOT)/Intent/DesignSystem/QuestionWizardLayout.swift
 $(SRCROOT)/Intent/DesignSystem/TerminalAppearance.swift
 $(SRCROOT)/Intent/DesignSystem/Theme.swift
@@ -453,6 +454,7 @@ $(SRCROOT)/IntentTests/NotificationManagerTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerWindowRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationSessionAggregationTests.swift
 $(SRCROOT)/IntentTests/ObjCCallbackIsolationTests.swift
+$(SRCROOT)/IntentTests/PairingDesignTests.swift
 $(SRCROOT)/IntentTests/PairingFlowTests.swift
 $(SRCROOT)/IntentTests/PairingLifecycleDiagnosticTests.swift
 $(SRCROOT)/IntentTests/PairingOptionTests.swift
@@ -547,6 +549,7 @@ $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
 $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift
+$(SRCROOT)/IntentUITests/PairingDesignUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/WorkspaceEntryUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift
