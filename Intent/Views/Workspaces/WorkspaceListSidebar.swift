@@ -8,6 +8,7 @@ struct WorkspaceListSidebar: View {
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
+    @State private var showingDiagnosticLogs = false
     @FocusState private var searchFocused: Bool
 
     init(workspaceStore: WorkspaceStore) {
@@ -65,6 +66,11 @@ struct WorkspaceListSidebar: View {
                     } label: {
                         Label("Connect to…", systemImage: "desktopcomputer")
                     }
+                    Button {
+                        showingDiagnosticLogs = true
+                    } label: {
+                        Label("Export logs", systemImage: "doc.zipper")
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -79,6 +85,9 @@ struct WorkspaceListSidebar: View {
         .sheet(isPresented: $showingConnections) {
             ConnectionsView()
                 .environment(coordinator)
+        }
+        .sheet(isPresented: $showingDiagnosticLogs) {
+            DiagnosticExportView()
         }
         .refreshable {
             await workspaceStore.fetchAll()

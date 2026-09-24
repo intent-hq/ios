@@ -91,8 +91,8 @@ struct DiagnosticConcurrencyTests {
         let report = try #require(await store.beginReport())
         storage.state.withLock { $0.failRead = false }
         _ = await store.snapshot()
-        let exported = try Data(contentsOf: report.directory.appendingPathComponent("events.jsonl"))
-        #expect(exported == report.snapshot.jsonLines)
+        let entries = try DiagnosticZIPTestReader.extract(Data(contentsOf: report.archiveURL))
+        #expect(entries["events.jsonl"] == report.snapshot.jsonLines)
         #expect(await store.endReport(report))
     }
 

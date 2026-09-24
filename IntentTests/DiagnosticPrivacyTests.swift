@@ -73,7 +73,8 @@ struct DiagnosticPrivacyTests {
         #expect(try DiagnosticFixtures.records(snapshot).count == 1)
         let report = try #require(await reopened.beginReport())
         let persisted = try storage.files.readHistory(maximumBytes: DiagnosticLimits.maximumHistoryBytes)
-        let exported = try Data(contentsOf: report.directory.appendingPathComponent("events.jsonl"))
+        let entries = try DiagnosticZIPTestReader.extract(Data(contentsOf: report.archiveURL))
+        let exported = try #require(entries["events.jsonl"])
         for data in [persisted, exported, snapshot.jsonLines, try snapshot.metadataJSON()] {
             let text = try #require(String(data: data, encoding: .utf8))
             for sentinel in sentinels { #expect(!text.contains(sentinel)) }
@@ -161,8 +162,7 @@ struct DiagnosticPrivacyTests {
     private func reportFiles(storage: DiagnosticTestStorage, report: DiagnosticReport) -> [URL] {
         [
             storage.files.directory, storage.files.directory.appendingPathComponent("events.jsonl"),
-            report.directory, report.directory.appendingPathComponent("events.jsonl"),
-            report.directory.appendingPathComponent("metadata.json")
+            report.directory, report.archiveURL
         ]
     }
 }

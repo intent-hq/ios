@@ -12,6 +12,7 @@ struct ConnectionFailureView: View {
     @State private var attemptNumber = 0
     @State private var retryTask: Task<Void, Never>?
     @State private var savedConnections: [StoredConnection] = []
+    @State private var showingDiagnosticLogs = false
 
     var body: some View {
         ZStack {
@@ -29,6 +30,9 @@ struct ConnectionFailureView: View {
         .onChange(of: isCertMismatch) { applyRetryPolicy() }
         .onDisappear {
             stopAutoRetry()
+        }
+        .sheet(isPresented: $showingDiagnosticLogs) {
+            DiagnosticExportView()
         }
     }
 
@@ -67,6 +71,11 @@ struct ConnectionFailureView: View {
             manualLogOffButton
             reconnectButton
             savedConnectionsSection
+            Button {
+                showingDiagnosticLogs = true
+            } label: {
+                Label("Export logs", systemImage: "doc.zipper")
+            }
         }
         .padding(.horizontal, Constants.ConnectionFailure.controlsHorizontalPadding)
     }

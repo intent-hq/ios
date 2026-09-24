@@ -126,14 +126,16 @@ struct DiagnosticStoreTests {
         #expect(disk == snapshot.jsonLines)
     }
 
-    @Test func clearAlsoRemovesReportsAndStaleLeaseCannotDeleteNewReport() async throws {
+    @Test func clearPreservesActiveConsumerAndStaleLeaseCannotDeleteNewReport() async throws {
         let storage = DiagnosticTestStorage()
         let store = DiagnosticStore(storage: storage)
         store.record(DiagnosticFixtures.event())
         let oldReport = try #require(await store.beginReport())
         #expect(await store.clearHistory())
-        #expect(!FileManager.default.fileExists(atPath: oldReport.directory.path))
+        #expect(FileManager.default.fileExists(atPath: oldReport.archiveURL.path))
         #expect(await store.snapshot().jsonLines.isEmpty)
+        #expect(await store.beginReport() == nil)
+        #expect(await store.endReport(oldReport))
         let newReport = try #require(await store.beginReport())
         #expect(!(await store.endReport(oldReport)))
         #expect(FileManager.default.fileExists(atPath: newReport.directory.path))
@@ -147,11 +149,12 @@ struct DiagnosticStoreTests {
         store.record(DiagnosticFixtures.event())
         let report = try #require(await store.beginReport())
         let files = try FileManager.default.contentsOfDirectory(atPath: report.directory.path)
-        #expect(Set(files) == ["events.jsonl", "metadata.json"])
+        #expect(Set(files) == ["diagnostics.zip"])
         #expect(await store.beginReport() == nil)
         clock.advance(DiagnosticLimits.maximumAge)
         _ = await store.snapshot()
-        #expect(try Data(contentsOf: report.directory.appendingPathComponent("events.jsonl")) == report.snapshot.jsonLines)
+        let entries = try DiagnosticZIPTestReader.extract(Data(contentsOf: report.archiveURL))
+        #expect(entries["events.jsonl"] == report.snapshot.jsonLines)
         #expect(await store.endReport(report))
         #expect(!FileManager.default.fileExists(atPath: report.directory.path))
     }

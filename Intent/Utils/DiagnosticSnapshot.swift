@@ -27,6 +27,9 @@ nonisolated struct DiagnosticRecord: Codable, Equatable, Sendable {
 nonisolated struct DiagnosticSnapshot: Sendable {
     let jsonLines: Data
     let metadata: Metadata
+    // In-memory review validity only; never serialized into the report.
+    let historyRevision: UUID
+    let expiresAt: Date
 
     nonisolated struct Metadata: Encodable, Sendable {
         let schemaVersion = 1

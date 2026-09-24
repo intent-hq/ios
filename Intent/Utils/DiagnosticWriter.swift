@@ -12,6 +12,7 @@ actor DiagnosticWriter {
     private var needsPersistence = true
     private var loss = DiagnosticLoss()
     private var activeReport: DiagnosticReport?
+    private var historyRevision = UUID()
 
     init(
         storage: any DiagnosticStorage,
@@ -39,22 +40,31 @@ actor DiagnosticWriter {
         let counts = intake.losses()
         loss.queueOverflow = counts.overflow
         loss.invalidScope = counts.invalidScope
+        let data = encodedHistory()
+        let timestamp = now
+        let first = records.map(\.firstTimestamp).min() ?? timestamp
         return DiagnosticSnapshot(
-            jsonLines: encodedHistory(),
-            metadata: .init(generatedAt: now, retainedRecords: records.count, loss: loss)
+            jsonLines: data,
+            metadata: .init(generatedAt: timestamp, retainedRecords: records.count, loss: loss),
+            historyRevision: historyRevision,
+            expiresAt: first.addingTimeInterval(limits.age)
         )
     }
 
     func clearHistory() -> Bool {
         intake.clear()
         records = []
-        activeReport = nil
+        historyRevision = UUID()
         loss = DiagnosticLoss()
         // Never reload pre-clear history if removing a protected file failed.
         loaded = true
         var succeeded = true
         do { try storage.clearHistory() } catch { succeeded = false }
-        do { try storage.clearReports() } catch { succeeded = false }
+        // A different window may still have a system share consumer. Its
+        // immutable report is removed by endReport, not underneath the reader.
+        if activeReport == nil {
+            do { try storage.clearReports() } catch { succeeded = false }
+        }
         loss.storageUnavailable = !succeeded
         needsPersistence = !succeeded
         return succeeded
@@ -62,12 +72,36 @@ actor DiagnosticWriter {
 
     func beginReport() -> DiagnosticReport? {
         guard activeReport == nil else { return nil }
-        let snapshot = snapshot()
+        return beginReport(snapshot: snapshot())
+    }
+
+    func prepareExport(reviewing snapshot: DiagnosticSnapshot) -> DiagnosticExportResult {
+        guard !Task.isCancelled else { return .unavailable }
+        guard snapshot.historyRevision == historyRevision,
+              snapshot.metadata.generatedAt <= now, now < snapshot.expiresAt else {
+            return .needsReview(self.snapshot())
+        }
+        guard let report = beginReport(snapshot: snapshot) else { return .unavailable }
+        // File preparation may cross the retention boundary. Never hand that
+        // stale archive to a new consumer; let the person review refreshed data.
+        guard now < snapshot.expiresAt, snapshot.metadata.generatedAt <= now else {
+            _ = endReport(report)
+            return .needsReview(self.snapshot())
+        }
+        return .ready(report)
+    }
+
+    private func beginReport(snapshot: DiagnosticSnapshot) -> DiagnosticReport? {
+        guard activeReport == nil, !Task.isCancelled else { return nil }
         do {
             let directory = try storage.prepareReport(snapshot: snapshot)
+            try Task.checkCancellation()
             let report = DiagnosticReport.make(snapshot: snapshot, directory: directory)
             activeReport = report
             return report
+        } catch is CancellationError {
+            try? storage.clearReports()
+            return nil
         } catch {
             loss.storageUnavailable = true
             try? storage.clearReports()
@@ -77,9 +111,11 @@ actor DiagnosticWriter {
 
     func endReport(_ report: DiagnosticReport) -> Bool {
         guard let activeReport, activeReport.matches(report) else { return false }
+        // Even if deletion fails, the consumer has finished. The next prepare
+        // or Clear retries deletion, without accumulating report directories.
+        defer { self.activeReport = nil }
         do {
             try storage.clearReports()
-            self.activeReport = nil
             return true
         } catch {
             loss.storageUnavailable = true

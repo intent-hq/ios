@@ -53,11 +53,14 @@ nonisolated final class DiagnosticStore: Sendable {
     /// could not be confirmed (for example, protected files before unlock).
     func clearHistory() async -> Bool { await writer.clearHistory() }
 
-    /// One pinned, fixed-entry report workspace. ZIP packaging belongs to the
-    /// sharing layer; it must end the lease on completion/cancellation. No ZIP
-    /// is created here. Orphans are deleted on next store launch.
+    /// One pinned, fixed-entry ZIP workspace. The sharing layer must end the
+    /// lease after its consumer finishes. Orphans are deleted on next launch.
     func beginReport() async -> DiagnosticReport? { await writer.beginReport() }
     func endReport(_ report: DiagnosticReport) async -> Bool { await writer.endReport(report) }
+
+    func prepareExport(reviewing snapshot: DiagnosticSnapshot) async -> DiagnosticExportResult {
+        await writer.prepareExport(reviewing: snapshot)
+    }
 
     private func scheduleDrain() {
         guard intake.scheduleWorker() else { return }

@@ -17,6 +17,7 @@ nonisolated final class DiagnosticTestStorage: DiagnosticStorage, Sendable {
         var failClear = false
         var touchedMainThread = false
         var writes = 0
+        var afterReportWrite: (@Sendable () throws -> Void)?
     }
 
     enum Failure: Error { case simulated }
@@ -67,7 +68,10 @@ nonisolated final class DiagnosticTestStorage: DiagnosticStorage, Sendable {
     func prepareReport(snapshot: DiagnosticSnapshot) throws -> URL {
         observeThread()
         if state.withLock({ $0.failWrite }) { throw Failure.simulated }
-        return try files.prepareReport(snapshot: snapshot)
+        let directory = try files.prepareReport(snapshot: snapshot)
+        let afterReportWrite = state.withLock { $0.afterReportWrite }
+        try afterReportWrite?()
+        return directory
     }
 
     private func observeThread() {

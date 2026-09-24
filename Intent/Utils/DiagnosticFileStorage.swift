@@ -55,8 +55,10 @@ nonisolated struct DiagnosticFileStorage: DiagnosticStorage {
         try prepare()
         try clearReports()
         try prepareDirectory(reports)
-        try write(snapshot.jsonLines, to: reports.appendingPathComponent("events.jsonl"))
-        try write(snapshot.metadataJSON(), to: reports.appendingPathComponent("metadata.json"))
+        // Only the bounded ZIP is written: no duplicate loose report files.
+        let archive = try DiagnosticZIP.encode(snapshot)
+        try Task.checkCancellation()
+        try write(archive, to: reports.appendingPathComponent("diagnostics.zip"))
         return reports
     }
 

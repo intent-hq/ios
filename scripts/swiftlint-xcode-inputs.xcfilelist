@@ -150,9 +150,12 @@ $(SRCROOT)/Intent/Utils/DiagnosticEvent.swift
 $(SRCROOT)/Intent/Utils/DiagnosticFailure.swift
 $(SRCROOT)/Intent/Utils/DiagnosticFileStorage.swift
 $(SRCROOT)/Intent/Utils/DiagnosticOperation.swift
+$(SRCROOT)/Intent/Utils/DiagnosticPreview.swift
+$(SRCROOT)/Intent/Utils/DiagnosticShareLease.swift
 $(SRCROOT)/Intent/Utils/DiagnosticSnapshot.swift
 $(SRCROOT)/Intent/Utils/DiagnosticStore.swift
 $(SRCROOT)/Intent/Utils/DiagnosticWriter.swift
+$(SRCROOT)/Intent/Utils/DiagnosticZIP.swift
 $(SRCROOT)/Intent/Utils/DurationFormat.swift
 $(SRCROOT)/Intent/Utils/ExternalLink.swift
 $(SRCROOT)/Intent/Utils/HapticManager.swift
@@ -175,6 +178,7 @@ $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Lifecycle.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Questions.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Sending.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel.swift
+$(SRCROOT)/Intent/ViewModels/DiagnosticExportModel.swift
 $(SRCROOT)/Intent/ViewModels/WorkspaceListViewModel.swift
 $(SRCROOT)/Intent/Views/Agents/AgentAvatarView.swift
 $(SRCROOT)/Intent/Views/Agents/AgentRowView.swift
@@ -255,6 +259,9 @@ $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift
 $(SRCROOT)/Intent/Views/Onboarding/Splash/SplashArtView.swift
 $(SRCROOT)/Intent/Views/Settings/AcknowledgementsView.swift
+$(SRCROOT)/Intent/Views/Settings/DiagnosticExportView.swift
+$(SRCROOT)/Intent/Views/Settings/DiagnosticPreviewSection.swift
+$(SRCROOT)/Intent/Views/Settings/DiagnosticShareSheet.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
@@ -368,9 +375,14 @@ $(SRCROOT)/IntentTests/DemoFixturesTests.swift
 $(SRCROOT)/IntentTests/DemoInlineImageFixtureTests.swift
 $(SRCROOT)/IntentTests/DiagnosticConcurrencyTests.swift
 $(SRCROOT)/IntentTests/DiagnosticCoverageTests.swift
+$(SRCROOT)/IntentTests/DiagnosticExportEntryPointTests.swift
+$(SRCROOT)/IntentTests/DiagnosticExportModelTests.swift
+$(SRCROOT)/IntentTests/DiagnosticExportTests.swift
 $(SRCROOT)/IntentTests/DiagnosticPrivacyTests.swift
 $(SRCROOT)/IntentTests/DiagnosticStoreTests.swift
 $(SRCROOT)/IntentTests/DiagnosticTestSupport.swift
+$(SRCROOT)/IntentTests/DiagnosticZIPTestReader.swift
+$(SRCROOT)/IntentTests/DiagnosticZIPTests.swift
 $(SRCROOT)/IntentTests/DictationTranscriptTests.swift
 $(SRCROOT)/IntentTests/EventCatalogCoverageTests.swift
 $(SRCROOT)/IntentTests/EventWakeAttributionTests.swift
@@ -500,6 +512,7 @@ $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Keyboard.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
+$(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/WorkspaceEntryUITests.swift
