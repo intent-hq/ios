@@ -143,6 +143,8 @@ $(SRCROOT)/Intent/Presentation/ToolClassifier+Classification.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
 $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
 $(SRCROOT)/Intent/Resources
+$(SRCROOT)/Intent/Resources/Fonts
+$(SRCROOT)/Intent/Resources/Fonts/Inter
 $(SRCROOT)/Intent/Services
 $(SRCROOT)/Intent/Services/AgentStore.swift
 $(SRCROOT)/Intent/Services/AttachmentImageLoader.swift
@@ -505,6 +507,7 @@ $(SRCROOT)/IntentTests/IntentFileAttachmentLoaderTests.swift
 $(SRCROOT)/IntentTests/IntentFileLinkTests.swift
 $(SRCROOT)/IntentTests/IntentFileVideoTests.swift
 $(SRCROOT)/IntentTests/IntentNoteLinkParsingTests.swift
+$(SRCROOT)/IntentTests/InterFontTests.swift
 $(SRCROOT)/IntentTests/LaunchPhaseTimelineTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
