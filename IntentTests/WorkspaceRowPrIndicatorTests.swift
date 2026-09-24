@@ -176,18 +176,6 @@ struct WorkspaceRowPrIndicatorTests {
         #expect(model.pill == .init(status: .open, number: 20))
     }
 
-    @Test func bothPoolsAbsentFallsBackToLegacyFields() {
-        let workspace = makeWorkspace(
-            prStatus: "Merged",
-            prNumber: 42,
-            activePullRequest: nil
-        )
-
-        let model = WorkspaceRowView.derivePrIndicator(workspace: workspace, monitors: [])
-        #expect(model.pill == .init(status: .merged, number: 42))
-        #expect(model.otherMonitorCount == 0)
-    }
-
     // MARK: - Legacy fallback path
 
     @Test func emptyPoolFallsBackToLegacyPrStatusAndNumber() {
