@@ -15,7 +15,7 @@ struct AssistantPromptRenderingTests {
     private static let observationTimeout: TimeInterval = 3
     private static let observationInterval: TimeInterval = 0.02
 
-    @Observable private final class Model {
+    @Observable fileprivate final class Model {
         var message: ConversationMessage
 
         init(message: ConversationMessage) {
@@ -36,8 +36,10 @@ struct AssistantPromptRenderingTests {
         let prefix = Self.greeting + "\n\n<!-- suggested-prompts\n"
         let body = Self.prompt + "\n" + Self.secondPrompt
         let blocks = splitAcrossBlocks
-            ? [ContentBlock(id: "text", type: .text, text: prefix),
-               ContentBlock(id: "prompts", type: .text, text: body)]
+            ? [
+                ContentBlock(id: "text", type: .text, text: prefix),
+                ContentBlock(id: "prompts", type: .text, text: body)
+            ]
             : [ContentBlock(id: "text", type: .text, text: prefix + body)]
         let model = Model(message: ConversationMessage(
             id: "streaming-reply",
@@ -60,9 +62,9 @@ struct AssistantPromptRenderingTests {
             #expect(SuggestedPrompts.parse(contentBlocks: model.message.contentBlocks).prompts == [
                 Self.prompt, Self.secondPrompt
             ])
-            try observe(in: host) {
-                $0.contains(Self.greeting) && !$0.contains("suggested-prompts")
-                    && !$0.contains(Self.prompt) && !$0.contains(Self.secondPrompt)
+            try observe(in: host) { text in
+                text.contains(Self.greeting) && !text.contains("suggested-prompts")
+                    && !text.contains(Self.prompt) && !text.contains(Self.secondPrompt)
             }
         }
     }
