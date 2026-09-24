@@ -126,6 +126,7 @@ $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
 $(SRCROOT)/Intent/Resources
 $(SRCROOT)/Intent/Services
 $(SRCROOT)/Intent/Services/AgentStore.swift
+$(SRCROOT)/Intent/Services/AssistantStore.swift
 $(SRCROOT)/Intent/Services/AttachmentImageLoader.swift
 $(SRCROOT)/Intent/Services/AttachmentUploadService.swift
 $(SRCROOT)/Intent/Services/BackgroundHookStore.swift
@@ -151,6 +152,7 @@ $(SRCROOT)/Intent/Services/ConversationWatchedAgents.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
 $(SRCROOT)/Intent/Services/DemoFixtures.swift
+$(SRCROOT)/Intent/Services/DemoFixturesAssistant.swift
 $(SRCROOT)/Intent/Services/DemoFixturesData.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
@@ -223,6 +225,7 @@ $(SRCROOT)/Intent/Views/Connection/ConnectionsView.swift
 $(SRCROOT)/Intent/Views/Connection/DisconnectedView.swift
 $(SRCROOT)/Intent/Views/Connection/LoadingView.swift
 $(SRCROOT)/Intent/Views/Conversation
+$(SRCROOT)/Intent/Views/Conversation/AssistantView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputAttachments.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputView.swift
@@ -311,6 +314,7 @@ $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
 $(SRCROOT)/IntentTests/AgentSessionDisplayTests.swift
 $(SRCROOT)/IntentTests/AgentSessionTests.swift
 $(SRCROOT)/IntentTests/AgentStoreTests.swift
+$(SRCROOT)/IntentTests/AppCoordinatorAssistantTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorAutoOpenTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorBackendRegistryTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorConnectionFailureTests.swift
@@ -321,6 +325,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorRegistryCorruptionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorRoutingTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorWorkspaceValidationTests.swift
+$(SRCROOT)/IntentTests/AssistantStoreTests.swift
 $(SRCROOT)/IntentTests/AttachmentImageLoaderTests.swift
 $(SRCROOT)/IntentTests/AttachmentUploadServiceTests.swift
 $(SRCROOT)/IntentTests/BackendSessionRegistryTests.swift
