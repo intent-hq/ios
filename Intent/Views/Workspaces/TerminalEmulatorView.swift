@@ -26,7 +26,7 @@ struct TerminalEmulatorView: UIViewRepresentable {
         view.isUserInteractionEnabled = connection.isReady
         if connection.isReady, !context.coordinator.hasFocused {
             context.coordinator.hasFocused = true
-            view.becomeFirstResponder()
+            _ = view.becomeFirstResponder()
         }
     }
 

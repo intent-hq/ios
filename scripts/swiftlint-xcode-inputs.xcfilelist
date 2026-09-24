@@ -38,6 +38,7 @@ $(SRCROOT)/Intent/Models/EventWakeAttribution.swift
 $(SRCROOT)/Intent/Models/GitHubRepo.swift
 $(SRCROOT)/Intent/Models/GitHubRepoSuggestions.swift
 $(SRCROOT)/Intent/Models/HookWakeAttribution.swift
+$(SRCROOT)/Intent/Models/MobileTerminal.swift
 $(SRCROOT)/Intent/Models/ModelChangeNotice.swift
 $(SRCROOT)/Intent/Models/MonitoredPr.swift
 $(SRCROOT)/Intent/Models/NewMessagesDivider.swift
@@ -107,7 +108,10 @@ $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
+$(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
+$(SRCROOT)/Intent/Services/MobileTerminalConnection.swift
+$(SRCROOT)/Intent/Services/MobileTerminalStore.swift
 $(SRCROOT)/Intent/Services/MonitoredPrStore.swift
 $(SRCROOT)/Intent/Services/NetworkAvailability.swift
 $(SRCROOT)/Intent/Services/NetworkCopyDiagnostics.swift
@@ -244,16 +248,19 @@ $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceView.swift
 $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
+$(SRCROOT)/Intent/Views/Workspaces/MobileTerminalView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ModelPicker.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderModelStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderPicker.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
+$(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAttentionCue.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSearchBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusIconView.swift
@@ -368,6 +375,8 @@ $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
 $(SRCROOT)/IntentTests/MarkdownTextViewTests.swift
 $(SRCROOT)/IntentTests/MessageBlockPartitionTests.swift
 $(SRCROOT)/IntentTests/MessageCopyContextMenuGatingTests.swift
+$(SRCROOT)/IntentTests/MobileTerminalConnectionTests.swift
+$(SRCROOT)/IntentTests/MobileTerminalStoreTests.swift
 $(SRCROOT)/IntentTests/ModelsSpecialistAndTaskTests.swift
 $(SRCROOT)/IntentTests/ModelsTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrStoreFoldAndIntegrationTests.swift
@@ -471,6 +480,7 @@ $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
+$(SRCROOT)/IntentUITests/MobileTerminalUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/WorkspaceEntryUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift
