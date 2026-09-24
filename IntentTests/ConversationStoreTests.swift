@@ -2,7 +2,7 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Tests for ConversationStore – covers reset behavior and lastFailedSend tracking.
+/// Tests for ConversationStore – reset behavior and retained send ownership.
 @MainActor
 struct ConversationStoreTests {
     // MARK: - Helpers
@@ -54,17 +54,17 @@ struct ConversationStoreTests {
         #expect(store.messages.isEmpty)
     }
 
-    // MARK: - lastFailedSend tracking (duplicate message prevention)
+    // MARK: - Retained attempts (ordinary sends are not idempotent)
 
     @Test func lastFailedSendStartsNil() {
         let store = ConversationStore()
         #expect(store.lastFailedSend == nil)
     }
 
-    @Test func retryWithSameContentReusesMessageId() async throws {
+    @Test func newSendWithSameContentDoesNotReplayUnconfirmedIdentity() async throws {
         let fake = FakeConnectionManager()
         fake.errorQueueMap["agent.sendMessage"] = [NSError(domain: "WebSocket", code: -32_000)]
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
 
         await #expect(throws: (any Error).self) {
@@ -72,20 +72,20 @@ struct ConversationStoreTests {
         }
         let failedRequest = try #require(fake.requestLog.first)
         let failedMessageId = try #require(failedRequest.params["messageId"] as? String)
-        #expect(store.lastFailedSend?.messageId == failedMessageId)
+        #expect(store.lastFailedSend?.id == failedMessageId)
 
         try await store.sendMessage(agentId: "a", content: "Hello", workspaceId: "w")
 
         let retryRequest = try #require(fake.requestLog.last)
-        #expect(retryRequest.params["messageId"] as? String == failedMessageId)
-        #expect(fake.requestLog.count == 2, "the failed send and its retry both reach the command path")
-        #expect(store.lastFailedSend == nil, "a successful retry clears failure tracking")
+        #expect(retryRequest.params["messageId"] as? String != failedMessageId)
+        #expect(fake.requestLog.count == 2, "these are two explicitly requested operations, not a replay")
+        #expect(store.lastFailedSend?.id == failedMessageId, "another send cannot discard unresolved recovery")
     }
 
     @Test func retryWithDifferentContentGeneratesNewId() async throws {
         let fake = FakeConnectionManager()
         fake.errorQueueMap["agent.sendMessage"] = [NSError(domain: "WebSocket", code: -32_000)]
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
 
         await #expect(throws: (any Error).self) {
@@ -109,29 +109,43 @@ struct ConversationStoreTests {
             store.messages.map(\.id) == [failedMessageId, otherMessage.id, retryMessageId],
             "a different send preserves the failed row and unrelated transcript rows"
         )
-        #expect(store.lastFailedSend == nil, "the successful different send clears failure tracking")
+        #expect(store.lastFailedSend?.id == failedMessageId, "the different send preserves failure tracking")
     }
 
-    @Test func resetClearsLastFailedSend() {
-        let store = ConversationStore()
-        store.lastFailedSend = (messageId: "failed-id-123", content: "Hello")
+    @Test func resetClearsLastFailedSend() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -2)
+        let store = ConversationStore(connectionManager: fake)
+        try? await store.sendMessage(agentId: "a", content: "Hello", workspaceId: "w")
         #expect(store.lastFailedSend != nil)
         store.reset()
         #expect(store.lastFailedSend == nil, "reset() should clear lastFailedSend")
     }
 
-    @Test func staleOptimisticMessageCleanedUpOnRetry() async throws {
+    @Test func knownNotSentRetryReusesOriginalPayloadAndReplacesOnlyItsRow() async throws {
         let fake = FakeConnectionManager()
-        fake.errorQueueMap["agent.sendMessage"] = [NSError(domain: "WebSocket", code: -32_000)]
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        fake.errorQueueMap["agent.sendMessage"] = [DiagnosticErrorOwnership.attaching(
+            to: NSError(domain: "WebSocket", code: -4),
+            failure: DiagnosticFailure(origin: .localRequest, classification: .notConnected)
+        )]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
 
         await #expect(throws: (any Error).self) {
-            try await store.sendMessage(agentId: "a", content: "Test message", workspaceId: "w")
+            try await store.sendMessage(
+                agentId: "a",
+                content: "Test message",
+                workspaceId: "w",
+                imagePayload: .attachments([["type": "image", "attachmentId": "image-1"]]),
+                filePayload: .attachments([["type": "file", "attachmentId": "file-1"]]),
+                messageMetadata: .fields(["selection": "original"])
+            )
         }
         let failedRequest = try #require(fake.requestLog.first)
         let failedMessageId = try #require(failedRequest.params["messageId"] as? String)
         #expect(store.messages.map(\.id) == [failedMessageId], "the failed send leaves its optimistic row")
+        #expect(store.lastFailedSend?.status == .notSent)
+        #expect(store.lastFailedSend?.canRetry == true)
         let otherMessage = ConversationMessage(
             id: "other-msg",
             role: .assistant,
@@ -139,7 +153,7 @@ struct ConversationStoreTests {
         )
         store.messages.append(otherMessage)
 
-        try await store.sendMessage(agentId: "a", content: "Test message", workspaceId: "w")
+        try await store.sendPreparedAttempt(failedMessageId)
 
         #expect(
             store.messages.map(\.id) == [otherMessage.id, failedMessageId],
@@ -149,6 +163,12 @@ struct ConversationStoreTests {
             store.messages.count { $0.id == failedMessageId } == 1,
             "the replacement retry row must not coexist with its stale predecessor"
         )
+        #expect(store.lastFailedSend == nil)
+        #expect(fake.requestLog.last?.params["messageId"] as? String == failedMessageId)
+        let retriedRequest = try #require(fake.requestLog.last)
+        let originalPayload = try JSONSerialization.data(withJSONObject: failedRequest.params, options: .sortedKeys)
+        let retriedPayload = try JSONSerialization.data(withJSONObject: retriedRequest.params, options: .sortedKeys)
+        #expect(originalPayload == retriedPayload)
     }
 
     // MARK: - rollbackFailedSend (failed send must not supersede pending questions)
@@ -162,13 +182,13 @@ struct ConversationStoreTests {
             try await store.sendMessage(agentId: "a", content: "Q: x\nA: y", workspaceId: "w")
         }
         #expect(store.messages.count == 1, "failed send leaves the optimistic message")
-        #expect(store.isStreaming, "failed send leaves the optimistic thinking state")
+        #expect(!store.isStreaming, "failed send settles only its optimistic thinking state")
 
         store.rollbackFailedSend()
 
         #expect(store.messages.isEmpty, "rollback removes the optimistic message")
         #expect(store.isStreaming == false, "rollback resets the thinking state")
-        #expect(store.lastFailedSend != nil, "retry dedup tracking is preserved")
+        #expect(store.lastFailedSend != nil, "full recovery remains independent of the optimistic row")
     }
 
     @Test func rollbackFailedSendIsNoopWithoutTrackedFailure() {
@@ -194,7 +214,7 @@ struct ConversationStoreTests {
 extension ConversationStoreTests {
     @Test func sendMessageThreadsMessageMetadataToWire() async throws {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
 
         try await store.sendMessage(
@@ -215,7 +235,7 @@ extension ConversationStoreTests {
 
     @Test func sendMessageOmitsMessageMetadataWhenAbsent() async throws {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
 
         try await store.sendMessage(agentId: "a", content: "hi", workspaceId: "w")

@@ -47,6 +47,39 @@ struct ConversationDecodingIdentityTests {
         #expect(viaCodable.contentBlocks.map(\.id) == ["msg-1:0", "msg-1:1", "wire-2"])
     }
 
+    @Test func transcriptAppMessageIdSurvivesEveryDecodePathAndRoundTrip() throws {
+        let wire: [String: Any] = [
+            "id": "server-drained-row", "appMessageId": "client-attempt", "role": "user",
+            "contentBlocks": [["type": "text", "text": "hello"]]
+        ]
+        let viaDictionary = try #require(ConversationMessage.parseMessage(wire))
+        let viaCodable = try JSONDecoder().decode(ConversationMessage.self, from: rowData(wire))
+        let viaPage = try #require(ConversationMessage.parseMessages([wire]).first)
+        for message in [viaDictionary, viaCodable, viaPage] {
+            #expect(message.id == "server-drained-row")
+            #expect(message.appMessageId == "client-attempt")
+            #expect(message.metadata.isEmpty, "correlation is top-level, not fabricated metadata")
+            let encoded = try JSONEncoder().encode(message)
+            let fields = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+            #expect(fields["appMessageId"] as? String == "client-attempt")
+            #expect(fields["metadata"] == nil)
+            #expect(try JSONDecoder().decode(ConversationMessage.self, from: encoded) == message)
+        }
+    }
+
+    @Test func missingOrMalformedAppMessageIdRemainsOptional() throws {
+        for value: Any in [NSNull(), 42, ["nested": "not-an-id"]] {
+            var wire = row
+            wire["appMessageId"] = value
+            let message = try #require(ConversationMessage.parseMessage(wire))
+            #expect(message.appMessageId == nil)
+        }
+        let message = try #require(ConversationMessage.parseMessage(row))
+        #expect(message.appMessageId == nil)
+        let fields = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(message)) as? [String: Any])
+        #expect(fields["appMessageId"] == nil, "legacy rows do not gain a null correlation field")
+    }
+
     @Test func idLessBlocksOfDifferentMessagesDoNotCollide() throws {
         var other = row
         other["id"] = "msg-2"

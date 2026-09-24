@@ -125,7 +125,7 @@ extension ConversationStoreLiveStateTests {
     /// block id) must upsert onto it, not duplicate the message or the block.
     @Test func userRowDeltaDoesNotDuplicateOptimisticLocalAppend() async throws {
         let (store, fake) = makeStore()
-        fake.responseMap["agent.sendMessage"] = ["success": true]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         try await store.sendMessage(agentId: "agent-1", content: "Hello", workspaceId: "ws-1")
@@ -156,7 +156,7 @@ extension ConversationStoreLiveStateTests {
     /// the attachment blocks alongside, without duplicating anything.
     @Test func multiBlockUserRowDeltaUpsertsOverOptimisticAppend() async throws {
         let (store, fake) = makeStore()
-        fake.responseMap["agent.sendMessage"] = ["success": true]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         try await store.sendMessage(
@@ -206,7 +206,7 @@ extension ConversationStoreLiveStateTests {
 extension ConversationStoreLiveStateTests {
     @Test func userRowTerminalDeltaDoesNotClearTurnStreaming() async throws {
         let (store, fake) = makeStore()
-        fake.responseMap["agent.sendMessage"] = ["success": true]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         try await store.sendMessage(agentId: "agent-1", content: "Hello", workspaceId: "ws-1")

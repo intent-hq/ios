@@ -77,7 +77,7 @@ extension ConversationViewModelTests {
         if let sendError {
             fake.errorMap["agent.sendMessage"] = sendError
         } else {
-            fake.responseMap["agent.sendMessage"] = ["messageId": "srv-1"]
+            fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         }
         let attachmentSize = 3
         fake.responseMap["file.placeAttachment"] = [

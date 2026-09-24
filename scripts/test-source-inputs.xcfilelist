@@ -70,6 +70,7 @@ $(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusPrOpen.colorset
 $(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusPrReady.colorset
 $(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusUnknown.colorset
 $(SRCROOT)/Intent/Assets.xcassets/WorkspaceUnread.colorset
+$(SRCROOT)/Intent/ConnectionRegistryReadResult.swift
 $(SRCROOT)/Intent/Constants.swift
 $(SRCROOT)/Intent/DesignSystem
 $(SRCROOT)/Intent/DesignSystem/AgentAvatarDesign.swift
@@ -96,6 +97,7 @@ $(SRCROOT)/Intent/Models/ContentBlock+Identity.swift
 $(SRCROOT)/Intent/Models/ContentBlock.swift
 $(SRCROOT)/Intent/Models/ContextMention.swift
 $(SRCROOT)/Intent/Models/ConversationMessage.swift
+$(SRCROOT)/Intent/Models/ConversationSendAttempt.swift
 $(SRCROOT)/Intent/Models/EventWakeAttribution.swift
 $(SRCROOT)/Intent/Models/GitHubRepo.swift
 $(SRCROOT)/Intent/Models/GitHubRepoSuggestions.swift
@@ -159,6 +161,7 @@ $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Subscribe.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Commands.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Lifecycle.swift
+$(SRCROOT)/Intent/Services/ConversationStore+SendRecovery.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Streaming.swift
 $(SRCROOT)/Intent/Services/ConversationStore.swift
 $(SRCROOT)/Intent/Services/ConversationWatchedAgents.swift
@@ -408,6 +411,7 @@ $(SRCROOT)/IntentTests/ContextMentionTests.swift
 $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
+$(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreBindingGenerationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreHydrationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreIntegrationTests.swift
@@ -433,6 +437,7 @@ $(SRCROOT)/IntentTests/ConversationViewModelModelCatalogTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelQuestionTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelSeenTests.swift
+$(SRCROOT)/IntentTests/ConversationViewModelSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceBranchTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCatalogTests.swift
@@ -500,8 +505,10 @@ $(SRCROOT)/IntentTests/PairingPayloadTests.swift
 $(SRCROOT)/IntentTests/PendingQuestionDerivationTests.swift
 $(SRCROOT)/IntentTests/PersistenceEphemeralTests.swift
 $(SRCROOT)/IntentTests/PersistenceKeychainAccessibilityTests.swift
+$(SRCROOT)/IntentTests/PersistenceKeychainReadTests.swift
 $(SRCROOT)/IntentTests/PersistenceManagerTests.swift
 $(SRCROOT)/IntentTests/PersistenceRegistryIntegrityTests.swift
+$(SRCROOT)/IntentTests/PersistenceRegistryReadFailureTests.swift
 $(SRCROOT)/IntentTests/PlatformGuardAllowlistTests.swift
 $(SRCROOT)/IntentTests/PrivacyManifestDriftTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift

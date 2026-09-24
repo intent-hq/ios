@@ -54,7 +54,7 @@ extension ConversationViewModelTests {
         -> (viewModel: ConversationViewModel, fake: FakeConnectionManager) {
         let viewModel = makeVM()
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.sendMessage"] = ["messageId": "srv-1"]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         fake.responseMap["agent.markSeen"] = ["success": true] as [String: Any]
         viewModel.store = ConversationStore(connectionManager: fake)
         viewModel.markSeenDebounceDuration = debounce
