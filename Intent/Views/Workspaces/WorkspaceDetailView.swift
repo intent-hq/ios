@@ -196,43 +196,45 @@ struct WorkspaceDetailView: View {
             }
             #endif
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button {
-                        showSpecialistPicker = true
-                    } label: {
-                        Label("Create New Agent", systemImage: "plus.circle")
-                    }
-                    Button {
-                        let requestedWorkspace = workspaceId
-                        let request = UUID()
-                        terminalCreationRequest = request
-                        Task {
-                            let terminal = await terminalStore.create(workspaceId: requestedWorkspace)
-                            if terminalCreationRequest == request { selectedTerminal = terminal }
-                        }
-                    } label: {
-                        Label("New terminal", systemImage: "terminal")
-                    }
-                    .disabled(!terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId))
-                    Divider()
-                    Button { showArchiveConfirmation = true } label: {
-                        Label("Archive", systemImage: "archivebox")
-                    }
-                    Button(role: .destructive) {
-                        showDeleteConfirmation = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel("Workspace actions")
+                workspaceActions
             }
         }
     }
 }
 
 private extension WorkspaceDetailView {
+    var workspaceActions: some View {
+        Menu {
+            Button { showSpecialistPicker = true } label: {
+                Label("Create New Agent", systemImage: "plus.circle")
+            }
+            Button(action: createTerminal) {
+                Label("New terminal", systemImage: "terminal")
+            }
+            .disabled(!terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId))
+            Divider()
+            Button { showArchiveConfirmation = true } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            Button(role: .destructive) { showDeleteConfirmation = true } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityLabel("Workspace actions")
+    }
+
+    func createTerminal() {
+        let requestedWorkspace = workspaceId
+        let request = UUID()
+        terminalCreationRequest = request
+        Task {
+            let terminal = await terminalStore.create(workspaceId: requestedWorkspace)
+            if terminalCreationRequest == request { selectedTerminal = terminal }
+        }
+    }
+
     var detailContent: some View {
         VStack(spacing: 0) {
             repositoryName
@@ -327,8 +329,8 @@ private extension WorkspaceDetailView {
             LazyVStack(spacing: 0) {
                 foregroundAgents
                 backgroundAgents
-                WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) {
-                    selectedTerminal = $0
+                WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) { terminal in
+                    selectedTerminal = terminal
                 }
             }
             .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)

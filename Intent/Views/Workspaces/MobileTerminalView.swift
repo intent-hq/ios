@@ -32,26 +32,7 @@ struct MobileTerminalView: View {
             }
             .navigationTitle(terminal.name)
             .toolbarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Reconnect", systemImage: "arrow.clockwise") {
-                            Task { await connection.attach() }
-                        }
-                        .disabled(!store.isConnected || !store.isActive(terminal))
-                        Button("Close terminal", systemImage: "xmark.circle", role: .destructive) {
-                            confirmClose = true
-                        }
-                        .disabled(!store.isConnected || isClosing)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .accessibilityLabel("Terminal actions")
-                }
-            }
+            .toolbar { terminalToolbar }
             .alert("Close terminal?", isPresented: $confirmClose) {
                 Button("Cancel", role: .cancel) {}
                 Button("Close terminal", role: .destructive) {
@@ -69,6 +50,28 @@ struct MobileTerminalView: View {
             }
         }
         .interactiveDismissDisabled(isClosing)
+    }
+
+    @ToolbarContentBuilder
+    private var terminalToolbar: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("Done") { dismiss() }
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Button("Reconnect", systemImage: "arrow.clockwise") {
+                    Task { await connection.attach() }
+                }
+                .disabled(!store.isConnected || !store.isActive(terminal))
+                Button("Close terminal", systemImage: "xmark.circle", role: .destructive) {
+                    confirmClose = true
+                }
+                .disabled(!store.isConnected || isClosing)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .accessibilityLabel("Terminal actions")
+        }
     }
 
     @ViewBuilder

@@ -15,8 +15,8 @@ enum DemoTerminalFixtures {
         case "terminal.list":
             return [
                 "daemonBootId": bootId,
-                "terminals": terminals.filter { $0.value == workspaceId }.map {
-                    ["id": $0.key, "name": "Terminal", "cwd": "/workspace", "isExecutingCommand": true] as [String: Any]
+                "terminals": terminals.filter { $0.value == workspaceId }.map { terminal in
+                    ["id": terminal.key, "name": "Terminal", "cwd": "/workspace", "isExecutingCommand": true] as [String: Any]
                 }
             ]
         case "terminal.getBuffer":

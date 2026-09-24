@@ -757,7 +757,7 @@
 			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
 			requirement = {
 				kind = exactVersion;
-				version = 1.20.0;
+				version = 1.18.0;
 			};
 		};
 		AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */ = {

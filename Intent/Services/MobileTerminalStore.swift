@@ -83,7 +83,9 @@ final class MobileTerminalStore {
                 throw MobileTerminalError.invalidResponse
             }
             let terminal = MobileTerminal(
-                id: id, workspaceId: workspaceId, daemonBootId: bootId,
+                id: id,
+                workspaceId: workspaceId,
+                daemonBootId: bootId,
                 name: nextName(workspaceId: workspaceId)
             )
             terminals.append(terminal)
@@ -137,8 +139,8 @@ final class MobileTerminalStore {
         }
         let liveIds = Set(rows.compactMap { $0["id"] as? String })
         if revisions[workspaceId, default: 0] == revision {
-            terminals.removeAll {
-                $0.workspaceId == workspaceId && ($0.daemonBootId != bootId || !liveIds.contains($0.id))
+            terminals.removeAll { terminal in
+                terminal.workspaceId == workspaceId && (terminal.daemonBootId != bootId || !liveIds.contains(terminal.id))
             }
             verifiedIds.formUnion(terminals.filter { $0.workspaceId == workspaceId }.map(\.id))
             persistence.save(terminals)
@@ -150,7 +152,10 @@ final class MobileTerminalStore {
         let generation = connectionGeneration
         try checkConnection(generation)
         if subscriptionId != nil { return }
-        if let subscriptionTask { return try await subscriptionTask.value }
+        if let subscriptionTask {
+            try await subscriptionTask.value
+            return
+        }
         let task = Task { @MainActor in
             let response = try await self.connection.request("events.subscribe", params: [
                 "eventTypes": ["terminal:exit"], "replaceGroup": "ios-mobile-terminals"
@@ -187,8 +192,8 @@ final class MobileTerminalStore {
               event["type"] as? String == "terminal:exit",
               let data = event["data"] as? [String: Any],
               let id = data["terminalId"] as? String,
-              let terminal = terminals.first(where: {
-                  $0.id == id && $0.workspaceId == event["workspaceId"] as? String
+              let terminal = terminals.first(where: { terminal in
+                  terminal.id == id && terminal.workspaceId == event["workspaceId"] as? String
               }) else { return }
         remove(terminal)
     }
