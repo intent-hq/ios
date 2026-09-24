@@ -1,5 +1,6 @@
 import Foundation
 @testable import Intent
+import Synchronization
 import Testing
 
 extension ConversationStoreTests {
@@ -9,11 +10,10 @@ extension ConversationStoreTests {
         return row
     }
 
-    private func queuedSend(_ id: String, originalId: String) -> [String: Any] {
-        [
-            "id": id, "content": "hello", "queuedAt": "2026-09-24T00:00:00Z", "position": 0,
-            "messageMetadata": ["userAppMessageId": originalId]
-        ]
+    func queuedSend(_ id: String, originalId: String? = nil) -> [String: Any] {
+        var row: [String: Any] = ["id": id, "content": "hello", "queuedAt": "2026-09-24T00:00:00Z", "position": 0]
+        if let originalId { row["messageMetadata"] = ["userAppMessageId": originalId] }
+        return row
     }
 
     @Test(arguments: [-32_603, -32_602, -2, -3, -4])
@@ -323,6 +323,102 @@ extension ConversationStoreTests {
 }
 
 extension ConversationStoreTests {
+    /// Use the same decoded snapshot/event paths as ordinary transcript and queue updates.
+    func deliverRecoveryRow(
+        _ rowId: String,
+        source: String,
+        store: ConversationStore,
+        fake: FakeConnectionManager,
+        correlation: String? = nil,
+        legacyId: String? = nil
+    ) async {
+        if source == "queue" {
+            store.handleStreamEvent("events.event", params: ["event": [
+                "type": "agent:queue:updated",
+                "data": ["agentId": "a", "queue": [queuedSend(rowId, originalId: correlation)]]
+            ]])
+        } else {
+            var row = sentRow(rowId, appMessageId: source == "topLevel" ? correlation : nil)
+            if let nestedId = source == "legacy" ? correlation : legacyId {
+                row["metadata"] = ["userAppMessageId": nestedId]
+            }
+            fake.stubChatSnapshot(messages: [row])
+            await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
+        }
+    }
+
+    @Test(arguments: ["topLevel", "legacy", "queue"], [false, true])
+    func explicitRecoveryCorrelationExcludesConflictingIdentities(source: String, unknown: Bool) async throws {
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -2)
+        let store = ConversationStore(connectionManager: fake)
+        store.bindAgent("a")
+        let stopped = Mutex<[URL]>([])
+        for name in ["direct", "owner"] {
+            let url = URL(fileURLWithPath: "/tmp/\(name).txt")
+            let id = store.beginSendAttempt(
+                agentId: "a", content: name, workspaceId: "w",
+                files: [PendingFile(url: url, displayName: name, size: 0)],
+                fileAccess: ConversationSendFileAccess(urls: [url], stopAccess: { url in
+                    stopped.withLock { $0.append(url) }
+                })
+            )
+            store.prepareSendAttempt(id, imagePayload: .none, filePayload: .attachments([["type": "file", "attachmentId": name]]))
+            try? await store.sendPreparedAttempt(id)
+        }
+        let direct = store.sendAttempts[0].id
+        let owner = store.sendAttempts[1].id
+        fake.errorMap.removeValue(forKey: "agent.sendMessage")
+        fake.responseMap["agent.sendMessage"] = [
+            "success": true, "queued": true, "queuedMessage": queuedSend(direct)
+        ]
+        try await store.sendMessage(agentId: "a", content: "prior", workspaceId: "w")
+        await deliverRecoveryRow(
+            direct, source: source, store: store, fake: fake,
+            correlation: unknown ? "unknown" : owner, legacyId: unknown ? owner : direct
+        )
+        let confirmed: ConversationSendAttempt.Status = source == "queue" ? .queued : .accepted
+        #expect(store.sendAttempts[0].status == .unconfirmed)
+        #expect(store.sendAttempts[0].files.count == 1)
+        #expect(store.sendAttempts[0].fileAccess != nil)
+        #expect(store.sendAttempts[1].status == (unknown ? .unconfirmed : confirmed))
+        #expect(store.sendAttempts[1].confirmedMessageId == (unknown ? nil : direct))
+        #expect(store.sendAttempts[1].files.count == (unknown ? 1 : 0))
+        #expect((store.sendAttempts[1].fileAccess != nil) == unknown)
+        #expect(store.sendAttempts[2].status == .queued, "prior confirmed identity cannot override correlation")
+        #expect(stopped.withLock { $0 } == (unknown ? [] : [URL(fileURLWithPath: "/tmp/owner.txt")]))
+        var retainedPayload: [String: Any] = [:]
+        store.sendAttempts[0].filePayload.apply(to: &retainedPayload)
+        #expect((retainedPayload["fileBlocks"] as? [[String: Any]])?.first?["attachmentId"] as? String == "direct")
+        #expect(fake.paramsForMethod("agent.sendMessage").count == 3, "reconciliation never replays a send")
+    }
+
+    @Test(arguments: ["topLevel", "legacy", "queue"], ["correlated", "direct", "prior"])
+    func recoveryCorrelationKeepsBoundAgentFiltering(source: String, identity: String) async throws {
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -2)
+        let store = ConversationStore(connectionManager: fake)
+        store.bindAgent("a")
+        try? await store.sendMessage(agentId: "a", content: "bound", workspaceId: "w")
+        let bound = try #require(store.sendAttempts.first?.id)
+        if identity == "prior" {
+            fake.errorMap.removeValue(forKey: "agent.sendMessage")
+            fake.responseMap["agent.sendMessage"] = [
+                "success": true, "queued": true, "queuedMessage": queuedSend(bound)
+            ]
+        }
+        try? await store.sendMessage(agentId: "b", content: "other agent", workspaceId: "w")
+        let other = try #require(store.sendAttempts.last?.id)
+        await deliverRecoveryRow(
+            identity == "direct" ? other : bound, source: source, store: store, fake: fake,
+            correlation: identity == "correlated" ? other : nil
+        )
+        let expected: ConversationSendAttempt.Status = source == "queue" ? .queued : .accepted
+        #expect(store.sendAttempts[0].status == (identity == "prior" ? expected : .unconfirmed))
+        #expect(store.sendAttempts[1].status == (identity == "prior" ? .queued : .unconfirmed))
+        #expect(fake.paramsForMethod("agent.sendMessage").count == 2)
+    }
+
     @Test func localDisconnectedSendRetainsRetryAndRecordsOnlyOnce() async throws {
         let diagnostics = DiagnosticStore(storage: DiagnosticTestStorage())
         let manager = ConnectionManager(diagnostics: diagnostics)

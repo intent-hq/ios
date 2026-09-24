@@ -1,5 +1,6 @@
 import Foundation
 @testable import Intent
+import Synchronization
 import Testing
 
 /// Tests for ConversationStore – reset behavior and retained send ownership.
@@ -362,5 +363,49 @@ extension ConversationStoreTests {
         store.agentNotFound = true
         store.reset()
         #expect(!store.agentNotFound)
+    }
+}
+
+extension ConversationStoreTests {
+    @Test(arguments: ["topLevel", "queue"], ["direct", "confirmed", "same", "ambiguous", "sharedConfirmed"])
+    func recoveryWithoutCorrelationRequiresOneDistinctAttempt(source: String, identity: String) async {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        store.bindAgent("a")
+        let stopped = Mutex<[URL]>([])
+        let url = URL(fileURLWithPath: "/tmp/fallback.txt")
+        let id = store.beginSendAttempt(
+            agentId: "a", content: "original", workspaceId: "w",
+            files: [PendingFile(url: url, displayName: "fallback.txt", size: 0)],
+            fileAccess: ConversationSendFileAccess(urls: [url], stopAccess: { url in
+                stopped.withLock { $0.append(url) }
+            })
+        )
+        store.prepareSendAttempt(id, imagePayload: .none, filePayload: .attachments([["type": "file", "attachmentId": "file-1"]]))
+        let rowId = identity == "confirmed" || identity == "sharedConfirmed" ? "server-row" : id
+        let initiallyQueued = ["confirmed", "same", "sharedConfirmed"].contains(identity)
+        let ambiguous = identity == "ambiguous" || identity == "sharedConfirmed"
+        let queuedReply: [String: Any] = ["success": true, "queued": true, "queuedMessage": queuedSend(rowId)]
+        fake.responseMap["agent.sendMessage"] = queuedReply
+        if !initiallyQueued { fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -2) }
+        try? await store.sendPreparedAttempt(id)
+        fake.errorMap["agent.sendMessage"] = ambiguous ? nil : NSError(domain: "WebSocket", code: -2)
+        try? await store.sendMessage(agentId: "a", content: "other", workspaceId: "w")
+        let initialStatus: ConversationSendAttempt.Status = initiallyQueued ? .queued : .unconfirmed
+        #expect(store.sendAttempts[0].status == initialStatus)
+        #expect(stopped.withLock { $0 } == (initiallyQueued ? [url] : []))
+        await deliverRecoveryRow(rowId, source: source, store: store, fake: fake)
+        let confirmed: ConversationSendAttempt.Status = source == "queue" ? .queued : .accepted
+        #expect(store.sendAttempts[0].status == (ambiguous ? initialStatus : confirmed))
+        #expect(store.sendAttempts[0].confirmedMessageId == (initiallyQueued || !ambiguous ? rowId : nil))
+        #expect(store.sendAttempts[1].status == (ambiguous ? .queued : .unconfirmed))
+        let retainsResources = ambiguous && !initiallyQueued
+        #expect(store.sendAttempts[0].files.count == (retainsResources ? 1 : 0))
+        #expect((store.sendAttempts[0].fileAccess != nil) == retainsResources)
+        #expect(stopped.withLock { $0 } == (retainsResources ? [] : [url]))
+        var payload: [String: Any] = [:]
+        store.sendAttempts[0].filePayload.apply(to: &payload)
+        #expect((payload["fileBlocks"] != nil) == retainsResources)
+        #expect(fake.paramsForMethod("agent.sendMessage").count == 2)
     }
 }

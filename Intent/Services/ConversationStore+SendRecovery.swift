@@ -130,27 +130,31 @@ extension ConversationStore {
             // AgentMessage reads lift this out of row metadata. A nested legacy
             // copy must not override the canonical top-level correlation.
             let appId = message.appMessageId ?? message.metadata["userAppMessageId"]?.stringValue
-            let matches = sendAttempts.filter { attempt in
-                (agentId == nil || attempt.agentId == agentId) &&
-                    (attempt.id == message.id || attempt.id == appId || attempt.confirmedMessageId == message.id)
-            }
-            for attempt in matches {
-                confirmSendAttempt(attempt.id, status: .accepted, confirmedMessageId: message.id)
-            }
+            guard let attemptId = sendAttemptId(rowId: message.id, appMessageId: appId) else { continue }
+            confirmSendAttempt(attemptId, status: .accepted, confirmedMessageId: message.id)
         }
     }
 
     func reconcileSendAttempts(queue: [QueuedMessage]) {
         for message in queue {
             let appId = message.messageMetadata["userAppMessageId"]?.value as? String
-            let matches = sendAttempts.filter { attempt in
-                (agentId == nil || attempt.agentId == agentId) &&
-                    (attempt.id == message.id || attempt.id == appId || attempt.confirmedMessageId == message.id)
-            }
-            for attempt in matches {
-                confirmSendAttempt(attempt.id, status: .queued, confirmedMessageId: message.id)
-            }
+            guard let attemptId = sendAttemptId(rowId: message.id, appMessageId: appId) else { continue }
+            confirmSendAttempt(attemptId, status: .queued, confirmedMessageId: message.id)
         }
+    }
+
+    private func sendAttemptId(rowId: String, appMessageId: String?) -> String? {
+        let matches = sendAttempts.filter { attempt in
+            guard agentId == nil || attempt.agentId == agentId else { return false }
+            // Present correlation is exclusive, including unknown IDs. Only
+            // its absence permits direct or previously confirmed row identity.
+            if let appMessageId { return attempt.id == appMessageId }
+            return attempt.id == rowId || attempt.confirmedMessageId == rowId
+        }
+        // Count attempts, not matching fields: two identities on one attempt
+        // are fine, but a row naming different attempts settles none.
+        guard matches.count == 1 else { return nil }
+        return matches.first?.id
     }
 
     /// Read-only and explicitly user-triggered; never resends a mutation. It can

@@ -149,4 +149,56 @@ extension ConversationViewModelTests {
         store.reset()
         #expect(stopped.withLock { $0 } == [url, url], "the attempt's extra lease is balanced")
     }
+
+    @Test(arguments: [false, true])
+    func cancellationBeforeDispatchRetainsPreparedSendAndCancelledRetry(retryEntry: Bool) async throws {
+        let stopped = Mutex<[URL]>([])
+        let pipeline = ConversationAttachmentPipeline(
+            startSecurityScopedAccess: { _ in true },
+            stopSecurityScopedAccess: { url in stopped.withLock { $0.append(url) } }
+        )
+        let url = URL(fileURLWithPath: "/tmp/cancelled-send.txt")
+        pipeline.addFiles([url])
+        let files = pipeline.pendingFiles
+        let image = try #require(UIImage(systemName: "star"))
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        let id = store.beginSendAttempt(
+            agentId: "a", content: "original", workspaceId: "w", images: [image], files: files,
+            fileAccess: pipeline.retainFileAccess(for: files), messageMetadata: .fields(["selection": "original"])
+        )
+        store.prepareSendAttempt(
+            id, imagePayload: .attachments([["type": "image", "attachmentId": "image-1"]]),
+            filePayload: .attachments([["type": "file", "attachmentId": "file-1"]])
+        )
+        pipeline.clearPendingFiles()
+        #expect(store.sendAttempts.first?.status == .preparing)
+        for _ in 0 ..< (retryEntry ? 2 : 1) {
+            let send = Task { @MainActor in try await store.sendPreparedAttempt(id) }
+            // No suspension on MainActor before cancel: the request cannot have entered yet.
+            send.cancel()
+            await #expect(throws: CancellationError.self) { try await send.value }
+            #expect(store.sendAttempts.first?.status == .notSent)
+            #expect(store.sendAttempts.first?.canRetry == true)
+        }
+        #expect(fake.paramsForMethod("agent.sendMessage").isEmpty)
+        #expect(store.messages.isEmpty)
+        #expect(!store.isStreaming)
+        #expect(store.sendAttempts.count == 1)
+        #expect(store.sendAttempts.first?.id == id)
+        #expect(store.sendAttempts.first?.content == "original")
+        #expect(store.sendAttempts.first?.images.first === image)
+        #expect(store.sendAttempts.first?.files == files)
+        #expect(store.sendAttempts.first?.fileAccess != nil)
+        var params: [String: Any] = [:]
+        store.sendAttempts[0].imagePayload.apply(to: &params)
+        store.sendAttempts[0].filePayload.apply(to: &params)
+        store.sendAttempts[0].messageMetadata.apply(to: &params)
+        #expect((params["imageBlocks"] as? [[String: Any]])?.first?["attachmentId"] as? String == "image-1")
+        #expect((params["fileBlocks"] as? [[String: Any]])?.first?["attachmentId"] as? String == "file-1")
+        #expect((params["messageMetadata"] as? [String: Any])?["selection"] as? String == "original")
+        #expect(stopped.withLock { $0 } == [url], "cancellation does not release the retained attempt lease")
+        store.reset()
+        #expect(stopped.withLock { $0 } == [url, url])
+    }
 }
