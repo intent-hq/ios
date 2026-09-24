@@ -77,7 +77,12 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         ])
         app.buttons["Workspace options"].tap()
         app.buttons["Connect to…"].tap()
-        app.buttons["Manual Connection"].tap()
+        // The parent sheet exposes its rows during presentation; wait for
+        // the manual-entry action before trying to present a nested sheet.
+        let manualConnection = app.buttons["Manual Connection"]
+        XCTAssertTrue(manualConnection.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(manualConnection.isHittable)
+        manualConnection.tap()
         let hostField = app.textFields["192.168.1.42 or tc…"]
         XCTAssertTrue(hostField.waitForExistence(timeout: Fixture.timeout))
         hostField.tap()
