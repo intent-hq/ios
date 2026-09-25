@@ -25,6 +25,15 @@ on:
         type: string
         required: false
         default: ''
+      ui_test_trial:
+        description: >-
+          Manual UI-only comparison (non-gating). Serial and two-shards use
+          the same full enabled UI catalog. Cannot combine with only_testing.
+          Reruns must include every worker in one new attempt; no partial reruns.
+        type: choice
+        required: false
+        default: 'off'
+        options: ['off', serial, two-shards]
 
 permissions:
   contents: read
@@ -42,6 +51,7 @@ concurrency:
 jobs:
   go-test:
     name: Go unit tests (TailcatKit)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.ui_test_trial == '' || inputs.ui_test_trial == 'off' }}
     # TailcatKit is pure Go and cross-compiles for Linux, so its tests run
     # here on a cheap, fast Linux runner instead of serialising 2-12 minutes
     # of Tailscale compilation onto the 3-core macOS VM.
@@ -66,6 +76,11 @@ jobs:
       - name: xcodebuild.sh self-tests
         run: scripts/test_xcodebuild.sh
 
+      - name: UI trial contract tests
+        run: |
+          python3 scripts/test-ui-test-shards.py
+          python3 scripts/test-ui-test-trial.py
+
       # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
       # override in scripts/swiftlint.sh against a stubbed swiftlint; pure bash.
       - name: swiftlint.sh self-tests
@@ -84,7 +99,8 @@ jobs:
 
   swiftlint:
     name: SwiftLint
-    # Runs unconditionally on both triggers so the "Require Go unit tests and
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.ui_test_trial == '' || inputs.ui_test_trial == 'off' }}
+    # Runs on both normal triggers so the "Require Go unit tests and
     # SwiftLint" step in build-and-test never sees a skipped job. The official
     # Linux release uses its in-process sourcekitd, so lint needs no macOS,
     # Xcode, Go, SPM or simulator work.
@@ -128,6 +144,7 @@ jobs:
 
   build-and-test:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.ui_test_trial == '' || inputs.ui_test_trial == 'off' }}
     # The repo ruleset requires only this job. A job skipped because a
     # `needs` dependency failed counts as passing for required checks, so
     # `needs: [go-test, swiftlint]` would not keep a Go or lint failure
@@ -447,7 +464,7 @@ jobs:
     # Filtered dispatches already run their requested selector in build-and-test.
     # A human adds this check to the ruleset after merge; build-and-test does not
     # wait for it, so both macOS jobs release their runners independently.
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
+    if: ${{ github.event_name != 'workflow_dispatch' || (inputs.only_testing == '' && (inputs.ui_test_trial == '' || inputs.ui_test_trial == 'off')) }}
     runs-on: macos-15
     timeout-minutes: 45
     env:
@@ -596,7 +613,7 @@ jobs:
     # TailcatKit is linked with an iOS-only platform filter, so this job
     # needs no Go toolchain and no xcframework build. Skipped on a filtered
     # dispatch to save a macOS runner.
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
+    if: ${{ github.event_name != 'workflow_dispatch' || (inputs.only_testing == '' && (inputs.ui_test_trial == '' || inputs.ui_test_trial == 'off')) }}
     runs-on: macos-15
     timeout-minutes: 45
     env:
@@ -651,6 +668,183 @@ jobs:
       # if the visionOS platform is not installed.
       - name: Build
         run: scripts/xcodebuild.sh build-visionos
+
+  # Explicit manual experiment only. Normal jobs above do not depend on this
+  # validation, preserving PR/filtered scheduling and required check identities.
+  ui-trial-inputs:
+    name: UI Trial Input Validation (non-gating)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.ui_test_trial != '' && inputs.ui_test_trial != 'off' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      count: ${{ steps.validate.outputs.count }}
+      matrix: ${{ steps.validate.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - name: Validate UI trial inputs
+        id: validate
+        env:
+          TRIAL_MODE: ${{ inputs.ui_test_trial }}
+          ONLY_TESTING: ${{ inputs.only_testing }}
+        run: python3 scripts/ui-test-trial.py validate
+
+  ui-trial-worker:
+    name: UI Trial Worker ${{ matrix.index }} (non-gating)
+    needs: ui-trial-inputs
+    if: ${{ github.event_name == 'workflow_dispatch' && needs.ui-trial-inputs.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.ui-trial-inputs.outputs.matrix) }}
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      GIT_TERMINAL_PROMPT: '0'
+      SPM_CLONE_DIR: build/SourcePackages
+      BUILD_CONFIGURATION: Debug
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      # Mirror the standard UI lane: no shared build producer or UI-only build
+      # optimization. Both modes independently build this exact checkout.
+      - name: Select Xcode
+        run: |
+          echo "Available Xcode bundles:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
+            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+            echo "Selected $xcode"
+            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+          else
+            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
+            xcodebuild -version
+          fi
+
+      - name: Pick simulator device
+        run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
+
+      - name: Pre-boot simulator
+        run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
+
+      - name: Cache TailcatKit.xcframework
+        id: tailcat-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            TailcatKit/build/TailcatKit.xcframework
+            TailcatKit/build/tcecho
+          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
+
+      - name: Set up Go
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache-dependency-path: TailcatKit/go.sum
+
+      - name: Build TailcatKit.xcframework
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        run: ./TailcatKit/build_xcframework.sh
+
+      - name: Build tailcat echo server
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        working-directory: TailcatKit
+        run: go build -o build/tcecho ./cmd/tcecho
+
+      - name: Cache SPM packages
+        id: spm-cache
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve SPM packages
+        run: scripts/xcodebuild.sh resolve
+
+      - name: Build for testing
+        run: python3 scripts/ui-test-trial.py build
+
+      - name: Simulator state
+        run: |
+          echo "--- simctl boot output:"
+          cat /tmp/simboot.log 2>/dev/null || echo "(no output)"
+          echo "--- device:"
+          xcrun simctl list devices | grep -F "$SIM_UDID" || true
+
+      - name: Record UI trial context
+        env:
+          SPM_CACHE_HIT: ${{ steps.spm-cache.outputs.cache-hit }}
+          TAILCAT_CACHE_HIT: ${{ steps.tailcat-cache.outputs.cache-hit }}
+        run: python3 scripts/ui-test-trial.py context
+
+      - name: Run UI trial tests
+        env:
+          UI_TEST_SHARD_COUNT: ${{ needs.ui-trial-inputs.outputs.count }}
+          UI_TEST_SHARD_INDEX: ${{ matrix.index }}
+          UI_TEST_SHARD_CONTEXT: trial-context.json
+          UI_TEST_SHARD_DIR: trial
+        run: scripts/xcodebuild.sh test-without-building
+
+      # A successful test is not a successful worker until its upload AND all
+      # job/post steps finish. The collector checks authoritative job receipts.
+      - name: Upload UI trial evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-trial-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.index }}
+          path: trial/worker.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Check for crash retry diagnostics
+        id: retry
+        if: always()
+        run: |
+          if [ -d trial/Tests-retry.xcresult ]; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload UI trial diagnostics
+        if: ${{ always() && (failure() || cancelled() || steps.retry.outputs.present == 'true') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-trial-diagnostics-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.index }}
+          path: trial/*.xcresult
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 14
+
+  ui-trial-result:
+    name: UI Trial Result (non-gating)
+    needs: [ui-trial-inputs, ui-trial-worker]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.ui-trial-inputs.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      # Fetch exact artifact IDs from paginated metadata for this run/attempt;
+      # verify digests, provenance and upload conclusions before reconciliation.
+      - name: Verify UI trial receipts and coverage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIAL_COUNT: ${{ needs.ui-trial-inputs.outputs.count }}
+        run: python3 scripts/ui-test-trial.py collect --count "$TRIAL_COUNT" --directory trial-combined
+      - name: Upload verified UI trial result
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-trial-combined-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: trial-combined/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   pr-title:
     runs-on: ubuntu-latest
