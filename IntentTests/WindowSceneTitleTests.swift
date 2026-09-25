@@ -99,7 +99,7 @@ struct WindowSceneTitleTests {
         try await waitUntil("SwiftUI to clear the label at Home") { scene.title?.isEmpty == true }
     }
 
-    @Observable private final class NavigationState {
+    @Observable final class NavigationState {
         var title: String? = "Studio"
         var path: [String] = []
         var appearedScreen: String?
