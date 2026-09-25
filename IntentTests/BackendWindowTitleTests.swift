@@ -98,6 +98,34 @@ extension BackendSessionRegistryTests {
         restored.release()
     }
 
+    @Test func cloudPublicationAndImportedNameChangesKeepWindowLabelsCurrent() async throws {
+        let store = try BackendSyncTestStore()
+        defer { store.cleanUp() }
+        let stored = store.manager.upsertConnection(BackendSyncFixtures.local())
+        let window = BackendWindowSession(registry: makeRegistry(), persistence: store.manager)
+        window.bind(to: BackendID(stored.id))
+        defer { window.release() }
+        #expect(window.sceneTitle == "My Mac")
+
+        store.manager.publishPendingBackends()
+        #expect(try store.cloud.object()["label"] as? String == "My Mac")
+        #expect(store.manager.loadConnections().first?.pendingSyncUpdatedAt == nil)
+        let publicationWrites = store.cloud.writeCount
+
+        let records = SyncedBackendConnectionMergeTests()
+        let rename = records.record(label: "Desktop rename", updatedAt: 2000)
+        let outcome = store.manager.mergeSyncedBackends(records: [rename])
+        #expect(outcome.updatedIds == [stored.id])
+        try await waitUntil("the bound window to observe an imported iCloud name") {
+            window.sceneTitle == "Desktop rename"
+        }
+        #expect(store.cloud.writeCount == publicationWrites, "Observing the label must not republish a remote edit")
+
+        let removal = records.record(updatedAt: 3000, deleted: true)
+        #expect(store.manager.mergeSyncedBackends(records: [removal]).removedIds == [stored.id])
+        try await waitUntil("an imported iCloud removal to clear the label") { window.sceneTitle == nil }
+    }
+
     @Test func homeRebindAndRestoredHomeNeverKeepThePreviousLabel() {
         let first = saveTitleConnection(name: "First", host: "first.local")
         let second = saveTitleConnection(name: "Second", host: "second.local")
