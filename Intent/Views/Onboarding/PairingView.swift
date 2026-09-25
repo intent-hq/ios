@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 /// The pairing paths PairingView offers, platform-filtered: visionOS exposes
@@ -39,43 +40,71 @@ struct PairingView: View {
     @State private var showQRScanner = false
     @State private var showManualEntry = false
     @State private var showConnections = false
+    @ScaledMetric(relativeTo: .title) private var headingCapHeight = PairingTextMetrics.headingCapHeight
+    @ScaledMetric(relativeTo: .body) private var bodyCapHeight = PairingTextMetrics.bodyCapHeight
+    @ScaledMetric(relativeTo: .body) private var bodyLineSpacing = PairingTextMetrics.bodyLineSpacing
 
     var body: some View {
         NavigationStack {
             pairingContent
+                .toolbar(.hidden, for: .navigationBar)
                 .sheet(isPresented: $showQRScanner) { QRScannerView() }
                 .sheet(isPresented: $showManualEntry) { ManualTokenEntryView() }
                 .sheet(isPresented: $showConnections) { ConnectionsView() }
         }
+        .preference(
+            key: ConnectionBackdropPreference.self,
+            value: showManualEntry ? ConnectionBackdropPreference.manualOpacity
+                : (showConnections ? ConnectionBackdropPreference.savedOpacity : 0)
+        )
     }
 
     private var pairingContent: some View {
         ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
-            VStack(spacing: Constants.Pairing.contentSpacing) {
-                Spacer()
-                pairingHeader
-                pairingOptions
-                Spacer()
-                Spacer()
+            Constants.Pairing.background(for: colorScheme).ignoresSafeArea()
+            // Safe insets are required synchronously for the first layout, without a state feedback pass.
+            // swiftlint:disable:next geometry_reader_usage
+            GeometryReader { geometry in
+                // Equal outer safe margins center on the full container, not the
+                // asymmetric safe area. The same protected region gates scrolling.
+                ViewThatFits(in: .vertical) {
+                    pairingLayout
+                    ScrollView { pairingLayout }
+                }
+                .padding(.vertical, Constants.Pairing.optionsHorizontalPadding)
+                .padding(.top, max(0, geometry.safeAreaInsets.bottom - geometry.safeAreaInsets.top))
+                .padding(.bottom, max(0, geometry.safeAreaInsets.top - geometry.safeAreaInsets.bottom))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }
 
-    private var pairingHeader: some View {
-        VStack(spacing: Constants.Pairing.headerSpacing) {
-            IntentLogo()
-                .frame(width: Constants.Pairing.logoSize, height: Constants.Pairing.logoSize)
-                .foregroundStyle(Theme.primary(for: colorScheme))
-            Text("Connect to Intent")
-                .font(.title2.bold())
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-            Text("Pair with your desktop app to manage workspaces and chat with agents")
-                .font(.subheadline)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Constants.Pairing.descriptionHorizontalPadding)
+    private var pairingLayout: some View {
+        VStack(spacing: Constants.Pairing.contentSpacing) {
+            pairingHeader
+            pairingOptions
         }
+        .frame(maxWidth: Constants.Pairing.maximumContentWidth)
+        .padding(.horizontal, Constants.Pairing.optionsHorizontalPadding)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var pairingHeader: some View {
+        PairingHeaderLayout(capHeights: [headingCapHeight, bodyCapHeight], spacing: Constants.Pairing.headerSpacing) {
+            Text("Connect to Intent")
+                .font(Constants.Typography.heading2.font)
+                .tracking(Constants.Pairing.headingTracking)
+                .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+                .multilineTextAlignment(.center)
+            Text("Pair with your desktop app to manage workspaces and chat with agents.")
+                .font(Constants.Typography.bodyS.font)
+                .tracking(Constants.Pairing.bodyTracking)
+                .lineSpacing(bodyLineSpacing)
+                .foregroundStyle(Constants.Pairing.mutedForeground(for: colorScheme))
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, Constants.Pairing.descriptionHorizontalPadding)
     }
 
     private var pairingOptions: some View {
@@ -85,15 +114,16 @@ struct PairingView: View {
         return VStack(spacing: Constants.Pairing.optionsSpacing) {
             if options.contains(.qrScan) {
                 PairingOptionButton(
-                    icon: "camera.fill",
+                    icon: .connectQR,
                     title: "Scan QR Code",
                     subtitle: "Fastest way to connect",
+                    isProminent: true,
                     colorScheme: colorScheme
                 ) { showQRScanner = true }
             }
             if options.contains(.manualEntry) {
                 PairingOptionButton(
-                    icon: "keyboard",
+                    icon: .connectManual,
                     title: "Manual Connection",
                     subtitle: "Enter IP, port, and token",
                     colorScheme: colorScheme
@@ -101,15 +131,14 @@ struct PairingView: View {
             }
             if options.contains(.savedConnections) {
                 PairingOptionButton(
-                    icon: "clock.arrow.circlepath",
+                    icon: .connectSaved,
                     title: "Saved Connections",
-                    subtitle: "Reconnect to a previously paired daemon",
+                    subtitle: "Reconnect to paired daemon",
                     colorScheme: colorScheme
                 ) { showConnections = true }
             }
             visionPairingHint
         }
-        .padding(.horizontal, Constants.Pairing.optionsHorizontalPadding)
     }
 
     @ViewBuilder
@@ -123,47 +152,102 @@ struct PairingView: View {
     }
 }
 
+/// Figma spaces the header from cap top to last baseline, not native line-box
+/// edges. Measure real multiline baselines without clipping or fixing text height.
+private struct PairingHeaderLayout: Layout {
+    let capHeights: [CGFloat]
+    let spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let textProposal = ProposedViewSize(width: proposal.width, height: nil)
+        var size = CGSize.zero
+        for (subview, capHeight) in zip(subviews, capHeights) {
+            let dimensions = subview.dimensions(in: textProposal)
+            size.width = max(size.width, dimensions.width)
+            size.height += dimensions[.lastTextBaseline] - dimensions[.firstTextBaseline] + capHeight
+        }
+        size.height += spacing * CGFloat(max(0, subviews.count - 1))
+        return size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        let textProposal = ProposedViewSize(width: bounds.width, height: nil)
+        var capTop = bounds.minY
+        for (subview, capHeight) in zip(subviews, capHeights) {
+            let dimensions = subview.dimensions(in: textProposal)
+            let origin = capTop + capHeight - dimensions[.firstTextBaseline]
+            subview.place(at: CGPoint(x: bounds.midX, y: origin), anchor: .top, proposal: textProposal)
+            capTop += dimensions[.lastTextBaseline] - dimensions[.firstTextBaseline]
+                + capHeight + spacing
+        }
+    }
+}
+
+private enum PairingTextMetrics {
+    private static let heading = font(Constants.Typography.heading2)
+    private static let body = font(Constants.Typography.bodyS)
+    private static let bodyLineHeightRatio: CGFloat = 1.32 // Figma Connect description.
+    private static let bodyLineHeight = CTFontGetAscent(body) + CTFontGetDescent(body) + CTFontGetLeading(body)
+    static let headingCapHeight = CTFontGetCapHeight(heading)
+    static let bodyCapHeight = CTFontGetCapHeight(body)
+    static let bodyLineSpacing = max(0, Constants.Typography.bodyS.size * bodyLineHeightRatio - bodyLineHeight)
+    // Inter Regular and Medium share vertical metrics. Native line boxes already
+    // contribute this whitespace to the title/subtitle gap between visible caps.
+    static let bodyNativeLeading = bodyLineHeight - bodyCapHeight
+
+    private static func font(_ style: Constants.Typography.Style) -> CTFont {
+        CTFontCreateWithName(style.face.rawValue as CFString, style.size, nil)
+    }
+}
+
 struct PairingOptionButton: View {
-    let icon: String
-    let title: String
-    let subtitle: String
+    let icon: ImageResource
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+    var isProminent = false
     let colorScheme: ColorScheme
     let action: () -> Void
+    @ScaledMetric(relativeTo: .body) private var nativeLeading = PairingTextMetrics.bodyNativeLeading
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: Constants.Pairing.optionSpacing) {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundStyle(Theme.primary(for: colorScheme))
-                    .frame(width: Constants.Pairing.optionIconWidth)
-                    .accessibilityHidden(true)
+                iconTile
 
-                VStack(alignment: .leading, spacing: Constants.Pairing.optionTextSpacing) {
+                VStack(alignment: .leading, spacing: max(0, Constants.Pairing.optionTextSpacing - nativeLeading)) {
                     Text(title)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                        .font(Constants.Typography.bodySEmphasized.font)
+                        .tracking(Constants.Pairing.optionTitleTracking)
+                        .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                     Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .multilineTextAlignment(.leading)
+                        .font(Constants.Typography.bodyS.font)
+                        .tracking(Constants.Pairing.bodyTracking)
+                        .foregroundStyle(Constants.Pairing.mutedForeground(for: colorScheme))
                 }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .accessibilityHidden(true)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(Constants.Pairing.optionPadding)
-            .background(Theme.card(for: colorScheme))
+            .padding(.horizontal, Constants.Pairing.optionPadding)
+            .padding(.vertical, isProminent ? Constants.Pairing.optionPadding : 0)
+            .background(isProminent ? Constants.Pairing.surface(for: colorScheme) : .clear)
             .clipShape(.rect(cornerRadius: Constants.Pairing.optionCornerRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: Constants.Pairing.optionCornerRadius)
-                    .stroke(Theme.border(for: colorScheme), lineWidth: Constants.Pairing.optionBorderWidth)
-            )
+            .contentShape(.rect(cornerRadius: Constants.Pairing.optionCornerRadius))
         }
+        .buttonStyle(.plain)
         .visionCardRowButton(cornerRadius: Constants.Pairing.optionCornerRadius)
+    }
+
+    private var iconTile: some View {
+        Image(icon)
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: Constants.Pairing.glyphSize, height: Constants.Pairing.glyphSize)
+            .foregroundStyle(isProminent ? Constants.Pairing.onAccent : Constants.Pairing.foreground(for: colorScheme))
+            .frame(width: Constants.Pairing.iconTileSize, height: Constants.Pairing.iconTileSize)
+            .background(isProminent ? Constants.Pairing.accent : Constants.Pairing.surface(for: colorScheme))
+            .clipShape(.rect(cornerRadius: Constants.Pairing.iconTileCornerRadius))
+            .accessibilityHidden(true)
     }
 }

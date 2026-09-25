@@ -38,6 +38,13 @@ $(SRCROOT)/Intent/Assets.xcassets/CodeBlockAction.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockBackground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockForeground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockSecondaryLabel.colorset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectManual.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectQR.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectSaved.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionClipboard.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionClose.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionLaptop.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionServer.imageset
 $(SRCROOT)/Intent/Assets.xcassets/LaunchBackground.imageset
 $(SRCROOT)/Intent/Assets.xcassets/MarkdownCodeBlockBackground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/MarkdownInlineCodeBackground.colorset
@@ -79,13 +86,17 @@ $(SRCROOT)/Intent/DesignSystem/AgentAvatarDesign.swift
 $(SRCROOT)/Intent/DesignSystem/Colors.swift
 $(SRCROOT)/Intent/DesignSystem/ComponentLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ComposerLayout.swift
+$(SRCROOT)/Intent/DesignSystem/ConnectionSheetStyle.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationMediaLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationTranscriptLayout.swift
 $(SRCROOT)/Intent/DesignSystem/Layout.swift
 $(SRCROOT)/Intent/DesignSystem/MarkdownLayout.swift
+$(SRCROOT)/Intent/DesignSystem/PairingColors.swift
 $(SRCROOT)/Intent/DesignSystem/QuestionWizardLayout.swift
+$(SRCROOT)/Intent/DesignSystem/SavedConnectionStyle.swift
 $(SRCROOT)/Intent/DesignSystem/TerminalAppearance.swift
 $(SRCROOT)/Intent/DesignSystem/Theme.swift
+$(SRCROOT)/Intent/DesignSystem/Typography.swift
 $(SRCROOT)/Intent/DesignSystem/VisionHitTarget.swift
 $(SRCROOT)/Intent/DesignSystem/WorkspaceChromeLayout.swift
 $(SRCROOT)/Intent/Models
@@ -143,6 +154,8 @@ $(SRCROOT)/Intent/Presentation/ToolClassifier+Classification.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
 $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
 $(SRCROOT)/Intent/Resources
+$(SRCROOT)/Intent/Resources/Fonts
+$(SRCROOT)/Intent/Resources/Fonts/Inter
 $(SRCROOT)/Intent/Services
 $(SRCROOT)/Intent/Services/AgentStore.swift
 $(SRCROOT)/Intent/Services/AttachmentImageLoader.swift
@@ -276,9 +289,14 @@ $(SRCROOT)/Intent/Views/Connection/ConnectionLossOverlay.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossPresenter.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionNetworkMessage.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionNetworkStatusView.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionSheet.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionSheetButtonStyle.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionSheetText.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionsView.swift
 $(SRCROOT)/Intent/Views/Connection/DisconnectedView.swift
 $(SRCROOT)/Intent/Views/Connection/LoadingView.swift
+$(SRCROOT)/Intent/Views/Connection/SavedConnectionCard.swift
+$(SRCROOT)/Intent/Views/Connection/SavedConnectionDetails.swift
 $(SRCROOT)/Intent/Views/Conversation
 $(SRCROOT)/Intent/Views/Conversation/Composer
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputAttachments.swift
@@ -346,6 +364,8 @@ $(SRCROOT)/Intent/Views/Notes/NoteListView.swift
 $(SRCROOT)/Intent/Views/Notes/TaskMetadataHeaderView.swift
 $(SRCROOT)/Intent/Views/Onboarding
 $(SRCROOT)/Intent/Views/Onboarding/DeepLinkPairingView.swift
+$(SRCROOT)/Intent/Views/Onboarding/ManualConnectionField.swift
+$(SRCROOT)/Intent/Views/Onboarding/ManualConnectionHeader.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualTokenEntryView.swift
 $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift
@@ -505,6 +525,7 @@ $(SRCROOT)/IntentTests/IntentFileAttachmentLoaderTests.swift
 $(SRCROOT)/IntentTests/IntentFileLinkTests.swift
 $(SRCROOT)/IntentTests/IntentFileVideoTests.swift
 $(SRCROOT)/IntentTests/IntentNoteLinkParsingTests.swift
+$(SRCROOT)/IntentTests/InterFontTests.swift
 $(SRCROOT)/IntentTests/LaunchPhaseTimelineTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
@@ -536,6 +557,7 @@ $(SRCROOT)/IntentTests/NotificationManagerTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerWindowRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationSessionAggregationTests.swift
 $(SRCROOT)/IntentTests/ObjCCallbackIsolationTests.swift
+$(SRCROOT)/IntentTests/PairingDesignTests.swift
 $(SRCROOT)/IntentTests/PairingFlowTests.swift
 $(SRCROOT)/IntentTests/PairingLifecycleDiagnosticTests.swift
 $(SRCROOT)/IntentTests/PairingOptionTests.swift
@@ -557,6 +579,7 @@ $(SRCROOT)/IntentTests/ReleaseConfigurationTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
+$(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
 $(SRCROOT)/IntentTests/SessionCacheBoundsMeasurementTests.swift
 $(SRCROOT)/IntentTests/SettingsViewTests.swift
 $(SRCROOT)/IntentTests/ShapeIsolationTests.swift
@@ -593,6 +616,7 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Sequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
+$(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift

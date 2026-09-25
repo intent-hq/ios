@@ -94,6 +94,10 @@ struct WorkspaceListView: View {
             await workspaceStore.fetchAll()
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
+        .preference(
+            key: ConnectionBackdropPreference.self,
+            value: showingConnections ? ConnectionBackdropPreference.savedOpacity : 0
+        )
     }
 
     private var emptyState: some View {
