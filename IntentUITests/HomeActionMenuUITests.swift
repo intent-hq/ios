@@ -97,8 +97,10 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let assistant = app.buttons["intent.menu.assistant"]
         let position = assistant.frame.minY
         carousel.swipeUp()
+        XCTAssertTrue(assistant.exists, "A vertical drag must not open a tile's destination")
         XCTAssertEqual(assistant.frame.minY, position, accuracy: Self.scrollTolerance)
         carousel.swipeDown()
+        XCTAssertTrue(assistant.exists, "A vertical drag must keep the menu open")
         XCTAssertEqual(assistant.frame.minY, position, accuracy: Self.scrollTolerance)
         let backdropStart = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Self.backdropStartY))
         let backdropEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Self.backdropEndY))
@@ -127,9 +129,14 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     private func reveal(_ action: String, in app: XCUIApplication) -> XCUIElement {
         let tile = app.buttons["intent.menu.\(action)"]
         let carousel = app.scrollViews["intent.menu.tiles"]
-        for _ in 0..<Self.maximumSwipes where !tile.isHittable {
+        XCTAssertTrue(tile.waitForExistence(timeout: Self.timeout))
+        let viewport = carousel.frame.intersection(app.frame)
+        for _ in 0..<Self.maximumSwipes {
+            let center = CGPoint(x: tile.frame.midX, y: tile.frame.midY)
+            if viewport.contains(center) { break }
             carousel.swipeLeft()
         }
+        XCTAssertTrue(viewport.contains(CGPoint(x: tile.frame.midX, y: tile.frame.midY)))
         XCTAssertTrue(tile.isHittable)
         return tile
     }

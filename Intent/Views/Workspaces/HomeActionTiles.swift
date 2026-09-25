@@ -24,6 +24,7 @@ struct HomeActionTiles: View {
         static let iconSize: CGFloat = 22
         static let badgeInset: CGFloat = 2
         static let pressedOpacity = 0.7
+        static let maximumTapMovement: CGFloat = 10
     }
 
     var body: some View {
@@ -108,9 +109,26 @@ struct HomeActionTiles: View {
         }
     }
 
-    private struct HomeActionTileStyle: ButtonStyle {
+    private struct HomeActionTileStyle: PrimitiveButtonStyle {
         func makeBody(configuration: Configuration) -> some View {
-            configuration.label.opacity(configuration.isPressed ? Layout.pressedOpacity : 1)
+            TileTapTarget(configuration: configuration)
+        }
+    }
+
+    private struct TileTapTarget: View {
+        let configuration: PrimitiveButtonStyleConfiguration
+        @GestureState private var isPressed = false
+
+        var body: some View {
+            configuration.label
+                .opacity(isPressed ? Layout.pressedOpacity : 1)
+                .onTapGesture { configuration.trigger() }
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: .infinity, maximumDistance: Layout.maximumTapMovement)
+                        .updating($isPressed) { pressing, state, _ in state = pressing }
+                )
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { configuration.trigger() }
         }
     }
 }
