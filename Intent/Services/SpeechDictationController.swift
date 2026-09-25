@@ -272,6 +272,7 @@ final class SpeechDictationController {
     var onDidStop: ((DictationStopReason) -> Void)?
 
     private var audioEngine: AVAudioEngine?
+    private var audioLease: UUID?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     /// Identity of the recognition segment (request + task) whose results
@@ -316,9 +317,17 @@ final class SpeechDictationController {
 
         unavailabilityHint = nil
         do {
+            let lease = try await MediaAudioSession.shared.acquire(.dictation)
+            guard startState.canProceed(token), !Task.isCancelled else {
+                startState.abort(token)
+                try? await MediaAudioSession.shared.release(lease)
+                return
+            }
+            audioLease = lease
             try begin(with: recognizer)
             _ = startState.started(token)
         } catch {
+            guard startState.canProceed(token) else { return }
             startState.abort(token)
             teardownAudio()
             recognitionRequest = nil
@@ -371,13 +380,8 @@ final class SpeechDictationController {
     }
 
     private func begin(with recognizer: SFSpeechRecognizer) throws {
-        // Dictation only records; .record + .measurement + .duckOthers is
-        // Apple's dictation configuration. Activation must precede
-        // engine.start(); teardownAudio() deactivates.
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
-
+        // startRecording has acquired the recording category and activated the
+        // shared session before starting the engine, even after video playback.
         let engine = AVAudioEngine()
         audioEngine = engine
         installRecognition(on: engine, with: recognizer)
@@ -476,7 +480,10 @@ final class SpeechDictationController {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if let lease = audioLease {
+            audioLease = nil
+            Task { try? await MediaAudioSession.shared.release(lease) }
+        }
     }
 
     private static func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {

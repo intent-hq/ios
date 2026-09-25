@@ -103,7 +103,10 @@ struct RootView: View {
     #endif
 
     @ViewBuilder private var rootContent: some View {
-        Group {
+        // A real container keeps one presenter across the animated branch
+        // change. Group distributes its modifiers to both outgoing and
+        // incoming content, briefly giving each its own overlay window.
+        ZStack {
             if isWorkspaceFlow {
                 workspaceFlowContent
             } else {
