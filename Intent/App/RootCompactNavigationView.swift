@@ -10,6 +10,7 @@ extension RootView {
                         WorkspaceDetailView(workspaceId: workspaceId, session: session)
                             .navigationDestination(isPresented: $showingConversation) {
                                 conversationDestination
+                                    .hidesTabBarWhenPushed()
                             }
                             .navigationDestination(isPresented: $showingNoteDetail) {
                                 NoteDetailView(
@@ -23,6 +24,7 @@ extension RootView {
                                     noteDetailNoteTitle = title
                                 }
                                 .id(noteDetailNoteId)
+                                .hidesTabBarWhenPushed()
                             }
                     }
                 }

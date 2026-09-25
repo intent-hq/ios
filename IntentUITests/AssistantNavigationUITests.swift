@@ -47,6 +47,37 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertTrue(history.exists)
     }
 
+    /// iPhone: the Workspaces/Assistant tab bar stays on the workspace
+    /// overview but is hidden on a pushed conversation, so it never sits
+    /// under the composer; popping back restores it.
+    @MainActor
+    func testTabBarHidesOnPushedWorkspaceConversation() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "compact-width behavior")
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+
+        let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        workspace.tap()
+        let agentRow = app.staticTexts["Test Stabilizer"].firstMatch
+        XCTAssertTrue(agentRow.waitForExistence(timeout: Fixture.timeout))
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.exists, "the tab bar should show on the workspace overview")
+
+        agentRow.tap()
+        let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+        XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(
+            tabBar.waitForNonExistence(timeout: Fixture.timeout),
+            "the tab bar must not sit under a pushed conversation's composer"
+        )
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(agentRow.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(tabBar.waitForExistence(timeout: Fixture.timeout), "popping back must restore the tab bar")
+    }
+
     @MainActor
     func testNewConversationIsAvailableWithoutScrollingHistory() {
         let app = XCUIApplication()
