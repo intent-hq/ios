@@ -263,6 +263,7 @@ $(SRCROOT)/Intent/Views/Onboarding/DeepLinkPairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualTokenEntryView.swift
 $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift
+$(SRCROOT)/Intent/Views/Onboarding/Splash/LaunchAppearanceModifier.swift
 $(SRCROOT)/Intent/Views/Onboarding/Splash/SplashArtView.swift
 $(SRCROOT)/Intent/Views/Settings/AcknowledgementsView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticExportView.swift
@@ -462,7 +463,6 @@ $(SRCROOT)/IntentTests/SettingsViewTests.swift
 $(SRCROOT)/IntentTests/ShapeIsolationTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
-$(SRCROOT)/IntentTests/SplashPlaybackTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift

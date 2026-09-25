@@ -12,12 +12,13 @@ struct CertMismatchListView: View {
 
     @Environment(\.colorScheme) var colorScheme
     let mismatches: [HostCertMismatch]
+    var warningForeground: Color = .orange
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.contentSpacing) {
             Label("Certificate mismatch", systemImage: "exclamationmark.shield")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(warningForeground)
 
             ForEach(mismatches, id: \.host) { mismatch in
                 VStack(alignment: .leading, spacing: Layout.hostSpacing) {
