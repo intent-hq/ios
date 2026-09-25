@@ -28,7 +28,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
         ))
         #endif
         let coordinator = context.coordinator
-        coordinator.trace("copy-offline=\(ConnectionNetworkMessage(status: networkStatus).isUnavailable)")
         let content = ConnectionLossOverlay(
             mismatches: mismatches, networkStatus: networkStatus, onHome: coordinator.homeAction(onHome)
         )
@@ -61,7 +60,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
 
     @MainActor
     final class Coordinator {
-        private let traceID = UUID()
         private weak var sourceWindow: UIWindow?
         private var overlayWindow: UIWindow?
         private var host: UIHostingController<AnyView>?
@@ -71,7 +69,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
         private var content = AnyView(EmptyView())
 
         func attach(to window: UIWindow?) {
-            trace("attach window=\(window != nil) same=\(sourceWindow === window)")
             // UIKit/SwiftUI may temporarily remove the anchor during scene
             // transitions. A missing window is not a request to dismiss an
             // existing loss or discard pending content. Keep the source until
@@ -84,7 +81,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
         }
 
         func detach() {
-            trace("detach")
             hide(reason: .detached)
             isPresented = false
             content = AnyView(EmptyView())
@@ -103,7 +99,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
         }
 
         func update(isPresented: Bool, content: AnyView) {
-            trace("update requested=\(isPresented)")
             self.isPresented = isPresented
             self.content = isPresented ? content : AnyView(EmptyView())
             refresh()
@@ -148,7 +143,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
 
         func hide(reason: HideReason = .explicit) {
             guard let overlayWindow else { return }
-            trace("hide reason=\(reason.rawValue)")
             UIView.performWithoutAnimation {
                 let wasKey = overlayWindow.isKeyWindow
                 overlayWindow.isHidden = true
@@ -163,13 +157,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
                 host = nil
             }
             UIAccessibility.post(notification: .screenChanged, argument: nil)
-        }
-
-        func trace(_ event: String) {
-            DemoConnectionLoss.trace(
-                "presenter=\(traceID) \(event) presented=\(isPresented) "
-                    + "source=\(sourceWindow != nil) scene=\(sourceWindow?.windowScene != nil) overlay=\(overlayWindow != nil)"
-            )
         }
     }
 }

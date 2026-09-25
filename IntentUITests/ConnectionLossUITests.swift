@@ -367,13 +367,6 @@ extension ConnectionLossUITests {
             attachment.lifetime = .keepAlways
             self?.add(attachment)
             print("Connection-loss fixture events: \(events)")
-            if let trace = try? String(contentsOf: directory.appendingPathComponent("lifecycle-trace.txt"), encoding: .utf8) {
-                let traceAttachment = XCTAttachment(string: trace)
-                traceAttachment.name = "connection-loss-lifecycle-trace"
-                traceAttachment.lifetime = .keepAlways
-                self?.add(traceAttachment)
-                print("Connection-loss lifecycle trace:\n\(trace)")
-            }
             try FileManager.default.removeItem(at: directory)
         }
         return directory

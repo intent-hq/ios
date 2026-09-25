@@ -11,8 +11,6 @@ enum DemoConnectionLoss {
     private static var backgroundLossStarted = false
     private static let quickRecoveryMilliseconds = 250
     private static let statePollMilliseconds = 10
-    private static let maximumTraceEntries = 256
-    private static var lifecycleTrace: [String] = []
 
     private static var backgroundScenario: String? {
         guard directory != nil else { return nil }
@@ -25,20 +23,9 @@ enum DemoConnectionLoss {
     static func record(_ event: String) {
         guard let directory else { return }
         try? Data().write(to: directory.appendingPathComponent(event))
-        trace(event)
-    }
-
-    static func trace(_ event: @autoclosure () -> String) {
-        guard let directory, lifecycleTrace.count < maximumTraceEntries else { return }
-        let event = event()
-        guard lifecycleTrace.last != event else { return }
-        lifecycleTrace.append(event)
-        let text = lifecycleTrace.enumerated().map { "\($0.offset + 1) \($0.element)" }.joined(separator: "\n")
-        try? text.write(to: directory.appendingPathComponent("lifecycle-trace.txt"), atomically: true, encoding: .utf8)
     }
 
     static func sceneChanged(_ phase: ScenePhase, connection: any SessionConnectionManaging) {
-        trace("scene=\(phase) connection=\(connection.connectionState)")
         guard let scenario = backgroundScenario else { return }
         if phase == .background, !backgroundLossStarted {
             backgroundLossStarted = true
@@ -110,14 +97,12 @@ enum DemoConnectionLoss {
             }
             connection.connectionState = ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-reconnecting")
                 ? .reconnecting(attempt: 1) : .disconnected
-            trace("fixture-loss-delivered")
             if ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-startup-failure") {
                 coordinator.onConnectionFailed(error: "Server certificate has changed. Re-pair to trust the new certificate.")
                 return
             }
             try await DemoFixtures.wait(for: .triggerFile(directory.appendingPathComponent("recover")))
             try Task.checkCancellation()
-            trace("fixture-recovery-delivered")
             connection.connectionState = .connected
         } catch {
             // Root teardown cancels the scenario; it must not revive Home.
