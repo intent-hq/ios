@@ -44,6 +44,12 @@ struct WorkspaceListView: View {
             }
         }
         .background(Theme.background(for: colorScheme))
+        .overlay(alignment: .bottomTrailing) {
+            AssistantLaunchButton {
+                searchFocused = false
+                coordinator.onSelectAssistant()
+            }
+        }
         .navigationTitle("Workspaces")
         .workspaceSearch(text: $viewModel.searchText, isFocused: $searchFocused)
         .toolbar {
@@ -97,6 +103,7 @@ struct WorkspaceListView: View {
 
     private var workspaceList: some View {
         List { workspaceSections }
+            .contentMargins(.bottom, AssistantLaunchButton.scrollClearance, for: .scrollContent)
             .scrollContentBackground(.hidden)
             .listStyle(.plain)
             #if !os(visionOS)

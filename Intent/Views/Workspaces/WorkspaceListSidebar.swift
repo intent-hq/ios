@@ -44,6 +44,12 @@ struct WorkspaceListSidebar: View {
             }
         }
         .background(Theme.sidebar(for: colorScheme))
+        .overlay(alignment: .bottomTrailing) {
+            AssistantLaunchButton {
+                searchFocused = false
+                coordinator.onSelectAssistant()
+            }
+        }
         .navigationTitle("Workspaces")
         .workspaceSearch(text: $viewModel.searchText, isFocused: $searchFocused)
         .toolbar {
@@ -142,6 +148,7 @@ struct WorkspaceListSidebar: View {
         .scrollDismissesKeyboard(.immediately)
         #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
+        .contentMargins(.bottom, AssistantLaunchButton.scrollClearance, for: .scrollContent)
     }
 
     /// Shared row modifiers for every view mode. The explicit row background

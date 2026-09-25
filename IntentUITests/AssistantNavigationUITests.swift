@@ -17,18 +17,21 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
     }
 
     @MainActor
-    func testAssistantAndWorkspaceSwitchingPreservesOpenWorkspace() {
+    func testAssistantButtonOpensAndReturnsToWorkspaces() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
         app.launch()
 
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
-        workspace.tap()
-        let context = app.buttons["Context"].firstMatch
-        XCTAssertTrue(context.waitForExistence(timeout: Fixture.timeout))
-
-        app.buttons["Assistant"].firstMatch.tap()
+        let launcher = app.buttons["assistant.open"]
+        XCTAssertTrue(launcher.isHittable)
+        XCTAssertFalse(app.tabBars.firstMatch.exists)
+        let workspaceScreenshot = XCTAttachment(screenshot: app.screenshot())
+        workspaceScreenshot.name = "Workspace list with Assistant button"
+        workspaceScreenshot.lifetime = .keepAlways
+        add(workspaceScreenshot)
+        launcher.tap()
         let actions = app.buttons["assistant.actions"]
         XCTAssertTrue(actions.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.tabBars.firstMatch.waitForNonExistence(timeout: Fixture.timeout))
@@ -40,20 +43,17 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         add(assistantScreenshot)
 
         app.buttons["assistant.back"].tap()
-        XCTAssertTrue(context.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.staticTexts["Test Stabilizer"].firstMatch.exists)
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(launcher.isHittable)
+        XCTAssertFalse(app.tabBars.firstMatch.exists)
 
-        app.buttons["Assistant"].firstMatch.tap()
+        launcher.tap()
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(actions.exists)
     }
 
-    /// iPhone: the Workspaces/Assistant tab bar stays on the workspace
-    /// overview but is hidden on a pushed conversation, so it never sits
-    /// under the composer; popping back restores it.
     @MainActor
-    func testTabBarHidesOnPushedWorkspaceConversation() throws {
+    func testAssistantButtonStaysOnWorkspaceList() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "compact-width behavior")
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
@@ -61,23 +61,24 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
 
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        let launcher = app.buttons["assistant.open"]
+        XCTAssertTrue(launcher.isHittable)
         workspace.tap()
         let agentRow = app.staticTexts["Test Stabilizer"].firstMatch
         XCTAssertTrue(agentRow.waitForExistence(timeout: Fixture.timeout))
-        let tabBar = app.tabBars.firstMatch
-        XCTAssertTrue(tabBar.exists, "the tab bar should show on the workspace overview")
+        XCTAssertTrue(launcher.waitForNonExistence(timeout: Fixture.timeout))
 
         agentRow.tap()
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(
-            tabBar.waitForNonExistence(timeout: Fixture.timeout),
-            "the tab bar must not sit under a pushed conversation's composer"
-        )
+        XCTAssertFalse(launcher.exists)
+        XCTAssertFalse(app.tabBars.firstMatch.exists)
 
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(agentRow.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(tabBar.waitForExistence(timeout: Fixture.timeout), "popping back must restore the tab bar")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(launcher.isHittable)
     }
 
     @MainActor
@@ -85,9 +86,9 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-assistant-history"]
         app.launch()
-        let assistantTab = app.buttons["Assistant"].firstMatch
-        XCTAssertTrue(assistantTab.waitForExistence(timeout: Fixture.timeout))
-        assistantTab.tap()
+        let launcher = app.buttons["assistant.open"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
+        launcher.tap()
 
         let greeting = app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "I can help you plan and follow up")
@@ -115,9 +116,9 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-assistant-history"]
         app.launch()
-        let assistantTab = app.buttons["Assistant"].firstMatch
-        XCTAssertTrue(assistantTab.waitForExistence(timeout: Fixture.timeout))
-        assistantTab.tap()
+        let launcher = app.buttons["assistant.open"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
+        launcher.tap()
         let greeting = app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "I can help you plan and follow up")
         ).firstMatch
@@ -152,9 +153,9 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         app.launchArguments += ["--demo-data", "--demo-assistant-prompts-trigger-file=\(trigger.path)"]
         if splitAcrossBlocks { app.launchArguments.append("--demo-assistant-prompts-split") }
         app.launch()
-        let assistantTab = app.buttons["Assistant"].firstMatch
-        XCTAssertTrue(assistantTab.waitForExistence(timeout: Fixture.timeout))
-        assistantTab.tap()
+        let launcher = app.buttons["assistant.open"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
+        launcher.tap()
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
         let rawMarkup = transcript.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "suggested-prompts")

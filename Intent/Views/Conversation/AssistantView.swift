@@ -27,7 +27,6 @@ struct AssistantView: View {
                 }
             }
         }
-        .hidesTabBarWhenPushed(includingRegularWidth: true)
         .task {
             await store.refresh()
             if coordinator.assistantAgentId == nil {

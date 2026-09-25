@@ -31,6 +31,7 @@ $(SRCROOT)/Intent/Assets.xcassets/AppIcon.solidimagestack/Front.solidimagestackl
 $(SRCROOT)/Intent/Assets.xcassets/AppIcon.solidimagestack/Front.solidimagestacklayer/Content.imageset
 $(SRCROOT)/Intent/Assets.xcassets/AppIcon.solidimagestack/Middle.solidimagestacklayer
 $(SRCROOT)/Intent/Assets.xcassets/AppIcon.solidimagestack/Middle.solidimagestacklayer/Content.imageset
+$(SRCROOT)/Intent/Assets.xcassets/AssistantAccent.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockAction.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockBackground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockForeground.colorset
@@ -212,6 +213,7 @@ $(SRCROOT)/Intent/Views/Agents
 $(SRCROOT)/Intent/Views/Agents/AgentAvatarView.swift
 $(SRCROOT)/Intent/Views/Agents/AgentRowView.swift
 $(SRCROOT)/Intent/Views/Components
+$(SRCROOT)/Intent/Views/Components/AssistantLaunchButton.swift
 $(SRCROOT)/Intent/Views/Components/NavigationTitleSubtitleView.swift
 $(SRCROOT)/Intent/Views/Components/RepoOwnerAvatarView.swift
 $(SRCROOT)/Intent/Views/Components/TaskProgressRingView.swift

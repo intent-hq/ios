@@ -76,7 +76,6 @@ private struct ConversationViewContent: View {
                     session: session
                 )
                 .id(dest.agentId)
-                .hidesTabBarWhenPushed()
             }
             .task {
                 await viewModel.load()

@@ -114,16 +114,17 @@ struct RootView: View {
     }
 
     @ViewBuilder private var workspaceFlowContent: some View {
-        @Bindable var coordinator = coordinator
-        TabView(selection: $coordinator.selectedSection) {
-            workspaceNavigationContent
-                .tabItem { Label("Workspaces", systemImage: "rectangle.stack") }
-                .tag(AppSection.workspaces)
+        workspaceNavigationContent
+            .fullScreenCover(isPresented: assistantPresented) {
+                AssistantView(session: session)
+            }
+    }
 
-            AssistantView(session: session)
-                .tabItem { Label("Assistant", image: "IntentDandelion") }
-                .tag(AppSection.assistant)
-        }
+    private var assistantPresented: Binding<Bool> {
+        Binding(
+            get: { coordinator.selectedSection == .assistant },
+            set: { if !$0 { coordinator.selectedSection = .workspaces } }
+        )
     }
 
     @ViewBuilder private var workspaceNavigationContent: some View {

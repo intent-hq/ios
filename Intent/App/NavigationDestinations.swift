@@ -43,25 +43,3 @@ struct AgentDestination: Hashable, Identifiable {
         hasher.combine(id)
     }
 }
-
-/// Hides the app's Workspaces/Assistant tab bar on a pushed detail screen on
-/// iPhone, so the bar doesn't sit under the message composer or note content.
-/// Regular width keeps it: there the tab bar is the top-level switcher.
-private struct HidesTabBarWhenPushed: ViewModifier {
-    var includingRegularWidth = false
-    @Environment(\.horizontalSizeClass) private var sizeClass
-
-    func body(content: Content) -> some View {
-        #if os(iOS)
-        content.toolbar(includingRegularWidth || sizeClass == .compact ? .hidden : .automatic, for: .tabBar)
-        #else
-        content
-        #endif
-    }
-}
-
-extension View {
-    func hidesTabBarWhenPushed(includingRegularWidth: Bool = false) -> some View {
-        modifier(HidesTabBarWhenPushed(includingRegularWidth: includingRegularWidth))
-    }
-}
