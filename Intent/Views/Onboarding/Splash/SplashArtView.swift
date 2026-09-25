@@ -1,12 +1,13 @@
+import Lottie
 import SwiftUI
 
-/// Full-screen launch splash using the supplied GIF's frames and timing.
+/// Full-screen launch splash using the supplied twist intro and pulse loop.
 struct SplashArtView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var playback: SplashPlaybackState
-    /// Held for the view's lifetime only, so the decoded frames go away with
+    /// Held for the view's lifetime only, so the decoded compositions go away with
     /// the splash (ios#256).
     @State private var lease: SplashAnimationLease?
 
@@ -22,9 +23,9 @@ struct SplashArtView: View {
     }
 
     static func shouldAnimate(
-        scenePhase: ScenePhase, reduceMotion: Bool, frameCount: Int
+        scenePhase: ScenePhase, reduceMotion: Bool, hasAnimation: Bool
     ) -> Bool {
-        scenePhase == .active && !reduceMotion && frameCount > 1
+        scenePhase == .active && !reduceMotion && hasAnimation
     }
 
     private var animation: SplashAnimation? { lease?.animation }
@@ -33,7 +34,7 @@ struct SplashArtView: View {
         Self.shouldAnimate(
             scenePhase: scenePhase,
             reduceMotion: reduceMotion,
-            frameCount: animation?.frameCount ?? 0
+            hasAnimation: animation != nil
         )
     }
 
@@ -45,18 +46,22 @@ struct SplashArtView: View {
                     paused: !shouldAnimate
                 )) { _ in
                     if let animation {
+                        let sample = animation.frame(at: playback.elapsedTime, animated: !reduceMotion)
                         SplashFrameView(
-                            image: animation.image(
-                                at: playback.elapsedTime,
-                                animated: !reduceMotion
-                            ),
+                            animation: sample.animation,
+                            frame: sample.frame,
                             colorScheme: colorScheme
+                        )
+                        .frame(
+                            width: Constants.Splash.maximumLogoDimension,
+                            height: Constants.Splash.maximumLogoDimension
                         )
                     }
                 }
             }
         .ignoresSafeArea()
         .allowsHitTesting(false)
+        .accessibilityHidden(true)
         .onAppear {
             if lease == nil { lease = store.lease() }
             playback.setRunning(shouldAnimate)
@@ -71,27 +76,40 @@ struct SplashArtView: View {
     }
 }
 
-/// Renders the GIF's dark mark as theme foreground without its opaque white canvas.
-struct SplashFrameView: View {
-    let image: CGImage
+/// Lottie renders the source paths, keyframes and time remapping directly. The
+/// existing monotonic clock is the sole playback driver: Lottie never starts an
+/// independent animation that could continue while this scene is inactive.
+struct SplashFrameView: UIViewRepresentable {
+    let animation: LottieAnimation
+    let frame: AnimationFrameTime
     let colorScheme: ColorScheme
 
-    var body: some View {
-        Theme.foreground(for: colorScheme)
-            .mask {
-                Image(decorative: image, scale: 1)
-                    .resizable()
-                    .scaledToFit()
-                    // The source is an opaque black-on-white GIF. Inverting
-                    // before deriving alpha keeps only the mark, including its
-                    // antialiased gray edge coverage, without pixel processing.
-                    .colorInvert()
-                    .luminanceToAlpha()
-            }
-            .frame(
-                maxWidth: Constants.Splash.maximumLogoDimension,
-                maxHeight: Constants.Splash.maximumLogoDimension
-            )
+    func makeUIView(context _: Context) -> LottieAnimationView {
+        // The main-thread renderer supports the supplied twist's time remapping
+        // and samples exact source frames without Core Animation approximation.
+        let view = LottieAnimationView(
+            animation: nil,
+            configuration: LottieConfiguration(renderingEngine: .mainThread)
+        )
+        view.contentMode = .scaleAspectFit
+        view.backgroundBehavior = .pause
+        view.animateLayoutChangesWithCurrentCoreAnimationContext = false
+        return view
+    }
+
+    func updateUIView(_ view: LottieAnimationView, context _: Context) {
+        if view.animation !== animation { view.animation = animation }
+        let keypath = AnimationKeypath(keypath: "**.Color")
+        let color = UIColor(Theme.foreground(for: colorScheme)).lottieColorValue
+        if (view.valueProviders[keypath] as? ColorValueProvider)?.color != color {
+            view.setValueProvider(ColorValueProvider(color), keypath: keypath)
+        }
+        view.currentFrame = frame
+    }
+
+    static func dismantleUIView(_ view: LottieAnimationView, coordinator _: ()) {
+        view.stop()
+        view.animation = nil
     }
 }
 

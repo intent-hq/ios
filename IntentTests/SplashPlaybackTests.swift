@@ -1,11 +1,12 @@
 import Foundation
 @testable import Intent
+import Lottie
 import SwiftUI
 import Testing
 
 /// ios#247 / ios#256: splash playback samples one injectable monotonic clock
-/// for both frame selection and pause/resume accounting, and the decoded GIF
-/// frames live only while a splash owner holds a lease on them.
+/// for both source-frame selection and pause/resume accounting. The decoded
+/// compositions live only while a splash owner holds a lease on them.
 struct SplashPlaybackTests {
     /// Stepped monotonic clock: nothing but `advance` moves it.
     private final class SteppedClock: SplashPlaybackClock {
@@ -25,35 +26,33 @@ struct SplashPlaybackTests {
     }
 
     private func bundledAnimation() throws -> SplashAnimation {
-        let url = try #require(
-            SplashAnimation.bundledURL,
-            "IntentSplash.gif is missing from the app bundle"
+        try #require(
+            SplashAnimation(),
+            "The supplied twist and pulse JSON animations must decode from the app bundle"
         )
-        return try #require(SplashAnimation(url: url))
-    }
-
-    /// Playback time in the middle of frame `index`, from the GIF's own timing.
-    private func midpoint(ofFrame index: Int, in animation: SplashAnimation) -> TimeInterval {
-        animation.frameDurations.prefix(index).reduce(0, +) + animation.frameDurations[index] / 2
     }
 
     // MARK: - Frame selection under a stepped clock
 
-    @Test func frameIndexFollowsTheInjectedClock() throws {
+    @Test func twistPlaysOnceThenPulseLoopsOnTheInjectedClock() throws {
         let animation = try bundledAnimation()
-        try #require(animation.frameCount > 3)
-        let clock = SteppedClock()
+        let clock = SteppedClock(now: 0)
         var playback = SplashPlaybackState(clock: clock)
         playback.setRunning(true)
 
-        #expect(animation.frameIndex(at: playback.elapsedTime, animated: true) == 0)
-        clock.advance(by: midpoint(ofFrame: 1, in: animation))
-        #expect(animation.frameIndex(at: playback.elapsedTime, animated: true) == 1)
-        clock.advance(by: midpoint(ofFrame: 3, in: animation) - midpoint(ofFrame: 1, in: animation))
-        #expect(animation.frameIndex(at: playback.elapsedTime, animated: true) == 3)
-        // One full cycle later the loop lands on the same frame.
-        clock.advance(by: animation.duration)
-        #expect(animation.frameIndex(at: playback.elapsedTime, animated: true) == 3)
+        // Source files: twist is 46 frames, pulse is 61, both at 30 fps.
+        // Crossing the 1.2-second loading phase must not restart the intro.
+        let samples: [(time: Double, expected: (animation: LottieAnimation, frame: Double))] = [
+            (0, (animation.twist, 0)), (0.5, (animation.twist, 15)), (1.2, (animation.twist, 36)),
+            (46.0 / 30, (animation.pulse, 0)), (61.0 / 30, (animation.pulse, 15)),
+            (122.0 / 30, (animation.pulse, 15)), (183.0 / 30, (animation.pulse, 15))
+        ]
+        for sample in samples {
+            clock.now = sample.time
+            let rendered = animation.frame(at: playback.elapsedTime, animated: true)
+            #expect(rendered.animation === sample.expected.animation)
+            #expect(abs(rendered.frame - sample.expected.frame) < 0.0001)
+        }
     }
 
     /// The clock-jump case: playback moves only when the injected monotonic
@@ -105,58 +104,65 @@ struct SplashPlaybackTests {
 
     // MARK: - Reduce Motion
 
-    @Test func reduceMotionSelectsTheStaticFirstFrameAtAnyPlaybackTime() throws {
+    @Test func reduceMotionSelectsTheCompletePulseMarkAtAnyPlaybackTime() throws {
         let animation = try bundledAnimation()
-        for elapsed in [0, animation.duration / 2, animation.duration * 40.25] {
-            #expect(animation.frameIndex(at: elapsed, animated: false) == 0)
+        for elapsed in [0, 0.5, 1.2, 2, 100] {
+            let rendered = animation.frame(at: elapsed, animated: false)
+            #expect(rendered.animation === animation.pulse)
+            #expect(rendered.frame == 0)
         }
     }
 
     @Test func reduceMotionAndInactiveScenesPausePlayback() {
         let animates = SplashArtView.shouldAnimate
-        #expect(animates(.active, false, 2))
-        #expect(!animates(.active, true, 2))
-        #expect(!animates(.inactive, false, 2))
-        #expect(!animates(.background, false, 2))
-        #expect(!animates(.active, false, 1))
+        #expect(animates(.active, false, true))
+        #expect(!animates(.active, true, true))
+        #expect(!animates(.inactive, false, true))
+        #expect(!animates(.background, false, true))
+        #expect(!animates(.active, false, false))
     }
 
-    // MARK: - Frame lifetime
+    // MARK: - Composition lifetime
 
-    @Test func framesAreDecodedOnceWhileAnyOwnerIsAliveAndReleasedAfterTheLast() throws {
-        let url = try #require(SplashAnimation.bundledURL)
+    @Test func compositionsAreDecodedOnceWhileAnyOwnerIsAliveAndReleasedAfterTheLast() throws {
         let loads = Counter()
         let store = SplashAnimationStore {
             loads.count += 1
-            return SplashAnimation(url: url)
+            return SplashAnimation()
         }
-        #expect(!store.isRetainingFrames)
+        #expect(!store.isRetainingAnimations)
 
         var first = store.lease()
         var second = store.lease()
+        weak var twist = first?.animation.twist
+        weak var pulse = first?.animation.pulse
         #expect(first != nil)
         #expect(first === second)
         #expect(loads.count == 1)
-        #expect(store.isRetainingFrames)
+        #expect(store.isRetainingAnimations)
 
         first = nil
-        #expect(store.isRetainingFrames)
+        #expect(store.isRetainingAnimations)
         second = nil
-        #expect(!store.isRetainingFrames)
+        #expect(!store.isRetainingAnimations)
+        #expect(twist == nil)
+        #expect(pulse == nil)
 
         do {
             let third = store.lease()
             withExtendedLifetime(third) {
                 #expect(loads.count == 2)
-                #expect(store.isRetainingFrames)
+                #expect(store.isRetainingAnimations)
             }
         }
-        #expect(!store.isRetainingFrames)
+        #expect(!store.isRetainingAnimations)
     }
 
     @Test func sharedStoreServesTheBundledAnimation() throws {
         let lease = try #require(SplashAnimationStore.shared.lease())
-        #expect(lease.animation.frameCount > 1)
-        #expect(lease.animation.duration > 0)
+        #expect(lease.animation.twist.size == CGSize(width: 256, height: 256))
+        #expect(lease.animation.pulse.size == CGSize(width: 256, height: 256))
+        #expect(lease.animation.twist.duration == 46.0 / 30)
+        #expect(lease.animation.pulse.duration == 61.0 / 30)
     }
 }

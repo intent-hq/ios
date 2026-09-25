@@ -66,7 +66,7 @@ struct RootView: View {
     }
 
     /// True during the launch splash phases (loading and connecting), which
-    /// share a single SplashArtView so GIF playback doesn't reset between them.
+    /// share a single SplashArtView so animation playback doesn't reset between them.
     private var isLaunchSplash: Bool {
         switch coordinator.currentScreen {
         case .loading, .connecting:
@@ -135,7 +135,7 @@ struct RootView: View {
     private var launchContent: some View {
         ZStack {
             // One SplashArtView spans loading and connecting. Keeping
-            // it in this stable position preserves GIF playback across
+            // it in this stable position preserves animation playback across
             // the phase transition; the phase views render on top.
             if isLaunchSplash {
                 SplashArtView()
