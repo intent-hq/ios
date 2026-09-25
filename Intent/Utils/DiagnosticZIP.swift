@@ -8,7 +8,8 @@ nonisolated enum DiagnosticZIP {
     enum Failure: Error { case oversized }
 
     static let maximumMetadataBytes = 16_384
-    static let maximumArchiveBytes = DiagnosticLimits.maximumHistoryBytes + maximumMetadataBytes + 1024
+    private static let maximumHeaderBytes = 1024
+    static let maximumArchiveBytes = DiagnosticLimits.maximumHistoryBytes + maximumMetadataBytes + maximumHeaderBytes
 
     private struct Entry {
         let name: Data

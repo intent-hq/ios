@@ -4,6 +4,7 @@ import Synchronization
 
 nonisolated final class DiagnosticTestClock: Sendable {
     private static let epoch: TimeInterval = 1_800_000_000
+
     private struct State {
         var date: Date
         var reads = 0

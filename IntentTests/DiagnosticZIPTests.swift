@@ -18,7 +18,7 @@ struct DiagnosticZIPTests {
         #expect(entries["events.jsonl"] == reviewed.jsonLines)
         #expect(entries["metadata.json"] == (try report.snapshot.metadataJSON()))
         #expect(archive.count <= DiagnosticZIP.maximumArchiveBytes)
-        #expect(archive.range(of: sentinel) == nil)
+        #expect(!archive.contains(sentinel))
         #expect(!storage.state.withLock { $0.touchedMainThread })
         #expect(await store.endReport(report))
         #expect(try Data(contentsOf: unrelated) == sentinel)
@@ -44,14 +44,18 @@ struct DiagnosticZIPTests {
         let snapshot = await DiagnosticStore(storage: DiagnosticTestStorage()).snapshot()
         let maximum = DiagnosticSnapshot(
             jsonLines: Data(repeating: 0, count: DiagnosticLimits.maximumHistoryBytes),
-            metadata: snapshot.metadata, historyRevision: snapshot.historyRevision, expiresAt: snapshot.expiresAt
+            metadata: snapshot.metadata,
+            historyRevision: snapshot.historyRevision,
+            expiresAt: snapshot.expiresAt
         )
         let archive = try DiagnosticZIP.encode(maximum)
         #expect(archive.count <= DiagnosticZIP.maximumArchiveBytes)
         #expect(try DiagnosticZIPTestReader.extract(archive)["events.jsonl"] == maximum.jsonLines)
         let oversized = DiagnosticSnapshot(
             jsonLines: Data(repeating: 0, count: DiagnosticLimits.maximumHistoryBytes + 1),
-            metadata: snapshot.metadata, historyRevision: snapshot.historyRevision, expiresAt: snapshot.expiresAt
+            metadata: snapshot.metadata,
+            historyRevision: snapshot.historyRevision,
+            expiresAt: snapshot.expiresAt
         )
         #expect(throws: DiagnosticZIP.Failure.self) { try DiagnosticZIP.encode(oversized) }
     }

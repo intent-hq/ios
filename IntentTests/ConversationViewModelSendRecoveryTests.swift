@@ -164,13 +164,15 @@ extension ConversationViewModelTests {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
         let id = store.beginSendAttempt(
-            agentId: "a", content: "original", workspaceId: "w", images: [image], files: files,
-            fileAccess: pipeline.retainFileAccess(for: files), messageMetadata: .fields(["selection": "original"])
+            agentId: "a",
+            content: "original",
+            workspaceId: "w",
+            images: [image],
+            files: files,
+            fileAccess: pipeline.retainFileAccess(for: files),
+            messageMetadata: .fields(["selection": "original"])
         )
-        store.prepareSendAttempt(
-            id, imagePayload: .attachments([["type": "image", "attachmentId": "image-1"]]),
-            filePayload: .attachments([["type": "file", "attachmentId": "file-1"]])
-        )
+        store.prepareSendAttempt(id, imagePayload: .attachments([["type": "image", "attachmentId": "image-1"]]), filePayload: .attachments([["type": "file", "attachmentId": "file-1"]]))
         pipeline.clearPendingFiles()
         #expect(store.sendAttempts.first?.status == .preparing)
         for _ in 0 ..< (retryEntry ? 2 : 1) {

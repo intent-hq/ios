@@ -15,6 +15,7 @@ struct DiagnosticExportModelTests {
         let preview = try #require(model.preview)
         #expect(preview.rows.count == 1)
         #expect(preview.rows.first?.record.event.operation == .workspaceLoad)
+        #expect(Data((preview.rows.map(\.json).joined(separator: "\n") + "\n").utf8) == preview.snapshot.jsonLines)
         #expect(model.share == nil)
         #expect(!FileManager.default.fileExists(atPath: storage.files.directory.appendingPathComponent("report").path))
         model.shareZIP()
@@ -85,5 +86,24 @@ struct DiagnosticExportModelTests {
         model.sharingFinished(id: lease.id, failed: true, cleaned: true)
         #expect(model.share == nil)
         #expect(model.notice != nil)
+    }
+
+    @Test func previewRejectsInvalidUTF8EvenInIgnoredJSONFields() async throws {
+        let store = DiagnosticStore(storage: DiagnosticTestStorage())
+        store.record(DiagnosticFixtures.event())
+        let snapshot = await store.snapshot()
+        var malformed = Data(snapshot.jsonLines.dropLast(2))
+        malformed.append(contentsOf: #", "ignored": ""#.utf8)
+        malformed.append(0xFF)
+        malformed.append(contentsOf: "\"}\n".utf8)
+        let invalid = DiagnosticSnapshot(
+            jsonLines: malformed,
+            metadata: snapshot.metadata,
+            historyRevision: snapshot.historyRevision,
+            expiresAt: snapshot.expiresAt
+        )
+        await #expect(throws: CocoaError(.fileReadInapplicableStringEncoding)) {
+            try await DiagnosticPreview.make(invalid)
+        }
     }
 }

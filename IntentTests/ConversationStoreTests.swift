@@ -125,10 +125,12 @@ struct ConversationStoreTests {
 
     @Test func knownNotSentRetryReusesOriginalPayloadAndReplacesOnlyItsRow() async throws {
         let fake = FakeConnectionManager()
-        fake.errorQueueMap["agent.sendMessage"] = [DiagnosticErrorOwnership.attaching(
-            to: NSError(domain: "WebSocket", code: -4),
-            failure: DiagnosticFailure(origin: .localRequest, classification: .notConnected)
-        )]
+        fake.errorQueueMap["agent.sendMessage"] = [
+            DiagnosticErrorOwnership.attaching(
+                to: NSError(domain: "WebSocket", code: -4),
+                failure: DiagnosticFailure(origin: .localRequest, classification: .notConnected)
+            )
+        ]
         fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
 
@@ -375,11 +377,13 @@ extension ConversationStoreTests {
         let stopped = Mutex<[URL]>([])
         let url = URL(fileURLWithPath: "/tmp/fallback.txt")
         let id = store.beginSendAttempt(
-            agentId: "a", content: "original", workspaceId: "w",
+            agentId: "a",
+            content: "original",
+            workspaceId: "w",
             files: [PendingFile(url: url, displayName: "fallback.txt", size: 0)],
-            fileAccess: ConversationSendFileAccess(urls: [url], stopAccess: { url in
+            fileAccess: ConversationSendFileAccess(urls: [url]) { url in
                 stopped.withLock { $0.append(url) }
-            })
+            }
         )
         store.prepareSendAttempt(id, imagePayload: .none, filePayload: .attachments([["type": "file", "attachmentId": "file-1"]]))
         let rowId = identity == "confirmed" || identity == "sharedConfirmed" ? "server-row" : id

@@ -20,15 +20,22 @@ nonisolated struct DiagnosticPreview: Sendable {
         let rows = try snapshot.jsonLines.split(separator: DiagnosticEncoding.newline).map { line in
             try Task.checkCancellation()
             let record = try decoder.decode(DiagnosticRecord.self, from: Data(line))
+            // JSONDecoder can skip malformed UTF-8 in unknown fields. Review
+            // must show the original bytes, never replacement characters.
+            guard let json = String(bytes: line, encoding: .utf8) else {
+                throw CocoaError(.fileReadInapplicableStringEncoding)
+            }
             return PreviewRow(
                 id: "\(record.session.uuidString)-\(record.sequence)",
                 record: record,
-                json: String(decoding: line, as: UTF8.self)
+                json: json
             )
         }
         let encoder = DiagnosticEncoding.encoder()
         encoder.outputFormatting.insert(.prettyPrinted)
-        let metadata = String(decoding: try encoder.encode(snapshot.metadata), as: UTF8.self)
+        guard let metadata = String(bytes: try encoder.encode(snapshot.metadata), encoding: .utf8) else {
+            throw CocoaError(.fileReadInapplicableStringEncoding)
+        }
         return Self(snapshot: snapshot, rows: rows, metadata: metadata)
     }
 }

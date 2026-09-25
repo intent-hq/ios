@@ -69,7 +69,7 @@ struct DiagnosticExportTests {
     }
 
     @Test(arguments: [false, true])
-    func expiryAndClockRollbackRequireAnotherReview(rollback: Bool) async throws {
+    func expiryAndClockRollbackRequireAnotherReview(rollback: Bool) async {
         let clock = DiagnosticTestClock()
         let storage = DiagnosticTestStorage()
         let store = DiagnosticStore(storage: storage) { clock.now() }

@@ -333,10 +333,12 @@ extension ConversationStoreTests {
         legacyId: String? = nil
     ) async {
         if source == "queue" {
-            store.handleStreamEvent("events.event", params: ["event": [
-                "type": "agent:queue:updated",
-                "data": ["agentId": "a", "queue": [queuedSend(rowId, originalId: correlation)]]
-            ]])
+            store.handleStreamEvent("events.event", params: [
+                "event": [
+                    "type": "agent:queue:updated",
+                    "data": ["agentId": "a", "queue": [queuedSend(rowId, originalId: correlation)]]
+                ]
+            ])
         } else {
             var row = sentRow(rowId, appMessageId: source == "topLevel" ? correlation : nil)
             if let nestedId = source == "legacy" ? correlation : legacyId {
@@ -357,11 +359,13 @@ extension ConversationStoreTests {
         for name in ["direct", "owner"] {
             let url = URL(fileURLWithPath: "/tmp/\(name).txt")
             let id = store.beginSendAttempt(
-                agentId: "a", content: name, workspaceId: "w",
+                agentId: "a",
+                content: name,
+                workspaceId: "w",
                 files: [PendingFile(url: url, displayName: name, size: 0)],
-                fileAccess: ConversationSendFileAccess(urls: [url], stopAccess: { url in
+                fileAccess: ConversationSendFileAccess(urls: [url]) { url in
                     stopped.withLock { $0.append(url) }
-                })
+                }
             )
             store.prepareSendAttempt(id, imagePayload: .none, filePayload: .attachments([["type": "file", "attachmentId": name]]))
             try? await store.sendPreparedAttempt(id)
@@ -374,8 +378,12 @@ extension ConversationStoreTests {
         ]
         try await store.sendMessage(agentId: "a", content: "prior", workspaceId: "w")
         await deliverRecoveryRow(
-            direct, source: source, store: store, fake: fake,
-            correlation: unknown ? "unknown" : owner, legacyId: unknown ? owner : direct
+            direct,
+            source: source,
+            store: store,
+            fake: fake,
+            correlation: unknown ? "unknown" : owner,
+            legacyId: unknown ? owner : direct
         )
         let confirmed: ConversationSendAttempt.Status = source == "queue" ? .queued : .accepted
         #expect(store.sendAttempts[0].status == .unconfirmed)
@@ -410,7 +418,10 @@ extension ConversationStoreTests {
         try? await store.sendMessage(agentId: "b", content: "other agent", workspaceId: "w")
         let other = try #require(store.sendAttempts.last?.id)
         await deliverRecoveryRow(
-            identity == "direct" ? other : bound, source: source, store: store, fake: fake,
+            identity == "direct" ? other : bound,
+            source: source,
+            store: store,
+            fake: fake,
             correlation: identity == "correlated" ? other : nil
         )
         let expected: ConversationSendAttempt.Status = source == "queue" ? .queued : .accepted

@@ -5,7 +5,7 @@ struct DiagnosticShareSheet: UIViewControllerRepresentable {
     let lease: DiagnosticShareLease
     let onFinished: @MainActor @Sendable (UUID, Bool, Bool) -> Void
 
-    func makeUIViewController(context: Context) -> UIActivityViewController {
+    func makeUIViewController(context _: Context) -> UIActivityViewController {
         let controller = UIActivityViewController(activityItems: [lease.report.archiveURL], applicationActivities: nil)
         let lease = lease
         let onFinished = onFinished
@@ -22,5 +22,5 @@ struct DiagnosticShareSheet: UIViewControllerRepresentable {
         return controller
     }
 
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+    func updateUIViewController(_: UIActivityViewController, context _: Context) {}
 }

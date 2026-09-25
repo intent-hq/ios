@@ -23,9 +23,13 @@ extension WebSocketConnection {
     /// Pure and unit-testable; text is UTF-8-decoded only once the message is
     /// complete so multi-byte characters split across fragments stay intact.
     nonisolated struct MessageAssembler {
-        var diagnostics: DiagnosticStore = .shared
+        var diagnostics: DiagnosticStore
         private var pendingKind = PendingMessageKind.none
         private var buffer = Data()
+
+        init(diagnostics: DiagnosticStore = .shared) {
+            self.diagnostics = diagnostics
+        }
 
         mutating func consume(
             kind: FragmentKind,
