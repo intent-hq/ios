@@ -211,6 +211,12 @@ struct BackendWindowRoot: View {
         }
         .onAppear {
             windowSession.updateNetworkObservation(for: scenePhase)
+            if let demoBackendID = DemoSettings.consumeStartupBackendID() {
+                // Settings demos start from this process's fresh fixtures,
+                // not an obsolete native scene value or restored Home state.
+                restoresSavedMachines = false
+                backendID = demoBackendID
+            }
             if restoresSavedMachines {
                 windowSession.returnToSavedMachines()
             }

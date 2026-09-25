@@ -70,8 +70,22 @@ struct ComposerSubmitPolicyTests {
     @MainActor
     @Test func composerRefreshesTypographyWithoutLosingDraftOrSelection() throws {
         let textView = KeyCommandTextView(frame: CGRect(x: 0, y: 0, width: 300, height: 100))
-        textView.traitOverrides.preferredContentSizeCategory = .large
-        textView.traitOverrides.legibilityWeight = .regular
+        let controller = UIViewController()
+        controller.view.addSubview(textView)
+        let window = UIWindow(frame: textView.frame)
+        window.rootViewController = controller
+        window.traitOverrides.preferredContentSizeCategory = .large
+        window.traitOverrides.legibilityWeight = .regular
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        window.updateTraitsIfNeeded()
+        window.layoutIfNeeded()
+        try #require(textView.window === window)
+        #expect(textView.traitCollection.preferredContentSizeCategory == .large)
+        #expect(textView.traitCollection.legibilityWeight == .regular)
         let draft = "Keep this draft\nand its selection"
         textView.text = draft
         let selection = NSRange(location: 5, length: 4)
@@ -82,11 +96,15 @@ struct ComposerSubmitPolicyTests {
         #expect(regular.fontName == "Inter-Regular")
         #expect(regular.pointSize == 16)
 
-        // Change the live view traits, not the font helper: this catches a
-        // missing trait registration as well as an accidentally fixed-size font.
-        textView.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
-        textView.traitOverrides.legibilityWeight = .bold
+        // Apply inherited traits through UIKit's synchronous update path. Layout
+        // alone doesn't flush traits on a detached view. The production observer
+        // must refresh the font; this test never calls the font-update helper.
+        window.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
+        window.traitOverrides.legibilityWeight = .bold
+        window.updateTraitsIfNeeded()
         textView.layoutIfNeeded()
+        #expect(textView.traitCollection.preferredContentSizeCategory == .accessibilityExtraExtraExtraLarge)
+        #expect(textView.traitCollection.legibilityWeight == .bold)
         let accessible = try #require(textView.font)
         let base = try #require(UIFont(name: "Inter-SemiBold", size: 16))
         let reference = UIFontMetrics(forTextStyle: .body).scaledFont(
