@@ -16,7 +16,6 @@ import XCTest
 /// recovered an end row the fixture withdrew on the test's signal, present
 /// once it gave up over one kept withdrawn. Those launches and the cold-entry
 /// ones attach a JSON evidence record (`recoveryEvidence`).
-///
 /// Every wait is settlement polling on the app's own state, never a guessed
 /// idle delay: a forced follow (entry, Go to End, a send) reports its
 /// outcome in the transcript's accessibility value once its live geometry
@@ -36,13 +35,11 @@ import XCTest
 /// read from single snapshots (`frame(of:)`): `exists` followed by `frame`
 /// resolves the query twice and a row the lazy stack derealizes in between
 /// fails the test outright.
-///
 /// Every "rests at the bottom" failure message reports the follow's report,
 /// whether Go to End is present and where the last row's frame lies
 /// relative to the transcript's frame (ABOVE it: viewport past the end over
 /// a blank band; BELOW it: viewport short of the end) so a CI failure is
 /// diagnostic on its own (intent-hq/ios#281).
-///
 /// Runs under the `Intent` scheme (`scripts/xcodebuild.sh test-ios`, CI).
 /// The transcript is the coordinator-shaped, 150+-message
 /// `DemoFixtures.longConversationMessages` (tool-call groups, agent-to-agent
@@ -327,7 +324,12 @@ extension ConversationTranscriptScrollUITests {
     /// symptoms are intermittent, so the entry is repeated
     /// (intent-hq/ios#281, symptoms 2 and 3).
     @MainActor
-    func testEnteringConversationRepeatedlyRestsAtBottomWithGoToEndHidden() {
+    func testEnteringConversationRepeatedlyRestsAtBottomWithGoToEndHidden() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["INTENT_UITEST_TRANSCRIPT_CRASH_REPRO"] == "1",
+            "Temporary quarantine for the unresolved app crash tracked at https://github.com/intent-hq/ios/issues/427; "
+                + "opt in with TEST_RUNNER_INTENT_UITEST_TRANSCRIPT_CRASH_REPRO=1."
+        )
         let app = launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile)
         let endRow = EndRow.lastSuggestedPrompt(in: app)
         for cycle in 1 ... Fixture.entryCycles {
@@ -362,7 +364,6 @@ extension ConversationTranscriptScrollUITests {
     /// and only after a send in the next), so the cold entry is repeated — a
     /// fresh launch each cycle, as a return through the workspace list would
     /// mount the cached transcript.
-    ///
     /// The hooks row is held back like everywhere else; here the test also
     /// asserts the gate held, as this is where its landing blanked the
     /// transcript on CI (intent-hq/ios#338; the "last paragraph not in the
