@@ -103,9 +103,9 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         let history = app.buttons["assistant.conversations"]
         XCTAssertTrue(history.waitForExistence(timeout: Fixture.timeout))
         history.tap()
-        let menuAction = app.buttons["New Conversation"].firstMatch
+        let menuAction = app.buttons["assistant.history.newConversation"]
         XCTAssertTrue(menuAction.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(menuAction.isHittable)
+        XCTAssertTrue(menuAction.isHittable, app.debugDescription)
         menuAction.tap()
         XCTAssertTrue(newConversation.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(newConversation.isHittable)

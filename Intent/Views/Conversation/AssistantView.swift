@@ -121,6 +121,7 @@ struct AssistantHistoryMenu: View {
                 }
             }
             .disabled(store.isCreating || !store.hasLoaded)
+            .accessibilityIdentifier("assistant.history.newConversation")
             Divider()
             ForEach(store.threads) { thread in
                 Button {
