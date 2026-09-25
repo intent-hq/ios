@@ -115,6 +115,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
 $(SRCROOT)/Intent/Services/LifecycleDiagnostics.swift
+$(SRCROOT)/Intent/Services/MediaAudioSession.swift
 $(SRCROOT)/Intent/Services/MonitoredPrStore.swift
 $(SRCROOT)/Intent/Services/NetworkAvailability.swift
 $(SRCROOT)/Intent/Services/NetworkCopyDiagnostics.swift
@@ -411,6 +412,7 @@ $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
 $(SRCROOT)/IntentTests/MarkdownTextViewTests.swift
+$(SRCROOT)/IntentTests/MediaAudioSessionTests.swift
 $(SRCROOT)/IntentTests/MessageBlockPartitionTests.swift
 $(SRCROOT)/IntentTests/MessageCopyContextMenuGatingTests.swift
 $(SRCROOT)/IntentTests/ModelsSpecialistAndTaskTests.swift
