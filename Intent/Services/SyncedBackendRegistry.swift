@@ -136,7 +136,7 @@ enum SyncedBackendPayload {
             updatedAt: updatedAt,
             deleted: false,
             deletedAt: nil,
-            tcAddress: nil
+            tcAddress: tunnelAddress(object["tcAddress"])
         )
         if case .value(true) = bool(object["deleted"]) {
             record.deleted = true
