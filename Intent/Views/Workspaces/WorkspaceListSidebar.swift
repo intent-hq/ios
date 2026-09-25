@@ -46,6 +46,9 @@ struct WorkspaceListSidebar: View {
                 WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
             }
         }
+        .refreshable {
+            await workspaceStore.fetchAll()
+        }
         .modifier(WorkspaceActionLauncher(
             isSearching: isSearching,
             onCreateWorkspace: { showingCreateWorkspace = true },
@@ -93,9 +96,6 @@ struct WorkspaceListSidebar: View {
         }
         .sheet(isPresented: $showingDiagnosticLogs) {
             DiagnosticExportView()
-        }
-        .refreshable {
-            await workspaceStore.fetchAll()
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
     }

@@ -78,7 +78,6 @@ struct WorkspaceActionLauncher: ViewModifier {
                 onSelect: select
             ) { isOpen = false }
         }
-        .environment(\.refresh, nil)
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape) { isOpen = false }
     }
