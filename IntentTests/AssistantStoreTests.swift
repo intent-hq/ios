@@ -104,6 +104,18 @@ struct AssistantStoreTests {
         #expect(second.threads.map(\.id) == ["second-backend"])
     }
 
+    @Test func observesConnectionEventsOnlyAfterFirstUse() async {
+        let connection = FakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": []]
+        let store = AssistantStore(connection: connection)
+        #expect(connection.eventHandlerCount == 0, "an unopened Assistant must not observe the connection")
+
+        await store.refresh()
+        await store.refresh()
+
+        #expect(connection.eventHandlerCount == 1)
+    }
+
     @Test func globalThreadEventsRefreshHistory() async throws {
         let connection = FakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": [thread("deleted")]]

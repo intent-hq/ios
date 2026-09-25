@@ -19,6 +19,14 @@ final class AssistantStore {
 
     init(connection: any ConnectionManagerRouting) {
         self.connection = connection
+    }
+
+    /// Observation starts on first use, not at init: every BackendSession
+    /// (including transient pairing sessions) owns a store, and most never
+    /// open the Assistant tab, so an eager handler would sit on every
+    /// connection.
+    private func startObservingIfNeeded() {
+        guard eventHandlerId == nil else { return }
         eventHandlerId = connection.onEvent { [weak self] method, params in
             Task { @MainActor [weak self] in
                 self?.handleEvent(method, params: params)
@@ -39,6 +47,7 @@ final class AssistantStore {
     }
 
     func refresh() async {
+        startObservingIfNeeded()
         guard !isLoading else {
             refreshRequested = true
             return
@@ -71,6 +80,7 @@ final class AssistantStore {
     }
 
     func createThread() async -> String? {
+        startObservingIfNeeded()
         guard !isCreating else { return nil }
         isCreating = true
         errorMessage = nil
