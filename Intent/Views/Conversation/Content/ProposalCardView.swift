@@ -68,6 +68,7 @@ struct ProposalCardView: View {
                 Text("Retry")
                     .copyContextMenuPassthrough()
             }
+            .buttonStyle(IntentButtonStyle(variant: .secondary))
         } else {
             Text("Waiting for confirmation availability…").font(.callout)
         }
@@ -114,6 +115,7 @@ struct ProposalCardView: View {
                 Text("Not now")
                     .copyContextMenuPassthrough()
             }
+            .buttonStyle(IntentButtonStyle(variant: .secondary))
             .accessibilityIdentifier("proposal.dismiss")
             Spacer()
             if proposal.method != nil {
@@ -123,7 +125,7 @@ struct ProposalCardView: View {
                     Text(proposal.method == "workspace.delete" ? "Delete" : "Archive")
                         .copyContextMenuPassthrough()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(IntentButtonStyle())
                 .disabled(selection.isEmpty)
                 .accessibilityIdentifier("proposal.apply")
             }
