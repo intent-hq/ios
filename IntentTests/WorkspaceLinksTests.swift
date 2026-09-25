@@ -2,6 +2,18 @@
 import Testing
 
 struct WorkspaceLinksTests {
+    @Test(arguments: ["@", "@@", "@@@", "@@@work", "@@@workspace", "@@@workspace\nalpha\n"])
+    func hidesStreamingWorkspaceMarkers(_ fragment: String) {
+        #expect(WorkspaceLinks.parse("Before\n" + fragment, isStreaming: true) == [.markdown("Before\n")])
+        #expect(WorkspaceLinks.parse(fragment, isStreaming: false) == [.markdown(fragment)])
+    }
+
+    @Test func completedStreamingBlockBecomesCards() {
+        #expect(WorkspaceLinks.parse("@@@workspace\nalpha\n@@@", isStreaming: true) == [.workspaces(["alpha"])])
+        let code = "```text\n@@@workspace\nalpha"
+        #expect(WorkspaceLinks.parse(code, isStreaming: true) == [.markdown(code)])
+    }
+
     @Test func parsesWorkspaceListsAndPreservesProse() {
         let text = "Before\n\n@@@workspace\n- `alpha`\n* beta\nintent://local/workspace/gamma\nalpha\n@@@\n\nAfter"
         #expect(WorkspaceLinks.parse(text) == [

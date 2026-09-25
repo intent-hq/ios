@@ -10,7 +10,7 @@ enum WorkspaceLinks {
     private static let codeIndent = 4
     private static let linkPrefix = "intent://local/workspace/"
 
-    static func parse(_ text: String) -> [Segment] {
+    static func parse(_ text: String, isStreaming: Bool = false) -> [Segment] {
         let lines = text.components(separatedBy: "\n")
         var result: [Segment] = []
         var start = 0
@@ -26,12 +26,17 @@ enum WorkspaceLinks {
                 let isWorkspaceFence = marker?.first == "`" && line == (marker ?? "") + "workspace"
                 if line == "@@@workspace" || isWorkspaceFence,
                    let end = closingLine(in: lines, after: index, marker: isWorkspaceFence ? marker : nil),
-                   let ids = workspaceIDs(lines[(index + 1)..<end]) {
+                   !workspaceIDs(lines[(index + 1)..<end]).isEmpty {
                     if start < index { result.append(.markdown(lines[start..<index].joined(separator: "\n") + "\n")) }
-                    result.append(.workspaces(ids))
+                    result.append(.workspaces(workspaceIDs(lines[(index + 1)..<end])))
                     index = end
                     start = end + 1
                 } else {
+                    if isStreaming, line.hasPrefix("@"), "@@@workspace".hasPrefix(line) {
+                        if start < index { result.append(.markdown(lines[start..<index].joined(separator: "\n") + "\n")) }
+                        start = lines.count
+                        break
+                    }
                     fence = marker
                 }
             }
@@ -46,7 +51,10 @@ enum WorkspaceLinks {
         var pending: [ContentBlock] = []
         func flush() {
             let text = pending.compactMap(\.resolvedText).joined()
-            if var first = pending.first, text.contains("@@@workspace") || text.contains("```workspace") {
+            let hasPartialMarker = text.components(separatedBy: "\n").contains { line in
+                line.hasPrefix("@") && "@@@workspace".hasPrefix(line.trimmingCharacters(in: .whitespaces))
+            }
+            if var first = pending.first, text.contains("@@@workspace") || text.contains("```workspace") || hasPartialMarker {
                 first.text = text
                 result.append(first)
             } else {
@@ -66,7 +74,7 @@ enum WorkspaceLinks {
         return result
     }
 
-    private static func workspaceIDs(_ lines: ArraySlice<String>) -> [String]? {
+    private static func workspaceIDs(_ lines: ArraySlice<String>) -> [String] {
         var ids: [String] = []
         for line in lines {
             var id = line.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -74,15 +82,15 @@ enum WorkspaceLinks {
             if id.hasPrefix("- ") || id.hasPrefix("* ") { id = String(id.dropFirst(2)) }
             id = id.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "`"))
             if id.hasPrefix(linkPrefix) { id = String(id.dropFirst(linkPrefix.count)) }
-            guard id.wholeMatch(of: /[A-Za-z0-9_-]+/) != nil else { return nil }
+            guard id.wholeMatch(of: /[A-Za-z0-9_-]+/) != nil else { return [] }
             if !ids.contains(id) { ids.append(id) }
         }
-        return ids.isEmpty ? nil : ids
+        return ids
     }
 
     private static func fenceMarker(_ line: String) -> String? {
         guard let first = line.first, first == "`" || first == "~" else { return nil }
-        let marker = String(line.prefix(while: { $0 == first }))
+        let marker = String(line.prefix { $0 == first })
         return marker.count >= minimumFenceLength ? marker : nil
     }
 

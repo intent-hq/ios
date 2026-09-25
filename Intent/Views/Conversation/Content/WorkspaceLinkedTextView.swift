@@ -7,6 +7,8 @@ struct WorkspaceLinkedTextView: View {
     @Environment(BackendSession.self) private var session
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.assistantMessageStreaming) private var isStreaming
+    @Environment(\.proposalWorkspaceIDs) private var coveredIDs
 
     private enum Layout {
         static let spacing: CGFloat = 8
@@ -15,14 +17,14 @@ struct WorkspaceLinkedTextView: View {
     }
 
     var body: some View {
-        let segments = WorkspaceLinks.parse(text)
+        let segments = WorkspaceLinks.parse(text, isStreaming: isStreaming)
         VStack(alignment: .leading, spacing: Layout.spacing) {
             ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                 switch segment {
                 case .markdown(let markdown):
                     MarkdownTextView(text: markdown, onOpenURL: onOpenURL, workspaceId: workspaceId)
                 case .workspaces(let ids):
-                    ForEach(ids, id: \.self) { id in
+                    ForEach(ids.filter { !coveredIDs.contains($0) }, id: \.self) { id in
                         workspaceButton(id)
                     }
                 }
@@ -60,4 +62,10 @@ struct WorkspaceLinkedTextView: View {
         .disabled(workspace == nil)
         .accessibilityIdentifier("assistant.workspace.\(id)")
     }
+}
+
+extension EnvironmentValues {
+    @Entry var assistantMessageStreaming = false
+    @Entry var proposalMessageId = ""
+    @Entry var proposalWorkspaceIDs: Set<String> = []
 }

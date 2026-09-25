@@ -342,6 +342,7 @@ enum DemoFixtures {
     /// Fixture response for a JSON-RPC method. Unknown methods return an
     /// empty dictionary, which every call site parses as "no data" safely.
     static func response(for method: String, params: [String: Any]) -> Any {
+        if let response = proposalResponse(for: method, params: params) { return response }
         switch method {
         case "workspace.list":
             return ["workspaces": workspaces]

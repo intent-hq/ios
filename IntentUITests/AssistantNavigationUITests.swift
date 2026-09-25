@@ -44,8 +44,8 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         assistantScreenshot.lifetime = .keepAlways
         add(assistantScreenshot)
 
-        app.navigationBars["Assistant"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
-            .press(forDuration: Fixture.dismissDuration, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Fixture.dismissEnd)))
+        let sheetTop = app.navigationBars["Assistant"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+        sheetTop.press(forDuration: Fixture.dismissDuration, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Fixture.dismissEnd)))
         XCTAssertTrue(actions.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(launcher.isHittable)

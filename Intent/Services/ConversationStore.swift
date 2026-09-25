@@ -85,7 +85,7 @@ import SwiftUI
     var isSubscribing = false
     @ObservationIgnored var eventHandlerId: UUID?
     var streamEventBuffer: [(eventType: String, data: [String: Any])] = []
-    @ObservationIgnored var sessionMetadataGeneration = 0
+    var sessionMetadataGeneration = 0
     @ObservationIgnored var pendingQuestionRecoveryTask: Task<Void, Never>?
     @ObservationIgnored var markedQuestionRetryDelays: [Duration] =
         ConversationStore.defaultMarkedQuestionRetryDelays

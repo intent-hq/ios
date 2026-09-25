@@ -170,13 +170,7 @@ private extension MessageInputView {
                 isFocused: $isFocused,
                 onSubmit: { sendCurrentMessage() },
                 onHeightChange: updateTextViewHeight,
-                onCaretChange: { offset in
-                    #if os(visionOS)
-                    caretOffset = offset
-                    #else
-                    _ = offset
-                    #endif
-                }
+                onCaretChange: updateCaretOffset
             )
             .padding(.horizontal, Constants.Conversation.Composer.textEditorHorizontalPadding)
             .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)
@@ -208,6 +202,14 @@ private extension MessageInputView {
             ),
             Constants.Conversation.Composer.maximumTextViewHeight
         )
+    }
+
+    private func updateCaretOffset(_ offset: Int) {
+        #if os(visionOS)
+        caretOffset = offset
+        #else
+        _ = offset
+        #endif
     }
 
     var sendButtonStack: some View {

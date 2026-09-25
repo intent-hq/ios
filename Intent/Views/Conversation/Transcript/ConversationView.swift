@@ -3,6 +3,7 @@ import UIKit
 
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
+    @State private var proposals: ProposalActionStore
     var onAgentUnavailable: (() -> Void)?
     var assistantStore: AssistantStore?
 
@@ -16,6 +17,7 @@ struct ConversationView: View {
     ) {
         self.onAgentUnavailable = onAgentUnavailable
         self.assistantStore = assistantStore
+        _proposals = State(initialValue: ProposalActionStore(connection: session.connection, agentId: agentId, workspaceId: workspaceId))
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
             workspaceId: workspaceId,
@@ -32,6 +34,12 @@ struct ConversationView: View {
             onAgentUnavailable: onAgentUnavailable,
             assistantStore: assistantStore
         )
+        .environment(proposals)
+        .task(id: viewModel.store.sessionMetadataGeneration) {
+            if viewModel.store.messages.contains(where: { message in message.contentBlocks.contains { ActionProposal.parse($0) != nil } }) {
+                await proposals.refresh()
+            }
+        }
     }
 }
 

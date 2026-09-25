@@ -55,8 +55,8 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         app.buttons["assistant.open"].tap()
         let actions = app.buttons["assistant.actions"]
         XCTAssertTrue(actions.waitForExistence(timeout: Fixture.timeout))
-        app.navigationBars["Assistant"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
-            .press(forDuration: Fixture.dismissDuration, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Fixture.dismissEnd)))
+        let sheetTop = app.navigationBars["Assistant"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+        sheetTop.press(forDuration: Fixture.dismissDuration, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Fixture.dismissEnd)))
         XCTAssertTrue(actions.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
         XCTAssertEqual(field.value as? String, "payment")

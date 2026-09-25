@@ -77,10 +77,9 @@ struct ContentBlockView: View {
             fileView
 
         case .resource:
-            // Standalone resource blocks (PROTOCOL §7.1) never render in the
-            // transcript; question resources are wizard-only and stripped by
-            // MIME regardless of payload validity (FE parity).
-            EmptyView()
+            if let proposal = ActionProposal.parse(block) {
+                ProposalCardView(proposal: proposal)
+            }
         }
     }
 

@@ -75,6 +75,9 @@ struct AssistantMessageView: View {
             .id(hasStrippedPrompts)
         }
         .padding(.vertical, Layout.verticalPadding)
+        .environment(\.assistantMessageStreaming, message.isStreaming)
+        .environment(\.proposalMessageId, message.id)
+        .environment(\.proposalWorkspaceIDs, Set(blocks.compactMap(ActionProposal.parse).filter { $0.method != nil }.flatMap(\.workspaceIDs)))
         .modifier(MessageCopyContextMenu(
             text: copyText,
             userStyled: false,

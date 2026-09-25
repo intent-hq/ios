@@ -4,6 +4,7 @@ extension DemoFixtures {
     static let assistantAgentId = "demo-agent-assistant"
     private static let assistantHistoryCount = 30
     private static var createdAssistantAgents: [[String: Any]] = []
+    private static var proposalOutcome: String?
 
     static var assistantAgents: [[String: Any]] {
         let history: [[String: Any]] = ProcessInfo.processInfo.arguments.contains("--demo-assistant-history")
@@ -23,7 +24,7 @@ extension DemoFixtures {
                 "workspaceId": Workspace.chiefWorkspaceId,
                 "status": "idle",
                 "updatedAt": "2026-09-24T10:00:00Z",
-                "metadata": ["specialist": "chief-of-staff"]
+                "metadata": assistantMetadata
             ]
         ] + history + createdAssistantAgents
     }
@@ -42,6 +43,7 @@ extension DemoFixtures {
     }
 
     static func streamAssistantPromptsIfRequested(in store: ConversationStore) async {
+        await streamWorkspaceLinksIfRequested(in: store)
         let prefix = "--demo-assistant-prompts-trigger-file="
         guard DemoMode.isEnabled, store.agentId == assistantAgentId,
               let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix(prefix) }) else { return }
@@ -85,7 +87,32 @@ extension DemoFixtures {
         ]
     }
 
+    private static func streamWorkspaceLinksIfRequested(in store: ConversationStore) async {
+        let prefix = "--demo-workspace-stream-trigger="
+        guard DemoMode.isEnabled, store.agentId == assistantAgentId,
+              let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix(prefix) }) else { return }
+        let trigger = URL(fileURLWithPath: String(argument.dropFirst(prefix.count)))
+        store.messages = [
+            ConversationMessage(
+                id: "workspace-stream", role: .assistant,
+                contentBlocks: [ContentBlock(id: "text", type: .text, text: "Workspace links are loading.\n\n@@@work")],
+                streamingState: .streaming
+            )
+        ]
+        store.isStreaming = true
+        do {
+            try await wait(for: .triggerFile(trigger))
+            try Task.checkCancellation()
+        } catch { return }
+        var message = store.messages[0]
+        message.contentBlocks.append(ContentBlock(id: "tail", type: .text, text: "space\n\(longConversationWorkspaceId)\n@@@"))
+        message.streamingState = .complete
+        store.messages = [message]
+        store.isStreaming = false
+    }
+
     private static var assistantReplyBlocks: [[String: Any]] {
+        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal") { return proposalReplyBlocks }
         if ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-links") {
             return [
                 ["type": "text", "text": "Open this workspace.\n\n@@@work"],
@@ -93,5 +120,38 @@ extension DemoFixtures {
             ]
         }
         return [["type": "text", "text": "I can help you plan and follow up across your workspaces. What would you like to work on?"]]
+    }
+
+    private static var assistantMetadata: [String: Any] {
+        guard ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal") else { return ["specialist": "chief-of-staff"] }
+        if let proposalOutcome { return ["proposalResolutions": ["demo-proposal": proposalOutcome]] }
+        return ["pendingProposals": [["proposalId": "demo-proposal", "messageId": "demo-assistant-message"]]]
+    }
+
+    private static var proposalReplyBlocks: [[String: Any]] {
+        let proposal: [String: Any] = [
+            "kind": "bulk-op", "applyToolCallId": "demo-proposal",
+            "payload": ["operation": "workspace.bulkArchive", "ids": [longConversationWorkspaceId]],
+            "preview": [
+                "title": "Archive selected workspaces", "summary": "Review before archiving.", "applyLabel": "Archive",
+                "bulkItems": [["id": longConversationWorkspaceId, "title": "Deflake payment integration tests", "selected": true]]
+            ]
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: proposal), let json = String(data: data, encoding: .utf8) else { return [] }
+        return [
+            ["type": "text", "text": "@@@workspace\n\(longConversationWorkspaceId)\n@@@"],
+            ["type": "resource", "resource": ["mimeType": "application/vnd.intent.proposal+json", "text": json]]
+        ]
+    }
+
+    static func proposalResponse(for method: String, params: [String: Any]) -> Any? {
+        guard ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal") else { return nil }
+        switch method {
+        case "workspace.archive": return ["workspace": ["id": params["workspaceId"] ?? ""]]
+        case "agent.resolveProposal":
+            proposalOutcome = params["outcome"] as? String
+            return ["success": true, "outcome": proposalOutcome ?? "dismissed"] as [String: Any]
+        default: return nil
+        }
     }
 }
