@@ -66,9 +66,13 @@ class AppCoordinator {
         }
     }
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
-    var isDisconnected = false
+    var isDisconnected = false {
+        didSet {
+            if oldValue, !isDisconnected { connectionLossPresentation.recovered() }
+        }
+    }
     var showsConnectionLossOverlay: Bool {
-        currentScreen.supportsConnectionLossOverlay && isDisconnected
+        currentScreen.supportsConnectionLossOverlay && isDisconnected && !connectionLossPresentation.isDeferred
     }
     /// True when the pairing surface should also offer the remaining saved
     /// connections (e.g. after logging off the active connection while others
@@ -113,6 +117,7 @@ class AppCoordinator {
     @ObservationIgnored let lifecycleState = AppCoordinatorLifecycleState()
     @ObservationIgnored let routingState = AppCoordinatorRoutingState()
     @ObservationIgnored let navigationState = AppCoordinatorNavigationState()
+    @ObservationIgnored let connectionLossPresentation: ConnectionLossPresentation
     /// The backend this coordinator's window is bound to; nil only for a
     /// window that has no backend yet (pairing session). Bound windows route
     /// straight to .connecting on load and dial this backend's saved record.
@@ -137,6 +142,7 @@ class AppCoordinator {
         sessionRegistry: BackendSessionRegistry = .shared,
         syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
         backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
+        connectionLossPresentation: ConnectionLossPresentation = ConnectionLossPresentation(),
         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
         claimScreenRestoration: @escaping @MainActor () -> Bool = { true }
     ) {
@@ -151,6 +157,7 @@ class AppCoordinator {
             claimScreenRestoration: claimScreenRestoration
         )
         self.backendID = backendID
+        self.connectionLossPresentation = connectionLossPresentation
         lifecycleState.workspaceDataAtInitialFlowStart = workspaceStore.lastUpdated
         startObservingConnection()
         startObservingCertMismatch()
@@ -171,6 +178,7 @@ class AppCoordinator {
     }
 
     isolated deinit {
+        connectionLossPresentation.reset()
         reconnectOverlayTimeoutTask?.cancel()
         cancelReconnectLoadingObservation()
     }
@@ -193,6 +201,7 @@ extension AppCoordinator {
 
     /// A new initial flow must not inherit a previous session's loss or delayed recovery work.
     func resetConnectionLossEligibility() {
+        connectionLossPresentation.reset()
         lifecycleState.hasEnteredRemoteUI = false
         lifecycleState.hasCompletedInitialRouting = false
         lifecycleState.workspaceDataAtInitialFlowStart = dependencies.workspaceStore.lastUpdated
@@ -228,7 +237,8 @@ extension AppCoordinator {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 guard let self, !lifecycleState.hasReturnedToSavedMachines,
-                      connectionObservationID == observationID else { return }
+                      connectionObservationID == observationID,
+                      connectionDeliveryIsCurrent(state) else { return }
                 switch state {
                 case .reconnecting, .disconnected:
                     cancelReconnectLoadingObservation()
@@ -255,6 +265,26 @@ extension AppCoordinator {
                     break
                 }
             }
+    }
+
+    private func connectionDeliveryIsCurrent(_ state: ConnectionState) -> Bool {
+        guard state != dependencies.connection.connectionState else { return true }
+        // A loss/recovery burst can finish before either publisher delivery.
+        // Never present its obsolete loss, but keep the reconnect's agent check.
+        if lifecycleState.hasEnteredRemoteUI, dependencies.connection.connectionState == .connected {
+            switch state {
+            case .disconnected, .reconnecting: revalidateCurrentAgentAfterReconnect()
+            default: break
+            }
+        }
+        return false
+    }
+
+    func reconcileBackgroundRecovery() {
+        guard isDisconnected, dependencies.connection.connectionState == .connected,
+              reconnectLoadingObservationID == nil else { return }
+        waitForWorkspaceLoadThenClearOverlay()
+        revalidateCurrentAgentAfterReconnect()
     }
 
     /// Wait for WorkspaceStore to finish loading before clearing the reconnection overlay.
@@ -284,7 +314,7 @@ extension AppCoordinator {
             } catch {
                 return
             }
-            guard let self, !Task.isCancelled else { return }
+            guard let self, !Task.isCancelled, dependencies.connection.connectionState == .connected else { return }
             reconnectOverlayTimeoutTask = nil
             if isDisconnected {
                 cancelReconnectLoadingObservation()
@@ -308,7 +338,8 @@ extension AppCoordinator {
             observationDidChange()
             Task { @MainActor [weak self] in
                 guard let self,
-                      reconnectLoadingObservationID == observationID else { return }
+                      reconnectLoadingObservationID == observationID,
+                      dependencies.connection.connectionState == .connected else { return }
                 if dependencies.workspaceStore.isLoading {
                     observeWorkspaceLoading(observationID: observationID)
                 } else {

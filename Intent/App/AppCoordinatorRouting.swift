@@ -155,6 +155,9 @@ extension AppCoordinator {
     /// made on other devices while the app was backgrounded show up.
     func onScenePhaseActive() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        connectionLossPresentation.becameActive { [weak self] in
+            self?.reconcileBackgroundRecovery()
+        }
         dependencies.backgroundTaskManager.endIfNeeded()
         refreshSyncedBackends()
     }
@@ -164,6 +167,15 @@ extension AppCoordinator {
     func onScenePhaseNotActive() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
         dependencies.backgroundTaskManager.beginIfNeeded()
+    }
+
+    /// Inactive alone (Control Center, permissions, etc.) is not a background
+    /// return and must not delay an ordinary foreground connection failure.
+    func onScenePhaseBackground() {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        connectionLossPresentation.enteredBackground(
+            eligible: lifecycleState.hasEnteredRemoteUI && !showsConnectionLossOverlay
+        )
     }
 
     /// Merges the iCloud-synced backend registry into the saved connections

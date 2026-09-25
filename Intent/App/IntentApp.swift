@@ -130,7 +130,9 @@ struct SessionWindowRoot: View {
                     coordinator.onScenePhaseActive()
                 } else {
                     coordinator.onScenePhaseNotActive()
+                    if phase == .background { coordinator.onScenePhaseBackground() }
                 }
+                DemoConnectionLoss.sceneChanged(phase, connection: session.connection)
             }
     }
 }

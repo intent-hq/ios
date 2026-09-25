@@ -12,6 +12,57 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
     }
 
     @MainActor
+    func testQuickBackgroundRecoveryNeverPresentsOverlayAndKeepsConversationDraft() throws {
+        let directory = try makeTriggerDirectory()
+        let app = launch(directory: directory, arguments: ["--demo-background-loss=quick"])
+        openConversation(in: app)
+        let composer = app.textViews["composer.textView"]
+        XCTAssertTrue(composer.waitForExistence(timeout: Fixture.timeout))
+        composer.tap()
+        composer.typeText("Draft survives background return")
+        backgroundAndActivate(app, directory: directory)
+        waitForEvent("did-recover", in: directory)
+        XCTAssertFalse(eventExists("overlay-presented", in: directory), "Even a transient presentation is a regression")
+        XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
+        XCTAssertEqual(composer.value as? String, "Draft survives background return")
+        XCTAssertTrue(app.navigationBars[Fixture.agentName].exists)
+        capture(app, named: "quick-background-conversation")
+    }
+
+    @MainActor
+    func testLossQueuedAtActivationNeverPresentsOverlayOrDismissesSheet() throws {
+        let directory = try makeTriggerDirectory()
+        let app = launch(directory: directory, arguments: ["--demo-background-loss=activation-quick"])
+        app.buttons["Workspace options"].tap()
+        app.buttons["Connect to…"].tap()
+        app.buttons["Manual Connection"].tap()
+        let host = app.textFields["192.168.1.42 or tc…"]
+        XCTAssertTrue(host.waitForExistence(timeout: Fixture.timeout))
+        host.tap()
+        host.typeText("background-draft.invalid")
+        backgroundAndActivate(app, directory: directory)
+        waitForEvent("did-recover", in: directory)
+        XCTAssertFalse(eventExists("overlay-presented", in: directory), "activate() settling must not hide a flash")
+        XCTAssertEqual(host.value as? String, "background-draft.invalid")
+        XCTAssertTrue(app.navigationBars["Manual Connection"].exists)
+        capture(app, named: "quick-background-sheet")
+    }
+
+    @MainActor
+    func testSustainedBackgroundLossPresentsOverlayAndHomeStillWorks() throws {
+        let directory = try makeTriggerDirectory()
+        let app = launch(directory: directory, arguments: ["--demo-background-loss=sustained"])
+        backgroundAndActivate(app, directory: directory)
+        assertOverlay(in: app)
+        XCTAssertTrue(eventExists("overlay-presented", in: directory), "Also validates the transient-presentation recorder")
+        capture(app, named: "sustained-background-loss")
+        app.buttons[Fixture.homeIdentifier].tap()
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
+    }
+
+    @MainActor
     func testLossBlocksConversationAndRecoveryKeepsDraftAndNavigation() throws {
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory)
@@ -58,6 +109,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         app.activate()
         assertNetworkTitle("No network connection", identifier: "connection-loss.status", in: app)
         assertOverlay(in: app)
+        XCTAssertFalse(eventExists("overlay-dismissed", in: directory), "An existing overlay must never hide on background return")
 
         try trigger("network-restored", in: directory)
         assertNetworkTitle("Reconnecting…", identifier: "connection-loss.status", in: app)
@@ -223,7 +275,9 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         XCTAssertTrue(app.buttons["Re-pair Device"].isHittable)
     }
+}
 
+extension ConnectionLossUITests {
     @MainActor
     private func assertNetworkTitle(_ title: String, identifier: String, in app: XCUIApplication) {
         let text = app.staticTexts.matching(NSPredicate(
@@ -296,6 +350,28 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
 
     private func trigger(_ name: String, in directory: URL) throws {
         try Data().write(to: directory.appendingPathComponent(name))
+    }
+
+    @MainActor
+    private func backgroundAndActivate(_ app: XCUIApplication, directory: URL) {
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: Fixture.timeout))
+        waitForEvent("did-background", in: directory)
+        XCTAssertFalse(eventExists("overlay-presented", in: directory), "Background loss must not pre-present an overlay")
+        app.activate()
+        waitForEvent("did-activate", in: directory)
+    }
+
+    private func eventExists(_ event: String, in directory: URL) -> Bool {
+        FileManager.default.fileExists(atPath: directory.appendingPathComponent(event).path)
+    }
+
+    private func waitForEvent(_ event: String, in directory: URL) {
+        let path = directory.appendingPathComponent(event).path
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            FileManager.default.fileExists(atPath: path)
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: Fixture.timeout), .completed, "Missing fixture event: \(event)")
     }
 
     @MainActor

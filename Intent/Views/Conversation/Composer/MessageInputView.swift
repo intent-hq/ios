@@ -32,6 +32,10 @@ struct MessageInputView: View {
         self.store = store
     }
 
+    /// Overlay visibility is presentation policy, not permission to consume a
+    /// draft. Read the live backend state again at both submission boundaries.
+    var isConnectionReadyForSending: Bool { viewModel.connection.connectionState == .connected }
+
     var body: some View {
         VStack(spacing: 0) {
             supplementalRows
@@ -203,6 +207,7 @@ private extension MessageInputView {
         (!localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || viewModel.hasPendingAttachments)
             && !viewModel.isUploadingFiles
+            && isConnectionReadyForSending
     }
 
     var sendButtonStack: some View {
@@ -362,6 +367,7 @@ private extension MessageInputView {
     // MARK: - Actions
 
     private func sendCurrentMessage() {
+        guard isConnectionReadyForSending else { return }
         #if os(visionOS)
         // Stop app dictation before the text is consumed; a late final
         // result must not resurrect the sent text (.send cancels outright).
@@ -383,7 +389,7 @@ private extension MessageInputView {
             // files, but the text view's submit callback still lands here —
             // pendingFiles clears only after success, so a second send
             // would duplicate the uploads.
-            guard !viewModel.isUploadingFiles else { return }
+            guard !viewModel.isUploadingFiles, isConnectionReadyForSending else { return }
             let text = localText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty || viewModel.hasPendingAttachments else {
                 isFocused = true
