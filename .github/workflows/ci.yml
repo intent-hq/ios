@@ -29,9 +29,12 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  # Lets the iOS job read the go-test and swiftlint jobs' conclusions
-  # (Require Go unit tests and SwiftLint).
+  # Stable gates reconcile the latest job attempts as well as needs results.
   actions: read
+
+env:
+  # The producer validates and exports this ONE count for matrix, workers and gate.
+  UI_TEST_SHARD_COUNT: '6'
 
 # Cancel in progress workflows on pull_requests.
 # https://docs.github.com/en/actions/using-jobs/using-concurrency#example-using-a-fallback-value
@@ -69,6 +72,9 @@ jobs:
       - name: UI shard gate self-tests
         run: python3 scripts/test-ui-test-shards.py
 
+      - name: Hosted test handoff self-tests
+        run: python3 scripts/test-ci-test-handoff.py
+
       # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
       # override in scripts/swiftlint.sh against a stubbed swiftlint; pure bash.
       - name: swiftlint.sh self-tests
@@ -87,8 +93,8 @@ jobs:
 
   swiftlint:
     name: SwiftLint
-    # Runs unconditionally on both triggers so the "Require Go unit tests and
-    # SwiftLint" step in build-and-test never sees a skipped job. The official
+    # Runs unconditionally on both triggers so the build-and-test gate never
+    # sees a skipped lint job. The official
     # Linux release uses its in-process sourcekitd, so lint needs no macOS,
     # Xcode, Go, SPM or simulator work.
     runs-on: ubuntu-latest
@@ -129,63 +135,34 @@ jobs:
           SWIFTLINT_REPORTER: github-actions-logging
         run: scripts/swiftlint.sh
 
-  build-and-test:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
-    # The repo ruleset requires only this job. A job skipped because a
-    # `needs` dependency failed counts as passing for required checks, so
-    # `needs: [go-test, swiftlint]` would not keep a Go or lint failure
-    # merge-blocking; instead the final "Require Go unit tests and SwiftLint"
-    # step below waits for those jobs and fails this one if either did not
-    # succeed. All three jobs still run in parallel.
-    # GitHub-hosted arm64 macOS runner; ships Xcode and iOS simulator
-    # runtimes preinstalled. Timeout allows a cold SPM resolve + full build
-    # on the 3-core M-series VM.
-    runs-on: macos-15
+  ios-test-build:
+    name: iOS Test Build
+    # Paid GitHub-hosted M2 arm64 producer; repository access must be confirmed
+    # before publication. No self-hosted/standard fallback or access probe run.
+    # This job NEVER waits for or executes tests: upload, finish, then fan out.
+    runs-on: macos-15-xlarge
     timeout-minutes: 45
+    outputs:
+      run: ${{ steps.configure.outputs.run }}
+      revision: ${{ steps.configure.outputs.revision }}
+      artifact: ${{ steps.configure.outputs.artifact }}
+      context: ${{ steps.configure.outputs.context }}
+      count: ${{ steps.configure.outputs.count }}
+      matrix: ${{ steps.configure.outputs.matrix }}
+      sha256: ${{ steps.publish.outputs.sha256 }}
+      echo-sha256: ${{ steps.publish.outputs.echo_sha256 }}
     env:
       GIT_TERMINAL_PROMPT: '0'
-      # Knobs for scripts/xcodebuild.sh: pin SPM clones to the cached path
-      # and write the test result bundle where the artifact upload expects it.
       SPM_CLONE_DIR: build/SourcePackages
-      RESULT_BUNDLE: TestResults
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Select the newest Xcode*.app bundle on the image: the Textual
-      # dependency needs a recent toolchain (its own CI builds iOS on
-      # Xcode 26.5), so older bundles hit a Swift 6.0 concurrency
-      # false-positive compiling Table.swift. List every bundle first for
-      # diagnostics. DEVELOPER_DIR needs no sudo.
-      - name: Select Xcode
-        run: |
-          echo "Available Xcode bundles:"
-          ls -d /Applications/Xcode*.app 2>/dev/null || true
-          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
-          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
-            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-            echo "Selected $xcode"
-            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
-          else
-            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
-            xcodebuild -version
-          fi
-
-      # Device selection lives in scripts/xcodebuild.sh (pick-simulator).
-      # Export the UDID so the pre-boot step and every later script
-      # invocation share one concrete device.
-      - name: Pick simulator device
-        run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
-
-      # Kick off the simulator boot early so it overlaps with package
-      # resolution and compilation instead of delaying the test step.
-      # Run in the background: simctl boot can block for minutes waiting for
-      # the device to reach the Booted state, but CoreSimulator completes the
-      # boot on its own and the test step waits on bootstatus before
-      # launching. Output goes to a log file that the "Simulator state" step
-      # prints later, so a failed or slow boot is visible instead of silent.
-      - name: Pre-boot simulator
-        run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
+      # Record git HEAD, not PR-head SHA: checkout normally uses the merge tree.
+      # Consumers find this EXACT Xcode version/build and runtime ID/version/build.
+      - name: Configure trusted producer identity and platform
+        id: configure
+        run: python3 scripts/ci-test-handoff.py configure
 
       # The gomobile bind output (and the tcecho helper binary) are
       # deterministic for a given wrapper source + module graph + Go
@@ -219,6 +196,79 @@ jobs:
         working-directory: TailcatKit
         run: go build -o build/tcecho ./cmd/tcecho
 
+      - name: Cache SPM packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve SPM packages
+        run: scripts/xcodebuild.sh resolve
+
+      - name: Build portable test products
+        env:
+          TEST_ARTIFACT_PATH: ${{ runner.temp }}/ios-test-build/tests.tar.gz
+          TEST_ARTIFACT_RUN: ${{ steps.configure.outputs.run }}
+          TEST_ARTIFACT_REVISION: ${{ steps.configure.outputs.revision }}
+        run: scripts/xcodebuild.sh build-test-artifact
+
+      # Outputs are trusted independently of the downloaded receipt. The smoke
+      # executable is separately hashed; no server/token exists on this producer.
+      - name: Publish trusted checksums
+        id: publish
+        env:
+          TEST_ARTIFACT_PATH: ${{ runner.temp }}/ios-test-build/tests.tar.gz
+          TEST_ARTIFACT_RUN: ${{ steps.configure.outputs.run }}
+          TEST_ARTIFACT_REVISION: ${{ steps.configure.outputs.revision }}
+          TEST_BUILD_CONTEXT: ${{ steps.configure.outputs.context }}
+        run: python3 scripts/ci-test-handoff.py publish
+
+      - name: Upload portable test build
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.configure.outputs.artifact }}
+          path: |
+            ${{ runner.temp }}/ios-test-build/tests.tar.gz
+            ${{ runner.temp }}/ios-test-build/tests.tar.gz.json
+            ${{ runner.temp }}/ios-test-build/tcecho
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+
+  ios-unit-tests:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS Filtered Worker (non-gating)' || 'iOS Unit Tests' }}
+    needs: ios-test-build
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      RESULT_BUNDLE: TestResults
+      TEST_ARTIFACT_PATH: ios-test-build/tests.tar.gz
+      TEST_ARTIFACT_RUN: ${{ needs.ios-test-build.outputs.run }}
+      TEST_ARTIFACT_REVISION: ${{ needs.ios-test-build.outputs.revision }}
+      TEST_ARTIFACT_SHA256: ${{ needs.ios-test-build.outputs.sha256 }}
+      TEST_BUILD_CONTEXT: ${{ needs.ios-test-build.outputs.context }}
+      TEST_ECHO_SHA256: ${{ needs.ios-test-build.outputs.echo-sha256 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select exact producer platform
+        run: python3 scripts/ci-test-handoff.py consume
+
+      - name: Pre-boot simulator
+        run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
+
+      - name: Download same-run test build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEST_BUILD_NAME: ${{ needs.ios-test-build.outputs.artifact }}
+        run: gh run download "$GITHUB_RUN_ID" --name "$TEST_BUILD_NAME" --dir ios-test-build
+
+      - name: Validate tailcat echo executable
+        run: python3 scripts/ci-test-handoff.py verify-echo
+
       # In-process tailcat echo server for the Swift smoke test; prints
       # its connection token on the first line of stdout. The token
       # reaches the simulator test process via the TEST_RUNNER_ prefix.
@@ -231,7 +281,7 @@ jobs:
       - name: Start tailcat echo server
         working-directory: TailcatKit
         env:
-          TCECHO_BIN: ./build/tcecho
+          TCECHO_BIN: ${{ github.workspace }}/ios-test-build/tcecho
           TCECHO_BACKOFF: 5 15 30
         run: |
           derp_cause() {
@@ -295,24 +345,6 @@ jobs:
           echo "::add-mask::$token"
           echo "TAILCAT_SMOKE_TOKEN=$token" >> "$GITHUB_ENV"
 
-      # Ephemeral runner: cache SPM checkouts across runs. SPM_CLONE_DIR
-      # (job env above) makes scripts/xcodebuild.sh pin
-      # -clonedSourcePackagesDirPath to the cached path so the cache key
-      # actually covers what gets written.
-      - name: Cache SPM packages
-        uses: actions/cache@v6
-        with:
-          path: build/SourcePackages
-          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: |
-            ${{ runner.os }}-spm-
-
-      - name: Resolve SPM packages
-        run: scripts/xcodebuild.sh resolve
-
-      - name: Build for testing
-        run: scripts/xcodebuild.sh build-for-testing
-
       # Diagnostics for the intermittent multi-minute stall before the test
       # host launches: show what the background boot printed and whether
       # the device is actually Booted before xcodebuild takes over.
@@ -335,7 +367,7 @@ jobs:
       # TEST_RUNNER_-prefixed environment variables into the test process
       # (minus the prefix), carrying the tcecho token to the TailcatKit
       # smoke test. A pull_request (or unfiltered dispatch) uses the unit-only
-      # subcommand, which skips IntentUITests without selector enumeration. A
+      # subcommand, selecting all IntentTests for the catalog report. A
       # filtered workflow_dispatch retains the regular verified-selector path:
       # a selector that matches or executes nothing fails with exit 82, an
       # unverifiable selection with 83, and the per-selector table is appended
@@ -344,11 +376,12 @@ jobs:
         env:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
+          TEST_SELECTION_REPORT: ${{ runner.temp }}/unit-selection.json
         run: |
           if [ -n "$ONLY_TESTING" ]; then
             scripts/xcodebuild.sh test-without-building
           else
-            scripts/xcodebuild.sh test-without-building-unit
+            ONLY_TESTING=IntentTests scripts/xcodebuild.sh test-without-building-unit
           fi
 
       # InfoPlistSyncTests, PlatformGuardAllowlistTests,
@@ -367,6 +400,7 @@ jobs:
         env:
           RESULT_BUNDLE: TestResults-source-moved
           ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests IntentTests/ObjCCallbackIsolationTests IntentTests/ExternalLinkTests IntentTests/PrivacyManifestDriftTests
+          TEST_SELECTION_REPORT: ${{ runner.temp }}/source-selection.json
         run: |
           moved="$RUNNER_TEMP/source-moved"
           mkdir -p "$moved"
@@ -383,128 +417,94 @@ jobs:
           scripts/xcodebuild.sh test-without-building
 
       - name: Upload test results
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
-          name: ios-unit-test-results
+          name: ios-unit-test-results-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             TestResults
+            TestResults-retry
             TestResults-source-moved
+            TestResults-source-moved-retry
 
-      # See the job comment: turns a go-test or swiftlint failure into a
-      # failure of this (the only ruleset-required) job. Both normally finish
-      # minutes before this step runs, so the wait is usually zero. A failing
-      # `gh api` call (transient network/API error) is retried like an
-      # empty conclusion rather than aborting under `set -e`; the 20-minute
-      # timeout below is the only hard failure besides a failed required job.
-      - name: Require Go unit tests and SwiftLint
+      - name: Upload unit selection evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-selection-${{ github.run_id }}-${{ github.run_attempt }}-unit
+          path: |
+            ${{ runner.temp }}/unit-selection.json
+            ${{ runner.temp }}/source-selection.json
+          retention-days: 7
+          if-no-files-found: error
+
+  build-and-test:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
+    # This is still the ONLY ruleset-required gate. always() prevents failed or
+    # skipped prerequisites turning it into a skipped, apparently passing check.
+    # UI remains a separate visible gate; no required-check policy changes.
+    needs: [ios-test-build, ios-unit-tests, go-test, swiftlint]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download selection evidence
         env:
           GH_TOKEN: ${{ github.token }}
+          REPORT_KIND: unit
+        run: python3 scripts/ci-test-handoff.py download-reports
+
+      - name: Require build, unit, Go and lint success
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          TEST_ARTIFACT_RUN: ${{ needs.ios-test-build.outputs.run }}
+          TEST_ARTIFACT_REVISION: ${{ needs.ios-test-build.outputs.revision }}
+          TEST_ARTIFACT_SHA256: ${{ needs.ios-test-build.outputs.sha256 }}
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
-          for i in $(seq 1 80); do
-            if ! jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name == "Go unit tests (TailcatKit)" or .name == "SwiftLint") | "\(.name)\t\(.conclusion // "")"'); then
-              echo "gh api failed (attempt $i/80); retrying in 15s" >&2
-              sleep 15
-              continue
-            fi
-            pending=0
-            for name in "Go unit tests (TailcatKit)" "SwiftLint"; do
-              c=$(printf '%s\n' "$jobs" | awk -F'\t' -v n="$name" '$1 == n { print $2 }')
-              case "$c" in
-                success) ;;
-                "") pending=1 ;;
-                *) echo "$name job concluded: $c" >&2; exit 1 ;;
-              esac
-            done
-            if [ "$pending" -eq 0 ]; then
-              echo "Go unit tests and SwiftLint passed"
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "timed out waiting for the Go unit tests / SwiftLint jobs" >&2
-          exit 1
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=all&per_page=100" \
+            | python3 scripts/check-ui-test-shards.py --required "$GITHUB_RUN_ATTEMPT" selection-evidence
 
   ios-ui-test-shards:
-    name: iOS UI Tests (shard ${{ matrix.shard }}/2)
+    name: iOS UI Tests (shard ${{ matrix.shard }}/${{ needs.ios-test-build.outputs.count }})
+    needs: ios-test-build
     # Pull requests and unfiltered manual runs exercise the complete UI bundle.
-    # Filtered dispatches already run their requested selector in build-and-test.
+    # Filtered dispatches already run their requested selector in ios-unit-tests.
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     runs-on: macos-15
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: ${{ fromJSON(needs.ios-test-build.outputs.matrix) }}
     env:
-      GIT_TERMINAL_PROMPT: '0'
-      SPM_CLONE_DIR: build/SourcePackages
       RESULT_BUNDLE: UITestResults
+      UI_TEST_SHARD_COUNT: ${{ needs.ios-test-build.outputs.count }}
+      TEST_ARTIFACT_PATH: ios-test-build/tests.tar.gz
+      TEST_ARTIFACT_RUN: ${{ needs.ios-test-build.outputs.run }}
+      TEST_ARTIFACT_REVISION: ${{ needs.ios-test-build.outputs.revision }}
+      TEST_ARTIFACT_SHA256: ${{ needs.ios-test-build.outputs.sha256 }}
+      TEST_BUILD_CONTEXT: ${{ needs.ios-test-build.outputs.context }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Select Xcode
-        run: |
-          echo "Available Xcode bundles:"
-          ls -d /Applications/Xcode*.app 2>/dev/null || true
-          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
-          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
-            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-            echo "Selected $xcode"
-            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
-          else
-            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
-            xcodebuild -version
-          fi
-
-      - name: Pick simulator device
-        run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
+      - name: Select exact producer platform
+        run: python3 scripts/ci-test-handoff.py consume
 
       - name: Pre-boot simulator
         run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
 
-      - name: Cache TailcatKit.xcframework
-        id: tailcat-cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            TailcatKit/build/TailcatKit.xcframework
-            TailcatKit/build/tcecho
-          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
-
-      - name: Set up Go
-        if: steps.tailcat-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: TailcatKit/go.mod
-          cache-dependency-path: TailcatKit/go.sum
-
-      - name: Build TailcatKit.xcframework
-        if: steps.tailcat-cache.outputs.cache-hit != 'true'
-        run: ./TailcatKit/build_xcframework.sh
-
-      # Populate the shared cache identically to build-and-test. This job never
-      # starts tcecho because IntentUITests do not consume its smoke token.
-      - name: Build tailcat echo server
-        if: steps.tailcat-cache.outputs.cache-hit != 'true'
-        working-directory: TailcatKit
-        run: go build -o build/tcecho ./cmd/tcecho
-
-      - name: Cache SPM packages
-        uses: actions/cache@v6
-        with:
-          path: build/SourcePackages
-          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: |
-            ${{ runner.os }}-spm-
-
-      - name: Resolve SPM packages
-        run: scripts/xcodebuild.sh resolve
-
-      - name: Build for testing
-        run: scripts/xcodebuild.sh build-for-testing
+      - name: Download same-run test build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEST_BUILD_NAME: ${{ needs.ios-test-build.outputs.artifact }}
+        run: gh run download "$GITHUB_RUN_ID" --name "$TEST_BUILD_NAME" --dir ios-test-build
 
       - name: Simulator state
         run: |
@@ -515,16 +515,24 @@ jobs:
 
       - name: Run UI tests
         env:
-          # Step-only: build-for-testing rejects UI_TEST_SHARD. The wrapper
-          # discovers and verifies disjoint, complete method-level selections.
           UI_TEST_SHARD: ${{ matrix.shard }}
+          TEST_SELECTION_REPORT: ${{ runner.temp }}/ui-selection.json
         run: scripts/xcodebuild.sh test-without-building
+
+      - name: Upload UI selection evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-selection-${{ github.run_id }}-${{ github.run_attempt }}-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ui-selection.json
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Upload UI test results
         if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
-          name: ios-ui-test-results-shard-${{ matrix.shard }}
+          name: ios-ui-test-results-${{ github.run_id }}-${{ github.run_attempt }}-shard-${{ matrix.shard }}
           path: |
             UITestResults
             UITestResults-retry
@@ -574,7 +582,7 @@ jobs:
         if: always() && steps.recovery-evidence.outputs.count != '0'
         uses: actions/upload-artifact@v7
         with:
-          name: ios-transcript-recovery-evidence-shard-${{ matrix.shard }}
+          name: ios-transcript-recovery-evidence-${{ github.run_id }}-${{ github.run_attempt }}-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/recovery-evidence
           retention-days: 14
           if-no-files-found: ignore
@@ -582,7 +590,7 @@ jobs:
   ios-ui-tests:
     # A skipped filtered run must not publish the stable full-coverage gate.
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS UI Tests (non-gating)' || 'iOS UI Tests' }}
-    needs: ios-ui-test-shards
+    needs: [ios-test-build, ios-unit-tests, ios-ui-test-shards]
     if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -590,19 +598,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # always() above keeps failed/cancelled dependencies from skipping this
-      # check. Require both the matrix result and every expected job record;
-      # missing, unreadable or incomplete evidence fails closed. Read all
-      # attempts so a partial rerun can reuse an unchanged successful shard,
-      # but never let an older success hide its newer failed execution.
+      - name: Download selection evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT_KIND: all
+        run: python3 scripts/ci-test-handoff.py download-reports
+
+      # All attempts remain in separate artifact directories. Bind each report
+      # to its job's latest successful attempt AND the trusted producer outputs.
+      # If a producer is rebuilt, old consumers must not satisfy this new gate.
       - name: Require every UI shard
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
           SHARD_RESULT: ${{ needs.ios-ui-test-shards.result }}
+          EXPECTED_SHARD_COUNT: ${{ needs.ios-test-build.outputs.count }}
+          TEST_ARTIFACT_RUN: ${{ needs.ios-test-build.outputs.run }}
+          TEST_ARTIFACT_REVISION: ${{ needs.ios-test-build.outputs.revision }}
+          TEST_ARTIFACT_SHA256: ${{ needs.ios-test-build.outputs.sha256 }}
         run: |
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=all&per_page=100" \
-            | python3 scripts/check-ui-test-shards.py "$SHARD_RESULT" "$GITHUB_RUN_ATTEMPT"
+            | python3 scripts/check-ui-test-shards.py "$SHARD_RESULT" "$GITHUB_RUN_ATTEMPT" "$EXPECTED_SHARD_COUNT" selection-evidence
 
   visionos-build:
     name: visionOS Build
@@ -621,7 +638,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Same Xcode selection logic as the iOS job above.
+      # Independent visionOS lane retains its existing Xcode selection.
       - name: Select Xcode
         run: |
           echo "Available Xcode bundles:"

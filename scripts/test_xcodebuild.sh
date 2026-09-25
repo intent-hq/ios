@@ -215,7 +215,8 @@ export PATH="$stubs:$PATH"
 export TMPDIR=$work
 # The wrapper appends to a caller's step summary; the self-test's own CI job
 # must not receive the fixture tables.
-unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING BUILD_CONFIGURATION UI_TEST_SHARD
+unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING BUILD_CONFIGURATION UI_TEST_SHARD UI_TEST_SHARD_COUNT
+unset TEST_ARTIFACT_PATH TEST_ARTIFACT_RUN TEST_ARTIFACT_REVISION TEST_ARTIFACT_SHA256 TEST_SELECTION_REPORT
 export SIM_UDID=00000000-0000-0000-0000-000000000001
 export SIM_LOCK_DIR=$work/locks
 lock=$SIM_LOCK_DIR/xcodebuild-sim-$SIM_UDID.lock
@@ -1069,11 +1070,28 @@ assert_eq "without GITHUB_STEP_SUMMARY the run exits 0" "$status" 0
 assert_eq "without GITHUB_STEP_SUMMARY no summary file appears" "$(ls "$work" | grep -c 'step-summary')" 3
 
 echo "# UI sharding rejects invalid or ambiguous configuration before touching Xcode"
-for shard in 0 3 -1 01 abc 1/2; do
-  status=$(run_filtered shardinvalid "" test-without-building UI_TEST_SHARD="$shard")
-  assert_eq "UI_TEST_SHARD=$shard is refused" "$status" 1
-  assert_eq "invalid shard makes no Xcode call" "$(argv_count shardinvalid)" 0
+for count in 2 6; do
+  for shard in 0 "$((count + 1))" -1 01 abc 1/2 1.0 +1 ' 1' $'1\n' １ 18446744073709551617; do
+    status=$(run_filtered shardinvalid "" test-without-building UI_TEST_SHARD="$shard" UI_TEST_SHARD_COUNT="$count")
+    assert_eq "UI_TEST_SHARD=$shard of $count is refused" "$status" 1
+    assert_eq "invalid shard makes no Xcode call" "$(argv_count shardinvalid)" 0
+  done
 done
+for count in '' 0 -1 06 abc 1/6 6.0 +6 ' 6' $'6\n' ６; do
+  status=$(run_filtered shardcountinvalid "" test-without-building UI_TEST_SHARD=1 UI_TEST_SHARD_COUNT="$count")
+  assert_eq "UI_TEST_SHARD_COUNT=$count is refused" "$status" 1
+  assert_eq "invalid count makes no Xcode call" "$(argv_count shardcountinvalid)" 0
+done
+status=$(run_filtered sharddefaultinvalid "" test-without-building UI_TEST_SHARD=3)
+assert_eq "default count still rejects shard 3" "$status" 1
+assert_eq "invalid default shard makes no Xcode call" "$(argv_count sharddefaultinvalid)" 0
+status=$(run_filtered countonly "" test-without-building UI_TEST_SHARD_COUNT=6)
+assert_eq "a shared count alone keeps the full gate" "$status" 0
+assert_eq "count alone does not enumerate" "$(argv_count countonly)" 1
+assert_lacks "count alone does not narrow selection" "$(argv_line countonly 1)" "-only-testing:"
+status=$(run_filtered countfiltered "IntentTests/DemoFixturesTests" test-without-building UI_TEST_SHARD_COUNT=6)
+assert_eq "a shared count preserves explicit filtered runs" "$status" 0
+assert_contains "count does not replace the explicit selector" "$(argv_line countfiltered 2)" "[-only-testing:IntentTests/DemoFixturesTests]"
 status=$(run_filtered shardfilter "IntentUITests" test-without-building UI_TEST_SHARD=1)
 assert_eq "a shard cannot silently override ONLY_TESTING" "$status" 1
 assert_eq "ambiguous selection makes no Xcode call" "$(argv_count shardfilter)" 0
@@ -1103,28 +1121,55 @@ catalog("shardsuite", entries + [{"identifier": "IntentUITests/UnexpandedSuite"}
 catalog("shardlist", {"identifier": methods[0]})
 catalog("shardempty", [{"identifier": "IntentTests/UnitTests/testUnit()"}], disabled)
 catalog("shardsingle", entries[:1])
+catalog("shardconflict", entries, [entries[0]])
+catalog("shardfew", entries[:5])
+catalog("shardlarge", [{"identifier": "IntentUITests/TranscriptUITests/test%s()" % c}
+                       for c in "ABCDEFGHIJKLMNOPQR"])
 EOF
 ui=IntentUITests/TranscriptUITests
-make_results "$work/shard1.json" "$ui/testA()=Passed" "$ui/testC()=Passed" "$ui/testE()=Passed"
-make_results "$work/shard2.json" "$ui/testB()=Passed" "$ui/testD()=Passed" "$ui/testF()=Passed"
-make_results "$work/shardnew1.json" "$ui/testA()=Passed" "$ui/testC()=Passed" "$ui/testE()=Passed" \
-  "IntentUITests/ZNewUITests/testNew()=Passed"
 
-echo "# both shards are deterministic, disjoint, complete, and split a large class"
-for variant in catalog reordered new; do
-  for shard in 1 2; do
-    results=$work/shard$shard.json
-    [ "$variant/$shard" != new/1 ] || results=$work/shardnew1.json
-    name=shard$variant$shard
-    status=$(run_filtered "$name" "" test-without-building UI_TEST_SHARD="$shard" \
-      STUB_CATALOG="$work/shard$variant.json" STUB_RESULTS="$results" GITHUB_STEP_SUMMARY="$work/sharding-summary.md")
-    assert_eq "$variant shard $shard succeeds" "$status" 0
-    assert_eq "$variant shard $shard enumerates then runs" "$(argv_count "$name")" 2
-    assert_eq "$variant shard $shard verifies its results" "$(xcresulttool_count "$name")" 1
+echo "# all groups are deterministic, disjoint, complete, and split at method level"
+# Independent expectations for the synthetic six-method catalog, not app inventory
+# or values computed by the resolver. "default" also proves legacy two-way callers.
+while read -r config shard letters; do
+  count=$config; knobs=()
+  if [ "$config" = default ]; then count=2; else knobs+=("UI_TEST_SHARD_COUNT=$count"); fi
+  for variant in catalog reordered new; do
+    name=shard$variant$config-$shard
+    cases=()
+    for letter in $letters; do cases+=("$ui/test$letter()=Passed"); done
+    if [ "$variant" = new ]; then
+      case "$count/$shard" in
+        1/1|2/1|4/3|6/1) cases+=("IntentUITests/ZNewUITests/testNew()=Passed") ;;
+      esac
+    fi
+    printf '%s\n' "${cases[@]}" | sed 's/=Passed$//' > "$work/$name.want"
+    make_results "$work/$name.json" "${cases[@]}"
+    status=$(run_filtered "$name" "" test-without-building UI_TEST_SHARD="$shard" ${knobs+"${knobs[@]}"} \
+      STUB_CATALOG="$work/shard$variant.json" STUB_RESULTS="$work/$name.json" GITHUB_STEP_SUMMARY="$work/sharding-summary.md")
+    assert_eq "$variant shard $shard/$config succeeds" "$status" 0
+    assert_eq "$variant shard $shard/$config enumerates then runs" "$(argv_count "$name")" 2
+    assert_eq "$variant shard $shard/$config verifies its results" "$(xcresulttool_count "$name")" 1
     assert_contains "shard execution stays serial" "$(argv_line "$name" 2)" "[-parallel-testing-enabled] [NO]"
     assert_lacks "shard enumeration is not narrowed" "$(argv_line "$name" 1)" "-only-testing:"
   done
-done
+done <<'EOF'
+default 1 A C E
+default 2 B D F
+1 1 A B C D E F
+2 1 A C E
+2 2 B D F
+4 1 A E
+4 2 B F
+4 3 C
+4 4 D
+6 1 A
+6 2 B
+6 3 C
+6 4 D
+6 5 E
+6 6 F
+EOF
 if python3 - "$work" <<'EOF'
 import pathlib, re, sys
 work = pathlib.Path(sys.argv[1])
@@ -1134,76 +1179,101 @@ def selected(name):
     assert len(lines) == 1, lines
     return re.findall(r"\[-only-testing:([^\]]+)\]", lines[0])
 expected = {"IntentUITests/TranscriptUITests/test%s()" % letter for letter in "ABCDEF"}
-for variant in ("catalog", "reordered", "new"):
-    left, right = [selected("shard%s%d" % (variant, shard)) for shard in (1, 2)]
-    assert len(left) == len(set(left)) and len(right) == len(set(right))
-    assert not set(left) & set(right), (left, right)
-    want = expected | ({"IntentUITests/ZNewUITests/testNew()"} if variant == "new" else set())
-    assert set(left + right) == want, (left, right, want)
-    assert all(sum("/TranscriptUITests/" in ident for ident in side) == 3 for side in (left, right))
-    if variant == "reordered":
-        assert left == selected("shardcatalog1") and right == selected("shardcatalog2")
-assert selected("shardcatalog1") == ["IntentUITests/TranscriptUITests/test%s()" % c for c in "ACE"]
+for config, count in (("default", 2), ("1", 1), ("2", 2), ("4", 4), ("6", 6)):
+    for variant in ("catalog", "reordered", "new"):
+        groups = []
+        for shard in range(1, count + 1):
+            name = "shard%s%s-%d" % (variant, config, shard)
+            group = selected(name)
+            assert group == (work / (name + ".want")).read_text().splitlines(), (name, group)
+            assert group
+            if variant == "reordered":
+                assert group == selected("shardcatalog%s-%d" % (config, shard))
+            groups.append(group)
+        flat = [ident for group in groups for ident in group]
+        want = expected | ({"IntentUITests/ZNewUITests/testNew()"} if variant == "new" else set())
+        assert len(flat) == len(set(flat)) and set(flat) == want, (config, variant, groups)
+        assert max(map(len, groups)) - min(map(len, groups)) <= 1
 EOF
 then pass "shard selections cover exactly all enabled UI methods and ignore enumeration order"
 else fail "shard selections overlap, omit methods, or depend on enumeration order"; fi
 assert_contains "job summary identifies the shard" "$(cat "$work/sharding-summary.md")" "UI test shard 1/2"
+assert_contains "job summary identifies all six shards" "$(cat "$work/sharding-summary.md")" "UI test shard 6/6"
 assert_contains "job summary includes method-level verification" "$(cat "$work/sharding-summary.md")" '| `IntentUITests/TranscriptUITests/testC()` | 1 | 1 | 0 | 0 | 0 |'
 assert_lock_free "lock released after shard execution"
 
 echo "# partial, malformed, or empty catalogs cannot silently omit UI tests"
-for bad in errors malformed suite list empty single; do
+for bad in errors malformed suite list empty single conflict; do
   status=$(run_filtered shardbad "" test-without-building UI_TEST_SHARD=1 STUB_CATALOG="$work/shard$bad.json")
   assert_eq "$bad shard catalog fails closed" "$status" 83
   assert_eq "$bad shard catalog never starts tests" "$(argv_count shardbad)" 1
   assert_lock_free "lock released after $bad shard catalog"
 done
+for spec in 4:single 6:few 7:catalog 18446744073709551617:catalog; do
+  count=${spec%:*}; kind=${spec#*:}
+  status=$(run_filtered shardfew "" test-without-building UI_TEST_SHARD=1 UI_TEST_SHARD_COUNT="$count" \
+    STUB_CATALOG="$work/shard$kind.json")
+  assert_eq "too few methods for $count groups fails even for nonempty shard 1" "$status" 83
+  assert_eq "too few methods never starts tests" "$(argv_count shardfew)" 1
+  assert_lock_free "lock released after too-few-method catalog"
+done
 status=$(run_filtered shardenumfail "" test-without-building UI_TEST_SHARD=1 STUB_ENUMERATE_FAIL=1)
 assert_eq "shard enumeration failure exits 83" "$status" 83
 
 echo "# every shard method needs a known result; duplicates cannot replace missing methods"
-make_results "$work/shardmissing.json" "$ui/testA()=Passed" "$ui/testA()=Passed" "$ui/testE()=Passed"
-make_results "$work/shardunknown.json" "$ui/testA()=Passed" "$ui/testC()=Mysterious" "$ui/testE()=Passed"
-make_results "$work/shardfailed.json" "$ui/testA()=Passed" "$ui/testC()=Failed" "$ui/testE()=Passed"
-make_results "$work/shardskipped.json" "$ui/testA()=Passed" "$ui/testC()=Skipped" "$ui/testE()=Expected Failure"
-make_results "$work/shardextra.json" "$ui/testA()=Passed" "$ui/testC()=Passed" "$ui/testE()=Passed" "$ui/testB()=Passed"
-for spec in missing:82 unknown:83 failed:65 skipped:0 extra:83; do
-  kind=${spec%:*}; expected=${spec#*:}
-  status=$(run_filtered shardresult "" test-without-building UI_TEST_SHARD=1 \
-    STUB_CATALOG="$work/shardcatalog.json" STUB_RESULTS="$work/shard$kind.json")
-  assert_eq "$kind shard result exits $expected even when Xcode exits 0" "$status" "$expected"
-done
-for spec in STUB_NO_BUNDLE=1 STUB_RESULTS_FAIL=1; do
-  status=$(run_filtered shardunread "" test-without-building UI_TEST_SHARD=1 STUB_CATALOG="$work/shardcatalog.json" "$spec")
-  assert_eq "$spec cannot leave a shard green" "$status" 83
-done
-status=$(run_filtered shardfail "" test-without-building UI_TEST_SHARD=1 STUB_CATALOG="$work/shardcatalog.json" STUB_MODE=fail STUB_RESULTS_FAIL=1)
-assert_eq "shard test failure wins over unreadable results" "$status" 65
+for count in 2 6; do
+  catalog=$work/shardcatalog.json; middle=C; last=E
+  if [ "$count" = 6 ]; then catalog=$work/shardlarge.json; middle=G; last=M; fi
+  make_results "$work/shardpass.json" "$ui/testA()=Passed" "$ui/test$middle()=Passed" "$ui/test$last()=Passed"
+  make_results "$work/shardmissing.json" "$ui/testA()=Passed" "$ui/testA()=Passed" "$ui/test$last()=Passed"
+  make_results "$work/shardunknown.json" "$ui/testA()=Passed" "$ui/test$middle()=Mysterious" "$ui/test$last()=Passed"
+  make_results "$work/shardfailed.json" "$ui/testA()=Passed" "$ui/test$middle()=Failed" "$ui/test$last()=Passed"
+  make_results "$work/shardskipped.json" "$ui/testA()=Passed" "$ui/test$middle()=Skipped" "$ui/test$last()=Expected Failure"
+  make_results "$work/shardextra.json" "$ui/testA()=Passed" "$ui/test$middle()=Passed" "$ui/test$last()=Passed" "$ui/testB()=Passed"
+  make_results "$work/shardnewresult.json" "$ui/testA()=Passed" "$ui/test$middle()=Passed" "$ui/test$last()=Passed" \
+    "IntentUITests/UnknownUITests/testNew()=Passed"
+  for spec in missing:82 unknown:83 failed:65 skipped:0 extra:83 newresult:83; do
+    kind=${spec%:*}; expected=${spec#*:}
+    status=$(run_filtered shardresult "" test-without-building UI_TEST_SHARD=1 UI_TEST_SHARD_COUNT="$count" \
+      STUB_CATALOG="$catalog" STUB_RESULTS="$work/shard$kind.json")
+    assert_eq "$kind result for 1/$count exits $expected even when Xcode exits 0" "$status" "$expected"
+  done
+  for spec in STUB_NO_BUNDLE=1 STUB_RESULTS_FAIL=1; do
+    status=$(run_filtered shardunread "" test-without-building UI_TEST_SHARD=1 UI_TEST_SHARD_COUNT="$count" STUB_CATALOG="$catalog" "$spec")
+    assert_eq "$spec cannot leave a shard green" "$status" 83
+  done
+  status=$(run_filtered shardfail "" test-without-building UI_TEST_SHARD=1 UI_TEST_SHARD_COUNT="$count" STUB_CATALOG="$catalog" STUB_MODE=fail STUB_RESULTS_FAIL=1)
+  assert_eq "shard test failure wins over unreadable results" "$status" 65
 
-echo "# a shard crash retries only its assigned methods and verifies every retry result"
-make_results "$work/shardretrymissing.json" "$ui/testA()=Passed" "$ui/testE()=Passed"
-for spec in recovered:0 missing:82 failed:65 crashed:80; do
-  kind=${spec%:*}; expected=${spec#*:}
-  results=$work/shard1.json; mode=pass
-  case "$kind" in
-    missing) results=$work/shardretrymissing.json ;;
-    failed) mode=fail ;;
-    crashed) mode=marker ;;
-  esac
-  status=$(run_filtered shardretry$kind "" test-without-building UI_TEST_SHARD=1 \
-    STUB_CATALOG="$work/shardcatalog.json" STUB_RESULTS="$work/shardfailed.json" STUB_RESULTS_RETRY="$results" \
-    STUB_MODE=marker STUB_THEN="$mode" STUB_STATE="$work/shardretry$kind.state" STUB_NO_FAILING=1 \
-    STUB_MARKER="Restarting after unexpected exit, crash, or test timeout in IntentUITests.TranscriptUITests/testC(); summary will include totals from previous launches.")
-  assert_eq "$kind shard crash outcome exits $expected" "$status" "$expected"
-  assert_eq "shard crash enumerates once and retries exactly once" "$(argv_count shardretry$kind)" 3
-  assert_contains "retry stays serial and within assigned methods" "$(retry_argv shardretry$kind)" \
-    "[-only-testing:$ui/testA()] [-only-testing:$ui/testC()] [-only-testing:$ui/testE()]"
-  assert_lacks "retry does not expand to the whole UI suite" "$(retry_argv shardretry$kind)" "[-only-testing:$ui]"
-  assert_lock_free "lock released after $kind shard retry"
+  echo "# a shard crash retries only its assigned methods and verifies every retry result"
+  make_results "$work/shardretrymissing.json" "$ui/testA()=Passed" "$ui/test$last()=Passed"
+  for spec in recovered:0 missing:82 unknown:83 extra:83 recordedfailure:65 failed:65 crashed:80; do
+    kind=${spec%:*}; expected=${spec#*:}
+    results=$work/shardpass.json; mode=pass
+    case "$kind" in
+      missing) results=$work/shardretrymissing.json ;;
+      unknown|extra) results=$work/shard$kind.json ;;
+      recordedfailure) results=$work/shardfailed.json ;;
+      failed) mode=fail ;;
+      crashed) mode=marker ;;
+    esac
+    status=$(run_filtered shardretry$kind "" test-without-building UI_TEST_SHARD=1 UI_TEST_SHARD_COUNT="$count" \
+      STUB_CATALOG="$catalog" STUB_RESULTS="$work/shardfailed.json" STUB_RESULTS_RETRY="$results" \
+      STUB_MODE=marker STUB_THEN="$mode" STUB_STATE="$work/shardretry$count-$kind.state" STUB_NO_FAILING=1 \
+      STUB_MARKER="Restarting after unexpected exit, crash, or test timeout in IntentUITests.TranscriptUITests/test$middle(); summary will include totals from previous launches.")
+    assert_eq "$kind crash outcome for 1/$count exits $expected" "$status" "$expected"
+    assert_eq "shard crash enumerates once and retries exactly once" "$(argv_count shardretry$kind)" 3
+    assert_contains "retry stays serial" "$(retry_argv shardretry$kind)" "[-parallel-testing-enabled] [NO]"
+    assert_eq "retry contains exactly the assigned methods, not the whole suite or another shard" \
+      "$(retry_argv shardretry$kind | grep -o -- '-only-testing:[^]]*')" \
+      "$(printf '%s\n' "-only-testing:$ui/testA()" "-only-testing:$ui/test$middle()" "-only-testing:$ui/test$last()")"
+    assert_lock_free "lock released after $kind shard retry"
+  done
 done
 
 echo
 if [ "$failures" -eq 0 ]; then
+  python3 scripts/test-test-build-artifact.py
   echo "all xcodebuild.sh self-tests passed"
 else
   echo "$failures xcodebuild.sh self-test(s) FAILED" >&2

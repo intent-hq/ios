@@ -17,6 +17,7 @@
 #   build-ios               Build for the generic iOS Simulator destination
 #   build-visionos          Build for the generic visionOS Simulator destination
 #   build-for-testing       Build the iOS test bundle (CI split step)
+#   build-test-artifact     Fresh arm64 build and portable same-run test archive
 #   test-without-building   Run iOS tests against a prior build-for-testing
 #   test-without-building-unit
 #                           test-without-building minus IntentUITests
@@ -41,6 +42,25 @@
 #   SIM_UDID              Simulator UDID for test destinations; when unset the
 #                         newest available iPhone simulator is picked automatically.
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
+#   TEST_ARTIFACT_PATH    build-test-artifact writes this new .tar.gz and a .json
+#                         receipt. On test-without-building[-unit], validates and
+#                         restores it privately, using -xctestrun for enumeration,
+#                         execution and retry, without project/SPM resolution.
+#                         Never use cross-run cached app products. The producer
+#                         always builds in fresh DerivedData; no arbitrary input
+#                         directory may be packaged through this wrapper.
+#                         Artifacts support only Debug; Release verification must
+#                         use the non-artifact build/test commands described below.
+#   TEST_ARTIFACT_RUN     Required with PATH: trusted producer run ID plus attempt.
+#   TEST_ARTIFACT_REVISION Required with PATH: full checked-out commit SHA.
+#   TEST_ARTIFACT_SHA256  Required for consumers: trusted producer receipt digest
+#                         supplied independently of the downloaded archive. Exact
+#                         Xcode, arm64 and runtime ID/version/build must match.
+#   TEST_SELECTION_REPORT Optional new JSON path for verified catalog/selection
+#                         evidence (artifact consumers only). Contains producer
+#                         identity/digest, sorted enabled/disabled identifiers and
+#                         selected methods, so CI can compare worker catalogs and
+#                         prove a disjoint union. Job/result success is separate.
 #   RESULT_BUNDLE         Passed as -resultBundlePath to test-without-building;
 #                         an existing bundle at that path is removed first.
 #                         A filtered run (ONLY_TESTING set) with no RESULT_BUNDLE
@@ -71,10 +91,10 @@
 #                         result on a green run exits 83 (see the exit codes
 #                         below). Unset/empty skips all of this and leaves the
 #                         command line untouched.
-#   UI_TEST_SHARD         1 or 2, only with test-without-building and without
+#   UI_TEST_SHARD         1..UI_TEST_SHARD_COUNT, only with test-without-building and without
 #                         ONLY_TESTING. Enumerates the built catalog, sorts all
-#                         enabled IntentUITests methods and alternates them
-#                         between two nonempty shards (including within classes).
+#                         enabled IntentUITests methods and distributes them
+#                         round-robin across nonempty shards (including within classes).
 #                         Uses one verified selector per method, serial execution
 #                         and the existing narrowed crash retry. Every assigned
 #                         method must have a known result; missing results exit
@@ -82,8 +102,14 @@
 #                         results exit 83, and recorded failures exit 65 even if
 #                         xcodebuild exits 0. Runtime skips stay visible/allowed.
 #                         Unset/empty preserves the full local gate. Assignment
-#                         balances method counts, not measured duration; both
-#                         runners must build the same revision and run one shard.
+#                         balances method counts, not measured duration; all
+#                         runners must use the same built catalog and count.
+#   UI_TEST_SHARD_COUNT   Positive decimal integer, default 2 when unset. A count
+#                         alone does not enable sharding or change ONLY_TESTING.
+#                         Empty/malformed counts and out-of-range indexes fail
+#                         before Xcode; fewer methods than groups exits 83.
+#                         CI must pass this same count to the aggregate checker
+#                         as its third argument and run every index from 1..N.
 #   GITHUB_STEP_SUMMARY   When set (GitHub Actions does), the per-selector table
 #                         of a filtered run is also appended there as Markdown,
 #                         as is every test-process crash or restart (the crash
@@ -193,6 +219,7 @@ cd "$(dirname "$0")/.."
 
 PROJECT_ARGS=(-project Intent.xcodeproj -scheme Intent)
 SIGNING_ARGS=(CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO)
+TEST_ARTIFACT_RESTORED=
 
 die() {
   echo "error: $*" >&2
@@ -207,6 +234,7 @@ Usage: scripts/xcodebuild.sh <subcommand>
   build-ios               Build for the generic iOS Simulator destination
   build-visionos          Build for the generic visionOS Simulator destination
   build-for-testing       Build the iOS test bundle (CI split step)
+  build-test-artifact     Fresh arm64 build and portable same-run test archive
   test-without-building   Run iOS tests against a prior build-for-testing
   test-without-building-unit
                           test-without-building minus IntentUITests
@@ -216,7 +244,7 @@ Usage: scripts/xcodebuild.sh <subcommand>
 
 Optional env knobs: BUILD_CONFIGURATION (Debug or Release; unset keeps defaults),
 SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING, UI_TEST_SHARD,
-TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see
+UI_TEST_SHARD_COUNT, TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see
 script header).
 Release tests enable @testable access, not DEBUG. Use focused release-compatible
 suites; DEBUG-only plaintext fixtures fail in Release. See the script header
@@ -224,8 +252,9 @@ for production build proof and executable ReleaseConfigurationTests commands.
 ONLY_TESTING selectors (Target[/Suite[/test]], not file names) are gated: each
 is resolved against the enumerated tests before the run and checked against
 the result bundle after it, with a per-selector table printed at the end.
-UI_TEST_SHARD=1 or 2 runs half the enabled UI methods with test-without-building
-only; it cannot be combined with ONLY_TESTING. Both shards must run to cover UI.
+UI_TEST_SHARD=1..N runs one of N groups of enabled UI methods with test-without-building
+only; UI_TEST_SHARD_COUNT sets N (default 2). It cannot be combined with ONLY_TESTING.
+Every shard must run with the same catalog and count to cover UI.
 A test-process crash re-runs the interrupted suites once, alone; a green
 re-run keeps the run green (TEST_CRASH_RETRY=0 disables this).
 Exit codes: xcodebuild's own, plus 80 (test process crashed/terminated, and
@@ -306,7 +335,7 @@ common_args() {
       esac
     fi
   fi
-  if [ -n "${SPM_CLONE_DIR:-}" ]; then
+  if [ -n "${SPM_CLONE_DIR:-}" ] && [ -z "${TEST_ARTIFACT_RESTORED:-}" ]; then
     printf '%s\n' -clonedSourcePackagesDirPath "$SPM_CLONE_DIR"
   fi
 }
@@ -766,6 +795,34 @@ cmd_build_for_testing() {
     -destination "platform=iOS Simulator,id=$udid" "${SIGNING_ARGS[@]}"
 }
 
+cmd_build_test_artifact() {
+  local udid derived
+  [ -n "${TEST_ARTIFACT_PATH:-}" ] || die "build-test-artifact requires TEST_ARTIFACT_PATH"
+  [ ! -e "$TEST_ARTIFACT_PATH" ] && [ ! -e "$TEST_ARTIFACT_PATH.json" ] || die "artifact output already exists"
+  udid=$(pick_simulator)
+  # Check provenance/toolchain before spending time building. The helper never
+  # receives the process environment as artifact content or as command arguments.
+  python3 -c 'import runpy,sys; runpy.run_path("scripts/test-build-artifact.py")["context"](sys.argv[1])' "$udid"
+  ensure_tailcatkit
+  derived=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-producer.XXXXXX")
+  echo "Fresh test-build directory: $derived" >&2
+  run_xcodebuild build-for-testing "${PROJECT_ARGS[@]}" \
+    -derivedDataPath "$derived" -destination "platform=iOS Simulator,id=$udid" \
+    ARCHS=arm64 ONLY_ACTIVE_ARCH=YES "${SIGNING_ARGS[@]}"
+  python3 scripts/test-build-artifact.py pack "$derived/Build/Products" "$TEST_ARTIFACT_PATH" "$udid"
+}
+
+prepare_test_artifact() {
+  [ -n "${TEST_ARTIFACT_PATH:-}" ] || return 0
+  local restored runfile
+  restored=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-consumer.XXXXXX")
+  runfile=$(python3 scripts/test-build-artifact.py restore "$TEST_ARTIFACT_PATH" "$restored" "$1") \
+    || die "test artifact validation failed; no tests were started"
+  TEST_ARTIFACT_RESTORED=$restored
+  PROJECT_ARGS=(-xctestrun "$runfile" -disableAutomaticPackageResolution -skipPackageUpdates)
+  echo "Validated test artifact restored to: $restored" >&2
+}
+
 # SwiftUI hosting views only publish their accessibility tree when the
 # simulator has accessibility enabled (the same switch Accessibility Inspector
 # and XCUITest flip, persisted in the device's com.apple.Accessibility
@@ -930,10 +987,11 @@ if shard:
     methods = ui_methods(enabled)
     if methods & ui_methods(disabled):
         unverified("UI shard enumeration marks a method both enabled and disabled")
-    if len(methods) < 2:
-        unverified("UI sharding requires at least two enabled IntentUITests methods")
-    selectors = sorted(methods)[int(shard) - 1::2]
-    sys.stderr.write("UI test shard %s/2: %d of %d enabled UI methods (sorted round-robin)\n" % (shard, len(selectors), len(methods)))
+    count = int(os.environ.get("UI_TEST_SHARD_COUNT", "2"))
+    if len(methods) < count:
+        unverified("UI sharding requires at least %d enabled IntentUITests methods for %d nonempty groups" % (count, count))
+    selectors = sorted(methods)[int(shard) - 1::count]
+    sys.stderr.write("UI test shard %s/%d: %d of %d enabled UI methods (sorted round-robin)\n" % (shard, count, len(selectors), len(methods)))
 known = enabled + disabled
 candidates = sorted(set(i.split("/")[0] for i in known)) + sorted(set("/".join(i.split("/")[:2]) for i in known if "/" in i))
 def suggest(selector):
@@ -973,6 +1031,19 @@ if unmatched:
     sys.stderr.write("error: %d ONLY_TESTING selector(s) matched nothing; the test run was not started.\n" % unmatched)
     sys.stderr.write("A selector is Target/Suite or Target/Suite/test as enumerated by xcodebuild, not a file name (IntentTests/FooTests.swift never matches).\n")
     sys.exit(1)
+report = os.environ.get("TEST_SELECTION_REPORT", "")
+if report:
+    try:
+        with open(report, "x") as f:
+            json.dump({"schema": 1, "run": os.environ["TEST_ARTIFACT_RUN"],
+                       "revision": os.environ["TEST_ARTIFACT_REVISION"],
+                       "artifact_sha256": os.environ["TEST_ARTIFACT_SHA256"],
+                       "enabled": sorted(enabled), "disabled": sorted(disabled),
+                       "selectors": selectors, "shard": int(shard) if shard else None,
+                       "shard_count": int(os.environ.get("UI_TEST_SHARD_COUNT", "2")) if shard else None}, f, sort_keys=True)
+            f.write("\n")
+    except (OSError, KeyError, ValueError):
+        unverified("could not write new TEST_SELECTION_REPORT")
 '
 
 # Enumerates the tests of the built revision and resolves every ONLY_TESTING
@@ -994,7 +1065,7 @@ resolve_only_testing() {
   catalog=$dir/tests.json
   log=$dir/enumerate.log
   if [ -n "${UI_TEST_SHARD:-}" ]; then
-    echo "resolving UI test shard $UI_TEST_SHARD/2 against the enumerated test catalog" >&2
+    echo "resolving UI test shard $UI_TEST_SHARD/${UI_TEST_SHARD_COUNT-2} against the enumerated test catalog" >&2
   else
     echo "resolving ${#ONLY_TESTING_IDS[@]} ONLY_TESTING selector(s) against the enumerated test catalog" >&2
   fi
@@ -1029,7 +1100,7 @@ Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified), not $status." >&
       ONLY_TESTING_IDS+=("$id")
       ONLY_TESTING_ARGS+=("-only-testing:$id")
     done <<< "$ONLY_TESTING_RESOLVED"
-    append_step_summary "### UI test shard $UI_TEST_SHARD/2" "" \
+    append_step_summary "### UI test shard $UI_TEST_SHARD/${UI_TEST_SHARD_COUNT-2}" "" \
       "Assigned ${#ONLY_TESTING_IDS[@]} enabled UI methods using sorted round-robin; every method is verified below." ""
   fi
 }
@@ -1280,6 +1351,7 @@ cmd_test_without_building() {
   local udid extra=() log bundle= bundle_dir= status=0 outcome=0
   parse_only_testing
   udid=$(pick_simulator)
+  prepare_test_artifact "$udid"
   acquire_simulator_lock "$udid"
   enable_simulator_accessibility "$udid"
   resolve_only_testing "$udid" "$@"
@@ -1330,11 +1402,41 @@ case "${BUILD_CONFIGURATION:-}" in
   *) die "BUILD_CONFIGURATION must be Debug or Release (or unset to preserve scheme defaults)" ;;
 esac
 
-if [ -n "${UI_TEST_SHARD:-}" ]; then
-  case "$UI_TEST_SHARD" in
-    1|2) ;;
-    *) die "UI_TEST_SHARD must be 1 or 2 (got '$UI_TEST_SHARD')" ;;
+if [ "${BUILD_CONFIGURATION:-}" = Release ] &&
+   { [ "$subcommand" = build-test-artifact ] || [ -n "${TEST_ARTIFACT_PATH:-}" ]; }; then
+  die "test artifacts support only Debug; use non-artifact build/test commands for Release verification"
+fi
+
+if [ -n "${TEST_ARTIFACT_PATH:-}" ]; then
+  case "$subcommand" in
+    build-test-artifact|test-without-building|test-without-building-unit) ;;
+    *) die "TEST_ARTIFACT_PATH is supported only for build-test-artifact or test-without-building[-unit]" ;;
   esac
+elif [ -n "${TEST_ARTIFACT_RUN:-}${TEST_ARTIFACT_REVISION:-}${TEST_ARTIFACT_SHA256:-}" ]; then
+  die "artifact identity requires TEST_ARTIFACT_PATH"
+fi
+if [ -n "${TEST_SELECTION_REPORT:-}" ]; then
+  [ -n "${TEST_ARTIFACT_PATH:-}" ] || die "TEST_SELECTION_REPORT requires an artifact consumer"
+  case "$subcommand" in test-without-building|test-without-building-unit) ;; *) die "report requires a test consumer" ;; esac
+  [ -n "${ONLY_TESTING:-}${UI_TEST_SHARD:-}" ] || die "report requires ONLY_TESTING or UI_TEST_SHARD"
+fi
+
+if [ -n "${UI_TEST_SHARD:-}" ] || [ "${UI_TEST_SHARD_COUNT+x}" = x ]; then
+  command -v python3 >/dev/null 2>&1 || die "python3 is required to validate UI sharding"
+  python3 - "${UI_TEST_SHARD_COUNT-2}" "${UI_TEST_SHARD:-}" <<'PY' || exit 1
+import re, sys
+count, shard = sys.argv[1:]
+try:
+    if not re.fullmatch(r"[1-9][0-9]*", count):
+        raise ValueError("UI_TEST_SHARD_COUNT must be a positive decimal integer (default 2 when unset)")
+    count = int(count)
+    if shard and (not re.fullmatch(r"[1-9][0-9]*", shard) or not 1 <= int(shard) <= count):
+        raise ValueError("UI_TEST_SHARD must be a decimal index from 1 to UI_TEST_SHARD_COUNT")
+except ValueError as error:
+    sys.exit("error: %s" % error)
+PY
+fi
+if [ -n "${UI_TEST_SHARD:-}" ]; then
   [ "$subcommand" = test-without-building ] || die "UI_TEST_SHARD is supported only by test-without-building"
   [ -z "${ONLY_TESTING:-}" ] || die "UI_TEST_SHARD cannot be combined with ONLY_TESTING; unset one selection"
 fi
@@ -1344,6 +1446,7 @@ case "$subcommand" in
   build-ios)             cmd_build_ios ;;
   build-visionos)        cmd_build_visionos ;;
   build-for-testing)     cmd_build_for_testing ;;
+  build-test-artifact)   cmd_build_test_artifact ;;
   test-without-building) cmd_test_without_building ;;
   test-without-building-unit) cmd_test_without_building -skip-testing:IntentUITests ;;
   test-ios)              parse_only_testing && cmd_build_for_testing && cmd_test_without_building ;;
