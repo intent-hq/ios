@@ -88,14 +88,13 @@ struct ProposalCardView: View {
             if selection.contains(item.id) { selection.remove(item.id) } else { selection.insert(item.id) }
         } label: {
             HStack(spacing: Layout.spacing) {
-                Image(systemName: selection.contains(item.id) ? "checkmark.circle.fill" : "circle")
-                    .accessibilityHidden(true)
                 VStack(alignment: .leading) {
                     Text(item.title)
                     if let summary = item.summary { Text(summary).font(.caption).foregroundStyle(.secondary) }
                     if isCompleted { Text("Applied").font(.caption) }
                 }
                 Spacer(minLength: 0)
+                ProposalSelectionSwitch(isOn: selection.contains(item.id))
             }
             .frame(minHeight: Layout.minimumRowHeight)
             .contentShape(Rectangle())
@@ -103,6 +102,7 @@ struct ProposalCardView: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selection.contains(item.id) ? .isSelected : [])
+        .accessibilityValue(selection.contains(item.id) ? "On" : "Off")
         .accessibilityIdentifier("proposal.item.\(item.id)")
     }
 

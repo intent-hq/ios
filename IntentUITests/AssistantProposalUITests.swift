@@ -20,8 +20,12 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         XCTAssertTrue(apply.waitForExistence(timeout: Self.timeout))
         let item = app.buttons["proposal.item.demo-ws-flaky-tests"]
         XCTAssertTrue(item.isSelected)
+        XCTAssertEqual(item.value as? String, "On")
+        captureSwitches(in: app, name: "Assistant switches on")
         item.tap()
         XCTAssertFalse(item.isSelected)
+        XCTAssertEqual(item.value as? String, "Off")
+        captureSwitches(in: app, name: "Assistant switches off")
         XCTAssertFalse(apply.isEnabled)
         item.tap()
         XCTAssertTrue(item.isSelected)
@@ -57,6 +61,14 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         try Data().write(to: trigger)
         XCTAssertTrue(app.buttons["assistant.workspace.demo-ws-flaky-tests"].waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(raw.exists)
+    }
+
+    @MainActor
+    private func captureSwitches(in app: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor
