@@ -22,24 +22,33 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         if create.exists { XCTAssertLessThan(create.frame.midY, settings.frame.midY) }
         export.tap()
         assertPreview(app)
+        let retainedRecords = app.staticTexts.matching(NSPredicate(format: "label ENDSWITH %@", " retained records")).firstMatch
+        let originalCount = retainedRecords.label
+        XCTAssertNotEqual(originalCount, "0 retained records")
+        let sessionStarted = app.staticTexts["app.session_started"].firstMatch
+        XCTAssertTrue(sessionStarted.exists)
 
         // Opening the entry presents our readable screen, not UIKit sharing.
         app.buttons["diagnosticClear"].tap()
         XCTAssertTrue(app.buttons["Clear logs"].waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.staticTexts["Clear local diagnostic logs?"].exists)
-        XCTAssertTrue(app.buttons["Cancel"].exists)
         let oldMessage = NSPredicate(format: "label CONTAINS %@", "This removes local diagnostic history")
         XCTAssertFalse(app.staticTexts.matching(oldMessage).firstMatch.exists)
-        app.buttons["Cancel"].tap()
+        cancelClear(in: app)
         assertPreview(app)
+        XCTAssertEqual(retainedRecords.label, originalCount, "Cancelling must preserve the reviewed history")
+        XCTAssertFalse(app.staticTexts["diagnosticNotice"].exists)
         app.navigationBars["Export logs"].buttons["Done"].tap()
         openMenu(app)
         app.buttons["Export logs"].tap()
         assertPreview(app)
+        XCTAssertTrue(sessionStarted.exists, "Reopening must still read the retained session history")
         app.buttons["diagnosticClear"].tap()
+        XCTAssertTrue(app.buttons["Clear logs"].waitForExistence(timeout: Self.timeout))
         app.buttons["Clear logs"].tap()
         XCTAssertTrue(app.staticTexts["diagnosticNotice"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(app.staticTexts["diagnosticNotice"].label, "Local log history cleared. New events can still be recorded.")
+        XCTAssertTrue(sessionStarted.waitForNonExistence(timeout: Self.timeout), "Confirmed Clear must remove prior history")
     }
 
     @MainActor
@@ -72,6 +81,21 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         let options = app.buttons["Workspace options"]
         XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
         options.tap()
+    }
+
+    @MainActor
+    private func cancelClear(in app: XCUIApplication) {
+        if app.buttons["Cancel"].exists {
+            app.buttons["Cancel"].tap()
+        } else {
+            // Native confirmation popovers expose their outside-dismiss region,
+            // including on iPhone under iOS 26, instead of a Cancel button.
+            let dismissRegion = app.otherElements["PopoverDismissRegion"]
+            XCTAssertTrue(dismissRegion.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(dismissRegion.isHittable)
+            dismissRegion.tap()
+        }
+        XCTAssertTrue(app.buttons["Clear logs"].waitForNonExistence(timeout: Self.timeout))
     }
 
     @MainActor
