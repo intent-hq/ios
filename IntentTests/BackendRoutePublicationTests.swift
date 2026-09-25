@@ -109,14 +109,15 @@ struct BackendRoutePublicationTests {
         #expect(live.updateCachedCredentialsLog.last?.tcAddress == "tcNew")
     }
 
-    @Test func newerSharedRouteWinsOverPendingAutomaticRotation() throws {
+    @Test(arguments: [1001.0, 3000.0])
+    func equalOrNewerSharedRouteWinsOverPendingAutomaticRotation(clock: Double) throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
         #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "old-token"))
         let original = try #require(store.manager.activeConnection())
         store.cloud.writeFailure = errSecNotAvailable
         #expect(store.manager.updateConnectionTcAddress(id: original.id, tcAddress: "tcLocalRotation"))
-        try store.cloud.put(BackendSyncFixtures.remote(clock: 3000))
+        try store.cloud.put(BackendSyncFixtures.remote(clock: clock))
         store.cloud.writeFailure = nil
         let live = FakeConnectionManager()
         let coordinator = coordinator(store, live: live, id: original.id)
@@ -126,6 +127,41 @@ struct BackendRoutePublicationTests {
         #expect(store.manager.activeConnection()?.server.tcAddress == "tcDesktop")
         #expect(store.manager.activeConnection()?.pendingRoutePublication == nil)
         #expect(live.updateCachedCredentialsLog.last?.tcAddress == "tcDesktop")
+    }
+
+    @Test func newerLocalObservationReplacesOlderSharedRotationWithoutLosingMetadata() throws {
+        let store = try BackendSyncTestStore()
+        defer { store.cleanUp() }
+        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "old-token"))
+        let original = try #require(store.manager.activeConnection())
+        var remote = BackendSyncFixtures.remote(clock: 2000)
+        remote["tcAddress"] = "tcMiddle"
+        try store.cloud.put(remote)
+        let later = PersistenceManager(
+            defaults: store.defaults,
+            keychainStorage: store.local,
+            backendPublisher: BackendSyncFixtures.publisher(store.cloud, clock: 3000)
+        )
+        #expect(later.updateConnectionTcAddress(id: original.id, tcAddress: "tcNewest"))
+        let payload = try store.cloud.object()
+        #expect(payload["updatedAt"] as? Double == 3000)
+        #expect(payload["tcAddress"] as? String == "tcNewest")
+        #expect(payload["token"] as? String == "remote-token")
+        #expect(payload["label"] as? String == "Desktop name")
+        #expect(payload["accent"] as? String == "blue")
+        let live = FakeConnectionManager()
+        #expect(coordinator(store, live: live, id: original.id).refreshSyncedBackends()?.updatedIds == [original.id])
+        #expect(later.activeConnection()?.server.tcAddress == "tcNewest")
+        #expect(later.activeConnection()?.token == "remote-token")
+        #expect(live.updateCachedCredentialsLog.last?.tcAddress == "tcNewest")
+        let registry = SyncedBackendRegistry(keychain: store.cloud, accessGroup: BackendSyncFixtures.accessGroup)
+        guard case .available(let records) = registry.listBackends() else {
+            Issue.record("Expected the second client to read the latest route")
+            return
+        }
+        let imported = try #require(SyncedBackendConnectionMerge.merge(records: records, into: []).connections.first)
+        #expect(imported.server.tcAddress == "tcNewest")
+        #expect(imported.token == "remote-token")
     }
 
     @Test func pendingRouteSurvivesImportWhileCloudWriteFails() throws {

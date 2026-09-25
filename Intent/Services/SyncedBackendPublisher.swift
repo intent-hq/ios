@@ -97,8 +97,11 @@ struct SyncedBackendPublisher {
         guard !winner.record.deleted else { return .superseded(winner.record) }
         guard !rows.contains(where: { blocks($0, connection: connection, accounts: [target.account, winner.account]) })
         else { return .retry }
+        // A later local observation can replace an older shared rotation;
+        // equal/newer competing rotations still win over a stale retry.
         if let desired = pending.tcAddress, let remote = winner.record.tcAddress,
-           remote != desired, remote != pending.previousTcAddress {
+           remote != desired, remote != pending.previousTcAddress,
+           winner.record.updatedAt >= pending.updatedAt {
             return .superseded(winner.record)
         }
         let hosts = PersistenceManager.mergeHostLists(existing: winner.record.hosts, incoming: pending.hosts)
