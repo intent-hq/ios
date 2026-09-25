@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Executable archive boundary and wrapper handoff tests; no Xcode required."""
 import copy
+import fcntl
 import hashlib
 import io
 import json
@@ -8,10 +9,12 @@ import os
 from pathlib import Path
 import plistlib
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +22,7 @@ HELPER = ROOT / 'scripts/test-build-artifact.py'
 WRAPPER = ROOT / 'scripts/xcodebuild.sh'
 APPS = ('Intent.app', 'IntentUITests-Runner.app')
 STUB = '''#!/usr/bin/env python3
-import json, os, pathlib, shutil, sys
+import fcntl, json, os, pathlib, shutil, sys, time
 name = pathlib.Path(sys.argv[0]).name
 a = sys.argv[1:]
 if name == 'uname': print(os.environ.get('FAKE_ARCH', 'arm64'))
@@ -39,9 +42,23 @@ elif name == 'xcodebuild':
     else:
         with open(os.environ['CALLS'], 'a') as f: f.write(json.dumps(a) + '\\n')
         if a[0] == 'build-for-testing':
+            if os.environ.get('FAKE_BUILD_FAIL'): sys.exit(65)
             dest = pathlib.Path(a[a.index('-derivedDataPath') + 1]) / 'Build/Products'
             shutil.copytree(os.environ['PRODUCT_FIXTURE'], dest)
         elif '-enumerate-tests' in a:
+            if os.environ.get('PRODUCER_DISCOVERY_PROBE') == '1':
+                with open(pathlib.Path(os.environ['SIM_LOCK_DIR']) / 'xcodebuild-sim-device.lock') as lock:
+                    try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError: pass
+                    else: sys.exit(99)
+                assert pathlib.Path(os.environ['TEST_ARTIFACT_PATH'] + '.json').is_file()
+                if os.environ.get('FAKE_ENUMERATE_HOLD'):
+                    pathlib.Path(os.environ['FAKE_ENUMERATE_HOLD']).write_text(str(os.getpid()))
+                    time.sleep(10)
+            if os.environ.get('FAKE_ENUMERATE_FAIL', '0') != '0':
+                print('private probe output must not appear')
+                print('private probe error must not appear', file=sys.stderr)
+                sys.exit(int(os.environ['FAKE_ENUMERATE_FAIL']))
             tests = ['IntentTests/FooTests/testA()', 'IntentTests/FooTests/testB()']
             tests += ['IntentUITests/UITests/test%d()' % n for n in range(12)]
             pathlib.Path(a[a.index('-test-enumeration-output-path') + 1]).write_text(json.dumps({'errors': [], 'values': [{'enabledTests': [{'identifier': t} for t in tests], 'disabledTests': []}]}))
@@ -75,7 +92,8 @@ class ArtifactTests(unittest.TestCase):
                         TEST_ARTIFACT_PATH=str(self.archive), CALLS=str(self.work / 'calls'),
                         PRODUCT_FIXTURE=str(self.products))
         for key in ('ONLY_TESTING', 'UI_TEST_SHARD', 'UI_TEST_SHARD_COUNT', 'RESULT_BUNDLE', 'BUILD_CONFIGURATION',
-                    'GITHUB_STEP_SUMMARY', 'TEST_SELECTION_REPORT', 'TEST_ARTIFACT_SHA256'):
+                    'GITHUB_STEP_SUMMARY', 'TEST_SELECTION_REPORT', 'TEST_ARTIFACT_SHA256',
+                    'CI_PHASE_TIMING', 'PRODUCER_DISCOVERY_PROBE'):
             self.env.pop(key, None)
         targets = []
         for app, target in zip(APPS, ('IntentTests', 'IntentUITests')):
@@ -205,7 +223,9 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(self.calls(), [])
 
     def test_wrapper_fresh_producer_and_relocated_unit_enumeration_run_retry(self):
-        self.call(['bash', str(WRAPPER), 'build-test-artifact'], SPM_CLONE_DIR='shared-packages')
+        result = self.call(['bash', str(WRAPPER), 'build-test-artifact'], SPM_CLONE_DIR='shared-packages')
+        self.assertNotIn('ci-phase', result.stderr)
+        self.assertEqual(len(self.calls()), 1)  # Default-off: no producer enumeration.
         build = self.calls()[0]
         self.assertEqual(build[0], 'build-for-testing')
         self.assertIn('ARCHS=arm64', build)
@@ -232,6 +252,121 @@ class ArtifactTests(unittest.TestCase):
         proof = json.loads(report.read_text())
         self.assertEqual(proof['selectors'], ['IntentTests/FooTests'])
         self.assertEqual(proof['artifact_sha256'], self.env['TEST_ARTIFACT_SHA256'])
+
+    def markers(self, result):
+        self.assertNotIn('ci-phase', result.stdout)
+        rows = [line for line in result.stderr.splitlines() if line.startswith('ci-phase')]
+        for line in rows:
+            self.assertRegex(line, r'^ci-phase phase=(artifact_context|artifact_products_validate|artifact_pack_total|'
+                             r'artifact_restore_total|artifact_extract|producer_build|producer_discovery_probe_total|'
+                             r'simulator_readiness|consumer_discovery|test_process|result_verification) '
+                             r'outcome=(success|failure|cancelled) elapsed_seconds=[0-9]+\.[0-9]{6}$')
+        return {line.split()[1].split('=')[1]: line.split()[2].split('=')[1] for line in rows}
+
+    def test_artifact_timings_preserve_receipt_runfile_stdout_and_validation_failure(self):
+        self.env['CI_PHASE_TIMING'] = '1'
+        result = self.call([sys.executable, str(HELPER), 'pack', str(self.products), str(self.archive), 'device'])
+        self.assertEqual(json.loads(result.stdout), json.loads(Path(str(self.archive) + '.json').read_text()))
+        self.assertEqual(self.markers(result), dict.fromkeys(
+            ('artifact_context', 'artifact_products_validate', 'artifact_pack_total'), 'success'))
+        self.env['TEST_ARTIFACT_SHA256'] = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        dest, result = self.restore()
+        self.assertEqual(result.stdout, str(dest / 'Intent.xctestrun') + '\n')
+        self.assertEqual(self.markers(result), dict.fromkeys(
+            ('artifact_context', 'artifact_extract', 'artifact_products_validate', 'artifact_restore_total'), 'success'))
+        _, result = self.restore(1, TEST_ARTIFACT_SHA256='0' * 64)
+        self.assertEqual(self.markers(result), {'artifact_restore_total': 'failure'})
+
+    def test_probe_is_separate_non_gating_and_never_replaces_consumer_discovery(self):
+        for failure in ('0', '70', '143'):
+            with self.subTest(failure=failure):
+                archive = self.work / ('probe-' + failure + '.tar.gz')
+                result = self.call(['bash', str(WRAPPER), 'build-test-artifact'], 143 if failure == '143' else 0,
+                                   TEST_ARTIFACT_PATH=str(archive), PRODUCER_DISCOVERY_PROBE='1',
+                                   FAKE_ENUMERATE_FAIL=failure, SPM_CLONE_DIR='must-not-reach-probe')
+                self.assertEqual(self.markers(result), {'producer_discovery_probe_total':
+                                 'success' if failure == '0' else 'cancelled' if failure == '143' else 'failure'})
+                self.assertNotIn('private probe', result.stdout + result.stderr)
+                build, probe = self.calls()[-2:]
+                self.assertEqual(build[0], 'build-for-testing')
+                self.assertEqual(probe[0], 'test-without-building')
+                self.assertIn('-enumerate-tests', probe)
+                self.assertIn('-disableAutomaticPackageResolution', probe)
+                self.assertIn('-skipPackageUpdates', probe)
+                self.assertNotIn('-project', probe); self.assertNotIn('-scheme', probe)
+                self.assertNotIn('-clonedSourcePackagesDirPath', probe)
+                fresh = Path(build[build.index('-derivedDataPath') + 1]) / 'Build/Products/Intent_generated.xctestrun'
+                self.assertEqual(Path(probe[probe.index('-xctestrun') + 1]), fresh)
+                self.assertFalse(list(self.work.glob('xcodebuild-probe.*')))
+                before = archive.read_bytes(), Path(str(archive) + '.json').read_bytes()
+                self.call(['bash', str(WRAPPER), 'test-without-building-unit'], TEST_ARTIFACT_PATH=str(archive),
+                          TEST_ARTIFACT_SHA256=hashlib.sha256(before[0]).hexdigest(), ONLY_TESTING='IntentTests/FooTests')
+                self.assertIn('-enumerate-tests', self.calls()[-2])
+                self.assertNotIn('-enumerate-tests', self.calls()[-1])
+                self.assertEqual(before, (archive.read_bytes(), Path(str(archive) + '.json').read_bytes()))
+
+    def test_phase_timing_alone_never_enables_producer_discovery(self):
+        result = self.call(['bash', str(WRAPPER), 'build-test-artifact'], CI_PHASE_TIMING='1')
+        self.assertEqual(self.markers(result), dict.fromkeys(
+            ('artifact_context', 'producer_build', 'artifact_products_validate', 'artifact_pack_total'), 'success'))
+        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(self.calls()[0][0], 'build-for-testing')
+        self.assertTrue(self.archive.is_file())
+
+    def test_probe_never_suppresses_build_or_pack_failures(self):
+        for env, code, failed_phase in [({'FAKE_BUILD_FAIL': '1'}, 65, 'producer_build'),
+                                        ({'FAKE_BINARY_ARCH': 'x86_64'}, 1, 'artifact_pack_total')]:
+            with self.subTest(env=env):
+                result = self.call(['bash', str(WRAPPER), 'build-test-artifact'], code,
+                                   CI_PHASE_TIMING='1', PRODUCER_DISCOVERY_PROBE='1', **env)
+                self.assertEqual(self.markers(result)[failed_phase], 'failure')
+                self.assertNotIn('producer_discovery_probe_total', self.markers(result))
+                self.assertFalse(self.archive.exists())
+                self.assertTrue(all(args[0] == 'build-for-testing' for args in self.calls()))
+
+    def test_probe_lock_timeout_is_non_gating_and_does_not_enumerate(self):
+        lock = Path(self.env['SIM_LOCK_DIR']) / 'xcodebuild-sim-device.lock'
+        lock.parent.mkdir()
+        with lock.open('w') as held:
+            fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = self.call(['bash', str(WRAPPER), 'build-test-artifact'], PRODUCER_DISCOVERY_PROBE='1', SIM_LOCK_TIMEOUT='0')
+            self.assertEqual(self.markers(result), {'producer_discovery_probe_total': 'failure'})
+            self.assertEqual(len(self.calls()), 1)
+            self.assertTrue(self.archive.is_file())
+
+    def test_probe_parent_cancellation_and_orphan_cleanup(self):
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            with self.subTest(signal=sig):
+                ready = self.work / ('ready-' + str(sig))
+                archive = self.work / ('cancel-' + str(sig) + '.tar.gz')
+                env = dict(self.env, PRODUCER_DISCOVERY_PROBE='1', SIM_LOCK_KILL_GRACE='0',
+                           TEST_ARTIFACT_PATH=str(archive), FAKE_ENUMERATE_HOLD=str(ready))
+                with subprocess.Popen(['bash', str(WRAPPER), 'build-test-artifact'], cwd=ROOT, env=env,
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as process:
+                    deadline = time.monotonic() + 10
+                    while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                    self.assertTrue(ready.exists(), 'probe did not reach enumeration')
+                    process.send_signal(sig)
+                    # Bash defers TERM while its foreground pipeline is running, as
+                    # on ordinary test runs. Let the stub finish to deliver the trap.
+                    if sig == signal.SIGTERM:
+                        os.kill(int(ready.read_text()), signal.SIGTERM)
+                    stdout, stderr = process.communicate(timeout=10)
+                self.assertEqual(process.returncode, 143 if sig == signal.SIGTERM else -signal.SIGKILL)
+                if sig == signal.SIGTERM:
+                    self.assertIn('outcome=cancelled', stderr)
+                self.assertTrue(archive.is_file())
+                lock = Path(self.env['SIM_LOCK_DIR']) / 'xcodebuild-sim-device.lock'
+                with lock.open() as stream:
+                    deadline = time.monotonic() + 5
+                    while True:
+                        try:
+                            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            break
+                        except BlockingIOError:
+                            self.assertLess(time.monotonic(), deadline, 'orphan retained simulator lock')
+                            time.sleep(0.02)
 
     def test_wrapper_debug_artifacts_cannot_be_used_as_release_evidence(self):
         self.pack()

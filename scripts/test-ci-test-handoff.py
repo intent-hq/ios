@@ -79,6 +79,7 @@ class HandoffTests(unittest.TestCase):
                         GITHUB_ENV=str(self.root / 'env'), GITHUB_OUTPUT=str(self.root / 'outputs'),
                         GITHUB_RUN_ID='900', GITHUB_RUN_ATTEMPT='1', GITHUB_REPOSITORY='intent-hq/ios',
                         GITHUB_SHA='c' * 40, UI_TEST_SHARD_COUNT='6')
+        self.env.pop('CI_PHASE_TIMING', None)
 
     def stub(self, path):
         path.write_text(STUB)
@@ -97,6 +98,7 @@ class HandoffTests(unittest.TestCase):
         Path(self.env['PLATFORM_FIXTURE']).write_text(json.dumps(self.config))
         completed = subprocess.run([sys.executable, str(HELPER), command], cwd=self.root, env=self.env,
                                    capture_output=True, text=True, check=False)
+        self.completed = completed
         self.assertEqual(completed.returncode, expected, completed.stderr)
         if message:
             self.assertIn(message, completed.stderr)
@@ -136,6 +138,32 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual(selected['DEVELOPER_DIR'], str(self.root / 'Xcode_26.4.app/Contents/Developer'))
         self.config['xcodes'][str(self.root / 'Xcode_26.4.app')] = 'Xcode 26.4\nBuild version 17D3'
         self.run_helper('consume', 1, 'Xcode version/build')
+
+    def test_phase_markers_are_opt_in_content_free_and_preserve_outputs_and_failures(self):
+        baseline = self.prepare_consumer()
+        self.assertNotIn('ci-phase', self.completed.stderr)
+        env_before = Path(self.env['GITHUB_ENV']).read_text()
+        self.env['CI_PHASE_TIMING'] = '1'
+        self.assertEqual(self.run_helper('configure'), baseline)
+        self.assertEqual(Path(self.env['GITHUB_ENV']).read_text(), env_before * 2)
+        read_fd, write_fd = os.pipe()
+        os.close(read_fd)
+        try:
+            completed = subprocess.run([sys.executable, str(HELPER), 'configure'], cwd=self.root,
+                                       env=self.env, stderr=write_fd, capture_output=False, check=False)
+            self.assertEqual(completed.returncode, 0, 'broken diagnostic pipe must not gate platform selection')
+        finally:
+            os.close(write_fd)
+        for command, expected in (('configure', 0), ('consume', 0), ('consume', 1)):
+            if expected:
+                self.config['architecture'] = 'x86_64'
+            self.run_helper(command, expected)
+            self.assertEqual(self.completed.stdout, '')
+            markers = [line for line in self.completed.stderr.splitlines() if line.startswith('ci-phase')]
+            self.assertEqual(len(markers), 2)
+            outcome = 'failure' if expected else 'success'
+            for line, name in zip(markers, ('toolchain_select', 'platform_select_total')):
+                self.assertRegex(line, rf'^ci-phase phase={name} outcome={outcome} elapsed_seconds=[0-9]+\.[0-9]{{6}}$')
 
     def test_discovery_ignores_unusable_bundles_but_requires_a_compatible_toolchain(self):
         self.add_xcode('Xcodes.app', 'manager, not Xcode', executable=False)

@@ -33,6 +33,26 @@
 # platformFilter = ios only).
 #
 # Environment knobs (all optional; local runs need none):
+#   CI_PHASE_TIMING       Exactly 1 enables content-free stderr phase/outcome/
+#                         monotonic elapsed_seconds markers. Best effort only;
+#                         missing markers are not success. *_total spans include
+#                         nested phases and must not be added to them. Shell spans
+#                         include timer process overhead. test_process includes
+#                         Xcode startup, test execution and finalization (each
+#                         crash retry is a separate span), not isolated test bodies.
+#                         simulator_readiness covers the existing best-effort boot
+#                         and accessibility setup, not a new readiness guarantee.
+#   PRODUCER_DISCOVERY_PROBE Exactly 1 separately opts build-test-artifact into a
+#                         post-pack enumeration-only measurement of fresh products.
+#                         Its marker is emitted even without CI_PHASE_TIMING=1.
+#                         producer_discovery_probe_total includes lock wait, boot/
+#                         accessibility setup, enumeration and temporary-file cleanup;
+#                         readiness is NOT separated within this probe. Success
+#                         means enumeration exited 0, not catalog validation.
+#                         Probe output is discarded, never packaged or trusted.
+#                         Ordinary probe failures are non-gating; cancellation and
+#                         all build/pack failures retain their original exit codes.
+#                         No rebuild, package resolution/update or test execution.
 #   BUILD_CONFIGURATION   Debug or Release; unset/empty preserves the scheme's
 #                         existing defaults. Applied to every build/test call,
 #                         including enumeration and crash retries. Release test
@@ -221,6 +241,24 @@ PROJECT_ARGS=(-project Intent.xcodeproj -scheme Intent)
 SIGNING_ARGS=(CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO)
 TEST_ARTIFACT_RESTORED=
 
+# One active shell span; nested Python spans have their own clocks. Do not wrap
+# commands in a timing conditional: that would disable Bash's errexit in functions.
+PHASE_NAME=
+PHASE_START=
+phase_begin() {
+  [ "${CI_PHASE_TIMING:-}" = 1 ] || [ "${2:-0}" = 1 ] || return 0
+  PHASE_NAME=$1
+  PHASE_START=$(python3 scripts/ci_phase.py start 2>/dev/null 9>&-) || PHASE_START=
+}
+
+phase_end() {
+  if [ -n "$PHASE_NAME" ]; then
+    python3 scripts/ci_phase.py finish "$PHASE_NAME" "$PHASE_START" "$1" >&2 2>/dev/null 9>&- || true
+  fi
+  PHASE_NAME=
+  PHASE_START=
+}
+
 die() {
   echo "error: $*" >&2
   exit 1
@@ -246,6 +284,8 @@ Optional env knobs: BUILD_CONFIGURATION (Debug or Release; unset keeps defaults)
 SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING, UI_TEST_SHARD,
 UI_TEST_SHARD_COUNT, TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see
 script header).
+CI_PHASE_TIMING=1 enables stderr timing markers; PRODUCER_DISCOVERY_PROBE=1
+separately enables non-gating post-pack enumeration (see header for boundaries).
 Release tests enable @testable access, not DEBUG. Use focused release-compatible
 suites; DEBUG-only plaintext fixtures fail in Release. See the script header
 for production build proof and executable ReleaseConfigurationTests commands.
@@ -561,7 +601,7 @@ release_simulator_lock() {
 # The EXIT trap releases the lock on any exit path; the signal traps turn an
 # interrupt into a normal exit so that the EXIT trap runs. (Neither is needed
 # for correctness: a shell killed outright drops fd 9 and the lock with it.)
-trap release_simulator_lock EXIT
+trap 'phase_end "$?"; release_simulator_lock' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -749,10 +789,12 @@ Exiting $EXIT_TEST_PROCESS_CRASHED (test-process crash), not 65." >&2
   echo "notice: re-running the interrupted suite(s) once, alone: $suites" >&2
   acquire_simulator_lock "$udid"
   retry_log=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-retry.XXXXXX")
+  phase_begin test_process
   run_xcodebuild_logged "$retry_log" test-without-building "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" \
     -parallel-testing-enabled NO ${extra+"${extra[@]}"} "${selectors[@]}" "$@" || status=$?
   echo done >&9
+  phase_end "$status"
   release_simulator_lock
   report_test_outcome "$status" "$retry_log" "the re-run" || outcome=$?
   case "$outcome" in
@@ -802,14 +844,56 @@ cmd_build_test_artifact() {
   udid=$(pick_simulator)
   # Check provenance/toolchain before spending time building. The helper never
   # receives the process environment as artifact content or as command arguments.
-  python3 -c 'import runpy,sys; runpy.run_path("scripts/test-build-artifact.py")["context"](sys.argv[1])' "$udid"
+  python3 -c 'import runpy,sys; sys.path.insert(0,"scripts"); runpy.run_path("scripts/test-build-artifact.py")["context"](sys.argv[1])' "$udid"
   ensure_tailcatkit
   derived=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-producer.XXXXXX")
   echo "Fresh test-build directory: $derived" >&2
+  phase_begin producer_build
   run_xcodebuild build-for-testing "${PROJECT_ARGS[@]}" \
     -derivedDataPath "$derived" -destination "platform=iOS Simulator,id=$udid" \
     ARCHS=arm64 ONLY_ACTIVE_ARCH=YES "${SIGNING_ARGS[@]}"
+  phase_end 0
   python3 scripts/test-build-artifact.py pack "$derived/Build/Products" "$TEST_ARTIFACT_PATH" "$udid"
+  if [ "${PRODUCER_DISCOVERY_PROBE:-}" = 1 ]; then
+    # Only this tail of a successful producer may downgrade ordinary failures.
+    # Stay in the owning shell: fd 9 and the existing signal traps still govern
+    # cancellation/orphan cleanup, including when this shell is killed outright.
+    exec 3>&2
+    trap 'finish_producer_probe "$?"' EXIT
+    phase_begin producer_discovery_probe_total 1
+    producer_discovery_probe "$derived" "$udid" >/dev/null 2>&1
+  fi
+}
+
+PROBE_DIR=
+finish_producer_probe() {
+  local status=$1
+  release_simulator_lock >/dev/null 2>&1
+  if [ -n "$PROBE_DIR" ]; then
+    rm -f -- "$PROBE_DIR/tests.json" 2>/dev/null || true
+    rmdir -- "$PROBE_DIR" 2>/dev/null || true
+  fi
+  phase_end "$status" 2>&3
+  # SIGINT/SIGTERM/HUP (and signal exits from the child) are never a green probe.
+  [ "$status" -lt 128 ] || exit "$status"
+  exit 0
+}
+
+producer_discovery_probe() {
+  local derived=$1 udid=$2 status=0 runfiles=("$1"/Build/Products/*.xctestrun)
+  [ "${#runfiles[@]}" -eq 1 ] && [ -f "${runfiles[0]}" ] || return 1
+  PROBE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-probe.XXXXXX")
+  # Suppress common_args' package-clone option, as on restored consumers.
+  TEST_ARTIFACT_RESTORED=$derived
+  acquire_simulator_lock "$udid"
+  enable_simulator_accessibility "$udid"
+  run_xcodebuild_logged /dev/null test-without-building \
+    -xctestrun "${runfiles[0]}" -disableAutomaticPackageResolution -skipPackageUpdates \
+    -destination "platform=iOS Simulator,id=$udid" -enumerate-tests \
+    -test-enumeration-style flat -test-enumeration-format json \
+    -test-enumeration-output-path "$PROBE_DIR/tests.json" || status=$?
+  echo done >&9
+  return "$status"
 }
 
 prepare_test_artifact() {
@@ -1069,11 +1153,13 @@ resolve_only_testing() {
   else
     echo "resolving ${#ONLY_TESTING_IDS[@]} ONLY_TESTING selector(s) against the enumerated test catalog" >&2
   fi
+  phase_begin consumer_discovery
   run_xcodebuild_logged "$log" test-without-building "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" \
     -enumerate-tests -test-enumeration-style flat -test-enumeration-format json \
     -test-enumeration-output-path "$catalog" "$@" || status=$?
   echo done >&9
+  phase_end "$status"
   if [ "$status" -ne 0 ]; then
     rm -rf -- "$dir"
     release_simulator_lock
@@ -1283,6 +1369,7 @@ summarize_only_testing() {
   local status=$1 bundle=$2 results retry_results= outcome=0
   shift 2
   [ "${#ONLY_TESTING_IDS[@]}" -gt 0 ] || return "$status"
+  phase_begin result_verification
   results=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-results.XXXXXX")
   if [ ! -e "$bundle" ]; then
     echo "error: could not verify the ONLY_TESTING selection: no result bundle was written at $bundle" >&2
@@ -1309,6 +1396,7 @@ summarize_only_testing() {
     fi
   fi
   rm -f -- "$results" ${retry_results:+"$retry_results"}
+  phase_end "$outcome"
   case "$outcome" in
     0) return "$status" ;;
     1)
@@ -1353,7 +1441,9 @@ cmd_test_without_building() {
   udid=$(pick_simulator)
   prepare_test_artifact "$udid"
   acquire_simulator_lock "$udid"
+  phase_begin simulator_readiness
   enable_simulator_accessibility "$udid"
+  phase_end 0
   resolve_only_testing "$udid" "$@"
   if [ -n "${RESULT_BUNDLE:-}" ]; then
     rm -rf -- "${RESULT_BUNDLE:?}"
@@ -1364,11 +1454,13 @@ cmd_test_without_building() {
   fi
   [ -z "$bundle" ] || extra+=(-resultBundlePath "$bundle")
   log=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-test.XXXXXX")
+  phase_begin test_process
   run_xcodebuild_logged "$log" test-without-building "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" \
     -parallel-testing-enabled NO ${extra+"${extra[@]}"} \
     ${ONLY_TESTING_ARGS+"${ONLY_TESTING_ARGS[@]}"} "$@" || status=$?
   echo done >&9
+  phase_end "$status"
   release_simulator_lock
   report_test_outcome "$status" "$log" || outcome=$?
   if [ "$outcome" -eq "$EXIT_TEST_PROCESS_CRASHED" ]; then

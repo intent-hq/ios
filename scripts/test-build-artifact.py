@@ -19,6 +19,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+from ci_phase import phase
 
 PRODUCTS = 'Debug-iphonesimulator'
 APPS = ('Intent.app', 'IntentUITests-Runner.app')
@@ -52,6 +53,7 @@ def identity():
     return {'run': run, 'revision': revision}
 
 
+@phase('artifact_context')
 def context(udid):
     require(output('uname', '-m') == 'arm64', 'shared test builds require an arm64 host')
     devices = json.loads(output('xcrun', 'simctl', 'list', 'devices', 'available', '-j'))['devices']
@@ -135,6 +137,7 @@ def validate_runfile(data):
                             'nonportable testing environment path')
 
 
+@phase('artifact_products_validate')
 def validate_products(root, runfile=None):
     validate_runfile(plistlib.loads((runfile or root / RUNFILE).read_bytes()))
     for app, target in zip(APPS, ('IntentTests', 'IntentUITests')):
@@ -151,6 +154,7 @@ def validate_products(root, runfile=None):
                     'test bundle is missing TestSourceInputs')
 
 
+@phase('artifact_pack_total')
 def pack(products, archive, udid):
     metadata = context(udid)
     require(not archive.exists() and not Path(str(archive) + '.json').exists(), 'artifact output already exists')
@@ -188,6 +192,7 @@ def pack(products, archive, udid):
     print(json.dumps(receipt, sort_keys=True))
 
 
+@phase('artifact_restore_total')
 def restore(archive, destination, udid):
     expected = os.environ.get('TEST_ARTIFACT_SHA256', '')
     require(re.fullmatch(r'[0-9a-f]{64}', expected), 'TEST_ARTIFACT_SHA256 must come from the trusted producer output')
@@ -210,18 +215,19 @@ def restore(archive, destination, udid):
                 'manifest and xctestrun must be regular files')
         require(json.load(tar.extractfile(MANIFEST)) == metadata, 'artifact producer or toolchain/runtime mismatch')
         # No extractall: reject links/devices/traversals first and preserve only ordinary modes.
-        for member in members:
-            path = destination / member.name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            if member.isdir():
-                path.mkdir(exist_ok=True)
-            elif member.issym():
-                path.symlink_to(member.linkname)
-            else:
-                with tar.extractfile(member) as source, path.open('xb') as sink:
-                    shutil.copyfileobj(source, sink)
-            if not member.issym():
-                path.chmod(member.mode)
+        with phase('artifact_extract'):
+            for member in members:
+                path = destination / member.name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if member.isdir():
+                    path.mkdir(exist_ok=True)
+                elif member.issym():
+                    path.symlink_to(member.linkname)
+                else:
+                    with tar.extractfile(member) as source, path.open('xb') as sink:
+                        shutil.copyfileobj(source, sink)
+                if not member.issym():
+                    path.chmod(member.mode)
     validate_products(destination)
     print(destination / RUNFILE)
 

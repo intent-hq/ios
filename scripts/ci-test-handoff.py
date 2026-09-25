@@ -3,6 +3,8 @@
 
 Only configure/publish run on the producer. Consumer expectations come from job
 outputs, never from the downloaded receipt. Runtime smoke credentials are not read.
+CI_PHASE_TIMING=1 adds content-free stderr timings; platform_select_total includes
+toolchain_select. Workflow outputs and environment-file contracts are unchanged.
 """
 
 import hashlib
@@ -13,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+from ci_phase import phase
 
 
 def require(ok, message):
@@ -46,6 +49,7 @@ def checkout():
     return revision
 
 
+@phase('toolchain_select')
 def select_xcode(expected=None):
     require(output('uname', '-m') == 'arm64', 'host must be arm64')
     bundles = output('find', '-L', '/Applications', '-maxdepth', '1', '-name', 'Xcode*.app').splitlines()
@@ -70,6 +74,7 @@ def select_xcode(expected=None):
     return path, version
 
 
+@phase('platform_select_total')
 def select_platform(expected=None):
     developer, version = select_xcode(expected['xcode'] if expected else None)
     devices = json.loads(output('xcrun', 'simctl', 'list', 'devices', 'available', '-j'))['devices']

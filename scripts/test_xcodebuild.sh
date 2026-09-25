@@ -217,6 +217,7 @@ export TMPDIR=$work
 # must not receive the fixture tables.
 unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING BUILD_CONFIGURATION UI_TEST_SHARD UI_TEST_SHARD_COUNT
 unset TEST_ARTIFACT_PATH TEST_ARTIFACT_RUN TEST_ARTIFACT_REVISION TEST_ARTIFACT_SHA256 TEST_SELECTION_REPORT
+unset CI_PHASE_TIMING PRODUCER_DISCOVERY_PROBE
 export SIM_UDID=00000000-0000-0000-0000-000000000001
 export SIM_LOCK_DIR=$work/locks
 lock=$SIM_LOCK_DIR/xcodebuild-sim-$SIM_UDID.lock
@@ -296,6 +297,62 @@ assert_lacks "passing run prints no crash diagnostic" "$(cat "$work/pass.out")" 
 assert_lock_free "lock released after passing run"
 assert_eq "lock file is left empty when free" "$(cat "$lock")" ""
 assert_eq "passing run keeps no log" "$(ls "$work" | grep -c '^xcodebuild-test\.')" 0
+assert_lacks "phase timing is off by default" "$(cat "$work/pass.out")" "ci-phase"
+
+echo "# opt-in phase boundaries preserve outcomes and keep markers off stdout"
+for scenario in pass enumeration result selector tests; do
+  knobs=(); expected=0; only=IntentTests/DemoFixturesTests
+  case "$scenario" in
+    enumeration) knobs+=(STUB_ENUMERATE_FAIL=1); expected=83 ;;
+    result) knobs+=(STUB_RESULTS_FAIL=1); expected=83 ;;
+    selector) only=IntentTests/DoesNotExist; expected=82 ;;
+    tests) knobs+=(STUB_MODE=fail); expected=65 ;;
+  esac
+  status=0
+  env CI_PHASE_TIMING=1 ONLY_TESTING="$only" STUB_SLEEP=0.1 RESULT_BUNDLE="$work/timing-$scenario.xcresult" ${knobs+"${knobs[@]}"} \
+    "$SCRIPT" test-without-building > "$work/timing-$scenario.stdout" 2> "$work/timing-$scenario.stderr" || status=$?
+  assert_eq "$scenario timing preserves exit" "$status" "$expected"
+  assert_lock_free "$scenario timing releases the lock"
+done
+if python3 - "$work" <<'EOF'
+import pathlib, re, sys
+work = pathlib.Path(sys.argv[1])
+for scenario in ('pass', 'enumeration', 'result', 'selector', 'tests'):
+    assert 'ci-phase' not in (work / ('timing-' + scenario + '.stdout')).read_text()
+    rows = [line for line in (work / ('timing-' + scenario + '.stderr')).read_text().splitlines()
+            if line.startswith('ci-phase')]
+    expected = [('simulator_readiness', 'success'), ('consumer_discovery',
+                'failure' if scenario == 'enumeration' else 'success')]
+    if scenario not in ('enumeration', 'selector'):
+        expected += [('test_process', 'failure' if scenario == 'tests' else 'success'),
+                     ('result_verification', 'failure' if scenario == 'result' else 'success')]
+    actual = []
+    for line in rows:
+        match = re.fullmatch(r'ci-phase phase=([a-z_]+) outcome=(success|failure) elapsed_seconds=([0-9]+\.[0-9]{6})', line)
+        assert match, line
+        actual.append(match.group(1, 2))
+        if match[1] == 'test_process':
+            assert float(match[3]) >= 0.1, line
+    assert actual == expected, (scenario, actual, expected)
+EOF
+then pass "timing markers have only fixed names, outcomes and elapsed seconds at actual phase boundaries"
+else fail "timing marker contract"; fi
+
+echo "# optional timer failure cannot gate or hide a failed operation"
+real_python=$(command -v python3)
+mkdir "$work/broken-timer"
+cat > "$work/broken-timer/python3" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = scripts/ci_phase.py ]; then exit 7; fi
+exec "$real_python" "\$@"
+EOF
+chmod +x "$work/broken-timer/python3"
+for mode in pass fail; do
+  expected=0; [ "$mode" != fail ] || expected=65
+  status=$(PATH="$work/broken-timer:$PATH" CI_PHASE_TIMING=1 STUB_MODE="$mode" run_wrapper "$work/broken-$mode.out" test-without-building)
+  assert_eq "timer failure preserves $mode operation" "$status" "$expected"
+  assert_lacks "failed timer does not invent success" "$(cat "$work/broken-$mode.out")" "ci-phase"
+done
 
 echo "# failing tests"
 status=$(STUB_MODE=fail run_wrapper "$work/fail.out" test-without-building)
