@@ -116,6 +116,7 @@ struct WindowSceneTitleTests {
                         Text(screen)
                             .navigationTitle(screen)
                             .onAppear { state.appearedScreen = screen }
+                            .id(screen)
                     }
             }
             .background(WindowSceneTitle(title: state.title).frame(width: 0, height: 0))
