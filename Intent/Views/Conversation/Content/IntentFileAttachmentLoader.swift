@@ -34,9 +34,9 @@ nonisolated enum MarkdownImageRoute: Equatable {
 }
 
 /// Textual image-attachment loader that renders `![alt](intent://local/[ws-id/]file/<path>)`
-/// images and `workspace-asset://` images by fetching bytes from the daemon,
-/// and remote http(s) images via `RemoteImageLoader`. All open the lightbox
-/// on tap; other URLs fall through to the wrapped fallback loader
+/// images/videos and `workspace-asset://` media by fetching bytes from the daemon,
+/// and remote http(s) images via `RemoteImageLoader`. Videos open full-screen
+/// playback; images open the lightbox. Other URLs use the wrapped fallback loader
 /// (Textual's default network loader).
 ///
 /// Never throws for intent-file or saved-asset links — failures degrade to
@@ -58,8 +58,11 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         try await WorkspaceFileImageLoader.shared.image(workspaceId: workspaceId, path: path)
     }
     /// Saved assets use the same session-bound loader, cache and decode limits.
-    var assetImage: @Sendable (_ workspaceId: String, _ assetId: String) async throws -> UIImage = { workspaceId, assetId in
-        try await WorkspaceFileImageLoader.shared.assetImage(workspaceId: workspaceId, assetId: assetId)
+    var assetMedia: @Sendable (String, String) async throws -> WorkspaceFileMedia = { workspaceId, assetId in
+        try await WorkspaceFileImageLoader.shared.assetMedia(workspaceId: workspaceId, assetId: assetId)
+    }
+    var fileVideo: @Sendable (String, String) async throws -> WorkspaceVideo = { workspaceId, path in
+        try await WorkspaceFileImageLoader.shared.video(workspaceId: workspaceId, path: path)
     }
 
     func attachment(
@@ -91,13 +94,16 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     ) async throws -> AnyAttachment {
         switch MarkdownImageRoute.route(for: url) {
         case .workspaceAsset(let link):
-            if let link, let image = try? await assetImage(link.workspaceId, link.assetId) {
-                return AnyAttachment(
-                    IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment
-                )
-            }
-            return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+            return await assetAttachment(link: link, text: text)
         case .intentFile(let link):
+            if WorkspaceVideo.isVideo(path: link.path) {
+                if let workspaceId = link.workspaceId ?? workspaceId,
+                   let video = try? await fileVideo(workspaceId, link.path) {
+                    return AnyAttachment(IntentFileVideoAttachment(video: video, name: text.isEmpty ?
+                        URL(fileURLWithPath: link.path).lastPathComponent : text) as any Textual.Attachment)
+                }
+                return videoFailure(path: link.path)
+            }
             guard link.isImage, let resolvedWorkspaceId = link.workspaceId ?? workspaceId else {
                 return AnyAttachment(
                     IntentFileFailureAttachment(altText: text) as any Textual.Attachment
@@ -122,6 +128,31 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         case .fallback:
             return try await fallback()
         }
+    }
+
+    private func assetAttachment(link: WorkspaceAssetLink?, text: String) async -> AnyAttachment {
+        guard let link else {
+            return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+        }
+        do {
+            switch try await assetMedia(link.workspaceId, link.assetId) {
+            case .image(let image):
+                return AnyAttachment(IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment)
+            case .video(let video):
+                return AnyAttachment(IntentFileVideoAttachment(video: video, name: text.isEmpty ?
+                    link.assetId : text) as any Textual.Attachment)
+            }
+        } catch {
+            if WorkspaceVideo.isVideo(path: link.assetId) || error as? WorkspaceFileImageLoader.LoadError == .notAVideo {
+                return videoFailure(path: link.assetId)
+            }
+            return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+        }
+    }
+
+    private func videoFailure(path: String) -> AnyAttachment {
+        AnyAttachment(IntentFileVideoFailureAttachment(name: URL(fileURLWithPath: path).lastPathComponent)
+            as any Textual.Attachment)
     }
 
     /// Loaded remote image wrapped in the lightbox-capable attachment; nil on

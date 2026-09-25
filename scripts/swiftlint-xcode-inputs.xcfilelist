@@ -143,6 +143,7 @@ $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceProviderOptions.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
+$(SRCROOT)/Intent/Services/WorkspaceVideo.swift
 $(SRCROOT)/Intent/Utils/AppLog.swift
 $(SRCROOT)/Intent/Utils/BackgroundTaskManager.swift
 $(SRCROOT)/Intent/Utils/Date+Relative.swift
@@ -215,7 +216,9 @@ $(SRCROOT)/Intent/Views/Conversation/Content/ImageAttachmentThumbnail.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageDecodeFailureView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileAttachmentLoader.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/IntentFileVideoAttachment.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MarkdownTextView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/VideoLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AgentMessageAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AttentionNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/EventWakeBannerView.swift
@@ -401,6 +404,7 @@ $(SRCROOT)/IntentTests/GitHubRepoSuggestionsTests.swift
 $(SRCROOT)/IntentTests/InfoPlistSyncTests.swift
 $(SRCROOT)/IntentTests/IntentFileAttachmentLoaderTests.swift
 $(SRCROOT)/IntentTests/IntentFileLinkTests.swift
+$(SRCROOT)/IntentTests/IntentFileVideoTests.swift
 $(SRCROOT)/IntentTests/IntentNoteLinkParsingTests.swift
 $(SRCROOT)/IntentTests/LaunchPhaseTimelineTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift

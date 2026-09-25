@@ -2,9 +2,9 @@ import Foundation
 import ImageIO
 import UIKit
 
-/// Fetches workspace-file images from the daemon via chunked `file.readChunk`
+/// Fetches workspace-file media from the daemon via chunked `file.readChunk`
 /// reads over the paired WebSocket, assembling and base64-decoding the slices
-/// into a `UIImage`. Results are cached per (workspaceId, path) so transcript
+/// into an image or video poster/local file. Results are cached per (workspaceId, path) so transcript
 /// scrolling never refetches, and concurrent requests for the same file share
 /// one in-flight fetch.
 @MainActor
@@ -15,6 +15,7 @@ final class WorkspaceFileImageLoader {
         case malformedResponse
         case fileTooLarge
         case notAnImage
+        case notAVideo
         case previouslyFailed
     }
 
@@ -49,7 +50,7 @@ final class WorkspaceFileImageLoader {
 
         /// One-shot `note.readAsset` read: the daemon answers the whole
         /// asset as base64 (`{ assetId, mimeType, data, sizeKb }`).
-        func requestAsset(workspaceId: String, assetId: String) async throws -> String {
+        func requestAsset(workspaceId: String, assetId: String) async throws -> (data: String, mimeType: String?) {
             let result = try await connection.request("note.readAsset", params: [
                 "workspaceId": workspaceId,
                 "asset": assetId
@@ -57,7 +58,7 @@ final class WorkspaceFileImageLoader {
             guard let dict = result as? [String: Any],
                   let data = dict["data"] as? String
             else { throw LoadError.malformedResponse }
-            return data
+            return (data, dict["mimeType"] as? String)
         }
     }
 
@@ -71,13 +72,13 @@ final class WorkspaceFileImageLoader {
     /// downsampling thumbnail path, so a small compressed file declaring
     /// enormous pixel dimensions cannot balloon decode/render memory.
     nonisolated static let maxPixelSize = 2048
-    /// Total decoded-byte budget for the image cache (a 2048×2048 BGRA image
-    /// is ~16 MB, so this holds a handful before NSCache evicts).
+    /// Total media-byte budget for the cache (a 2048×2048 BGRA image
+    /// is ~16 MB; videos also charge their on-disk bytes against this budget).
     static let cacheTotalCostLimit = 64 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
 
     // NSCache requires a reference-type key; NSString preserves that Foundation contract.
     // swiftlint:disable:next legacy_objc_type
-    private let cache = NSCache<NSString, UIImage>()
+    private let cache = NSCache<NSString, WorkspaceFileMediaBox>()
     /// Session-lifetime negative cache: keys whose fetch/decode failed, so a
     /// persistently broken link doesn't refetch on every scroll-into-view.
     /// Intentionally uncapped (ios#264): it grows only with distinct failed
@@ -85,7 +86,8 @@ final class WorkspaceFileImageLoader {
     /// by `SessionCacheBoundsMeasurementTests`, so even a 10k-link session
     /// retains ~1.5 MiB — noise next to one `cacheTotalCostLimit`.
     private(set) var failedKeys: Set<String> = []
-    private var inFlight: [String: Task<UIImage, Error>] = [:]
+    private var failedVideoKeys: Set<String> = []
+    private var inFlight: [String: Task<WorkspaceFileMedia, Error>] = [:]
     private let chunkRequester: ChunkRequester
 
     init(connection: ConnectionManagerRouting = ConnectionManager.shared) {
@@ -109,13 +111,30 @@ final class WorkspaceFileImageLoader {
     /// `statusImageAssetId`). Asset ids are content-addressed, so a replaced
     /// image is a new key and refetches; keys never collide with file paths.
     func assetImage(workspaceId: String, assetId: String) async throws -> UIImage {
-        try await cachedImage(key: Self.assetKey(workspaceId: workspaceId, assetId: assetId)) { [chunkRequester] in
+        guard case .image(let image) = try await assetMedia(workspaceId: workspaceId, assetId: assetId) else {
+            throw LoadError.notAnImage
+        }
+        return image
+    }
+
+    func assetMedia(workspaceId: String, assetId: String) async throws -> WorkspaceFileMedia {
+        try await cachedMedia(key: Self.assetKey(workspaceId: workspaceId, assetId: assetId)) { [chunkRequester] in
             try await Self.fetchAndDecodeAsset(
                 chunkRequester: chunkRequester,
                 workspaceId: workspaceId,
                 assetId: assetId
             )
         }
+    }
+
+    func video(workspaceId: String, path: String) async throws -> WorkspaceVideo {
+        let key = "video\u{0}" + Self.fileKey(workspaceId: workspaceId, path: path)
+        let media = try await cachedMedia(key: key) { [chunkRequester] in
+            let data = try await Self.fetchBytes(chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
+            return .video(try await WorkspaceVideo.prepare(data: data, path: path))
+        }
+        guard case .video(let video) = media else { throw LoadError.notAVideo }
+        return video
     }
 
     private static func fileKey(workspaceId: String, path: String) -> String {
@@ -129,25 +148,34 @@ final class WorkspaceFileImageLoader {
     private func cachedImage(
         key: String, fetch: @escaping @Sendable () async throws -> UIImage
     ) async throws -> UIImage {
+        let media = try await cachedMedia(key: key) { .image(try await fetch()) }
+        guard case .image(let image) = media else { throw LoadError.notAnImage }
+        return image
+    }
+
+    private func cachedMedia(
+        key: String, fetch: @escaping @Sendable () async throws -> WorkspaceFileMedia
+    ) async throws -> WorkspaceFileMedia {
         // NSString is the concrete reference key required by NSCache.
         // swiftlint:disable:next legacy_objc_type
         if let cached = cache.object(forKey: key as NSString) {
-            return cached
+            return cached.media
         }
+        if failedVideoKeys.contains(key) { throw LoadError.notAVideo }
         if failedKeys.contains(key) {
             throw LoadError.previouslyFailed
         }
         if let task = inFlight[key] {
             return try await task.value
         }
-        let task = Task<UIImage, Error> { [cache] in
-            let image = try await fetch()
+        let task = Task<WorkspaceFileMedia, Error> { [cache] in
+            let media = try await fetch()
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
             // NSString is the concrete reference key required by NSCache.
             // swiftlint:disable:next legacy_objc_type
-            cache.setObject(image, forKey: key as NSString, cost: Self.decodedCost(of: image))
-            return image
+            cache.setObject(WorkspaceFileMediaBox(media), forKey: key as NSString, cost: Self.cost(of: media))
+            return media
         }
         inFlight[key] = task
         defer { inFlight[key] = nil }
@@ -158,6 +186,7 @@ final class WorkspaceFileImageLoader {
             // fetch itself didn't fail) so broken links don't refetch forever.
             if !(error is CancellationError) {
                 failedKeys.insert(key)
+                if error as? LoadError == .notAVideo { failedVideoKeys.insert(key) }
             }
             throw error
         }
@@ -172,6 +201,14 @@ final class WorkspaceFileImageLoader {
     /// `forgetFailure` for the asset namespace (status image retry taps).
     func forgetAssetFailure(workspaceId: String, assetId: String) {
         failedKeys.remove(Self.assetKey(workspaceId: workspaceId, assetId: assetId))
+        failedVideoKeys.remove(Self.assetKey(workspaceId: workspaceId, assetId: assetId))
+    }
+
+    private static func cost(of media: WorkspaceFileMedia) -> Int {
+        switch media {
+        case .image(let image): decodedCost(of: image)
+        case .video(let video): video.byteCount + decodedCost(of: video.poster)
+        }
     }
 
     /// Approximate decoded byte size, used as the NSCache cost (shared with
@@ -204,16 +241,21 @@ final class WorkspaceFileImageLoader {
     @concurrent
     nonisolated private static func fetchAndDecodeAsset(
         chunkRequester: ChunkRequester, workspaceId: String, assetId: String
-    ) async throws -> UIImage {
-        let base64 = try await chunkRequester.requestAsset(workspaceId: workspaceId, assetId: assetId)
-        guard let data = Data(base64Encoded: base64) else {
-            throw LoadError.malformedResponse
+    ) async throws -> WorkspaceFileMedia {
+        let response = try await chunkRequester.requestAsset(workspaceId: workspaceId, assetId: assetId)
+        let isVideo = WorkspaceVideo.isVideo(path: assetId, mimeType: response.mimeType)
+        do {
+            guard let data = Data(base64Encoded: response.data) else { throw LoadError.malformedResponse }
+            guard data.count <= maxFileBytes else { throw LoadError.fileTooLarge }
+            if isVideo {
+                return .video(try await WorkspaceVideo.prepare(data: data, path: assetId, mimeType: response.mimeType))
+            }
+            guard let image = decodeImage(data) else { throw LoadError.notAnImage }
+            return .image(image)
+        } catch {
+            if isVideo, !(error is CancellationError) { throw LoadError.notAVideo }
+            throw error
         }
-        guard data.count <= maxFileBytes else { throw LoadError.fileTooLarge }
-        guard let image = decodeImage(data) else {
-            throw LoadError.notAnImage
-        }
-        return image
     }
 
     /// Assemble the file's raw bytes from sequential `file.readChunk` slices
@@ -233,6 +275,7 @@ final class WorkspaceFileImageLoader {
             guard result.size <= maxFileBytes else { throw LoadError.fileTooLarge }
             guard let chunk = Data(base64Encoded: result.content), chunk.count == result.bytesRead
             else { throw LoadError.malformedResponse }
+            guard data.count <= maxFileBytes - chunk.count else { throw LoadError.fileTooLarge }
             data.append(chunk)
             offset += result.bytesRead
             // EOF window (bytesRead == 0) or the whole file assembled.

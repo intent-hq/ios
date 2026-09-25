@@ -18,6 +18,7 @@ struct MarkdownTextView: View {
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
+    @State private var videoItem: VideoItem?
 
     private static let maximumBlockIndent = 3
     private static let minimumFenceLength = 3
@@ -46,10 +47,17 @@ struct MarkdownTextView: View {
     }
 
     /// Bind saved images to the window's session, never to URL backend hints.
-    static func assetImageFetcher(session: BackendSession?) -> @Sendable (String, String) async throws -> UIImage {
+    static func assetMediaFetcher(session: BackendSession?) -> @Sendable (String, String) async throws -> WorkspaceFileMedia {
         let fileLoader = session?.workspaceFileImageLoader ?? .shared
         return { workspaceId, assetId in
-            try await fileLoader.assetImage(workspaceId: workspaceId, assetId: assetId)
+            try await fileLoader.assetMedia(workspaceId: workspaceId, assetId: assetId)
+        }
+    }
+
+    private var fileVideoFetcher: @Sendable (String, String) async throws -> WorkspaceVideo {
+        let fileLoader = session?.workspaceFileImageLoader ?? .shared
+        return { workspaceId, path in
+            try await fileLoader.video(workspaceId: workspaceId, path: path)
         }
     }
 
@@ -61,7 +69,8 @@ struct MarkdownTextView: View {
                     workspaceId: workspaceId,
                     fallback: .image(),
                     fileImage: fileImageFetcher,
-                    assetImage: Self.assetImageFetcher(session: session)
+                    assetMedia: Self.assetMediaFetcher(session: session),
+                    fileVideo: fileVideoFetcher
                 )
             )
             .textual.listItemSpacing(
@@ -74,6 +83,8 @@ struct MarkdownTextView: View {
             .textual.onAttachmentTap { attachment in
                 if let image = Self.lightboxImage(for: attachment) {
                     lightboxItem = LightboxItem(image: image)
+                } else if let video = Self.playbackVideo(for: attachment) {
+                    videoItem = VideoItem(video: video)
                 }
             }
             .font(.body)
@@ -81,6 +92,9 @@ struct MarkdownTextView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
                 ImageLightboxView(image: item.image)
+            }
+            .fullScreenCover(item: $videoItem) { item in
+                VideoLightboxView(video: item.video)
             }
 
         if let handler = onOpenURL {
@@ -96,6 +110,10 @@ struct MarkdownTextView: View {
     /// failure placeholders) is inert.
     static func lightboxImage(for attachment: AnyAttachment) -> UIImage? {
         (attachment.base as? IntentFileImageAttachment)?.image
+    }
+
+    static func playbackVideo(for attachment: AnyAttachment) -> WorkspaceVideo? {
+        (attachment.base as? IntentFileVideoAttachment)?.video
     }
 
     /// GFM task-list line: optional blockquote prefix, indent, list marker
@@ -180,4 +198,9 @@ struct MarkdownTextView: View {
 private struct LightboxItem: Identifiable {
     let id = UUID()
     let image: UIImage
+}
+
+private struct VideoItem: Identifiable {
+    let id = UUID()
+    let video: WorkspaceVideo
 }

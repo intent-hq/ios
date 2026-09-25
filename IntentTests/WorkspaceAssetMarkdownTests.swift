@@ -43,9 +43,9 @@ struct WorkspaceAssetMarkdownTests {
         let url = try #require(URL(string: source))
         #expect(MarkdownImageRoute.route(for: url) == .workspaceAsset(nil))
         var loader = IntentFileAttachmentLoader(workspaceId: "current-workspace", fallback: .image())
-        loader.assetImage = { _, _ in
+        loader.assetMedia = { _, _ in
             Issue.record("Malformed saved-asset URLs must not fetch")
-            return UIImage()
+            return .image(UIImage())
         }
         loader.fileImage = { _, _ in
             Issue.record("Saved assets must not use file reads")
@@ -67,8 +67,8 @@ struct WorkspaceAssetMarkdownTests {
         connection.responseMap["note.readAsset"] = Self.imageResponse()
         let imageLoader = WorkspaceFileImageLoader(connection: connection)
         var loader = IntentFileAttachmentLoader(workspaceId: nil, fallback: .image())
-        loader.assetImage = { workspaceId, assetId in
-            try await imageLoader.assetImage(workspaceId: workspaceId, assetId: assetId)
+        loader.assetMedia = { workspaceId, assetId in
+            try await imageLoader.assetMedia(workspaceId: workspaceId, assetId: assetId)
         }
         let url = try #require(URL(string: "workspace-asset://linked-workspace/chart%20one.png?v=2&backend=other"))
 
@@ -100,8 +100,8 @@ struct WorkspaceAssetMarkdownTests {
         }
         let imageLoader = WorkspaceFileImageLoader(connection: connection)
         var loader = IntentFileAttachmentLoader(workspaceId: "ws-1", fallback: .image())
-        loader.assetImage = { workspaceId, assetId in
-            try await imageLoader.assetImage(workspaceId: workspaceId, assetId: assetId)
+        loader.assetMedia = { workspaceId, assetId in
+            try await imageLoader.assetMedia(workspaceId: workspaceId, assetId: assetId)
         }
         let url = try #require(URL(string: "workspace-asset://ws-1/image.png"))
 
@@ -121,19 +121,19 @@ struct WorkspaceAssetMarkdownTests {
         let secondSession = Self.makeSession(connection: secondConnection)
         let url = try #require(URL(string: "workspace-asset://linked-workspace/image.png?backend=other&v=2"))
         var loader = IntentFileAttachmentLoader(workspaceId: "current-workspace", fallback: .image())
-        loader.assetImage = MarkdownTextView.assetImageFetcher(session: firstSession)
+        loader.assetMedia = MarkdownTextView.assetMediaFetcher(session: firstSession)
 
         let first = try await loader.resolvedAttachment(for: url, text: "first", fallback: forbiddenFallback)
         #expect(first.base is IntentFileImageAttachment)
         #expect(secondConnection.paramsForMethod("note.readAsset").isEmpty)
 
-        loader.assetImage = MarkdownTextView.assetImageFetcher(session: secondSession)
+        loader.assetMedia = MarkdownTextView.assetMediaFetcher(session: secondSession)
         let second = try await loader.resolvedAttachment(for: url, text: "second", fallback: forbiddenFallback)
         #expect(second.base is IntentFileFailureAttachment)
         #expect(firstConnection.paramsForMethod("note.readAsset").count == 1)
         #expect(secondConnection.paramsForMethod("note.readAsset").count == 1)
 
-        loader.assetImage = MarkdownTextView.assetImageFetcher(session: firstSession)
+        loader.assetMedia = MarkdownTextView.assetMediaFetcher(session: firstSession)
         let cached = try await loader.resolvedAttachment(for: url, text: "cached", fallback: forbiddenFallback)
         #expect(MarkdownTextView.lightboxImage(for: cached) === MarkdownTextView.lightboxImage(for: first))
         #expect(firstConnection.paramsForMethod("note.readAsset").count == 1)
