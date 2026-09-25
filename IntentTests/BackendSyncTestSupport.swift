@@ -6,7 +6,7 @@ import Testing
 
 /// Shared fake for the writer and a second client's ordinary registry reader.
 /// Stores exactly the JSON bytes handed to Security, never real credentials.
-final class MemorySyncedKeychain: SyncedKeychainWriting {
+nonisolated final class MemorySyncedKeychain: SyncedKeychainWriting {
     var items: [String: Data] = [:]
     var readFailure: OSStatus?
     var writeFailure: OSStatus?

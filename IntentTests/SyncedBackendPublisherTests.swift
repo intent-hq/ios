@@ -5,6 +5,13 @@ import Testing
 @testable import Intent
 
 struct SyncedBackendPublisherTests {
+    private func expectSuperseded(_ outcome: SyncedBackendPublisher.Outcome, sourceLocation: SourceLocation = #_sourceLocation) {
+        guard case .superseded = outcome else {
+            Issue.record("Expected a superseded publication, got \(outcome)", sourceLocation: sourceLocation)
+            return
+        }
+    }
+
     @Test func writesDesktopV1PayloadToSynchronizableSharedGroup() throws {
         let cloud = MemorySyncedKeychain()
         let publisher = BackendSyncFixtures.publisher(cloud)
@@ -73,7 +80,7 @@ struct SyncedBackendPublisherTests {
             let cloud = MemorySyncedKeychain()
             try cloud.put(BackendSyncFixtures.remote(clock: deleted ? 1000 : 2000, deleted: deleted))
             let before = cloud.items
-            #expect(BackendSyncFixtures.publisher(cloud).publish(BackendSyncFixtures.local()) == .superseded)
+            expectSuperseded(BackendSyncFixtures.publisher(cloud).publish(BackendSyncFixtures.local()))
             #expect(cloud.items == before)
             #expect(cloud.writeCount == 0)
         }
@@ -84,7 +91,7 @@ struct SyncedBackendPublisherTests {
         var tombstone = BackendSyncFixtures.remote(clock: 2000, deleted: true)
         tombstone["host"] = "old-address.local"
         try cloud.put(tombstone, account: "old-address.local:8843")
-        #expect(BackendSyncFixtures.publisher(cloud).publish(BackendSyncFixtures.local()) == .superseded)
+        expectSuperseded(BackendSyncFixtures.publisher(cloud).publish(BackendSyncFixtures.local()))
         #expect(cloud.writeCount == 0)
     }
 
@@ -143,7 +150,7 @@ struct SyncedBackendPublisherTests {
         #expect(publisher.publish(BackendSyncFixtures.local()) == .retry)
         #expect(cloud.adds.count == 1)
         #expect(cloud.updates.isEmpty)
-        #expect(publisher.publish(BackendSyncFixtures.local()) == .superseded)
+        expectSuperseded(publisher.publish(BackendSyncFixtures.local()))
         #expect(cloud.items["mac.local:8843"] == newer)
     }
 

@@ -207,6 +207,86 @@ struct PersistenceBackendSyncTests {
         #expect(try store.cloud.object()["deleted"] as? Bool == true)
     }
 
+}
+
+extension PersistenceBackendSyncTests {
+    @Test func supersededBackfillStaysRetiredAfterPurgeAndRelaunch() throws {
+        let store = try BackendSyncTestStore()
+        defer { store.cleanUp() }
+        var old = BackendSyncFixtures.local(clock: 100)
+        old.pendingSyncUpdatedAt = nil
+        try store.seed([old])
+        try store.cloud.put(BackendSyncFixtures.remote(clock: 200, deleted: true))
+        store.manager.publishPendingBackends()
+        #expect(store.cloud.writeCount == 0)
+        store.cloud.items.removeAll()
+        let relaunched = PersistenceManager(
+            defaults: store.defaults,
+            keychainStorage: store.local,
+            backendPublisher: BackendSyncFixtures.publisher(store.cloud)
+        )
+        relaunched.publishPendingBackends()
+        #expect(store.cloud.writeCount == 0)
+        #expect(store.cloud.items.isEmpty)
+    }
+
+    @Test func observedRemovalSurvivesKeychainSaveFailureButAllowsDeliberateRepair() throws {
+        let store = try BackendSyncTestStore()
+        defer { store.cleanUp() }
+        let pending = BackendSyncFixtures.local(clock: 100)
+        try store.seed([pending])
+        try store.cloud.put(BackendSyncFixtures.remote(clock: 200, deleted: true))
+        store.local.setSaveFailure(true)
+        store.manager.publishPendingBackends()
+        store.cloud.items.removeAll()
+        let relaunched = PersistenceManager(
+            defaults: store.defaults,
+            keychainStorage: store.local,
+            backendPublisher: BackendSyncFixtures.publisher(store.cloud, clock: 100)
+        )
+        relaunched.publishPendingBackends()
+        #expect(store.cloud.writeCount == 0)
+        store.local.setSaveFailure(false)
+        relaunched.publishPendingBackends()
+        #expect(store.cloud.writeCount == 0)
+        #expect(relaunched.savePairing(server: pending.server, token: "deliberate-repair"))
+        #expect(try store.cloud.object()["token"] as? String == "deliberate-repair")
+        #expect(try store.cloud.object()["updatedAt"] as? Double == 201)
+    }
+
+    @Test func equalClockSameTokenCollisionImportsWinningRouteAndLiveCache() throws {
+        let store = try BackendSyncTestStore()
+        defer { store.cleanUp() }
+        var pending = SyncedBackendConnectionMergeTests().local(
+            hosts: ["mac.local"],
+            token: "shared-token",
+            syncUpdatedAt: 500,
+            tcAddress: "tcOld"
+        )
+        pending.pendingSyncUpdatedAt = 1000
+        try store.seed([pending])
+        store.manager.setActiveConnection(id: pending.id)
+        var remote = BackendSyncFixtures.remote(clock: 1000)
+        remote["token"] = "shared-token"
+        remote["tcAddress"] = "tcNew"
+        try store.cloud.put(remote)
+        let live = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: live,
+            backendID: BackendID(pending.id),
+            persistence: store.manager,
+            syncedRegistry: SyncedBackendRegistry(keychain: store.cloud, accessGroup: BackendSyncFixtures.accessGroup)
+        )
+        #expect(coordinator.refreshSyncedBackends()?.updatedIds == [pending.id])
+        #expect(store.cloud.writeCount == 0)
+        #expect(store.manager.activeConnection()?.server.tcAddress == "tcNew")
+        #expect(store.manager.activeConnection()?.displayName == "Desktop name")
+        #expect(store.manager.activeConnection()?.pendingSyncUpdatedAt == nil)
+        #expect(live.updateCachedCredentialsLog.last?.tcAddress == "tcNew")
+        #expect(coordinator.refreshSyncedBackends()?.changed == false)
+    }
+
     @Test func backfillSaveFailureDoesNotPublish() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }

@@ -246,7 +246,7 @@ enum SyncedBackendConnectionMerge {
         _ record: SyncedBackendRecord,
         to existing: StoredConnection
     ) -> StoredConnection {
-        StoredConnection(
+        var updated = StoredConnection(
             id: existing.id,
             server: PairedServer(
                 hosts: PersistenceManager.mergeHostLists(
@@ -264,6 +264,9 @@ enum SyncedBackendConnectionMerge {
             lastConnectedAt: existing.lastConnectedAt,
             syncUpdatedAt: record.updatedAt
         )
+        updated.localPairingSyncClock = existing.localPairingSyncClock
+        updated.pendingRoutePublication = existing.pendingRoutePublication
+        return updated
     }
 
     private static func makeConnection(from record: SyncedBackendRecord, now: Date)

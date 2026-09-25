@@ -146,7 +146,12 @@ extension PersistenceManager {
 
     private func preparePublication(_ stored: inout StoredConnection, incoming: StoredConnection) {
         guard incoming.syncUpdatedAt == nil, let backendPublisher else { return }
-        stored.pendingSyncUpdatedAt = backendPublisher.pairingClock(for: stored)
+        stored.pendingSyncUpdatedAt = max(
+            backendPublisher.pairingClock(for: stored),
+            (suppressedPublicationClock(id: stored.id) ?? 0) + 1
+        )
+        stored.localPairingSyncClock = stored.pendingSyncUpdatedAt
+        stored.pendingRoutePublication = nil
     }
 
     private static func matchesPairing(_ stored: StoredConnection, incoming: StoredConnection) -> Bool {
@@ -191,7 +196,10 @@ extension PersistenceManager {
             certFingerprint: server.certFingerprint,
             tcAddress: server.tcAddress
         )
-        return saveConnectionsLocked(connections)
+        if hosts != server.hosts { queueRoutePublication(&connections[index], previousRoute: server.tcAddress) }
+        guard saveConnectionsLocked(connections) else { return false }
+        publishPendingBackends()
+        return true
     }
 
     /// Replaces the stored tailcat tunnel address of the connection with the
@@ -211,7 +219,12 @@ extension PersistenceManager {
             certFingerprint: server.certFingerprint,
             tcAddress: tcAddress
         )
-        return saveConnectionsLocked(connections)
+        if tcAddress != server.tcAddress {
+            queueRoutePublication(&connections[index], previousRoute: server.tcAddress, newRoute: tcAddress)
+        }
+        guard saveConnectionsLocked(connections) else { return false }
+        publishPendingBackends()
+        return true
     }
 
     /// Replaces the stored display name of the connection with the given id,

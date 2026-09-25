@@ -25,7 +25,7 @@ struct SyncedBackendPublisher {
     enum Outcome: Equatable {
         case published
         case retry
-        case superseded
+        case superseded(SyncedBackendRecord)
     }
 
     let keychain: any SyncedKeychainWriting
@@ -67,19 +67,15 @@ struct SyncedBackendPublisher {
     func publish(_ connection: StoredConnection) -> Outcome {
         guard let clock = connection.pendingSyncUpdatedAt,
               let target = target(for: connection),
-              let accessGroup, let rows = readRows()
+              let rows = readRows()
         else { return .retry }
         let entries = rows.compactMap(Entry.init)
-        let matching = entries.filter { matches($0, connection: connection, target: target) }
-        let winner = matching.reduce(nil as Entry?) { winner, entry in
-            guard let winner else { return entry }
-            return entry.record.wins(over: winner.record) ? entry : winner
-        }
+        let winner = self.winner(in: entries, connection: connection, target: target)
         // Include expired tombstones here: an old local pairing must not
         // revive a deletion merely because its reader-side TTL elapsed.
         if let winner, winner.record.updatedAt >= clock {
-            return winner.record.updatedAt == clock && !winner.record.deleted
-                && winner.record.token == connection.token ? .published : .superseded
+            return acknowledges(connection, record: winner.record, clock: clock)
+                ? .published : .superseded(winner.record)
         }
         let host = winner?.record.port == connection.server.port ? winner?.record.host ?? target.host : target.host
         let account = Self.account(host: host, port: connection.server.port)
@@ -88,12 +84,58 @@ struct SyncedBackendPublisher {
         guard !rows.contains(where: { blocks($0, connection: connection, accounts: [target.account, account]) })
         else { return .retry }
         guard let payload = payload(connection, host: host, winner: winner, clock: clock) else { return .retry }
+        return write(payload, account: account, rows: rows, exists: entries.contains { $0.account == account })
+    }
+
+    /// Automatic route observations patch a live row only. They cannot add a
+    /// missing/deleted backend or restamp stale credentials over newer edits.
+    func publishRoutes(_ connection: StoredConnection) -> Outcome {
+        guard let pending = connection.pendingRoutePublication,
+              let target = target(for: connection), let rows = readRows(),
+              let winner = self.winner(in: rows.compactMap(Entry.init), connection: connection, target: target)
+        else { return .retry }
+        guard !winner.record.deleted else { return .superseded(winner.record) }
+        guard !rows.contains(where: { blocks($0, connection: connection, accounts: [target.account, winner.account]) })
+        else { return .retry }
+        if let desired = pending.tcAddress, let remote = winner.record.tcAddress,
+           remote != desired, remote != pending.previousTcAddress {
+            return .superseded(winner.record)
+        }
+        let hosts = PersistenceManager.mergeHostLists(existing: winner.record.hosts, incoming: pending.hosts)
+        let route = pending.tcAddress ?? winner.record.tcAddress
+        if hosts == winner.record.hosts, route == winner.record.tcAddress { return .published }
+        var object = winner.object
+        object["hosts"] = hosts
+        if let route { object["tcAddress"] = route }
+        object["updatedAt"] = max(pending.updatedAt, winner.record.updatedAt + 1)
+        guard let payload = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return .retry }
+        return write(payload, account: winner.account, rows: rows, exists: true)
+    }
+
+    func routeClock(for connection: StoredConnection) -> Double {
+        max(
+            floor(now().timeIntervalSince1970 * Self.millisecondsPerSecond),
+            max(connection.syncUpdatedAt ?? 0, connection.pendingRoutePublication?.updatedAt ?? 0) + 1
+        )
+    }
+
+    private func winner(in entries: [Entry], connection: StoredConnection, target: Target) -> Entry? {
+        entries
+            .filter { matches($0, connection: connection, target: target) }
+            .reduce(nil as Entry?) { winner, entry in
+                guard let winner else { return entry }
+                return entry.record.wins(over: winner.record) ? entry : winner
+            }
+    }
+
+    private func write(_ payload: Data, account: String, rows: [[String: Any]], exists: Bool) -> Outcome {
+        guard let accessGroup else { return .retry }
         let query = Self.itemQuery(account: account, accessGroup: accessGroup)
         // Re-read immediately before mutation to catch local concurrent
         // writers and preserve edits that landed during preparation.
         guard let freshRows = readRows(), Self.sameRows(rows, freshRows) else { return .retry }
         let status: OSStatus
-        if entries.contains(where: { $0.account == account }) {
+        if exists {
             status = keychain.update(matching: query, attributes: [kSecValueData as String: payload])
         } else {
             var attributes = query
@@ -102,6 +144,21 @@ struct SyncedBackendPublisher {
             status = keychain.add(attributes)
         }
         return status == errSecSuccess ? .published : .retry
+    }
+
+    /// An equal clock alone is not proof that this device wrote the row.
+    /// Only equivalent connection fields acknowledge a failed local save;
+    /// a competing edit must still reach the ordinary importer/live cache.
+    private func acknowledges(_ connection: StoredConnection, record: SyncedBackendRecord, clock: Double) -> Bool {
+        record.updatedAt == clock && !record.deleted
+            && record.token == connection.token
+            && record.label == connection.displayName
+            && record.port == connection.server.port
+            && record.accountKey == target(for: connection)?.account
+            && record.hosts == connection.server.hosts
+            && SyncedBackendConnectionMerge.normalizeFingerprint(record.fingerprint)
+                == SyncedBackendConnectionMerge.normalizeFingerprint(connection.server.certFingerprint)
+            && record.tcAddress == SyncedBackendPayload.tunnelAddress(connection.server.tcAddress)
     }
 
     private struct Target {
