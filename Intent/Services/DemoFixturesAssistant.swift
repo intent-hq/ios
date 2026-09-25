@@ -53,12 +53,14 @@ extension DemoFixtures {
             ContentBlock(id: "reply", type: .text, text: opening),
             ContentBlock(id: "prompts", type: .text, text: prompts)
         ] : [ContentBlock(id: "reply", type: .text, text: opening + prompts)]
-        store.messages = [ConversationMessage(
-            id: "demo-streaming-assistant",
-            role: .assistant,
-            contentBlocks: blocks,
-            streamingState: .streaming
-        )]
+        store.messages = [
+            ConversationMessage(
+                id: "demo-streaming-assistant",
+                role: .assistant,
+                contentBlocks: blocks,
+                streamingState: .streaming
+            )
+        ]
         store.isStreaming = true
         do {
             try await wait(for: .triggerFile(trigger))
