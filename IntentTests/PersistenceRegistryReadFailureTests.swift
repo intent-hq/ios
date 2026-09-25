@@ -118,7 +118,7 @@ final class PersistenceRegistryReadFailureTests {
     @Test func transientReadFailureStopsOperationAndExplicitRetryPreservesRecords() {
         let stored = manager.upsertConnection(connection())
         #expect(manager.setActiveConnection(id: stored.id))
-        let incoming = connection(host: "new.local")
+        let incoming = connection(host: "new.local", fingerprint: "cc:dd")
         let before = fake.items
         let writes = fake.updateCallCount
         fake.nextReadFailures[manager.keychainAccountConnections] = errSecNotAvailable

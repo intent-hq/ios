@@ -113,6 +113,7 @@ $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
 $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
 $(SRCROOT)/Intent/Models/WorkspaceTask.swift
 $(SRCROOT)/Intent/PersistenceKeychainStorage.swift
+$(SRCROOT)/Intent/PersistenceManager+BackendSync.swift
 $(SRCROOT)/Intent/PersistenceManager+Drafts.swift
 $(SRCROOT)/Intent/PersistenceManager+Screens.swift
 $(SRCROOT)/Intent/PersistenceManager.swift
@@ -191,6 +192,7 @@ $(SRCROOT)/Intent/Services/RemoteImageLoader.swift
 $(SRCROOT)/Intent/Services/SocketPathObservation.swift
 $(SRCROOT)/Intent/Services/SpeechDictationController.swift
 $(SRCROOT)/Intent/Services/SyncedBackendConnectionMerge.swift
+$(SRCROOT)/Intent/Services/SyncedBackendPublisher.swift
 $(SRCROOT)/Intent/Services/SyncedBackendRegistry.swift
 $(SRCROOT)/Intent/Services/TailcatTunnel.swift
 $(SRCROOT)/Intent/Services/TaskStore.swift
@@ -387,7 +389,9 @@ $(SRCROOT)/IntentTests/AppCoordinatorTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorWorkspaceValidationTests.swift
 $(SRCROOT)/IntentTests/AttachmentImageLoaderTests.swift
 $(SRCROOT)/IntentTests/AttachmentUploadServiceTests.swift
+$(SRCROOT)/IntentTests/BackendRoutePublicationTests.swift
 $(SRCROOT)/IntentTests/BackendSessionRegistryTests.swift
+$(SRCROOT)/IntentTests/BackendSyncTestSupport.swift
 $(SRCROOT)/IntentTests/BackendWindowSessionTests.swift
 $(SRCROOT)/IntentTests/BackgroundHookStoreTests.swift
 $(SRCROOT)/IntentTests/BackgroundTaskManagerTests.swift
@@ -515,6 +519,7 @@ $(SRCROOT)/IntentTests/PairingLifecycleDiagnosticTests.swift
 $(SRCROOT)/IntentTests/PairingOptionTests.swift
 $(SRCROOT)/IntentTests/PairingPayloadTests.swift
 $(SRCROOT)/IntentTests/PendingQuestionDerivationTests.swift
+$(SRCROOT)/IntentTests/PersistenceBackendSyncTests.swift
 $(SRCROOT)/IntentTests/PersistenceEphemeralTests.swift
 $(SRCROOT)/IntentTests/PersistenceKeychainAccessibilityTests.swift
 $(SRCROOT)/IntentTests/PersistenceKeychainReadTests.swift
@@ -542,7 +547,10 @@ $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionMergeTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionTombstoneTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendIdentityTests.swift
+$(SRCROOT)/IntentTests/SyncedBackendPublisherTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendRegistryTests.swift
+$(SRCROOT)/IntentTests/SyncedBackendRouteTests.swift
+$(SRCROOT)/IntentTests/SyncedBackendTunnelTests.swift
 $(SRCROOT)/IntentTests/TailcatKitSmokeTests.swift
 $(SRCROOT)/IntentTests/TailcatTunnelSessionTests.swift
 $(SRCROOT)/IntentTests/TaskMetadataHeaderTests.swift
