@@ -7,15 +7,24 @@ import Testing
 
 extension ConnectionManagerTests {
     static func enablePlaintextLoopback() -> Bool {
+        #if DEBUG
         WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { state in
             let previous = state
             state = true
             return previous
         }
+        #else
+        // Keep Release tests buildable without enabling a production escape
+        // hatch. These fixtures are not evidence of Release transport coverage.
+        Issue.record("Plaintext loopback fixtures require DEBUG; run this test with the default configuration")
+        return false
+        #endif
     }
 
     static func restorePlaintextLoopback(_ previous: Bool) {
+        #if DEBUG
         WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { $0 = previous }
+        #endif
     }
 
     @Test func webSocketURLRefusesMissingOrBlankFingerprint() {

@@ -20,19 +20,25 @@ extension ConversationStore {
             }
     }
 
-    private func onReconnected() async {
+    /// The reconnect registration of `chat.subscribe` is the transcript
+    /// recovery: its seq-0 snapshot replaces whatever the outage left behind.
+    /// The `agent.get` streaming-state read runs alongside and yields to the
+    /// snapshot when the channel lands first.
+    func onReconnected() async {
+        guard let agentId else { return }
+        let activeEventGeneration = eventRegistrationGeneration
+        guard ownsStreamingRegistration(activeEventGeneration) else { return }
         liveTranscript.prepareForReconnect()
 
-        guard let agentId else { return }
-        async let conv: () = fetchConversation(agentId: agentId, workspaceId: workspaceId)
+        let liveStateVersion = liveTranscript.liveStateVersion
+        async let chat: () = subscribeLiveChat(agentId: agentId)
         async let queue: () = fetchQueue(agentId: agentId)
-        async let streaming: () = fetchAgentStreamingState(agentId: agentId)
-        _ = await (conv, queue, streaming)
-        if let workspaceId {
-            await subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
-            await subscribeLiveChat(agentId: agentId)
-            await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
-        }
+        async let streaming: () = fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
+        _ = await (chat, queue, streaming)
+        guard ownsStreamingRegistration(activeEventGeneration), let workspaceId else { return }
+        guard let generation = await subscribeToStreaming(agentId: agentId, workspaceId: workspaceId),
+              ownsStreamingRegistration(generation) else { return }
+        await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
     }
 
     /// Fetch the agent's current state via `agent.get` and restore `isStreaming`.
@@ -41,32 +47,32 @@ extension ConversationStore {
     /// `turnInFlight`; `isStreaming`/`isResponding` may always be false).
     /// With `raiseOnly` the flag is only ever raised, never cleared — used as a
     /// backstop on view load so it cannot clobber snapshot/optimistic state.
-    /// The pending attention request is always taken from the server response
-    /// (raise or clear) — it is server-authoritative with no optimistic state.
     /// A reply (or error) that lands while the store is bound to a different
     /// agent than the one the request was issued for — or unbound by a
     /// `reset()` since the request was issued — is dropped entirely: it must
-    /// not touch the new conversation's streaming/attention state, nor mark
+    /// not touch the new conversation's streaming state, nor mark
     /// the new agent deleted on a not-found for the previous one. A request
-    /// issued while still unbound (view load, before `fetchConversation`
+    /// issued while still unbound (view load, before `subscribeLiveChat`
     /// binds the same agent) stays valid.
     /// The session-metadata markers are additionally skipped when an
     /// `agent:updated` push landed, or the bound agent changed (agent switch /
     /// `reset`), while the request was in flight: the reply predates the
     /// change, so applying it would revert the newer marker or leak the
     /// previous agent's markers into the new conversation.
-    func fetchAgentStreamingState(agentId: String, raiseOnly: Bool = false) async {
+    /// With `liveStateVersion`, the streaming flag is also left alone when the
+    /// live chat channel advanced past that version while the request was in
+    /// flight: the channel is authoritative and the reply predates it.
+    func fetchAgentStreamingState(
+        agentId: String,
+        raiseOnly: Bool = false,
+        liveStateVersion: Int? = nil
+    ) async {
         let generation = sessionMetadataGeneration
         let boundAtIssue = self.agentId
         do {
             if let state = try await commands.fetchAgentState(agentId: agentId) {
                 guard isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
-                if raiseOnly {
-                    if state.isStreaming { isStreaming = true }
-                } else {
-                    isStreaming = state.isStreaming
-                }
-                attentionRequest = state.attentionRequest
+                applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: liveStateVersion)
                 guard generation == sessionMetadataGeneration else { return }
                 if let pendingId = state.pendingQuestionsMessageId {
                     pendingQuestionsMessageId = pendingId
@@ -82,6 +88,20 @@ extension ConversationStore {
                 raiseAgentNotFoundIfDefinitive(error)
             }
             AppLog.conversation.error("[ConversationStore] Failed to fetch agent streaming state: \(error)")
+        }
+    }
+
+    private func applyFetchedStreamingState(_ streaming: Bool, raiseOnly: Bool, issuedAt liveStateVersion: Int?) {
+        if let liveStateVersion, liveStateVersion != liveTranscript.liveStateVersion {
+            AppLog.conversation.debug(
+                "[ConversationStore] Live channel advanced during agent.get; keeping its streaming state"
+            )
+            return
+        }
+        if raiseOnly {
+            if streaming { isStreaming = true }
+        } else {
+            isStreaming = streaming
         }
     }
 
@@ -106,22 +126,13 @@ extension ConversationStore {
         }
     }
 
-    // MARK: - Fetch conversation
+    // MARK: - Binding
 
     func bindAgent(_ agentId: String?) {
         if let bound = self.agentId, bound != agentId {
             sessionMetadataGeneration += 1
         }
         self.agentId = agentId
-    }
-
-    func fetchConversation(agentId: String, workspaceId: String? = nil) async {
-        bindAgent(agentId)
-        if let workspaceId {
-            self.workspaceId = workspaceId
-        }
-        await liveTranscript.fetchConversation(agentId: agentId, workspaceId: workspaceId)
-        reconcilePendingQuestionRecovery()
     }
 
     // MARK: - Marked question recovery (aroundMessageId seek, PROTOCOL §5.5)

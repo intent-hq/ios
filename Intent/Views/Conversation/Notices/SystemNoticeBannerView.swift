@@ -12,7 +12,8 @@ struct SystemNoticeBannerView: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     static let defaultMessage = "This conversation was interrupted because intentd restarted."
-    private static let increasedContrastBackgroundMultiplier: Double = 1.75
+
+    private typealias Layout = Constants.Conversation.NoticeCard
 
     private var displayText: String {
         message.isEmpty ? Self.defaultMessage : message
@@ -36,7 +37,7 @@ struct SystemNoticeBannerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(
             colorSchemeContrast == .increased
-                ? Constants.Conversation.NoticeCard.backgroundOpacity * Self.increasedContrastBackgroundMultiplier
+                ? Constants.Conversation.NoticeCard.backgroundOpacity * Layout.increasedContrastBackgroundMultiplier
                 : Constants.Conversation.NoticeCard.backgroundOpacity
         ))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius))
@@ -47,7 +48,7 @@ struct SystemNoticeBannerView: View {
                         ? 1
                         : Constants.Conversation.NoticeCard.borderOpacity),
                     lineWidth: colorSchemeContrast == .increased
-                        ? Constants.Conversation.NoticeCard.borderWidth * 2
+                        ? Constants.Conversation.NoticeCard.borderWidth * Layout.increasedContrastBorderWidthMultiplier
                         : Constants.Conversation.NoticeCard.borderWidth
                 )
         )

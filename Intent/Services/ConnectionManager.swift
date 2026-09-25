@@ -51,7 +51,8 @@ import os
     @ObservationIgnored private let connectionStateSubject = CurrentValueSubject<ConnectionState, Never>(.disconnected)
     @ObservationIgnored private let certMismatchSubject = CurrentValueSubject<Bool, Never>(false)
     @ObservationIgnored private let certMismatchesSubject = CurrentValueSubject<[HostCertMismatch], Never>([])
-    @ObservationIgnored let subscriptionRouter = ConnectionSubscriptionRouter()
+    @ObservationIgnored let subscriptionRouter: ConnectionSubscriptionRouter
+    @ObservationIgnored let diagnostics: DiagnosticStore
 
     @ObservationIgnored var socket: WebSocketConnection?
     @ObservationIgnored var messagePumpTask: Task<Void, Never>?
@@ -77,10 +78,11 @@ import os
     @ObservationIgnored var pathMonitor: (any NetworkPathMonitoring)?
     @ObservationIgnored var pathMonitorID = 0
     @ObservationIgnored var lastPathSnapshot: NetworkPathSnapshot?
-    /// Injectable socket-path reader; loopback tests override this baseline.
-    @ObservationIgnored var readSocketPath: (WebSocketConnection) -> NetworkPathSnapshot? = { socket in
-        socket.establishedPath
+    /// Injectable endpoint evidence; general path reports cannot disprove a direct route.
+    @ObservationIgnored var readSocketPath: (WebSocketConnection) -> SocketPathObservation = { socket in
+        socket.pathObservation
     }
+    @ObservationIgnored var socketPathObservation: SocketPathObservation?
     @ObservationIgnored var socketInterface: String?
     @ObservationIgnored var lastSuccessfulConnectAt: CFAbsoluteTime?
     @ObservationIgnored var lastReconnectAttempt = 0
@@ -120,7 +122,10 @@ import os
     /// Internal (not private) so `BackendSessionRegistry` can construct one
     /// additional instance per pinned backend session; `.shared` remains the
     /// process-wide default used by the default session and existing code.
-    init() {}
+    init(diagnostics: DiagnosticStore = .shared) {
+        self.diagnostics = diagnostics
+        subscriptionRouter = ConnectionSubscriptionRouter(diagnostics: diagnostics)
+    }
 
     isolated deinit {
         stopPathMonitor()
@@ -151,6 +156,27 @@ extension ConnectionManager {
         token: String,
         certFingerprint: String? = nil,
         tcAddress: String? = nil
+    ) async throws {
+        let scope = diagnostics.makeScope()
+        let origin = DiagnosticConnectContext.origin
+        recordConnectionAttempt(.started, context: origin, scope: scope)
+        do {
+            try await performConnect(hosts: hosts, port: port, token: token, certFingerprint: certFingerprint, tcAddress: tcAddress)
+            recordConnectionAttempt(.succeeded, context: activeTunnel == nil ? .direct : .tunnel, scope: scope)
+        } catch {
+            let cancelled = error is CancellationError || Task.isCancelled
+            recordConnectionAttempt(
+                cancelled ? .cancelled : .failed,
+                failure: cancelled ? .none : TransportDiagnosticFailure.classify(error),
+                context: origin,
+                scope: scope
+            )
+            throw error
+        }
+    }
+
+    private func performConnect(
+        hosts: [String], port: Int, token: String, certFingerprint: String?, tcAddress: String?
     ) async throws {
         try validateTransportSecurity(hosts: hosts, certFingerprint: certFingerprint)
         let target = ConnectTarget(
@@ -312,6 +338,16 @@ extension ConnectionManager {
     }
 
     func disconnect() {
+        if connectionState != .disconnected {
+            diagnostics.record(DiagnosticEvent(
+                kind: .connectionTransition,
+                operation: .connectionTransition,
+                site: .connectionManager,
+                stage: .cleanup,
+                outcome: .changed,
+                context: .explicitDisconnect
+            ))
+        }
         teardownConnection()
         if !certMismatches.isEmpty { certMismatches = [] }
     }

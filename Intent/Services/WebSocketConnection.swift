@@ -9,8 +9,7 @@ import os
 /// below — the SHA-256 certificate fingerprint is the sole trust decision.
 actor WebSocketConnection {
     nonisolated let host: String
-    /// The socket's path at handshake completion, used as the path-monitor baseline.
-    nonisolated let establishedPath: NetworkPathSnapshot?
+    nonisolated let pathObservation: SocketPathObservation
 
     private let connection: NWConnection
     private let queue: DispatchQueue
@@ -34,26 +33,29 @@ actor WebSocketConnection {
         connection: NWConnection,
         queue: DispatchQueue,
         didOpen: OSAllocatedUnfairLock<Bool>,
-        establishedPath: NetworkPathSnapshot?
+        pathObservation: SocketPathObservation
     ) {
         self.host = host
         self.connection = connection
         self.queue = queue
         self.didOpen = didOpen
-        self.establishedPath = establishedPath
+        self.pathObservation = pathObservation
     }
 
     deinit {
+        pathObservation.stop()
         Self.close(connection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
     }
 
     // MARK: - Connection setup
 
+    // swiftlint:disable:next function_parameter_count
     nonisolated private static func makeParameters(
         host: String,
         token: String,
         certFingerprint: String?,
         mismatchFingerprint: OSAllocatedUnfairLock<String?>,
+        missingCertificate: OSAllocatedUnfairLock<Bool>,
         verifyQueue: DispatchQueue
     ) -> NWParameters {
         let parameters: NWParameters
@@ -70,6 +72,7 @@ actor WebSocketConnection {
                           let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
                           let serverCert = certChain.first else {
                         AppLog.connection.error("[CertPinning] \(host): no server certificate presented")
+                        missingCertificate.withLock { $0 = true }
                         complete(false)
                         return
                     }
@@ -106,34 +109,48 @@ actor WebSocketConnection {
         _ connection: NWConnection,
         host: String,
         didOpen: OSAllocatedUnfairLock<Bool>,
+        pathObservation: SocketPathObservation,
         continuation: AsyncThrowingStream<Void, Error>.Continuation
     ) {
-        connection.stateUpdateHandler = { state in
+        connection.pathUpdateHandler = { @Sendable path in
+            pathObservation.pathChanged(NetworkPathSnapshot(path))
+        }
+        connection.viabilityUpdateHandler = { @Sendable isViable in
+            pathObservation.viabilityChanged(isViable)
+        }
+        // Preserve lifecycle ordering while retaining typed failure provenance.
+        // swiftlint:disable:next closure_body_length
+        connection.stateUpdateHandler = { @Sendable [weak connection] state in
             switch state {
             case .setup, .preparing:
                 AppLog.connection.debug("[WebSocket] \(host): \(String(describing: state))")
             case .ready:
                 AppLog.connection.debug("[WebSocket] \(host): ready")
+                pathObservation.ready(path: connection?.currentPath.map { NetworkPathSnapshot($0) })
                 didOpen.withLock { $0 = true }
                 continuation.yield()
                 continuation.finish()
             case .waiting(let error):
+                pathObservation.viabilityChanged(false)
                 AppLog.connection.error("[WebSocket] \(host): waiting (\(String(describing: error)))")
                 continuation.finish(throwing: WebSocketTransportError.failed(
                     host: host,
-                    message: String(describing: error)
+                    message: String(describing: error),
+                    diagnosticFailure: TransportDiagnosticFailure.classify(error)
                 ))
             case .failed(let error):
+                pathObservation.viabilityChanged(false)
                 AppLog.connection.error("[WebSocket] \(host): failed (\(String(describing: error)))")
                 continuation.finish(throwing: WebSocketTransportError.failed(
                     host: host,
-                    message: String(describing: error)
+                    message: String(describing: error),
+                    diagnosticFailure: TransportDiagnosticFailure.classify(error)
                 ))
             case .cancelled:
+                pathObservation.stop()
                 AppLog.connection.debug("[WebSocket] \(host): cancelled")
                 continuation.finish(throwing: WebSocketTransportError.failed(
-                    host: host,
-                    message: "Connection cancelled before opening"
+                    host: host, message: "Connection cancelled before opening"
                 ))
             @unknown default:
                 break
@@ -180,6 +197,8 @@ actor WebSocketConnection {
         }
     }
 
+    // Keep trust classification next to the existing handshake cleanup.
+    // swiftlint:disable:next function_body_length
     nonisolated static func connect(
         host: String,
         port: Int,
@@ -188,7 +207,9 @@ actor WebSocketConnection {
     ) async throws -> WebSocketConnection {
         let url = try makeURL(host: host, port: port, certFingerprint: certFingerprint)
         let mismatchFingerprint = OSAllocatedUnfairLock<String?>(initialState: nil)
+        let missingCertificate = OSAllocatedUnfairLock(initialState: false)
         let didOpen = OSAllocatedUnfairLock(initialState: false)
+        let pathObservation = SocketPathObservation()
         let queue = DispatchQueue(label: "WebSocketConnection.\(host)")
         let (lifecycleEvents, lifecycleContinuation) = AsyncThrowingStream<Void, Error>.makeStream()
         let parameters = makeParameters(
@@ -196,6 +217,7 @@ actor WebSocketConnection {
             token: token,
             certFingerprint: certFingerprint,
             mismatchFingerprint: mismatchFingerprint,
+            missingCertificate: missingCertificate,
             verifyQueue: queue
         )
         let nwConnection = NWConnection(to: .url(url), using: parameters)
@@ -203,6 +225,7 @@ actor WebSocketConnection {
             nwConnection,
             host: host,
             didOpen: didOpen,
+            pathObservation: pathObservation,
             continuation: lifecycleContinuation
         )
         do {
@@ -219,10 +242,19 @@ actor WebSocketConnection {
                 connection: nwConnection,
                 queue: queue,
                 didOpen: didOpen,
-                establishedPath: nwConnection.currentPath.map { NetworkPathSnapshot($0) }
+                pathObservation: pathObservation
             )
         } catch {
+            pathObservation.stop()
             Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
+            if !Task.isCancelled, missingCertificate.withLock({ $0 }),
+               case let .failed(host, message, _) = error as? WebSocketTransportError {
+                throw WebSocketTransportError.failed(
+                    host: host,
+                    message: message,
+                    diagnosticFailure: DiagnosticFailure(origin: .transport, classification: .noCertificate)
+                )
+            }
             throw WebSocketPingSupport.mappedConnectionError(
                 error,
                 mismatchFingerprint: mismatchFingerprint,
@@ -257,7 +289,8 @@ extension WebSocketConnection {
                         if let error {
                             continuation.resume(throwing: WebSocketTransportError.failed(
                                 host: host,
-                                message: String(describing: error)
+                                message: String(describing: error),
+                                diagnosticFailure: TransportDiagnosticFailure.classify(error)
                             ))
                             return
                         }
@@ -377,7 +410,8 @@ extension WebSocketConnection {
                     if let error {
                         continuation.resume(throwing: WebSocketTransportError.failed(
                             host: host,
-                            message: String(describing: error)
+                            message: String(describing: error),
+                            diagnosticFailure: TransportDiagnosticFailure.classify(error)
                         ))
                     } else {
                         continuation.resume(returning: ())
@@ -417,6 +451,7 @@ extension WebSocketConnection {
     }
 
     func disconnect() {
+        pathObservation.stop()
         Self.close(connection, didOpen: didOpen, code: .protocolCode(.normalClosure), queue: queue)
     }
 
@@ -430,6 +465,8 @@ extension WebSocketConnection {
         code: NWProtocolWebSocket.CloseCode,
         queue: DispatchQueue
     ) {
+        connection.pathUpdateHandler = nil
+        connection.viabilityUpdateHandler = nil
         guard didOpen.withLock({ $0 }) else {
             connection.cancel()
             return

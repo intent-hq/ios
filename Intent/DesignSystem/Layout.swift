@@ -363,29 +363,24 @@ extension Constants.RepoOwnerAvatar {
     static let fallbackScale: CGFloat = 0.5
 }
 
-extension Constants.ManualTokenEntry {
-    static let contentSpacing: CGFloat = 24
-    static let headerSpacing: CGFloat = 8
-    static let headerTopPadding: CGFloat = 32
-    static let formSpacing: CGFloat = 16
-    static let fieldSpacing: CGFloat = 4
-    static let horizontalPadding: CGFloat = 24
-    static let progressSpacing: CGFloat = 8
-}
-
 extension Constants.Pairing {
-    static let contentSpacing: CGFloat = 32
-    static let headerSpacing: CGFloat = 8
-    static let logoSize: CGFloat = 40
-    static let descriptionHorizontalPadding: CGFloat = 32
-    static let optionsSpacing: CGFloat = 12
+    // Connect frame 3051:54405. Wide windows retain a readable centered column.
+    static let maximumContentWidth: CGFloat = 480
+    static let contentSpacing: CGFloat = 64
+    static let headerSpacing: CGFloat = 24
+    static let descriptionHorizontalPadding: CGFloat = 24
+    static let optionsSpacing: CGFloat = 24
     static let optionsHorizontalPadding: CGFloat = 24
-    static let optionSpacing: CGFloat = 16
-    static let optionIconWidth: CGFloat = 32
-    static let optionTextSpacing: CGFloat = 2
-    static let optionPadding: CGFloat = 16
-    static let optionCornerRadius: CGFloat = 12
-    static let optionBorderWidth: CGFloat = 1
+    static let optionSpacing: CGFloat = 24
+    static let glyphSize: CGFloat = 24
+    static let iconTileSize: CGFloat = 64
+    static let iconTileCornerRadius: CGFloat = 16
+    static let optionTextSpacing: CGFloat = 12
+    static let optionPadding: CGFloat = 24
+    static let optionCornerRadius: CGFloat = 40
+    static let headingTracking: CGFloat = -0.56
+    static let optionTitleTracking: CGFloat = -0.32
+    static let bodyTracking: CGFloat = -0.16
 }
 
 extension Constants.Settings {
@@ -492,5 +487,5 @@ extension Constants.Loading {
 }
 
 extension Constants.Splash {
-    static let maximumLogoDimension: CGFloat = 80
+    static let maximumLogoDimension: CGFloat = 100
 }

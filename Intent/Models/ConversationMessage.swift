@@ -185,8 +185,8 @@ nonisolated struct QueuedMessage: Identifiable, Codable {
         content = try container.decode(String.self, forKey: .content)
         queuedAt = try container.decode(String.self, forKey: .queuedAt)
         position = try container.decode(Int.self, forKey: .position)
-        if let decodedImageBlocks = try? container.decode([ImageBlock].self, forKey: .imageBlocks) {
-            imageBlocks = decodedImageBlocks
+        if var imageBlocksContainer = try? container.nestedUnkeyedContainer(forKey: .imageBlocks) {
+            imageBlocks = Self.decodeLenientArray(ImageBlock.self, from: &imageBlocksContainer)
             imageBlocksWereProvided = true
         } else {
             imageBlocks = []
@@ -199,6 +199,20 @@ nonisolated struct QueuedMessage: Identifiable, Codable {
             messageMetadata = [:]
             messageMetadataWasProvided = false
         }
+    }
+
+    private static func decodeLenientArray<Element: Decodable>(
+        _: Element.Type,
+        from container: inout UnkeyedDecodingContainer
+    ) -> [Element] {
+        var items: [Element] = []
+        while !container.isAtEnd {
+            guard let elementDecoder = try? container.superDecoder() else { break }
+            if let item = try? Element(from: elementDecoder) {
+                items.append(item)
+            }
+        }
+        return items
     }
 
     func encode(to encoder: Encoder) throws {
@@ -237,6 +251,8 @@ nonisolated struct QueuedMessage: Identifiable, Codable {
 /// A single message in an agent conversation.
 nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
     let id: String
+    /// Client correlation lifted from row metadata by the daemon (PROTOCOL §5.5).
+    var appMessageId: String?
     let role: MessageRole
     var contentBlocks: [ContentBlock] {
         didSet { contentBlocksWereProvided = true }
@@ -270,7 +286,7 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
     var hasReportedMetadata: Bool { metadataWasProvided }
 
     enum CodingKeys: String, CodingKey {
-        case id, role, contentBlocks, timestamp, turnNumber
+        case id, appMessageId, role, contentBlocks, timestamp, turnNumber
         case toolCalls, toolResults, error, isStreaming, metadata
     }
 
@@ -282,6 +298,7 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let messageId = try container.decode(String.self, forKey: .id)
         id = messageId
+        appMessageId = try? container.decode(String.self, forKey: .appMessageId)
         role = (try? container.decode(MessageRole.self, forKey: .role)) ?? .system
         if var blocksContainer = try? container.nestedUnkeyedContainer(forKey: .contentBlocks) {
             contentBlocks = Self.decodeContentBlocks(from: &blocksContainer, messageId: messageId)
@@ -334,9 +351,11 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
         contentBlocksWereProvided: Bool = false,
         toolCallsWereProvided: Bool = false,
         toolResultsWereProvided: Bool = false,
-        metadataWasProvided: Bool = false
+        metadataWasProvided: Bool = false,
+        appMessageId: String? = nil
     ) {
         self.id = id
+        self.appMessageId = appMessageId
         self.role = role
         self.contentBlocks = contentBlocks
         self.contentBlocksWereProvided = contentBlocksWereProvided || !contentBlocks.isEmpty
@@ -424,6 +443,7 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(role, forKey: .role)
+        try container.encodeIfPresent(appMessageId, forKey: .appMessageId)
         if contentBlocksWereProvided { try container.encode(contentBlocks, forKey: .contentBlocks) }
         try container.encode(timestamp, forKey: .timestamp)
         try container.encodeIfPresent(turnNumber, forKey: .turnNumber)

@@ -23,10 +23,10 @@ extension CreateWorkspaceParamsTests {
             makeCatalogSpecialist(id: "coordinator", name: "Zeta", role: "orchestrator")
         ]
         #expect(
-            CreateWorkspaceView.pickerSpecialists(catalog).map(\.id)
+            CreationSelectionPolicy.workspacePickerSpecialists(catalog).map(\.id)
                 == ["coordinator", "implementor", "verifier"]
         )
-        #expect(CreateWorkspaceView.pickerSpecialists([]).isEmpty)
+        #expect(CreationSelectionPolicy.workspacePickerSpecialists([]).isEmpty)
     }
 
     // MARK: - preselectedSpecialist
@@ -37,7 +37,7 @@ extension CreateWorkspaceParamsTests {
             makeCatalogSpecialist(id: "implementor", name: "Implementor")
         ]
         #expect(
-            CreateWorkspaceView.preselectedSpecialist(
+            CreationSelectionPolicy.preselectedWorkspaceSpecialist(
                 current: nil,
                 catalog: withOrchestrator
             )?.id == "coordinator"
@@ -47,7 +47,7 @@ extension CreateWorkspaceParamsTests {
             makeCatalogSpecialist(id: "implementor", name: "Implementor")
         ]
         #expect(
-            CreateWorkspaceView.preselectedSpecialist(
+            CreationSelectionPolicy.preselectedWorkspaceSpecialist(
                 current: nil,
                 catalog: plain
             )?.id == "implementor"
@@ -60,7 +60,7 @@ extension CreateWorkspaceParamsTests {
             makeCatalogSpecialist(id: "implementor", name: "Implementor")
         ]
         #expect(
-            CreateWorkspaceView.preselectedSpecialist(
+            CreationSelectionPolicy.preselectedWorkspaceSpecialist(
                 current: makeSpecialist(id: "verifier"),
                 catalog: specialists
             )?.id == "verifier"
@@ -68,7 +68,7 @@ extension CreateWorkspaceParamsTests {
         // A background refresh dropped the selected specialist: re-default
         // to the first pickable entry (name order).
         #expect(
-            CreateWorkspaceView.preselectedSpecialist(
+            CreationSelectionPolicy.preselectedWorkspaceSpecialist(
                 current: makeSpecialist(id: "retired"),
                 catalog: specialists
             )?.id == "implementor"
@@ -83,7 +83,7 @@ extension CreateWorkspaceParamsTests {
             makeSpecialist(id: "verifier"),
             makeSpecialist(id: "implementor", resolvedModel: "opus4.6", resolvedProvider: "auggie")
         ]
-        let kept = CreateWorkspaceView.preselectedSpecialist(current: stale, catalog: refreshed)
+        let kept = CreationSelectionPolicy.preselectedWorkspaceSpecialist(current: stale, catalog: refreshed)
         #expect(kept?.id == "implementor")
         #expect(kept?.resolvedModel == "opus4.6")
         #expect(kept == refreshed[1])
@@ -99,7 +99,7 @@ extension CreateWorkspaceParamsTests {
         ]
         #expect(refreshed.map(\.id) == ["coordinator", "implementor"])
         #expect(
-            CreateWorkspaceView.preselectedSpecialist(
+            CreationSelectionPolicy.preselectedWorkspaceSpecialist(
                 current: selected,
                 catalog: refreshed
             )?.id == "coordinator"
@@ -110,7 +110,7 @@ extension CreateWorkspaceParamsTests {
             makeCatalogSpecialist(id: "implementor", name: "Implementor", role: "internal")
         ]
         #expect(
-            CreateWorkspaceView.preselectedSpecialist(
+            CreationSelectionPolicy.preselectedWorkspaceSpecialist(
                 current: selected,
                 catalog: internalised
             )?.id == "coordinator"
@@ -124,11 +124,11 @@ extension CreateWorkspaceParamsTests {
         // letting a hidden id reach buildCreateWorkspaceParams.
         let selected = makeCatalogSpecialist(id: "implementor", name: "Implementor")
         let hiddenOnly = [makeCatalogSpecialist(id: "implementor", name: "Implementor", hidden: true)]
-        #expect(CreateWorkspaceView.pickerSpecialists(hiddenOnly).isEmpty)
-        #expect(CreateWorkspaceView.preselectedSpecialist(current: selected, catalog: hiddenOnly) == nil)
+        #expect(CreationSelectionPolicy.workspacePickerSpecialists(hiddenOnly).isEmpty)
+        #expect(CreationSelectionPolicy.preselectedWorkspaceSpecialist(current: selected, catalog: hiddenOnly) == nil)
         let internalOnly = [makeCatalogSpecialist(id: "implementor", name: "Implementor", role: "internal")]
-        #expect(CreateWorkspaceView.preselectedSpecialist(current: selected, catalog: internalOnly) == nil)
-        #expect(CreateWorkspaceView.preselectedSpecialist(current: nil, catalog: hiddenOnly) == nil)
+        #expect(CreationSelectionPolicy.preselectedWorkspaceSpecialist(current: selected, catalog: internalOnly) == nil)
+        #expect(CreationSelectionPolicy.preselectedWorkspaceSpecialist(current: nil, catalog: hiddenOnly) == nil)
     }
 
     @Test func specialistCatalogEqualityTracksMetadataNotJustIds() {
@@ -147,12 +147,12 @@ extension CreateWorkspaceParamsTests {
         // survives the empty interim (and nil stays nil). Only an empty
         // catalog is transient — a non-empty one is authoritative.
         #expect(
-            CreateWorkspaceView.preselectedSpecialist(
+            CreationSelectionPolicy.preselectedWorkspaceSpecialist(
                 current: makeSpecialist(id: "implementor"),
                 catalog: []
             )?.id == "implementor"
         )
-        #expect(CreateWorkspaceView.preselectedSpecialist(current: nil, catalog: []) == nil)
+        #expect(CreationSelectionPolicy.preselectedWorkspaceSpecialist(current: nil, catalog: []) == nil)
     }
 
     // MARK: - showsOptionsLoading (cached reopen never spins; warm-before-load clears)

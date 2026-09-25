@@ -59,6 +59,7 @@ enum ConversationConstants {
         static let initialScrollSettleDelay: Double = 0.2
         static let dividerProbeDelay: Double = 0.15
         static let scrollDebounceMilliseconds = 100
+        static let rowHeightSettleMilliseconds = 120
         static let scrollCompletionMilliseconds = 300
         /// How many corrections a forced follow issues before giving up.
         static let followLandingRetries = 3
@@ -74,10 +75,6 @@ enum ConversationConstants {
         static let streamingFollowDriftTolerance: CGFloat = 1
         /// Delay before rechecking geometry that briefly reads past the end.
         static let pastEndSettleMilliseconds = 150
-    }
-
-    enum AttentionRequest {
-        static let reasonLineLimit = 6
     }
 
     enum CodeBlock {
@@ -131,6 +128,7 @@ enum Constants {
     typealias Conversation = ConversationConstants
 
     enum AppCoordination {
+        static let backgroundRecoveryGrace: Duration = .seconds(1)
         private static let reconnectOverlayTimeoutSeconds = 5
         static let reconnectOverlayTimeout: Duration = .seconds(reconnectOverlayTimeoutSeconds)
     }

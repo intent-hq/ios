@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A parsed response group from `<group:Name>...</group>` tags in assistant text.
-struct ResponseGroup: Identifiable {
+struct ResponseGroup: Identifiable, Equatable {
     /// Deterministic id derived by the parser from the group's source
     /// (opening block id + per-block ordinal + name), so re-parsing identical
     /// input yields the same identity and streaming deltas don't reset the
@@ -29,44 +29,84 @@ enum RenderBlock: Identifiable {
     }
 }
 
+/// One `<group:Name>` disclosure of an assistant message. A thin shell over
+/// `ResponseGroupBody`: the message hands every group fresh closures on each
+/// evaluation, so the group body is gated by `.equatable()` and only
+/// re-renders when its children, paired tool results, position, workspace,
+/// or hydration set changed — not when a streaming delta lands outside it.
 struct ResponseGroupView: View {
     let group: ResponseGroup
     let isLast: Bool
     let workspaceId: String
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
+    /// `tool_result` blocks keyed by the id of the `tool_use` child they pair
+    /// with, pre-paired once per message by `AssistantMessageView` and
+    /// restricted to this group's children.
+    var toolResults: [String: ContentBlock] = [:]
     /// Slim-projection hydration passthrough (PROTOCOL §5.5): in-flight block
-    /// ids and the on-demand full-block fetch, forwarded to ContentBlockView.
+    /// ids (restricted to this group's children and their paired results)
+    /// and the on-demand full-block fetch, forwarded to ContentBlockView.
     var hydratingBlockIds: Set<String> = []
+    var onLayoutChange: (() -> Void)?
+    var onHydrateBlock: ((_ blockId: String) -> Void)?
+
+    var body: some View {
+        ResponseGroupBody(
+            group: group,
+            isLast: isLast,
+            workspaceId: workspaceId,
+            onNavigateToNote: onNavigateToNote,
+            toolResults: toolResults,
+            hydratingBlockIds: hydratingBlockIds,
+            onLayoutChange: onLayoutChange,
+            onHydrateBlock: onHydrateBlock
+        )
+        .equatable()
+    }
+}
+
+/// The value-compared group body behind `ResponseGroupView`.
+struct ResponseGroupBody: View, Equatable {
+    let group: ResponseGroup
+    let isLast: Bool
+    let workspaceId: String
+    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
+    let toolResults: [String: ContentBlock]
+    let hydratingBlockIds: Set<String>
+    var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded: Bool
 
-    private enum Layout {
-        static let groupSpacing: CGFloat = 4
-        static let headerSpacing: CGFloat = 6
-        static let iconOpacity: Double = 0.6
-        static let countHorizontalPadding: CGFloat = 5
-        static let countVerticalPadding: CGFloat = 1
-        static let disclosureOpacity: Double = 0.4
-        static let headerVerticalPadding: CGFloat = 4
-        static let railOpacity: Double = 0.15
-        static let bottomPadding: CGFloat = 8
-        static let childSpacing: CGFloat = 8
+    /// Manual `==`: closures are excluded on purpose — the message builds
+    /// new ones per evaluation, and they only capture stable identifiers.
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.group == rhs.group
+            && lhs.isLast == rhs.isLast
+            && lhs.workspaceId == rhs.workspaceId
+            && lhs.toolResults == rhs.toolResults
+            && lhs.hydratingBlockIds == rhs.hydratingBlockIds
     }
+
+    private typealias Layout = Constants.Conversation.ResponseGroup
 
     init(
         group: ResponseGroup,
         isLast: Bool,
         workspaceId: String,
         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil,
+        toolResults: [String: ContentBlock] = [:],
         hydratingBlockIds: Set<String> = [],
+        onLayoutChange: (() -> Void)? = nil,
         onHydrateBlock: ((_ blockId: String) -> Void)? = nil
     ) {
         self.group = group
         self.isLast = isLast
         self.workspaceId = workspaceId
         self.onNavigateToNote = onNavigateToNote
+        self.toolResults = toolResults
         self.hydratingBlockIds = hydratingBlockIds
+        self.onLayoutChange = onLayoutChange
         self.onHydrateBlock = onHydrateBlock
         self._isExpanded = State(initialValue: isLast)
     }
@@ -81,6 +121,7 @@ struct ResponseGroupView: View {
 
     private var headerButton: some View {
         Button {
+            onLayoutChange?()
             withAnimation(.easeInOut(duration: Constants.Conversation.ResponseGroup.expansionAnimationDuration)) {
                 isExpanded.toggle()
             }
@@ -160,12 +201,15 @@ struct ResponseGroupView: View {
     private var groupChildrenView: some View {
         VStack(alignment: .leading, spacing: Layout.childSpacing) {
             ForEach(group.children) { block in
+                let toolResult = toolResults[block.id]
                 ContentBlockView(
                     block: block,
-                    allBlocks: group.children,
+                    toolResult: toolResult,
                     workspaceId: workspaceId,
                     onNavigateToNote: onNavigateToNote,
-                    hydratingBlockIds: hydratingBlockIds,
+                    isHydrating: hydratingBlockIds.contains(block.id)
+                        || (toolResult.map { hydratingBlockIds.contains($0.id) } ?? false),
+                    onLayoutChange: onLayoutChange,
                     onHydrateBlock: onHydrateBlock
                 )
             }

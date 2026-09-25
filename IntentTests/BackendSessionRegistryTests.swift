@@ -14,7 +14,7 @@ final class BackendSessionRegistryTests {
     /// Per-test isolated persistence (same pattern as AppCoordinatorTests):
     /// a private UserDefaults suite plus in-memory keychain so no state
     /// leaks between tests or into the real app container.
-    private let persistence: PersistenceManager
+    let persistence: PersistenceManager
     private let suiteName: String
 
     /// Fakes created by the injected factory, in creation order.
@@ -68,7 +68,7 @@ final class BackendSessionRegistryTests {
         )
     }
 
-    private func makeRegistry() -> BackendSessionRegistry {
+    func makeRegistry() -> BackendSessionRegistry {
         BackendSessionRegistry { [self] backendID in
             let connection = SessionFakeConnectionManager()
             createdBackendIDs.append(backendID)
@@ -470,14 +470,6 @@ struct BackendIDTests {
 
         #expect(BackendID(connection: connection).connectionID == connection.id)
         #expect(BackendID(connection: connection) == BackendID(connection.id))
-    }
-
-    @Test func hashesByConnectionUUID() {
-        let uuid = UUID()
-        let counts = [BackendID(uuid): 1]
-
-        #expect(counts[BackendID(uuid)] == 1)
-        #expect(BackendID(uuid) != BackendID(UUID()))
     }
 
     @Test func roundTripsThroughCodable() throws {

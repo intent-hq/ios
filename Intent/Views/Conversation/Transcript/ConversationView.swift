@@ -116,7 +116,6 @@ private struct ConversationViewContent: View {
                         connectionId: connectionId
                     )
                 }
-                Task { await viewModel.teardownLiveStores() }
                 // Stop-looking boundary — fires markSeen immediately.
                 viewModel.conversationDisappeared()
             }

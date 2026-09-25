@@ -1,5 +1,6 @@
 import Foundation
 @testable import Intent
+import Security
 import Testing
 
 extension AppCoordinatorTests {
@@ -64,6 +65,41 @@ extension AppCoordinatorTests {
 }
 
 extension AppCoordinatorTests {
+    @Test @MainActor func unreadableRegistryDoesNotReportSuccessfulLogOffOrDelete() {
+        let storage = FakeSecItemStore()
+        persistence.keychainStorage = SecItemKeychainStorage(security: storage.securityCalls())
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 1))
+        persistence.setActiveConnection(id: stored.id)
+        saveWorkspaceListScreen(for: stored)
+        let fake = FakeConnectionManager()
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore.shared,
+            connection: fake,
+            backendID: BackendID(stored.id),
+            persistence: persistence,
+            sessionRegistry: registry
+        )
+        let before = storage.items
+        let writes = storage.updateCallCount
+        storage.readFailures[persistence.keychainAccountConnections] = errSecNotAvailable
+
+        #expect(!coordinator.onDeleteConnection(id: stored.id))
+        #expect(!coordinator.onLogOff())
+        #expect(storage.items == before)
+        #expect(storage.updateCallCount == writes)
+        #expect(!registry.isBackendRemoved(BackendID(stored.id)))
+        #expect(persistence.loadLastScreen(for: stored.id) != nil)
+        #expect(persistence.defaults.string(forKey: persistence.activeConnectionIdKey) == stored.id.uuidString)
+        #expect(fake.disconnectCallCount == 1)
+        #expect(coordinator.connectionFailureRetryPolicy == .manualLogOff)
+
+        storage.readFailures = [:]
+        #expect(coordinator.onLogOff())
+        #expect(persistence.loadConnections().isEmpty)
+        #expect(registry.isBackendRemoved(BackendID(stored.id)))
+    }
+
     private struct FailedLogOffContext {
         let storage: InMemoryKeychainStorage
         let stored: StoredConnection

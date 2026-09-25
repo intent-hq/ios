@@ -14,13 +14,13 @@ struct MarkdownTextView: View {
     /// also re-runs on lightbox state changes).
     private let markdownSource: String
     @Environment(\.colorScheme) var colorScheme
-    /// The window's session, when present: intent-file images then load over
+    /// The window's session, when present: workspace images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
+    @State private var videoItem: VideoItem?
+    @State private var attachmentAttempt = 0
 
-    private static let taskListTopSpacing: CGFloat = 2
-    private static let taskListBottomSpacing: CGFloat = 4
     private static let maximumBlockIndent = 3
     private static let minimumFenceLength = 3
     private static let indentedCodeWidth = 4
@@ -47,6 +47,21 @@ struct MarkdownTextView: View {
         }
     }
 
+    /// Bind saved images to the window's session, never to URL backend hints.
+    static func assetMediaFetcher(session: BackendSession?) -> @Sendable (String, String) async throws -> WorkspaceFileMedia {
+        let fileLoader = session?.workspaceFileImageLoader ?? .shared
+        return { workspaceId, assetId in
+            try await fileLoader.assetMedia(workspaceId: workspaceId, assetId: assetId)
+        }
+    }
+
+    private var fileVideoFetcher: @Sendable (String, String) async throws -> WorkspaceVideo {
+        let fileLoader = session?.workspaceFileImageLoader ?? .shared
+        return { workspaceId, path in
+            try await fileLoader.video(workspaceId: workspaceId, path: path)
+        }
+    }
+
     var body: some View {
         let markdownView = StructuredText(markdown: markdownSource)
             .textual.structuredTextStyle(.compact)
@@ -54,26 +69,39 @@ struct MarkdownTextView: View {
                 IntentFileAttachmentLoader(
                     workspaceId: workspaceId,
                     fallback: .image(),
-                    fileImage: fileImageFetcher
+                    fileImage: fileImageFetcher,
+                    assetMedia: Self.assetMediaFetcher(session: session),
+                    fileVideo: fileVideoFetcher
                 )
             )
             .textual.listItemSpacing(
                 .fontScaled(
-                    top: Self.taskListTopSpacing / CompactMarkdownStyle.baseFontSize,
-                    bottom: Self.taskListBottomSpacing / CompactMarkdownStyle.baseFontSize
+                    top: Constants.Markdown.taskListTopSpacing / Constants.Markdown.baseFontSize,
+                    bottom: Constants.Markdown.taskListBottomSpacing / Constants.Markdown.baseFontSize
                 )
             )
             .textual.textSelection(.enabled)
             .textual.onAttachmentTap { attachment in
                 if let image = Self.lightboxImage(for: attachment) {
                     lightboxItem = LightboxItem(image: image)
+                } else if let video = Self.playbackVideo(for: attachment) {
+                    videoItem = VideoItem(video: video)
+                } else if let failure = attachment.base as? IntentFileVideoFailureAttachment,
+                          failure.prepareRetry(using: session?.workspaceFileImageLoader ?? .shared) {
+                    attachmentAttempt += 1
                 }
             }
+            // Textual resolves URLs once per attributed string. Recreate that
+            // state on explicit retry; successful media still uses the cache.
+            .id(attachmentAttempt)
             .font(.body)
             .foregroundStyle(Theme.foreground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
                 ImageLightboxView(image: item.image)
+            }
+            .fullScreenCover(item: $videoItem) { item in
+                VideoLightboxView(video: item.video)
             }
 
         if let handler = onOpenURL {
@@ -84,11 +112,15 @@ struct MarkdownTextView: View {
         }
     }
 
-    /// Routes attachment taps: only loaded markdown images (intent-file and
-    /// remote http(s)) open the lightbox; every other attachment (e.g.
-    /// failure placeholders) is inert.
+    /// Routes attachment taps: only loaded markdown images (intent-file, saved assets and
+    /// remote http(s)) open the image lightbox. Videos and retry placeholders
+    /// have separate actions in the attachment tap handler.
     static func lightboxImage(for attachment: AnyAttachment) -> UIImage? {
         (attachment.base as? IntentFileImageAttachment)?.image
+    }
+
+    static func playbackVideo(for attachment: AnyAttachment) -> WorkspaceVideo? {
+        (attachment.base as? IntentFileVideoAttachment)?.video
     }
 
     /// GFM task-list line: optional blockquote prefix, indent, list marker
@@ -173,4 +205,9 @@ struct MarkdownTextView: View {
 private struct LightboxItem: Identifiable {
     let id = UUID()
     let image: UIImage
+}
+
+private struct VideoItem: Identifiable {
+    let id = UUID()
+    let video: WorkspaceVideo
 }

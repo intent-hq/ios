@@ -15,14 +15,7 @@ struct BackgroundHooksRow: View {
     private let hookStore: BackgroundHookStore
     @Environment(\.colorScheme) var colorScheme
 
-    /// Max characters of a hook name shown on a chip (mirrors the FE's
-    /// visual max-width truncation).
-    private static let nameMaxLength = 24
-    private static let repeatIconFontSize: CGFloat = 8
-    private static let chipTopPadding: CGFloat = 4
-    private static let chipBottomPadding: CGFloat = 6
-    private static let chipBackgroundOpacity = 0.3
-    private static let timeBarInset: CGFloat = 3
+    private typealias Layout = Constants.Conversation.StatusStrip.BackgroundHooks
 
     init(viewModel: ConversationViewModel, hookStore: BackgroundHookStore) {
         self.viewModel = viewModel
@@ -90,7 +83,7 @@ struct BackgroundHooksRow: View {
                 .lineLimit(1)
             if hook.perpetual {
                 Image(systemName: "repeat")
-                    .font(.system(size: Self.repeatIconFontSize))
+                    .font(.system(size: Layout.repeatIconFontSize))
                     .accessibilityLabel("Repeating hook")
             }
             if hook.state == .running {
@@ -100,19 +93,19 @@ struct BackgroundHooksRow: View {
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         .padding(.horizontal, Constants.Conversation.StatusStrip.chipHorizontalPadding)
-        .padding(.top, Self.chipTopPadding)
-        .padding(.bottom, Self.chipBottomPadding)
-        .background(Theme.muted(for: colorScheme).opacity(Self.chipBackgroundOpacity))
+        .padding(.top, Layout.chipTopPadding)
+        .padding(.bottom, Layout.chipBottomPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Layout.chipBackgroundOpacity))
         .overlay(alignment: .bottom) {
             if hook.state == .scheduled, let nextRunAt = hook.nextRunAt {
                 HookTimeBar(
                     nextRunAt: nextRunAt,
                     delayMs: hook.delayMs,
-                    color: Theme.mutedForeground(for: colorScheme).opacity(0.5)
+                    color: Theme.mutedForeground(for: colorScheme).opacity(Layout.timeBarOpacity)
                 )
                 .id(nextRunAt)
-                .padding(.horizontal, Self.timeBarInset)
-                .padding(.bottom, Self.timeBarInset)
+                .padding(.horizontal, Layout.timeBarInset)
+                .padding(.bottom, Layout.timeBarInset)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius))
@@ -126,8 +119,8 @@ struct BackgroundHooksRow: View {
     }
 
     private func truncatedName(_ name: String) -> String {
-        if name.count <= Self.nameMaxLength { return name }
-        return name.prefix(Self.nameMaxLength) + "…"
+        if name.count <= Layout.nameMaxLength { return name }
+        return name.prefix(Layout.nameMaxLength) + "…"
     }
 
     // MARK: - Display helpers (pure, unit-tested)
@@ -172,7 +165,7 @@ private struct HookTimeBar: View {
     var body: some View {
         Rectangle()
             .fill(color)
-            .frame(height: 1)
+            .frame(height: Constants.Conversation.StatusStrip.BackgroundHooks.timeBarHeight)
             .scaleEffect(x: fraction, y: 1, anchor: .leading)
             .onAppear(perform: start)
     }

@@ -108,6 +108,7 @@ extension ConnectionManager {
     /// connection so tests can race fakes; internal for test visibility.
     nonisolated static func raceCandidates<Connection: HostRacingConnection>(
         _ hosts: [String],
+        diagnostics: DiagnosticStore = .shared,
         connect: @escaping @Sendable (String) async throws -> Connection
     ) async -> HostRaceOutcome<Connection> {
         let mailbox = RaceMailbox<Connection>()
@@ -118,9 +119,15 @@ extension ConnectionManager {
             let settlement = await settleCandidates(
                 count: hosts.count,
                 candidates: candidates,
-                mailbox: mailbox
+                mailbox: mailbox,
+                diagnostics: diagnostics
             )
-            let drain = makeDrain(remaining: settlement.remaining, mailbox: mailbox)
+            let drain = makeDrain(
+                remaining: settlement.remaining,
+                mailbox: mailbox,
+                diagnostics: diagnostics,
+                hasWinner: settlement.winner != nil
+            )
             return await makeOutcome(settlement: settlement, hosts: hosts, drain: drain)
         } onCancel: {
             cancelAll()
@@ -153,7 +160,8 @@ extension ConnectionManager {
     nonisolated private static func settleCandidates<Connection: HostRacingConnection>(
         count: Int,
         candidates: [Task<Void, Never>],
-        mailbox: RaceMailbox<Connection>
+        mailbox: RaceMailbox<Connection>,
+        diagnostics: DiagnosticStore
     ) async -> HostRaceSettlement<Connection> {
         var lastError: Error?
         var mismatches: [HostCertMismatch] = []
@@ -174,6 +182,20 @@ extension ConnectionManager {
                 winner = connection
                 break settle
             case .failure(let error):
+                if !Task.isCancelled, !(error is CancellationError) {
+                    let failure = TransportDiagnosticFailure.classify(error)
+                    diagnostics.record(DiagnosticEvent(
+                        kind: failure.classification == .pinMismatch || failure.classification == .noCertificate
+                            ? .trustRejected : .connectionAttempt,
+                        operation: failure.classification == .pinMismatch || failure.classification == .noCertificate
+                            ? .trustReject : .connectionAttempt,
+                        site: .webSocket,
+                        stage: .connect,
+                        outcome: .fallbackPending,
+                        failure: failure,
+                        effect: .candidateRejected
+                    ))
+                }
                 if Task.isCancelled {
                     cancellationObserved = true
                     cancelCandidates(candidates)
@@ -205,7 +227,9 @@ extension ConnectionManager {
 
     nonisolated private static func makeDrain<Connection: HostRacingConnection>(
         remaining: Int,
-        mailbox: RaceMailbox<Connection>
+        mailbox: RaceMailbox<Connection>,
+        diagnostics: DiagnosticStore,
+        hasWinner: Bool
     ) -> Task<[HostCertMismatch], Never>? {
         guard remaining > 0 else { return nil }
         AppLog.connection.debug("[ConnectionManager] Host racing settled; draining \(remaining) candidate(s) in the background")
@@ -217,6 +241,20 @@ extension ConnectionManager {
                     await loser.disconnect()
                 case .failure(let error):
                     appendMismatch(from: error, to: &lateMismatches)
+                    // Losing candidates are cancelled deliberately. A concrete
+                    // late pin rejection still matters; generic cancellation
+                    // fallout does not represent another connection failure.
+                    if hasWinner, let error = error as? WebSocketTransportError, error.isCertificateMismatch {
+                        diagnostics.record(DiagnosticEvent(
+                            kind: .trustRejected,
+                            operation: .trustReject,
+                            site: .webSocket,
+                            stage: .connect,
+                            outcome: .recovered,
+                            failure: TransportDiagnosticFailure.classify(error),
+                            effect: .candidateRejected
+                        ))
+                    }
                     AppLog.connection.debug("[ConnectionManager] Host racing: \(error.localizedDescription)")
                 }
             }

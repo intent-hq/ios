@@ -49,6 +49,12 @@ struct AgentSession: Identifiable, Equatable {
     /// existing memberwise construction sites keep compiling.
     var pendingQuestionsMessageId: String?
     var dismissedQuestionsMessageId: String?
+    /// Daemon-owned per-session notification mute (PROTOCOL §5.5): a muted
+    /// agent raises no alert, chime or haptic on this client. Served
+    /// top-level on every AgentLite/AgentSession projection; absent (older
+    /// daemons) means unmuted. Defaulted so existing memberwise construction
+    /// sites keep compiling.
+    var notificationsMuted = false
 
     private static let activeStatuses: Set<String> = [
         "active",
@@ -191,7 +197,8 @@ struct AgentSession: Identifiable, Equatable {
             attentionRequestReason: attentionRequestReason,
             attentionRequestTimestamp: attentionRequestTimestamp,
             pendingQuestionsMessageId: pendingQuestionsMessageId,
-            dismissedQuestionsMessageId: dismissedQuestionsMessageId
+            dismissedQuestionsMessageId: dismissedQuestionsMessageId,
+            notificationsMuted: notificationsMuted
         )
     }
 
@@ -223,7 +230,10 @@ struct AgentSession: Identifiable, Equatable {
             attentionRequestReason: attentionSurface?.reason,
             attentionRequestTimestamp: attentionSurface?.timestamp,
             pendingQuestionsMessageId: metadata?["pendingQuestionsMessageId"] as? String,
-            dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String
+            dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String,
+            notificationsMuted: dict["notificationsMuted"] as? Bool
+                ?? metadata?["notificationsMuted"] as? Bool
+                ?? false
         )
     }
 
@@ -239,18 +249,6 @@ struct AgentSession: Identifiable, Equatable {
             return surface
         }
         return nil
-    }
-
-    /// Extracts the pending attention request straight from a raw agent dict,
-    /// without requiring the full session parse (which needs id/name), so
-    /// attention state can still raise/clear on a partial payload.
-    static func parsePendingAttentionRequest(_ dict: [String: Any]) -> PendingAttentionRequest? {
-        guard let surface = attentionRequestSurface(dict) else { return nil }
-        return PendingAttentionRequest(
-            kind: AgentAttentionKind(wire: surface.kind),
-            reason: oneLiner(surface.reason),
-            raisedAt: ISO8601DateFormatter.lenientDate(from: surface.timestamp)
-        )
     }
 }
 

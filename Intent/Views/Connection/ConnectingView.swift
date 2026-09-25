@@ -7,20 +7,29 @@ import SwiftUI
 struct ConnectingView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
+    var networkStatus: NetworkAvailability.Status = .unknown
 
-    private enum Layout {
-        static let mismatchHorizontalPadding: CGFloat = 32
-        static let contentBottomPadding: CGFloat = 24
-    }
+    private typealias Layout = Constants.Connecting
 
     var body: some View {
         VStack {
             Spacer()
+            if DemoConnectionLoss.initialDataGate != nil {
+                Text(verbatim: String(describing: session.connection.connectionState))
+                    .accessibilityIdentifier("demo-connection-startup")
+            }
+            if ConnectionNetworkMessage(status: networkStatus).isUnavailable {
+                ConnectionNetworkStatusView(status: networkStatus)
+                    .padding(.horizontal, Layout.mismatchHorizontalPadding)
+            }
             // Passive per-host cert-mismatch list: hosts that presented a
             // wrong certificate while the race continues on the others.
             if !session.connection.certMismatches.isEmpty {
-                CertMismatchListView(mismatches: session.connection.certMismatches)
-                    .padding(.horizontal, Layout.mismatchHorizontalPadding)
+                CertMismatchListView(
+                    mismatches: session.connection.certMismatches,
+                    warningForeground: Theme.foreground(for: .light)
+                )
+                .padding(.horizontal, Layout.mismatchHorizontalPadding)
             }
         }
         .padding(.bottom, Layout.contentBottomPadding)
@@ -33,6 +42,8 @@ struct ConnectingView: View {
     }
 
     private func attemptConnection() async {
+        guard !coordinator.lifecycleState.hasReturnedToSavedMachines else { return }
+        let attemptID = coordinator.connectionAttemptId
         if DemoMode.pretendPaired {
             // Demo/screenshot mode: no daemon. Mark the connection live so the
             // stores run their normal on-connected fetches (served from
@@ -54,13 +65,15 @@ struct ConnectingView: View {
             }
 
             do {
-                try await session.connection.connect(
-                    hosts: connection.server.hosts,
-                    port: connection.server.port,
-                    token: connection.token,
-                    certFingerprint: connection.server.certFingerprint,
-                    tcAddress: connection.server.tcAddress
-                )
+                try await DiagnosticConnectContext.$origin.withValue(.saved) {
+                    try await session.connection.connect(
+                        hosts: connection.server.hosts,
+                        port: connection.server.port,
+                        token: connection.token,
+                        certFingerprint: connection.server.certFingerprint,
+                        tcAddress: connection.server.tcAddress
+                    )
+                }
             } catch {
                 // A bumped connectionAttemptId cancels this task and starts a
                 // replacement: the superseded attempt's failure must not stomp
@@ -79,6 +92,9 @@ struct ConnectingView: View {
         // WorkspaceStore auto-fetches on .connected and sets lastUpdated
         // when done. Poll with a 5-second timeout to avoid getting stuck.
         do {
+            if let gate = DemoConnectionLoss.initialRoutingGate {
+                try await DemoFixtures.wait(for: gate)
+            }
             try await waitForWorkspaceData(timeout: Constants.Connecting.workspaceLoadTimeout)
         } catch {
             // Cancelled mid-wait (attempt restarted or view dismissed): the
@@ -86,7 +102,7 @@ struct ConnectingView: View {
             // replacement owns either (ios#230).
             return
         }
-        coordinator.onConnectionSuccess()
+        coordinator.onInitialWorkspaceLoadComplete(attemptID: attemptID)
     }
 
     /// Waits for the session's `WorkspaceStore.lastUpdated` to become

@@ -6,24 +6,15 @@ struct ToolCallView: View {
     /// True while a slim-truncated body (input or output) is being hydrated
     /// via agent.getMessageBlock (PROTOCOL §5.5).
     var isHydrating: Bool = false
+    /// Invalidates the transcript's settled row height before disclosure.
+    var onLayoutChange: (() -> Void)?
     /// Fetch the full bodies of this row's slim-truncated blocks; absent →
     /// no hydration (the bounded preview stays).
     var onHydrate: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded = false
 
-    private enum Layout {
-        static let headerSpacing: CGFloat = 4
-        static let pathOpacity: Double = 0.6
-        static let disclosureFontSize: CGFloat = 8
-        static let disclosureOpacity: Double = 0.4
-        static let headerLeadingPadding: CGFloat = 8
-        static let headerVerticalPadding: CGFloat = 3
-        static let expandedContentSpacing: CGFloat = 8
-        static let hydrationStatusSpacing: CGFloat = 4
-        static let expandedHorizontalPadding: CGFloat = 10
-        static let expandedBottomPadding: CGFloat = 10
-    }
+    private typealias Layout = Constants.Conversation.ToolCall
 
     private var toolName: String {
         block.resolvedName ?? "tool"
@@ -49,7 +40,7 @@ struct ToolCallView: View {
 
     private var borderColor: Color {
         if toolResult == nil { return Color.blue }
-        return hasError ? Theme.destructive(for: colorScheme) : Color.green.opacity(0.5)
+        return hasError ? Theme.destructive(for: colorScheme) : Color.green.opacity(Layout.successBorderOpacity)
     }
 
     // MARK: - Body
@@ -64,12 +55,13 @@ struct ToolCallView: View {
         .overlay(alignment: .leading) {
             Rectangle()
                 .fill(borderColor)
-                .frame(width: 2)
+                .frame(width: Layout.statusBorderWidth)
         }
     }
 
     private var headerButton: some View {
         Button {
+            onLayoutChange?()
             withAnimation(.easeInOut(duration: Constants.Conversation.ToolCall.expansionAnimationDuration)) {
                 isExpanded.toggle()
             }

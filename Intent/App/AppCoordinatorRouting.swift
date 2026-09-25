@@ -15,6 +15,7 @@ final class AppCoordinatorRoutingState {
 
 extension AppCoordinator {
     func onLoadComplete() {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
         routingState.hasLoadCompleted = true
         refreshSyncedBackends()
         if DemoMode.pretendPaired || backendID != nil {
@@ -42,6 +43,7 @@ extension AppCoordinator {
     /// The URL itself is never logged — pair payloads carry the auth token.
     func handleIncomingURL(_ url: URL) {
         guard let payload = PairingPayload.parse(url.absoluteString) else {
+            if url.scheme == "intent", url.host == "pair" { PairingDiagnostics.invalidInput() }
             AppLog.app.info("[AppCoordinator] Ignoring non-pairing deep link")
             return
         }
@@ -64,6 +66,7 @@ extension AppCoordinator {
     /// backend's window — or replace an unbound pairing window with it —
     /// where multiple windows are supported).
     func onDeepLinkPaired(_ connection: StoredConnection) {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
         pendingDeepLinkPairing = nil
         if let bound = backendID, bound.connectionID == connection.id {
             dependencies.connection.updateCachedCredentials(
@@ -85,6 +88,7 @@ extension AppCoordinator {
     /// v2 policy (rebind in place vs open/raise); without a hook (tests,
     /// previews) the pairing session's live connection is used in place.
     func onPaired(_ connection: StoredConnection) {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
         if let retargetWindow {
             let target = BackendID(connection.id)
             retargetWindow(target)
@@ -133,7 +137,7 @@ extension AppCoordinator {
         agentName: String,
         connectionId: UUID
     ) {
-        guard windowConnectionID == connectionId else { return }
+        guard !lifecycleState.hasReturnedToSavedMachines, windowConnectionID == connectionId else { return }
         switch currentScreen {
         case .loading, .connecting, .pairing, .connectionFailed, .disconnected:
             routingState.pendingNotificationSelection = .init(
@@ -151,6 +155,10 @@ extension AppCoordinator {
     /// foreground): re-merges the iCloud-synced backend registry so changes
     /// made on other devices while the app was backgrounded show up.
     func onScenePhaseActive() {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        connectionLossPresentation.becameActive { [weak self] in
+            self?.reconcileBackgroundRecovery()
+        }
         dependencies.backgroundTaskManager.endIfNeeded()
         refreshSyncedBackends()
     }
@@ -158,7 +166,17 @@ extension AppCoordinator {
     /// Called when the scene leaves the foreground so agent-completion events
     /// can continue arriving during iOS's extended background execution window.
     func onScenePhaseNotActive() {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
         dependencies.backgroundTaskManager.beginIfNeeded()
+    }
+
+    /// Inactive alone (Control Center, permissions, etc.) is not a background
+    /// return and must not delay an ordinary foreground connection failure.
+    func onScenePhaseBackground() {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        connectionLossPresentation.enteredBackground(
+            eligible: lifecycleState.hasEnteredRemoteUI && !showsConnectionLossOverlay
+        )
     }
 
     /// Merges the iCloud-synced backend registry into the saved connections
@@ -172,6 +190,7 @@ extension AppCoordinator {
     /// uses them.
     @discardableResult
     func refreshSyncedBackends() -> SyncedBackendMergeOutcome? {
+        dependencies.persistence.publishPendingBackends()
         guard case .available(let records) = dependencies.syncedRegistry.listBackends() else { return nil }
         let windowID = windowConnectionID
         let outcome = dependencies.persistence.mergeSyncedBackends(records: records)
@@ -211,7 +230,18 @@ extension AppCoordinator {
         return outcome
     }
 
+    /// Keep the existing bounded startup fallback, even during transport-owned
+    /// reconnect. Routing completion alone does not establish overlay eligibility.
+    func onInitialWorkspaceLoadComplete(attemptID: Int) {
+        guard !lifecycleState.hasReturnedToSavedMachines, case .connecting = currentScreen,
+              attemptID == connectionAttemptId else { return }
+        onConnectionSuccess()
+    }
+
     func onConnectionSuccess() {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        lifecycleState.hasCompletedInitialRouting = true
+        defer { establishConnectionLossEligibility() }
         if routePendingNotificationSelection() { return }
         if restoreLastScreenIfAvailable() { return }
         currentScreen = .workspaceList
@@ -234,12 +264,35 @@ extension AppCoordinator {
     }
 
     func onRetryConnection() {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
         currentScreen = .connecting
     }
 
     func onReconnect() {
         pairingShowsSavedConnections = !dependencies.persistence.loadConnections().isEmpty
         currentScreen = .pairing
+    }
+
+    /// Leave this remote session without forgetting its pairing. Unlike Log
+    /// Off, this never edits credentials or marks the backend removed.
+    func onReturnToSavedMachines() {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        stopConnectionLifecycleForReturnHome()
+        isDisconnected = false
+        selectedWorkspaceId = nil
+        pendingDeepLinkPairing = nil
+        routingState.stashedDeepLinkPayload = nil
+        routingState.pendingNotificationSelection = nil
+        pairingShowsSavedConnections = !dependencies.persistence.loadConnections().isEmpty
+        currentScreen = .pairing
+        if let returnWindowToSavedMachines {
+            returnWindowToSavedMachines()
+        } else {
+            // No window owner in standalone tests/previews. A live window
+            // must use the hook so surviving windows keep their connection.
+            dependencies.connection.disconnect()
+            resetWorkspaceStore()
+        }
     }
 
     /// Drop the previous daemon's workspace data so no stale rows are shown
@@ -256,8 +309,7 @@ extension AppCoordinator {
     /// data, then restart the attempt — ConnectingView dials from
     /// windowConnection, this window's own saved record.
     private func redialWindowBackend() {
-        lifecycleState.hasEverConnected = false
-        isDisconnected = false
+        resetConnectionLossEligibility()
         dependencies.connection.disconnect()
         resetWorkspaceStore()
         restartConnectionAttempt()
@@ -271,8 +323,7 @@ extension AppCoordinator {
     /// it to a fresh pairing session); this in-place routing covers windows
     /// without a root hook (tests, previews).
     private func exitRemovedBackend() {
-        lifecycleState.hasEverConnected = false
-        isDisconnected = false
+        resetConnectionLossEligibility()
         dependencies.connection.disconnect()
         resetWorkspaceStore()
         if let connectionID = windowConnectionID {
@@ -296,12 +347,12 @@ extension AppCoordinator {
             retargetWindow(BackendID(id))
             return
         }
-        lifecycleState.hasEverConnected = false
-        isDisconnected = false
+        resetConnectionLossEligibility()
         dependencies.connection.disconnect()
         resetWorkspaceStore()
         selectedWorkspaceId = nil
         pairingShowsSavedConnections = false
+        resumeConnectionLifecycleIfNeeded()
         restartConnectionAttempt()
     }
 
@@ -336,14 +387,16 @@ extension AppCoordinator {
     /// pairing surface, offering any remaining saved connections).
     @discardableResult
     func onLogOff() -> Bool {
-        if let record = windowConnection {
-            guard dependencies.persistence.deleteConnection(id: record.id) else {
+        // Use the window's identity, not an optional storage lookup that can
+        // disappear on read failure and falsely report a successful Log Off.
+        if let connectionID = windowConnectionID {
+            guard dependencies.persistence.deleteConnection(id: connectionID) else {
                 AppLog.app.error("[AppCoordinator] Failed to forget saved connection during log off")
                 handleFailedLogOff()
                 return false
             }
-            dependencies.persistence.clearLastScreen(for: record.id)
-            dependencies.sessionRegistry.markBackendRemoved(BackendID(record.id))
+            dependencies.persistence.clearLastScreen(for: connectionID)
+            dependencies.sessionRegistry.markBackendRemoved(BackendID(connectionID))
         }
         exitRemovedBackend()
         return true
@@ -353,8 +406,7 @@ extension AppCoordinator {
     /// cannot be forgotten. Keep persistence-derived state intact and surface
     /// the failure instead of routing to first-run pairing.
     private func handleFailedLogOff() {
-        lifecycleState.hasEverConnected = false
-        isDisconnected = false
+        resetConnectionLossEligibility()
         dependencies.connection.disconnect()
         resetWorkspaceStore()
         selectedWorkspaceId = nil

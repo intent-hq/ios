@@ -20,7 +20,6 @@ import SwiftUI
 
     var isTruncated: Bool { store.isTruncated }
     var totalMessageCount: Int { store.totalMessageCount }
-    var attentionRequest: PendingAttentionRequest? { store.attentionRequest }
     var agentNotFound: Bool { store.agentNotFound }
     var activeAgentHooks: [BackgroundHook] {
         hookStore.activeHooks.filter { $0.agentId == agentId }
@@ -39,8 +38,12 @@ import SwiftUI
     var hasLatchedNewMessagesDividerAnchor = false
 
     var messageText = "" {
-        didSet { draftTextSubject.send(messageText) }
+        didSet {
+            composerTextRevision &+= 1
+            draftTextSubject.send(messageText)
+        }
     }
+    @ObservationIgnored var composerTextRevision = 0
     var availableModels: [ModelInfo] = []
     var currentModelId: String?
     var currentProviderId: String?
@@ -90,6 +93,8 @@ import SwiftUI
     @ObservationIgnored var isAppActive = true
     @ObservationIgnored var previousIsStreaming = false
     @ObservationIgnored var markSeenDebounceTask: Task<Void, Never>?
+    @ObservationIgnored var liveStoreActivationGeneration = 0
+    @ObservationIgnored var activeLiveStoreActivation: Int?
 
     init(
         agentId: String,

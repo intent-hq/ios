@@ -212,7 +212,17 @@ struct CreateWorkspaceParamsTests {
 
     // MARK: - Provider emission/omission
 
-    @Test func providerOmittedWhenAuggieOnDaemonDefault() throws {
+    @Test func enabledAuggieOverridesDifferentSpecialistProvider() throws {
+        let params = buildParams(
+            specialist: makeSpecialist(resolvedProvider: "codex"), provider: makeProvider(id: "auggie")
+        )
+        let initialAgent = try #require(params["initialAgent"] as? [String: Any])
+        #expect(initialAgent["provider"] as? String == "auggie")
+        let providerOnly = buildParams(provider: makeProvider(id: "auggie"))
+        #expect((providerOnly["initialAgent"] as? [String: Any])?["provider"] as? String == "auggie")
+    }
+
+    @Test func auggieSentExplicitlyWithDaemonDefaultModel() throws {
         let params = buildParams(
             specialist: makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie"),
             provider: makeProvider(id: "auggie"),
@@ -220,18 +230,18 @@ struct CreateWorkspaceParamsTests {
             message: "Do the thing"
         )
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
-        #expect(initialAgent["provider"] == nil)
+        #expect(initialAgent["provider"] as? String == "auggie")
         #expect(initialAgent["model"] == nil)
     }
 
-    @Test func providerOmittedWhenAuggieWithModelPick() throws {
+    @Test func auggieSentExplicitlyWithModelPick() throws {
         let params = buildParams(
             specialist: makeSpecialist(),
             provider: makeProvider(id: "auggie"),
             model: makeModel(id: "opus4.6")
         )
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
-        #expect(initialAgent["provider"] == nil)
+        #expect(initialAgent["provider"] as? String == "auggie")
         #expect(initialAgent["model"] as? String == "opus4.6")
     }
 

@@ -1,11 +1,16 @@
 import Foundation
 
 extension ConversationViewModel {
+    /// The transcript comes only from the `chat.subscribe` seq-0 snapshot;
+    /// the load waits for it to apply (or its wait to time out), so the
+    /// new-messages divider anchors against the served rows.
     func load() async {
+        guard !Task.isCancelled else { return }
+        let activation = activateLiveStores()
         await store.subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
-        await store.subscribeLiveChat(agentId: agentId)
+        guard ownsLiveStoreActivation(activation), !Task.isCancelled else { return }
 
-        async let conversation: () = store.fetchConversation(agentId: agentId, workspaceId: workspaceId)
+        async let conversation: () = loadTranscript()
         async let queue: () = store.fetchQueue(agentId: agentId)
         async let model: () = fetchCurrentModel()
         async let subscriptions: () = store.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
@@ -14,8 +19,24 @@ extension ConversationViewModel {
         async let monitors: () = monitoredPrStore.subscribe(workspaceId: workspaceId, agentId: agentId)
 
         _ = await (conversation, streamingState)
+        guard ownsLiveStoreActivation(activation), !Task.isCancelled else { return }
         latchNewMessagesDividerAnchorIfNeeded()
         _ = await (queue, model, subscriptions, hooks, monitors)
+    }
+
+    private func activateLiveStores() -> Int {
+        liveStoreActivationGeneration &+= 1
+        activeLiveStoreActivation = liveStoreActivationGeneration
+        return liveStoreActivationGeneration
+    }
+
+    private func ownsLiveStoreActivation(_ activation: Int) -> Bool {
+        activeLiveStoreActivation == activation
+    }
+
+    private func loadTranscript() async {
+        await store.subscribeLiveChat(agentId: agentId, workspaceId: workspaceId)
+        await store.awaitLiveChatSnapshot()
     }
 
     func latchNewMessagesDividerAnchorIfNeeded() {
@@ -53,6 +74,7 @@ extension ConversationViewModel {
 
     func conversationDisappeared() {
         isOnScreen = false
+        teardownLiveStores()
         fireMarkSeenNow()
     }
 

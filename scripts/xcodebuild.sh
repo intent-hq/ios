@@ -17,7 +17,9 @@
 #   build-ios               Build for the generic iOS Simulator destination
 #   build-visionos          Build for the generic visionOS Simulator destination
 #   build-for-testing       Build the iOS test bundle (CI split step)
-#   test-without-building   Run iOS unit tests against a prior build-for-testing
+#   test-without-building   Run iOS tests against a prior build-for-testing
+#   test-without-building-unit
+#                           test-without-building minus IntentUITests
 #   test-ios                build-for-testing then test-without-building
 #   test-ios-unit           test-ios minus the IntentUITests bundle (-skip-testing)
 #   pick-simulator          Print the chosen iPhone simulator UDID on stdout
@@ -30,6 +32,12 @@
 # platformFilter = ios only).
 #
 # Environment knobs (all optional; local runs need none):
+#   BUILD_CONFIGURATION   Debug or Release; unset/empty preserves the scheme's
+#                         existing defaults. Applied to every build/test call,
+#                         including enumeration and crash retries. Release test
+#                         commands enable @testable access (ENABLE_TESTABILITY=YES)
+#                         but never define DEBUG or change optimization. Plain
+#                         build-ios/build-visionos keep production testability.
 #   SIM_UDID              Simulator UDID for test destinations; when unset the
 #                         newest available iPhone simulator is picked automatically.
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
@@ -41,8 +49,9 @@
 #                         kept and named (like the log) after a failing one.
 #   ONLY_TESTING          Whitespace-separated Target[/Class[/method]] identifiers;
 #                         each becomes one -only-testing: argument on the test
-#                         subcommands (test-without-building, test-ios,
-#                         test-ios-unit). Entries starting with '-' are refused;
+#                         subcommands (test-without-building and its unit
+#                         variant, test-ios, test-ios-unit). Entries starting
+#                         with '-' are refused;
 #                         duplicates are collapsed. Before the filtered run the
 #                         wrapper enumerates the built revision's tests
 #                         (xcodebuild -enumerate-tests, under the simulator
@@ -81,7 +90,24 @@
 #                         (with every process under it) gets to exit after
 #                         SIGTERM before the survivors are SIGKILLed; default 30.
 #
-# Simulator lock: test-without-building (and so test-ios / test-ios-unit) holds
+# Release verification (intent-hq/ios#468):
+#   BUILD_CONFIGURATION=Release scripts/xcodebuild.sh build-ios
+#     Production-configuration build proof only, not runtime failure coverage.
+#   BUILD_CONFIGURATION=Release ONLY_TESTING='IntentTests/ReleaseConfigurationTests' \
+#     scripts/xcodebuild.sh test-ios-unit
+#     Executes the Release branch checks. Add release-compatible diagnostic
+#     suites to ONLY_TESTING as implemented; this does not prove producers that
+#     do not exist yet. The full suite contains DEBUG-only plaintext fixtures:
+#     using those in Release deliberately fails, rather than enabling insecure
+#     app behavior or silently skipping coverage. NetworkCopyDiagnosticsTests
+#     is DEBUG-only and will not resolve in Release.
+#   For split runs use BUILD_CONFIGURATION=Release on BOTH build-for-testing
+#   and test-without-building[-unit], and rebuild after changing configuration
+#   (both use the scheme's generated xctestrun location). Do not reuse a Debug
+#   build as Release evidence. ReleaseConfigurationTests is absent in Debug,
+#   so selecting it there fails the existing selector gate.
+#
+# Simulator lock: test-without-building (and its unit/test-ios variants) holds
 # an exclusive lock on the chosen simulator for the duration of the xcodebuild
 # test run. Two runs driving one device concurrently (two agents in one
 # checkout, or two checkouts picking the same device) kill each other's test
@@ -168,14 +194,20 @@ Usage: scripts/xcodebuild.sh <subcommand>
   build-ios               Build for the generic iOS Simulator destination
   build-visionos          Build for the generic visionOS Simulator destination
   build-for-testing       Build the iOS test bundle (CI split step)
-  test-without-building   Run iOS unit tests against a prior build-for-testing
+  test-without-building   Run iOS tests against a prior build-for-testing
+  test-without-building-unit
+                          test-without-building minus IntentUITests
   test-ios                build-for-testing then test-without-building
   test-ios-unit           test-ios minus the IntentUITests bundle (-skip-testing)
   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 
-Optional env knobs: SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING,
+Optional env knobs: BUILD_CONFIGURATION (Debug or Release; unset keeps defaults),
+SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING,
 TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see
 script header).
+Release tests enable @testable access, not DEBUG. Use focused release-compatible
+suites; DEBUG-only plaintext fixtures fail in Release. See the script header
+for production build proof and executable ReleaseConfigurationTests commands.
 ONLY_TESTING selectors (Target[/Suite[/test]], not file names) are gated: each
 is resolved against the enumerated tests before the run and checked against
 the result bundle after it, with a per-selector table printed at the end.
@@ -250,6 +282,15 @@ Not building it automatically: $reason"
 
 # Shared optional args appended to every xcodebuild invocation.
 common_args() {
+  if [ -n "${BUILD_CONFIGURATION:-}" ]; then
+    printf '%s\n' -configuration "$BUILD_CONFIGURATION"
+    if [ "$BUILD_CONFIGURATION" = Release ]; then
+      case "$subcommand" in
+        build-for-testing|test-without-building|test-without-building-unit|test-ios|test-ios-unit)
+          printf '%s\n' ENABLE_TESTABILITY=YES ;;
+      esac
+    fi
+  fi
   if [ -n "${SPM_CLONE_DIR:-}" ]; then
     printf '%s\n' -clonedSourcePackagesDirPath "$SPM_CLONE_DIR"
   fi
@@ -797,7 +838,7 @@ def matches(selector_parts, identifier):
 def excluded_by(selector, skips):
     return [skip for skip in skips if matches(skip.split("/"), selector)]
 def excluded_message(selector, skip):
-    return "ONLY_TESTING selector %r is excluded by -skip-testing:%s on this subcommand (test-ios-unit skips the IntentUITests bundle; use test-ios or test-without-building for it)." % (selector, skip)
+    return "ONLY_TESTING selector %r is excluded by -skip-testing:%s on this subcommand (unit-only subcommands skip the IntentUITests bundle; use test-ios or test-without-building for it)." % (selector, skip)
 '
 
 # Resolves the ONLY_TESTING selectors against the enumerated test catalog.
@@ -1146,7 +1187,8 @@ summarize_only_testing() {
 # directory, so the path is free) that the post-run summary reads; it is
 # removed after a passing run and kept, and named, after a failing one.
 # Positional arguments are test-selection flags supplied by the subcommand
-# dispatch below (test-ios-unit passes -skip-testing:IntentUITests); they are
+# dispatch below (the two unit-only variants pass
+# -skip-testing:IntentUITests); they are
 # appended after the unconditional flags, as are the ONLY_TESTING arguments.
 #
 # The simulator lock is taken before the device is touched (boot, defaults,
@@ -1204,12 +1246,18 @@ for arg in "$@"; do
   esac
 done
 
+case "${BUILD_CONFIGURATION:-}" in
+  ''|Debug|Release) ;;
+  *) die "BUILD_CONFIGURATION must be Debug or Release (or unset to preserve scheme defaults)" ;;
+esac
+
 case "$subcommand" in
   resolve)               cmd_resolve ;;
   build-ios)             cmd_build_ios ;;
   build-visionos)        cmd_build_visionos ;;
   build-for-testing)     cmd_build_for_testing ;;
   test-without-building) cmd_test_without_building ;;
+  test-without-building-unit) cmd_test_without_building -skip-testing:IntentUITests ;;
   test-ios)              parse_only_testing && cmd_build_for_testing && cmd_test_without_building ;;
   test-ios-unit)         parse_only_testing && cmd_build_for_testing && cmd_test_without_building -skip-testing:IntentUITests ;;
   pick-simulator)        pick_simulator ;;

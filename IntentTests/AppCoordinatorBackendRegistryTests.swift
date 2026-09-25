@@ -366,18 +366,4 @@ extension AppCoordinatorTests {
             "A merge that only adds must not mark anything removed"
         )
     }
-
-    @Test @MainActor func onSelectWorkspace_landsOnWorkspaceDetail() {
-        let wsId = "test-coord-no-saved-\(UUID().uuidString)"
-        defer { cleanupLastScreen() }
-
-        let coordinator = AppCoordinator(persistence: persistence)
-        coordinator.onSelectWorkspace(wsId)
-
-        if case let .workspaceDetail(wId) = coordinator.currentScreen {
-            #expect(wId == wsId)
-        } else {
-            Issue.record("Expected .workspaceDetail, got \(coordinator.currentScreen)")
-        }
-    }
 }

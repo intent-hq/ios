@@ -18,27 +18,7 @@ struct TaskStatusIconView: View {
     var size: CGFloat = Metrics.defaultSize
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
-    private enum Metrics {
-        static let defaultSize: CGFloat = 16
-        static let referenceSize: CGFloat = 24
-        static let standardStrokeWidth: CGFloat = 2.5
-        static let increasedContrastStrokeWidth: CGFloat = 3.5
-        static let increasedContrastNeutralOpacity: Double = 0.75
-        static let fullFillRadius: CGFloat = 12
-        static let inProgressFillRadius: CGFloat = 6.6
-        static let outerCircleDiameter: CGFloat = 21.6
-        static let inProgressInnerStrokeWidth: CGFloat = 2
-        static let inProgressInnerDiameter: CGFloat = 20
-        static let diameterMultiplier: CGFloat = 2
-        static let inProgressClipLeadingX: CGFloat = 11.52
-        static let secondaryGlyphSize: CGFloat = 11
-        static let questionGlyphSize: CGFloat = 12
-        static let eyeGlyphSize: CGFloat = 10
-        static let blockedGlyphStrokeWidth: CGFloat = 3
-        static let blockedDotDiameter: CGFloat = 3.2
-        static let blockedDotOffset: CGFloat = 5.5
-        static let completeGlyphStrokeWidth: CGFloat = 3.5
-    }
+    private typealias Metrics = Constants.TaskStatusIcon
 
     /// Scale factor from the 24×24 reference space to the rendered size.
     private var scale: CGFloat { size / Metrics.referenceSize }

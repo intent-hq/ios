@@ -8,9 +8,11 @@ extension Constants.Conversation.Composer {
     static let sendButtonStackSpacing: CGFloat = 4
     static let inputRowHorizontalPadding: CGFloat = 12
     static let inputRowVerticalPadding: CGFloat = 8
+    static let fieldBackgroundOpacity: Double = 0.5
 
     static let pendingImageRowSpacing: CGFloat = 8
     static let pendingImageCornerRadius: CGFloat = 8
+    static let imageRemoveButtonBackgroundOpacity: Double = 0.5
     static let pendingImageRemoveButtonHorizontalOffset: CGFloat = 4
     static let pendingImageRemoveButtonVerticalOffset: CGFloat = -4
     static let pendingImagesHorizontalPadding: CGFloat = 12
@@ -21,6 +23,7 @@ extension Constants.Conversation.Composer {
     static let pendingFileHorizontalPadding: CGFloat = 8
     static let pendingFileVerticalPadding: CGFloat = 6
     static let pendingFileCornerRadius: CGFloat = 10
+    static let pendingFileBackgroundOpacity: Double = 0.5
     static let pendingFilesHorizontalPadding: CGFloat = 12
     static let pendingFilesTopPadding: CGFloat = 8
 
@@ -31,6 +34,18 @@ extension Constants.Conversation.Composer {
     static let suggestedPromptContentSpacing: CGFloat = 8
     static let suggestedPromptHorizontalPadding: CGFloat = 20
     static let suggestedPromptBackgroundOpacity: Double = 0.4
+    static let suggestedPromptLineLimit = 2
     static let suggestedPromptsHorizontalPadding: CGFloat = 12
     static let suggestedPromptsTopPadding: CGFloat = 8
+}
+
+extension Constants.Conversation.QueuedMessage {
+    static let headerHorizontalPadding: CGFloat = 16
+    static let headerTopPadding: CGFloat = 8
+    static let headerBottomPadding: CGFloat = 4
+    static let backgroundOpacity: Double = 0.8
+    static let rowSpacing: CGFloat = 8
+    static let rowHorizontalPadding: CGFloat = 16
+    static let rowVerticalPadding: CGFloat = 6
+    static let contentLineLimit = 2
 }

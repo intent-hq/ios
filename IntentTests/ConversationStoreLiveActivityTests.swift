@@ -125,7 +125,7 @@ extension ConversationStoreLiveStateTests {
     /// block id) must upsert onto it, not duplicate the message or the block.
     @Test func userRowDeltaDoesNotDuplicateOptimisticLocalAppend() async throws {
         let (store, fake) = makeStore()
-        fake.responseMap["agent.sendMessage"] = ["success": true]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         try await store.sendMessage(agentId: "agent-1", content: "Hello", workspaceId: "ws-1")
@@ -156,7 +156,7 @@ extension ConversationStoreLiveStateTests {
     /// the attachment blocks alongside, without duplicating anything.
     @Test func multiBlockUserRowDeltaUpsertsOverOptimisticAppend() async throws {
         let (store, fake) = makeStore()
-        fake.responseMap["agent.sendMessage"] = ["success": true]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         try await store.sendMessage(
@@ -206,7 +206,7 @@ extension ConversationStoreLiveStateTests {
 extension ConversationStoreLiveStateTests {
     @Test func userRowTerminalDeltaDoesNotClearTurnStreaming() async throws {
         let (store, fake) = makeStore()
-        fake.responseMap["agent.sendMessage"] = ["success": true]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         try await store.sendMessage(agentId: "agent-1", content: "Hello", workspaceId: "ws-1")
@@ -264,8 +264,8 @@ extension ConversationStoreLiveStateTests {
     private func makeParentStore(watching childId: String) async -> (ConversationStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        fake.responseMap["agent.getConversation"] = ["messages": []]
-        await store.fetchConversation(agentId: "agent-parent", workspaceId: "ws-1")
+        fake.stubChatSnapshot()
+        await store.subscribeLiveChat(agentId: "agent-parent", workspaceId: "ws-1")
         store.watchedAgentIds = [childId]
         store.watchedAgents = [makeWatchedAgent(id: childId, lastAgentResponse: "Old preview")]
         store.isWaitingForAgents = true

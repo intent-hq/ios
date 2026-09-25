@@ -14,7 +14,8 @@ nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
     /// per-host mismatch instead of just the last one.
     case certificateMismatches(mismatches: [HostCertMismatch])
     case disconnected(host: String, code: Int, reason: String)
-    case failed(host: String, message: String)
+    case failed(host: String, message: String,
+                diagnosticFailure: DiagnosticFailure = DiagnosticFailure(origin: .transport, classification: .transportUnknown))
     case invalidURL(host: String)
     /// The record has no trusted certificate pin, so the connection is refused
     /// before any bearer token can be sent over a socket.
@@ -29,7 +30,7 @@ nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
             "No trusted certificate is saved for \(host). Re-pair this device to connect securely."
         case .timedOut(let host):
             "Connection to \(host) timed out"
-        case let .failed(host, message):
+        case let .failed(host, message, _):
             "Connection to \(host) failed: \(message)"
         case let .disconnected(host, code, reason):
             "Disconnected from \(host) (\(code)): \(reason)"

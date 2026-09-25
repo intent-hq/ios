@@ -59,7 +59,7 @@ extension SpecialistPickerSelectionTests {
                 catalog: store.specialists
             )?.id == "coordinator"
         )
-        let provider = CreateWorkspaceView.preselectedProvider(current: nil, providers: store.providers)
+        let provider = CreationSelectionPolicy.preselectedProvider(current: nil, providers: store.providers)
         #expect(provider?.id == "auggie")
         #expect(!SpecialistPickerView.showsModelsLoading(catalog: store.models(for: "auggie"), settled: false))
         #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
@@ -185,7 +185,7 @@ extension SpecialistPickerSelectionTests {
         // An explicit grok pick does not survive the switch to auggie even
         // if a bare id were shared: reconciliation matches id and provider.
         let stalePick = makeModel("grok-4", provider: "grok")
-        #expect(CreateWorkspaceView.reconciledModel(current: stalePick, models: auggieModels) == nil)
+        #expect(CreationSelectionPolicy.reconciledModel(current: stalePick, models: auggieModels) == nil)
     }
 
     /// Holds the sheet's auggie load, reconnects (hard clear), starts the

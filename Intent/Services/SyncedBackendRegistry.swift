@@ -3,13 +3,13 @@ import Security
 
 // MARK: - Payload codec (v1 wire contract)
 
-/// Read-only view of the iCloud-synced backend registry written by the
+/// View of the iCloud-synced backend registry shared with the
 /// desktop app's keychain helper (cloudlands-fe `keychain-sync.ts` +
 /// `sync-helper.swift`): ONE generic-password item per backend under the
 /// fixed service `com.cloudlands.intent.backends` in the cross-app shared
 /// access group, keyed by the normalized `host:port` account, carrying a
-/// versioned JSON payload. This layer only LISTS records — no writes, no
-/// reconcile — and is fail-soft: any SecItem failure (including entitlement
+/// versioned JSON payload. Publication lives in `SyncedBackendPublisher`.
+/// Reads are fail-soft: any SecItem failure (including entitlement
 /// rejection) surfaces as `.unavailable`, never as "no items".
 
 /// One synced backend record — the decoded keychain payload. Tombstones keep
@@ -37,6 +37,9 @@ struct SyncedBackendRecord: Equatable, Sendable {
     var deleted: Bool
     /// When the tombstone was written (ms since epoch).
     var deletedAt: Double?
+    /// Opaque, case-sensitive tunnel route. Missing/null/blank values mean
+    /// unknown, not an instruction to erase a locally learned route.
+    var tcAddress: String?
 }
 
 extension SyncedBackendRecord {
@@ -132,7 +135,8 @@ enum SyncedBackendPayload {
             token: object["token"] as? String ?? "",
             updatedAt: updatedAt,
             deleted: false,
-            deletedAt: nil
+            deletedAt: nil,
+            tcAddress: tunnelAddress(object["tcAddress"])
         )
         if case .value(true) = bool(object["deleted"]) {
             record.deleted = true
@@ -140,6 +144,12 @@ enum SyncedBackendPayload {
             record.token = ""
         }
         return .record(record)
+    }
+
+    static func tunnelAddress(_ value: Any?) -> String? {
+        guard let raw = value as? String else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// JSON number (never a JSON bool — JSONSerialization bridges both to
@@ -260,9 +270,8 @@ struct SyncedBackendRegistry {
     /// List query mirroring the desktop helper's `baseQuery` + list
     /// attributes, scoped to the shared access group. Items are only ever
     /// written with kSecAttrSynchronizable = true; matching "any" is for
-    /// robustness. iOS never writes these records, so it sets no
-    /// accessibility class here — see the credential policy on
-    /// `SecItemKeychainStorage` (ios#263).
+    /// robustness. Accessibility is set by the publisher on writes, not
+    /// restricted by the read query.
     static func listQuery(accessGroup: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,

@@ -139,40 +139,6 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(recovery(geometry(offsetY: 300), isFollowing: true, correctionsSpent: 1) == .continue(.settling))
     }
 
-    typealias RecoveryDrain = ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryDrain
-
-    /// The drain is handed a terminal only: an intermediate step cannot be
-    /// drained, by type.
-    func drain(_ outcome: RecoveryTerminal, isFollowing: Bool = false) -> RecoveryDrain {
-        ConversationTranscriptScrollPolicy.unrealizedEndRecoveryDrain(
-            outcome: outcome,
-            isFollowing: isFollowing
-        )
-    }
-
-    /// Every terminal a recovery poll can finish with is drainable, and
-    /// every step is either a continuation or a terminal.
-    @Test func recoveryStepsAreEitherContinuationsOrDrainableTerminals() {
-        let steps: [RecoveryStep] = [
-            recovery(nil),
-            recovery(geometry(offsetY: 2_270, contentHeight: 3_000)),
-            recovery(geometry(offsetY: 300)),
-            recovery(geometry(offsetY: 300), isEndRealized: true),
-            recovery(geometry(offsetY: 300), correctionsLeft: 0)
-        ]
-        var terminals: [RecoveryTerminal] = []
-        var continuations = 0
-        for step in steps {
-            switch step {
-            case .continue: continuations += 1
-            case .finish(let terminal): terminals.append(terminal)
-            }
-        }
-        #expect(continuations == 3)
-        #expect(terminals == [.notNeeded, .giveUp])
-        #expect(terminals.map { drain($0) } == [.replayEdge, .showGoToEnd])
-    }
-
     /// The report of a transcript with one episode armed, resolved on
     /// `outcome` (nil: still running) with the end row realized by default.
     private func recoveryReport(

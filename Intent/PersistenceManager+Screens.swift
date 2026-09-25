@@ -33,7 +33,7 @@ extension PersistenceManager {
 
     func loadLastScreen(for connectionID: UUID) -> SavedScreen? {
         let dict = loadLastScreensDict()
-        if let data = dict[connectionID.uuidString] {
+        if let data = dict[connectionID.uuidString] as? Data {
             return try? JSONDecoder().decode(SavedScreen.self, from: data)
         }
         // Legacy migration: the old single-slot screen belonged to the
@@ -54,8 +54,8 @@ extension PersistenceManager {
         }
     }
 
-    private func loadLastScreensDict() -> [String: Data] {
-        (defaults.dictionary(forKey: Self.lastScreensKey) as? [String: Data]) ?? [:]
+    private func loadLastScreensDict() -> [String: Any] {
+        defaults.dictionary(forKey: Self.lastScreensKey) ?? [:]
     }
 
     private func loadLegacyLastScreen() -> SavedScreen? {

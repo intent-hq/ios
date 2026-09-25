@@ -48,6 +48,7 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
     /// decoded into a `ContentBlock`.
     struct ChatBlockEntity {
         let messageId: String
+        let appMessageId: String?
         let block: ContentBlock
         /// Role of the owning message; defaults to `.assistant` when absent.
         let role: MessageRole
@@ -66,6 +67,7 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
 
         private init(shaped: ShapedChatBlockEntity, block: ContentBlock) {
             messageId = shaped.messageId
+            appMessageId = shaped.entity["appMessageId"] as? String
             self.block = block
             role = MessageRole(rawValue: shaped.entity["role"] as? String ?? "assistant") ?? .system
             timestamp = shaped.entity["timestamp"] as? String

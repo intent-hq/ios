@@ -3,6 +3,8 @@ import Foundation
 import Testing
 import UIKit
 
+// swiftlint:disable file_length
+
 struct ConversationTranscriptScrollPolicyTests {
     private typealias Step = ConversationTranscriptScrollPolicy.InitialScrollStep
 
@@ -39,6 +41,70 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(initialStep(alreadyPerformed: true, scrollViewResolved: true) == .skip)
         #expect(initialStep(alreadyPerformed: true, scrollViewWaitElapsed: true) == .skip)
         #expect(initialStep(alreadyPerformed: true) == .skip)
+    }
+
+    /// A live replacement can empty a transcript after its entry scroll and
+    /// while Go to End is showing. The empty state clears that flag and every
+    /// entry latch; its next non-empty snapshot enters through a fresh scroll.
+    @Test func emptyReplacementRearmsEntryScrollForTheNextSnapshot() {
+        let state = ConversationTranscriptScrollState()
+        state.userIsScrolledAway = true
+        state.hasInitiallyScrolled = true
+        state.initialScrollScheduled = true
+        state.initialScrollAwaitingScrollView = true
+        state.initialScrollPerformed = true
+        state.isScrollingToBottom = true
+        let generation = state.initialScrollGeneration
+
+        #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: 12,
+            to: 0,
+            hasInitiallyScrolled: true
+        ) == .rearmEntryScroll)
+        state.rearmAfterTranscriptEmptied()
+        #expect(!state.userIsScrolledAway)
+        #expect(!state.hasInitiallyScrolled)
+        #expect(!state.initialScrollScheduled)
+        #expect(!state.initialScrollAwaitingScrollView)
+        #expect(!state.initialScrollPerformed)
+        #expect(!state.isScrollingToBottom)
+        #expect(state.initialScrollGeneration == generation + 1)
+        #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: 0,
+            to: 8,
+            hasInitiallyScrolled: state.hasInitiallyScrolled
+        ) == .runEntryScroll)
+    }
+
+    @Test func emptyReplacementInvalidatesPendingDividerProbe() {
+        let state = ConversationTranscriptScrollState()
+        let staleGeneration = state.initialScrollGeneration
+
+        state.rearmAfterTranscriptEmptied()
+        state.applyDividerProbe(distanceToBottom: 100, generation: staleGeneration)
+
+        #expect(!state.userIsScrolledAway)
+    }
+
+    @Test func matchingGenerationDividerProbeMarksScrolledAway() {
+        let state = ConversationTranscriptScrollState()
+
+        state.applyDividerProbe(
+            distanceToBottom: 100,
+            generation: state.initialScrollGeneration
+        )
+
+        #expect(state.userIsScrolledAway)
+    }
+
+    /// Regression (#350): replacing a scrolled-away transcript with a shorter
+    /// snapshot can strand UIKit's old offset beyond the new content end.
+    @Test func shorterReplacementRechecksForPastEndRePin() {
+        #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: 40,
+            to: 10,
+            hasInitiallyScrolled: true
+        ) == .rePinIfPastEnd)
     }
 
     /// The hosting wait must outlast the entry timer it replaces, and the
@@ -343,4 +409,227 @@ struct ConversationTranscriptScrollPolicyTests {
     }
 
     typealias ContainerRePin = ConversationTranscriptScrollPolicy.ContainerRePinDecision
+}
+
+@Suite @MainActor
+struct TranscriptRowHeightCacheTests {
+    @Test func cachesOnlyTheLatestSettledHeight() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let message = assistantMessage(text: "A completed response")
+
+        cache.record(height: 8, for: message, hydratingBlockIds: [])
+        cache.record(height: 291, for: message, hydratingBlockIds: [])
+        try await waitUntil("latest height settles") {
+            cache.height(for: message, hydratingBlockIds: []) == 291
+        }
+    }
+
+    @Test func contentHydrationAndWidthChangesInvalidateTheHeight() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let message = assistantMessage(text: "Original")
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        try await waitUntil("original height settles") {
+            cache.height(for: message, hydratingBlockIds: []) == 100
+        }
+
+        #expect(cache.height(for: assistantMessage(text: "Updated"), hydratingBlockIds: []) == nil)
+        #expect(cache.height(for: message, hydratingBlockIds: ["block"]) == nil)
+        #expect(cache.height(for: message, hydratingBlockIds: []) == 100)
+
+        cache.updateLayoutWidth(320)
+        #expect(cache.height(for: message, hydratingBlockIds: []) == 100)
+        cache.updateLayoutWidth(400)
+        #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
+    }
+
+    @Test func streamingRowsAreNeverCached() {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let message = assistantMessage(text: "Growing", streamingState: .streaming)
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
+    }
+
+    @Test func matchingSettledHeightCancelsObsoletePendingMeasurement() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let message = assistantMessage(text: "Settled")
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        try await waitUntil("initial height settles") {
+            cache.height(for: message, hydratingBlockIds: []) == 100
+        }
+
+        cache.record(height: 200, for: message, hydratingBlockIds: [])
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        let fence = assistantMessage(text: "Fence", id: "fence")
+        cache.record(height: 1, for: fence, hydratingBlockIds: [])
+        try await waitUntil("stale measurement window passes") {
+            cache.height(for: fence, hydratingBlockIds: []) == 1
+        }
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == 100)
+    }
+
+    @Test func cumulativeWidthChangesInvalidateCommittedHeight() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let message = assistantMessage(text: "Wrapping")
+        cache.updateLayoutWidth(320)
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        try await waitUntil("committed height settles") {
+            cache.height(for: message, hydratingBlockIds: []) == 100
+        }
+
+        cache.updateLayoutWidth(320.4)
+        #expect(cache.height(for: message, hydratingBlockIds: []) == 100)
+        cache.updateLayoutWidth(320.8)
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
+    }
+
+    @Test func cumulativeWidthChangesCancelPendingHeight() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(50))
+        let message = assistantMessage(text: "Pending wrapping")
+        cache.updateLayoutWidth(320)
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+
+        cache.updateLayoutWidth(320.4)
+        cache.updateLayoutWidth(320.8)
+        let fence = assistantMessage(text: "Fence", id: "fence")
+        cache.record(height: 1, for: fence, hydratingBlockIds: [])
+        try await waitUntil("stale width measurement window passes") {
+            cache.height(for: fence, hydratingBlockIds: []) == 1
+        }
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
+    }
+
+    @Test func sameCountReplacementRetiresSettledAndPendingHeight() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(20))
+        let retired = assistantMessage(text: "Retired", id: "retired")
+        let survivor = assistantMessage(text: "Survivor", id: "survivor")
+        let replacement = assistantMessage(text: "Replacement", id: "replacement")
+        cache.retainMessages(withIDs: [retired.id, survivor.id])
+        cache.record(height: 100, for: retired, hydratingBlockIds: [])
+        cache.record(height: 200, for: survivor, hydratingBlockIds: [])
+        try await waitUntil("original heights settle") {
+            cache.height(for: retired, hydratingBlockIds: []) == 100
+                && cache.height(for: survivor, hydratingBlockIds: []) == 200
+        }
+
+        cache.record(height: 300, for: retired, hydratingBlockIds: [])
+        cache.retainMessages(withIDs: [survivor.id, replacement.id])
+        #expect(!cache.record(height: 350, for: retired, hydratingBlockIds: []))
+        #expect(cache.record(height: 400, for: replacement, hydratingBlockIds: []))
+        try await waitUntil("replacement height settles after stale work") {
+            cache.height(for: replacement, hydratingBlockIds: []) == 400
+        }
+
+        #expect(cache.height(for: retired, hydratingBlockIds: []) == nil)
+        #expect(cache.height(for: survivor, hydratingBlockIds: []) == 200)
+    }
+
+    @Test func pendingOnlyRetirementCannotRestoreHeight() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(20))
+        let retired = assistantMessage(text: "Retired", id: "retired")
+        let replacement = assistantMessage(text: "Replacement", id: "replacement")
+        cache.record(height: 100, for: retired, hydratingBlockIds: [])
+
+        cache.retainMessages(withIDs: [replacement.id])
+        cache.record(height: 200, for: replacement, hydratingBlockIds: [])
+        try await waitUntil("replacement settles after retired pending work") {
+            cache.height(for: replacement, hydratingBlockIds: []) == 200
+        }
+
+        #expect(cache.height(for: retired, hydratingBlockIds: []) == nil)
+    }
+
+    @Test func measurementEdgeReconcilesNewAndReappearingMessages() async throws {
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: .milliseconds(1))
+        let survivor = assistantMessage(text: "Survivor", id: "survivor")
+        let appended = assistantMessage(text: "Appended", id: "appended")
+        cache.retainMessages(withIDs: [survivor.id])
+        cache.record(height: 100, for: survivor, hydratingBlockIds: [])
+        try await waitUntil("survivor height settles") {
+            cache.height(for: survivor, hydratingBlockIds: []) == 100
+        }
+
+        #expect(cache.record(
+            height: 200,
+            for: appended,
+            hydratingBlockIds: [],
+            retainingMessagesWithIDs: [survivor.id, appended.id]
+        ))
+        try await waitUntil("first appended measurement settles") {
+            cache.height(for: appended, hydratingBlockIds: []) == 200
+        }
+        #expect(cache.height(for: survivor, hydratingBlockIds: []) == 100)
+
+        cache.retainMessages(withIDs: [])
+        #expect(cache.record(
+            height: 300,
+            for: appended,
+            hydratingBlockIds: [],
+            retainingMessagesWithIDs: [appended.id]
+        ))
+        #expect(!cache.record(
+            height: 400,
+            for: survivor,
+            hydratingBlockIds: [],
+            retainingMessagesWithIDs: [appended.id]
+        ))
+        try await waitUntil("first reappearing measurement settles") {
+            cache.height(for: appended, hydratingBlockIds: []) == 300
+        }
+        #expect(cache.height(for: survivor, hydratingBlockIds: []) == nil)
+    }
+
+    @Test func emptyTranscriptRetiresSettledAndPendingHeight() async throws {
+        let settleDelay = Duration.milliseconds(20)
+        let cache = ConversationTranscriptRowHeightCache(settleDelay: settleDelay)
+        let message = assistantMessage(text: "Removed")
+        cache.retainMessages(withIDs: [message.id])
+        cache.record(height: 100, for: message, hydratingBlockIds: [])
+        try await waitUntil("height settles before emptying") {
+            cache.height(for: message, hydratingBlockIds: []) == 100
+        }
+        cache.record(height: 200, for: message, hydratingBlockIds: [])
+
+        cache.retainMessages(withIDs: [])
+        #expect(!cache.record(height: 300, for: message, hydratingBlockIds: []))
+        let replacement = assistantMessage(text: "Replacement", id: "replacement")
+        cache.retainMessages(withIDs: [replacement.id])
+        #expect(cache.record(height: 1, for: replacement, hydratingBlockIds: []))
+        try await waitUntil("replacement settles after emptying") {
+            cache.height(for: replacement, hydratingBlockIds: []) == 1
+        }
+
+        #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
+    }
+
+    private func waitUntil(
+        _ what: String,
+        timeout: TimeInterval = 2,
+        _ condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() >= deadline {
+                Issue.record("timed out waiting for \(what)")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
+    private func assistantMessage(
+        text: String,
+        streamingState: MessageStreamingState = .complete,
+        id: String = "message"
+    ) -> ConversationMessage {
+        ConversationMessage(
+            id: id,
+            role: .assistant,
+            contentBlocks: [ContentBlock(type: .text, text: text)],
+            streamingState: streamingState
+        )
+    }
 }

@@ -76,6 +76,21 @@ enum MessageBlockPartitioning {
         .joined(separator: "\n\n")
     }
 
+    /// `tool_result` blocks keyed by the id of the `tool_use` block they
+    /// answer (matched on `resolvedToolUseId` / `toolCallId`, first match
+    /// wins). Computed once per message so each block row receives only its
+    /// own result value instead of the whole block array.
+    static func pairToolResults(_ blocks: [ContentBlock]) -> [String: ContentBlock] {
+        let results = blocks.filter { $0.type == .toolResult }
+        guard !results.isEmpty else { return [:] }
+        var paired: [String: ContentBlock] = [:]
+        for block in blocks where block.type == .toolUse {
+            guard let toolUseId = block.resolvedToolUseId ?? block.toolCallId else { continue }
+            paired[block.id] = results.first { $0.resolvedToolUseId == toolUseId || $0.toolCallId == toolUseId }
+        }
+        return paired
+    }
+
     static func stripSupervisorTags(_ text: String) -> String {
         text.replacingOccurrences(
             of: "<supervisor>[\\s\\S]*?</supervisor>",

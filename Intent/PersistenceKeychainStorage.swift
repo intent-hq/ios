@@ -1,11 +1,23 @@
 import Foundation
 import Security
 
+enum KeychainReadResult: Equatable {
+    case malformed
+    case missing
+    case unavailable(OSStatus)
+    case value(Data)
+
+    var data: Data? {
+        guard case .value(let data) = self else { return nil }
+        return data
+    }
+}
+
 /// Abstraction over Keychain item storage so tests can run hermetically.
 protocol KeychainStorage {
     @discardableResult
     func save(data: Data, service: String, account: String) -> Bool
-    func load(service: String, account: String) -> Data?
+    func load(service: String, account: String) -> KeychainReadResult
     func delete(service: String, account: String)
 }
 
@@ -22,8 +34,8 @@ final class EphemeralKeychainStorage: KeychainStorage, @unchecked Sendable {
         return true
     }
 
-    func load(service: String, account: String) -> Data? {
-        lock.withLock { items[key(service, account)] }
+    func load(service: String, account: String) -> KeychainReadResult {
+        lock.withLock { items[key(service, account)].map(KeychainReadResult.value) ?? .missing }
     }
 
     func delete(service: String, account: String) {
@@ -34,11 +46,17 @@ final class EphemeralKeychainStorage: KeychainStorage, @unchecked Sendable {
 /// Production backend over the Security framework.
 struct SecItemKeychainStorage: KeychainStorage {
     struct SecurityCalls {
+        let copyMatching: ([String: Any]) -> (OSStatus, AnyObject?)
         let update: ([String: Any], [String: Any]) -> OSStatus
         let add: ([String: Any]) -> OSStatus
         let delete: ([String: Any]) -> OSStatus
 
         static let live = Self(
+            copyMatching: { query in
+                var result: AnyObject?
+                let status = SecItemCopyMatching(query as CFDictionary, &result)
+                return (status, result)
+            },
             update: { query, attributes in
                 SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
             },
@@ -72,7 +90,7 @@ struct SecItemKeychainStorage: KeychainStorage {
         return security.add(addQuery) == errSecSuccess
     }
 
-    func load(service: String, account: String) -> Data? {
+    func load(service: String, account: String) -> KeychainReadResult {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -80,10 +98,11 @@ struct SecItemKeychainStorage: KeychainStorage {
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data else { return nil }
-        return data
+        let (status, result) = security.copyMatching(query)
+        if status == errSecItemNotFound { return .missing }
+        guard status == errSecSuccess else { return .unavailable(status) }
+        guard let data = result as? Data else { return .malformed }
+        return .value(data)
     }
 
     func delete(service: String, account: String) {

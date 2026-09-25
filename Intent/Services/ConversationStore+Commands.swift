@@ -12,60 +12,14 @@ extension ConversationStore {
         filePayload: OutgoingFilePayload = .none,
         messageMetadata: MessageSendMetadata = .none
     ) async throws {
-        let messageId: String
-        if let failed = lastFailedSend, failed.content == content {
-            messageId = failed.messageId
-            messages.removeAll { $0.id == failed.messageId }
-        } else {
-            messageId = UUID().uuidString
-        }
-        let userMessage = ConversationMessage(
-            id: messageId,
-            role: .user,
-            contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)],
-            metadata: messageMetadata.optimisticFields,
-            metadataWasProvided: messageMetadata.wasProvided
+        let messageId = beginSendAttempt(
+            agentId: agentId,
+            content: content,
+            workspaceId: workspaceId,
+            messageMetadata: messageMetadata
         )
-        withAnimation(.spring(
-            response: Constants.Conversation.Sending.messageAppendSpringResponse,
-            dampingFraction: Constants.Conversation.Sending.messageAppendSpringDamping
-        )) {
-            messages.append(userMessage)
-        }
-
-        withAnimation(.easeOut(
-            duration: Constants.Conversation.Sending.stateTransitionAnimationDuration
-        )) {
-            isStreaming = true
-        }
-
-        let queued: Bool
-        do {
-            queued = try await commands.sendMessage(.init(
-                agentId: agentId,
-                content: content,
-                workspaceId: workspaceId,
-                messageId: messageId,
-                imagePayload: imagePayload,
-                filePayload: filePayload,
-                messageMetadata: messageMetadata
-            ))
-        } catch {
-            lastFailedSend = (messageId: messageId, content: content)
-            throw error
-        }
-
-        lastFailedSend = nil
-        attentionRequest = nil
-
-        if queued {
-            isStreaming = false
-            withAnimation(.easeOut(
-                duration: Constants.Conversation.Sending.stateTransitionAnimationDuration
-            )) {
-                messages.removeAll { $0.id == userMessage.id }
-            }
-        }
+        prepareSendAttempt(messageId, imagePayload: imagePayload, filePayload: filePayload)
+        try await sendPreparedAttempt(messageId)
     }
 
     func rollbackFailedSend() {
@@ -73,8 +27,8 @@ extension ConversationStore {
         withAnimation(.easeOut(
             duration: Constants.Conversation.Sending.stateTransitionAnimationDuration
         )) {
-            messages.removeAll { $0.id == failed.messageId }
-            isStreaming = false
+            messages.removeAll { $0.id == failed.id }
+            sendThinkingMessageIds.remove(failed.id)
         }
     }
 
@@ -189,17 +143,14 @@ extension ConversationStore {
     // MARK: - Cleanup
 
     func reset() {
+        deactivateStreaming()
         liveTranscript.reset()
         commands.reset()
         watchedAgentCoordinator.reset()
         bindAgent(nil)
         workspaceId = nil
-        subscriptionId = nil
-        currentStreamId = nil
-        isSubscribing = false
-        streamEventBuffer.removeAll()
-        lastFailedSend = nil
-        attentionRequest = nil
+        sendAttempts.removeAll()
+        sendThinkingMessageIds.removeAll()
         agentNotFound = false
         clearPendingQuestionRecovery()
     }

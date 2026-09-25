@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("appThemePreference") private var themePreference: String = "system"
     @State private var showLogOffConfirmation = false
+    @State private var showingDiagnosticLogs = false
 
     var body: some View {
         NavigationStack {
@@ -24,6 +25,9 @@ struct SettingsView: View {
                 } message: {
                     Text("Are you sure? You'll need to pair again to reconnect.")
                 }
+                .sheet(isPresented: $showingDiagnosticLogs) {
+                    DiagnosticExportView()
+                }
         }
     }
 
@@ -33,6 +37,13 @@ struct SettingsView: View {
             connectionSection
             accountSection
             aboutSection
+            Section("Diagnostics") {
+                Button {
+                    showingDiagnosticLogs = true
+                } label: {
+                    Label("Export logs", systemImage: "doc.zipper")
+                }
+            }
         }
         .scrollContentBackground(.hidden)
         .background(Theme.background(for: colorScheme))

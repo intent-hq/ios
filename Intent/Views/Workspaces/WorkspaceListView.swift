@@ -9,6 +9,7 @@ struct WorkspaceListView: View {
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @State private var isSearching = false
+    @State private var showingDiagnosticLogs = false
     @FocusState private var searchFocused: Bool
 
     init(workspaceStore: WorkspaceStore) {
@@ -67,10 +68,17 @@ struct WorkspaceListView: View {
             ConnectionsView()
                 .environment(coordinator)
         }
+        .sheet(isPresented: $showingDiagnosticLogs) {
+            DiagnosticExportView()
+        }
         .refreshable {
             await workspaceStore.fetchAll()
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
+        .preference(
+            key: ConnectionBackdropPreference.self,
+            value: showingConnections ? ConnectionBackdropPreference.savedOpacity : 0
+        )
     }
 
     private var emptyState: some View {
@@ -125,6 +133,11 @@ struct WorkspaceListView: View {
                 showingConnections = true
             } label: {
                 Label("Connect to…", systemImage: "desktopcomputer")
+            }
+            Button {
+                showingDiagnosticLogs = true
+            } label: {
+                Label("Export logs", systemImage: "doc.zipper")
             }
         } label: {
             Image(systemName: "ellipsis")

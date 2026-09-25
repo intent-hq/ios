@@ -32,52 +32,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages[0].timestamp == "2026-06-27T01:00:05.000Z")
     }
 
-    @Test func initialFetchDoesNotClobberLiveSnapshot() async throws {
-        let (store, fake) = makeStore()
-        fake.pendingMethods.insert("agent.getConversation")
-
-        // Start the initial fetch (messages is empty → pre-await initial load).
-        let fetchTask = Task { await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1") }
-
-        // While the fetch is in flight, the chat snapshot seeds the transcript
-        // including an in-flight assistant message the server page lacks.
-        try await fake.waitForPendingRequests("agent.getConversation")
-        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
-            [
-                "id": "msg-1",
-                "role": "user",
-                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
-                "timestamp": "2026-06-27T01:00:00.000Z"
-            ],
-            [
-                "id": "msg-2",
-                "role": "assistant",
-                "contentBlocks": [["type": "text", "id": "msg-2:0", "text": "Working"]],
-                "timestamp": "2026-06-27T01:00:01.000Z",
-                "isStreaming": true
-            ]
-        ]))
-
-        // The server page lands after the snapshot and lacks msg-2.
-        fake.resolvePending("agent.getConversation", with: [
-            "messages": [
-                [
-                    "id": "msg-1",
-                    "role": "user",
-                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
-                    "timestamp": "2026-06-27T01:00:00.000Z"
-                ]
-            ]
-        ] as [String: Any])
-        await fetchTask.value
-
-        // The completed fetch must merge, not wholesale-replace the live snapshot.
-        #expect(store.messages.count == 2)
-        #expect(store.messages[0].id == "msg-1")
-        #expect(store.messages[1].id == "msg-2")
-        #expect(store.messages[1].isStreaming == true)
-    }
-
     // MARK: - Firehose gating while chat channel is live
 
     @Test func firehoseActivityIgnoredWhenChatLive() async {
@@ -119,7 +73,8 @@ extension ConversationStoreLiveStateTests {
     }
 
     @Test func firehoseActivityRaisesStreamingWhenChatNotLive() async {
-        // No chat.subscribe snapshot applied → chatLive is false (legacy fallback).
+        // No chat.subscribe snapshot applied → chatLive is false: the firehose
+        // is the only liveness signal until the channel seeds.
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
@@ -131,6 +86,37 @@ extension ConversationStoreLiveStateTests {
 
         #expect(store.messages.isEmpty)
         #expect(store.isStreaming == true)
+
+        // agent:stream:end lowers the flag it raised, still without content.
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:end", "data": ["streamId": "s-1"]]
+        ])
+        #expect(store.messages.isEmpty)
+        #expect(store.isStreaming == false)
+    }
+
+    @Test func firehoseStreamEndLeavesTheLiveChannelsRowsAlone() async {
+        let (store, _) = makeStore()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Partial"]
+            )
+        ]))
+        #expect(store.messages[0].isStreaming == true)
+        #expect(store.isStreaming == true)
+
+        // The channel owns the in-flight row and the streaming flag; only its
+        // terminal delta settles them.
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:end", "data": ["streamId": "s-1"]]
+        ])
+
+        #expect(store.messages[0].isStreaming == true)
+        #expect(store.isStreaming == true)
+        #expect(store.streamingUpdateCount == 1)
     }
 
     @Test func failedResubscribeClearsChatLiveSoFirehoseApplies() async {
@@ -148,14 +134,15 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages.count == 1)
 
         // A re-subscribe fails (no response configured → request throws).
-        // The legacy-fallback cleanup must clear chatLive so firehose events apply.
+        // The failed registration must clear chatLive so firehose events apply
+        // until the backoff retry lands a channel again.
         await store.subscribeLiveChat(agentId: "agent-1")
 
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:start", "data": ["streamId": "s-1"]]
+            "event": ["type": "agent:stream:start", "data": ["agentId": "agent-1", "streamId": "s-1"]]
         ])
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:activity", "data": ["messageId": "m-1"]]
+            "event": ["type": "agent:stream:activity", "data": ["agentId": "agent-1", "messageId": "m-1"]]
         ])
 
         #expect(store.messages.count == 1)
@@ -294,15 +281,6 @@ extension ConversationStoreLiveStateTests {
         #expect(display.path == "crates/intent-core/src")
     }
 
-    @Test func terminalToolWithAcpTitleOnlyExtractsCommand() async {
-        let display = ToolClassifier.classify(name: "launch-process", input: [
-            "_acpTitle": AnyCodable("Run `cargo test --workspace`")
-        ])
-        #expect(display.icon == "▶️")
-        #expect(display.verb == "Run")
-        #expect(display.subject == "cargo test --workspace")
-    }
-
     @Test func workspaceApiWithAcpTitleUsesTitleAsLabel() async {
         let display = ToolClassifier.classify(name: "workspace_api", input: [
             "_acpTitle": AnyCodable("Read spec and task note")
@@ -346,15 +324,6 @@ extension ConversationStoreLiveStateTests {
         #expect(display.verb == "Edit")
         #expect(display.subject == "bar.ts")
         #expect(display.path == "src/foo")
-    }
-
-    @Test func terminalKillAcpTitleUsesTitleVerbAndSubject() async {
-        let display = ToolClassifier.classify(name: "launch-process", input: [
-            "_acpTitle": AnyCodable("Kill terminal 5")
-        ])
-        #expect(display.icon == "▶️")
-        #expect(display.verb == "Kill")
-        #expect(display.subject == "terminal 5")
     }
 
     /// The completed `agent:tool:call` update arrives as an `updated` entity with

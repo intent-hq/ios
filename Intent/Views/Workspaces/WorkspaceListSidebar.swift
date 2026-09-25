@@ -9,6 +9,7 @@ struct WorkspaceListSidebar: View {
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @State private var isSearching = false
+    @State private var showingDiagnosticLogs = false
     @FocusState private var searchFocused: Bool
 
     init(workspaceStore: WorkspaceStore) {
@@ -72,6 +73,11 @@ struct WorkspaceListSidebar: View {
                     } label: {
                         Label("Connect to…", systemImage: "desktopcomputer")
                     }
+                    Button {
+                        showingDiagnosticLogs = true
+                    } label: {
+                        Label("Export logs", systemImage: "doc.zipper")
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -86,6 +92,9 @@ struct WorkspaceListSidebar: View {
         .sheet(isPresented: $showingConnections) {
             ConnectionsView()
                 .environment(coordinator)
+        }
+        .sheet(isPresented: $showingDiagnosticLogs) {
+            DiagnosticExportView()
         }
         .refreshable {
             await workspaceStore.fetchAll()
@@ -147,6 +156,11 @@ struct WorkspaceListSidebar: View {
         #if !os(visionOS)
         // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
         .scrollDismissesKeyboard(.immediately)
+        // With a hardware keyboard attached, iPadOS draws the focused row's
+        // selection as an accent-coloured halo once the row background is
+        // customised (ios#339). The grey listRowBackground already marks the
+        // selection, so suppress the default focus effect for the sidebar rows.
+        .focusEffectDisabled()
         #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
         .contentMargins(.bottom, isSearching ? 0 : AssistantLaunchButton.scrollClearance, for: .scrollContent)
@@ -154,8 +168,18 @@ struct WorkspaceListSidebar: View {
 
     /// Shared row modifiers for every view mode. The explicit row background
     /// replaces the sidebar list's accent-tinted selection with a neutral grey.
+    /// On visionOS that custom background also replaces the system row
+    /// background that drew the gaze highlight (ios#339), so the hover effect
+    /// is reapplied to the row content in the selection's rounded shape.
     private func sidebarRow(_ workspace: Workspace, showRepo: Bool = true) -> some View {
         WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
+            #if os(visionOS)
+            .contentShape(
+                .hoverEffect,
+                .rect(cornerRadius: Constants.WorkspaceList.sidebarSelectionCornerRadius)
+            )
+            .hoverEffect()
+            #endif
             .tag(workspace.id)
             .listRowInsets(EdgeInsets(
                 top: Constants.WorkspaceList.sidebarRowInset,

@@ -362,7 +362,7 @@ extension DemoFixtures {
             [
                 "id": "demo-msg-1",
                 "role": "user",
-                "timestamp": iso(minutesAgo: 65),
+                "timestamp": transcriptIso(minutesAgo: 65),
                 "contentBlocks": [
                     [
                         "type": "text",
@@ -373,7 +373,7 @@ extension DemoFixtures {
             [
                 "id": "demo-msg-2",
                 "role": "assistant",
-                "timestamp": iso(minutesAgo: 62),
+                "timestamp": transcriptIso(minutesAgo: 62),
                 "contentBlocks": [
                     [
                         "type": "text",
@@ -393,7 +393,7 @@ extension DemoFixtures {
             [
                 "id": "demo-msg-3",
                 "role": "user",
-                "timestamp": iso(minutesAgo: 30),
+                "timestamp": transcriptIso(minutesAgo: 30),
                 "contentBlocks": [
                     [
                         "type": "text",
@@ -404,7 +404,7 @@ extension DemoFixtures {
             [
                 "id": "demo-msg-4",
                 "role": "assistant",
-                "timestamp": iso(minutesAgo: 12),
+                "timestamp": transcriptIso(minutesAgo: 12),
                 "contentBlocks": [
                     [
                         "type": "text",

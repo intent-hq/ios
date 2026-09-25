@@ -8,25 +8,20 @@ import SwiftUI
 /// route that still has stale mismatching siblings. Purely informational —
 /// no actions.
 struct CertMismatchListView: View {
-    private enum Layout {
-        static let contentSpacing: CGFloat = 8
-        static let verticalPadding: CGFloat = 10
-        static let horizontalPadding: CGFloat = 12
-        static let backgroundOpacity = 0.12
-        static let cornerRadius: CGFloat = 12
-    }
+    private typealias Layout = Constants.CertMismatch
 
     @Environment(\.colorScheme) var colorScheme
     let mismatches: [HostCertMismatch]
+    var warningForeground: Color = .orange
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.contentSpacing) {
             Label("Certificate mismatch", systemImage: "exclamationmark.shield")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(warningForeground)
 
             ForEach(mismatches, id: \.host) { mismatch in
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: Layout.hostSpacing) {
                     Text(mismatch.host)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))

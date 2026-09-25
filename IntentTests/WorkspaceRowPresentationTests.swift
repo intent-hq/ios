@@ -21,8 +21,8 @@ struct WorkspaceRowPresentationTests {
             await SyntheticBadgeHost.publishesAccessibilityTree()
         }
     )
-    func renderedPrBadgesFitThenFallBackInsideSyntheticHost() throws {
-        let fit = try renderBadges(width: 600)
+    func renderedPrBadgesFitThenFallBackInsideSyntheticHost() async throws {
+        let fit = try await renderBadges(width: 600)
         let combinedIdealWidth = fit.badges[0].frame.union(fit.badges[1].frame).width
         let largestBadgeWidth = fit.badges.map { $0.frame.width }.max() ?? 0
         let fallbackWidth = ceil(largestBadgeWidth) + 1
@@ -39,7 +39,7 @@ struct WorkspaceRowPresentationTests {
         #expect(fit.badges.allSatisfy { fit.hostFrame.contains($0.frame) })
         #expect(fit.badges.map { $0.label } == Self.badgeLabels)
 
-        let fallback = try renderBadges(width: fallbackWidth)
+        let fallback = try await renderBadges(width: fallbackWidth)
 
         #expect(fallback.badges[0].frame.minX == fallback.badges[1].frame.minX)
         #expect(fallback.badges[0].frame.maxY < fallback.badges[1].frame.minY)
@@ -196,6 +196,53 @@ struct WorkspaceRowPresentationTests {
         } else {
             #expect(selected.luminance - sidebar.luminance > minimumLuminanceGap)
         }
+    }
+
+    // With a hardware keyboard attached, iPadOS draws the focused sidebar row's
+    // selection as an accent-coloured halo once the row background is
+    // customised (ios#339), so the sidebar List must keep the default focus
+    // effect disabled. Scans the packaged copy of the source (see
+    // TestSourceInputs), never the checkout.
+    @Test func sidebarListDisablesKeyboardFocusEffect() throws {
+        let source = try String(
+            contentsOf: TestSourceInputs.url(for: "Intent/Views/Workspaces/WorkspaceListSidebar.swift"),
+            encoding: .utf8
+        )
+        let listStyle = try #require(source.range(of: ".listStyle(.sidebar)"))
+        let rowHelper = try #require(source.range(of: "private func sidebarRow("))
+        let listModifiers = source[listStyle.upperBound..<rowHelper.lowerBound]
+
+        #expect(listModifiers.contains(".focusEffectDisabled()"))
+    }
+
+    // The custom listRowBackground from ios#339 replaces the system row
+    // background that draws the visionOS gaze highlight, so the shared row
+    // helper must reapply the hover effect under a visionOS-only guard, shaped
+    // to the selection background's corner radius. Scans the packaged copy of
+    // the source (see TestSourceInputs), never the checkout.
+    @Test func sidebarRowRestoresGazeHoverEffectOnVisionOS() throws {
+        let source = try String(
+            contentsOf: TestSourceInputs.url(for: "Intent/Views/Workspaces/WorkspaceListSidebar.swift"),
+            encoding: .utf8
+        )
+        let rowHelper = try #require(source.range(of: "private func sidebarRow("))
+        let selectionHelper = try #require(source.range(of: "static func rowSelectionBackground("))
+        let rowModifiers = source[rowHelper.upperBound..<selectionHelper.lowerBound]
+        let guardStart = try #require(rowModifiers.range(of: "#if os(" + "visionOS)"))
+        let guardEnd = try #require(
+            rowModifiers.range(of: "#endif", range: guardStart.upperBound..<rowModifiers.endIndex)
+        )
+        let visionOnly = rowModifiers[guardStart.upperBound..<guardEnd.lowerBound]
+        let outsideGuard = rowModifiers.replacingCharacters(
+            in: guardStart.lowerBound..<guardEnd.upperBound,
+            with: ""
+        )
+
+        #expect(visionOnly.contains(".hoverEffect("))
+        #expect(visionOnly.contains(".contentShape("))
+        #expect(visionOnly.contains(".hoverEffect,"))
+        #expect(visionOnly.contains("Constants.WorkspaceList.sidebarSelectionCornerRadius"))
+        #expect(!outsideGuard.contains(".hoverEffect("))
     }
 
     private struct RGBA {

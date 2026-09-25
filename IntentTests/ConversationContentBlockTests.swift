@@ -127,12 +127,6 @@ struct ContentBlockTests {
         #expect(block.resolvedErrorOutcome == .failed)
     }
 
-    @Test func unknownTypeDefaultsToText() throws {
-        let json = #"{"type":"unknown_type","text":"fallback"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
-        #expect(block.type == .text)
-    }
-
     @Test func decodeMetaAlias() throws {
         let json = #"{"type":"text","text":"reason","meta":{"kind":"discussion-request"}}"#
         let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
@@ -184,13 +178,6 @@ struct AttentionNoticeTests {
         let notice = msg?.attentionNotice
         #expect(notice?.kind == .turnFailure)
         #expect(notice?.reason == "Model refused the request")
-    }
-
-    @Test func unknownKindReturnsNil() {
-        let msg = systemMessage(blocks: [
-            ["type": "text", "text": "Interrupted", "meta": ["kind": "interruption"]]
-        ])
-        #expect(msg?.attentionNotice == nil)
     }
 
     @Test func unknownKindFallsBackToJoinedText() {

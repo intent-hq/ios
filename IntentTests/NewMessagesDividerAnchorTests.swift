@@ -1,5 +1,7 @@
 import Foundation
 @testable import Intent
+import Observation
+import SwiftUI
 import Testing
 import UIKit
 
@@ -214,5 +216,156 @@ struct ScrollViewFinderTests {
         // Re-assigning the same proxy is a no-op.
         finder.proxy = proxy
         #expect(scrollView.gestureRecognizers?.count == installed)
+    }
+}
+
+@Suite @MainActor
+struct TranscriptRowHeightFrameTests {
+    private static let cachedHeight: CGFloat = 100
+    private static let grownHeight: CGFloat = 200
+    private static let shrunkHeight: CGFloat = 60
+    private static let viewportSize = CGSize(width: 320, height: 400)
+
+    @Test func cachedFrameKeepsObservingLateNaturalGrowthAndShrink() async throws {
+        let source = HostedTranscriptHeightSource(height: Self.cachedHeight)
+        let recorder = HostedTranscriptHeightRecorder()
+        let host = HostedTranscriptHeightProbe(source: source, recorder: recorder)
+        defer { host.tearDown() }
+
+        try await waitUntil("initial natural and framed heights") {
+            recorder.naturalHeight == Self.cachedHeight && recorder.rowHeight == Self.cachedHeight
+        }
+
+        source.height = Self.grownHeight
+        host.layout()
+        try await waitUntil("late intrinsic growth") {
+            recorder.contentHeight == Self.grownHeight && recorder.naturalHeight == Self.grownHeight
+        }
+        #expect(recorder.rowHeight == Self.cachedHeight)
+
+        source.height = Self.shrunkHeight
+        host.layout()
+        try await waitUntil("late intrinsic shrink") {
+            recorder.contentHeight == Self.shrunkHeight && recorder.naturalHeight == Self.shrunkHeight
+        }
+        #expect(recorder.rowHeight == Self.cachedHeight)
+    }
+
+    @Test func stableNaturalHeightIsReportedWhenStreamingCompletes() async throws {
+        let source = HostedTranscriptHeightSource(height: Self.cachedHeight, isStreaming: true)
+        let recorder = HostedTranscriptHeightRecorder()
+        let host = HostedTranscriptHeightProbe(source: source, recorder: recorder)
+        defer { host.tearDown() }
+
+        try await waitUntil("initial streaming measurement") {
+            recorder.naturalHeightChanges > 0
+        }
+        let streamingMeasurements = recorder.naturalHeightChanges
+
+        source.isStreaming = false
+        host.layout()
+        try await waitUntil("terminal-state measurement") {
+            recorder.naturalHeightChanges > streamingMeasurements
+        }
+        #expect(recorder.naturalHeight == Self.cachedHeight)
+    }
+
+    private func waitUntil(
+        _ what: String,
+        timeout: TimeInterval = 2,
+        _ condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() >= deadline {
+                Issue.record("timed out waiting for \(what)")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    @Observable
+    final class HeightSource {
+        var height: CGFloat
+        var isStreaming: Bool
+
+        init(height: CGFloat, isStreaming: Bool = false) {
+            self.height = height
+            self.isStreaming = isStreaming
+        }
+    }
+
+    private typealias HostedTranscriptHeightSource = HeightSource
+
+    private final class HeightRecorder {
+        var contentHeight: CGFloat?
+        var naturalHeight: CGFloat?
+        var naturalHeightChanges = 0
+        var rowHeight: CGFloat?
+    }
+
+    private typealias HostedTranscriptHeightRecorder = HeightRecorder
+
+    private struct HeightProbe: View {
+        let source: HeightSource
+        let recorder: HeightRecorder
+
+        var body: some View {
+            Color.clear
+                .frame(height: source.height)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    recorder.contentHeight = height
+                }
+                .modifier(
+                    ConversationTranscriptRowHeightFrame(
+                        cachedHeight: TranscriptRowHeightFrameTests.cachedHeight,
+                        isStreaming: source.isStreaming
+                    ) { height in
+                        recorder.naturalHeight = height
+                        recorder.naturalHeightChanges += 1
+                    }
+                )
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    recorder.rowHeight = height
+                }
+        }
+    }
+
+    private final class HostedTranscriptHeightProbe {
+        private var controller: UIHostingController<HeightProbe>?
+        private var window: UIWindow?
+
+        init(source: HeightSource, recorder: HeightRecorder) {
+            let controller = UIHostingController(
+                rootView: HeightProbe(source: source, recorder: recorder)
+            )
+            let window = UIWindow(
+                frame: CGRect(origin: .zero, size: TranscriptRowHeightFrameTests.viewportSize)
+            )
+            controller.view.frame = window.bounds
+            controller.beginAppearanceTransition(true, animated: false)
+            window.addSubview(controller.view)
+            window.isHidden = false
+            controller.endAppearanceTransition()
+            self.controller = controller
+            self.window = window
+            layout()
+        }
+
+        func layout() {
+            controller?.view.setNeedsLayout()
+            controller?.view.layoutIfNeeded()
+        }
+
+        func tearDown() {
+            guard let controller, let window else { return }
+            controller.beginAppearanceTransition(false, animated: false)
+            controller.view.removeFromSuperview()
+            window.isHidden = true
+            controller.endAppearanceTransition()
+            self.controller = nil
+            self.window = nil
+        }
     }
 }

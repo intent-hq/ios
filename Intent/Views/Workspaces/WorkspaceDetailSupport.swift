@@ -35,9 +35,6 @@ struct WorkspaceTaskProgressLayout: Equatable {
 }
 
 struct WorkspaceTaskProgressView: View {
-    private static let increasedRemainingOpacity = 0.55
-    private static let increasedContrastProgressBorderWidth: CGFloat = 1.5
-
     let progress: WorkspaceTaskProgressLayout
 
     @Environment(\.colorScheme) private var colorScheme
@@ -87,7 +84,7 @@ struct WorkspaceTaskProgressView: View {
                     Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast)
                         .opacity(
                             colorSchemeContrast == .increased
-                                ? Self.increasedRemainingOpacity
+                                ? Constants.WorkspaceDetail.increasedRemainingOpacity
                                 : Constants.WorkspaceDetail.remainingProgressOpacity
                         )
                 )
@@ -111,7 +108,7 @@ struct WorkspaceTaskProgressView: View {
             RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
                 .strokeBorder(
                     Theme.border(for: colorScheme, contrast: colorSchemeContrast),
-                    lineWidth: Self.increasedContrastProgressBorderWidth
+                    lineWidth: Constants.WorkspaceDetail.increasedContrastProgressBorderWidth
                 )
         }
     }

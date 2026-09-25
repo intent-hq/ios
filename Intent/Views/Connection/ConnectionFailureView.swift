@@ -7,10 +7,12 @@ struct ConnectionFailureView: View {
     let errorMessage: String
     var isCertMismatch: Bool = false
     var retryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
+    var networkStatus: NetworkAvailability.Status = .unknown
     @State private var isRetrying = false
     @State private var attemptNumber = 0
     @State private var retryTask: Task<Void, Never>?
     @State private var savedConnections: [StoredConnection] = []
+    @State private var showingDiagnosticLogs = false
 
     var body: some View {
         ZStack {
@@ -28,6 +30,9 @@ struct ConnectionFailureView: View {
         .onChange(of: isCertMismatch) { applyRetryPolicy() }
         .onDisappear {
             stopAutoRetry()
+        }
+        .sheet(isPresented: $showingDiagnosticLogs) {
+            DiagnosticExportView()
         }
     }
 
@@ -59,19 +64,6 @@ struct ConnectionFailureView: View {
         }
     }
 
-    private var failureTitle: some View {
-        VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
-            Text(retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can't Connect")
-                .font(.title2.bold())
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-            Text(errorMessage)
-                .font(.subheadline)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)
-        }
-    }
-
     private var failureControls: some View {
         VStack(spacing: Constants.ConnectionFailure.controlSpacing) {
             certificateMismatches
@@ -79,6 +71,11 @@ struct ConnectionFailureView: View {
             manualLogOffButton
             reconnectButton
             savedConnectionsSection
+            Button {
+                showingDiagnosticLogs = true
+            } label: {
+                Label("Export logs", systemImage: "doc.zipper")
+            }
         }
         .padding(.horizontal, Constants.ConnectionFailure.controlsHorizontalPadding)
     }
@@ -292,6 +289,9 @@ struct ConnectionFailureView: View {
 
             try? await Task.sleep(for: backoff(attempt))
             if Task.isCancelled { break }
+            // Home retires the coordinator synchronously, before SwiftUI
+            // delivers onDisappear and cancels this view-owned retry task.
+            guard !coordinator.lifecycleState.hasReturnedToSavedMachines else { return }
 
             // Dial this window's own bound record (re-read each
             // attempt so rotated tokens synced mid-retry are used);
@@ -306,13 +306,15 @@ struct ConnectionFailureView: View {
             }
 
             do {
-                try await connection.connect(
-                    hosts: record.server.hosts,
-                    port: record.server.port,
-                    token: record.token,
-                    certFingerprint: record.server.certFingerprint,
-                    tcAddress: record.server.tcAddress
-                )
+                try await DiagnosticConnectContext.$origin.withValue(.failureScreenRetry) {
+                    try await connection.connect(
+                        hosts: record.server.hosts,
+                        port: record.server.port,
+                        token: record.token,
+                        certFingerprint: record.server.certFingerprint,
+                        tcAddress: record.server.tcAddress
+                    )
+                }
                 // A cancelled retry must never route: the user may have
                 // switched to another saved connection while this connect
                 // was in flight, and a stale success would restore the
@@ -359,6 +361,23 @@ struct ConnectionFailureView: View {
                     isRetrying = true
                 }
             )
+        }
+    }
+}
+
+extension ConnectionFailureView {
+    private var failureTitle: some View {
+        VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
+            Text(retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can't Connect")
+                .font(.title2.bold())
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+            Text(errorMessage)
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)
+            ConnectionNetworkStatusView(status: networkStatus, showsReconnecting: false)
+                .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)
         }
     }
 }

@@ -26,7 +26,10 @@ struct ObjCCallbackIsolationTests {
         "AVAudioApplication.requestRecordPermission",  // arbitrary queue
         ".setSampleBufferDelegate(",                // AVCaptureVideoDataOutput
         ".setMetadataObjectsDelegate(",             // AVCaptureMetadataOutput
-        ".addObserver(forName"                     // NotificationCenter — posting thread
+        ".addObserver(forName",                    // NotificationCenter — posting thread
+        ".pathUpdateHandler =",                    // Network — connection/monitor queue
+        ".viabilityUpdateHandler =",               // NWConnection — connection queue
+        ".completionWithItemsHandler ="            // UIActivityViewController — defensive isolation boundary
     ]
 
     /// How many lines below a match to search for the opening `{` of a
@@ -73,6 +76,12 @@ struct ObjCCallbackIsolationTests {
         matchRange: Range<String.Index>
     ) -> Bool {
         let line = lines[lineIndex]
+        let assignment = line[matchRange.lowerBound...]
+        if assignment.hasPrefix(".pathUpdateHandler =") || assignment.hasPrefix(".viabilityUpdateHandler =") {
+            if assignment.split(separator: "=", maxSplits: 1).last?.trimmingCharacters(in: .whitespaces) == "nil" {
+                return true
+            }
+        }
         let ownStatementPrefix = line[..<matchRange.lowerBound]
             .split(separator: ";", omittingEmptySubsequences: false).last ?? ""
         if ownStatementPrefix.contains("await ") { return true }

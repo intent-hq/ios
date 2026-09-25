@@ -62,7 +62,7 @@ extension ConnectionManager {
                 "[ConnectionManager] Heartbeat probe failed: \(error.localizedDescription), "
                     + "triggering reconnection"
             )
-            handleDisconnection()
+            handleDisconnection(cause: .heartbeatFailure, failure: TransportDiagnosticFailure.classify(error))
         }
     }
 

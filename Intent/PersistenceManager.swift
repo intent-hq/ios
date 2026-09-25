@@ -1,13 +1,17 @@
+import Combine
 import Foundation
 
 struct ConnectionUpsertOutcome {
     let connection: StoredConnection
     let persisted: Bool
-    let registryUndecodable: Bool
+    let registryReadError: ConnectionRegistryReadError?
+    var registryUndecodable: Bool { registryReadError == .malformed }
 }
 
 class PersistenceManager {
-    static let shared = DemoMode.isEnabled ? PersistenceManager.ephemeral() : PersistenceManager()
+    static let shared = DemoMode.isEnabled
+        ? PersistenceManager.ephemeral()
+        : PersistenceManager(backendPublisher: SyncedBackendPublisher.production())
 
     static func ephemeral() -> PersistenceManager {
         let suiteName = "com.intent.companion.demo-data"
@@ -31,13 +35,23 @@ class PersistenceManager {
     /// Backend for Keychain-stored values. Tests substitute an in-memory
     /// implementation (SecItem calls fail in headless CI simulators).
     var keychainStorage: KeychainStorage
+    /// Explicit opt-in: custom/test/ephemeral stores never publish through a
+    /// production writer. Only `shared` installs it outside the test host.
+    let backendPublisher: SyncedBackendPublisher?
+
+    /// Published only after a saved connection mutation succeeds. Window
+    /// labels observe their own record, independently of the last-used pointer.
+    var connectionsDidChange: AnyPublisher<Void, Never> { connectionsChanged.eraseToAnyPublisher() }
+    private let connectionsChanged = PassthroughSubject<Void, Never>()
 
     init(
         defaults: UserDefaults = .standard,
-        keychainStorage: KeychainStorage = SecItemKeychainStorage()
+        keychainStorage: KeychainStorage = SecItemKeychainStorage(),
+        backendPublisher: SyncedBackendPublisher? = nil
     ) {
         self.defaults = defaults
         self.keychainStorage = keychainStorage
+        self.backendPublisher = backendPublisher
     }
 }
 
@@ -45,17 +59,24 @@ extension PersistenceManager {
     // MARK: - Connections
 
     func loadConnections() -> [StoredConnection] {
-        migrateLegacyPairingIfNeeded()
-        return loadConnectionsLocked()
+        loadConnectionsWithOutcome().connections ?? []
+    }
+
+    /// Use this at storage entry/retry boundaries instead of treating a failed
+    /// compatibility `loadConnections()` read as an ordinary empty list.
+    func loadConnectionsWithOutcome() -> ConnectionRegistryReadResult {
+        let result = readConnectionsLocked()
+        guard case .missing = result else { return result }
+        return migrateLegacyPairingIfNeeded()
     }
 
     func isConnectionRegistryUndecodable() -> Bool {
-        readConnectionsLocked() == nil
+        readConnectionsLocked().error == .malformed
     }
 
     /// Inserts the connection, or updates the existing entry in place (preserving its
-    /// id) when one at the same port shares at least one host or carries the same
-    /// tailcat tunnel address. Returns the stored value.
+    /// id) when its certificate fingerprint matches, or one at the same port
+    /// shares at least one host or tailcat tunnel address. Returns the stored value.
     ///
     /// Overlap (not set equality) is the match key because the post-connect route
     /// refresh grows stored host sets over time: a re-pair of the same daemon via a
@@ -79,22 +100,16 @@ extension PersistenceManager {
     func upsertConnectionWithOutcome(
         _ connection: StoredConnection
     ) -> ConnectionUpsertOutcome {
-        migrateLegacyPairingIfNeeded()
-        guard var connections = readConnectionsLocked() else {
+        let read = loadConnectionsWithOutcome()
+        guard var connections = read.connections else {
             return ConnectionUpsertOutcome(
                 connection: connection,
                 persisted: false,
-                registryUndecodable: true
+                registryReadError: read.error
             )
         }
-        let stored: StoredConnection
-        let incomingHosts = Set(connection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
-        if let index = connections.firstIndex(where: { storedConnection in
-            storedConnection.server.port == connection.server.port
-                && (!incomingHosts.isDisjoint(with: storedConnection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
-                    || (connection.server.tcAddress != nil
-                        && storedConnection.server.tcAddress == connection.server.tcAddress))
-        }) {
+        var stored: StoredConnection
+        if let index = connections.firstIndex(where: { Self.matchesPairing($0, incoming: connection) }) {
             let existing = connections[index]
             let server = connection.server
             stored = StoredConnection(
@@ -116,21 +131,43 @@ extension PersistenceManager {
                 token: connection.token,
                 displayName: connection.displayName,
                 lastConnectedAt: connection.lastConnectedAt ?? existing.lastConnectedAt,
-                // The LWW clock survives a re-pair: the record is still the
-                // registry copy it was last synced from (write-back is the
-                // push path's job, not upsert's).
+                // Keep the last observed clock; a deliberate local pairing
+                // gets its own pending edit clock before the atomic save.
                 syncUpdatedAt: connection.syncUpdatedAt ?? existing.syncUpdatedAt
             )
+            stored.pendingSyncUpdatedAt = existing.pendingSyncUpdatedAt
+            preparePublication(&stored, incoming: connection)
             connections[index] = stored
         } else {
             stored = connection
+            preparePublication(&stored, incoming: connection)
             connections.append(stored)
         }
         return ConnectionUpsertOutcome(
             connection: stored,
             persisted: saveConnectionsLocked(connections),
-            registryUndecodable: false
+            registryReadError: nil
         )
+    }
+
+    private func preparePublication(_ stored: inout StoredConnection, incoming: StoredConnection) {
+        guard incoming.syncUpdatedAt == nil, let backendPublisher else { return }
+        stored.pendingSyncUpdatedAt = max(
+            backendPublisher.pairingClock(for: stored),
+            (suppressedPublicationClock(id: stored.id) ?? 0) + 1
+        )
+        stored.localPairingSyncClock = stored.pendingSyncUpdatedAt
+        stored.pendingRoutePublication = nil
+    }
+
+    private static func matchesPairing(_ stored: StoredConnection, incoming: StoredConnection) -> Bool {
+        let fingerprint = SyncedBackendConnectionMerge.normalizeFingerprint(incoming.server.certFingerprint)
+        if !fingerprint.isEmpty,
+           SyncedBackendConnectionMerge.normalizeFingerprint(stored.server.certFingerprint) == fingerprint { return true }
+        let incomingHosts = Set(incoming.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
+        return stored.server.port == incoming.server.port
+            && (!incomingHosts.isDisjoint(with: stored.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
+                || incoming.server.tcAddress != nil && stored.server.tcAddress == incoming.server.tcAddress)
     }
 
     /// Existing hosts keep their order and are never dropped; incoming hosts not
@@ -154,8 +191,7 @@ extension PersistenceManager {
     /// this never inserts or duplicates records. No-op when the id is unknown.
     @discardableResult
     func updateConnectionHosts(id: UUID, hosts: [String]) -> Bool {
-        migrateLegacyPairingIfNeeded()
-        guard var connections = readConnectionsLocked() else { return false }
+        guard var connections = loadConnectionsWithOutcome().connections else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         let server = connections[index].server
         connections[index].server = PairedServer(
@@ -166,7 +202,10 @@ extension PersistenceManager {
             certFingerprint: server.certFingerprint,
             tcAddress: server.tcAddress
         )
-        return saveConnectionsLocked(connections)
+        if hosts != server.hosts { queueRoutePublication(&connections[index], previousRoute: server.tcAddress) }
+        guard saveConnectionsLocked(connections) else { return false }
+        publishPendingBackends()
+        return true
     }
 
     /// Replaces the stored tailcat tunnel address of the connection with the
@@ -175,8 +214,7 @@ extension PersistenceManager {
     /// is unknown.
     @discardableResult
     func updateConnectionTcAddress(id: UUID, tcAddress: String) -> Bool {
-        migrateLegacyPairingIfNeeded()
-        guard var connections = readConnectionsLocked() else { return false }
+        guard var connections = loadConnectionsWithOutcome().connections else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         let server = connections[index].server
         connections[index].server = PairedServer(
@@ -187,7 +225,12 @@ extension PersistenceManager {
             certFingerprint: server.certFingerprint,
             tcAddress: tcAddress
         )
-        return saveConnectionsLocked(connections)
+        if tcAddress != server.tcAddress {
+            queueRoutePublication(&connections[index], previousRoute: server.tcAddress, newRoute: tcAddress)
+        }
+        guard saveConnectionsLocked(connections) else { return false }
+        publishPendingBackends()
+        return true
     }
 
     /// Replaces the stored display name of the connection with the given id,
@@ -196,8 +239,7 @@ extension PersistenceManager {
     /// next successful connect. No-op when the id is unknown.
     @discardableResult
     func updateConnectionDisplayName(id: UUID, displayName: String) -> Bool {
-        migrateLegacyPairingIfNeeded()
-        guard var connections = readConnectionsLocked() else { return false }
+        guard var connections = loadConnectionsWithOutcome().connections else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         connections[index].displayName = displayName
         return saveConnectionsLocked(connections)
@@ -205,8 +247,7 @@ extension PersistenceManager {
 
     @discardableResult
     func deleteConnection(id: UUID) -> Bool {
-        migrateLegacyPairingIfNeeded()
-        guard var connections = readConnectionsLocked() else { return false }
+        guard var connections = loadConnectionsWithOutcome().connections else { return false }
         guard connections.contains(where: { $0.id == id }) else { return true }
         connections.removeAll { $0.id == id }
         guard saveConnectionsLocked(connections) else { return false }
@@ -220,13 +261,16 @@ extension PersistenceManager {
     /// navigation concept — it only seeds which backend a fresh window
     /// binds to at launch).
     func activeConnection() -> StoredConnection? {
-        migrateLegacyPairingIfNeeded()
+        guard let connections = loadConnectionsWithOutcome().connections else { return nil }
         guard let id = activeConnectionIdLocked() else { return nil }
-        return loadConnectionsLocked().first { $0.id == id }
+        return connections.first { $0.id == id }
     }
 
-    func setActiveConnection(id: UUID) {
+    @discardableResult
+    func setActiveConnection(id: UUID) -> Bool {
+        guard loadConnectionsWithOutcome().error == nil else { return false }
         defaults.set(id.uuidString, forKey: activeConnectionIdKey)
+        return true
     }
 
     /// The backend a fresh window binds to at launch when system restoration
@@ -241,8 +285,7 @@ extension PersistenceManager {
 
     @discardableResult
     func touchLastConnected(id: UUID) -> Bool {
-        migrateLegacyPairingIfNeeded()
-        guard var connections = readConnectionsLocked() else { return false }
+        guard var connections = loadConnectionsWithOutcome().connections else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         connections[index].lastConnectedAt = Date()
         return saveConnectionsLocked(connections)
@@ -258,14 +301,14 @@ extension PersistenceManager {
     /// connection; the merge simply retries on the next registry read.
     @discardableResult
     func mergeSyncedBackends(records: [SyncedBackendRecord]) -> SyncedBackendMergeOutcome {
-        migrateLegacyPairingIfNeeded()
-        guard let connections = readConnectionsLocked() else {
+        let read = loadConnectionsWithOutcome()
+        guard let connections = read.connections else {
             return SyncedBackendMergeOutcome(
                 addedIds: [],
                 updatedIds: [],
                 removedIds: [],
                 removedActiveConnection: false,
-                registryUndecodable: true
+                registryReadError: read.error
             )
         }
         let result = SyncedBackendConnectionMerge.merge(records: records, into: connections)
@@ -293,23 +336,25 @@ extension PersistenceManager {
         )
     }
 
-    // nil distinguishes an undecodable registry from a valid empty registry.
-    // swiftlint:disable:next discouraged_optional_collection
-    private func readConnectionsLocked() -> [StoredConnection]? {
-        guard let data = loadDataFromKeychain(account: keychainAccountConnections) else {
-            return []
+    private func readConnectionsLocked() -> ConnectionRegistryReadResult {
+        switch readDataFromKeychain(account: keychainAccountConnections) {
+        case .missing: return .missing
+        case .unavailable(let status): return .failed(.unavailable(status))
+        case .malformed: return .failed(.malformed)
+        case .value(let data):
+            guard let connections = try? JSONDecoder().decode([StoredConnection].self, from: data) else {
+                return .failed(.malformed)
+            }
+            return .loaded(connections)
         }
-        return try? JSONDecoder().decode([StoredConnection].self, from: data)
-    }
-
-    private func loadConnectionsLocked() -> [StoredConnection] {
-        readConnectionsLocked() ?? []
     }
 
     @discardableResult
-    private func saveConnectionsLocked(_ connections: [StoredConnection]) -> Bool {
+    func saveConnectionsLocked(_ connections: [StoredConnection]) -> Bool {
         guard let data = try? JSONEncoder().encode(connections) else { return false }
-        return saveDataToKeychain(data: data, account: keychainAccountConnections)
+        guard saveDataToKeychain(data: data, account: keychainAccountConnections) else { return false }
+        connectionsChanged.send()
+        return true
     }
 
     private func activeConnectionIdLocked() -> UUID? {
@@ -320,27 +365,48 @@ extension PersistenceManager {
     /// One-time migration of the legacy single pairing (Keychain `serverInfo`+`apiToken`,
     /// or the even older UserDefaults `pairedServer`) into the connections list.
     /// Legacy entries are only removed after the new blob is written successfully.
-    private func migrateLegacyPairingIfNeeded() {
-        guard loadDataFromKeychain(account: keychainAccountConnections) == nil else { return }
-
-        var serverData = loadDataFromKeychain(account: keychainAccountServer)
-        if serverData == nil {
-            serverData = defaults.data(forKey: serverKey)
+    private func migrateLegacyPairingIfNeeded() -> ConnectionRegistryReadResult {
+        // Called only after the registry was positively identified as missing.
+        // Never fall back to older defaults after a failed Keychain server read.
+        let serverData: Data?
+        switch readDataFromKeychain(account: keychainAccountServer) {
+        case .missing: serverData = defaults.data(forKey: serverKey)
+        case .value(let data): serverData = data
+        case .unavailable(let status): return .failed(.unavailable(status))
+        case .malformed: return .failed(.malformed)
         }
-        guard let data = serverData,
-              let server = try? JSONDecoder().decode(PairedServer.self, from: data),
-              let token = loadStringFromKeychain(account: keychainAccountToken) else {
-            return
+        let token: String?
+        switch readLegacyToken() {
+        case .success(let value): token = value
+        case .failure(let error): return .failed(error)
         }
+        guard let serverData else { return .missing }
+        guard let server = try? JSONDecoder().decode(PairedServer.self, from: serverData) else {
+            return .failed(.malformed)
+        }
+        guard let token else { return .missing }
 
         let connection = StoredConnection(server: server, token: token)
-        guard saveConnectionsLocked([connection]) else { return }
+        guard saveConnectionsLocked([connection]) else { return .failed(.migrationSaveFailed) }
         defaults.set(connection.id.uuidString, forKey: activeConnectionIdKey)
 
         deleteFromKeychain(account: keychainAccountServer)
         deleteFromKeychain(account: keychainAccountToken)
         defaults.removeObject(forKey: serverKey)
+        return .loaded([connection])
     }
+
+    private func readLegacyToken() -> Result<String?, ConnectionRegistryReadError> {
+        switch readDataFromKeychain(account: keychainAccountToken) {
+        case .missing: return .success(nil)
+        case .unavailable(let status): return .failure(.unavailable(status))
+        case .malformed: return .failure(.malformed)
+        case .value(let data):
+            guard let token = String(data: data, encoding: .utf8) else { return .failure(.malformed) }
+            return .success(token)
+        }
+    }
+
     // MARK: - Pairing (compatibility shims over the connections API)
 
     @discardableResult
@@ -349,7 +415,8 @@ extension PersistenceManager {
             StoredConnection(server: server, token: token)
         )
         guard outcome.persisted else { return false }
-        setActiveConnection(id: outcome.connection.id)
+        guard setActiveConnection(id: outcome.connection.id) else { return false }
+        publishPendingBackends()
         return true
     }
 
@@ -361,7 +428,16 @@ extension PersistenceManager {
     /// Forgets the active connection (removes it from the saved list).
     @discardableResult
     func clearPairing() -> Bool {
-        if let connection = activeConnection() {
+        guard let connections = loadConnectionsWithOutcome().connections else { return false }
+        // Do not erase legacy entries if their prerequisite reads failed, even
+        // when a newer registry exists and therefore needs no migration.
+        for account in [keychainAccountServer, keychainAccountToken] {
+            switch readDataFromKeychain(account: account) {
+            case .unavailable, .malformed: return false
+            case .missing, .value: break
+            }
+        }
+        if let connection = connections.first(where: { $0.id == activeConnectionIdLocked() }) {
             guard deleteConnection(id: connection.id) else { return false }
         }
         // Clean up any legacy entries
@@ -379,6 +455,10 @@ extension PersistenceManager {
     }
 
     func loadDataFromKeychain(account: String) -> Data? {
+        readDataFromKeychain(account: account).data
+    }
+
+    func readDataFromKeychain(account: String) -> KeychainReadResult {
         keychainStorage.load(service: keychainService, account: account)
     }
 

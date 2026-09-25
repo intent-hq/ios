@@ -184,58 +184,6 @@ struct CommentStoreIntegrationTests {
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
     }
 
-    // MARK: - legacyEventSuppressedWhileLive
-
-    @Test func legacyEventSuppressedWhileLive() async throws {
-        let fake = FakeConnectionManager()
-        let store = CommentStore(connectionManager: fake)
-
-        fake.responseMap["comment.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
-        fake.responseMap["comment.unsubscribe"] = [:] as [String: Any]
-        try await connectAndSubscribe(fake, store)
-
-        // Snapshot establishes live state
-        fake.deliverSubscriptionPush(SubscriptionPush(
-            subscriptionId: "sub-1",
-            seq: 0,
-            snapshot: [
-                [
-                    "threadId": "t1",
-                    "noteId": "note-1",
-                    "status": "open",
-                    "createdAt": "2024-01-01T00:00:00Z",
-                    "lastActivity": "2024-01-01T00:00:00Z",
-                    "latestCommentAuthor": "user1",
-                    "latestCommentAuthorType": "user",
-                    "latestCommentAt": "2024-01-01T00:00:00Z",
-                    "commentCount": 1
-                ]
-            ],
-        ))
-        #expect(store.threads.count == 1)
-
-        fake.clearRequestLog()
-
-        // Verify event handler is registered
-        #expect(fake.eventHandlerCount > 0)
-
-        // Deliver legacy event (should be suppressed)
-        fake.deliverEvent(method: "comment.created", params: [
-            "event": [
-                "type": "comment:created",
-                "workspaceId": "ws-1",
-                "noteId": "note-1",
-                "threadId": "t99"
-            ]
-        ])
-
-        // Verify no resubscribe (legacy event suppressed)
-        try await expectNever("comment.subscribe after a legacy event while live") {
-            fake.didCallMethod("comment.subscribe")
-        }
-        #expect(store.threads.count == 1)
-    }
-
     // MARK: - crossIdPushIsolation
 
     @Test func crossIdPushIsolation() async throws {

@@ -51,7 +51,6 @@ final class ConversationCommands {
 
     struct AgentState {
         let isStreaming: Bool
-        let attentionRequest: PendingAttentionRequest?
         /// PROTOCOL §5.5 three-state marker: `nil` when absent from the
         /// response (legacy daemon), `""` when written-empty (nothing
         /// pending), else the question-bearing message id. Never coerced.
@@ -65,23 +64,18 @@ final class ConversationCommands {
         let delegationGroupStatus: (completed: Int, total: Int)?
     }
 
-    struct SendRequest {
-        let agentId: String
-        let content: String
-        let workspaceId: String
-        let messageId: String
-        let imagePayload: OutgoingImagePayload
-        let filePayload: OutgoingFilePayload
-        let messageMetadata: MessageSendMetadata
+    var queuedMessages: [QueuedMessage] = [] {
+        didSet { queueRevision &+= 1 }
     }
-
-    var queuedMessages: [QueuedMessage] = []
+    private var queueRevision = 0
+    @ObservationIgnored var onQueueSnapshot: (([QueuedMessage]) -> Void)?
     var pendingQuestionsMessageId: String?
     var dismissedQuestionsMessageId: String?
     var lastSeenMessageId: String?
 
     @ObservationIgnored private let connectionManager: ConnectionManagerRouting
     private var lastMarkSeenSentId: String?
+    private var resetGeneration = 0
 
     init(connectionManager: ConnectionManagerRouting) {
         self.connectionManager = connectionManager
@@ -101,7 +95,6 @@ extension ConversationCommands {
             isStreaming: (agent["isStreaming"] as? Bool ?? false)
                 || (agent["isResponding"] as? Bool ?? false)
                 || (agent["turnInFlight"] as? Bool ?? false),
-            attentionRequest: AgentSession.parsePendingAttentionRequest(agent),
             pendingQuestionsMessageId: metadata?["pendingQuestionsMessageId"] as? String,
             dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String,
             lastSeenMessageId: metadata?["lastSeenMessageId"] as? String
@@ -161,29 +154,39 @@ extension ConversationCommands {
         )
     }
 
-    func sendMessage(_ request: SendRequest) async throws -> Bool {
+    func sendMessage(_ request: SendRequest) async throws -> SendAcceptance {
+        let generation = resetGeneration
+        let issuedQueueRevision = queueRevision
         var params: [String: Any] = [
             "agentId": request.agentId,
             "content": request.content,
             "workspaceId": request.workspaceId,
-            "messageId": request.messageId
+            "messageId": request.messageId,
+            // Correlates auto-queue + drain; NOT a replay/dedup guarantee (PROTOCOL §5.5).
+            "userAppMessageId": request.messageId
         ]
         request.imagePayload.apply(to: &params)
         request.filePayload.apply(to: &params)
         request.messageMetadata.apply(to: &params)
         let result = try await connectionManager.request("agent.sendMessage", params: params)
+        guard generation == resetGeneration else { throw CancellationError() }
         guard let response = result as? [String: Any],
-              response["queued"] as? Bool == true else { return false }
-        // Seed the local queue from the auto-queued result so the entry (and
-        // its `question_answers` tag) is visible before `agent:queue:updated`
-        // lands; the event's authoritative snapshot then replaces it.
+              response["success"] as? Bool == true,
+              let queued = response["queued"] as? Bool else {
+            throw ConversationSendError.invalidAcknowledgement
+        }
+        if !queued { return SendAcceptance(queued: false, messageId: response["messageId"] as? String) }
+        // Seed only if no newer queue event/read landed during the request.
+        // The store also skips seeding when a transcript echo already won.
+        var seed: QueuedMessage?
         if let dictionary = response["queuedMessage"] as? [String: Any],
            let data = try? JSONSerialization.data(withJSONObject: dictionary),
            let message = try? JSONDecoder().decode(QueuedMessage.self, from: data),
-           !queuedMessages.contains(where: { $0.id == message.id }) {
-            queuedMessages.append(message)
+           issuedQueueRevision == queueRevision {
+            seed = message
         }
-        return true
+        let queuedId = (response["queuedMessage"] as? [String: Any])?["id"] as? String
+        return SendAcceptance(queued: true, messageId: queuedId, queueSeed: seed)
     }
 
     func dismissQuestions(
@@ -273,10 +276,12 @@ extension ConversationCommands {
     /// and clears the queue. Elements are decoded one by one (see
     /// `decodeQueueSnapshot`) so one malformed entry never blanks its siblings.
     func fetchQueue(agentId: String) async throws {
+        let generation = resetGeneration
         let result = try await connectionManager.request(
             "agent.getQueue",
             params: ["agentId": agentId]
         )
+        guard generation == resetGeneration else { throw CancellationError() }
         guard let response = result as? [String: Any],
               let decoded = Self.decodeQueueSnapshot(response["queue"], source: "agent.getQueue")
         else {
@@ -287,6 +292,7 @@ extension ConversationCommands {
             return
         }
         queuedMessages = decoded
+        onQueueSnapshot?(decoded)
     }
 
     /// Element-tolerant decoding shared by the `agent.getQueue` response and
@@ -484,6 +490,7 @@ extension ConversationCommands {
     }
 
     func reset() {
+        resetGeneration &+= 1
         queuedMessages = []
         pendingQuestionsMessageId = nil
         dismissedQuestionsMessageId = nil

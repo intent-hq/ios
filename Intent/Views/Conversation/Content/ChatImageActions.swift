@@ -84,7 +84,7 @@ struct SquareImageThumbnail: View {
 
     /// Assistant transcript thumbnails (agent image blocks + markdown
     /// images) — FE parity: 160px.
-    nonisolated static let transcriptSide: CGFloat = 160
+    nonisolated static let transcriptSide: CGFloat = Constants.Conversation.ImageThumbnail.transcriptSide
 
     var body: some View {
         Image(uiImage: image)

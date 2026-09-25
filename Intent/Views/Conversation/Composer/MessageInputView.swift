@@ -32,6 +32,10 @@ struct MessageInputView: View {
         self.store = store
     }
 
+    /// Overlay visibility is presentation policy, not permission to consume a
+    /// draft. Read the live backend state again at both submission boundaries.
+    var isConnectionReadyForSending: Bool { viewModel.connection.connectionState == .connected }
+
     var body: some View {
         VStack(spacing: 0) {
             supplementalRows
@@ -184,7 +188,7 @@ private extension MessageInputView {
                     .allowsHitTesting(false)
             }
         }
-        .background(Theme.muted(for: colorScheme).opacity(0.5))
+        .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.Composer.fieldBackgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius))
     }
 
@@ -192,6 +196,7 @@ private extension MessageInputView {
         (!localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || viewModel.hasPendingAttachments)
             && !viewModel.isUploadingFiles
+            && isConnectionReadyForSending
     }
 
     private func updateTextViewHeight(_ naturalHeight: CGFloat) {
@@ -334,7 +339,7 @@ private extension MessageInputView {
                                 .accessibilityHidden(true)
                             Text(prompt)
                                 .font(.body)
-                                .lineLimit(2)
+                                .lineLimit(Constants.Conversation.Composer.suggestedPromptLineLimit)
                                 .foregroundStyle(Theme.foreground(for: colorScheme))
                         }
                         .padding(.horizontal, Constants.Conversation.Composer.suggestedPromptHorizontalPadding)
@@ -359,6 +364,7 @@ private extension MessageInputView {
     // MARK: - Actions
 
     private func sendCurrentMessage() {
+        guard isConnectionReadyForSending else { return }
         #if os(visionOS)
         // Stop app dictation before the text is consumed; a late final
         // result must not resurrect the sent text (.send cancels outright).
@@ -380,7 +386,7 @@ private extension MessageInputView {
             // files, but the text view's submit callback still lands here —
             // pendingFiles clears only after success, so a second send
             // would duplicate the uploads.
-            guard !viewModel.isUploadingFiles else { return }
+            guard !viewModel.isUploadingFiles, isConnectionReadyForSending else { return }
             let text = localText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty || viewModel.hasPendingAttachments else {
                 isFocused = true

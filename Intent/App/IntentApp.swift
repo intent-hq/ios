@@ -6,6 +6,8 @@ struct IntentApp: App {
     @AppStorage("appThemePreference") private var themePreference: String = "system"
 
     init() {
+        LifecycleDiagnostics.sessionStarted()
+        DemoConnectionLoss.seedSavedMachineIfNeeded()
         _ = NotificationManager.shared
         // Aggregate agent alerts across every live backend session: each
         // session attaches an observer on creation and detaches on
@@ -37,8 +39,11 @@ struct IntentApp: App {
         // resolves to the last-used backend, else runs a transient pairing
         // session until a pairing completes and rebinds the window.
         WindowGroup(for: BackendID.self) { $backendID in
-            BackendWindowRoot(backendID: $backendID)
-                .preferredColorScheme(resolvedColorScheme)
+            BackendWindowRoot(
+                backendID: $backendID,
+                networkAvailability: DemoConnectionLoss.networkAvailability ?? .shared
+            )
+                .modifier(LaunchAppearanceModifier(preferredColorScheme: resolvedColorScheme))
                 #if os(visionOS)
                 .frame(
                     minWidth: Constants.Root.visionMinimumWindowWidth,
@@ -90,22 +95,33 @@ enum WindowRetargetRoute: Equatable {
 /// here so each window's coordinator sees its own scene's lifecycle.
 struct SessionWindowRoot: View {
     let session: BackendSession
+    let networkAvailability: NetworkAvailability
     let retargetWindow: ((BackendID) -> Void)?
+    let returnToSavedMachines: (() -> Void)?
     @State private var coordinator: AppCoordinator
     @Environment(\.scenePhase) private var scenePhase
 
-    init(session: BackendSession, retargetWindow: ((BackendID) -> Void)? = nil) {
+    init(
+        session: BackendSession,
+        networkAvailability: NetworkAvailability = .shared,
+        retargetWindow: ((BackendID) -> Void)? = nil,
+        returnToSavedMachines: (() -> Void)? = nil,
+        startingAtSavedMachines: Bool = false
+    ) {
         self.session = session
+        self.networkAvailability = networkAvailability
         self.retargetWindow = retargetWindow
-        _coordinator = State(initialValue: session.makeCoordinator())
+        self.returnToSavedMachines = returnToSavedMachines
+        _coordinator = State(initialValue: session.makeCoordinator(startingAtSavedMachines: startingAtSavedMachines))
     }
 
     var body: some View {
-        RootView()
+        RootView(networkAvailability: networkAvailability)
             .environment(session)
             .environment(coordinator)
             .onAppear {
                 coordinator.retargetWindow = retargetWindow
+                coordinator.returnWindowToSavedMachines = returnToSavedMachines
             }
             .onOpenURL { url in
                 coordinator.handleIncomingURL(url)
@@ -115,7 +131,9 @@ struct SessionWindowRoot: View {
                     coordinator.onScenePhaseActive()
                 } else {
                     coordinator.onScenePhaseNotActive()
+                    if phase == .background { coordinator.onScenePhaseBackground() }
                 }
+                DemoConnectionLoss.sceneChanged(phase, connection: session.connection)
             }
     }
 }
@@ -128,6 +146,9 @@ struct SessionWindowRoot: View {
 /// (plain launch, restoration loss) is resolved once to the last-used
 /// backend; with none paired the window runs a transient pairing session
 /// until a pairing completes and rebinds it via the retarget hook.
+/// Returning Home releases the attachment without rewriting the native
+/// scene value. The per-scene Home flag restores an unbound pairing session
+/// instead of auto-connecting; selecting the native backend reattaches it.
 ///
 /// Backend removal: when the registry marks this window's backend removed —
 /// user delete, log off, synced tombstone, or (on bind) a restored window
@@ -141,14 +162,21 @@ struct BackendWindowRoot: View {
     private static let replacementConnectionPollLimit = 20
 
     @Binding var backendID: BackendID?
-    @State private var session: BackendSession?
-    @State private var pairingSession: BackendSession?
+    @State private var windowSession: BackendWindowSession
+    @SceneStorage("backendWindowShowsSavedMachines") private var restoresSavedMachines = false
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.scenePhase) private var scenePhase
+
+    init(backendID: Binding<BackendID?>, networkAvailability: NetworkAvailability = .shared) {
+        _backendID = backendID
+        _windowSession = State(initialValue: BackendWindowSession(networkAvailability: networkAvailability))
+    }
 
     private var isRemoved: Bool {
-        guard let backendID else { return false }
+        guard let backendID,
+              !restoresSavedMachines, !windowSession.isShowingSavedMachines else { return false }
         return BackendSessionRegistry.shared.isBackendRemoved(backendID)
     }
 
@@ -156,8 +184,14 @@ struct BackendWindowRoot: View {
         Group {
             if isRemoved {
                 RemovedBackendPlaceholderView(onClose: closeRemovedWindow)
-            } else if let session = session ?? pairingSession {
-                SessionWindowRoot(session: session, retargetWindow: retarget)
+            } else if let session = windowSession.session {
+                SessionWindowRoot(
+                    session: session,
+                    networkAvailability: windowSession.networkAvailability,
+                    retargetWindow: retarget,
+                    returnToSavedMachines: windowSession.returnToSavedMachines,
+                    startingAtSavedMachines: windowSession.isShowingSavedMachines
+                )
                     // A rebind must build a fresh window root (new
                     // coordinator over the new session), not update the old
                     // one in place.
@@ -166,8 +200,20 @@ struct BackendWindowRoot: View {
                 Color.clear
             }
         }
+        .background {
+            #if os(iOS)
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                WindowSceneTitle(title: windowSession.sceneTitle)
+                    .frame(width: 0, height: 0)
+            }
+            #endif
+        }
         .onAppear {
-            if backendID == nil,
+            windowSession.updateNetworkObservation(for: scenePhase)
+            if restoresSavedMachines {
+                windowSession.returnToSavedMachines()
+            }
+            if backendID == nil, !windowSession.isShowingSavedMachines,
                let lastUsed = PersistenceManager.shared.lastUsedConnection() {
                 // Plain launch (no restored scene value): bind to the
                 // last-used backend; bindCurrentBackend runs via onChange.
@@ -176,26 +222,33 @@ struct BackendWindowRoot: View {
             }
             bindCurrentBackend()
         }
-        .onChange(of: backendID) { oldValue, _ in
-            releaseSession(oldValue)
+        .onChange(of: scenePhase) { _, phase in
+            windowSession.updateNetworkObservation(for: phase)
+        }
+        .onChange(of: windowSession.isShowingSavedMachines) { _, showsSavedMachines in
+            restoresSavedMachines = showsSavedMachines
+        }
+        .onChange(of: backendID) { _, _ in
+            windowSession.prepareToRebind()
             bindCurrentBackend()
         }
         // initial: true covers a mark set before this window ever rendered
         // (removal racing a window that is still opening or being restored).
         .onChange(of: isRemoved, initial: true) { _, removed in
             guard removed else { return }
-            releaseSession(backendID)
+            windowSession.release()
             closeRemovedWindow()
         }
         .onDisappear {
-            releaseSession(backendID)
+            windowSession.stopNetworkObservation()
+            windowSession.release()
         }
     }
 
     /// Attaches the session for the current scene value: the backend's
     /// shared session when bound, else a fresh transient pairing session.
     private func bindCurrentBackend() {
-        if let backendID {
+        if let backendID, !windowSession.isShowingSavedMachines {
             // A window restored (or retargeted) after its backend's record
             // was removed: mark it so the shared auto-close path takes over.
             if !isRemoved,
@@ -204,12 +257,9 @@ struct BackendWindowRoot: View {
                 BackendSessionRegistry.shared.markBackendRemoved(backendID)
                 return
             }
-            guard !isRemoved, session == nil else { return }
-            session = BackendSessionRegistry.shared.attach(backendID)
-        } else {
-            guard pairingSession == nil else { return }
-            pairingSession = BackendSessionRegistry.shared.makePairingSession()
+            guard !isRemoved else { return }
         }
+        windowSession.bind(to: backendID)
     }
 
     /// The coordinator's retarget hook: apply the v2 policy for switching
@@ -224,11 +274,21 @@ struct BackendWindowRoot: View {
         ) {
         case .openTargetWindow:
             openWindow(value: target)
+            if windowSession.isShowingSavedMachines {
+                // A new pairing may have used Home's transient connection.
+                // The target now owns its own session; Home must stay idle.
+                windowSession.release()
+                windowSession.bind(to: nil)
+            }
         case .replaceWindow:
             openWindow(value: target)
             dismissWhenReplacementConnects()
         case .rebindInPlace:
-            backendID = target
+            if backendID == target, windowSession.isShowingSavedMachines {
+                windowSession.rebind(to: target)
+            } else {
+                backendID = target
+            }
         }
     }
 
@@ -273,17 +333,6 @@ struct BackendWindowRoot: View {
             dismissWindow(value: removedID)
         case .retargetToPairing:
             backendID = nil
-        }
-    }
-
-    private func releaseSession(_ id: BackendID?) {
-        if session != nil, let id {
-            session = nil
-            BackendSessionRegistry.shared.detach(id)
-        }
-        if let pairing = pairingSession {
-            pairingSession = nil
-            pairing.teardown()
         }
     }
 }
