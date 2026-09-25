@@ -29,7 +29,7 @@ struct CreateWorkspaceBranchStepView: View {
             } else if let loadError {
                 VStack(spacing: Constants.CreateWorkspace.errorStateSpacing) {
                     Text("Couldn't load branches")
-                        .interFont(Constants.Typography.bodyXS.withFace(.semibold))
+                        .interFont(Constants.Typography.bodyXSEmphasized)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                     Text(loadError)
                         .interFont(Constants.Typography.bodyXS)

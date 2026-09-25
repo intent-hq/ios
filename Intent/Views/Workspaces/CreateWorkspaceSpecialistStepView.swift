@@ -73,7 +73,7 @@ struct CreateWorkspaceSpecialistStepView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Create Workspace")
-                    .font(.title.weight(.semibold))
+                    .interFont(Constants.Typography.heading2)
                     .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, CreateWorkspaceFormStyle.headingSpacing)
                 messageSection
@@ -96,7 +96,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     private var agentSection: some View {
         VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
             Text("AGENT")
-                .font(.caption)
+                .interFont(Constants.Typography.eyebrow)
                 .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
                 .accessibilityAddTraits(.isHeader)
                 .padding(.bottom, CreateWorkspaceFormStyle.controlPadding - CreateWorkspaceFormStyle.rowSpacing)
@@ -122,7 +122,7 @@ struct CreateWorkspaceSpecialistStepView: View {
             adaptiveField("Reasoning") { reasoningPicker }
             if reasoningLevels.isEmpty {
                 Text("Choose a model with reasoning options to override Auto.")
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
             }
         }
@@ -131,7 +131,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     private var messageSection: some View {
         TextField("What should we work on?", text: $messageText, axis: .vertical)
             .lineLimit(CreateWorkspaceView.initialMessageLineCountRange)
-            .font(.callout)
+            .interFont(Constants.Typography.bodyS)
             .padding(CreateWorkspaceFormStyle.pagePadding)
             .frame(minHeight: CreateWorkspaceFormStyle.promptHeight, alignment: .topLeading)
             .background(CreateWorkspaceFormStyle.card(for: colorScheme), in: .rect(
@@ -210,7 +210,7 @@ struct CreateWorkspaceSpecialistStepView: View {
         if CreateWorkspaceView.usesExpandedFormLayout(for: dynamicTypeSize) {
             VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
                 Text(label)
-                    .font(.callout)
+                    .interFont(Constants.Typography.bodyS)
                     .accessibilityHidden(true)
                 content()
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,7 +218,7 @@ struct CreateWorkspaceSpecialistStepView: View {
         } else {
             HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
                 Text(label)
-                    .font(.callout)
+                    .interFont(Constants.Typography.bodyS)
                     .frame(width: CreateWorkspaceFormStyle.fieldLabelWidth, alignment: .leading)
                     .accessibilityHidden(true)
                 content()
@@ -229,7 +229,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     private var noProvidersSignedInPlaceholder: some View {
         VStack(alignment: .leading, spacing: Constants.ModalPicker.placeholderSpacing) {
             Text("No providers are signed in")
-                .interFont(Constants.Typography.bodyXS.withFace(.semibold))
+                .interFont(Constants.Typography.bodyXSEmphasized)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
             Text("Set up a provider in the Intent desktop app, then come back and try again.")
                 .interFont(Constants.Typography.bodyXS)

@@ -20,7 +20,7 @@ struct CreateWorkspaceFormHeader: View {
             Spacer()
             Button(action: onCreate) {
                 Text("Create")
-                    .font(.callout.weight(.medium))
+                    .interFont(Constants.Typography.bodySEmphasized)
                     .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
                     .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
                     .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)

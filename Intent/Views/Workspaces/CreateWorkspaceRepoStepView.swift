@@ -8,7 +8,7 @@ struct CreateWorkspaceRepoStepView: View {
     let onRepoChanged: () -> Void
 
     var body: some View {
-        GitHubRepoPickerView(store: store, selectedRepo: $selectedRepo)
+        GitHubRepoPickerView(store: store, selectedRepo: $selectedRepo, usesCreationTypography: true)
             .navigationTitle("Select Repository")
             .toolbarTitleDisplayMode(.inline)
             .toolbar {

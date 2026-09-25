@@ -15,7 +15,9 @@ struct CreateWorkspaceSourceCard: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(repositoryFullName)
+                        .interFont(Constants.Typography.bodyS)
                     Text("off branch \(Text(branch).foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme)))")
+                        .interFont(Constants.Typography.bodyS)
                         .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
                 }
                 .fixedSize(horizontal: false, vertical: true)

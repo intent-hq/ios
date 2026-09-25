@@ -7,13 +7,13 @@ struct CreateWorkspaceChoiceLabel: View {
     var body: some View {
         HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
             Text(title)
+                .interFont(Constants.Typography.bodyS)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Image(systemName: "chevron.down")
                 .font(.caption.weight(.semibold))
                 .accessibilityHidden(true)
         }
-        .font(.callout)
         .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))
         .multilineTextAlignment(.leading)
         .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
