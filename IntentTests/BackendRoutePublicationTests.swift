@@ -282,3 +282,78 @@ struct BackendRoutePublicationTests {
         )
     }
 }
+
+extension BackendRoutePublicationTests {
+    @Test(arguments: [false, true])
+    func hostUpdateDoesNotRestampFailedTunnelObservation(useLegacyIntent: Bool) throws {
+        let store = try BackendSyncTestStore()
+        defer { store.cleanUp() }
+        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "old-token"))
+        let original = try #require(store.manager.activeConnection())
+        store.cloud.writeFailure = errSecNotAvailable
+        #expect(store.manager.updateConnectionTcAddress(id: original.id, tcAddress: "tcA"))
+        if useLegacyIntent { try removeTunnelClockFromSavedIntent(store) }
+        var remote = BackendSyncFixtures.remote(clock: 2000)
+        remote["tcAddress"] = "tcB"
+        try store.cloud.put(remote)
+        let later = PersistenceManager(
+            defaults: store.defaults,
+            keychainStorage: store.local,
+            backendPublisher: BackendSyncFixtures.publisher(store.cloud, clock: 3000)
+        )
+        #expect(later.updateConnectionHosts(id: original.id, hosts: ["Mac.Local", "10.0.0.2"]))
+        #expect(later.activeConnection()?.pendingRoutePublication?.updatedAt == 3000)
+        #expect(later.activeConnection()?.pendingRoutePublication?.tcUpdatedAt == 1001)
+        #expect(try store.cloud.object()["tcAddress"] as? String == "tcB")
+        let relaunched = PersistenceManager(
+            defaults: store.defaults,
+            keychainStorage: store.local,
+            backendPublisher: BackendSyncFixtures.publisher(store.cloud, clock: 9000)
+        )
+        store.cloud.writeFailure = nil
+        let live = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: live,
+            backendID: BackendID(original.id),
+            persistence: relaunched,
+            syncedRegistry: SyncedBackendRegistry(keychain: store.cloud, accessGroup: BackendSyncFixtures.accessGroup)
+        )
+        #expect(coordinator.refreshSyncedBackends()?.updatedIds == [original.id])
+        #expect(relaunched.activeConnection()?.server.tcAddress == "tcB")
+        #expect(relaunched.activeConnection()?.pendingRoutePublication == nil)
+        #expect(live.updateCachedCredentialsLog.last?.tcAddress == "tcB")
+        #expect(live.updateCachedCredentialsLog.last?.hosts.contains("10.0.0.2") == true)
+        try verifyHostOnlyRetry(store)
+    }
+
+    private func removeTunnelClockFromSavedIntent(_ store: BackendSyncTestStore) throws {
+        let stored = try #require(store.manager.activeConnection())
+        let data = try JSONEncoder().encode(stored)
+        var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var pending = try #require(object["pendingRoutePublication"] as? [String: Any])
+        pending["tcUpdatedAt"] = nil
+        object["pendingRoutePublication"] = pending
+        let legacy = try JSONDecoder().decode(StoredConnection.self, from: JSONSerialization.data(withJSONObject: object))
+        try store.seed([legacy])
+    }
+
+    private func verifyHostOnlyRetry(_ store: BackendSyncTestStore) throws {
+        let payload = try store.cloud.object()
+        let hostObservationClock = 3000.0
+        #expect(payload["tcAddress"] as? String == "tcB")
+        #expect(payload["updatedAt"] as? Double == hostObservationClock)
+        #expect(payload["hosts"] as? [String] == ["mac.local", "10.0.0.1", "10.0.0.2"])
+        #expect(payload["token"] as? String == "remote-token")
+        #expect(payload["label"] as? String == "Desktop name")
+        let registry = SyncedBackendRegistry(keychain: store.cloud, accessGroup: BackendSyncFixtures.accessGroup)
+        guard case .available(let records) = registry.listBackends() else {
+            Issue.record("Expected the second client to read the new hosts and winning tunnel")
+            return
+        }
+        let imported = try #require(SyncedBackendConnectionMerge.merge(records: records, into: []).connections.first)
+        #expect(imported.server.tcAddress == "tcB")
+        #expect(imported.server.hosts.contains("10.0.0.2"))
+        #expect(imported.token == "remote-token")
+    }
+}

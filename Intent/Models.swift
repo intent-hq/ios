@@ -35,6 +35,9 @@ struct PendingBackendRoutePublication: Codable, Equatable {
     var updatedAt: Double
     var hosts: [String]
     var tcAddress: String?
+    /// Time of the actual tunnel observation, unchanged by host-only edits.
+    /// Legacy pending intents fall back to their original updatedAt.
+    var tcUpdatedAt: Double?
     var previousTcAddress: String?
 }
 

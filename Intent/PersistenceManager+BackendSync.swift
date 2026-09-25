@@ -37,10 +37,21 @@ extension PersistenceManager {
     func queueRoutePublication(_ connection: inout StoredConnection, previousRoute: String?, newRoute: String? = nil) {
         guard let backendPublisher, routePublicationAllowed(connection) else { return }
         let previous = connection.pendingRoutePublication
+        let clock = backendPublisher.routeClock(for: connection)
+        let route = SyncedBackendPayload.tunnelAddress(newRoute)
+        let tunnelClock: Double?
+        if route != nil {
+            tunnelClock = clock
+        } else if let previous, previous.tcAddress != nil {
+            tunnelClock = previous.tcUpdatedAt ?? previous.updatedAt
+        } else {
+            tunnelClock = nil
+        }
         connection.pendingRoutePublication = PendingBackendRoutePublication(
-            updatedAt: backendPublisher.routeClock(for: connection),
+            updatedAt: clock,
             hosts: connection.server.hosts,
-            tcAddress: SyncedBackendPayload.tunnelAddress(newRoute) ?? previous?.tcAddress,
+            tcAddress: route ?? previous?.tcAddress,
+            tcUpdatedAt: tunnelClock,
             previousTcAddress: previous?.tcAddress != nil ? previous?.previousTcAddress : previousRoute
         )
     }

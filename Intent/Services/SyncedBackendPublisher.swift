@@ -97,15 +97,8 @@ struct SyncedBackendPublisher {
         guard !winner.record.deleted else { return .superseded(winner.record) }
         guard !rows.contains(where: { blocks($0, connection: connection, accounts: [target.account, winner.account]) })
         else { return .retry }
-        // A later local observation can replace an older shared rotation;
-        // equal/newer competing rotations still win over a stale retry.
-        if let desired = pending.tcAddress, let remote = winner.record.tcAddress,
-           remote != desired, remote != pending.previousTcAddress,
-           winner.record.updatedAt >= pending.updatedAt {
-            return .superseded(winner.record)
-        }
         let hosts = PersistenceManager.mergeHostLists(existing: winner.record.hosts, incoming: pending.hosts)
-        let route = pending.tcAddress ?? winner.record.tcAddress
+        let route = selectedRoute(pending, record: winner.record)
         if hosts == winner.record.hosts, route == winner.record.tcAddress { return .published }
         var object = winner.object
         object["hosts"] = hosts
@@ -113,6 +106,17 @@ struct SyncedBackendPublisher {
         object["updatedAt"] = max(pending.updatedAt, winner.record.updatedAt + 1)
         guard let payload = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return .retry }
         return write(payload, account: winner.account, rows: rows, exists: true)
+    }
+
+    private func selectedRoute(_ pending: PendingBackendRoutePublication, record: SyncedBackendRecord) -> String? {
+        guard let desired = pending.tcAddress else { return record.tcAddress }
+        // Host-only edits must not restamp a stale tunnel observation. Keep a
+        // winning shared tunnel while still publishing newly learned hosts.
+        if let remote = record.tcAddress, remote != desired, remote != pending.previousTcAddress,
+           record.updatedAt >= (pending.tcUpdatedAt ?? pending.updatedAt) {
+            return remote
+        }
+        return desired
     }
 
     func routeClock(for connection: StoredConnection) -> Double {
