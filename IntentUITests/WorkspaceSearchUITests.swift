@@ -3,8 +3,6 @@ import XCTest
 nonisolated final class WorkspaceSearchUITests: XCTestCase {
     private enum Fixture {
         static let timeout: TimeInterval = 30
-        static let dismissDuration: TimeInterval = 0.1
-        static let dismissEnd: CGFloat = 0.9
         static let scrollAttempts = 4
         static let workspaceTitle = "Deflake payment integration tests"
     }
@@ -33,11 +31,6 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
 
         field.typeText("payment")
         XCTAssertTrue(workspace.exists)
-        app.buttons["workspaces.viewMode.Repo"].tap()
-        XCTAssertTrue(workspace.exists)
-        app.buttons["workspaces.viewMode.Status"].tap()
-        XCTAssertTrue(workspace.exists)
-        field.tap()
         field.typeText("-no-match")
         XCTAssertTrue(workspace.waitForNonExistence(timeout: Fixture.timeout))
         app.buttons["workspaces.search.cancel"].tap()
@@ -47,26 +40,52 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     }
 
     @MainActor
-    func testSearchSurvivesAssistantRoundTrip() {
+    func testSearchAboveKeyboardHidesAssistantUntilClosed() {
         let app = launchWorkspaces()
+        XCTAssertTrue(app.buttons["assistant.open"].exists)
         app.buttons["workspaces.search.open"].tap()
         let field = app.textFields["workspaces.search.field"]
         XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertLessThanOrEqual(field.frame.maxY, keyboard.frame.minY)
+        XCTAssertGreaterThan(field.frame.minY, app.frame.midY)
+        XCTAssertFalse(app.buttons["assistant.open"].exists)
+        XCTAssertFalse(app.buttons["workspaces.viewMode.Recent"].exists)
         field.typeText("payment")
-        app.buttons["assistant.open"].tap()
-        let actions = app.buttons["assistant.actions"]
-        XCTAssertTrue(actions.waitForExistence(timeout: Fixture.timeout))
-        let sheetTop = app.navigationBars["Assistant"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
-        sheetTop.press(forDuration: Fixture.dismissDuration, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Fixture.dismissEnd)))
-        XCTAssertTrue(actions.waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertEqual(field.value as? String, "payment")
         XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.exists)
-        app.buttons["workspaces.search.cancel"].tap()
         let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Workspace search beside view selector"
+        screenshot.name = "Workspace search above keyboard without Assistant launcher"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        field.typeText("\n")
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(field.exists)
+        XCTAssertFalse(app.buttons["assistant.open"].exists)
+        app.buttons["workspaces.search.cancel"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["assistant.open"].exists)
+        XCTAssertTrue(app.buttons["workspaces.viewMode.Recent"].isHittable)
+        app.buttons["workspaces.search.open"].tap()
+        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertEqual(field.value as? String, "Search workspaces")
+    }
+
+    @MainActor
+    func testSearchFiltersGroupedWorkspaces() {
+        let app = launchWorkspaces()
+        for mode in ["Repo", "Status"] {
+            app.buttons["workspaces.viewMode.\(mode)"].tap()
+            app.buttons["workspaces.search.open"].tap()
+            let field = app.textFields["workspaces.search.field"]
+            XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+            field.typeText("payment")
+            XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.exists)
+            field.typeText("-no-match")
+            XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.waitForNonExistence(timeout: Fixture.timeout))
+            app.buttons["workspaces.search.cancel"].tap()
+            XCTAssertTrue(app.buttons["workspaces.viewMode.\(mode)"].isSelected)
+        }
     }
 
     @MainActor

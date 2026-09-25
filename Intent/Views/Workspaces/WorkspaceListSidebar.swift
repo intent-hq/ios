@@ -8,6 +8,7 @@ struct WorkspaceListSidebar: View {
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
+    @State private var isSearching = false
     @FocusState private var searchFocused: Bool
 
     init(workspaceStore: WorkspaceStore) {
@@ -17,7 +18,9 @@ struct WorkspaceListSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            WorkspaceSearchBar(viewMode: $viewModel.viewMode, text: $viewModel.searchText, isFocused: $searchFocused)
+            if !isSearching {
+                WorkspaceSearchBar(viewMode: $viewModel.viewMode, isSearching: $isSearching)
+            }
 
             ZStack {
                 Theme.sidebar(for: colorScheme).ignoresSafeArea()
@@ -37,10 +40,16 @@ struct WorkspaceListSidebar: View {
             }
         }
         .background(Theme.sidebar(for: colorScheme))
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isSearching {
+                WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
+            }
+        }
         .overlay(alignment: .bottomTrailing) {
-            AssistantLaunchButton {
-                searchFocused = false
-                coordinator.onSelectAssistant()
+            if !isSearching {
+                AssistantLaunchButton {
+                    coordinator.onSelectAssistant()
+                }
             }
         }
         .navigationTitle("Workspaces")
@@ -140,7 +149,7 @@ struct WorkspaceListSidebar: View {
         .scrollDismissesKeyboard(.immediately)
         #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
-        .contentMargins(.bottom, AssistantLaunchButton.scrollClearance, for: .scrollContent)
+        .contentMargins(.bottom, isSearching ? 0 : AssistantLaunchButton.scrollClearance, for: .scrollContent)
     }
 
     /// Shared row modifiers for every view mode. The explicit row background

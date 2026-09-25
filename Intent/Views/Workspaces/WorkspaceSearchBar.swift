@@ -3,10 +3,8 @@ import SwiftUI
 struct WorkspaceSearchBar: View {
     @Environment(\.colorScheme) private var colorScheme
     @Binding var viewMode: ViewMode
-    @Binding var text: String
-    var isFocused: FocusState<Bool>.Binding
+    @Binding var isSearching: Bool
     var horizontalPadding: CGFloat = Constants.WorkspaceList.pickerHorizontalPadding
-    @State private var isExpanded = false
 
     var body: some View {
         VStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
@@ -14,8 +12,7 @@ struct WorkspaceSearchBar: View {
                 viewModeSwitcher
 
                 Button {
-                    isExpanded = true
-                    isFocused.wrappedValue = true
+                    isSearching = true
                 } label: {
                     Image(systemName: "magnifyingglass")
                         .frame(width: Constants.WorkspaceSearch.buttonSize, height: Constants.WorkspaceSearch.buttonSize)
@@ -24,9 +21,6 @@ struct WorkspaceSearchBar: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Search workspaces")
                 .accessibilityIdentifier("workspaces.search.open")
-            }
-            if isExpanded {
-                searchInput
             }
         }
         .padding(.horizontal, horizontalPadding)
@@ -60,24 +54,38 @@ struct WorkspaceSearchBar: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Workspace view")
     }
+}
 
-    private var searchInput: some View {
+struct WorkspaceSearchInput: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Binding var text: String
+    @Binding var isSearching: Bool
+    var isFocused: FocusState<Bool>.Binding
+
+    var body: some View {
         HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
             searchField
-            Button("Cancel") {
+            Button {
                 text = ""
                 isFocused.wrappedValue = false
-                isExpanded = false
+                isSearching = false
+            } label: {
+                Image(systemName: "xmark")
+                    .frame(width: Constants.WorkspaceSearch.buttonSize, height: Constants.WorkspaceSearch.buttonSize)
+                    .background(Theme.muted(for: colorScheme), in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close search")
             .accessibilityIdentifier("workspaces.search.cancel")
         }
+        .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
+        .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
+        .background(.regularMaterial)
+        .accessibilityIdentifier("workspaces.search.input")
     }
 
     private var searchField: some View {
         HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
             TextField("Search workspaces", text: $text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
