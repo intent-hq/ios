@@ -133,29 +133,31 @@ final class NotificationSessionAggregationTests {
         let backendID = BackendID(UUID())
         let connection = SessionFakeConnectionManager()
         let session = makeSession(backendID: backendID, connection: connection)
+        let sessionHandlerCount = connection.eventHandlerCount
 
         manager.attachSessionObserver(for: session)
         manager.attachSessionObserver(for: session)
         #expect(
-            connection.eventHandlerCount == 1,
+            connection.eventHandlerCount == sessionHandlerCount + 1,
             "Repeat attaches for the same backend must not stack handlers"
         )
 
         manager.detachSessionObserver(for: backendID)
-        #expect(connection.eventHandlerCount == 0)
+        #expect(connection.eventHandlerCount == sessionHandlerCount)
         manager.detachSessionObserver(for: backendID)
-        #expect(connection.eventHandlerCount == 0)
+        #expect(connection.eventHandlerCount == sessionHandlerCount)
     }
 
     @Test func attachingPairingSessionIsNoOp() {
         let (manager, _) = makeManager(defaultConnection: FakeConnectionManager())
         let connection = SessionFakeConnectionManager()
         let session = makeSession(backendID: nil, connection: connection)
+        let sessionHandlerCount = connection.eventHandlerCount
 
         manager.attachSessionObserver(for: session)
 
         #expect(
-            connection.eventHandlerCount == 0,
+            connection.eventHandlerCount == sessionHandlerCount,
             "A transient pairing session has no backend to observe"
         )
     }

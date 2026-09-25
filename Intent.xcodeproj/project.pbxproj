@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AD000003AAAA000000000003 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = AD000001AAAA000000000001 /* SwiftTerm */; };
 		0B047438940A36D62A002FE6 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = 20E5CDC07E6C8F2AF917AE01 /* Lottie */; };
 		AB000003AAAA000000000003 /* TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit.xcframework */; platformFilter = ios; };
 		AB000004AAAA000000000004 /* TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit.xcframework */; platformFilter = ios; };
@@ -100,6 +101,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */,
+				AD000003AAAA000000000003 /* SwiftTerm in Frameworks */,
 				AB000004AAAA000000000004 /* TailcatKit.xcframework in Frameworks */,
 				0B047438940A36D62A002FE6 /* Lottie in Frameworks */,
 			);
@@ -177,6 +179,7 @@
 			name = Intent;
 			packageProductDependencies = (
 				AA000001AAAA000000000001 /* Textual */,
+				AD000001AAAA000000000001 /* SwiftTerm */,
 				20E5CDC07E6C8F2AF917AE01 /* Lottie */,
 			);
 			productName = Intent;
@@ -261,6 +264,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */,
+				AD000002AAAA000000000002 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 				37F58DE8F9ED3C34D35D3F0F /* XCRemoteSwiftPackageReference "lottie-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -752,6 +756,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AD000002AAAA000000000002 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = exactVersion;
+				version = 1.18.0;
+			};
+		};
 		37F58DE8F9ED3C34D35D3F0F /* XCRemoteSwiftPackageReference "lottie-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/airbnb/lottie-ios";
@@ -771,6 +783,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AD000001AAAA000000000001 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD000002AAAA000000000002 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
 		20E5CDC07E6C8F2AF917AE01 /* Lottie */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 37F58DE8F9ED3C34D35D3F0F /* XCRemoteSwiftPackageReference "lottie-ios" */;

@@ -12,6 +12,8 @@ struct WorkspaceDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
+    @State private var selectedTerminal: MobileTerminal?
+    @State private var terminalCreationRequest: UUID?
     @State private var selectedTab = WorkspaceTab.agents
     @State private var noteStore: NoteStore
     @Environment(BackendSession.self) private var session
@@ -31,6 +33,7 @@ struct WorkspaceDetailView: View {
     }
 
     private var workspaceStore: WorkspaceStore { session.workspaceStore }
+    private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
 
     private var workspace: Workspace? {
         workspaceStore.workspaces.first { $0.id == workspaceId }
@@ -77,6 +80,8 @@ struct WorkspaceDetailView: View {
             }
         }
         .onChange(of: workspaceId) { oldId, newId in
+            terminalCreationRequest = nil
+            selectedTerminal = nil
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: oldId,
@@ -116,6 +121,7 @@ struct WorkspaceDetailView: View {
                 coordinator.handleMissingWorkspace()
             }
         }
+        .task(id: workspaceId) { await terminalStore.refresh(workspaceId: workspaceId) }
     }
 
     var body: some View {
@@ -163,6 +169,24 @@ struct WorkspaceDetailView: View {
             )
                 .environment(coordinator)
         }
+        .fullScreenCover(
+            item: $selectedTerminal,
+            onDismiss: {
+                // The terminal already showed any error inline; don't replay it as an alert.
+                terminalStore.clearError(workspaceId: workspaceId)
+            },
+            content: { terminal in
+                MobileTerminalView(terminal: terminal, workspaceName: workspaceTitle, store: terminalStore)
+            }
+        )
+        .alert("Terminal unavailable", isPresented: Binding(
+            get: { terminalStore.errorMessage(workspaceId: workspaceId) != nil && selectedTerminal == nil },
+            set: { if !$0 { terminalStore.clearError(workspaceId: workspaceId) } }
+        )) {
+            Button("OK") { terminalStore.clearError(workspaceId: workspaceId) }
+        } message: {
+            Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
+        }
         .navigationTitle(workspaceTitle)
         .toolbarTitleDisplayMode(.inline)
         .toolbar {
@@ -179,31 +203,45 @@ struct WorkspaceDetailView: View {
             }
             #endif
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button {
-                        showSpecialistPicker = true
-                    } label: {
-                        Label("Create New Agent", systemImage: "plus.circle")
-                    }
-                    Divider()
-                    Button { showArchiveConfirmation = true } label: {
-                        Label("Archive", systemImage: "archivebox")
-                    }
-                    Button(role: .destructive) {
-                        showDeleteConfirmation = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel("Workspace actions")
+                workspaceActions
             }
         }
     }
 }
 
 private extension WorkspaceDetailView {
+    var workspaceActions: some View {
+        Menu {
+            Button { showSpecialistPicker = true } label: {
+                Label("Create New Agent", systemImage: "plus.circle")
+            }
+            Button(action: createTerminal) {
+                Label("New terminal", systemImage: "terminal")
+            }
+            .disabled(!terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId))
+            Divider()
+            Button { showArchiveConfirmation = true } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            Button(role: .destructive) { showDeleteConfirmation = true } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityLabel("Workspace actions")
+    }
+
+    func createTerminal() {
+        let requestedWorkspace = workspaceId
+        let request = UUID()
+        terminalCreationRequest = request
+        Task {
+            let terminal = await terminalStore.create(workspaceId: requestedWorkspace)
+            if terminalCreationRequest == request { selectedTerminal = terminal }
+        }
+    }
+
     var detailContent: some View {
         VStack(spacing: 0) {
             repositoryName
@@ -272,12 +310,13 @@ private extension WorkspaceDetailView {
     @ViewBuilder
     var tabContent: some View {
         if selectedTab == .agents {
-            if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty {
+            if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty,
+               terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty {
                 Spacer()
                 ProgressView("Loading agents...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 Spacer()
-            } else if viewModel.agents.isEmpty {
+            } else if viewModel.agents.isEmpty, terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty {
                 ContentUnavailableView(
                     "No Agents",
                     systemImage: "person.2",
@@ -297,10 +336,16 @@ private extension WorkspaceDetailView {
             LazyVStack(spacing: 0) {
                 foregroundAgents
                 backgroundAgents
+                WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) { terminal in
+                    selectedTerminal = terminal
+                }
             }
             .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
         }
-        .refreshable { await agentStore.fetchAgents(workspaceId: workspaceId) }
+        .refreshable {
+            await agentStore.fetchAgents(workspaceId: workspaceId)
+            await terminalStore.refresh(workspaceId: workspaceId)
+        }
     }
 
     var foregroundAgents: some View {
