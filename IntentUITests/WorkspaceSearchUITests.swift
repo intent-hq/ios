@@ -30,9 +30,9 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
 
         field.typeText("payment")
         XCTAssertTrue(workspace.exists)
-        app.segmentedControls.buttons["Repo"].tap()
+        app.buttons["workspaces.viewMode.Repo"].tap()
         XCTAssertTrue(workspace.exists)
-        app.segmentedControls.buttons["Status"].tap()
+        app.buttons["workspaces.viewMode.Status"].tap()
         XCTAssertTrue(workspace.exists)
         field.tap()
         field.typeText("-no-match")

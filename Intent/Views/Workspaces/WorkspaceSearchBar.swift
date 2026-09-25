@@ -10,12 +10,7 @@ struct WorkspaceSearchBar: View {
     var body: some View {
         VStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
             HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
-                Picker("View", selection: $viewMode) {
-                    ForEach(ViewMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
+                viewModeSwitcher
 
                 Button {
                     isExpanded = true
@@ -35,6 +30,34 @@ struct WorkspaceSearchBar: View {
         }
         .padding(.horizontal, Constants.WorkspaceList.pickerHorizontalPadding)
         .padding(.vertical, Constants.WorkspaceList.pickerVerticalPadding)
+    }
+
+    private var viewModeSwitcher: some View {
+        HStack(spacing: 0) {
+            ForEach(ViewMode.allCases, id: \.self) { mode in
+                Button {
+                    viewMode = mode
+                } label: {
+                    Text(mode.rawValue)
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: Constants.WorkspaceSearch.segmentHeight)
+                        .foregroundStyle(viewMode == mode ? Theme.background(for: colorScheme) : Theme.foreground(for: colorScheme))
+                        .background(
+                            viewMode == mode ? Theme.foreground(for: colorScheme) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(viewMode == mode ? .isSelected : [])
+                .accessibilityIdentifier("workspaces.viewMode.\(mode.rawValue)")
+            }
+        }
+        .padding(Constants.WorkspaceSearch.segmentInset)
+        .background(Theme.muted(for: colorScheme), in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Workspace view")
     }
 
     private var searchInput: some View {
