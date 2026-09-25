@@ -359,16 +359,6 @@ extension Constants.RepoOwnerAvatar {
     static let fallbackScale: CGFloat = 0.5
 }
 
-extension Constants.ManualTokenEntry {
-    static let contentSpacing: CGFloat = 24
-    static let headerSpacing: CGFloat = 8
-    static let headerTopPadding: CGFloat = 32
-    static let formSpacing: CGFloat = 16
-    static let fieldSpacing: CGFloat = 4
-    static let horizontalPadding: CGFloat = 24
-    static let progressSpacing: CGFloat = 8
-}
-
 extension Constants.Pairing {
     // Connect frame 3051:54405. Wide windows retain a readable centered column.
     static let maximumContentWidth: CGFloat = 480

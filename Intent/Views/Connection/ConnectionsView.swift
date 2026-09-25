@@ -76,8 +76,7 @@ enum ConnectionPairing {
     }
 }
 
-/// "Connect to…" sheet: switch between saved daemon connections, delete saved
-/// ones, or pair a new daemon.
+/// Saved daemon connections. Pairing stays on the main Connect screen.
 struct ConnectionsView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) var dismiss
@@ -86,77 +85,69 @@ struct ConnectionsView: View {
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @Environment(\.openWindow) private var openWindow
     @State private var connections: [StoredConnection] = []
-    @State private var showQRScanner = false
-    @State private var showManualEntry = false
+    @State private var connectionShowingDetails: StoredConnection?
     @State private var connectionPendingDelete: StoredConnection?
     @State private var showDeleteError = false
 
     var body: some View {
-        NavigationStack { navigationContent }
-    }
-
-    private var navigationContent: some View {
-        connectionsList
-            .navigationTitle("Connect to…")
-            .toolbarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
-                }
+        ConnectionSheet(
+            initialHeight: Constants.Connections.initialSheetHeight,
+            backgroundColor: Constants.Connections.background(for: colorScheme),
+            closeForeground: Constants.Connections.foreground(for: colorScheme)
+        ) {
+            VStack(spacing: Constants.Connections.headingToCardsSpacing) {
+                ConnectionSheetText(
+                    "Saved Connections", style: Constants.Typography.heading2, tracking: Constants.Connections.headingTracking
+                )
+                .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("saved-connections.title")
+                connectionsList
             }
-            .sheet(isPresented: $showQRScanner) {
-                QRScannerView(onPaired: handlePaired)
-            }
-            .sheet(isPresented: $showManualEntry) {
-                ManualTokenEntryView(onPaired: handlePaired)
-            }
-            .alert(
-                "Delete Connection?",
-                isPresented: Binding(
-                    get: { connectionPendingDelete != nil },
-                    set: { if !$0 { connectionPendingDelete = nil } }
-                ),
-                presenting: connectionPendingDelete
-            ) { connection in
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) { delete(connection) }
-            } message: { connection in
-                Text(connection.id == windowConnectionId
-                    ? "This is the current connection. Deleting it will disconnect you."
-                    : "This removes the saved connection. You'll need to pair again to reconnect.")
-            }
-            .alert("Couldn’t Delete Connection", isPresented: $showDeleteError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("The saved connection could not be removed. Please try again.")
-            }
-            .onAppear {
-                // Pull in registry changes synced from other devices while
-                // the sheet was closed, then show the merged list.
-                coordinator.refreshSyncedBackends()
-                reload()
-            }
+        }
+        .sheet(item: $connectionShowingDetails) { connection in
+            SavedConnectionDetails(connection: connection)
+        }
+        .alert(
+            "Delete Connection?",
+            isPresented: Binding(
+                get: { connectionPendingDelete != nil },
+                set: { if !$0 { connectionPendingDelete = nil } }
+            ),
+            presenting: connectionPendingDelete
+        ) { connection in
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) { delete(connection) }
+        } message: { connection in
+            Text(connection.id == windowConnectionId
+                ? "This is the current connection. Deleting it will disconnect you."
+                : "This removes the saved connection. You'll need to pair again to reconnect.")
+        }
+        .alert("Couldn’t Delete Connection", isPresented: $showDeleteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The saved connection could not be removed. Please try again.")
+        }
+        .onAppear {
+            // Pull in registry changes synced from other devices while
+            // the sheet was closed, then show the merged list.
+            coordinator.refreshSyncedBackends()
+            reload()
+        }
     }
 
     private var connectionsList: some View {
-        List {
-            if !connections.isEmpty {
-                Section("Saved Connections") {
-                    ForEach(connections) { connectionRow($0) }
-                }
-            }
-            Section("Pair New") {
-                let options = PairingOption.available(showsSavedConnections: false)
-                if options.contains(.qrScan) {
-                    Button { showQRScanner = true } label: {
-                        Label("Scan QR Code", systemImage: "camera.fill")
-                    }
-                }
-                if options.contains(.manualEntry) {
-                    Button { showManualEntry = true } label: {
-                        Label("Manual Connection", systemImage: "keyboard")
-                    }
-                }
+        VStack(spacing: Constants.Connections.cardSpacing) {
+            if connections.isEmpty {
+                Text("No saved connections. Pair from the Connect screen to save a connection.")
+                    .font(Constants.Typography.bodyS.font)
+                    .foregroundStyle(Constants.Pairing.mutedForeground(for: colorScheme))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("saved-connections.empty")
+            } else {
+                ForEach(connections) { connectionRow($0) }
             }
         }
     }
@@ -175,68 +166,28 @@ struct ConnectionsView: View {
             }
             dismiss()
         } label: {
-            connectionRowLabel(connection)
+            SavedConnectionCard(
+                name: connection.displayName,
+                address: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)",
+                isCurrentWindow: connection.id == windowConnectionId
+            )
         }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            // Not role: .destructive — the row must stay until the deletion is confirmed.
-            Button("Delete") { connectionPendingDelete = connection }
-                .tint(.red)
-        }
-        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            if supportsMultipleWindows {
-                openInNewWindowButton(connection)
-                    .tint(.blue)
-            }
-        }
+        .buttonStyle(ConnectionSheetButtonStyle())
+        .accessibilityIdentifier("saved-connection.\(connection.id)")
+        .accessibilityHint("Touch and hold for connection details and actions.")
         .contextMenu {
+            Button("Connection Details", systemImage: "info.circle") { connectionShowingDetails = connection }
             if supportsMultipleWindows {
                 openInNewWindowButton(connection)
             }
+            Button("Delete", systemImage: "trash", role: .destructive) { connectionPendingDelete = connection }
         }
-    }
-
-    private func connectionRowLabel(_ connection: StoredConnection) -> some View {
-        HStack(spacing: Constants.Connections.rowSpacing) {
-            Image(systemName: "desktopcomputer")
-                .font(.title3)
-                .foregroundStyle(Theme.primary(for: colorScheme))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Constants.Connections.rowTextSpacing) {
-                Text(connection.displayName)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                if let tcAddress = connection.server.tcAddress {
-                    Label(TcAddressDisplay.truncated(tcAddress), systemImage: "point.3.connected.trianglepath.dotted")
-                        .font(.caption2)
-                        .lineLimit(1)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .accessibilityLabel(tcAddress)
-                }
-                if let lastConnected = connection.lastConnectedAt {
-                    Text("Last connected \(lastConnected.formatted(.relative(presentation: .named)))")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
+        .accessibilityActions {
+            Button("Connection Details") { connectionShowingDetails = connection }
+            if supportsMultipleWindows {
+                openInNewWindowButton(connection)
             }
-            Spacer()
-            if connection.id == windowConnectionId { connectedStatus }
-        }
-    }
-
-    private var connectedStatus: some View {
-        HStack(spacing: Constants.Connections.statusSpacing) {
-            Circle()
-                .fill(.green)
-                .frame(
-                    width: Constants.Connections.statusDotSize,
-                    height: Constants.Connections.statusDotSize
-                )
-            Text("Connected")
-                .font(.caption)
-                .foregroundStyle(.primary)
+            Button("Delete", role: .destructive) { connectionPendingDelete = connection }
         }
     }
 
@@ -249,11 +200,6 @@ struct ConnectionsView: View {
         } label: {
             Label("Open in New Window", systemImage: "macwindow.badge.plus")
         }
-    }
-
-    private func handlePaired(_ connection: StoredConnection) {
-        dismiss()
-        coordinator.onPaired(connection)
     }
 
     private func delete(_ connection: StoredConnection) {

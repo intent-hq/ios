@@ -87,20 +87,14 @@ struct ManualTokenEntryView: View {
     @State private var probedInput: ManualConnectionInput?
     @State private var showFingerprintConfirmation = false
     @State private var connectTask: Task<Void, Never>?
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case host, port, token }
 
     var body: some View {
-        NavigationStack { navigationContent }
-    }
-
-    private var navigationContent: some View {
-        entryContent
-            .navigationTitle("Manual Connection")
-            .toolbarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
+        ConnectionSheet(initialHeight: Constants.ManualTokenEntry.initialSheetHeight) {
+            entryForm
+        }
             .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
                 Button("Cancel", role: .cancel) { isValidating = false }
                 Button("Trust & Connect") { connectWithFingerprint() }
@@ -109,34 +103,15 @@ struct ManualTokenEntryView: View {
             }
     }
 
-    private var entryContent: some View {
-        ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
-            ScrollView { entryForm }
-        }
-    }
-
     private var entryForm: some View {
         VStack(spacing: Constants.ManualTokenEntry.contentSpacing) {
-            entryHeader
-            connectionFields
-            validationError
-            connectButton
-            Spacer()
+            ManualConnectionHeader()
+            VStack(spacing: Constants.ManualTokenEntry.buttonSpacing) {
+                connectionFields
+                validationError
+                connectButton
+            }
         }
-    }
-
-    private var entryHeader: some View {
-        VStack(spacing: Constants.ManualTokenEntry.headerSpacing) {
-            Image(systemName: "keyboard")
-                .font(.largeTitle)
-                .foregroundStyle(Theme.primary(for: colorScheme))
-                .accessibilityHidden(true)
-            Text("Manual Connection")
-                .font(.title3.bold())
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-        }
-        .padding(.top, Constants.ManualTokenEntry.headerTopPadding)
     }
 
     private var connectionFields: some View {
@@ -146,65 +121,85 @@ struct ManualTokenEntryView: View {
             tokenField
         }
         .disabled(isValidating)
-        .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
     }
 
     private var hostField: some View {
         VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
-            #if os(visionOS)
-            Text("Host")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            TextField("192.168.1.42", text: $host)
-                .textFieldStyle(.roundedBorder)
+            ManualConnectionField(label: hostLabel) {
+                TextField("192.168.1.42", text: $host, prompt: placeholder("192.168.1.42"))
+                    .accessibilityLabel("Host / Tailcat Address")
+                    .accessibilityIdentifier("manual.host")
+                    .focused($focusedField, equals: .host)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .port }
+            }
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
+            #if os(visionOS)
             Text("Tailcat addresses aren't supported on visionOS yet — pair over your local network.")
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            #else
-            Text("Host / Tailcat Address")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            TextField("192.168.1.42 or tc…", text: $host)
-                .textFieldStyle(.roundedBorder)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
             #endif
         }
     }
 
+    private var hostLabel: LocalizedStringKey {
+        #if os(visionOS)
+        "HOST"
+        #else
+        "HOST / TAILCAT ADDRESS"
+        #endif
+    }
+
     private var portField: some View {
-        VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
-            Text("Port")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            TextField("5180", text: $port)
-                .textFieldStyle(.roundedBorder)
+        ManualConnectionField(label: "PORT") {
+            TextField("5180", text: $port, prompt: placeholder("5180"))
+                .accessibilityLabel("Port")
+                .accessibilityIdentifier("manual.port")
+                .focused($focusedField, equals: .port)
                 .keyboardType(.numberPad)
         }
     }
 
     private var tokenField: some View {
-        VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
-            Text("API Token")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            HStack {
-                TextField("Paste token here", text: $token)
-                    .font(.system(.body, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
+        ManualConnectionField(label: "API TOKEN", verticalPadding: Constants.ManualTokenEntry.pasteVerticalPadding) {
+            HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
+                TextField("Paste token", text: $token, prompt: placeholder("Paste token"))
+                    .accessibilityLabel("API Token")
+                    .accessibilityIdentifier("manual.token")
+                    .focused($focusedField, equals: .token)
+                    .submitLabel(.done)
+                    .onSubmit { focusedField = nil }
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                Button(action: pasteToken) {
-                    Image(systemName: "doc.on.clipboard")
-                        .foregroundStyle(Theme.primary(for: colorScheme))
+                if token.isEmpty {
+                    Button(action: pasteToken) {
+                        Image(.connectionClipboard)
+                            // The exact export already has 30% white strokes.
+                            .renderingMode(colorScheme == .dark ? .original : .template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                            .frame(
+                                width: Constants.ConnectionSheet.minimumTouchTarget,
+                                height: Constants.ConnectionSheet.minimumTouchTarget
+                            )
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+                    .accessibilityLabel("Paste API token")
+                    // Expand the hit region inward, retaining the reference's 24pt glyph inset.
+                    .padding(.trailing, -Constants.ManualTokenEntry.pasteHitExpansion)
                 }
-                .accessibilityLabel("Paste API token")
             }
         }
+    }
+
+    private func placeholder(_ text: LocalizedStringKey) -> Text {
+        Text(text).foregroundStyle(Constants.Pairing.foreground(for: colorScheme)
+            .opacity(Constants.ConnectionSheet.placeholderOpacity))
     }
 
     @ViewBuilder
@@ -213,26 +208,38 @@ struct ManualTokenEntryView: View {
             Text(error)
                 .font(.caption)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
-                .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
+                .accessibilityIdentifier("manual.error")
         }
     }
 
     private var connectButton: some View {
         Button(action: toggleConnectionValidation) {
-            if isValidating {
-                HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
-                    ProgressView().tint(.white)
-                    Text("Cancel")
+            Group {
+                if isValidating {
+                    HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
+                        ProgressView().tint(Constants.Pairing.onAccent)
+                        Text("Cancel")
+                    }
+                } else {
+                    Text("Connect")
                 }
-                .frame(maxWidth: .infinity)
-            } else {
-                Text("Connect").frame(maxWidth: .infinity)
             }
+            .font(Constants.Typography.bodySEmphasized.font)
+            .tracking(Constants.Pairing.optionTitleTracking)
+            .foregroundStyle(Constants.Pairing.onAccent.opacity(
+                !isValidating && (host.isEmpty || token.isEmpty) ? Constants.ConnectionSheet.placeholderOpacity : 1
+            ))
+            .padding(.vertical, Constants.ConnectionSheet.fieldVerticalPadding)
+            .frame(maxWidth: .infinity, minHeight: Constants.ConnectionSheet.fieldHeight)
+            .background(
+                !isValidating && (host.isEmpty || token.isEmpty)
+                    ? Constants.ConnectionSheet.disabledBackground : Constants.Pairing.accent,
+                in: .rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius)
+            )
         }
-        .buttonStyle(.borderedProminent)
-        .tint(Theme.primary(for: colorScheme))
+        .buttonStyle(ConnectionSheetButtonStyle())
         .disabled(!isValidating && (host.isEmpty || token.isEmpty))
-        .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
+        .accessibilityIdentifier("manual.connect")
     }
 
     private func pasteToken() {

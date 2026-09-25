@@ -33,18 +33,32 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
     func testLossQueuedAtActivationNeverPresentsOverlayOrDismissesSheet() throws {
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory, arguments: ["--demo-background-loss=activation-quick"])
-        app.buttons["Workspace options"].tap()
-        app.buttons["Connect to…"].tap()
-        app.buttons["Manual Connection"].tap()
-        let host = app.textFields["192.168.1.42 or tc…"]
-        XCTAssertTrue(host.waitForExistence(timeout: Fixture.timeout))
-        host.tap()
-        host.typeText("background-draft.invalid")
+        // Saved Connections no longer opens Manual Connection. Use a real
+        // editable sheet while connected, without submitting the draft.
+        openCreateWorkspace(in: app)
+        let repository = app.staticTexts["nova-labs/console"]
+        XCTAssertTrue(repository.waitForExistence(timeout: Fixture.timeout))
+        repository.tap()
+        app.buttons["Next"].tap()
+        XCTAssertTrue(app.navigationBars["Select Branch"].waitForExistence(timeout: Fixture.timeout))
+        let next = app.buttons["Next"]
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Fixture.timeout), .completed)
+        next.tap()
+        let sheet = app.navigationBars["Create Workspace"]
+        XCTAssertTrue(sheet.waitForExistence(timeout: Fixture.timeout))
+        let message = app.textViews["What should the first agent work on?"]
+        XCTAssertTrue(message.waitForExistence(timeout: Fixture.timeout))
+        message.tap()
+        message.typeText("Draft survives background return")
+        XCTAssertEqual(message.value as? String, "Draft survives background return")
         backgroundAndActivate(app, directory: directory)
         waitForEvent("did-recover", in: directory)
         XCTAssertFalse(eventExists("overlay-presented", in: directory), "activate() settling must not hide a flash")
-        XCTAssertEqual(host.value as? String, "background-draft.invalid")
-        XCTAssertTrue(app.navigationBars["Manual Connection"].exists)
+        XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
+        XCTAssertTrue(message.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertEqual(message.value as? String, "Draft survives background return")
+        XCTAssertTrue(sheet.exists)
         capture(app, named: "quick-background-sheet")
     }
 
@@ -131,7 +145,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
     }
 
     @MainActor
-    func testReconnectingCoversNestedSheetAndPreservesItsDraftOnRecovery() throws {
+    func testReconnectingCoversNestedConnectionDetailsOnRecovery() throws {
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory, arguments: [
             "--demo-connection-loss-reconnecting", "--demo-connection-loss-cert-mismatch",
@@ -139,17 +153,23 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         ])
         app.buttons["Workspace options"].tap()
         app.buttons["Connect to…"].tap()
-        // The parent sheet exposes its rows during presentation; wait for
-        // the manual-entry action before trying to present a nested sheet.
-        let manualConnection = app.buttons["Manual Connection"]
-        XCTAssertTrue(manualConnection.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(manualConnection.isHittable)
-        manualConnection.tap()
-        let hostField = app.textFields["192.168.1.42 or tc…"]
-        XCTAssertTrue(hostField.waitForExistence(timeout: Fixture.timeout))
-        hostField.tap()
-        hostField.typeText("draft.invalid")
-        let cancelFrame = app.buttons["Cancel"].firstMatch.frame
+        // Wait for the parent sheet and its action before presenting a nested sheet.
+        let machine = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Demo Mac")).firstMatch
+        XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(machine.isHittable)
+        machine.press(forDuration: 1)
+        let details = app.buttons["Connection Details"]
+        XCTAssertTrue(details.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(details.isHittable)
+        details.tap()
+        let detailsTitle = app.staticTexts["saved-connection.details-title"]
+        XCTAssertTrue(detailsTitle.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
+        // Both sheets own a Close button; only the presented Details action is hittable.
+        let closeButtons = app.buttons.matching(identifier: "connection-sheet.close")
+            .allElementsBoundByIndex.filter { $0.isHittable }
+        XCTAssertEqual(closeButtons.count, 1)
+        let cancelFrame = try XCTUnwrap(closeButtons.first).frame
         let cancelPosition = app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: cancelFrame.midX, dy: cancelFrame.midY))
         capture(app, named: "sheet-before-loss")
@@ -161,24 +181,24 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Check your Wi-Fi or cellular connection."].exists)
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         XCTAssertTrue(app.staticTexts["demo.invalid"].exists)
-        XCTAssertFalse(hostField.exists, "The presented sheet must be excluded from accessibility")
-        XCTAssertFalse(app.buttons["Connect"].exists)
+        XCTAssertFalse(detailsTitle.exists, "The presented sheet must be excluded from accessibility")
+        XCTAssertFalse(app.staticTexts["demo.invalid:443"].exists)
         XCTAssertFalse(app.keyboards.firstMatch.exists)
-        cancelPosition.tap() // A real coordinate tap must not dismiss the covered editor.
+        cancelPosition.tap() // A real coordinate tap must not dismiss the covered detail sheet.
         capture(app, named: "sheet-offline-large-text-certificate")
 
         try trigger("network-restored", in: directory)
         assertNetworkTitle("Reconnecting…", identifier: "connection-loss.status", in: app)
         assertOverlay(in: app)
-        XCTAssertFalse(hostField.exists, "A general path recovery must not dismiss the loss surface")
+        XCTAssertFalse(detailsTitle.exists, "A general path recovery must not dismiss the loss surface")
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         capture(app, named: "network-restored-backend-still-down")
 
         try trigger("recover", in: directory)
         XCTAssertTrue(app.buttons[Fixture.homeIdentifier].waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(hostField.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertEqual(hostField.value as? String, "draft.invalid")
-        XCTAssertTrue(app.navigationBars["Manual Connection"].exists)
+        XCTAssertTrue(detailsTitle.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["Demo Mac"].exists)
+        XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
         capture(app, named: "sheet-recovered")
     }
 
