@@ -27,6 +27,9 @@ struct AssistantView: View {
                 }
             }
         }
+        .accessibilityAction(.escape) {
+            coordinator.selectedSection = .workspaces
+        }
         .task {
             await store.refresh()
             if coordinator.assistantAgentId == nil {
@@ -41,14 +44,6 @@ struct AssistantView: View {
     }
 
     @ToolbarContentBuilder private var assistantToolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button {
-                coordinator.selectedSection = .workspaces
-            } label: {
-                Label("Back to Workspaces", systemImage: "chevron.left")
-            }
-            .accessibilityIdentifier("assistant.back")
-        }
         ToolbarItem(placement: .topBarTrailing) {
             newConversationButton
                 .accessibilityIdentifier("assistant.newConversation")

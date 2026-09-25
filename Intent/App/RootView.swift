@@ -115,8 +115,10 @@ struct RootView: View {
 
     @ViewBuilder private var workspaceFlowContent: some View {
         workspaceNavigationContent
-            .fullScreenCover(isPresented: assistantPresented) {
+            .sheet(isPresented: assistantPresented) {
                 AssistantView(session: session)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
     }
 

@@ -3,6 +3,8 @@ import XCTest
 nonisolated final class AssistantNavigationUITests: XCTestCase {
     private enum Fixture {
         static let timeout: TimeInterval = 30
+        static let dismissDuration: TimeInterval = 0.1
+        static let dismissEnd: CGFloat = 0.9
         static let workspaceTitle = "Deflake payment integration tests"
     }
 
@@ -42,7 +44,9 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         assistantScreenshot.lifetime = .keepAlways
         add(assistantScreenshot)
 
-        app.buttons["assistant.back"].tap()
+        app.navigationBars["Assistant"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+            .press(forDuration: Fixture.dismissDuration, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Fixture.dismissEnd)))
+        XCTAssertTrue(actions.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(launcher.isHittable)
         XCTAssertFalse(app.tabBars.firstMatch.exists)
@@ -149,7 +153,7 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Ready when you are."].exists)
         link.tap()
         XCTAssertTrue(app.staticTexts["Test Stabilizer"].firstMatch.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.buttons["assistant.back"].waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["assistant.actions"].waitForNonExistence(timeout: Fixture.timeout))
     }
 
     @MainActor

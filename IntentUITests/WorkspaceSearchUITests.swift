@@ -3,6 +3,8 @@ import XCTest
 nonisolated final class WorkspaceSearchUITests: XCTestCase {
     private enum Fixture {
         static let timeout: TimeInterval = 30
+        static let dismissDuration: TimeInterval = 0.1
+        static let dismissEnd: CGFloat = 0.9
         static let workspaceTitle = "Deflake payment integration tests"
     }
 
@@ -51,9 +53,11 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
         field.typeText("payment")
         app.buttons["assistant.open"].tap()
-        let back = app.buttons["assistant.back"]
-        XCTAssertTrue(back.waitForExistence(timeout: Fixture.timeout))
-        back.tap()
+        let actions = app.buttons["assistant.actions"]
+        XCTAssertTrue(actions.waitForExistence(timeout: Fixture.timeout))
+        app.navigationBars["Assistant"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+            .press(forDuration: Fixture.dismissDuration, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Fixture.dismissEnd)))
+        XCTAssertTrue(actions.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
         XCTAssertEqual(field.value as? String, "payment")
         XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.exists)
