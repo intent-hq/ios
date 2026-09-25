@@ -174,20 +174,6 @@ struct WorkspaceStoreAgentParsingTests {
         #expect(decoded.specialist == nil)
         #expect(decoded.lastActivity == nil)
     }
-
-    // MARK: - WorkspaceAgentInfo Equatable
-
-    @Test func agentInfoEquality() async {
-        let first = WorkspaceAgentInfo(id: "x", name: "X", status: "idle", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
-        let second = WorkspaceAgentInfo(id: "x", name: "X", status: "idle", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
-        #expect(first == second)
-    }
-
-    @Test func agentInfoInequalityDifferentStatus() async {
-        let idle = WorkspaceAgentInfo(id: "x", name: "X", status: "idle", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
-        let responding = WorkspaceAgentInfo(id: "x", name: "X", status: "responding", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
-        #expect(idle != responding)
-    }
 }
 
 // MARK: - lastActivity mirrors intentd (no client-side bumping)

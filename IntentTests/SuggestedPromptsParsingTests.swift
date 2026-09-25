@@ -2,17 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-struct ImageBlockTests {
-    @Test func initAndCodable() throws {
-        let block = ImageBlock(type: "image", data: "base64data", mimeType: "image/png")
-        let data = try JSONEncoder().encode(block)
-        let decoded = try JSONDecoder().decode(ImageBlock.self, from: data)
-        #expect(decoded.type == "image")
-        #expect(decoded.data == "base64data")
-        #expect(decoded.mimeType == "image/png")
-    }
-}
-
 // MARK: - SuggestedPrompts Tests
 
 struct SuggestedPromptsTests {

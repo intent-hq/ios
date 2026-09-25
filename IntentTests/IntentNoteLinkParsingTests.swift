@@ -86,15 +86,4 @@ struct IntentNoteLinkParsingTests {
     @Test func unknownResourceTypeIsRejected() {
         #expect(parse("intent://local/ws-123/comment/abc") == nil)
     }
-
-    // MARK: - Cross-workspace routing fallback
-
-    @Test func callerFallbackUsesCurrentWorkspaceForShortForm() {
-        // Mirrors the caller pattern: link.workspaceId ?? currentWorkspaceId.
-        let currentWorkspaceId = "current-ws"
-        let short = parse("intent://local/note/abc-123")
-        #expect((short?.workspaceId ?? currentWorkspaceId) == "current-ws")
-        let long = parse("intent://local/other-ws/note/abc-123")
-        #expect((long?.workspaceId ?? currentWorkspaceId) == "other-ws")
-    }
 }

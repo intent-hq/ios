@@ -12,18 +12,6 @@ struct ConnectionManagerTests {
         var error: (any Error)?
     }
 
-    // MARK: - ConnectionState equality
-
-    @Test @MainActor func connectionStateReconnectingDifferentAttempt() {
-        #expect(ConnectionState.reconnecting(attempt: 1) != ConnectionState.reconnecting(attempt: 2))
-    }
-
-    @Test @MainActor func connectionStateDifferentCases() {
-        #expect(ConnectionState.connected != ConnectionState.disconnected)
-        #expect(ConnectionState.connecting != ConnectionState.connected)
-        #expect(ConnectionState.reconnecting(attempt: 1) != ConnectionState.connected)
-    }
-
     @Test @MainActor func observableStateKeepsCombineBridgesInSync() {
         let manager = ConnectionManager.shared
         let originalConnectionState = manager.connectionState

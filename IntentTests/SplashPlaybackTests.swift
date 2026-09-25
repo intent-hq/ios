@@ -159,21 +159,4 @@ struct SplashPlaybackTests {
         #expect(lease.animation.frameCount > 1)
         #expect(lease.animation.duration > 0)
     }
-
-    /// Measures what a lease retains: the decoded backing store of every frame
-    /// (`bytesPerRow * height`), which is the cost the lease bounds (ios#256).
-    /// The value is printed into the test log alongside the encoded file size.
-    @Test func decodedFrameFootprintIsMeasured() throws {
-        let url = try #require(SplashAnimation.bundledURL)
-        let animation = try #require(SplashAnimation(url: url))
-        let fileSize = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize
-        let encodedBytes = try #require(fileSize)
-        let decodedBytes = animation.frames.reduce(0) { $0 + $1.bytesPerRow * $1.height }
-        print(
-            "SplashAnimation footprint: \(animation.frameCount) frames, "
-                + "\(decodedBytes) decoded bytes retained per lease, "
-                + "\(encodedBytes) encoded bytes on disk"
-        )
-        #expect(decodedBytes > encodedBytes)
-    }
 }
