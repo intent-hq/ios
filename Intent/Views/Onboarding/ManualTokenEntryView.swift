@@ -326,39 +326,14 @@ struct ManualTokenEntryView: View {
     }
 
     private func connect(input: ManualConnectionInput, port: Int, fingerprint: String) async {
-        PairingDiagnostics.phase(.connect, .started)
         do {
-            try await DiagnosticConnectContext.$origin.withValue(.pairing) {
-                try await session.connection.connect(
-                    hosts: input.hosts,
-                    port: port,
-                    token: token,
-                    certFingerprint: fingerprint,
-                    tcAddress: input.tcAddress
-                )
-            }
-            let server = PairedServer(
-                hosts: input.hosts,
+            let stored = try await Self.connectAndSave(
+                input: input,
                 port: port,
-                name: "Intent",
-                pairedAt: Date(),
-                certFingerprint: fingerprint,
-                tcAddress: input.tcAddress
+                fingerprint: fingerprint,
+                token: token,
+                connection: session.connection
             )
-            let stored: StoredConnection
-            do {
-                PairingDiagnostics.phase(.save, .started)
-                stored = try await ConnectionPairing.finalize(
-                    server: server,
-                    token: token,
-                    connection: session.connection
-                )
-            } catch {
-                PairingDiagnostics.phase(.save, .failed)
-                session.connection.disconnect()
-                throw error
-            }
-            PairingDiagnostics.phase(.save, .succeeded)
             dismiss()
             if let onPaired {
                 onPaired(stored)
@@ -366,9 +341,60 @@ struct ManualTokenEntryView: View {
                 coordinator.onPaired(stored)
             }
         } catch {
-            PairingDiagnostics.phase(.connect, error is CancellationError ? .cancelled : .failed)
             errorMessage = "Connection failed: \(error.localizedDescription)"
             isValidating = false
+        }
+    }
+}
+
+extension ManualTokenEntryView {
+    /// Each phase owns only its own errors; the view handles presentation for either failure.
+    @MainActor static func connectAndSave(
+        input: ManualConnectionInput,
+        port: Int,
+        fingerprint: String,
+        token: String,
+        connection: any SessionConnectionManaging,
+        persistence: PersistenceManager = .shared,
+        diagnostics: DiagnosticStore = .shared
+    ) async throws -> StoredConnection {
+        PairingDiagnostics.phase(.connect, .started, store: diagnostics)
+        do {
+            try await DiagnosticConnectContext.$origin.withValue(.pairing) {
+                try await connection.connect(
+                    hosts: input.hosts,
+                    port: port,
+                    token: token,
+                    certFingerprint: fingerprint,
+                    tcAddress: input.tcAddress
+                )
+            }
+        } catch {
+            PairingDiagnostics.phase(.connect, error is CancellationError ? .cancelled : .failed, store: diagnostics)
+            throw error
+        }
+        let server = PairedServer(
+            hosts: input.hosts,
+            port: port,
+            name: "Intent",
+            pairedAt: Date(),
+            certFingerprint: fingerprint,
+            tcAddress: input.tcAddress
+        )
+        do {
+            PairingDiagnostics.phase(.save, .started, store: diagnostics)
+            let stored = try await ConnectionPairing.finalize(
+                server: server,
+                token: token,
+                connection: connection,
+                persistence: persistence
+            )
+            PairingDiagnostics.phase(.save, .succeeded, store: diagnostics)
+            return stored
+        } catch {
+            PairingDiagnostics.phase(.save, .failed, store: diagnostics)
+            connection.disconnect()
+            throw error
         }
     }
 }
