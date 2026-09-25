@@ -13,7 +13,7 @@ extension DemoFixtures {
             var workspace = baseWorkspaces[index % baseWorkspaces.count]
             workspace["id"] = "demo-scroll-\(index)"
             workspace["title"] = "Workspace scroll fixture \(index)"
-            workspace["lastActivity"] = iso(minutesAgo: 200 + index)
+            workspace["lastActivity"] = iso(minutesAgo: Double(200 + index))
             return workspace
         }
         return baseWorkspaces + extra
