@@ -36,7 +36,9 @@ import Testing
         #expect(records.first?.event.effect == .remoteRejected)
         #expect(try #require(String(data: snapshot.jsonLines, encoding: .utf8)).contains(marker) == false)
         let report = try #require(await store.beginReport())
-        let persisted = try Data(contentsOf: report.directory.appendingPathComponent("events.jsonl"))
+        let entries = try DiagnosticZIPTestReader.extract(Data(contentsOf: report.archiveURL))
+        let persisted = try #require(entries["events.jsonl"])
+        #expect(persisted == report.snapshot.jsonLines)
         #expect(try #require(String(data: persisted, encoding: .utf8)).contains(marker) == false)
         #expect(await store.endReport(report))
     }
