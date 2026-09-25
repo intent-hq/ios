@@ -87,7 +87,9 @@ struct CreateWorkspaceSpecialistStepView: View {
             .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
             .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
         }
+        #if !os(visionOS)
         .scrollDismissesKeyboard(.interactively)
+        #endif
     }
 
     @ViewBuilder
