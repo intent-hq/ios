@@ -23,6 +23,7 @@ struct WorkspaceActionLauncher: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
             .accessibilityHidden(isOpen)
@@ -77,6 +78,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                 onSelect: select
             ) { isOpen = false }
         }
+        .environment(\.refresh, nil)
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape) { isOpen = false }
     }

@@ -41,6 +41,7 @@ struct HomeActionTiles: View {
                 .scrollTargetLayout()
             }
             .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize, axes: .vertical)
             .scrollTargetBehavior(.viewAligned)
             .contentMargins(.horizontal, Layout.inset, for: .scrollContent)
             .fixedSize(horizontal: false, vertical: true)

@@ -4,6 +4,8 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     private static let timeout: TimeInterval = 30
     private static let scrollTolerance: CGFloat = 4
     private static let maximumSwipes = 5
+    private static let backdropStartY: CGFloat = 0.2
+    private static let backdropEndY: CGFloat = 0.4
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -35,9 +37,12 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         screenshot.name = "Intent home action tiles"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        verifyMenuDragBehavior(in: app)
         app.buttons["intent.menu.close"].tap()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(visibleRow?.frame.minY ?? 0, position, accuracy: Self.scrollTolerance)
+        list.swipeDown()
+        XCTAssertTrue(app.staticTexts["workspaces.title"].isHittable)
     }
 
     @MainActor
@@ -84,6 +89,23 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(app.buttons["intent.menu.close"].isHittable)
         app.buttons["intent.menu.close"].tap()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    private func verifyMenuDragBehavior(in app: XCUIApplication) {
+        let carousel = app.scrollViews["intent.menu.tiles"]
+        let assistant = app.buttons["intent.menu.assistant"]
+        let position = assistant.frame.minY
+        carousel.swipeUp()
+        XCTAssertEqual(assistant.frame.minY, position, accuracy: Self.scrollTolerance)
+        carousel.swipeDown()
+        XCTAssertEqual(assistant.frame.minY, position, accuracy: Self.scrollTolerance)
+        let backdropStart = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Self.backdropStartY))
+        let backdropEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Self.backdropEndY))
+        backdropStart.press(forDuration: 0, thenDragTo: backdropEnd)
+        backdropEnd.press(forDuration: 0, thenDragTo: backdropStart)
+        XCTAssertTrue(app.buttons["intent.menu.close"].isHittable)
+        XCTAssertEqual(reveal("connections", in: app).frame.minY, position, accuracy: Self.scrollTolerance)
     }
 
     @MainActor
