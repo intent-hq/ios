@@ -13,6 +13,7 @@ $(SRCROOT)/Intent/App/NavigationDestinations.swift
 $(SRCROOT)/Intent/App/RootCompactNavigationView.swift
 $(SRCROOT)/Intent/App/RootDetailContentView.swift
 $(SRCROOT)/Intent/App/RootView.swift
+$(SRCROOT)/Intent/App/WindowSceneTitle.swift
 $(SRCROOT)/Intent/Assets.xcassets
 $(SRCROOT)/Intent/Assets.xcassets/AccentColor.colorset
 $(SRCROOT)/Intent/Assets.xcassets/AgentAvatarActiveStrokeStrong.colorset
@@ -399,6 +400,7 @@ $(SRCROOT)/IntentTests/BackendRoutePublicationTests.swift
 $(SRCROOT)/IntentTests/BackendSessionRegistryTests.swift
 $(SRCROOT)/IntentTests/BackendSyncTestSupport.swift
 $(SRCROOT)/IntentTests/BackendWindowSessionTests.swift
+$(SRCROOT)/IntentTests/BackendWindowTitleTests.swift
 $(SRCROOT)/IntentTests/BackgroundHookStoreTests.swift
 $(SRCROOT)/IntentTests/BackgroundTaskManagerTests.swift
 $(SRCROOT)/IntentTests/CertMismatchListViewTests.swift
@@ -581,6 +583,7 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
+$(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift

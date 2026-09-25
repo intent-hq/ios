@@ -200,6 +200,14 @@ struct BackendWindowRoot: View {
                 Color.clear
             }
         }
+        .background {
+            #if os(iOS)
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                WindowSceneTitle(title: windowSession.sceneTitle)
+                    .frame(width: 0, height: 0)
+            }
+            #endif
+        }
         .onAppear {
             windowSession.updateNetworkObservation(for: scenePhase)
             if restoresSavedMachines {
