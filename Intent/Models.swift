@@ -29,6 +29,18 @@ struct PairedServer: Codable, Equatable {
     }
 }
 
+/// A route observation may patch an existing live shared row, never recreate
+/// one or replace its credentials. The baseline detects competing rotations.
+struct PendingBackendRoutePublication: Codable, Equatable {
+    var updatedAt: Double
+    var hosts: [String]
+    var tcAddress: String?
+    /// Time of the actual tunnel observation, unchanged by host-only edits.
+    /// Legacy pending intents fall back to their original updatedAt.
+    var tcUpdatedAt: Double?
+    var previousTcAddress: String?
+}
+
 /// A saved daemon connection: pairing info plus its API token and metadata.
 struct StoredConnection: Codable, Identifiable, Equatable {
     let id: UUID
@@ -38,10 +50,17 @@ struct StoredConnection: Codable, Identifiable, Equatable {
     var displayName: String
     var lastConnectedAt: Date?
     /// `updatedAt` (ms since epoch) of the last iCloud-synced registry record
-    /// applied to this connection — the last-writer-wins clock for
+    /// applied or successfully published — the last-writer-wins clock for
     /// `SyncedBackendConnectionMerge`. `nil` on connections that predate sync
     /// or were paired locally and never matched a registry record.
     var syncUpdatedAt: Double?
+    /// Durable local edit awaiting shared publication. Kept in the same
+    /// device-local Keychain blob as the credentials; retries never restamp it.
+    var pendingSyncUpdatedAt: Double?
+    /// Provenance for automatic route publication. Ordinary imports have none;
+    /// only an explicit pairing newer than a remembered removal can resume it.
+    var localPairingSyncClock: Double?
+    var pendingRoutePublication: PendingBackendRoutePublication?
 
     init(
         id: UUID,

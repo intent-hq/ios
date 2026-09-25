@@ -488,5 +488,5 @@ extension Constants.Loading {
 }
 
 extension Constants.Splash {
-    static let maximumLogoDimension: CGFloat = 80
+    static let maximumLogoDimension: CGFloat = 100
 }

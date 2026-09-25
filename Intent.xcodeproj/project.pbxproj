@@ -8,8 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		AD000003AAAA000000000003 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = AD000001AAAA000000000001 /* SwiftTerm */; };
-		AB000003AAAA000000000003 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */; platformFilter = ios; };
-		AB000004AAAA000000000004 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */; platformFilter = ios; };
+		0B047438940A36D62A002FE6 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = 20E5CDC07E6C8F2AF917AE01 /* Lottie */; };
+		AB000003AAAA000000000003 /* TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit.xcframework */; platformFilter = ios; };
+		AB000004AAAA000000000004 /* TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit.xcframework */; platformFilter = ios; };
 		AC000011AAAA000000000011 /* Intent in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000001AAAA000000000001 /* Intent */; };
 		AC000012AAAA000000000012 /* IntentTests in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000002AAAA000000000002 /* IntentTests */; };
 		AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000003AAAA000000000003 /* Info-visionOS.plist */; };
@@ -50,7 +51,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = TailcatKit/build/TailcatKit.xcframework; sourceTree = "<group>"; };
+		AB000001AAAA000000000001 /* TailcatKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = TailcatKit/build/TailcatKit.xcframework; sourceTree = "<group>"; };
 		AC000001AAAA000000000001 /* Intent */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Intent; sourceTree = SOURCE_ROOT; };
 		AC000002AAAA000000000002 /* IntentTests */ = {isa = PBXFileReference; lastKnownFileType = folder; path = IntentTests; sourceTree = SOURCE_ROOT; };
 		AC000003AAAA000000000003 /* Info-visionOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-visionOS.plist"; sourceTree = SOURCE_ROOT; };
@@ -80,11 +81,15 @@
 		};
 		EB655EDD2F669E6C00176730 /* IntentTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = IntentTests;
 			sourceTree = "<group>";
 		};
 		EB655EE72F669E6C00176730 /* IntentUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = IntentUITests;
 			sourceTree = "<group>";
 		};
@@ -97,7 +102,8 @@
 			files = (
 				EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */,
 				AD000003AAAA000000000003 /* SwiftTerm in Frameworks */,
-				AB000004AAAA000000000004 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */,
+				AB000004AAAA000000000004 /* TailcatKit.xcframework in Frameworks */,
+				0B047438940A36D62A002FE6 /* Lottie in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -105,7 +111,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AB000003AAAA000000000003 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */,
+				AB000003AAAA000000000003 /* TailcatKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,18 +125,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		EB655EC02F669E6B00176730 = {
-			isa = PBXGroup;
-			children = (
-				EB655ECB2F669E6B00176730 /* Intent */,
-				EB655EDD2F669E6C00176730 /* IntentTests */,
-				EB655EE72F669E6C00176730 /* IntentUITests */,
-				AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */,
-				AC000004AAAA000000000004 /* Test Source Inputs */,
-				EB655ECA2F669E6B00176730 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
 		AC000004AAAA000000000004 /* Test Source Inputs */ = {
 			isa = PBXGroup;
 			children = (
@@ -139,6 +133,18 @@
 				AC000003AAAA000000000003 /* Info-visionOS.plist */,
 			);
 			name = "Test Source Inputs";
+			sourceTree = "<group>";
+		};
+		EB655EC02F669E6B00176730 = {
+			isa = PBXGroup;
+			children = (
+				EB655ECB2F669E6B00176730 /* Intent */,
+				EB655EDD2F669E6C00176730 /* IntentTests */,
+				EB655EE72F669E6C00176730 /* IntentUITests */,
+				AB000001AAAA000000000001 /* TailcatKit.xcframework */,
+				AC000004AAAA000000000004 /* Test Source Inputs */,
+				EB655ECA2F669E6B00176730 /* Products */,
+			);
 			sourceTree = "<group>";
 		};
 		EB655ECA2F669E6B00176730 /* Products */ = {
@@ -174,6 +180,7 @@
 			packageProductDependencies = (
 				AA000001AAAA000000000001 /* Textual */,
 				AD000001AAAA000000000001 /* SwiftTerm */,
+				20E5CDC07E6C8F2AF917AE01 /* Lottie */,
 			);
 			productName = Intent;
 			productReference = EB655EC92F669E6B00176730 /* Intent.app */;
@@ -198,8 +205,6 @@
 				EB655EDD2F669E6C00176730 /* IntentTests */,
 			);
 			name = IntentTests;
-			packageProductDependencies = (
-			);
 			productName = IntentTests;
 			productReference = EB655EDA2F669E6C00176730 /* IntentTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -221,8 +226,6 @@
 				EB655EE72F669E6C00176730 /* IntentUITests */,
 			);
 			name = IntentUITests;
-			packageProductDependencies = (
-			);
 			productName = IntentUITests;
 			productReference = EB655EE42F669E6C00176730 /* IntentUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -262,6 +265,7 @@
 			packageReferences = (
 				AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */,
 				AD000002AAAA000000000002 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+				37F58DE8F9ED3C34D35D3F0F /* XCRemoteSwiftPackageReference "lottie-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = EB655ECA2F669E6B00176730 /* Products */;
@@ -422,7 +426,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.3;
+				MARKETING_VERSION = 1.1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -470,7 +474,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.3;
+				MARKETING_VERSION = 1.1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -623,7 +627,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1.3;
+				MARKETING_VERSION = 1.1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -651,7 +655,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1.3;
+				MARKETING_VERSION = 1.1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -673,7 +677,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.3;
+				MARKETING_VERSION = 1.1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -695,7 +699,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.3;
+				MARKETING_VERSION = 1.1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -760,6 +764,14 @@
 				version = 1.18.0;
 			};
 		};
+		37F58DE8F9ED3C34D35D3F0F /* XCRemoteSwiftPackageReference "lottie-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/airbnb/lottie-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.6.1;
+			};
+		};
 		AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/intent-hq/textual";
@@ -775,6 +787,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AD000002AAAA000000000002 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
 			productName = SwiftTerm;
+		};
+		20E5CDC07E6C8F2AF917AE01 /* Lottie */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 37F58DE8F9ED3C34D35D3F0F /* XCRemoteSwiftPackageReference "lottie-ios" */;
+			productName = Lottie;
 		};
 		AA000001AAAA000000000001 /* Textual */ = {
 			isa = XCSwiftPackageProductDependency;

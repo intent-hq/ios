@@ -452,7 +452,7 @@ extension AppCoordinatorTests {
 
         let rotated = #"{"v": 1, "label": "Synced Mac", "#
             + #""host": "10.9.9.10", "port": 5252, "fingerprint": "aa:bb", "#
-            + #""token": "tok-rotated", "updatedAt": 200}"#
+            + #""token": "tok-rotated", "tcAddress": "tcNewMiXeD", "updatedAt": 200}"#
         let coordinator = AppCoordinator(
             backendID: BackendID(active.id),
             persistence: persistence,
@@ -466,6 +466,7 @@ extension AppCoordinatorTests {
         #expect(manager.port == 5252)
         #expect(manager.hosts.first == "10.9.9.10")
         #expect(manager.certFingerprint == "aa:bb")
+        #expect(manager.tcAddress == "tcNewMiXeD")
     }
 
     @Test @MainActor func onReconnect_flagsSavedConnections_whenConnectionsExist() {
