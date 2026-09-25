@@ -47,8 +47,10 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         next.tap()
         let sheet = app.navigationBars["Create Workspace"]
         XCTAssertTrue(sheet.waitForExistence(timeout: Fixture.timeout))
-        let message = app.textViews["What should the first agent work on?"]
+        // The placeholder disappears after typing; this sheet has one editable field.
+        let message = app.textFields.firstMatch
         XCTAssertTrue(message.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertEqual(app.textFields.count, 1)
         message.tap()
         message.typeText("Draft survives background return")
         XCTAssertEqual(message.value as? String, "Draft survives background return")
