@@ -82,37 +82,23 @@ struct SplashArtView: View {
 /// Lottie renders the source paths, keyframes and time remapping directly. The
 /// existing monotonic clock is the sole playback driver: Lottie never starts an
 /// independent animation that could continue while this scene is inactive.
-struct SplashFrameView: UIViewRepresentable {
+struct SplashFrameView: View {
     let animation: LottieAnimation
     let frame: AnimationFrameTime
     let colorScheme: ColorScheme
 
-    func makeUIView(context _: Context) -> LottieAnimationView {
-        // The main-thread renderer supports the supplied twist's time remapping
-        // and samples exact source frames without Core Animation approximation.
-        let view = LottieAnimationView(
-            animation: nil,
-            configuration: LottieConfiguration(renderingEngine: .mainThread)
-        )
-        view.contentMode = .scaleAspectFit
-        view.backgroundBehavior = .pause
-        view.animateLayoutChangesWithCurrentCoreAnimationContext = false
-        return view
-    }
-
-    func updateUIView(_ view: LottieAnimationView, context _: Context) {
-        if view.animation !== animation { view.animation = animation }
-        let keypath = AnimationKeypath(keypath: "**.Color")
-        let color = UIColor(Theme.foreground(for: colorScheme)).lottieColorValue
-        if (view.valueProviders[keypath] as? ColorValueProvider)?.color != color {
-            view.setValueProvider(ColorValueProvider(color), keypath: keypath)
-        }
-        view.currentFrame = frame
-    }
-
-    static func dismantleUIView(_ view: LottieAnimationView, coordinator _: ()) {
-        view.stop()
-        view.animation = nil
+    var body: some View {
+        LottieView(animation: animation)
+            // Honor the SwiftUI proposal instead of the 256-point intrinsic size (ios#475).
+            .resizable()
+            .configuration(LottieConfiguration(renderingEngine: .mainThread))
+            .paused(at: .frame(frame))
+            .backgroundBehavior(.pause)
+            .configure(\.animateLayoutChangesWithCurrentCoreAnimationContext, to: false)
+            .valueProvider(
+                ColorValueProvider(UIColor(Theme.foreground(for: colorScheme)).lottieColorValue),
+                for: AnimationKeypath(keypath: "**.Color")
+            )
     }
 }
 

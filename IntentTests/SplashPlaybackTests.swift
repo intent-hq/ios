@@ -123,6 +123,47 @@ struct SplashPlaybackTests {
         #expect(!animates(.active, false, false))
     }
 
+    // MARK: - Hosted logo layout
+
+    /// Host UIKit as well as SwiftUI: ImageRenderer omits UIViewRepresentable
+    /// content and cannot catch Lottie's intrinsic size escaping the frame.
+    @MainActor
+    @Test func launchLogoFitsTheFullCompositionInto100Points() async throws {
+        let host = UIHostingController(rootView: SplashArtView()
+            .environment(\.scenePhase, .inactive))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(50))
+        host.view.layoutIfNeeded()
+        let logo = try #require(findLogo(in: host.view))
+        #expect(logo.bounds.size == CGSize(width: 100, height: 100))
+        let viewport = logo.convert(logo.bounds, to: host.view)
+        #expect(abs(viewport.midX - host.view.bounds.midX) < 0.5)
+        #expect(abs(viewport.midY - host.view.bounds.midY) < 0.5)
+
+        // A 100-point viewport must show all 256 source units, not crop a
+        // full-sized composition behind a smaller frame.
+        let composition = try #require(logo.convert(
+            CGRect(x: 0, y: 0, width: 100, height: 100), toLayerAt: nil
+        ))
+        #expect(abs(composition.minX) < 0.5)
+        #expect(abs(composition.minY) < 0.5)
+        #expect(abs(composition.width - 256) < 0.5)
+        #expect(abs(composition.height - 256) < 0.5)
+    }
+
+    @MainActor
+    private func findLogo(in view: UIView) -> LottieAnimationView? {
+        if let logo = view as? LottieAnimationView { return logo }
+        return view.subviews.lazy.compactMap { findLogo(in: $0) }.first
+    }
+
     // MARK: - Rendered launch background
 
     /// Samples the actual view, not the asset declaration: a missing catalog
