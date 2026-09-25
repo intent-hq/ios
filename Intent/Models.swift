@@ -42,6 +42,9 @@ struct StoredConnection: Codable, Identifiable, Equatable {
     /// `SyncedBackendConnectionMerge`. `nil` on connections that predate sync
     /// or were paired locally and never matched a registry record.
     var syncUpdatedAt: Double?
+    /// Durable local edit awaiting shared publication. Kept in the same
+    /// device-local Keychain blob as the credentials; retries never restamp it.
+    var pendingSyncUpdatedAt: Double?
 
     init(
         id: UUID,

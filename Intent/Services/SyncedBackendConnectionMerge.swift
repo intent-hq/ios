@@ -49,7 +49,7 @@ enum SyncedBackendConnectionMerge {
                 // written before the user re-paired this machine must not
                 // delete the fresh pairing.
                 let localClock =
-                    existing.syncUpdatedAt
+                    existing.pendingSyncUpdatedAt ?? existing.syncUpdatedAt
                     ?? existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond
                 if localClock > record.updatedAt { continue }
                 result.removedIds.append(existing.id)
@@ -62,7 +62,18 @@ enum SyncedBackendConnectionMerge {
                 // clock — same guard as the tombstone path — so a stale
                 // registry copy lagging behind a token rotation cannot
                 // clobber a fresh direct re-pairing.
-                if let applied = existing.syncUpdatedAt {
+                if let pending = existing.pendingSyncUpdatedAt {
+                    // A deliberate pairing has a durable edit clock even
+                    // before publication. Equal remote clocks win a retry.
+                    if record.updatedAt < pending { continue }
+                } else if let applied = existing.syncUpdatedAt {
+                    if applied != 0, record.updatedAt == applied,
+                       SyncedBackendPayload.tunnelAddress(existing.server.tcAddress) == nil,
+                       let route = record.tcAddress {
+                        result.connections[index] = addingRoute(route, to: existing)
+                        result.updatedIds.append(existing.id)
+                        continue
+                    }
                     if record.updatedAt <= applied { continue }
                 } else if record.updatedAt
                     < existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond {
@@ -78,7 +89,7 @@ enum SyncedBackendConnectionMerge {
                 // locals were paired by the user on this device; the
                 // host:port fallback above can still update them.)
                 guard !normalizeFingerprint(record.fingerprint).isEmpty,
-                    !candidateHosts(of: record).isEmpty
+                    !candidateHosts(of: record).isEmpty || record.tcAddress != nil
                 else { continue }
                 let added = makeConnection(from: record, now: now)
                 result.connections.append(added)
@@ -86,6 +97,23 @@ enum SyncedBackendConnectionMerge {
             }
         }
         return result
+    }
+
+    /// Additive-field upgrade for records imported before iOS read tcAddress.
+    /// Equal clocks authorize learning the missing route only, not replacing
+    /// credentials, metadata, or the shared clock.
+    private static func addingRoute(_ route: String, to connection: StoredConnection) -> StoredConnection {
+        var updated = connection
+        let server = connection.server
+        updated.server = PairedServer(
+            hosts: server.hosts,
+            port: server.port,
+            name: server.name,
+            pairedAt: server.pairedAt,
+            certFingerprint: server.certFingerprint,
+            tcAddress: route
+        )
+        return updated
     }
 
     /// Index of the local connection a record refers to: cert fingerprint
@@ -132,8 +160,10 @@ enum SyncedBackendConnectionMerge {
     /// so a malformed host must never survive the merge.
     static func candidateHosts(of record: SyncedBackendRecord) -> [String] {
         PersistenceManager.mergeHostLists(
-            existing: [record.host].compactMap(usableHost),
-            incoming: record.hosts.compactMap(usableHost)
+            // A tunnel-only publisher uses its opaque route as the required
+            // v1 host identity. That blob must not become a DNS candidate.
+            existing: record.host == record.tcAddress ? [] : [record.host].compactMap(usableHost),
+            incoming: record.hosts.filter { $0 != record.tcAddress }.compactMap(usableHost)
         )
     }
 
@@ -232,9 +262,7 @@ enum SyncedBackendConnectionMerge {
                 name: existing.server.name,
                 pairedAt: existing.server.pairedAt,
                 certFingerprint: fingerprintOrNil(record) ?? existing.server.certFingerprint,
-                // Registry records don't carry the tunnel address; keep the
-                // locally learned one.
-                tcAddress: existing.server.tcAddress
+                tcAddress: record.tcAddress ?? existing.server.tcAddress
             ),
             token: record.token,
             displayName: displayName(for: record),
@@ -252,7 +280,8 @@ enum SyncedBackendConnectionMerge {
                 port: record.port,
                 name: name,
                 pairedAt: now,
-                certFingerprint: fingerprintOrNil(record)
+                certFingerprint: fingerprintOrNil(record),
+                tcAddress: record.tcAddress
             ),
             token: record.token,
             displayName: name,
