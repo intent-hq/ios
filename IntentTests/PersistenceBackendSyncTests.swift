@@ -206,7 +206,6 @@ struct PersistenceBackendSyncTests {
         #expect(store.cloud.writeCount == 0)
         #expect(try store.cloud.object()["deleted"] as? Bool == true)
     }
-
 }
 
 extension PersistenceBackendSyncTests {
