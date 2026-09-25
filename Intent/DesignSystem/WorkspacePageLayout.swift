@@ -3,8 +3,9 @@ import SwiftUI
 extension Constants.WorkspaceList {
     static let pageInset: CGFloat = 24
     static let actionSize: CGFloat = 44
-    static let titleTopSpacing: CGFloat = 64
-    static let titleBottomSpacing: CGFloat = 48
+    static let titleTopSpacing: CGFloat = 24
+    static let titleBottomSpacing: CGFloat = 24
+    static let searchTitleSpacing: CGFloat = 16
     static let groupTopSpacing: CGFloat = 32
     static let groupBottomSpacing: CGFloat = 12
     static let emptyStateHeight: CGFloat = 240

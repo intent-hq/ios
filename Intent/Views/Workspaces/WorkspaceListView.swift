@@ -85,9 +85,10 @@ struct WorkspaceListView: View {
                 .font(.largeTitle.bold())
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("workspaces.title")
-                .padding(.top, isSearching ? Constants.WorkspaceList.pageInset : Constants.WorkspaceList.titleTopSpacing)
-                .padding(.bottom, isSearching ? Constants.WorkspaceList.pageInset : Constants.WorkspaceList.titleBottomSpacing)
+                .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
+                .padding(.bottom, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleBottomSpacing)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(Theme.foreground(for: colorScheme))
         .padding(.horizontal, Constants.WorkspaceList.pageInset)
     }
