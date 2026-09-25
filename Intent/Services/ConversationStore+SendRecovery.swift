@@ -132,6 +132,15 @@ extension ConversationStore {
             let appId = message.appMessageId ?? message.metadata["userAppMessageId"]?.stringValue
             guard let attemptId = sendAttemptId(rowId: message.id, appMessageId: appId) else { continue }
             confirmSendAttempt(attemptId, status: .accepted, confirmedMessageId: message.id)
+            // RPC acceptance is terminal for status, not transcript identity.
+            // Only authoritative rows may refine an already accepted association;
+            // late RPC/queue results still stop at confirmSendAttempt's guard.
+            if let index = sendAttempts.firstIndex(where: { $0.id == attemptId }) {
+                sendAttempts[index].confirmedMessageId = message.id
+            }
+            if message.id != attemptId {
+                messages.removeAll { $0.id == attemptId }
+            }
         }
     }
 

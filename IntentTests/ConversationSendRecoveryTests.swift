@@ -211,8 +211,8 @@ extension ConversationStoreTests {
         #expect(!store.isStreaming)
     }
 
-    @Test(arguments: ["queued", "accepted", "timeout", "cancelled", "malformed"])
-    func drainedTranscriptBeforeAnyQueueOrReplyWinsOverLateOutcome(outcome: String) async throws {
+    @Test(arguments: ["queued", "accepted", "timeout", "cancelled", "malformed"], ["snapshot", "delta"])
+    func drainedTranscriptBeforeAnyQueueOrReplyWinsOverLateOutcome(outcome: String, source: String) async throws {
         let fake = FakeConnectionManager()
         fake.pendingMethods.insert("agent.sendMessage")
         fake.stubChatSnapshot()
@@ -222,13 +222,17 @@ extension ConversationStoreTests {
         defer { send.cancel() }
         try await fake.waitForPendingRequests("agent.sendMessage")
         let id = try #require(store.sendAttempts.first?.id)
-        fake.deliverSubscriptionPush(SubscriptionPush(
-            subscriptionId: "sub-1",
-            kind: .snapshot,
-            seq: 1,
-            snapshot: [sentRow("drained", appMessageId: id)],
-            delta: nil
-        ))
+        if source == "delta" {
+            deliverRecoveryDelta("drained", store: store, correlation: id)
+        } else {
+            fake.deliverSubscriptionPush(SubscriptionPush(
+                subscriptionId: "sub-1",
+                kind: .snapshot,
+                seq: 1,
+                snapshot: [sentRow("drained", appMessageId: id)],
+                delta: nil
+            ))
+        }
         #expect(store.queuedMessages.isEmpty)
         #expect(store.sendAttempts.first?.status == .accepted, "no queue entry or RPC reply has arrived")
         #expect(store.sendAttempts.first?.confirmedMessageId == "drained")
@@ -323,7 +327,7 @@ extension ConversationStoreTests {
 }
 
 extension ConversationStoreTests {
-    /// Use the same decoded snapshot/event paths as ordinary transcript and queue updates.
+    /// Use production decoding/apply paths for transcript and queue updates.
     func deliverRecoveryRow(
         _ rowId: String,
         source: String,
@@ -339,6 +343,8 @@ extension ConversationStoreTests {
                     "data": ["agentId": "a", "queue": [queuedSend(rowId, originalId: correlation)]]
                 ]
             ])
+        } else if source == "delta" {
+            deliverRecoveryDelta(rowId, store: store, correlation: correlation)
         } else {
             var row = sentRow(rowId, appMessageId: source == "topLevel" ? correlation : nil)
             if let nestedId = source == "legacy" ? correlation : legacyId {
@@ -349,12 +355,12 @@ extension ConversationStoreTests {
         }
     }
 
-    @Test(arguments: ["topLevel", "legacy", "queue"], [false, true])
+    @Test(arguments: ["topLevel", "legacy", "queue", "delta"], [false, true])
     func explicitRecoveryCorrelationExcludesConflictingIdentities(source: String, unknown: Bool) async throws {
         let fake = FakeConnectionManager()
         fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -2)
         let store = ConversationStore(connectionManager: fake)
-        store.bindAgent("a")
+        await bindRecoveryStore(store, fake: fake, source: source)
         let stopped = Mutex<[URL]>([])
         for name in ["direct", "owner"] {
             let url = URL(fileURLWithPath: "/tmp/\(name).txt")
@@ -398,15 +404,16 @@ extension ConversationStoreTests {
         var retainedPayload: [String: Any] = [:]
         store.sendAttempts[0].filePayload.apply(to: &retainedPayload)
         #expect((retainedPayload["fileBlocks"] as? [[String: Any]])?.first?["attachmentId"] as? String == "direct")
+        #expect(source != "delta" || store.messages.map(\.id) == (unknown ? [direct, owner] : [direct]))
         #expect(fake.paramsForMethod("agent.sendMessage").count == 3, "reconciliation never replays a send")
     }
 
-    @Test(arguments: ["topLevel", "legacy", "queue"], ["correlated", "direct", "prior"])
+    @Test(arguments: ["topLevel", "legacy", "queue", "delta"], ["correlated", "direct", "prior"])
     func recoveryCorrelationKeepsBoundAgentFiltering(source: String, identity: String) async throws {
         let fake = FakeConnectionManager()
         fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -2)
         let store = ConversationStore(connectionManager: fake)
-        store.bindAgent("a")
+        await bindRecoveryStore(store, fake: fake, source: source)
         try? await store.sendMessage(agentId: "a", content: "bound", workspaceId: "w")
         let bound = try #require(store.sendAttempts.first?.id)
         if identity == "prior" {

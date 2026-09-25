@@ -369,11 +369,75 @@ extension ConversationStoreTests {
 }
 
 extension ConversationStoreTests {
-    @Test(arguments: ["topLevel", "queue"], ["direct", "confirmed", "same", "ambiguous", "sharedConfirmed"])
+    func bindRecoveryStore(_ store: ConversationStore, fake: FakeConnectionManager, source: String) async {
+        store.bindAgent("a")
+        if source == "delta" {
+            fake.stubChatSnapshot()
+            await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
+        }
+    }
+
+    func deliverRecoveryDelta(
+        _ rowId: String,
+        store: ConversationStore,
+        correlation: String? = nil,
+        seq: Int = 1,
+        updated: Bool = false
+    ) {
+        var entity: [String: Any] = [
+            "messageId": rowId, "role": "user", "streamingComplete": true,
+            "block": ["id": "\(rowId):0", "type": "text", "text": "hello"]
+        ]
+        if let correlation { entity["appMessageId"] = correlation }
+        store.handleStreamEvent("subscription.push", params: [
+            "subscriptionId": "sub-1", "kind": "delta", "seq": seq,
+            "delta": [
+                "added": updated ? [] : [entity], "updated": updated ? [entity] : [], "removedIds": []
+            ]
+        ])
+    }
+
+    @Test(arguments: [false, true])
+    func acceptedRPCThenCorrelatedLiveDeltaReconcilesOnce(existingRow: Bool) async throws {
+        let fake = FakeConnectionManager()
+        fake.pendingMethods.insert("agent.sendMessage")
+        fake.stubChatSnapshot()
+        let store = ConversationStore(connectionManager: fake)
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
+        let send = Task { try await store.sendMessage(agentId: "a", content: "hello", workspaceId: "w") }
+        defer { send.cancel() }
+        try await fake.waitForPendingRequests("agent.sendMessage")
+        let id = try #require(store.sendAttempts.first?.id)
+        fake.resolvePending("agent.sendMessage", with: ["success": true, "queued": false, "messageId": id])
+        try await send.value
+        #expect(store.sendAttempts.first?.status == .accepted)
+        #expect(store.messages.map(\.id) == [id])
+        if existingRow {
+            deliverRecoveryDelta("server-row", store: store)
+            #expect(store.messages.map(\.id) == [id, "server-row"], "absent correlation cannot guess the owner")
+        }
+        let seq = existingRow ? 2 : 1
+        deliverRecoveryDelta("server-row", store: store, correlation: id, seq: seq, updated: existingRow)
+        #expect(store.messages.map(\.id) == ["server-row"])
+        #expect(store.messages.last?.appMessageId == id)
+        #expect(store.sendAttempts.first?.confirmedMessageId == "server-row")
+        // Duplicate sequence, then a fresh update omitting optional correlation.
+        deliverRecoveryDelta("server-row", store: store, correlation: id, seq: seq)
+        deliverRecoveryDelta("server-row", store: store, seq: seq + 1, updated: true)
+        await deliverRecoveryRow("late-queue", source: "queue", store: store, fake: fake, correlation: id)
+        #expect(store.messages.map(\.id) == ["server-row"])
+        #expect(store.messages.last?.appMessageId == id)
+        #expect(store.messages.last?.contentBlocks.count == 1)
+        #expect(store.sendAttempts.first?.status == .accepted)
+        #expect(store.sendAttempts.first?.confirmedMessageId == "server-row")
+        #expect(fake.paramsForMethod("agent.sendMessage").count == 1)
+    }
+
+    @Test(arguments: ["topLevel", "queue", "delta"], ["direct", "confirmed", "same", "ambiguous", "sharedConfirmed"])
     func recoveryWithoutCorrelationRequiresOneDistinctAttempt(source: String, identity: String) async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        store.bindAgent("a")
+        await bindRecoveryStore(store, fake: fake, source: source)
         let stopped = Mutex<[URL]>([])
         let url = URL(fileURLWithPath: "/tmp/fallback.txt")
         let id = store.beginSendAttempt(

@@ -252,7 +252,7 @@ nonisolated struct QueuedMessage: Identifiable, Codable {
 nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
     let id: String
     /// Client correlation lifted from row metadata by the daemon (PROTOCOL §5.5).
-    let appMessageId: String?
+    var appMessageId: String?
     let role: MessageRole
     var contentBlocks: [ContentBlock] {
         didSet { contentBlocksWereProvided = true }

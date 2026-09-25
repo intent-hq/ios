@@ -362,6 +362,9 @@ extension ConversationLiveTranscript {
         if let timestamp = entity.timestamp, !timestamp.isEmpty {
             messages[messageIndex].timestamp = timestamp
         }
+        if let appMessageId = entity.appMessageId {
+            messages[messageIndex].appMessageId = appMessageId
+        }
         var blocks = messages[messageIndex].contentBlocks
         if let index = blocks.firstIndex(where: { $0.id == block.id }) {
             blocks[index] = mergedToolUseBlock(prior: blocks[index], incoming: block)
