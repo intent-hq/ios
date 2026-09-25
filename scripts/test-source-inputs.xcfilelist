@@ -35,6 +35,7 @@ $(SRCROOT)/Intent/Assets.xcassets/CodeBlockAction.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockBackground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockForeground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/CodeBlockSecondaryLabel.colorset
+$(SRCROOT)/Intent/Assets.xcassets/IntentDandelion.imageset
 $(SRCROOT)/Intent/Assets.xcassets/MarkdownCodeBlockBackground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/MarkdownInlineCodeBackground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/MarkdownInlineCodeForeground.colorset

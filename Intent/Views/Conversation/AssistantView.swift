@@ -14,30 +14,7 @@ struct AssistantView: View {
         NavigationStack {
             content
             .navigationTitle("Assistant")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        coordinator.selectedSection = .workspaces
-                    } label: {
-                        Label("Back to Workspaces", systemImage: "chevron.left")
-                    }
-                    .accessibilityIdentifier("assistant.back")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    newConversationButton
-                        .accessibilityIdentifier("assistant.newConversation")
-                }
-                if selectedThread == nil {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu {
-                            AssistantHistoryMenu(store: store)
-                        } label: {
-                            Label("Assistant actions", systemImage: "ellipsis.circle")
-                        }
-                        .accessibilityIdentifier("assistant.actions")
-                    }
-                }
-            }
+            .toolbar { assistantToolbar }
             .safeAreaInset(edge: .top) {
                 if let error = store.errorMessage {
                     VStack {
@@ -60,6 +37,31 @@ struct AssistantView: View {
         .onChange(of: coordinator.assistantAgentId) { _, agentId in
             if let agentId, !store.threads.contains(where: { $0.id == agentId }) {
                 Task { await store.refresh() }
+            }
+        }
+    }
+
+    @ToolbarContentBuilder private var assistantToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                coordinator.selectedSection = .workspaces
+            } label: {
+                Label("Back to Workspaces", systemImage: "chevron.left")
+            }
+            .accessibilityIdentifier("assistant.back")
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            newConversationButton
+                .accessibilityIdentifier("assistant.newConversation")
+        }
+        if selectedThread == nil {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    AssistantHistoryMenu(store: store)
+                } label: {
+                    Label("Assistant actions", systemImage: "ellipsis.circle")
+                }
+                .accessibilityIdentifier("assistant.actions")
             }
         }
     }
