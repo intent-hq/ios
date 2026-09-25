@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 struct ConnectionUpsertOutcome {
@@ -32,6 +33,11 @@ class PersistenceManager {
     /// Backend for Keychain-stored values. Tests substitute an in-memory
     /// implementation (SecItem calls fail in headless CI simulators).
     var keychainStorage: KeychainStorage
+
+    /// Published only after a saved connection mutation succeeds. Window
+    /// labels observe their own record, independently of the last-used pointer.
+    var connectionsDidChange: AnyPublisher<Void, Never> { connectionsChanged.eraseToAnyPublisher() }
+    private let connectionsChanged = PassthroughSubject<Void, Never>()
 
     init(
         defaults: UserDefaults = .standard,
@@ -315,7 +321,9 @@ extension PersistenceManager {
     @discardableResult
     private func saveConnectionsLocked(_ connections: [StoredConnection]) -> Bool {
         guard let data = try? JSONEncoder().encode(connections) else { return false }
-        return saveDataToKeychain(data: data, account: keychainAccountConnections)
+        guard saveDataToKeychain(data: data, account: keychainAccountConnections) else { return false }
+        connectionsChanged.send()
+        return true
     }
 
     private func activeConnectionIdLocked() -> UUID? {
