@@ -7,6 +7,7 @@ extension Constants.Connections {
     static let headingToCardsSpacing: CGFloat = 56
     static let cardSpacing: CGFloat = 4
     static let cardMinimumHeight: CGFloat = 96
+    static let pairingRowMinimumHeight: CGFloat = 56
     static let cardTextSpacing: CGFloat = 12
     static let infoSpacing: CGFloat = 12
     static let connectedSpacing: CGFloat = 8
