@@ -123,11 +123,9 @@ struct CreationPickerControlsTests {
             let accessibility = try await render(layout: layout, dynamicTypeSize: .accessibility3)
             for snapshot in [normal, accessibility] {
                 #expect(snapshot.provider.label?.contains("Provider") == true)
-                #expect(snapshot.provider.label?.contains(PickerLayoutHost.provider.displayName) == true)
-                #expect(snapshot.provider.value == nil)
+                #expect(snapshot.provider.spokenDescription.contains(PickerLayoutHost.provider.displayName))
                 #expect(snapshot.model.label?.contains("Model") == true)
-                #expect(snapshot.model.label?.contains(layout.expectedModelValue) == true)
-                #expect(snapshot.model.value == nil)
+                #expect(snapshot.model.spokenDescription.contains(layout.expectedModelValue))
                 #expect(snapshot.provider.hasFiniteNonemptyAccessibilityFrame)
                 #expect(snapshot.model.hasFiniteNonemptyAccessibilityFrame)
                 #expect(snapshot.provider.hasMinimumAccessibilityFrameSize)
@@ -450,6 +448,10 @@ private struct PickerElementSnapshot {
     let visibleControlFrame: CGRect
     let traits: UIAccessibilityTraits
 
+    var spokenDescription: String {
+        [label, value].compactMap { $0 }.joined(separator: ", ")
+    }
+
     var hasFiniteNonemptyAccessibilityFrame: Bool {
         let values = [frame.minX, frame.minY, frame.width, frame.height]
         return values.allSatisfy { $0.isFinite } && frame.width > 0 && frame.height > 0
@@ -578,6 +580,7 @@ private struct PickerLayoutHost: View {
                 colorScheme: .light,
                 onSelectProvider: selectWorkspaceProvider,
                 onRetryProviders: {},
+                onBack: {},
                 onCreate: {},
                 onLoad: {}
             )

@@ -214,6 +214,10 @@ struct CreateWorkspaceView: View {
                 colorScheme: colorScheme,
                 onSelectProvider: selectProvider,
                 onRetryProviders: { Task { await fetchCreationOptions() } },
+                onBack: {
+                    guard !isCreating, navigationPath.last == .create else { return }
+                    navigationPath.removeLast()
+                },
                 onCreate: createWorkspace,
                 onLoad: fetchCreationOptions
             )

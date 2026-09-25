@@ -573,7 +573,11 @@ $(SRCROOT)/Intent/Views/Settings/SettingsSupportSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsView.swift
 $(SRCROOT)/Intent/Views/Workspaces
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormStyle.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSourceCard.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceView.swift
 $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
