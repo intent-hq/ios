@@ -20,6 +20,7 @@ struct QRScannerView: View {
             Color.black
                 .overlay {
                     Text("Camera scanning isn't available — use manual token entry instead")
+                        .interFont(Constants.Typography.bodyS)
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
                         .padding(Constants.QRScanner.unavailableMessagePadding)
@@ -28,6 +29,7 @@ struct QRScannerView: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { dismiss() }
+                            .interFont(Constants.Typography.bodyS)
                     }
                 }
         }
@@ -62,6 +64,7 @@ struct QRScannerView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
+                    .interFont(Constants.Typography.bodyS)
             }
         }
         .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
@@ -91,6 +94,7 @@ struct QRScannerView: View {
                 Color.black
                     .overlay {
                         Text("Camera scanning isn't available — use manual token entry instead")
+                            .interFont(Constants.Typography.bodyS)
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.center)
                             .padding(Constants.QRScanner.unavailableMessagePadding)
@@ -118,19 +122,19 @@ struct QRScannerView: View {
                 ProgressView().tint(.white)
                 Text("Connecting...")
                     .foregroundStyle(.white)
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
             } else if let error = errorMessage {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
                     .accessibilityHidden(true)
                 Text(error)
                     .foregroundStyle(.white)
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .multilineTextAlignment(.center)
             } else {
                 Text("Point at the QR code in Intent Settings")
                     .foregroundStyle(.white)
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
             }
         }
     }

@@ -141,7 +141,7 @@ struct ConnectionsView: View {
         VStack(spacing: Constants.Connections.cardSpacing) {
             if connections.isEmpty {
                 Text("No saved connections. Pair from the Connect screen to save a connection.")
-                    .font(Constants.Typography.bodyS.font)
+                    .interFont(Constants.Typography.bodyS)
                     // No empty-state design reference: preserve its existing semantic light color.
                     .foregroundStyle(colorScheme == .dark
                         ? Constants.Pairing.mutedForeground(for: colorScheme) : Theme.mutedForeground(for: colorScheme))
@@ -178,11 +178,23 @@ struct ConnectionsView: View {
         .accessibilityIdentifier("saved-connection.\(connection.id)")
         .accessibilityHint("Touch and hold for connection details and actions.")
         .contextMenu {
-            Button("Connection Details", systemImage: "info.circle") { connectionShowingDetails = connection }
+            Button { connectionShowingDetails = connection } label: {
+                Label {
+                    Text("Connection Details").interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(systemName: "info.circle")
+                }
+            }
             if supportsMultipleWindows {
                 openInNewWindowButton(connection)
             }
-            Button("Delete", systemImage: "trash", role: .destructive) { connectionPendingDelete = connection }
+            Button(role: .destructive) { connectionPendingDelete = connection } label: {
+                Label {
+                    Text("Delete").interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(systemName: "trash")
+                }
+            }
         }
         .accessibilityActions {
             Button("Connection Details") { connectionShowingDetails = connection }
@@ -200,7 +212,11 @@ struct ConnectionsView: View {
             openWindow(value: BackendID(connection: connection))
             dismiss()
         } label: {
-            Label("Open in New Window", systemImage: "macwindow.badge.plus")
+            Label {
+                Text("Open in New Window").interFont(Constants.Typography.bodyS)
+            } icon: {
+                Image(systemName: "macwindow.badge.plus")
+            }
         }
     }
 

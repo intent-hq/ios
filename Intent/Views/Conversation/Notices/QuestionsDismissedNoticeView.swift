@@ -16,7 +16,7 @@ struct QuestionsDismissedNoticeView: View {
                 Image(systemName: "bubble.left.slash")
                     .font(.caption)
                 Text("Questions dismissed")
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .fixedSize(horizontal: false, vertical: true)

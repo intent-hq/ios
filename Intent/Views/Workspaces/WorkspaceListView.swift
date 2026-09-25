@@ -20,7 +20,7 @@ struct WorkspaceListView: View {
         VStack(spacing: 0) {
             Picker("View", selection: $viewModel.viewMode) {
                 ForEach(ViewMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
+                    Text(mode.rawValue).interFont(Constants.Typography.bodyXS).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
@@ -31,8 +31,10 @@ struct WorkspaceListView: View {
                 Theme.background(for: colorScheme).ignoresSafeArea()
 
                 if viewModel.isLoading, viewModel.workspaces.isEmpty {
-                    ProgressView("Loading workspaces...")
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    ProgressView {
+                        Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+                    }
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 } else if viewModel.filteredWorkspaces.isEmpty {
                     if viewModel.hasSearchQuery {
                         ContentUnavailableView.search
@@ -53,17 +55,17 @@ struct WorkspaceListView: View {
                     Button {
                         coordinator.onOpenSettings()
                     } label: {
-                        Label("Settings", systemImage: "gearshape")
+                        Label { Text("Settings").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "gearshape") }
                     }
                     Button {
                         showingConnections = true
                     } label: {
-                        Label("Connect to…", systemImage: "desktopcomputer")
+                        Label { Text("Connect to…").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "desktopcomputer") }
                     }
                     Button {
                         showingDiagnosticLogs = true
                     } label: {
-                        Label("Export logs", systemImage: "doc.zipper")
+                        Label { Text("Export logs").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "doc.zipper") }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -101,11 +103,15 @@ struct WorkspaceListView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView(
-            "No Workspaces",
-            systemImage: "rectangle.stack.badge.plus",
-            description: Text("Create one in the desktop app.")
-        )
+        ContentUnavailableView {
+            Label {
+                Text("No Workspaces").interFont(Constants.Typography.bodyM.withFace(.semibold))
+            } icon: {
+                Image(systemName: "rectangle.stack.badge.plus")
+            }
+        } description: {
+            Text("Create one in the desktop app.").interFont(Constants.Typography.bodyS)
+        }
     }
 
     private var workspaceList: some View {
@@ -126,7 +132,7 @@ struct WorkspaceListView: View {
             }
         case .repo:
             ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
-                Section(header: Text(repoName)) {
+                Section(header: Text(repoName).interFont(Constants.Typography.eyebrow)) {
                     ForEach(workspaces) { workspace in
                         workspaceButton(workspace, showRepo: false)
                     }
@@ -134,7 +140,7 @@ struct WorkspaceListView: View {
             }
         case .status:
             ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
-                Section(header: Text(statusLabel)) {
+                Section(header: Text(statusLabel).interFont(Constants.Typography.eyebrow)) {
                     ForEach(workspaces) { workspace in
                         workspaceButton(workspace, usesVisionHitTarget: false)
                     }

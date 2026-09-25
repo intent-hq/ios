@@ -28,10 +28,10 @@ struct QuestionWizardCollapsedBanner: View {
                     .font(.caption)
                     .foregroundStyle(Theme.primary(for: colorScheme))
                 Text("Questions")
-                    .font(.caption.weight(.medium))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 Text("\(questionCount)")
-                    .font(.caption.weight(.medium))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .padding(.horizontal, Layout.countBadgeHorizontalPadding)
                     .padding(.vertical, Layout.countBadgeVerticalPadding)
@@ -44,7 +44,7 @@ struct QuestionWizardCollapsedBanner: View {
                     )
                 Spacer(minLength: Layout.minimumContentSpacing)
                 Text("Tap to expand")
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
             .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
@@ -69,7 +69,7 @@ struct QuestionWizardDismissButton: View {
     var body: some View {
         Button(action: action) {
             Text("Dismiss")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .padding(.horizontal, Layout.horizontalPadding)
                 .padding(.vertical, Layout.verticalPadding)

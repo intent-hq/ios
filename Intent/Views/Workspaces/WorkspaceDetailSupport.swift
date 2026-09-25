@@ -44,7 +44,7 @@ struct WorkspaceTaskProgressView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Constants.WorkspaceDetail.progressSectionSpacing) {
             Text(progress.summary)
-                .font(.subheadline.weight(.medium))
+                .interFont(Constants.Typography.bodyXSEmphasized)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .fixedSize(horizontal: false, vertical: true)
             progressBar

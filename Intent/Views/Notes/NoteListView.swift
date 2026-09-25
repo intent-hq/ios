@@ -10,15 +10,22 @@ struct NoteListView: View {
     var body: some View {
         if noteStore.isLoading || !noteStore.hasLoaded, noteStore.notes.isEmpty {
             Spacer()
-            ProgressView("Loading notes...")
+            ProgressView {
+                Text("Loading notes...").interFont(Constants.Typography.bodyS)
+            }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             Spacer()
         } else if noteStore.sortedNotes.isEmpty {
-            ContentUnavailableView(
-                "No Notes",
-                systemImage: "doc.text",
-                description: Text("Notes will appear here when created.")
-            )
+            ContentUnavailableView {
+                Label {
+                    Text("No Notes").interFont(Constants.Typography.bodyM)
+                } icon: {
+                    Image(systemName: "doc.text")
+                }
+            } description: {
+                Text("Notes will appear here when created.")
+                    .interFont(Constants.Typography.bodyXS)
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
@@ -227,7 +234,7 @@ struct NoteRowView: View {
     private var titleAndTags: some View {
         VStack(alignment: .leading, spacing: Constants.Notes.List.titleSpacing) {
             Text(note.title)
-                .font(depth == 0 ? .headline : .body)
+                .interFont(depth == 0 ? Constants.Typography.bodyM : Constants.Typography.bodyS)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .lineLimit(NoteRowLayout.titleLineLimit(
                     usesAccessibilityLayout: usesAccessibilityLayout
@@ -237,7 +244,7 @@ struct NoteRowView: View {
                 HStack(spacing: Constants.Notes.List.contentSpacing) {
                     ForEach(visibleTags.prefix(Constants.Notes.List.maximumTagCount), id: \.self) { tag in
                         Text(tag)
-                            .font(.caption)
+                            .interFont(Constants.Typography.subtextXXS)
                             .padding(.horizontal, Constants.Notes.List.tagHorizontalPadding)
                             .padding(.vertical, Constants.Notes.List.tagVerticalPadding)
                             .background(Theme.muted(for: colorScheme))
@@ -247,7 +254,7 @@ struct NoteRowView: View {
                 }
             } else if depth == 0, let preview = note.preview {
                 Text(preview)
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .lineLimit(Constants.Notes.List.previewLineLimit)
             }

@@ -33,8 +33,7 @@ struct MonitoredPrsRow: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("Monitored PRs")
-                    .font(.caption)
-                    .fontWeight(.medium)
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
 
                 ForEach(monitoredPrStore.activeMonitors.filter { $0.agentId == viewModel.agentId }) { monitor in
@@ -96,7 +95,7 @@ struct MonitoredPrsRow: View {
     private func chipLabel(_ monitor: MonitoredPr) -> some View {
         HStack(spacing: Constants.Conversation.StatusStrip.chipSpacing) {
             Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))
-                .font(.caption2)
+                .interFont(Constants.Typography.subtextXXS)
                 .lineLimit(1)
             if monitor.hasPendingChanges {
                 Circle()

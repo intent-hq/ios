@@ -6,6 +6,8 @@ extension Constants {
     /// SemiBold 600 matches directly. Figma's “Bold” body styles use Medium, not Bold.
     /// Tracking units remain unverified, and Figma line-height ratios are not imposed on text layout.
     /// Apply to text only; preserve native control, SF Symbol, and monospaced fonts.
+    /// Use `interFont` on SwiftUI text for Bold Text support. Unsupported scripts and emoji
+    /// use the platform's glyph fallback; Inter does not cover every Unicode character.
     enum Typography {
         private static let heading1Size: CGFloat = 40
         private static let heading2Size: CGFloat = 28
@@ -48,6 +50,25 @@ extension Constants.Typography {
         case regular = "Inter-Regular"
         case medium = "Inter-Medium"
         case semibold = "Inter-SemiBold"
+        case bold = "Inter-Bold"
+        case extraBold = "Inter-ExtraBold"
+        case italic = "Inter-Italic"
+        case mediumItalic = "Inter-MediumItalic"
+        case semiboldItalic = "Inter-SemiBoldItalic"
+        case boldItalic = "Inter-BoldItalic"
+        case extraBoldItalic = "Inter-ExtraBoldItalic"
+
+        /// Accessibility emphasis is separate from the documented Figma “Bold” tokens.
+        var legibleFace: Self {
+            switch self {
+            case .regular: .semibold
+            case .medium, .semibold: .bold
+            case .bold, .extraBold: .extraBold
+            case .italic: .semiboldItalic
+            case .mediumItalic, .semiboldItalic: .boldItalic
+            case .boldItalic, .extraBoldItalic: .extraBoldItalic
+            }
+        }
     }
 
     struct Style {
@@ -58,6 +79,15 @@ extension Constants.Typography {
         /// SwiftUI resolves scaling from the current environment; no fixed size or category cap.
         var font: Font {
             .custom(face.rawValue, size: size, relativeTo: relativeTo)
+        }
+
+        func font(legibilityWeight: LegibilityWeight?) -> Font {
+            withFace(legibilityWeight == .bold ? face.legibleFace : face).font
+        }
+
+        /// Preserve the size and scaling role when genuine bold/italic is required.
+        func withFace(_ face: Face) -> Self {
+            Self(face: face, size: size, relativeTo: relativeTo)
         }
     }
 }

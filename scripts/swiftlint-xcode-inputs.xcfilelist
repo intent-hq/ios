@@ -21,6 +21,7 @@ $(SRCROOT)/Intent/DesignSystem/ComposerLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ConnectionSheetStyle.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationMediaLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationTranscriptLayout.swift
+$(SRCROOT)/Intent/DesignSystem/InterFontModifier.swift
 $(SRCROOT)/Intent/DesignSystem/Layout.swift
 $(SRCROOT)/Intent/DesignSystem/MarkdownLayout.swift
 $(SRCROOT)/Intent/DesignSystem/PairingColors.swift
@@ -28,6 +29,7 @@ $(SRCROOT)/Intent/DesignSystem/QuestionWizardLayout.swift
 $(SRCROOT)/Intent/DesignSystem/SavedConnectionStyle.swift
 $(SRCROOT)/Intent/DesignSystem/TerminalAppearance.swift
 $(SRCROOT)/Intent/DesignSystem/Theme.swift
+$(SRCROOT)/Intent/DesignSystem/Typography+UIKit.swift
 $(SRCROOT)/Intent/DesignSystem/Typography.swift
 $(SRCROOT)/Intent/DesignSystem/VisionHitTarget.swift
 $(SRCROOT)/Intent/DesignSystem/WorkspaceChromeLayout.swift

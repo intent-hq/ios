@@ -17,12 +17,12 @@ struct ToastView: View {
 
                 VStack(alignment: .leading, spacing: Constants.Toast.textSpacing) {
                     Text(toast.agentName)
-                        .font(.subheadline.weight(.semibold))
+                        .interFont(Constants.Typography.bodyXS.withFace(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                     Text(toast.workspaceName)
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
@@ -30,7 +30,7 @@ struct ToastView: View {
                 Spacer()
 
                 Text("Done")
-                    .font(.caption.weight(.medium))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, Constants.Toast.horizontalPadding)

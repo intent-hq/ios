@@ -28,8 +28,10 @@ struct CreateWorkspaceSpecialistStepView: View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
             if isLoadingSpecialists {
-                ProgressView("Loading...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                ProgressView {
+                    Text("Loading...").interFont(Constants.Typography.bodyS)
+                }
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else {
                 optionsList
             }
@@ -43,6 +45,7 @@ struct CreateWorkspaceSpecialistStepView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Create", action: onCreate)
+                    .interFont(Constants.Typography.bodySEmphasized)
                     .disabled(CreateWorkspaceView.isCreateDisabled(
                         isCreating: isCreating,
                         isLoadingProviders: isLoadingProviders,
@@ -70,7 +73,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     }
 
     private var sourceSection: some View {
-        Section("Source") {
+        Section {
             VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
                 ForEach(CreateWorkspaceView.creationContextRows(
                     repositoryFullName: repositoryFullName,
@@ -79,19 +82,25 @@ struct CreateWorkspaceSpecialistStepView: View {
                     contextRow(row)
                 }
             }
+        } header: {
+            Text("Source").interFont(Constants.Typography.eyebrow)
         }
     }
 
     @ViewBuilder
     private var agentSection: some View {
-        Section("Agent") {
+        Section {
             adaptiveField("Specialist") { specialistPicker }
             if let providerGuidance {
                 Text(providerGuidance)
+                    .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 Button("Retry", action: onRetryProviders)
+                    .interFont(Constants.Typography.bodyS)
             } else if isLoadingProviders, providers.isEmpty {
-                ProgressView("Loading providers...")
+                ProgressView {
+                    Text("Loading providers...").interFont(Constants.Typography.bodyS)
+                }
             } else if providers.noneSelectable {
                 noProvidersSignedInPlaceholder
                     .listRowBackground(Theme.card(for: colorScheme))
@@ -101,6 +110,8 @@ struct CreateWorkspaceSpecialistStepView: View {
             if !providers.isEmpty, !models.isEmpty {
                 adaptiveField("Model") { modelPicker }
             }
+        } header: {
+            Text("Agent").interFont(Constants.Typography.eyebrow)
         }
     }
 
@@ -108,13 +119,15 @@ struct CreateWorkspaceSpecialistStepView: View {
         Section {
             TextField("What should the first agent work on?", text: $messageText, axis: .vertical)
                 .lineLimit(CreateWorkspaceView.initialMessageLineCountRange)
-                .font(.body)
+                .interFont(Constants.Typography.bodyS)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .listRowBackground(Theme.card(for: colorScheme))
         } header: {
             Text("Message")
+                .interFont(Constants.Typography.eyebrow)
         } footer: {
             Text("Optional. Add instructions for the first agent in this workspace.")
+                .interFont(Constants.Typography.subtextXXS)
         }
     }
 
@@ -124,7 +137,7 @@ struct CreateWorkspaceSpecialistStepView: View {
             set: { id in selectedSpecialist = specialists.first { $0.id == id } }
         )) {
             ForEach(specialists) { specialist in
-                Text(specialist.name).tag(specialist.id)
+                Text(specialist.name).interFont(Constants.Typography.bodyS).tag(specialist.id)
             }
         }
         .pickerStyle(.menu)
@@ -163,14 +176,16 @@ struct CreateWorkspaceSpecialistStepView: View {
         if CreateWorkspaceView.usesExpandedFormLayout(for: dynamicTypeSize) {
             VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
                 Text(label)
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 content()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         } else {
-            LabeledContent(label) {
+            LabeledContent {
                 content()
+            } label: {
+                Text(label).interFont(Constants.Typography.bodyS)
             }
         }
     }
@@ -181,19 +196,23 @@ struct CreateWorkspaceSpecialistStepView: View {
             if CreateWorkspaceView.usesExpandedFormLayout(for: dynamicTypeSize) {
                 VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
                     Text(row.label)
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     Text(row.value)
+                        .interFont(Constants.Typography.bodyS)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
-                LabeledContent(row.label) {
+                LabeledContent {
                     Text(row.value)
+                        .interFont(Constants.Typography.bodyS)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .multilineTextAlignment(.trailing)
                         .lineLimit(Constants.CreateWorkspace.contextValueLineLimit)
                         .truncationMode(.middle)
+                } label: {
+                    Text(row.label).interFont(Constants.Typography.bodyS)
                 }
             }
         }
@@ -204,10 +223,10 @@ struct CreateWorkspaceSpecialistStepView: View {
     private var noProvidersSignedInPlaceholder: some View {
         VStack(alignment: .leading, spacing: Constants.ModalPicker.placeholderSpacing) {
             Text("No providers are signed in")
-                .font(.subheadline.weight(.semibold))
+                .interFont(Constants.Typography.bodyXS.withFace(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
             Text("Set up a provider in the Intent desktop app, then come back and try again.")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .padding(.vertical, Constants.ModalPicker.rowVerticalPadding)
@@ -219,7 +238,7 @@ struct CreateWorkspaceSpecialistStepView: View {
             VStack(spacing: Constants.ModalPicker.loadingOverlaySpacing) {
                 ProgressView()
                 Text("Cloning repository…")
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
             }
             .padding(Constants.ModalPicker.loadingOverlayPadding)

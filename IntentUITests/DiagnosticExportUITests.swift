@@ -103,6 +103,7 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Export logs"].waitForExistence(timeout: Self.timeout))
         let share = app.buttons["diagnosticShareZIP"]
         XCTAssertTrue(share.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(share.label, "Share ZIP")
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: share)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.timeout), .completed)
         XCTAssertTrue(app.buttons["diagnosticClear"].exists)

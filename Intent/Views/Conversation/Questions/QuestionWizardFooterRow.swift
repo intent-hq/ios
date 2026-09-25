@@ -43,7 +43,7 @@ struct QuestionWizardFooterRow: View {
                     .font(.caption.weight(.semibold))
                     .accessibilityHidden(true)
                 Text("Back")
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
             }
             .foregroundStyle(
                 Theme.mutedForeground(for: colorScheme)
@@ -60,14 +60,14 @@ struct QuestionWizardFooterRow: View {
 
     private var selectionInstruction: some View {
         Text("Selecting an option advances")
-            .font(.caption)
+            .interFont(Constants.Typography.subtextXXS)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.instructionOpacity))
     }
 
     private var skipButton: some View {
         Button(action: onSkip) {
             Text("Skip")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
@@ -81,7 +81,7 @@ struct QuestionWizardFooterRow: View {
         Button(action: onNext) {
             HStack(spacing: Layout.buttonLabelSpacing) {
                 Text(isLast ? "Send" : "Next")
-                    .font(.caption.weight(.semibold))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
                 Image(systemName: isLast ? "arrow.up" : "arrow.right")
                     .font(.caption.weight(.semibold))
                     .accessibilityHidden(true)

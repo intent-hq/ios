@@ -161,7 +161,7 @@ private struct LinkedTaskCardRow: View {
         Button(action: onOpen) {
             HStack(spacing: Constants.Notes.Content.linkedTaskSpacing) {
                 Text(title)
-                    .font(.subheadline.weight(.medium))
+                    .interFont(Constants.Typography.bodyXSEmphasized)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 Spacer(minLength: 0)

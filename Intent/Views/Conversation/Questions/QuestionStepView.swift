@@ -33,12 +33,12 @@ struct QuestionStepView: View {
             VStack(alignment: .leading, spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
                 VStack(alignment: .leading, spacing: Layout.titleSpacing) {
                     Text(question.header.uppercased())
-                        .font(.caption.weight(.semibold))
+                        .interFont(Constants.Typography.eyebrow.withFace(.semibold))
                         .kerning(Layout.headerKerning)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .fixedSize(horizontal: false, vertical: true)
                     Text(question.question)
-                        .font(.subheadline.weight(.medium))
+                        .interFont(Constants.Typography.bodyXSEmphasized)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -96,12 +96,12 @@ struct QuestionStepView: View {
             }
             VStack(alignment: .leading, spacing: Layout.optionLabelSpacing) {
                 Text(option.label)
-                    .font(.footnote.weight(.medium))
+                    .interFont(Constants.Typography.bodyXSEmphasized)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .fixedSize(horizontal: false, vertical: true)
                 if let description = option.description {
                     Text(description)
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -173,7 +173,7 @@ struct QuestionStepView: View {
     /// One body line of the free-text field, measured with the font
     /// `SubmittableTextView` installs.
     static var freeTextLineHeight: CGFloat {
-        UIFont.preferredFont(forTextStyle: .body).lineHeight
+        Constants.Typography.bodyS.uiFont(compatibleWith: .current).lineHeight
     }
 
     /// Clamps the free-text field's reported content height between one
@@ -233,7 +233,7 @@ struct QuestionStepView: View {
             .frame(height: freeTextHeight)
             if freeText.isEmpty {
                 Text(Self.freeTextPlaceholder)
-                    .font(.body)
+                    .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .padding(
                         .leading,

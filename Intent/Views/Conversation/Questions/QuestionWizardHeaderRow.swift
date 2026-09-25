@@ -42,7 +42,7 @@ struct QuestionWizardHeaderRow: View {
                 .foregroundStyle(Theme.primary(for: colorScheme))
                 .accessibilityHidden(true)
             Text("Questions")
-                .font(.caption.weight(.medium))
+                .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
         }
     }
@@ -50,7 +50,7 @@ struct QuestionWizardHeaderRow: View {
     private var progress: some View {
         Group {
             Text("\(index + 1) of \(questionCount)")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             HStack(spacing: Layout.progressSegmentSpacing) {
                 ForEach(0..<questionCount, id: \.self) { segment in
@@ -67,7 +67,7 @@ struct QuestionWizardHeaderRow: View {
 
     private var multiSelectBadge: some View {
         Text("Select all that apply")
-            .font(.caption)
+            .interFont(Constants.Typography.subtextXXS)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .padding(.horizontal, Layout.multiSelectHorizontalPadding)
             .padding(.vertical, Layout.multiSelectVerticalPadding)
@@ -77,7 +77,7 @@ struct QuestionWizardHeaderRow: View {
     private var ignoreButton: some View {
         Button(action: onIgnore) {
             Text("Ignore")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,

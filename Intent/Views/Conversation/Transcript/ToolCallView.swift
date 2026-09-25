@@ -73,17 +73,17 @@ struct ToolCallView: View {
                 Text(classified.icon)
                     .font(.caption2)
                 Text(classified.verb)
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 if let subject = classified.subject {
                     Text(subject)
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .lineLimit(1)
                 }
                 if let path = classified.path {
                     Text(path)
-                        .font(.caption2)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.pathOpacity))
                         .lineLimit(1)
                 }
@@ -127,11 +127,13 @@ struct ToolCallView: View {
                     ProgressView()
                         .controlSize(.mini)
                     Text("Loading full content…")
+                        .interFont(Constants.Typography.subtextXXS)
                 } else {
                     Image(systemName: "arrow.down.circle")
                         .font(.caption2)
                         .accessibilityHidden(true)
                     Text(onHydrate != nil ? "Preview — tap to load full content" : "Preview")
+                        .interFont(Constants.Typography.subtextXXS)
                 }
             }
             .font(.caption2)
@@ -145,7 +147,7 @@ struct ToolCallView: View {
     private var inputSection: some View {
         Group {
             Text("Input")
-                .font(.caption.weight(.semibold))
+                .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             ScrollView(.horizontal) {
                 Text(formatJSON(block.input))
@@ -160,7 +162,7 @@ struct ToolCallView: View {
     private func resultSection(_ result: ContentBlock) -> some View {
         Divider()
         Text(hasError ? "Error" : "Result")
-            .font(.caption.weight(.semibold))
+            .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
             .foregroundStyle(hasError
                 ? Theme.destructive(for: colorScheme)
                 : Theme.mutedForeground(for: colorScheme))

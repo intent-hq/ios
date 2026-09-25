@@ -16,7 +16,8 @@ struct CompactMarkdownStyle: StructuredText.Style {
 
     let inlineStyle = InlineStyle()
         .code(
-            .monospaced,
+            // Inter has no monospaced design; select the system code font explicitly.
+            .font(.system(.body, design: .monospaced)),
             .fontScale(Constants.Markdown.codeFontScale),
             .foregroundColor(Self.codeForeground),
             .backgroundColor(Self.codeBackground)
@@ -42,8 +43,8 @@ extension StructuredText.Style where Self == CompactMarkdownStyle {
     static var compact: Self { .init() }
 }
 
-/// At the default `.body` size: h1 19.27pt/semibold, h2 18.13pt/semibold,
-/// h3 17pt/semibold, h4-h6 17pt/medium, with 8/6/4pt top and 4pt bottom margins.
+/// Keep the compact heading ratios and margins, using the Inter body baseline
+/// and real semibold/medium faces rather than changing the prose scaling role.
 struct CompactHeadingStyle: StructuredText.HeadingStyle {
     private static let maximumHeadingLevel = 6
     private static let arrayIndexOffset = 1
@@ -52,7 +53,9 @@ struct CompactHeadingStyle: StructuredText.HeadingStyle {
         let level = min(configuration.headingLevel, Self.maximumHeadingLevel)
         configuration.label
             .textual.fontScale(Constants.Markdown.Heading.fontScales[level - Self.arrayIndexOffset])
-            .fontWeight(Constants.Markdown.Heading.weights[level - Self.arrayIndexOffset])
+            .interFont(Constants.Typography.bodyS.withFace(
+                Constants.Markdown.Heading.weights[level - Self.arrayIndexOffset] == .semibold ? .semibold : .medium
+            ))
             .textual.blockSpacing(.init(
                 top: Constants.Markdown.Heading.topMargins[level - Self.arrayIndexOffset],
                 bottom: Constants.Markdown.Heading.bottomMargin
@@ -91,7 +94,7 @@ struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
             .textual.lineSpacing(.fontScaled(Constants.Markdown.lineSpacingScale))
             .textual.fontScale(Constants.Markdown.codeFontScale)
             .fixedSize(horizontal: false, vertical: true)
-            .monospaced()
+            .font(.system(.body, design: .monospaced))
             .padding(Constants.Markdown.CodeBlock.contentPadding)
             .background(Self.background)
             .clipShape(RoundedRectangle(cornerRadius: Constants.Markdown.CodeBlock.cornerRadius))
@@ -99,12 +102,11 @@ struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
     }
 }
 
-/// 17pt cells at the default `.body` size, semibold header row, and the old
-/// 0.72em/0.35em cell padding.
+/// Inter body cells, a semibold header row, and the existing 0.72em/0.35em padding.
 struct CompactTableCellStyle: StructuredText.TableCellStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .fontWeight(configuration.row == 0 ? .semibold : .regular)
+            .interFont(Constants.Typography.bodyS.withFace(configuration.row == 0 ? .semibold : .regular))
             .fixedSize(horizontal: false, vertical: true)
             .textual.lineSpacing(.fontScaled(Constants.Markdown.lineSpacingScale))
             .textual.padding(.horizontal, .fontScaled(Constants.Markdown.TableCell.horizontalPaddingScale))

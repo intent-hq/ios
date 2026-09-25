@@ -9,6 +9,7 @@ struct ImageDecodeFailureView: View {
             Image(systemName: "photo")
                 .accessibilityHidden(true)
             Text("Image")
+                .interFont(Constants.Typography.subtextXXS)
         }
         .font(.caption)
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))

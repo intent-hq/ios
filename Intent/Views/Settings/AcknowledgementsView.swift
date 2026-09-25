@@ -71,18 +71,18 @@ struct AcknowledgementsView: View {
     private func acknowledgementCard(_ entry: Entry) -> some View {
         VStack(alignment: .leading, spacing: Layout.entrySpacing) {
             Text(entry.name)
-                .font(.caption.weight(.medium))
+                .interFont(Constants.Typography.eyebrow.withFace(.medium))
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .textCase(.uppercase)
             VStack(alignment: .leading, spacing: Layout.licenseSpacing) {
                 Text(entry.licenseTitle)
-                    .font(.body.weight(.medium))
+                    .interFont(Constants.Typography.bodySEmphasized)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 Text(entry.url)
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 Text(entry.licenseText)
-                    .font(.caption.monospaced())
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .textSelection(.enabled)
             }

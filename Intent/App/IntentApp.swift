@@ -374,13 +374,16 @@ private struct RemovedBackendPlaceholderView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text("Connection Removed")
-                .font(.headline)
+                .interFont(Constants.Typography.bodyM.withFace(.semibold))
             Text("This connection is no longer saved.")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Close Window") { onClose() }
-                .buttonStyle(.bordered)
+            Button(action: onClose) {
+                Text("Close Window")
+                    .interFont(Constants.Typography.bodyS)
+            }
+            .buttonStyle(.bordered)
         }
         .padding()
     }

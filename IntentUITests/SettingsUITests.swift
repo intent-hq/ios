@@ -55,10 +55,10 @@ nonisolated final class SettingsUITests: XCTestCase {
         openSettings(app)
         reveal(app.buttons["Manual Connection"], in: app)
         app.buttons["Manual Connection"].tap()
-        let manual = app.navigationBars["Manual Connection"]
+        let manual = app.staticTexts["manual.title"]
         XCTAssertTrue(manual.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["Connect"].exists)
-        manual.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["manual.connect"].exists)
+        app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(manual.waitForNonExistence(timeout: Self.timeout))
         reveal(app.buttons["QR Code"], in: app)
         app.buttons["QR Code"].tap()
@@ -70,6 +70,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         app.buttons["Acknowledgements"].tap()
         let acknowledgements = app.navigationBars["Acknowledgements"]
         XCTAssertTrue(acknowledgements.waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Settings-Acknowledgements")
         acknowledgements.buttons.firstMatch.tap()
         XCTAssertTrue(acknowledgements.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)

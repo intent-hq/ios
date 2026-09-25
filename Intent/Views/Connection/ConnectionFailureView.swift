@@ -74,7 +74,7 @@ struct ConnectionFailureView: View {
             Button {
                 showingDiagnosticLogs = true
             } label: {
-                Label("Export logs", systemImage: "doc.zipper")
+                Label { Text("Export logs").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "doc.zipper") }
             }
         }
         .padding(.horizontal, Constants.ConnectionFailure.controlsHorizontalPadding)
@@ -94,7 +94,7 @@ struct ConnectionFailureView: View {
                 ProgressView()
                 if attemptNumber > 1 {
                     Text("Attempt \(attemptNumber)")
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 }
             }
@@ -114,8 +114,8 @@ struct ConnectionFailureView: View {
                 stopAutoRetry()
                 coordinator.onLogOff()
             } label: {
-                Label("Retry Log Off", systemImage: "rectangle.portrait.and.arrow.forward")
-                    .frame(maxWidth: .infinity)
+                Label { Text("Retry Log Off").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "rectangle.portrait.and.arrow.forward") }
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .tint(Theme.primary(for: colorScheme))
@@ -127,10 +127,11 @@ struct ConnectionFailureView: View {
             stopAutoRetry()
             coordinator.onReconnect()
         } label: {
-            Label(
-                isCertMismatch ? "Re-pair Device" : "Connect to Different Server",
-                systemImage: isCertMismatch ? "arrow.triangle.2.circlepath" : "link.badge.plus"
-            )
+            Label {
+                Text(isCertMismatch ? "Re-pair Device" : "Connect to Different Server").interFont(Constants.Typography.bodyS)
+            } icon: {
+                Image(systemName: isCertMismatch ? "arrow.triangle.2.circlepath" : "link.badge.plus")
+            }
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
@@ -142,7 +143,7 @@ struct ConnectionFailureView: View {
         if !savedConnections.isEmpty {
             VStack(alignment: .leading, spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
                 Text("Saved Connections")
-                    .font(.caption.weight(.semibold))
+                    .interFont(Constants.Typography.eyebrow.withFace(.semibold))
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 ScrollView {
                     VStack(spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
@@ -158,12 +159,12 @@ struct ConnectionFailureView: View {
     private var helpText: some View {
         VStack(spacing: Constants.ConnectionFailure.helpSpacing) {
             Text(retryPolicy == .manualLogOff ? "Connection Kept" : "Troubleshooting")
-                .font(.caption.weight(.semibold))
+                .interFont(Constants.Typography.eyebrow.withFace(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
             Text(retryPolicy == .manualLogOff
                  ? "Your saved connection and settings were kept so you can retry logging off."
                  : "• Make sure Intent is running on your Mac\n• Check that both devices are on the same network\n• Verify the WebSocket API is enabled in Settings")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .multilineTextAlignment(.leading)
         }
@@ -220,10 +221,10 @@ struct ConnectionFailureView: View {
 
                 VStack(alignment: .leading, spacing: Constants.ConnectionFailure.savedConnectionTextSpacing) {
                     Text(connection.displayName)
-                        .font(.subheadline.weight(.medium))
+                        .interFont(Constants.Typography.bodyXSEmphasized)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                     Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 }
 
@@ -369,10 +370,10 @@ extension ConnectionFailureView {
     private var failureTitle: some View {
         VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
             Text(retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can't Connect")
-                .font(.title2.bold())
+                .interFont(Constants.Typography.heading2.withFace(.bold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
             Text(errorMessage)
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)

@@ -245,7 +245,7 @@ private struct PendingQuestionRecoveryPlaceholder: View {
             ProgressView()
                 .controlSize(.small)
             Text("Loading questions...")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .frame(maxWidth: .infinity)
@@ -263,7 +263,7 @@ private struct ConversationLoadingView: View {
         VStack(spacing: Layout.contentSpacing) {
             ProgressView()
             Text("Loading conversation...")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
     }
@@ -283,18 +283,18 @@ private struct ConversationEmptyView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text(name)
-                    .font(.headline)
+                    .interFont(Constants.Typography.bodyM)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 if let description = viewModel.specialistDescription {
                     Text(description)
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, Layout.descriptionHorizontalPadding)
                 }
                 if let displayName = viewModel.currentModelDisplayName {
                     Text("Using \(displayName)")
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.modelCaptionOpacity))
                         .padding(.top, Layout.modelCaptionTopPadding)
                 }
@@ -306,14 +306,14 @@ private struct ConversationEmptyView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("No messages yet")
-                    .font(.headline)
+                    .interFont(Constants.Typography.bodyM)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 Text("Messages will appear here as the agent works.")
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 if let displayName = viewModel.currentModelDisplayName {
                     Text("Using \(displayName)")
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.modelCaptionOpacity))
                         .padding(.top, Layout.modelCaptionTopPadding)
                 }

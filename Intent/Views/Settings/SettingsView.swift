@@ -81,7 +81,11 @@ struct SettingsView: View {
 
     private var logOffButton: some View {
         Button { showLogOffConfirmation = true } label: {
-            Label("Log Off", systemImage: "rectangle.portrait.and.arrow.right")
+            Label {
+                Text("Log Off").interFont(Constants.Typography.bodySEmphasized)
+            } icon: {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+            }
                 .font(.callout.weight(.medium))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, SettingsStyle.rowVerticalPadding)

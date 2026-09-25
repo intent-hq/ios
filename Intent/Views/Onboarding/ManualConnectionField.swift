@@ -18,7 +18,6 @@ struct ManualConnectionField<Content: View>: View {
                 .accessibilityHidden(true)
             content
                 .textFieldStyle(.plain)
-                .font(Constants.Typography.bodySEmphasized.font)
                 .tracking(Constants.Pairing.optionTitleTracking)
                 .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                 .padding(.horizontal, Constants.ConnectionSheet.inset)

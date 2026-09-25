@@ -51,9 +51,18 @@ struct IntentFileVideoFailureAttachment: Attachment {
 
     var body: some View {
         VStack(spacing: Constants.Conversation.ImagePlaceholder.failureLabelSpacing) {
-            Label("Video", systemImage: "video")
-            Text(name).lineLimit(2).truncationMode(.middle)
-            if retrySource != nil { Text("Tap to retry") }
+            Label {
+                Text("Video").interFont(Constants.Typography.subtextXXS)
+            } icon: {
+                Image(systemName: "video")
+            }
+            Text(name)
+                .interFont(Constants.Typography.subtextXXS)
+                .lineLimit(2)
+                .truncationMode(.middle)
+            if retrySource != nil {
+                Text("Tap to retry").interFont(Constants.Typography.subtextXXS)
+            }
         }
         .font(.caption)
         .lineLimit(1)
