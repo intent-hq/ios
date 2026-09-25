@@ -483,10 +483,7 @@ $(SRCROOT)/IntentTests/FakeConnectionManagerRecords.swift
 $(SRCROOT)/IntentTests/FakeConnectionManagerTests.swift
 $(SRCROOT)/IntentTests/Fixtures
 $(SRCROOT)/IntentTests/Fixtures/backend-keychain
-$(SRCROOT)/IntentTests/Fixtures/backend-keychain.lock.json
 $(SRCROOT)/IntentTests/Fixtures/backend-keychain/v1
-$(SRCROOT)/IntentTests/Fixtures/backend-keychain/v1/corpus.json
-$(SRCROOT)/IntentTests/Fixtures/backend-keychain/v1/manifest.json
 $(SRCROOT)/IntentTests/GitHubRepoStoreBranchCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
