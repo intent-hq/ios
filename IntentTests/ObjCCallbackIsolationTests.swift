@@ -28,7 +28,8 @@ struct ObjCCallbackIsolationTests {
         ".setMetadataObjectsDelegate(",             // AVCaptureMetadataOutput
         ".addObserver(forName",                    // NotificationCenter — posting thread
         ".pathUpdateHandler =",                    // Network — connection/monitor queue
-        ".viabilityUpdateHandler ="                // NWConnection — connection queue
+        ".viabilityUpdateHandler =",               // NWConnection — connection queue
+        ".completionWithItemsHandler ="            // UIActivityViewController — defensive isolation boundary
     ]
 
     /// How many lines below a match to search for the opening `{` of a

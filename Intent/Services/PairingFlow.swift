@@ -25,14 +25,19 @@ enum PairingFlow {
     /// the payload's hosts.
     static func resolveFingerprint(
         for payload: PairingPayload,
+        diagnostics: DiagnosticStore = .shared,
         probe: ([String], Int) async -> CertFingerprintProbe.ProbeResult = { hosts, port in
             await CertFingerprintProbe.probeFirst(hosts: hosts, port: port)
         }
     ) async -> FingerprintResolution {
+        PairingDiagnostics.phase(.input, .started, store: diagnostics)
         if let fingerprint = payload.certFingerprint {
+            PairingDiagnostics.phase(.input, .succeeded, store: diagnostics)
             return .pinned(fingerprint)
         }
+        PairingDiagnostics.phase(.probe, .started, store: diagnostics)
         let probed = await probe(payload.hosts, payload.port)
+        PairingDiagnostics.probeResult(probed, store: diagnostics)
         switch CertFingerprintProbe.outcome(forProbe: probed) {
         case .confirmFingerprint(let fingerprint):
             return .needsUserConfirmation(fingerprint)
@@ -52,20 +57,30 @@ enum PairingFlow {
         payload: PairingPayload,
         certFingerprint: String,
         connectionManager: any SessionConnectionManaging,
-        persistence: PersistenceManager = .shared
+        persistence: PersistenceManager = .shared,
+        diagnostics: DiagnosticStore = .shared
     ) async throws -> StoredConnection {
-        try await connectionManager.connect(
-            hosts: payload.hosts,
-            port: payload.port,
-            token: payload.token,
-            certFingerprint: certFingerprint,
-            tcAddress: payload.tcAddress
-        )
+        PairingDiagnostics.phase(.connect, .started, store: diagnostics)
+        do {
+            try await DiagnosticConnectContext.$origin.withValue(.pairing) {
+                try await connectionManager.connect(
+                    hosts: payload.hosts,
+                    port: payload.port,
+                    token: payload.token,
+                    certFingerprint: certFingerprint,
+                    tcAddress: payload.tcAddress
+                )
+            }
+        } catch {
+            PairingDiagnostics.phase(.connect, error is CancellationError || Task.isCancelled ? .cancelled : .failed, store: diagnostics)
+            throw error
+        }
         // A cancelled pairing (deep-link sheet dismissed mid-flight) must
         // not be persisted after the connect happens to complete first —
         // and the just-established authenticated socket must not be left
         // dangling with no UI reflecting it.
         if Task.isCancelled {
+            PairingDiagnostics.phase(.connect, .cancelled, store: diagnostics)
             connectionManager.disconnect()
             throw CancellationError()
         }
@@ -78,13 +93,18 @@ enum PairingFlow {
             tcAddress: payload.tcAddress
         )
         do {
-            return try await ConnectionPairing.finalize(
+            PairingDiagnostics.phase(.save, .started, store: diagnostics)
+            let stored = try await ConnectionPairing.finalize(
                 server: server,
                 token: payload.token,
                 connection: connectionManager,
                 persistence: persistence
             )
+            PairingDiagnostics.phase(.save, .succeeded, store: diagnostics)
+            return stored
         } catch {
+            // The persistence task owns the save failure; this is phase context.
+            PairingDiagnostics.phase(.save, error is CancellationError ? .cancelled : .failed, store: diagnostics)
             // The authenticated socket belongs to this failed pairing attempt;
             // do not leave it live when no saved connection can own it.
             connectionManager.disconnect()

@@ -312,6 +312,7 @@ extension ConversationStore {
             source: "agent:queue:updated"
         ) {
             queuedMessages = decoded
+            reconcileSendAttempts(queue: decoded)
             return
         }
         if let agentId {
@@ -330,6 +331,7 @@ extension ConversationStore {
     private func handleUserMessageSent(_ data: [String: Any]) {
         guard let messageId = data["messageId"] as? String,
               let content = data["content"] as? String else { return }
+        confirmSendAttempt(messageId, status: .accepted, confirmedMessageId: messageId)
         guard !messages.contains(where: { $0.id == messageId }) else { return }
 
         let userMessage = ConversationMessage(

@@ -445,6 +445,12 @@ enum DemoFixtures {
             let blockId = params["blockId"] as? String
             guard let block = longConversationFullBlock(id: blockId) else { return [String: Any]() }
             return ["block": block]
+        case "agent.sendMessage":
+            // Static transcripts have no replying agent; acknowledge the send
+            // without replacing its optimistic row or ending the Thinking state.
+            var response: [String: Any] = ["success": true, "queued": false]
+            response["messageId"] = params["messageId"] as? String
+            return response
         case "agent.getQueue":
             return ["queue": [[String: Any]]()]
         case "agent.getSubscriptions":

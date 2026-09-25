@@ -35,8 +35,8 @@ struct ConnectionLossPresenter: UIViewRepresentable {
             isPresented: isPresented,
             content: AnyView(content.environment(\.self, context.environment))
         )
-        // An initial update can precede didMoveToWindow. Keep that pending
-        // content; only an actual removal/dismantle is a detach.
+        // An initial update can precede didMoveToWindow. Window membership
+        // can also disappear temporarily; dismantle owns permanent teardown.
         if let window = uiView.window { coordinator.attach(to: window) }
     }
 
@@ -54,6 +54,10 @@ struct ConnectionLossPresenter: UIViewRepresentable {
         }
     }
 
+    enum HideReason: String {
+        case sourceWindowChanged, detached, presentationEnded, explicit
+    }
+
     @MainActor
     final class Coordinator {
         private weak var sourceWindow: UIWindow?
@@ -65,18 +69,19 @@ struct ConnectionLossPresenter: UIViewRepresentable {
         private var content = AnyView(EmptyView())
 
         func attach(to window: UIWindow?) {
-            guard let window else {
-                detach()
-                return
-            }
+            // UIKit/SwiftUI may temporarily remove the anchor during scene
+            // transitions. A missing window is not a request to dismiss an
+            // existing loss or discard pending content. Keep the source until
+            // a real rebind, recovery, Home, or dismantleUIView tears it down.
+            guard let window else { return }
             guard sourceWindow !== window else { return }
-            hide()
+            hide(reason: .sourceWindowChanged)
             sourceWindow = window
             refresh()
         }
 
         func detach() {
-            hide()
+            hide(reason: .detached)
             isPresented = false
             content = AnyView(EmptyView())
             sourceWindow = nil
@@ -101,7 +106,7 @@ struct ConnectionLossPresenter: UIViewRepresentable {
 
         private func refresh() {
             guard isPresented, let sourceWindow, let scene = sourceWindow.windowScene else {
-                hide()
+                hide(reason: .presentationEnded)
                 return
             }
             var transaction = Transaction(animation: nil)
@@ -129,17 +134,20 @@ struct ConnectionLossPresenter: UIViewRepresentable {
                     self.host = host
                     overlayWindow = window
                     window.makeKeyAndVisible()
+                    DemoConnectionLoss.record("overlay-presented")
                     window.layoutIfNeeded()
                     UIAccessibility.post(notification: .screenChanged, argument: host.view)
                 }
             }
         }
 
-        func hide() {
+        func hide(reason: HideReason = .explicit) {
             guard let overlayWindow else { return }
             UIView.performWithoutAnimation {
                 let wasKey = overlayWindow.isKeyWindow
                 overlayWindow.isHidden = true
+                DemoConnectionLoss.record("overlay-dismissed")
+                DemoConnectionLoss.record("overlay-dismissed-\(reason.rawValue)")
                 host?.rootView = AnyView(EmptyView())
                 overlayWindow.rootViewController = nil
                 sourceWindow?.accessibilityElementsHidden = sourceAccessibilityHidden

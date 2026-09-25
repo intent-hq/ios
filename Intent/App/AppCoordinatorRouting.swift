@@ -43,6 +43,7 @@ extension AppCoordinator {
     /// The URL itself is never logged — pair payloads carry the auth token.
     func handleIncomingURL(_ url: URL) {
         guard let payload = PairingPayload.parse(url.absoluteString) else {
+            if url.scheme == "intent", url.host == "pair" { PairingDiagnostics.invalidInput() }
             AppLog.app.info("[AppCoordinator] Ignoring non-pairing deep link")
             return
         }
@@ -155,6 +156,9 @@ extension AppCoordinator {
     /// made on other devices while the app was backgrounded show up.
     func onScenePhaseActive() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        connectionLossPresentation.becameActive { [weak self] in
+            self?.reconcileBackgroundRecovery()
+        }
         dependencies.backgroundTaskManager.endIfNeeded()
         refreshSyncedBackends()
     }
@@ -164,6 +168,15 @@ extension AppCoordinator {
     func onScenePhaseNotActive() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
         dependencies.backgroundTaskManager.beginIfNeeded()
+    }
+
+    /// Inactive alone (Control Center, permissions, etc.) is not a background
+    /// return and must not delay an ordinary foreground connection failure.
+    func onScenePhaseBackground() {
+        guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        connectionLossPresentation.enteredBackground(
+            eligible: lifecycleState.hasEnteredRemoteUI && !showsConnectionLossOverlay
+        )
     }
 
     /// Merges the iCloud-synced backend registry into the saved connections
@@ -373,14 +386,16 @@ extension AppCoordinator {
     /// pairing surface, offering any remaining saved connections).
     @discardableResult
     func onLogOff() -> Bool {
-        if let record = windowConnection {
-            guard dependencies.persistence.deleteConnection(id: record.id) else {
+        // Use the window's identity, not an optional storage lookup that can
+        // disappear on read failure and falsely report a successful Log Off.
+        if let connectionID = windowConnectionID {
+            guard dependencies.persistence.deleteConnection(id: connectionID) else {
                 AppLog.app.error("[AppCoordinator] Failed to forget saved connection during log off")
                 handleFailedLogOff()
                 return false
             }
-            dependencies.persistence.clearLastScreen(for: record.id)
-            dependencies.sessionRegistry.markBackendRemoved(BackendID(record.id))
+            dependencies.persistence.clearLastScreen(for: connectionID)
+            dependencies.sessionRegistry.markBackendRemoved(BackendID(connectionID))
         }
         exitRemovedBackend()
         return true

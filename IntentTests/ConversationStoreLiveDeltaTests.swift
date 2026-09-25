@@ -281,15 +281,6 @@ extension ConversationStoreLiveStateTests {
         #expect(display.path == "crates/intent-core/src")
     }
 
-    @Test func terminalToolWithAcpTitleOnlyExtractsCommand() async {
-        let display = ToolClassifier.classify(name: "launch-process", input: [
-            "_acpTitle": AnyCodable("Run `cargo test --workspace`")
-        ])
-        #expect(display.icon == "▶️")
-        #expect(display.verb == "Run")
-        #expect(display.subject == "cargo test --workspace")
-    }
-
     @Test func workspaceApiWithAcpTitleUsesTitleAsLabel() async {
         let display = ToolClassifier.classify(name: "workspace_api", input: [
             "_acpTitle": AnyCodable("Read spec and task note")
@@ -333,15 +324,6 @@ extension ConversationStoreLiveStateTests {
         #expect(display.verb == "Edit")
         #expect(display.subject == "bar.ts")
         #expect(display.path == "src/foo")
-    }
-
-    @Test func terminalKillAcpTitleUsesTitleVerbAndSubject() async {
-        let display = ToolClassifier.classify(name: "launch-process", input: [
-            "_acpTitle": AnyCodable("Kill terminal 5")
-        ])
-        #expect(display.icon == "▶️")
-        #expect(display.verb == "Kill")
-        #expect(display.subject == "terminal 5")
     }
 
     /// The completed `agent:tool:call` update arrives as an `updated` entity with

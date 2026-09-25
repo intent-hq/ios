@@ -324,7 +324,7 @@ extension ConnectionManagerTests {
             )
             Issue.record("expected connectViaTunnel to throw")
         } catch let error as WebSocketTransportError {
-            guard case let .failed(host, message) = error else {
+            guard case let .failed(host, message, _) = error else {
                 Issue.record("unexpected transport error: \(error)")
                 return
             }

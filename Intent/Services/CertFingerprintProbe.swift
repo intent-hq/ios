@@ -317,19 +317,32 @@ enum CertFingerprintProbe {
     nonisolated static func probeFirst(
         hosts: [String],
         port: Int,
+        diagnostics: DiagnosticStore = .shared,
         probe: @Sendable (String, Int) async -> ProbeResult = { host, port in
             await Self.probe(host: host, port: port)
         }
     ) async -> ProbeResult {
         var last: ProbeResult = .noHosts
+        var hadFailure = false
         for host in hosts {
             last = await probe(host, port)
             switch last {
             case .fingerprint(let fingerprint) where !fingerprint.isEmpty:
+                if hadFailure { PairingDiagnostics.phase(.probe, .recovered, store: diagnostics) }
                 return last
             case .cancelled:
                 return last
             default:
+                hadFailure = true
+                diagnostics.record(DiagnosticEvent(
+                    kind: .pairingPhase,
+                    operation: .pairingPhase,
+                    site: .trustProbe,
+                    stage: .probe,
+                    outcome: .fallbackPending,
+                    failure: TransportDiagnosticFailure.probe(last),
+                    effect: .candidateRejected
+                ))
                 continue
             }
         }

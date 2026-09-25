@@ -64,7 +64,7 @@ enum ConnectionPairing {
         guard !outcome.registryUndecodable else { throw PersistenceError.registryUndecodable }
         guard outcome.persisted else { throw PersistenceError.saveFailed }
         let stored = outcome.connection
-        persistence.setActiveConnection(id: stored.id)
+        guard persistence.setActiveConnection(id: stored.id) else { throw PersistenceError.saveFailed }
         // Re-trigger the post-connect route refresh now that the record exists:
         // the refresh fired by connect() may have run before the upsert above
         // and found no stored record to persist the daemon-reported IPs into.

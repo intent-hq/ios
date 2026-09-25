@@ -18,8 +18,11 @@ import SwiftUI
     }
     @ObservationIgnored var onStreamingChanged: ((Bool) -> Void)?
     var isStreaming: Bool {
-        get { liveTranscript.isStreaming }
-        set { liveTranscript.isStreaming = newValue }
+        get { liveTranscript.isStreaming || !sendThinkingMessageIds.isEmpty }
+        set {
+            liveTranscript.isStreaming = newValue
+            sendThinkingMessageIds.removeAll()
+        }
     }
     var isLoading: Bool {
         get { liveTranscript.isLoading }
@@ -88,7 +91,16 @@ import SwiftUI
     @ObservationIgnored var pendingQuestionRecoveryTask: Task<Void, Never>?
     @ObservationIgnored var markedQuestionRetryDelays: [Duration] =
         ConversationStore.defaultMarkedQuestionRetryDelays
-    var lastFailedSend: (messageId: String, content: String)?
+    var sendAttempts: [ConversationSendAttempt] = []
+    var lastFailedSend: ConversationSendAttempt? {
+        sendAttempts.last { $0.status.needsRecovery }
+    }
+    var sendThinkingMessageIds: Set<String> = [] {
+        didSet {
+            let wasStreaming = liveTranscript.isStreaming || !oldValue.isEmpty
+            if wasStreaming != isStreaming { onStreamingChanged?(isStreaming) }
+        }
+    }
     var hydratingBlockKeys: Set<String> {
         get { liveTranscript.hydratingBlockKeys }
         set { liveTranscript.hydratingBlockKeys = newValue }
@@ -100,14 +112,24 @@ import SwiftUI
         self.commands = commands
         self.watchedAgentCoordinator = ConversationWatchedAgents(commands: commands)
         self.liveTranscript = ConversationLiveTranscript(connectionManager: connectionManager)
-        liveTranscript.onStreamingChanged = { [weak self] isStreaming in
-            self?.onStreamingChanged?(isStreaming)
+        liveTranscript.onStreamingChanged = { [weak self] _ in
+            guard let self else { return }
+            onStreamingChanged?(isStreaming)
         }
         liveTranscript.onSubscribeError = { [weak self] error in
             self?.raiseAgentNotFoundIfDefinitive(error)
         }
         liveTranscript.onTranscriptReplaced = { [weak self] in
             self?.reconcilePendingQuestionRecovery()
+        }
+        liveTranscript.onAuthoritativeMessages = { [weak self] messages, hasActivityState in
+            // A user-row delta confirms delivery, not the end of a turn.
+            // Only a snapshot or assistant activity replaces optimistic Thinking.
+            if hasActivityState { self?.sendThinkingMessageIds.removeAll() }
+            self?.reconcileSendAttempts(messages: messages)
+        }
+        commands.onQueueSnapshot = { [weak self] queue in
+            self?.reconcileSendAttempts(queue: queue)
         }
         observeConnection()
     }

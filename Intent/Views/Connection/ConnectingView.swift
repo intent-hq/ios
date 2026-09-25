@@ -62,13 +62,15 @@ struct ConnectingView: View {
             }
 
             do {
-                try await session.connection.connect(
-                    hosts: connection.server.hosts,
-                    port: connection.server.port,
-                    token: connection.token,
-                    certFingerprint: connection.server.certFingerprint,
-                    tcAddress: connection.server.tcAddress
-                )
+                try await DiagnosticConnectContext.$origin.withValue(.saved) {
+                    try await session.connection.connect(
+                        hosts: connection.server.hosts,
+                        port: connection.server.port,
+                        token: connection.token,
+                        certFingerprint: connection.server.certFingerprint,
+                        tcAddress: connection.server.tcAddress
+                    )
+                }
             } catch {
                 // A bumped connectionAttemptId cancels this task and starts a
                 // replacement: the superseded attempt's failure must not stomp

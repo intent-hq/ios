@@ -12,6 +12,7 @@ struct ConnectionFailureView: View {
     @State private var attemptNumber = 0
     @State private var retryTask: Task<Void, Never>?
     @State private var savedConnections: [StoredConnection] = []
+    @State private var showingDiagnosticLogs = false
 
     var body: some View {
         ZStack {
@@ -29,6 +30,9 @@ struct ConnectionFailureView: View {
         .onChange(of: isCertMismatch) { applyRetryPolicy() }
         .onDisappear {
             stopAutoRetry()
+        }
+        .sheet(isPresented: $showingDiagnosticLogs) {
+            DiagnosticExportView()
         }
     }
 
@@ -67,6 +71,11 @@ struct ConnectionFailureView: View {
             manualLogOffButton
             reconnectButton
             savedConnectionsSection
+            Button {
+                showingDiagnosticLogs = true
+            } label: {
+                Label("Export logs", systemImage: "doc.zipper")
+            }
         }
         .padding(.horizontal, Constants.ConnectionFailure.controlsHorizontalPadding)
     }
@@ -297,13 +306,15 @@ struct ConnectionFailureView: View {
             }
 
             do {
-                try await connection.connect(
-                    hosts: record.server.hosts,
-                    port: record.server.port,
-                    token: record.token,
-                    certFingerprint: record.server.certFingerprint,
-                    tcAddress: record.server.tcAddress
-                )
+                try await DiagnosticConnectContext.$origin.withValue(.failureScreenRetry) {
+                    try await connection.connect(
+                        hosts: record.server.hosts,
+                        port: record.server.port,
+                        token: record.token,
+                        certFingerprint: record.server.certFingerprint,
+                        tcAddress: record.server.tcAddress
+                    )
+                }
                 // A cancelled retry must never route: the user may have
                 // switched to another saved connection while this connect
                 // was in flight, and a stale success would restore the

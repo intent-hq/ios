@@ -128,6 +128,7 @@ enum Constants {
     typealias Conversation = ConversationConstants
 
     enum AppCoordination {
+        static let backgroundRecoveryGrace: Duration = .seconds(1)
         private static let reconnectOverlayTimeoutSeconds = 5
         static let reconnectOverlayTimeout: Duration = .seconds(reconnectOverlayTimeoutSeconds)
     }

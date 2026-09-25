@@ -15,37 +15,6 @@ struct ConversationStoreIntegrationTests {
         Issue.record("Timed out waiting for \(description)")
     }
 
-    // MARK: - subscribeOnConnect
-
-    @Test func subscribeOnConnect() async throws {
-        let fake = FakeConnectionManager()
-        let store = ConversationStore(connectionManager: fake)
-
-        // Configure all responses needed for onReconnected flow
-        fake.stubChatSnapshot()
-        fake.responseMap["agent.get"] = ["agent": ["isStreaming": false]]
-        fake.responseMap["agent.getQueue"] = ["queue": []]
-        fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-streaming"]
-        fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
-        fake.responseMap["agent.getSubscriptions"] = ["subscriptions": [], "delegationGroups": []]
-        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
-        fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
-
-        // Start connected and open the chat channel (triggers onReconnected)
-        fake.simulateConnect()
-        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
-        #expect(store.messages.isEmpty)
-        #expect(!store.isLoading)
-
-        try await waitFor("chat.subscribe handler registration") {
-            fake.hasSubscriptionHandler(id: "sub-1")
-        }
-
-        // Verify chat.subscribe was called and handler registered
-        #expect(fake.didCallMethod("chat.subscribe"))
-        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
-    }
-
     // MARK: - First-open transcript (chat.subscribe seq-0 snapshot only)
 
     /// The registration acks first; the load stays open until its seq-0

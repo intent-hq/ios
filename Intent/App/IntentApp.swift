@@ -6,6 +6,7 @@ struct IntentApp: App {
     @AppStorage("appThemePreference") private var themePreference: String = "system"
 
     init() {
+        LifecycleDiagnostics.sessionStarted()
         DemoConnectionLoss.seedSavedMachineIfNeeded()
         _ = NotificationManager.shared
         // Aggregate agent alerts across every live backend session: each
@@ -130,7 +131,9 @@ struct SessionWindowRoot: View {
                     coordinator.onScenePhaseActive()
                 } else {
                     coordinator.onScenePhaseNotActive()
+                    if phase == .background { coordinator.onScenePhaseBackground() }
                 }
+                DemoConnectionLoss.sceneChanged(phase, connection: session.connection)
             }
     }
 }
