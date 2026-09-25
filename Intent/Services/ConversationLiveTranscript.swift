@@ -27,6 +27,9 @@ final class ConversationLiveTranscript {
     /// Fired after the live chat channel replaced (snapshot) or merged (delta)
     /// the transcript, so the owner can reconcile state keyed on row residency.
     @ObservationIgnored var onTranscriptReplaced: (@MainActor () -> Void)?
+    /// Only incoming server rows, never the merged array containing optimistic
+    /// local rows. A delta about another message cannot confirm a local send.
+    @ObservationIgnored var onAuthoritativeMessages: (@MainActor ([ConversationMessage], Bool) -> Void)?
 
     let connectionManager: ConnectionManagerRouting
     var agentId: String?
@@ -288,6 +291,7 @@ extension ConversationLiveTranscript {
         )
         isLoading = false
         resumeSnapshotWaiters()
+        onAuthoritativeMessages?(snapshotMessages, true)
         onTranscriptReplaced?()
     }
 
@@ -328,6 +332,11 @@ extension ConversationLiveTranscript {
                 + "updated=\(delta.updated.count), removed=\(delta.removedIds.count), "
                 + "terminal=\(sawTerminal)"
         )
+        let incomingUserIds = Set(entities.filter { $0.role == .user }.map(\.messageId))
+        onAuthoritativeMessages?(
+            messages.filter { incomingUserIds.contains($0.id) && $0.role == .user },
+            sawUpsert || sawTerminal
+        )
         onTranscriptReplaced?()
     }
 
@@ -352,6 +361,9 @@ extension ConversationLiveTranscript {
 
         if let timestamp = entity.timestamp, !timestamp.isEmpty {
             messages[messageIndex].timestamp = timestamp
+        }
+        if let appMessageId = entity.appMessageId {
+            messages[messageIndex].appMessageId = appMessageId
         }
         var blocks = messages[messageIndex].contentBlocks
         if let index = blocks.firstIndex(where: { $0.id == block.id }) {

@@ -58,10 +58,10 @@ final class InMemoryKeychainStorage: KeychainStorage, @unchecked Sendable {
         lock.unlock()
     }
 
-    func load(service: String, account: String) -> Data? {
+    func load(service: String, account: String) -> KeychainReadResult {
         lock.lock()
         defer { lock.unlock() }
-        return items[key(service, account)]
+        return items[key(service, account)].map(KeychainReadResult.value) ?? .missing
     }
 
     func delete(service: String, account: String) {
@@ -87,6 +87,10 @@ final class FakeSecItemStore {
     var items: [String: Record]
     var updateFailure: OSStatus?
     var addFailure: OSStatus?
+    var readFailures: [String: OSStatus] = [:]
+    var nextReadFailures: [String: OSStatus] = [:]
+    var nextUpdateFailure: OSStatus?
+    var readOverride: (OSStatus, AnyObject?)?
     private(set) var updateCallCount = 0
     private(set) var addCallCount = 0
     private(set) var deleteCallCount = 0
@@ -94,6 +98,7 @@ final class FakeSecItemStore {
     /// policy tests can assert exactly what would reach the Security framework.
     private(set) var updateCalls: [(query: [String: Any], attributes: [String: Any])] = []
     private(set) var addQueries: [[String: Any]] = []
+    private(set) var readQueries: [[String: Any]] = []
 
     init(items: [String: Record] = [:]) {
         self.items = items
@@ -103,11 +108,29 @@ final class FakeSecItemStore {
         items[key(service: service, account: account)]
     }
 
+    private func copyMatching(_ query: [String: Any]) -> (OSStatus, AnyObject?) {
+        readQueries.append(query)
+        if let readOverride { return readOverride }
+        guard let key = key(from: query), let account = query[kSecAttrAccount as String] as? String else {
+            return (errSecParam, nil)
+        }
+        if let status = nextReadFailures.removeValue(forKey: account) ?? readFailures[account] {
+            return (status, nil)
+        }
+        guard let record = items[key] else { return (errSecItemNotFound, nil) }
+        return (errSecSuccess, record.data as AnyObject)
+    }
+
     func securityCalls() -> SecItemKeychainStorage.SecurityCalls {
         SecItemKeychainStorage.SecurityCalls(
+            copyMatching: { [self] query in copyMatching(query) },
             update: { [self] query, attributes in
                 updateCallCount += 1
                 updateCalls.append((query: query, attributes: attributes))
+                if let failure = nextUpdateFailure {
+                    nextUpdateFailure = nil
+                    return failure
+                }
                 if let updateFailure { return updateFailure }
                 guard let key = key(from: query), var record = items[key] else {
                     return errSecItemNotFound

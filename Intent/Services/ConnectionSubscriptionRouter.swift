@@ -17,15 +17,18 @@ final class ConnectionSubscriptionRouter {
     private let bufferLimit: Int
     private let bufferTTL: TimeInterval
     private let now: @MainActor () -> Date
+    private let diagnostics: DiagnosticStore
 
     init(
         bufferLimit: Int = defaultBufferLimit,
         bufferTTL: TimeInterval = defaultBufferTTL,
-        now: @escaping @MainActor () -> Date = Date.init
+        now: @escaping @MainActor () -> Date = Date.init,
+        diagnostics: DiagnosticStore = .shared
     ) {
         self.bufferLimit = bufferLimit
         self.bufferTTL = bufferTTL
         self.now = now
+        self.diagnostics = diagnostics
     }
 
     func register(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
@@ -48,6 +51,15 @@ final class ConnectionSubscriptionRouter {
     func route(method: String, params: Any) -> Bool {
         guard method == "subscription.push" else { return false }
         guard let push = SubscriptionPush.parse(method: method, params: params) else {
+            diagnostics.record(DiagnosticEvent(
+                kind: .subscriptionRecovery,
+                operation: .protocolSubscriptionPush,
+                site: .subscriptionRouter,
+                stage: .decode,
+                outcome: .failed,
+                failure: DiagnosticFailure(origin: .transport, classification: .malformedResponse),
+                context: .malformedPush
+            ))
             let paramsDictionary = params as? [String: Any] ?? [:]
             let subscriptionId = paramsDictionary["subscriptionId"] as? String ?? "nil"
             let keys = paramsDictionary.keys.sorted().joined(separator: ", ")

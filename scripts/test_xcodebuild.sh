@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Self-tests for scripts/xcodebuild.sh: the simulator lock, the
 # crash-vs-failure classification of a test run, the resolution of
-# ONLY_TESTING selectors against the enumerated test catalog, and the
-# per-selector summary read back from the result bundle. xcrun and
+# ONLY_TESTING selectors against the enumerated test catalog, explicit build
+# configuration, and the per-selector summary read back from the result bundle. xcrun and
 # xcodebuild are replaced by stubs on PATH, so this runs anywhere with bash
 # (including the stock macOS Bash 3.2) plus python3 (which the lock keeper and
 # the resolver need) and never touches a real simulator.
@@ -75,6 +75,7 @@ for arg in "$@"; do
   prev=$arg
 done
 case " $* " in
+  *" -showsdks "*) echo "Simulator - iOS -sdk iphonesimulator"; echo "Simulator - visionOS -sdk xrsimulator"; exit 0 ;;
   *" -enumerate-tests "*)
     if [ -n "${STUB_ENUMERATE_FAIL:-}" ]; then
       echo "xcodebuild: error: Unable to enumerate tests (stub)"
@@ -214,7 +215,7 @@ export PATH="$stubs:$PATH"
 export TMPDIR=$work
 # The wrapper appends to a caller's step summary; the self-test's own CI job
 # must not receive the fixture tables.
-unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING
+unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING BUILD_CONFIGURATION
 export SIM_UDID=00000000-0000-0000-0000-000000000001
 export SIM_LOCK_DIR=$work/locks
 lock=$SIM_LOCK_DIR/xcodebuild-sim-$SIM_UDID.lock
@@ -821,6 +822,72 @@ assert_contains "test-ios-unit real run carries the selector and the skip flag" 
   "/Intent.xcresult] [-only-testing:IntentTests/DemoFixturesTests] [-skip-testing:IntentUITests]"
 assert_contains "test-ios-unit summary row counts the selector's tests" "$(cat "$work/unitok.out")" \
   "  IntentTests/DemoFixturesTests         2         2        0       0"
+
+echo "# explicit configuration: default argv is unchanged; Release is not DEBUG"
+status=$(run_filtered defaultbuild "" build-ios)
+assert_eq "default iOS build exits 0" "$status" 0
+assert_eq "default iOS build keeps its exact destination and signing argv" "$(argv_line defaultbuild 1)" \
+  'argv: [build] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [generic/platform=iOS Simulator] [CODE_SIGN_IDENTITY=] [CODE_SIGNING_REQUIRED=NO] [CODE_SIGNING_ALLOWED=NO]'
+status=$(run_filtered emptyconfig "" build-ios BUILD_CONFIGURATION=)
+assert_eq "empty configuration keeps the default argv" "$(argv_line emptyconfig 1)" "$(argv_line defaultbuild 1)"
+status=$(run_filtered debugbuild "" build-ios BUILD_CONFIGURATION=Debug)
+assert_eq "explicit Debug build exits 0" "$status" 0
+assert_eq "explicit Debug adds only the configuration" "$(argv_line debugbuild 1)" \
+  "$(argv_line defaultbuild 1) [-configuration] [Debug]"
+status=$(run_filtered releasebuild "" build-ios BUILD_CONFIGURATION=Release)
+assert_eq "explicit Release build exits 0" "$status" 0
+assert_eq "production Release build adds only the configuration, not testability" "$(argv_line releasebuild 1)" \
+  "$(argv_line defaultbuild 1) [-configuration] [Release]"
+status=$(run_filtered releasevision "" build-visionos BUILD_CONFIGURATION=Release)
+assert_eq "Release visionOS build exits 0" "$status" 0
+assert_eq "Release visionOS still checks the SDK first" "$(argv_line releasevision 1)" 'argv: [-showsdks]'
+assert_eq "Release visionOS keeps its destination and signing, without testability" "$(argv_line releasevision 2)" \
+  'argv: [build] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [generic/platform=visionOS Simulator] [CODE_SIGN_IDENTITY=] [CODE_SIGNING_REQUIRED=NO] [CODE_SIGNING_ALLOWED=NO] [-configuration] [Release]'
+for sub in build-for-testing test-ios test-ios-unit test-without-building test-without-building-unit; do
+  status=$(run_filtered "release-$sub" "IntentTests/DemoFixturesTests" "$sub" BUILD_CONFIGURATION=Release)
+  assert_eq "Release $sub exits 0" "$status" 0
+  args=$(grep '^argv:' "$work/release-$sub.args")
+  while IFS= read -r line; do
+    assert_contains "Release $sub uses Release and testability on each invocation" "$line" \
+      '[-configuration] [Release] [ENABLE_TESTABILITY=YES]'
+    assert_contains "Release $sub keeps the simulator destination" "$line" \
+      "[-destination] [platform=iOS Simulator,id=$SIM_UDID]"
+  done <<< "$args"
+  assert_lacks "Release $sub never defines DEBUG" "$args" DEBUG
+  assert_lacks "Release $sub never changes compilation conditions" "$args" SWIFT_ACTIVE_COMPILATION_CONDITIONS
+  assert_lacks "Release $sub never changes optimization" "$args" SWIFT_OPTIMIZATION_LEVEL
+done
+assert_contains "Release test build preserves signing policy" "$(argv_line release-test-ios-unit 1)" \
+  '[CODE_SIGN_IDENTITY=] [CODE_SIGNING_REQUIRED=NO] [CODE_SIGNING_ALLOWED=NO]'
+assert_contains "Release unit run preserves UI exclusion" "$(argv_line release-test-ios-unit 3)" '[-skip-testing:IntentUITests]'
+status=$(run_filtered debugtest "IntentTests/DemoFixturesTests" test-ios-unit BUILD_CONFIGURATION=Debug)
+assert_eq "explicit Debug tests exit 0" "$status" 0
+assert_contains "explicit Debug tests select Debug" "$(argv_line debugtest 3)" '[-configuration] [Debug]'
+assert_lacks "explicit Debug tests need no testability override" "$(cat "$work/debugtest.args")" ENABLE_TESTABILITY
+status=$(run_filtered releasecrash "" test-without-building-unit BUILD_CONFIGURATION=Release \
+  STUB_MODE=crash STUB_THEN=pass STUB_STATE="$work/releasecrash.state")
+assert_eq "Release crash retry recovers" "$status" 0
+assert_eq "Release crash retries exactly once" "$(argv_count releasecrash)" 2
+assert_contains "Release retry preserves configuration and testability" "$(argv_line releasecrash 2)" \
+  '[-configuration] [Release] [ENABLE_TESTABILITY=YES]'
+assert_contains "Release retry preserves UI exclusion" "$(argv_line releasecrash 2)" '[-skip-testing:IntentUITests]'
+assert_lock_free "Release retry releases the simulator lock"
+status=$(run_filtered releasetypo "IntentTests/NotASuite" test-without-building BUILD_CONFIGURATION=Release)
+assert_eq "Release still rejects unknown selectors" "$status" 82
+assert_eq "Release unknown selector never starts tests" "$(argv_count releasetypo)" 1
+for config in Profile release 'Release -sdk iphoneos'; do
+  status=$(run_filtered badconfig "" build-ios BUILD_CONFIGURATION="$config")
+  assert_eq "invalid configuration $config exits 1" "$status" 1
+  assert_contains "invalid configuration is explained" "$(cat "$work/badconfig.out")" \
+    'BUILD_CONFIGURATION must be Debug or Release'
+  assert_eq "invalid configuration never invokes xcodebuild" "$(argv_count badconfig)" 0
+done
+for extra in -sdk -configuration; do
+  status=0
+  BUILD_CONFIGURATION=Release "$SCRIPT" build-ios "$extra" > "$work/extra.out" 2>&1 || status=$?
+  assert_eq "Release still refuses extra argument $extra" "$status" 1
+done
+assert_contains "extra arguments remain explained" "$(cat "$work/extra.out")" 'subcommands take no extra arguments'
 
 echo "# test-without-building-unit: split CI path skips IntentUITests without rebuilding"
 status=$(run_filtered splitunitplain "" test-without-building-unit)

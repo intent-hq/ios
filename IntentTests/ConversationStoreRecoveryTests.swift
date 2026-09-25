@@ -355,7 +355,7 @@ extension ConversationStoreTests {
         // The optimistic user row carries the answer tag so the wizard gate
         // sees the set as answered before the daemon clears the marker.
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
 
         try await store.sendMessage(
@@ -376,7 +376,7 @@ extension ConversationStoreTests {
 
     @Test func sendMessageLeavesOptimisticRowMetadataNilWhenAbsent() async throws {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
 
         try await store.sendMessage(agentId: "a", content: "hi", workspaceId: "w")

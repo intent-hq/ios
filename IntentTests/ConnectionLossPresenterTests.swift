@@ -67,12 +67,58 @@ struct ConnectionLossPresenterTests {
         #expect(sibling.accessibilityElementsHidden == siblingAccessibilityHidden)
         #expect(sibling.isUserInteractionEnabled == siblingInteractionEnabled)
 
-        presenter.attach(to: nil)
+        presenter.detach()
         #expect(source.accessibilityElementsHidden)
         #expect(!source.isUserInteractionEnabled)
         #expect(sibling.accessibilityElementsHidden == siblingAccessibilityHidden)
         #expect(sibling.isUserInteractionEnabled == siblingInteractionEnabled)
         source.isHidden = true
+    }
+
+    @Test(arguments: [false, true])
+    func transientAnchorRemovalPreservesOverlayUntilExplicitDismissal(recoverWhileDetached: Bool) throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previousKey = scene.keyWindow
+        let source = UIWindow(windowScene: scene)
+        source.rootViewController = UIViewController()
+        source.makeKeyAndVisible()
+        let presenter = ConnectionLossPresenter.Coordinator()
+        let anchor = ConnectionLossPresenter.WindowAnchor()
+        anchor.windowChanged = { [weak presenter] in presenter?.attach(to: $0) }
+        defer {
+            ConnectionLossPresenter.dismantleUIView(anchor, coordinator: presenter)
+            source.isHidden = true
+            previousKey?.makeKey()
+        }
+        source.rootViewController?.view.addSubview(anchor)
+        presenter.update(isPresented: true, content: AnyView(Text("Reconnecting")))
+        let overlay = try #require(scene.windows.first { $0.windowLevel > .alert && !$0.isHidden })
+        let host = overlay.rootViewController
+
+        // Window membership can disappear before SwiftUI dismantles the view.
+        // Drive didMoveToWindow itself, not only the coordinator's update API.
+        anchor.removeFromSuperview()
+        #expect(anchor.window == nil)
+        #expect(!overlay.isHidden)
+        #expect(overlay.rootViewController === host)
+        #expect(source.accessibilityElementsHidden)
+        #expect(!source.isUserInteractionEnabled)
+        presenter.update(isPresented: !recoverWhileDetached, content: AnyView(Text("No network connection")))
+        source.rootViewController?.view.addSubview(anchor)
+        #expect(overlay.isHidden == recoverWhileDetached)
+        if !recoverWhileDetached {
+            #expect(overlay.rootViewController === host, "Reattachment must reuse the already-presented host")
+            #expect(source.accessibilityElementsHidden)
+            #expect(!source.isUserInteractionEnabled)
+        }
+
+        ConnectionLossPresenter.dismantleUIView(anchor, coordinator: presenter)
+        #expect(overlay.isHidden)
+        #expect(overlay.rootViewController == nil)
+        #expect(source.isKeyWindow)
+        #expect(!source.accessibilityElementsHidden)
+        #expect(source.isUserInteractionEnabled)
+        #expect(!scene.windows.contains { $0.windowLevel > .alert && !$0.isHidden })
     }
 
     @Test(arguments: [false, true])
@@ -123,6 +169,8 @@ struct ConnectionLossPresenterTests {
         }
         #expect(weakCapture != nil, "Keep the initial update until didMoveToWindow supplies its window")
         presenter.attach(to: nil)
+        #expect(weakCapture != nil, "A temporary window gap must preserve the pending presentation")
+        presenter.detach()
         #expect(weakCapture == nil, "Detaching must clear content even when no overlay window was created")
     }
 

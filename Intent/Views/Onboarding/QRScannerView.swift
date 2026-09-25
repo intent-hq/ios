@@ -158,6 +158,7 @@ struct QRScannerView: View {
 
     private func prepareScanner() async {
         guard DataScannerViewController.isSupported else {
+            PairingDiagnostics.scanner(.scannerAvailability, failure: .unavailable)
             scannerAvailability = .unavailable
             return
         }
@@ -175,6 +176,9 @@ struct QRScannerView: View {
         }
 
         guard !Task.isCancelled else { return }
+        if !isAuthorized || !DataScannerViewController.isAvailable {
+            PairingDiagnostics.scanner(.scannerAvailability, failure: isAuthorized ? .unavailable : .permissionDenied)
+        }
         scannerAvailability = isAuthorized && DataScannerViewController.isAvailable
             ? .available
             : .unavailable
@@ -186,6 +190,7 @@ struct QRScannerView: View {
         // Parse both pairing-URI dialects (canonical `fp=` and legacy
         // `certFingerprint=`); see PairingPayload.
         guard let payload = PairingPayload.parse(code) else {
+            PairingDiagnostics.invalidInput()
             errorMessage = "Invalid QR code. Make sure you're scanning the code from Intent Settings."
             errorAutoClearID = UUID()
             return
@@ -299,7 +304,7 @@ struct QRCameraPreview: UIViewControllerRepresentable {
             do {
                 try scanner.startScanning()
             } catch {
-                reportUnavailableIfNeeded(for: scanner)
+                reportUnavailableIfNeeded(for: scanner, operation: .scannerStart)
             }
         }
 
@@ -357,8 +362,11 @@ struct QRCameraPreview: UIViewControllerRepresentable {
             resetTask = nil
         }
 
-        private func reportUnavailableIfNeeded(for scanner: DataScannerViewController) {
+        private func reportUnavailableIfNeeded(
+            for scanner: DataScannerViewController, operation: DiagnosticOperation = .scannerAvailability
+        ) {
             guard isActive, !scanner.isScanning else { return }
+            PairingDiagnostics.scanner(operation, failure: operation == .scannerStart ? .startFailed : .unavailable)
             isActive = false
             onUnavailable()
         }

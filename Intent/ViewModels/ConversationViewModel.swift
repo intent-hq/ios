@@ -38,8 +38,12 @@ import SwiftUI
     var hasLatchedNewMessagesDividerAnchor = false
 
     var messageText = "" {
-        didSet { draftTextSubject.send(messageText) }
+        didSet {
+            composerTextRevision &+= 1
+            draftTextSubject.send(messageText)
+        }
     }
+    @ObservationIgnored var composerTextRevision = 0
     var availableModels: [ModelInfo] = []
     var currentModelId: String?
     var currentProviderId: String?

@@ -103,13 +103,18 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         assertNetworkTitle("No network connection", identifier: "connection-loss.status", in: app)
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         assertOverlay(in: app)
+        XCTAssertFalse(eventExists("overlay-dismissed", in: directory), "Updating network copy must not recreate the overlay")
 
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: Fixture.timeout))
         app.activate()
         assertNetworkTitle("No network connection", identifier: "connection-loss.status", in: app)
         assertOverlay(in: app)
-        XCTAssertFalse(eventExists("overlay-dismissed", in: directory), "An existing overlay must never hide on background return")
+        let events = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+        XCTAssertFalse(
+            eventExists("overlay-dismissed", in: directory),
+            "An existing overlay must never hide on background return; events: \(events)"
+        )
 
         try trigger("network-restored", in: directory)
         assertNetworkTitle("Reconnecting…", identifier: "connection-loss.status", in: app)

@@ -30,9 +30,14 @@ final class NetworkAvailability {
     @ObservationIgnored private var monitor: (any NetworkPathMonitoring)?
     @ObservationIgnored private var monitorID: UUID?
     @ObservationIgnored private var observerCount = 0
+    @ObservationIgnored private let diagnostics: DiagnosticStore
 
-    init(makeMonitor: @escaping () -> any NetworkPathMonitoring = { NWPathMonitorAdapter() }) {
+    init(
+        makeMonitor: @escaping () -> any NetworkPathMonitoring = { NWPathMonitorAdapter() },
+        diagnostics: DiagnosticStore = .shared
+    ) {
         self.makeMonitor = makeMonitor
+        self.diagnostics = diagnostics
     }
 
     /// Retain one lease per foreground scene, including startup and reconnection.
@@ -57,7 +62,10 @@ final class NetworkAvailability {
                 #endif
                 guard let self, monitorID == identity else { return }
                 let next = Status(snapshot)
-                if status != next { status = next }
+                if status != next {
+                    status = next
+                    recordStatus()
+                }
             }
         }
     }
@@ -68,8 +76,29 @@ final class NetworkAvailability {
         monitorID = nil
         let retiredMonitor = monitor
         monitor = nil
-        status = .unknown
+        if status != .unknown {
+            status = .unknown
+            recordStatus()
+        }
         retiredMonitor?.cancel()
+    }
+
+    private func recordStatus() {
+        let context: DiagnosticEvent.Context = switch status {
+        case .unknown: .unknown
+        case .satisfied: .satisfied
+        case .requiresConnection: .requiresConnection
+        case .unsatisfied(.localNetworkDenied): .localNetworkDenied
+        case .unsatisfied: .unsatisfied
+        }
+        diagnostics.record(DiagnosticEvent(
+            kind: .networkAvailabilityChanged,
+            operation: .networkAvailability,
+            site: .networkAvailability,
+            stage: .active,
+            outcome: .changed,
+            context: context
+        ))
     }
 
     /// Idempotent explicit cancellation, with automatic release at scene teardown.

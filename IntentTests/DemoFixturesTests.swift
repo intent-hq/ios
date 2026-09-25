@@ -36,6 +36,34 @@ struct DemoFixturesTests {
 
     // MARK: - Fixture shape: parses through the real store parsers
 
+    @Test func demoSendAcknowledgementKeepsOptimisticMessageAndThinking() async throws {
+        let connection = FakeConnectionManager()
+        connection.pendingMethods.insert("agent.sendMessage")
+        let store = ConversationStore(connectionManager: connection)
+        let send = Task {
+            try await store.sendMessage(
+                agentId: DemoFixtures.longConversationAgentId,
+                content: "Suggested prompt",
+                workspaceId: DemoFixtures.longConversationWorkspaceId
+            )
+        }
+        defer { send.cancel() }
+        try await connection.waitForPendingRequests("agent.sendMessage")
+        let params = try #require(connection.paramsForMethod("agent.sendMessage").first)
+        let messageId = try #require(params["messageId"] as? String)
+        #expect(store.isStreaming)
+        connection.resolvePending("agent.sendMessage", with: DemoFixtures.response(for: "agent.sendMessage", params: params))
+        try await send.value
+
+        #expect(store.sendAttempts.first?.status == .accepted)
+        #expect(store.sendAttempts.first?.confirmedMessageId == messageId)
+        #expect(store.lastFailedSend == nil)
+        #expect(store.messages.map(\.id) == [messageId])
+        #expect(store.sendThinkingMessageIds == [messageId])
+        #expect(store.isStreaming, "The accepted demo send must keep Thinking until agent activity arrives")
+        #expect(connection.paramsForMethod("agent.sendMessage").count == 1)
+    }
+
     @Test func workspaceListFixtureParses() {
         let result = DemoFixtures.response(for: "workspace.list", params: [:])
         let workspaces = WorkspaceStore.parseWorkspaces(from: result)
