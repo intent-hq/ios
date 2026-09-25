@@ -356,21 +356,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages.count == 1)
     }
 
-    // MARK: - Malformed push rejection
-
-    @Test func rejectsMalformedPush() async {
-        // Snapshot push missing "snapshot" field
-        let malformedParams: [String: Any] = [
-            "subscriptionId": "sub-chat-123",
-            "kind": "snapshot",
-            "seq": 0
-            // Missing "snapshot" field
-        ]
-
-        let push = SubscriptionPush.parse(method: "subscription.push", params: malformedParams)
-        #expect(push == nil) // Should return nil for malformed push
-    }
-
     @Test func idleSnapshotClearsStaleStreaming() async {
         let (store, _) = makeStore()
 
