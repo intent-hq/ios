@@ -12,6 +12,7 @@ struct ProposalCardView: View {
         static let spacing: CGFloat = 12
         static let padding: CGFloat = 16
         static let cornerRadius: CGFloat = 16
+        static let minimumRowHeight: CGFloat = 44
     }
 
     init(proposal: ActionProposal) {
@@ -76,23 +77,33 @@ struct ProposalCardView: View {
         let completed = store.completed[store.receiptKey(proposal, messageId: messageId)] ?? []
         return VStack(alignment: .leading, spacing: Layout.spacing) {
             ForEach(proposal.items) { item in
-                Toggle(isOn: Binding(
-                    get: { selection.contains(item.id) },
-                    set: { selected in
-                        if selected { selection.insert(item.id) } else { selection.remove(item.id) }
-                    }
-                )) {
-                    VStack(alignment: .leading) {
-                        Text(item.title)
-                        if let summary = item.summary { Text(summary).font(.caption).foregroundStyle(.secondary) }
-                        if completed.contains(item.id) { Text("Applied").font(.caption) }
-                    }
-                    .copyContextMenuPassthrough()
-                }
-                .disabled(item.disabled == true || completed.contains(item.id) || store.isBusy)
-                .accessibilityIdentifier("proposal.item.\(item.id)")
+                selectionButton(item, isCompleted: completed.contains(item.id))
+                    .disabled(item.disabled == true || completed.contains(item.id) || store.isBusy)
             }
         }
+    }
+
+    private func selectionButton(_ item: ActionProposal.Item, isCompleted: Bool) -> some View {
+        Button {
+            if selection.contains(item.id) { selection.remove(item.id) } else { selection.insert(item.id) }
+        } label: {
+            HStack(spacing: Layout.spacing) {
+                Image(systemName: selection.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading) {
+                    Text(item.title)
+                    if let summary = item.summary { Text(summary).font(.caption).foregroundStyle(.secondary) }
+                    if isCompleted { Text("Applied").font(.caption) }
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: Layout.minimumRowHeight)
+            .contentShape(Rectangle())
+            .copyContextMenuPassthrough()
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selection.contains(item.id) ? .isSelected : [])
+        .accessibilityIdentifier("proposal.item.\(item.id)")
     }
 
     private func actionButtons(_ store: ProposalActionStore) -> some View {

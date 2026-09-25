@@ -18,10 +18,13 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         let app = openAssistant(arguments: ["--demo-assistant-proposal"])
         let apply = app.buttons["proposal.apply"]
         XCTAssertTrue(apply.waitForExistence(timeout: Self.timeout))
-        let item = app.switches["proposal.item.demo-ws-flaky-tests"]
+        let item = app.buttons["proposal.item.demo-ws-flaky-tests"]
+        XCTAssertTrue(item.isSelected)
         item.tap()
+        XCTAssertFalse(item.isSelected)
         XCTAssertFalse(apply.isEnabled)
         item.tap()
+        XCTAssertTrue(item.isSelected)
         XCTAssertTrue(apply.isEnabled)
         XCTAssertFalse(app.buttons["assistant.workspace.demo-ws-flaky-tests"].exists)
         apply.tap()
