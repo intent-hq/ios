@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Loading phase overlay: the splash GIF itself is rendered by RootView in a
+/// Loading phase overlay: the splash artwork is rendered by RootView in a
 /// position shared with the connecting phase (so playback doesn't reset on the
 /// loading → connecting transition). This view only owns the launch timer
-/// that advances the coordinator once the intro has had time to play.
+/// that advances the coordinator independently of animation completion.
 struct LoadingView: View {
     @Environment(AppCoordinator.self) var coordinator
 
@@ -13,8 +13,8 @@ struct LoadingView: View {
             .task {
                 // Advance to connecting after a beat. RootView keeps the
                 // shared SplashArtView mounted across loading → connecting,
-                // so GIF playback continues uninterrupted. Don't lengthen the
-                // 1.2-second phase to wait for a complete GIF cycle.
+                // so playback continues uninterrupted. Don't lengthen the
+                // 1.2-second phase to wait for the twist intro to finish.
                 do {
                     try await LaunchPhaseTimeline.delay(for: Constants.Loading.phaseDuration)
                 } catch {

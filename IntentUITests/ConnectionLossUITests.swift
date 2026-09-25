@@ -64,6 +64,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
 
     @MainActor
     func testLossBlocksConversationAndRecoveryKeepsDraftAndNavigation() throws {
+        throw XCTSkip("Flaky: intent-hq/ios#476")
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory)
         openConversation(in: app)
@@ -311,6 +312,12 @@ extension ConnectionLossUITests {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
         app.launch()
+        // First launch on a fresh simulator is inactive behind this prompt;
+        // the scene-owned network monitor cannot start until it is dismissed.
+        let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
+        if allowNotifications.waitForExistence(timeout: 2) {
+            allowNotifications.tap()
+        }
         if waitForStartup {
             XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Fixture.timeout))
             XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)

@@ -116,6 +116,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
 $(SRCROOT)/Intent/Services/LifecycleDiagnostics.swift
+$(SRCROOT)/Intent/Services/MediaAudioSession.swift
 $(SRCROOT)/Intent/Services/MonitoredPrStore.swift
 $(SRCROOT)/Intent/Services/NetworkAvailability.swift
 $(SRCROOT)/Intent/Services/NetworkCopyDiagnostics.swift
@@ -144,6 +145,7 @@ $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceProviderOptions.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
+$(SRCROOT)/Intent/Services/WorkspaceVideo.swift
 $(SRCROOT)/Intent/Utils/AppLog.swift
 $(SRCROOT)/Intent/Utils/BackgroundTaskManager.swift
 $(SRCROOT)/Intent/Utils/Date+Relative.swift
@@ -216,7 +218,9 @@ $(SRCROOT)/Intent/Views/Conversation/Content/ImageAttachmentThumbnail.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageDecodeFailureView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileAttachmentLoader.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/IntentFileVideoAttachment.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MarkdownTextView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/VideoLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AgentMessageAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AttentionNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/EventWakeBannerView.swift
@@ -260,6 +264,7 @@ $(SRCROOT)/Intent/Views/Onboarding/DeepLinkPairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualTokenEntryView.swift
 $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift
+$(SRCROOT)/Intent/Views/Onboarding/Splash/LaunchAppearanceModifier.swift
 $(SRCROOT)/Intent/Views/Onboarding/Splash/SplashArtView.swift
 $(SRCROOT)/Intent/Views/Settings/AcknowledgementsView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticExportView.swift
@@ -403,12 +408,14 @@ $(SRCROOT)/IntentTests/GitHubRepoSuggestionsTests.swift
 $(SRCROOT)/IntentTests/InfoPlistSyncTests.swift
 $(SRCROOT)/IntentTests/IntentFileAttachmentLoaderTests.swift
 $(SRCROOT)/IntentTests/IntentFileLinkTests.swift
+$(SRCROOT)/IntentTests/IntentFileVideoTests.swift
 $(SRCROOT)/IntentTests/IntentNoteLinkParsingTests.swift
 $(SRCROOT)/IntentTests/LaunchPhaseTimelineTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
 $(SRCROOT)/IntentTests/MarkdownTextViewTests.swift
+$(SRCROOT)/IntentTests/MediaAudioSessionTests.swift
 $(SRCROOT)/IntentTests/MessageBlockPartitionTests.swift
 $(SRCROOT)/IntentTests/MessageCopyContextMenuGatingTests.swift
 $(SRCROOT)/IntentTests/ModelsSpecialistAndTaskTests.swift
@@ -458,7 +465,6 @@ $(SRCROOT)/IntentTests/SettingsViewTests.swift
 $(SRCROOT)/IntentTests/ShapeIsolationTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
-$(SRCROOT)/IntentTests/SplashPlaybackTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift

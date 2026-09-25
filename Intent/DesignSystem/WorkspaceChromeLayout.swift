@@ -56,7 +56,3 @@ extension Constants.CreateWorkspace {
 extension Constants.GitHubRepoPicker {
     static let repositoryNameLineLimit = 2
 }
-
-extension Constants.Splash {
-    static let fallbackFrameDuration: TimeInterval = 0.1
-}

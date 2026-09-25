@@ -25,8 +25,11 @@ struct ConnectingView: View {
             // Passive per-host cert-mismatch list: hosts that presented a
             // wrong certificate while the race continues on the others.
             if !session.connection.certMismatches.isEmpty {
-                CertMismatchListView(mismatches: session.connection.certMismatches)
-                    .padding(.horizontal, Layout.mismatchHorizontalPadding)
+                CertMismatchListView(
+                    mismatches: session.connection.certMismatches,
+                    warningForeground: Theme.foreground(for: .light)
+                )
+                .padding(.horizontal, Layout.mismatchHorizontalPadding)
             }
         }
         .padding(.bottom, Layout.contentBottomPadding)
