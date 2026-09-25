@@ -74,4 +74,48 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertTrue(newConversation.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(newConversation.isHittable)
     }
+
+    @MainActor
+    func testCompletedSuggestedPromptsReplaceStreamingMarkup() throws {
+        try verifyPromptCompletion(splitAcrossBlocks: false)
+    }
+
+    @MainActor
+    func testCompletedSuggestedPromptsAcrossBlocksReplaceStreamingMarkup() throws {
+        try verifyPromptCompletion(splitAcrossBlocks: true)
+    }
+
+    @MainActor
+    private func verifyPromptCompletion(splitAcrossBlocks: Bool) throws {
+        let trigger = FileManager.default.temporaryDirectory
+            .appendingPathComponent("assistant-prompts-\(UUID().uuidString).trigger")
+        defer { try? FileManager.default.removeItem(at: trigger) }
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-assistant-prompts-trigger-file=\(trigger.path)"]
+        if splitAcrossBlocks { app.launchArguments.append("--demo-assistant-prompts-split") }
+        app.launch()
+        let assistantTab = app.buttons["Assistant"].firstMatch
+        XCTAssertTrue(assistantTab.waitForExistence(timeout: Fixture.timeout))
+        assistantTab.tap()
+        let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+        let rawMarkup = transcript.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "suggested-prompts")
+        ).firstMatch
+        XCTAssertTrue(rawMarkup.waitForExistence(timeout: Fixture.timeout), app.debugDescription)
+        try Data().write(to: trigger)
+        let firstPrompt = app.buttons["transcript.suggestedPrompt.0"]
+        XCTAssertTrue(firstPrompt.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(firstPrompt.isHittable)
+        XCTAssertTrue(app.buttons["transcript.suggestedPrompt.1"].isHittable)
+        XCTAssertTrue(rawMarkup.waitForNonExistence(timeout: Fixture.timeout), app.debugDescription)
+        let greeting = transcript.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "Hey bro — what’s on your mind?")
+        ).firstMatch
+        XCTAssertTrue(greeting.exists)
+        XCTAssertFalse(greeting.label.contains("Show me what needs my attention."))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Assistant prompts after streaming completes"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
 }

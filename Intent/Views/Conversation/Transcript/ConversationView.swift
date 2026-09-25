@@ -72,6 +72,7 @@ private struct ConversationViewContent: View {
             .task {
                 await viewModel.load()
                 handleAgentNotFoundIfNeeded()
+                await DemoFixtures.streamAssistantPromptsIfRequested(in: viewModel.store)
             }
             .task(id: viewModel.modelCatalogKey) {
                 await viewModel.loadModelCatalogIfNeeded()
