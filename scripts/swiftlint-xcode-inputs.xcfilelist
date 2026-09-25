@@ -306,6 +306,10 @@ $(SRCROOT)/IntentTests/AppCoordinatorTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorWorkspaceValidationTests.swift
 $(SRCROOT)/IntentTests/AttachmentImageLoaderTests.swift
 $(SRCROOT)/IntentTests/AttachmentUploadServiceTests.swift
+$(SRCROOT)/IntentTests/BackendKeychainConformanceSupport.swift
+$(SRCROOT)/IntentTests/BackendKeychainConformanceTests.swift
+$(SRCROOT)/IntentTests/BackendKeychainFixtureTests.swift
+$(SRCROOT)/IntentTests/BackendKeychainFixtures.swift
 $(SRCROOT)/IntentTests/BackendRoutePublicationTests.swift
 $(SRCROOT)/IntentTests/BackendSessionRegistryTests.swift
 $(SRCROOT)/IntentTests/BackendSyncTestSupport.swift

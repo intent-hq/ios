@@ -389,6 +389,10 @@ $(SRCROOT)/IntentTests/AppCoordinatorTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorWorkspaceValidationTests.swift
 $(SRCROOT)/IntentTests/AttachmentImageLoaderTests.swift
 $(SRCROOT)/IntentTests/AttachmentUploadServiceTests.swift
+$(SRCROOT)/IntentTests/BackendKeychainConformanceSupport.swift
+$(SRCROOT)/IntentTests/BackendKeychainConformanceTests.swift
+$(SRCROOT)/IntentTests/BackendKeychainFixtureTests.swift
+$(SRCROOT)/IntentTests/BackendKeychainFixtures.swift
 $(SRCROOT)/IntentTests/BackendRoutePublicationTests.swift
 $(SRCROOT)/IntentTests/BackendSessionRegistryTests.swift
 $(SRCROOT)/IntentTests/BackendSyncTestSupport.swift
@@ -478,6 +482,11 @@ $(SRCROOT)/IntentTests/FakeConnectionManager.swift
 $(SRCROOT)/IntentTests/FakeConnectionManagerRecords.swift
 $(SRCROOT)/IntentTests/FakeConnectionManagerTests.swift
 $(SRCROOT)/IntentTests/Fixtures
+$(SRCROOT)/IntentTests/Fixtures/backend-keychain
+$(SRCROOT)/IntentTests/Fixtures/backend-keychain.lock.json
+$(SRCROOT)/IntentTests/Fixtures/backend-keychain/v1
+$(SRCROOT)/IntentTests/Fixtures/backend-keychain/v1/corpus.json
+$(SRCROOT)/IntentTests/Fixtures/backend-keychain/v1/manifest.json
 $(SRCROOT)/IntentTests/GitHubRepoStoreBranchCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
