@@ -121,7 +121,7 @@ struct RootView: View {
                 .tag(AppSection.workspaces)
 
             AssistantView(session: session)
-                .tabItem { Label("Assistant", systemImage: "sparkles") }
+                .tabItem { Label("Assistant", image: "IntentDandelion") }
                 .tag(AppSection.assistant)
         }
     }

@@ -64,7 +64,7 @@ struct AssistantView: View {
             ProgressView("Loading Assistant…")
         } else {
             ContentUnavailableView {
-                Label("Assistant", systemImage: "sparkles")
+                Label("Assistant", image: "IntentDandelion")
             } description: {
                 Text("Plan your work and get help across all your workspaces.")
             } actions: {
