@@ -73,12 +73,19 @@ final class WorkspaceFileImageLoader {
     /// enormous pixel dimensions cannot balloon decode/render memory.
     nonisolated static let maxPixelSize = 2048
     /// Decoded-memory budget for the cache (a 2048×2048 BGRA image is ~16 MB).
-    /// Videos charge only their poster; their encoded bytes live in a temp file.
+    /// Videos charge only their poster; their temp files have a separate count bound.
     static let cacheTotalCostLimit = 64 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    /// Eight videos × the 32 MiB per-file limit bounds cache-owned temp files to
+    /// 256 MiB per backend session's loader. Attachments/players may retain evicted
+    /// files until they release them.
+    private static let cacheVideoCountLimit = 8
 
     // NSCache requires a reference-type key; NSString preserves that Foundation contract.
     // swiftlint:disable:next legacy_objc_type
     private let cache = NSCache<NSString, WorkspaceFileMediaBox>()
+    /// FIFO keys only, never extra file owners. NSCache may evict earlier, making
+    /// this count conservative; stale keys cannot increase the disk bound.
+    private var cachedVideoKeys: [String] = []
     /// Session-lifetime negative cache: keys whose fetch/decode failed, so a
     /// persistently broken link doesn't refetch on every scroll-into-view.
     /// Intentionally uncapped (ios#264): it grows only with distinct failed
@@ -168,13 +175,11 @@ final class WorkspaceFileImageLoader {
         if let task = inFlight[key] {
             return try await task.value
         }
-        let task = Task<WorkspaceFileMedia, Error> { [cache] in
+        let task = Task<WorkspaceFileMedia, Error> { [weak self] in
             let media = try await fetch()
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
-            // NSString is the concrete reference key required by NSCache.
-            // swiftlint:disable:next legacy_objc_type
-            cache.setObject(WorkspaceFileMediaBox(media), forKey: key as NSString, cost: Self.cost(of: media))
+            self?.store(media, forKey: key)
             return media
         }
         inFlight[key] = task
@@ -190,6 +195,23 @@ final class WorkspaceFileImageLoader {
             }
             throw error
         }
+    }
+
+    private func store(_ media: WorkspaceFileMedia, forKey key: String) {
+        if case .video = media {
+            // A refetch after memory-pressure eviction replaces its old FIFO slot.
+            cachedVideoKeys.removeAll { $0 == key }
+            if cachedVideoKeys.count >= Self.cacheVideoCountLimit {
+                let oldest = cachedVideoKeys.removeFirst()
+                // NSString is the concrete reference key required by NSCache.
+                // swiftlint:disable:next legacy_objc_type
+                cache.removeObject(forKey: oldest as NSString)
+            }
+            cachedVideoKeys.append(key)
+        }
+        // NSString is the concrete reference key required by NSCache.
+        // swiftlint:disable:next legacy_objc_type
+        cache.setObject(WorkspaceFileMediaBox(media), forKey: key as NSString, cost: Self.cost(of: media))
     }
 
     /// Drop a key from the session negative cache so a user-initiated retry

@@ -56,13 +56,15 @@ struct IntentFileVideoFailureAttachment: Attachment {
             if retrySource != nil { Text("Tap to retry") }
         }
         .font(.caption)
+        .lineLimit(1)
+        .minimumScaleFactor(0.5)
         .foregroundStyle(.secondary)
         // Textual resolves an ideal-sized Canvas symbol, then scales it into
         // the square run bounds. Give it a square so the labels do not stretch.
         .frame(width: SquareImageThumbnail.transcriptSide, height: SquareImageThumbnail.transcriptSide)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Video unavailable: \(name)")
-        .accessibilityHint(retrySource == nil ? "" : "Double-tap to retry")
+        .accessibilityHint("Retries loading the video", isEnabled: retrySource != nil)
         .accessibilityAddTraits(retrySource == nil ? [] : .isButton)
     }
 

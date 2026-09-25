@@ -143,6 +143,38 @@ struct IntentFileVideoTests {
         #expect(WorkspaceFileImageLoader.cost(of: .video(video)) == poster.bytesPerRow * poster.height)
     }
 
+    @Test func videoCacheRetainsAtMostEightFilesWithoutInterruptingPlayback() async throws {
+        let bytes = try await Self.videoBytes()
+        let connection = FakeConnectionManager()
+        connection.responseMap["file.readChunk"] = Self.chunk(bytes, size: bytes.count)
+        connection.responseMap["note.readAsset"] = ["data": bytes.base64EncodedString(), "mimeType": "video/mp4"]
+        let loader = WorkspaceFileImageLoader(connection: connection)
+        var playbackOwner: WorkspaceVideo? = try await loader.video(workspaceId: "ws", path: "first.mp4")
+        let firstURL = try #require(playbackOwner?.url)
+
+        // Both video namespaces share the cap, even when posters use very little RAM.
+        for index in 1...8 {
+            if index.isMultiple(of: 2) {
+                _ = try await loader.assetMedia(workspaceId: "ws", assetId: "asset-\(index)")
+            } else {
+                _ = try await loader.video(workspaceId: "ws", path: "clip-\(index).mp4")
+            }
+        }
+        let retainedBytes = try withExtendedLifetime(playbackOwner) {
+            try Data(contentsOf: firstURL)
+        }
+        #expect(retainedBytes == bytes)
+        let reloaded = try await loader.video(workspaceId: "ws", path: "first.mp4")
+        #expect(reloaded.url != firstURL)
+        #expect(connection.paramsForMethod("file.readChunk").count == 6)
+        #expect(connection.paramsForMethod("note.readAsset").count == 4)
+
+        playbackOwner = nil
+        try await waitUntil("evicted video removed after playback releases it") {
+            !FileManager.default.fileExists(atPath: firstURL.path)
+        }
+    }
+
     @Test(arguments: [1.0, 0.1])
     func videoPosterIsCappedAtThreeTimesTranscriptSize(_ duration: Double) async throws {
         let bytes = try await Self.videoBytes(side: 960, duration: duration)

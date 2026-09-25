@@ -65,7 +65,7 @@ struct VideoLightboxView: View {
             self.player = player
             player.play()
         } catch {
-            if !Task.isCancelled { playbackFailed = true }
+            if !Task.isCancelled, !isClosing { playbackFailed = true }
         }
     }
 }
