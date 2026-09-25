@@ -35,9 +35,17 @@ struct BackendKeychainConformanceTests {
         for fixture in try Fixtures.bundled().cases("identityCases") {
             let id: String = try Fixtures.value("id", in: fixture)
             let record = try SyncedBackendRecord(
-                label: "", host: Fixtures.value("host", in: fixture), hosts: [],
-                port: Fixtures.value("port", in: fixture), fingerprint: Fixtures.value("fingerprint", in: fixture),
-                hostname: nil, detectHosts: true, token: "", updatedAt: 0, deleted: false, deletedAt: nil
+                label: "",
+                host: Fixtures.value("host", in: fixture),
+                hosts: [],
+                port: Fixtures.value("port", in: fixture),
+                fingerprint: Fixtures.value("fingerprint", in: fixture),
+                hostname: nil,
+                detectHosts: true,
+                token: "",
+                updatedAt: 0,
+                deleted: false,
+                deletedAt: nil
             )
             #expect(record.accountKey == fixture["accountKey"] as? String, "\(id)")
             #expect(record.registryKey == fixture["registryKey"] as? String, "\(id)")
@@ -86,7 +94,9 @@ struct BackendKeychainConformanceTests {
             }
             let expected: Fixtures.Object = try Fixtures.value("expected", in: fixture)
             try Support.expectJSON(
-                ["outcome": Support.outcome(outcome), "writes": try Support.writes(cloud)], expected, id: id
+                ["outcome": Support.outcome(outcome), "writes": try Support.writes(cloud)],
+                expected,
+                id: id
             )
             let expectedWrites: [Fixtures.Object] = try Fixtures.value("writes", in: expected)
             #expect(cloud.writeCount == expectedWrites.count, "\(id)")
@@ -138,7 +148,9 @@ struct BackendKeychainConformanceTests {
             let expected: Fixtures.Object = try Fixtures.value("expected", in: fixture)
             let expectedIOS: Fixtures.Object = try Fixtures.value("ios", in: expected)
             try Support.expectJSON(
-                ["outcome": Support.outcome(outcome), "writes": try Support.writes(cloud)], expectedIOS, id: id
+                ["outcome": Support.outcome(outcome), "writes": try Support.writes(cloud)],
+                expectedIOS,
+                id: id
             )
             #expect(cloud.items == before, "\(id): original bytes must survive")
             #expect(cloud.writeCount == 0, "\(id)")

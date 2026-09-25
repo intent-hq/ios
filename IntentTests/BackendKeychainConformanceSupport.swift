@@ -7,6 +7,7 @@ import Testing
 /// Projects actual production values without normalizing routes or identities.
 enum BackendKeychainConformanceSupport {
     typealias Fixtures = BackendKeychainFixtures
+
     private static let millisecondsPerSecond: Double = 1000
 
     static func date(_ milliseconds: Double) -> Date {
@@ -39,7 +40,8 @@ enum BackendKeychainConformanceSupport {
         connection.pendingSyncUpdatedAt = try Fixtures.nullable("pendingSyncUpdatedAt", in: input)
         if let pending: Fixtures.Object = try Fixtures.nullable("pendingRoutePublication", in: input) {
             connection.pendingRoutePublication = try JSONDecoder().decode(
-                PendingBackendRoutePublication.self, from: Fixtures.json(pending)
+                PendingBackendRoutePublication.self,
+                from: Fixtures.json(pending)
             )
         }
         return connection
@@ -70,9 +72,11 @@ enum BackendKeychainConformanceSupport {
     static func expectJSON(_ actual: Any, _ expected: Any, id: String, sourceLocation: SourceLocation = #_sourceLocation) throws {
         let actualData = try Fixtures.json(actual)
         let expectedData = try Fixtures.json(expected)
+        let actualText = try #require(String(data: actualData, encoding: .utf8))
+        let expectedText = try #require(String(data: expectedData, encoding: .utf8))
         #expect(
             actualData == expectedData,
-            "\(id): actual \(String(decoding: actualData, as: UTF8.self)); expected \(String(decoding: expectedData, as: UTF8.self))",
+            "\(id): actual \(actualText); expected \(expectedText)",
             sourceLocation: sourceLocation
         )
     }

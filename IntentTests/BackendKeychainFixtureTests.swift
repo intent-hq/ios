@@ -3,6 +3,7 @@ import Testing
 
 struct BackendKeychainFixtureTests {
     private let sha256Length = 64
+
     private typealias Fixtures = BackendKeychainFixtures
 
     @Test func loadsNonemptyBundledCorpus() throws {
@@ -64,8 +65,8 @@ struct BackendKeychainFixtureTests {
 
     private func bundledResources() throws -> [String: Data] {
         let root = try TestSourceInputs.url(for: "IntentTests/Fixtures")
-        return try Dictionary(uniqueKeysWithValues: Fixtures.resourcePaths.map {
-            ($0, try Data(contentsOf: root.appendingPathComponent($0)))
+        return try Dictionary(uniqueKeysWithValues: Fixtures.resourcePaths.map { path in
+            (path, try Data(contentsOf: root.appendingPathComponent(path)))
         })
     }
 
