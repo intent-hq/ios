@@ -72,8 +72,8 @@ final class WorkspaceFileImageLoader {
     /// downsampling thumbnail path, so a small compressed file declaring
     /// enormous pixel dimensions cannot balloon decode/render memory.
     nonisolated static let maxPixelSize = 2048
-    /// Total media-byte budget for the cache (a 2048×2048 BGRA image
-    /// is ~16 MB; videos also charge their on-disk bytes against this budget).
+    /// Decoded-memory budget for the cache (a 2048×2048 BGRA image is ~16 MB).
+    /// Videos charge only their poster; their encoded bytes live in a temp file.
     static let cacheTotalCostLimit = 64 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
 
     // NSCache requires a reference-type key; NSString preserves that Foundation contract.
@@ -195,7 +195,11 @@ final class WorkspaceFileImageLoader {
     /// Drop a key from the session negative cache so a user-initiated retry
     /// (e.g. tapping a failed attachment placeholder) actually refetches.
     func forgetFailure(workspaceId: String, path: String) {
-        failedKeys.remove(Self.fileKey(workspaceId: workspaceId, path: path))
+        let key = Self.fileKey(workspaceId: workspaceId, path: path)
+        failedKeys.remove(key)
+        let videoKey = "video\u{0}" + key
+        failedKeys.remove(videoKey)
+        failedVideoKeys.remove(videoKey)
     }
 
     /// `forgetFailure` for the asset namespace (status image retry taps).
@@ -204,10 +208,10 @@ final class WorkspaceFileImageLoader {
         failedVideoKeys.remove(Self.assetKey(workspaceId: workspaceId, assetId: assetId))
     }
 
-    private static func cost(of media: WorkspaceFileMedia) -> Int {
+    static func cost(of media: WorkspaceFileMedia) -> Int {
         switch media {
         case .image(let image): decodedCost(of: image)
-        case .video(let video): video.byteCount + decodedCost(of: video.poster)
+        case .video(let video): decodedCost(of: video.poster)
         }
     }
 

@@ -77,6 +77,7 @@ struct IntentFileVideoTests {
         let attachment = try await loader.resolvedAttachment(for: url, text: "", fallback: forbiddenFallback)
         let placeholder = try #require(attachment.base as? IntentFileVideoFailureAttachment)
         #expect(placeholder.description == "Video: \(name)")
+        #expect(placeholder.prepareRetry(using: fileLoader) == (failure != "no-workspace"))
         #expect(MarkdownTextView.playbackVideo(for: attachment) == nil)
         #expect(MarkdownTextView.lightboxImage(for: attachment) == nil)
     }
@@ -96,6 +97,59 @@ struct IntentFileVideoTests {
             #expect((attachment.base as? IntentFileVideoFailureAttachment)?.description == "Video: opaque-id")
         }
         #expect(connection.paramsForMethod("note.readAsset").count == 1)
+
+        let bytes = try await Self.videoBytes()
+        connection.responseMap["note.readAsset"] = ["data": bytes.base64EncodedString(), "mimeType": "video/mp4"]
+        let failed = try await loader.resolvedAttachment(for: url, text: "", fallback: forbiddenFallback)
+        let placeholder = try #require(failed.base as? IntentFileVideoFailureAttachment)
+        #expect(placeholder.prepareRetry(using: fileLoader))
+        let retried = try await loader.resolvedAttachment(for: url, text: "", fallback: forbiddenFallback)
+        #expect(MarkdownTextView.playbackVideo(for: retried) != nil)
+        #expect(connection.paramsForMethod("note.readAsset").count == 2)
+    }
+
+    @Test(arguments: ["network", "unplayable"])
+    func forgettingFileVideoFailureAllowsRefetch(_ failure: String) async throws {
+        let connection = FakeConnectionManager()
+        connection.errorMap["file.readChunk"] = failure == "network"
+            ? URLError(.timedOut) : WorkspaceFileImageLoader.LoadError.notAVideo
+        let fileLoader = WorkspaceFileImageLoader(connection: connection)
+        var loader = IntentFileAttachmentLoader(workspaceId: "current", fallback: .image())
+        loader.fileVideo = { workspaceId, path in
+            try await fileLoader.video(workspaceId: workspaceId, path: path)
+        }
+        let url = try #require(URL(string: "intent://local/linked/file/clip.mp4"))
+        _ = try await loader.resolvedAttachment(for: url, text: "", fallback: forbiddenFallback)
+        let failed = try await loader.resolvedAttachment(for: url, text: "", fallback: forbiddenFallback)
+        let placeholder = try #require(failed.base as? IntentFileVideoFailureAttachment)
+        #expect(connection.paramsForMethod("file.readChunk").count == 1)
+
+        let bytes = try await Self.videoBytes()
+        connection.errorMap["file.readChunk"] = nil
+        connection.responseMap["file.readChunk"] = Self.chunk(bytes, size: bytes.count)
+        #expect(placeholder.prepareRetry(using: fileLoader))
+        let retried = try await loader.resolvedAttachment(for: url, text: "", fallback: forbiddenFallback)
+        let video = try #require(MarkdownTextView.playbackVideo(for: retried))
+        #expect(try Data(contentsOf: video.url) == bytes)
+        #expect(connection.paramsForMethod("file.readChunk").count == 2)
+        #expect(connection.paramsForMethod("file.readChunk").last?["workspaceId"] as? String == "linked")
+    }
+
+    @Test func videoCacheCostIncludesOnlyDecodedPoster() async throws {
+        let bytes = try await Self.videoBytes()
+        let video = try await WorkspaceVideo.prepare(data: bytes, path: "clip.mp4")
+        let poster = try #require(video.poster.cgImage)
+        #expect(video.byteCount == bytes.count)
+        #expect(WorkspaceFileImageLoader.cost(of: .video(video)) == poster.bytesPerRow * poster.height)
+    }
+
+    @Test(arguments: [1.0, 0.1])
+    func videoPosterIsCappedAtThreeTimesTranscriptSize(_ duration: Double) async throws {
+        let bytes = try await Self.videoBytes(side: 960, duration: duration)
+        let video = try await WorkspaceVideo.prepare(data: bytes, path: "clip.mp4")
+        let poster = try #require(video.poster.cgImage)
+        #expect(poster.width == 480)
+        #expect(poster.height == 480)
     }
 
     private func forbiddenFallback() async -> AnyAttachment {
@@ -133,16 +187,16 @@ struct IntentFileVideoTests {
     }
 
     /// A single deterministic H.264 frame; no network or checked-in binary fixture.
-    private static func videoBytes() async throws -> Data {
+    private static func videoBytes(side: Int = 16, duration: Double = 1) async throws -> Data {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("video-test-\(UUID()).mp4")
         defer { try? FileManager.default.removeItem(at: url) }
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
-            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 16, AVVideoHeightKey: 16
+            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: side, AVVideoHeightKey: side
         ])
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
-            kCVPixelBufferWidthKey as String: 16, kCVPixelBufferHeightKey as String: 16
+            kCVPixelBufferWidthKey as String: side, kCVPixelBufferHeightKey as String: side
         ])
         writer.add(input)
         #expect(writer.startWriting())
@@ -157,7 +211,7 @@ struct IntentFileVideoTests {
         }
         CVPixelBufferUnlockBaseAddress(frame, [])
         #expect(adaptor.append(frame, withPresentationTime: .zero))
-        writer.endSession(atSourceTime: CMTime(seconds: 1, preferredTimescale: 30))
+        writer.endSession(atSourceTime: CMTime(seconds: duration, preferredTimescale: 30))
         input.markAsFinished()
         await writer.finishWriting()
         #expect(writer.status == .completed)

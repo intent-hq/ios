@@ -34,7 +34,18 @@ struct IntentFileVideoAttachment: Attachment {
 }
 
 struct IntentFileVideoFailureAttachment: Attachment {
+    nonisolated enum RetrySource: Hashable, Sendable {
+        case asset(workspaceId: String, assetId: String)
+        case file(workspaceId: String, path: String)
+    }
+
     let name: String
+    let retrySource: RetrySource?
+
+    init(name: String, retrySource: RetrySource? = nil) {
+        self.name = name
+        self.retrySource = retrySource
+    }
 
     var description: String { "Video: \(name)" }
 
@@ -42,6 +53,7 @@ struct IntentFileVideoFailureAttachment: Attachment {
         VStack(spacing: Constants.Conversation.ImagePlaceholder.failureLabelSpacing) {
             Label("Video", systemImage: "video")
             Text(name).lineLimit(2).truncationMode(.middle)
+            if retrySource != nil { Text("Tap to retry") }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -49,11 +61,27 @@ struct IntentFileVideoFailureAttachment: Attachment {
         // the square run bounds. Give it a square so the labels do not stretch.
         .frame(width: SquareImageThumbnail.transcriptSide, height: SquareImageThumbnail.transcriptSide)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Video: \(name)")
-        .accessibilityHint("Video unavailable")
+        .accessibilityLabel("Video unavailable: \(name)")
+        .accessibilityHint(retrySource == nil ? "" : "Double-tap to retry")
+        .accessibilityAddTraits(retrySource == nil ? [] : .isButton)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, in _: TextEnvironmentValues) -> CGSize {
         IntentFileImageAttachment.thumbnailSize(proposedWidth: proposal.width)
+    }
+
+    /// Textual renders attachment bodies as symbols; its tap handler owns retry.
+    /// Clear the same session loader used to fetch, before re-resolving the markdown.
+    @MainActor
+    func prepareRetry(using loader: WorkspaceFileImageLoader) -> Bool {
+        switch retrySource {
+        case let .asset(workspaceId, assetId):
+            loader.forgetAssetFailure(workspaceId: workspaceId, assetId: assetId)
+        case let .file(workspaceId, path):
+            loader.forgetFailure(workspaceId: workspaceId, path: path)
+        case nil:
+            return false
+        }
+        return true
     }
 }

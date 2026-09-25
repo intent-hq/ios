@@ -8,19 +8,28 @@ struct VideoLightboxView: View {
     @State private var player: AVPlayer?
     @State private var audioLease: UUID?
     @State private var playbackFailed = false
+    @State private var isClosing = false
 
     var body: some View {
         VideoPlayer(player: player)
             .background(.black)
             .safeAreaInset(edge: .top, alignment: .trailing) {
-                Button("Close video", systemImage: "xmark") { dismiss() }
-                    .labelStyle(.iconOnly)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(Constants.Conversation.ImageLightbox.actionButtonPadding)
-                    .background(.black, in: Circle())
-                    .padding(Constants.Conversation.ImageLightbox.actionContainerPadding)
+                Button(action: close) {
+                    Label("Close video", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(Constants.Conversation.ImageLightbox.actionButtonPadding)
+                        .background(.black, in: Circle())
+                        .frame(
+                            minWidth: Constants.Accessibility.minimumTapTarget,
+                            minHeight: Constants.Accessibility.minimumTapTarget
+                        )
+                        .contentShape(.rect)
+                }
+                .padding(Constants.Conversation.ImageLightbox.actionContainerPadding)
             }
+            .accessibilityAction(.escape, close)
             .task { await startPlayback() }
             .onDisappear {
                 player?.pause()
@@ -32,8 +41,14 @@ struct VideoLightboxView: View {
                 }
             }
             .alert("Could not start video playback", isPresented: $playbackFailed) {
-                Button("Close", role: .cancel) { dismiss() }
+                Button("Close", role: .cancel, action: close)
             }
+    }
+
+    private func close() {
+        isClosing = true
+        player?.pause()
+        dismiss()
     }
 
     private func startPlayback() async {
@@ -41,7 +56,7 @@ struct VideoLightboxView: View {
             let lease = try await MediaAudioSession.shared.acquire(.playback)
             // Dismissal may cancel this task while activation is blocking. Do
             // not create a player after disappearance, or leak that activation.
-            guard !Task.isCancelled else {
+            guard !Task.isCancelled, !isClosing else {
                 try? await MediaAudioSession.shared.release(lease)
                 return
             }

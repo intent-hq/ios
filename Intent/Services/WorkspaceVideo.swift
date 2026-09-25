@@ -8,6 +8,12 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
     let url: URL
     let poster: UIImage
     let byteCount: Int
+    /// A fixed 3× cap covers high-density transcript thumbnails without a screen lookup.
+    private static let posterScale: CGFloat = 3
+    private static let posterTimescale: CMTimeScale = 600
+    private static let posterToleranceSeconds = 0.1
+    private static let posterTime = CMTime(seconds: 0.5, preferredTimescale: posterTimescale)
+    private static let posterTolerance = CMTime(seconds: posterToleranceSeconds, preferredTimescale: posterTimescale)
 
     private init(url: URL, poster: UIImage, byteCount: Int) {
         self.url = url
@@ -53,11 +59,15 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
         }
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
+        let posterSide = SquareImageThumbnail.transcriptSide * posterScale
         generator.maximumSize = CGSize(
-            width: WorkspaceFileImageLoader.maxPixelSize,
-            height: WorkspaceFileImageLoader.maxPixelSize
+            width: posterSide,
+            height: posterSide
         )
-        let frame = try await generator.image(at: .zero)
+        generator.requestedTimeToleranceBefore = posterTolerance
+        generator.requestedTimeToleranceAfter = posterTolerance
+        let duration = try await asset.load(.duration)
+        let frame = try await generator.image(at: duration > posterTime ? posterTime : .zero)
         try Task.checkCancellation()
         let video = WorkspaceVideo(url: url, poster: UIImage(cgImage: frame.image), byteCount: data.count)
         retained = true

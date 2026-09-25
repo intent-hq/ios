@@ -19,6 +19,7 @@ struct MarkdownTextView: View {
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
     @State private var videoItem: VideoItem?
+    @State private var attachmentAttempt = 0
 
     private static let maximumBlockIndent = 3
     private static let minimumFenceLength = 3
@@ -85,8 +86,14 @@ struct MarkdownTextView: View {
                     lightboxItem = LightboxItem(image: image)
                 } else if let video = Self.playbackVideo(for: attachment) {
                     videoItem = VideoItem(video: video)
+                } else if let failure = attachment.base as? IntentFileVideoFailureAttachment,
+                          failure.prepareRetry(using: session?.workspaceFileImageLoader ?? .shared) {
+                    attachmentAttempt += 1
                 }
             }
+            // Textual resolves URLs once per attributed string. Recreate that
+            // state on explicit retry; successful media still uses the cache.
+            .id(attachmentAttempt)
             .font(.body)
             .foregroundStyle(Theme.foreground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -106,8 +113,8 @@ struct MarkdownTextView: View {
     }
 
     /// Routes attachment taps: only loaded markdown images (intent-file, saved assets and
-    /// remote http(s)) open the lightbox; every other attachment (e.g.
-    /// failure placeholders) is inert.
+    /// remote http(s)) open the image lightbox. Videos and retry placeholders
+    /// have separate actions in the attachment tap handler.
     static func lightboxImage(for attachment: AnyAttachment) -> UIImage? {
         (attachment.base as? IntentFileImageAttachment)?.image
     }

@@ -97,12 +97,15 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
             return await assetAttachment(link: link, text: text)
         case .intentFile(let link):
             if WorkspaceVideo.isVideo(path: link.path) {
-                if let workspaceId = link.workspaceId ?? workspaceId,
-                   let video = try? await fileVideo(workspaceId, link.path) {
+                let resolvedWorkspaceId = link.workspaceId ?? workspaceId
+                if let resolvedWorkspaceId,
+                   let video = try? await fileVideo(resolvedWorkspaceId, link.path) {
                     return AnyAttachment(IntentFileVideoAttachment(video: video, name: text.isEmpty ?
                         URL(fileURLWithPath: link.path).lastPathComponent : text) as any Textual.Attachment)
                 }
-                return videoFailure(path: link.path)
+                return videoFailure(path: link.path, retrySource: resolvedWorkspaceId.map { workspaceId in
+                    .file(workspaceId: workspaceId, path: link.path)
+                })
             }
             guard link.isImage, let resolvedWorkspaceId = link.workspaceId ?? workspaceId else {
                 return AnyAttachment(
@@ -144,15 +147,18 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
             }
         } catch {
             if WorkspaceVideo.isVideo(path: link.assetId) || error as? WorkspaceFileImageLoader.LoadError == .notAVideo {
-                return videoFailure(path: link.assetId)
+                return videoFailure(path: link.assetId, retrySource: .asset(
+                    workspaceId: link.workspaceId, assetId: link.assetId
+                ))
             }
             return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
         }
     }
 
-    private func videoFailure(path: String) -> AnyAttachment {
-        AnyAttachment(IntentFileVideoFailureAttachment(name: URL(fileURLWithPath: path).lastPathComponent)
-            as any Textual.Attachment)
+    private func videoFailure(path: String, retrySource: IntentFileVideoFailureAttachment.RetrySource?) -> AnyAttachment {
+        AnyAttachment(IntentFileVideoFailureAttachment(
+            name: URL(fileURLWithPath: path).lastPathComponent, retrySource: retrySource
+        ) as any Textual.Attachment)
     }
 
     /// Loaded remote image wrapped in the lightbox-capable attachment; nil on
