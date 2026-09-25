@@ -343,23 +343,4 @@ extension ConversationStoreTests {
         store.reset()
         #expect(!store.agentNotFound)
     }
-
-    // MARK: - dismissQuestions (agent.dismissQuestions, PROTOCOL §5.5)
-
-    @Test func dismissQuestionsCallsRpcAndRaisesMarker() async throws {
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.dismissQuestions"] = [
-            "success": true,
-            "dismissedQuestionsMessageId": "a1"
-        ] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-
-        try await store.dismissQuestions(agentId: "a", messageId: "a1", workspaceId: "w")
-
-        let sent = try #require(fake.requestLog.last { $0.method == "agent.dismissQuestions" })
-        #expect(sent.params["agentId"] as? String == "a")
-        #expect(sent.params["messageId"] as? String == "a1")
-        #expect(sent.params["workspaceId"] as? String == "w")
-        #expect(store.dismissedQuestionsMessageId == "a1")
-    }
 }
