@@ -31,6 +31,7 @@ struct AssistantLaunchButton: View {
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
+        .frame(width: size, height: size)
         .shadow(color: .black.opacity(isOpen ? 0 : Layout.shadowOpacity), radius: Layout.shadowRadius, y: Layout.shadowOffset)
         .accessibilityLabel(isOpen ? "Close Intent menu" : "Intent menu")
         .accessibilityIdentifier(isOpen ? "intent.menu.close" : "intent.menu.open")

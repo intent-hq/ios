@@ -67,6 +67,7 @@ struct WorkspaceActionLauncher: ViewModifier {
             }
             if !isSearching { actionControls }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOpen ? .isModal : [])
         .accessibilityAction(.escape) { isOpen = false }
     }
