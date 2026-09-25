@@ -26,7 +26,7 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
 
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
-        let launcher = app.buttons["assistant.open"]
+        let launcher = app.buttons["intent.menu.open"]
         XCTAssertTrue(launcher.isHittable)
         XCTAssertFalse(app.tabBars.firstMatch.exists)
         let workspaceScreenshot = XCTAttachment(screenshot: app.screenshot())
@@ -34,6 +34,9 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         workspaceScreenshot.lifetime = .keepAlways
         add(workspaceScreenshot)
         launcher.tap()
+        let assistantTile = app.buttons["intent.menu.assistant"]
+        XCTAssertTrue(assistantTile.waitForExistence(timeout: Fixture.timeout))
+        assistantTile.tap()
         let actions = app.buttons["assistant.actions"]
         XCTAssertTrue(actions.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.tabBars.firstMatch.waitForNonExistence(timeout: Fixture.timeout))
@@ -52,6 +55,8 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertFalse(app.tabBars.firstMatch.exists)
 
         launcher.tap()
+        XCTAssertTrue(assistantTile.waitForExistence(timeout: Fixture.timeout))
+        assistantTile.tap()
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(actions.exists)
     }
@@ -65,7 +70,7 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
 
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
-        let launcher = app.buttons["assistant.open"]
+        let launcher = app.buttons["intent.menu.open"]
         XCTAssertTrue(launcher.isHittable)
         workspace.tap()
         let agentRow = app.staticTexts["Test Stabilizer"].firstMatch
@@ -90,9 +95,12 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-assistant-history"]
         app.launch()
-        let launcher = app.buttons["assistant.open"]
+        let launcher = app.buttons["intent.menu.open"]
         XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
         launcher.tap()
+        let assistantTile = app.buttons["intent.menu.assistant"]
+        XCTAssertTrue(assistantTile.waitForExistence(timeout: Fixture.timeout))
+        assistantTile.tap()
 
         let greeting = app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "I can help you plan and follow up")
@@ -120,9 +128,12 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-assistant-history"]
         app.launch()
-        let launcher = app.buttons["assistant.open"]
+        let launcher = app.buttons["intent.menu.open"]
         XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
         launcher.tap()
+        let assistantTile = app.buttons["intent.menu.assistant"]
+        XCTAssertTrue(assistantTile.waitForExistence(timeout: Fixture.timeout))
+        assistantTile.tap()
         let greeting = app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "I can help you plan and follow up")
         ).firstMatch
@@ -143,9 +154,12 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-assistant-workspace-links"]
         app.launch()
-        let launcher = app.buttons["assistant.open"]
+        let launcher = app.buttons["intent.menu.open"]
         XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
         launcher.tap()
+        let assistantTile = app.buttons["intent.menu.assistant"]
+        XCTAssertTrue(assistantTile.waitForExistence(timeout: Fixture.timeout))
+        assistantTile.tap()
         let link = app.buttons["assistant.workspace.demo-ws-flaky-tests"]
         XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(link.label.contains(Fixture.workspaceTitle))
@@ -175,9 +189,12 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         app.launchArguments += ["--demo-data", "--demo-assistant-prompts-trigger-file=\(trigger.path)"]
         if splitAcrossBlocks { app.launchArguments.append("--demo-assistant-prompts-split") }
         app.launch()
-        let launcher = app.buttons["assistant.open"]
+        let launcher = app.buttons["intent.menu.open"]
         XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
         launcher.tap()
+        let assistantTile = app.buttons["intent.menu.assistant"]
+        XCTAssertTrue(assistantTile.waitForExistence(timeout: Fixture.timeout))
+        assistantTile.tap()
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
         let rawMarkup = transcript.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "suggested-prompts")

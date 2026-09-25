@@ -76,9 +76,12 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"] + arguments
         app.launch()
-        let launcher = app.buttons["assistant.open"]
+        let launcher = app.buttons["intent.menu.open"]
         XCTAssertTrue(launcher.waitForExistence(timeout: Self.timeout))
         launcher.tap()
+        let assistantTile = app.buttons["intent.menu.assistant"]
+        XCTAssertTrue(assistantTile.waitForExistence(timeout: Self.timeout))
+        assistantTile.tap()
         return app
     }
 }

@@ -3,7 +3,7 @@ import SwiftUI
 struct AssistantLaunchButton: View {
     private enum Layout {
         static let diameter: CGFloat = 80
-        static let iconSize: CGFloat = 34
+        static let iconSize: CGFloat = 22
         static let trailingInset: CGFloat = 24
         static let bottomInset: CGFloat = 12
         static let shadowRadius: CGFloat = 16
@@ -28,8 +28,8 @@ struct AssistantLaunchButton: View {
         }
         .buttonStyle(.plain)
         .shadow(color: .black.opacity(Layout.shadowOpacity), radius: Layout.shadowRadius, y: Layout.shadowOffset)
-        .accessibilityLabel("Assistant")
-        .accessibilityIdentifier("assistant.open")
+        .accessibilityLabel("Intent menu")
+        .accessibilityIdentifier("intent.menu.open")
         .padding(.trailing, Layout.trailingInset)
         .padding(.bottom, Layout.bottomInset)
     }

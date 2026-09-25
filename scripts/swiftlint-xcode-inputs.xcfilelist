@@ -304,6 +304,8 @@ $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceView.swift
 $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
+$(SRCROOT)/Intent/Views/Workspaces/HomeActionSettingsView.swift
+$(SRCROOT)/Intent/Views/Workspaces/HomeActionTiles.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalControls.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ModelPicker.swift
@@ -313,6 +315,7 @@ $(SRCROOT)/Intent/Views/Workspaces/SpecialistPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalKeyBar.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceActionLauncher.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAttentionCue.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
@@ -575,6 +578,7 @@ $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
 $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
+$(SRCROOT)/IntentUITests/HomeActionMenuUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
 $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift

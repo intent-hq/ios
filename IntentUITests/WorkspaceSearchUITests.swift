@@ -42,7 +42,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     @MainActor
     func testSearchAboveKeyboardHidesAssistantUntilClosed() {
         let app = launchWorkspaces()
-        XCTAssertTrue(app.buttons["assistant.open"].exists)
+        XCTAssertTrue(app.buttons["intent.menu.open"].exists)
         app.buttons["workspaces.search.open"].tap()
         let field = app.textFields["workspaces.search.field"]
         XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
@@ -50,7 +50,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         XCTAssertTrue(keyboard.waitForExistence(timeout: Fixture.timeout))
         XCTAssertLessThanOrEqual(field.frame.maxY, keyboard.frame.minY)
         XCTAssertGreaterThan(field.frame.minY, app.frame.midY)
-        XCTAssertFalse(app.buttons["assistant.open"].exists)
+        XCTAssertFalse(app.buttons["intent.menu.open"].exists)
         XCTAssertFalse(app.buttons["workspaces.viewMode.Recent"].exists)
         field.typeText("payment")
         XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.exists)
@@ -61,10 +61,10 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         field.typeText("\n")
         XCTAssertTrue(keyboard.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(field.exists)
-        XCTAssertFalse(app.buttons["assistant.open"].exists)
+        XCTAssertFalse(app.buttons["intent.menu.open"].exists)
         app.buttons["workspaces.search.cancel"].tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.buttons["assistant.open"].exists)
+        XCTAssertTrue(app.buttons["intent.menu.open"].exists)
         XCTAssertTrue(app.buttons["workspaces.viewMode.Recent"].isHittable)
         app.buttons["workspaces.search.open"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))

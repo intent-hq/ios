@@ -46,13 +46,11 @@ struct WorkspaceListSidebar: View {
                 WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
             }
         }
-        .overlay(alignment: .bottomTrailing) {
-            if !isSearching {
-                AssistantLaunchButton {
-                    coordinator.onSelectAssistant()
-                }
-            }
-        }
+        .modifier(WorkspaceActionLauncher(
+            isSearching: isSearching,
+            onCreateWorkspace: { showingCreateWorkspace = true },
+            onConnections: { showingConnections = true }
+        ))
         .navigationTitle("Workspaces")
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
