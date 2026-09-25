@@ -88,6 +88,11 @@ jobs:
       - name: generate-test-inputs.sh self-tests
         run: scripts/test-generate-test-inputs.sh
 
+      # Offline API fixtures and actual workflow gate/key-lifecycle checks;
+      # Python/OpenSSL and Ruby's standard-library YAML parser are preinstalled.
+      - name: TestFlight promotion offline tests
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test*testflight*.py' -v
+
   swiftlint:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
