@@ -2,15 +2,18 @@ import SwiftUI
 
 struct MobileTerminalView: View {
     let terminal: MobileTerminal
+    let workspaceName: String
     let store: MobileTerminalStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var connection: MobileTerminalConnection
+    @State private var controls = MobileTerminalControls()
     @State private var confirmClose = false
     @State private var isClosing = false
 
-    init(terminal: MobileTerminal, store: MobileTerminalStore) {
+    init(terminal: MobileTerminal, workspaceName: String, store: MobileTerminalStore) {
         self.terminal = terminal
+        self.workspaceName = workspaceName
         self.store = store
         _connection = State(initialValue: MobileTerminalConnection(store: store, terminal: terminal))
     }
@@ -20,57 +23,95 @@ struct MobileTerminalView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                connectionStatus
-                TerminalEmulatorView(connection: connection)
-                    .disabled(!connection.isReady || !store.isActive(terminal))
-                    .task(id: attachmentKey) {
-                        if scenePhase == .active { await connection.attach() } else { connection.detach() }
-                    }
-                    .onDisappear { connection.detach() }
-            }
-            .navigationTitle(terminal.name)
-            .toolbarTitleDisplayMode(.inline)
-            .toolbar { terminalToolbar }
-            .alert("Close terminal?", isPresented: $confirmClose) {
-                Button("Cancel", role: .cancel) {}
-                Button("Close terminal", role: .destructive) {
-                    isClosing = true
-                    Task {
-                        if await store.close(terminal) { dismiss() }
-                        isClosing = false
-                    }
+        VStack(spacing: 0) {
+            header
+            connectionStatus
+            TerminalEmulatorView(connection: connection, controls: controls)
+                .padding(.horizontal, TerminalAppearance.terminalInset)
+                .disabled(!connection.isReady || !store.isActive(terminal))
+                .task(id: attachmentKey) {
+                    if scenePhase == .active { await connection.attach() } else { connection.detach() }
                 }
-            } message: {
-                Text("This stops the shell and any commands running in it. Use Done to leave it running.")
-            }
-            .onChange(of: store.isActive(terminal)) { _, active in
-                if !active { connection.detach() }
-            }
+                .onDisappear { connection.detach() }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            TerminalKeyBar(controls: controls, isEnabled: connection.isReady && store.isActive(terminal))
+        }
+        .background(TerminalAppearance.background.ignoresSafeArea())
+        .preferredColorScheme(.dark)
+        .tint(.white)
         .interactiveDismissDisabled(isClosing)
+        .alert("Close terminal?", isPresented: $confirmClose) { closeActions } message: {
+            Text("This stops the shell and any commands running in it. Go back to leave it running.")
+        }
+        .onChange(of: store.isActive(terminal)) { _, active in
+            if !active { connection.detach() }
+        }
     }
 
-    @ToolbarContentBuilder
-    private var terminalToolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button("Done") { dismiss() }
-        }
-        ToolbarItem(placement: .primaryAction) {
-            Menu {
-                Button("Reconnect", systemImage: "arrow.clockwise") {
-                    Task { await connection.attach() }
-                }
-                .disabled(!store.isConnected || !store.isActive(terminal))
-                Button("Close terminal", systemImage: "xmark.circle", role: .destructive) {
-                    confirmClose = true
-                }
-                .disabled(!store.isConnected || isClosing)
-            } label: {
-                Image(systemName: "ellipsis.circle")
+    private var header: some View {
+        HStack(spacing: TerminalAppearance.headerSpacing) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.title3.weight(.semibold))
+                    .frame(width: TerminalAppearance.controlSize, height: TerminalAppearance.controlSize)
             }
-            .accessibilityLabel("Terminal actions")
+            .buttonStyle(TerminalControlStyle())
+            .modifier(TerminalControlSurface())
+            .accessibilityLabel("Back to workspace")
+            .accessibilityHint("Leaves the terminal running")
+            .disabled(isClosing)
+            title
+            terminalMenu
+        }
+        .padding(.horizontal, TerminalAppearance.horizontalInset)
+        .padding(.top, TerminalAppearance.headerSpacing)
+        .padding(.bottom, TerminalAppearance.headerBottomInset)
+    }
+
+    private var title: some View {
+        VStack(spacing: TerminalAppearance.groupInset) {
+            Text(terminal.name)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .accessibilityIdentifier("mobile-terminal-title")
+            Text(workspaceName)
+                .font(.subheadline)
+                .foregroundStyle(TerminalAppearance.muted)
+        }
+        .lineLimit(1)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var terminalMenu: some View {
+        Menu {
+            Button("Reconnect", systemImage: "arrow.clockwise") {
+                Task { await connection.attach() }
+            }
+            .disabled(!store.isConnected || !store.isActive(terminal))
+            Button("Close terminal", systemImage: "xmark.circle", role: .destructive) {
+                confirmClose = true
+            }
+            .disabled(!store.isConnected || isClosing)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.title3.weight(.semibold))
+                .frame(width: TerminalAppearance.controlSize, height: TerminalAppearance.controlSize)
+        }
+        .buttonStyle(TerminalControlStyle())
+        .modifier(TerminalControlSurface())
+        .accessibilityLabel("Terminal actions")
+    }
+
+    @ViewBuilder
+    private var closeActions: some View {
+        Button("Cancel", role: .cancel) {}
+        Button("Close terminal", role: .destructive) {
+            isClosing = true
+            Task {
+                if await store.close(terminal) { dismiss() }
+                isClosing = false
+            }
         }
     }
 
@@ -84,6 +125,7 @@ struct MobileTerminalView: View {
             status(error)
         } else if !connection.isReady {
             ProgressView("Connecting to terminal…")
+                .tint(TerminalAppearance.green)
                 .padding()
         }
     }
@@ -91,9 +133,10 @@ struct MobileTerminalView: View {
     private func status(_ message: String) -> some View {
         Text(message)
             .font(.callout)
+            .foregroundStyle(TerminalAppearance.muted)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(.bar)
+            .padding(.horizontal, TerminalAppearance.horizontalInset)
+            .padding(.bottom, TerminalAppearance.headerSpacing)
             .accessibilityAddTraits(.updatesFrequently)
     }
 }

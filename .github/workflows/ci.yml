@@ -379,6 +379,24 @@ jobs:
           mkdir Intent IntentTests
           scripts/xcodebuild.sh test-without-building
 
+      - name: Export terminal screenshots
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'MobileTerminalUITests') }}
+        run: |
+          if [ -d TestResults ]; then
+            ln -s "$PWD/TestResults" "$RUNNER_TEMP/TerminalResults.xcresult"
+            xcrun xcresulttool export attachments \
+              --path "$RUNNER_TEMP/TerminalResults.xcresult" \
+              --output-path TerminalScreenshots
+          fi
+
+      - name: Upload terminal screenshots
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'MobileTerminalUITests') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-terminal-screenshots
+          path: TerminalScreenshots
+          if-no-files-found: warn
+
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v7

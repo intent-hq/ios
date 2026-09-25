@@ -169,12 +169,16 @@ struct WorkspaceDetailView: View {
             )
                 .environment(coordinator)
         }
-        .sheet(item: $selectedTerminal, onDismiss: {
-            // The sheet already showed any error inline; don't replay it as an alert.
-            terminalStore.clearError(workspaceId: workspaceId)
-        }) { terminal in
-            MobileTerminalView(terminal: terminal, store: terminalStore)
-        }
+        .fullScreenCover(
+            item: $selectedTerminal,
+            onDismiss: {
+                // The terminal already showed any error inline; don't replay it as an alert.
+                terminalStore.clearError(workspaceId: workspaceId)
+            },
+            content: { terminal in
+                MobileTerminalView(terminal: terminal, workspaceName: workspaceTitle, store: terminalStore)
+            }
+        )
         .alert("Terminal unavailable", isPresented: Binding(
             get: { terminalStore.errorMessage(workspaceId: workspaceId) != nil && selectedTerminal == nil },
             set: { if !$0 { terminalStore.clearError(workspaceId: workspaceId) } }

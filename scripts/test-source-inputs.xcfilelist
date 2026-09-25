@@ -80,6 +80,7 @@ $(SRCROOT)/Intent/DesignSystem/ConversationTranscriptLayout.swift
 $(SRCROOT)/Intent/DesignSystem/Layout.swift
 $(SRCROOT)/Intent/DesignSystem/MarkdownLayout.swift
 $(SRCROOT)/Intent/DesignSystem/QuestionWizardLayout.swift
+$(SRCROOT)/Intent/DesignSystem/TerminalAppearance.swift
 $(SRCROOT)/Intent/DesignSystem/Theme.swift
 $(SRCROOT)/Intent/DesignSystem/VisionHitTarget.swift
 $(SRCROOT)/Intent/DesignSystem/WorkspaceChromeLayout.swift
@@ -330,6 +331,7 @@ $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceView.swift
 $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
+$(SRCROOT)/Intent/Views/Workspaces/MobileTerminalControls.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ModelPicker.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderModelStepView.swift
@@ -337,6 +339,7 @@ $(SRCROOT)/Intent/Views/Workspaces/ProviderPicker.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift
+$(SRCROOT)/Intent/Views/Workspaces/TerminalKeyBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAttentionCue.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift

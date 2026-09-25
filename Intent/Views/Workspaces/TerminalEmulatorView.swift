@@ -4,15 +4,20 @@ import UIKit
 
 struct TerminalEmulatorView: UIViewRepresentable {
     let connection: MobileTerminalConnection
-    private static let fontSize: CGFloat = 14
+    let controls: MobileTerminalControls
 
-    func makeCoordinator() -> Coordinator { Coordinator(connection: connection) }
+    func makeCoordinator() -> Coordinator { Coordinator(connection: connection, controls: controls) }
 
-    func makeUIView(context: Context) -> SwiftTerm.TerminalView {
-        let view = SwiftTerm.TerminalView(frame: .zero)
-        view.font = .monospacedSystemFont(ofSize: Self.fontSize, weight: .regular)
-        view.nativeBackgroundColor = .black
-        view.nativeForegroundColor = .white
+    func makeUIView(context: Context) -> TerminalCanvasView {
+        let view = TerminalCanvasView(frame: .zero)
+        view.font = .monospacedSystemFont(ofSize: TerminalAppearance.terminalFontSize, weight: .regular)
+        view.nativeBackgroundColor = TerminalAppearance.canvas
+        view.nativeForegroundColor = TerminalAppearance.foreground
+        view.caretColor = TerminalAppearance.accent
+        view.keyboardAppearance = .dark
+        view.inputAccessoryView = nil
+        controls.terminalView = view
+        view.focusChanged = { [weak controls] in controls?.synchronize() }
         view.terminalDelegate = context.coordinator
         view.accessibilityLabel = "Workspace terminal"
         connection.outputHandler = { [weak view] data, reset in
@@ -22,7 +27,7 @@ struct TerminalEmulatorView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ view: SwiftTerm.TerminalView, context: Context) {
+    func updateUIView(_ view: TerminalCanvasView, context: Context) {
         view.isUserInteractionEnabled = connection.isReady
         if connection.isReady, !context.coordinator.hasFocused {
             context.coordinator.hasFocused = true
@@ -30,7 +35,9 @@ struct TerminalEmulatorView: UIViewRepresentable {
         }
     }
 
-    static func dismantleUIView(_ view: SwiftTerm.TerminalView, coordinator: Coordinator) {
+    static func dismantleUIView(_ view: TerminalCanvasView, coordinator: Coordinator) {
+        view.focusChanged = nil
+        coordinator.controls.terminalView = nil
         view.terminalDelegate = nil
         coordinator.connection.outputHandler = nil
         coordinator.connection.detach()
@@ -39,9 +46,13 @@ struct TerminalEmulatorView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, @preconcurrency TerminalViewDelegate {
         let connection: MobileTerminalConnection
+        let controls: MobileTerminalControls
         var hasFocused = false
 
-        init(connection: MobileTerminalConnection) { self.connection = connection }
+        init(connection: MobileTerminalConnection, controls: MobileTerminalControls) {
+            self.connection = connection
+            self.controls = controls
+        }
 
         func sizeChanged(source _: SwiftTerm.TerminalView, newCols: Int, newRows: Int) {
             connection.resize(columns: newCols, rows: newRows)
@@ -49,6 +60,7 @@ struct TerminalEmulatorView: UIViewRepresentable {
 
         func send(source _: SwiftTerm.TerminalView, data: ArraySlice<UInt8>) {
             connection.send(Data(data))
+            Task { @MainActor [weak controls] in controls?.synchronize() }
         }
 
         func setTerminalTitle(source _: SwiftTerm.TerminalView, title _: String) {}
