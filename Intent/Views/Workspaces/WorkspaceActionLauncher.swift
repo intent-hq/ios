@@ -18,7 +18,10 @@ struct WorkspaceActionLauncher: ViewModifier {
     private enum Layout {
         static let blurRadius: CGFloat = 16
         static let shadeOpacity = 0.6
-        static let duration = 0.2
+        static let springResponse = 0.35
+        static let springDamping = 0.85
+        static let footerSpacing: CGFloat = 20
+        static let tileEntranceOffset: CGFloat = 20
     }
 
     func body(content: Content) -> some View {
@@ -27,24 +30,11 @@ struct WorkspaceActionLauncher: ViewModifier {
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
             .accessibilityHidden(isOpen)
-            .overlay {
-                if isOpen {
-                    actionOverlay
-                        .transition(.opacity)
-                } else if !isSearching {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            AssistantLaunchButton {
-                                connectionCount = PersistenceManager.shared.loadConnections().count
-                                isOpen = true
-                            }
-                        }
-                    }
-                }
-            }
-            .animation(reduceMotion ? nil : .easeInOut(duration: Layout.duration), value: isOpen)
+            .overlay { actionOverlay }
+            .animation(
+                reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
+                value: isOpen
+            )
             .sheet(item: $destination) { destination in
                 HomeActionSettingsView(destination: destination)
             }
@@ -65,21 +55,35 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 
     private var actionOverlay: some View {
-        ZStack(alignment: .bottom) {
-            Theme.background(for: colorScheme)
-                .opacity(reduceTransparency ? 1 : Layout.shadeOpacity)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture { isOpen = false }
-                .accessibilityHidden(true)
-            HomeActionTiles(
-                connectionCount: connectionCount,
-                appearance: appearanceTitle,
-                onSelect: select
-            ) { isOpen = false }
+        ZStack(alignment: .bottomTrailing) {
+            if isOpen {
+                Theme.background(for: colorScheme)
+                    .opacity(reduceTransparency ? 1 : Layout.shadeOpacity)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { isOpen = false }
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+            }
+            if !isSearching { actionControls }
         }
-        .accessibilityAddTraits(.isModal)
+        .accessibilityAddTraits(isOpen ? .isModal : [])
         .accessibilityAction(.escape) { isOpen = false }
+    }
+
+    private var actionControls: some View {
+        VStack(alignment: .trailing, spacing: Layout.footerSpacing) {
+            Spacer(minLength: 0)
+            if isOpen {
+                HomeActionTiles(connectionCount: connectionCount, appearance: appearanceTitle, onSelect: select)
+                    .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
+            }
+            AssistantLaunchButton(isOpen: isOpen) {
+                if !isOpen { connectionCount = PersistenceManager.shared.loadConnections().count }
+                isOpen.toggle()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private var appearanceTitle: String {
