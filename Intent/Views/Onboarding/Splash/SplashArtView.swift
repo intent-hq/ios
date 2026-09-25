@@ -3,7 +3,6 @@ import SwiftUI
 
 /// Full-screen launch splash using the supplied twist intro and pulse loop.
 struct SplashArtView: View {
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var playback: SplashPlaybackState
@@ -39,7 +38,10 @@ struct SplashArtView: View {
     }
 
     var body: some View {
-        Theme.background(for: colorScheme)
+        // Exact exported background from Figma Launch 2989:19872 / 2989:19873.
+        // Stretch rather than aspect-fill so both gradient endpoints stay visible.
+        Image(.launchBackground)
+            .resizable()
             .overlay {
                 TimelineView(.animation(
                     minimumInterval: animation?.minimumFrameDuration,
@@ -50,7 +52,7 @@ struct SplashArtView: View {
                         SplashFrameView(
                             animation: sample.animation,
                             frame: sample.frame,
-                            colorScheme: colorScheme
+                            colorScheme: .light
                         )
                         .frame(
                             width: Constants.Splash.maximumLogoDimension,
@@ -60,6 +62,7 @@ struct SplashArtView: View {
                 }
             }
         .ignoresSafeArea()
+        .preference(key: LaunchAppearanceModifier.SplashVisibleKey.self, value: true)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .onAppear {

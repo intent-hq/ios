@@ -3,6 +3,7 @@ import Foundation
 import Lottie
 import SwiftUI
 import Testing
+import UIKit
 
 /// ios#247 / ios#256: splash playback samples one injectable monotonic clock
 /// for both source-frame selection and pause/resume accounting. The decoded
@@ -120,6 +121,104 @@ struct SplashPlaybackTests {
         #expect(!animates(.inactive, false, true))
         #expect(!animates(.background, false, true))
         #expect(!animates(.active, false, false))
+    }
+
+    // MARK: - Rendered launch background
+
+    /// Samples the actual view, not the asset declaration: a missing catalog
+    /// entry, aspect-fill crop, flat fallback, or dark variant must fail here.
+    @MainActor
+    @Test func launchGradientFillsPortraitAndLandscapeInEitherAppearance() throws {
+        for scheme in [ColorScheme.light, .dark] {
+            for size in [CGSize(width: 402, height: 874), CGSize(width: 874, height: 402)] {
+                let renderer = ImageRenderer(content: SplashArtView()
+                    .environment(\.colorScheme, scheme)
+                    .frame(width: size.width, height: size.height))
+                let image = try #require(renderer.cgImage)
+                let width = image.width
+                let height = image.height
+                let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+                let context = try #require(CGContext(
+                    data: nil,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: width * 4,
+                    space: colorSpace,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                ))
+                context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+                let pixels = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+                // Independent design reference: off-white top, beige at 61.94%, lime bottom.
+                let samples = [
+                    (0, [243, 242, 241]), (Int(Double(height) * 0.619377), [235, 224, 208]),
+                    (height - 1, [231, 245, 115])
+                ]
+                for (row, expected) in samples {
+                    for column in [0, width - 1] {
+                        let offset = (row * width + column) * 4
+                        for channel in 0..<3 {
+                            #expect(abs(Int(pixels[offset + channel]) - expected[channel]) <= 3)
+                        }
+                        #expect(pixels[offset + 3] == 255)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Window appearance
+
+    /// The real host's resolved appearance is what controls status-bar contrast.
+    /// Another window must not change, and removing/replacing the splash subtree
+    /// must restore both explicit Dark and the inherited System preference.
+    @MainActor
+    @Test func launchAppearanceIsWindowLocalAndClearsWhenSplashIsRemoved() async throws {
+        let host = UIHostingController(rootView: appearanceProbe(showsSplash: true, preference: .dark))
+        let other = UIHostingController(rootView: appearanceProbe(showsSplash: false, preference: .dark))
+        let windows = [host, other].map { controller in
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+            window.rootViewController = controller
+            window.isHidden = false
+            return window
+        }
+        defer {
+            for window in windows {
+                window.isHidden = true
+                window.rootViewController = nil
+            }
+        }
+        try await waitForAppearance(.light, on: host)
+        try await waitForAppearance(.dark, on: other)
+
+        host.rootView = appearanceProbe(showsSplash: false, preference: .dark)
+        try await waitForAppearance(.dark, on: host)
+        host.rootView = appearanceProbe(showsSplash: true, preference: nil)
+        try await waitForAppearance(.light, on: host)
+        host.rootView = appearanceProbe(showsSplash: false, preference: nil)
+        windows[0].overrideUserInterfaceStyle = .dark
+        try await waitForAppearance(.dark, on: host)
+        windows[0].overrideUserInterfaceStyle = .light
+        try await waitForAppearance(.light, on: host)
+        try await waitForAppearance(.dark, on: other)
+    }
+
+    private func appearanceProbe(showsSplash: Bool, preference: ColorScheme?) -> some View {
+        ZStack {
+            if showsSplash { SplashArtView() }
+            Text("Connection status")
+        }
+        .modifier(LaunchAppearanceModifier(preferredColorScheme: preference))
+    }
+
+    @MainActor
+    private func waitForAppearance(_ style: UIUserInterfaceStyle, on host: UIViewController) async throws {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while host.traitCollection.userInterfaceStyle != style, ContinuousClock.now < deadline {
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(host.traitCollection.userInterfaceStyle == style)
     }
 
     // MARK: - Composition lifetime
