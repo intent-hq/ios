@@ -142,7 +142,9 @@ struct ConnectionsView: View {
             if connections.isEmpty {
                 Text("No saved connections. Pair from the Connect screen to save a connection.")
                     .font(Constants.Typography.bodyS.font)
-                    .foregroundStyle(Constants.Pairing.mutedForeground(for: colorScheme))
+                    // No empty-state design reference: preserve its existing semantic light color.
+                    .foregroundStyle(colorScheme == .dark
+                        ? Constants.Pairing.mutedForeground(for: colorScheme) : Theme.mutedForeground(for: colorScheme))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("saved-connections.empty")

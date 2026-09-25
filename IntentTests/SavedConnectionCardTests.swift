@@ -1,6 +1,7 @@
 @testable import Intent
 import SwiftUI
 import Testing
+import UIKit
 
 @MainActor
 struct SavedConnectionCardTests {
@@ -11,9 +12,57 @@ struct SavedConnectionCardTests {
         let colors = try pixelColors(card, scheme: scheme)
         let expected = scheme == .light
             ? [[255, 255, 255], [8, 8, 8], [140, 140, 137], [111, 163, 86], [217, 217, 217]]
-            : [[39, 39, 39], [240, 240, 235], [140, 140, 137], [111, 163, 86], [69, 69, 68]]
+            : [[39, 39, 39], [240, 240, 235], [140, 140, 137], [111, 163, 86], [71, 71, 71]]
         for color in expected {
             #expect(pixelCount(color, in: colors) > 20, "Missing rendered Saved color: \(color), \(scheme)")
+        }
+        // Figma full-frame Outline/15% Black: light #00000026, dark #FFFFFF26.
+        // The exact alpha/tint catches a warm divider that a tolerant pixel histogram could miss.
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        UIColor(Constants.Connections.divider(for: scheme)).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #expect([red, green, blue] == Array(repeating: scheme == .light ? 0 : 1, count: 3))
+        #expect(abs(alpha - 38 / 255) < 0.0001)
+    }
+
+    @Test(.serialized, arguments: [ColorScheme.light, .dark])
+    func renderedManualEmptySheetUsesDesignPalette(scheme: ColorScheme) async throws {
+        // Actual sheet, labels, fields and disabled button; no pairing action or live credentials.
+        _ = TestKeychainStorage.installed
+        let suiteName = "ManualPaletteTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let session = makeSession(defaults: defaults)
+        let view = ManualTokenEntryView()
+            .environment(session)
+            .environment(session.makeCoordinator())
+            .environment(\.colorScheme, scheme)
+            .environment(\.dynamicTypeSize, .large)
+            .frame(width: 402, height: 633)
+        // ImageRenderer cannot flatten native text fields or lay out this sheet's scroll content.
+        let colors = try await SyntheticBadgeHost.render(view, width: 402, height: 633) { hostView, _ in
+            let renderer = UIGraphicsImageRenderer(bounds: hostView.bounds)
+            var drawn = false
+            let image = renderer.image { _ in
+                drawn = hostView.drawHierarchy(in: hostView.bounds, afterScreenUpdates: true)
+            }
+            try #require(drawn)
+            return try pixelColors(#require(image.cgImage))
+        }
+        // Independent full-frame references: light 3051:54152, dark 2989:19990.
+        let expected = scheme == .light
+            ? [
+                [240, 240, 235], [8, 8, 8], [140, 140, 137], [82, 82, 80],
+                [255, 255, 255], [186, 186, 183], [202, 202, 199]
+            ]
+            : [
+                [22, 22, 22], [240, 240, 235], [140, 140, 137], [39, 39, 39],
+                [82, 82, 80], [60, 60, 58]
+            ]
+        for color in expected {
+            #expect(pixelCount(color, in: colors) > 20, "Missing rendered Manual color: \(color), \(scheme)")
         }
     }
 
@@ -48,18 +97,52 @@ struct SavedConnectionCardTests {
         }
     }
 
+    private func makeSession(defaults: UserDefaults) -> BackendSession {
+        let connection = FakeConnectionManager()
+        let store = WorkspaceStore(forTesting: true)
+        let persistence = PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+        let fileLoader = WorkspaceFileImageLoader(connection: connection)
+        return BackendSession(
+            backendID: nil,
+            connection: connection,
+            workspaceStore: store,
+            coordinatorFactory: { claim in
+                AppCoordinator(
+                    workspaceStore: store,
+                    connection: connection,
+                    persistence: persistence,
+                    claimScreenRestoration: claim
+                )
+            },
+            githubRepoStore: GitHubRepoStore(connectionManager: connection),
+            creationOptionsStore: CreationOptionsStore(connectionManager: connection),
+            prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
+            attachmentUploadService: AttachmentUploadService(connection: connection),
+            workspaceFileImageLoader: fileLoader,
+            attachmentImageLoader: AttachmentImageLoader(connection: connection, fileLoader: fileLoader),
+            attentionCueCenter: WorkspaceAttentionCueCenter {}
+        )
+    }
+
     private func pixelColors<V: View>(_ view: V, scheme: ColorScheme) throws -> [[Int]] {
         let renderer = ImageRenderer(content: view
             .environment(\.colorScheme, scheme)
             .environment(\.dynamicTypeSize, .large))
         renderer.scale = 3
         let image = try #require(renderer.cgImage)
+        return try pixelColors(image)
+    }
+
+    private func pixelColors(_ image: CGImage) throws -> [[Int]] {
         let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
         var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
         try bytes.withUnsafeMutableBytes { buffer in
             let context = try #require(CGContext(
-                data: buffer.baseAddress, width: image.width, height: image.height,
-                bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                data: buffer.baseAddress,
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bytesPerRow: image.width * 4,
                 space: colorSpace,
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
             ))

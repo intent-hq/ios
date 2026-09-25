@@ -14,7 +14,7 @@ struct ManualConnectionField<Content: View>: View {
                 style: Constants.Typography.eyebrow,
                 tracking: Constants.ManualTokenEntry.labelTracking
             )
-                .foregroundStyle(Constants.Pairing.mutedForeground(for: colorScheme))
+                .foregroundStyle(Constants.ManualTokenEntry.labelForeground(for: colorScheme))
                 .accessibilityHidden(true)
             content
                 .textFieldStyle(.plain)

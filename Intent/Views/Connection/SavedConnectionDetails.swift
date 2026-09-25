@@ -29,7 +29,7 @@ struct SavedConnectionDetails: View {
                         .font(Constants.Typography.bodyXS.font)
                 }
             }
-            .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+            .foregroundStyle(Constants.ConnectionSheet.defaultForeground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
         }

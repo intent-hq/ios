@@ -92,7 +92,11 @@ struct ManualTokenEntryView: View {
     private enum Field { case host, port, token }
 
     var body: some View {
-        ConnectionSheet(initialHeight: Constants.ManualTokenEntry.initialSheetHeight) {
+        ConnectionSheet(
+            initialHeight: Constants.ManualTokenEntry.initialSheetHeight,
+            backgroundColor: Constants.Pairing.background(for: colorScheme),
+            closeForeground: Constants.Pairing.foreground(for: colorScheme)
+        ) {
             entryForm
         }
             .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
@@ -188,7 +192,8 @@ struct ManualTokenEntryView: View {
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+                    // Preserve the visible light paste affordance rather than Figma's white-on-white export.
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
                     .accessibilityLabel("Paste API token")
                     // Expand the hit region inward, retaining the reference's 24pt glyph inset.
                     .padding(.trailing, -Constants.ManualTokenEntry.pasteHitExpansion)
@@ -226,14 +231,15 @@ struct ManualTokenEntryView: View {
             }
             .font(Constants.Typography.bodySEmphasized.font)
             .tracking(Constants.Pairing.optionTitleTracking)
-            .foregroundStyle(Constants.Pairing.onAccent.opacity(
-                !isValidating && (host.isEmpty || token.isEmpty) ? Constants.ConnectionSheet.placeholderOpacity : 1
-            ))
+            .foregroundStyle(
+                !isValidating && (host.isEmpty || token.isEmpty)
+                    ? Constants.ConnectionSheet.disabledForeground(for: colorScheme) : Constants.Pairing.onAccent
+            )
             .padding(.vertical, Constants.ConnectionSheet.fieldVerticalPadding)
             .frame(maxWidth: .infinity, minHeight: Constants.ConnectionSheet.fieldHeight)
             .background(
                 !isValidating && (host.isEmpty || token.isEmpty)
-                    ? Constants.ConnectionSheet.disabledBackground : Constants.Pairing.accent,
+                    ? Constants.ConnectionSheet.disabledBackground(for: colorScheme) : Constants.Pairing.accent,
                 in: .rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius)
             )
         }

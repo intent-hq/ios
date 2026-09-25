@@ -12,12 +12,14 @@ extension Constants.Connections {
     static let connectedSpacing: CGFloat = 8
     static let dividerWidth: CGFloat = 1
     static let dividerHeight: CGFloat = 12
-    static let dividerOpacity: Double = 0.15
+    // Figma Outline/15% Black exports alpha 0x26 in both appearance modes.
+    // swiftlint:disable:next no_magic_numbers
+    static let dividerOpacity: Double = 38 / 255
     static let headingTracking: CGFloat = -0.56
     static let nameTracking: CGFloat = -0.32
     static let infoTracking: CGFloat = -0.12
 
-    // Saved-only light palette; other connection destinations retain Pairing colors.
+    // Preserve the approved exact Saved light palette independently of other destinations.
     // swiftlint:disable no_magic_numbers
     private static let lightBackground = Color(.sRGB, red: 240 / 255, green: 240 / 255, blue: 235 / 255)
     private static let lightForeground = Color(.sRGB, red: 8 / 255, green: 8 / 255, blue: 8 / 255)
@@ -43,7 +45,7 @@ extension Constants.Connections {
     }
 
     static func divider(for scheme: ColorScheme) -> Color {
-        scheme == .dark ? Constants.Pairing.foreground(for: scheme).opacity(dividerOpacity) : lightDivider
+        scheme == .dark ? Color.white.opacity(dividerOpacity) : lightDivider
     }
 
     static func connectedForeground(for _: ColorScheme) -> Color {

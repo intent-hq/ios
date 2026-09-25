@@ -26,7 +26,7 @@ struct ConnectionSheet<Content: View>: View {
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(closeForeground ?? Constants.Pairing.foreground(for: colorScheme))
+                .foregroundStyle(closeForeground ?? Constants.ConnectionSheet.defaultForeground(for: colorScheme))
                 .accessibilityLabel("Close")
                 .accessibilityIdentifier("connection-sheet.close")
                 .padding(.horizontal, Constants.ConnectionSheet.inset)
@@ -47,8 +47,8 @@ struct ConnectionSheet<Content: View>: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         }
-        .background(backgroundColor ?? Constants.Pairing.background(for: colorScheme))
-        .presentationBackground(backgroundColor ?? Constants.Pairing.background(for: colorScheme))
+        .background(backgroundColor ?? Constants.ConnectionSheet.defaultBackground(for: colorScheme))
+        .presentationBackground(backgroundColor ?? Constants.ConnectionSheet.defaultBackground(for: colorScheme))
         .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
         .presentationDragIndicator(.hidden)
         .presentationDetents([
