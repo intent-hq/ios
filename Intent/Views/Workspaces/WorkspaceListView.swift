@@ -16,26 +16,27 @@ struct WorkspaceListView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            WorkspaceSearchBar(viewMode: $viewModel.viewMode, text: $viewModel.searchText, isFocused: $searchFocused)
-
-            ZStack {
-                Theme.background(for: colorScheme).ignoresSafeArea()
-
-                if viewModel.isLoading, viewModel.workspaces.isEmpty {
-                    ProgressView("Loading workspaces...")
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                } else if viewModel.filteredWorkspaces.isEmpty {
-                    if viewModel.hasSearchQuery {
-                        ContentUnavailableView.search
-                    } else {
-                        emptyState
-                    }
-                } else {
-                    workspaceList
+        ScrollView {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                pageHeader
+                Section {
+                    workspaceContent
+                } header: {
+                    WorkspaceSearchBar(
+                        viewMode: $viewModel.viewMode,
+                        text: $viewModel.searchText,
+                        isFocused: $searchFocused,
+                        horizontalPadding: Constants.WorkspaceList.pageInset
+                    )
+                    .background(Theme.background(for: colorScheme))
                 }
             }
+            .padding(.bottom, AssistantLaunchButton.scrollClearance)
         }
+        .accessibilityIdentifier("workspaces.list")
+        #if !os(visionOS)
+        .scrollDismissesKeyboard(.immediately)
+        #endif
         .background(Theme.background(for: colorScheme))
         .overlay(alignment: .bottomTrailing) {
             AssistantLaunchButton {
@@ -44,33 +45,7 @@ struct WorkspaceListView: View {
             }
         }
         .navigationTitle("Workspaces")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Menu {
-                    Button {
-                        coordinator.onOpenSettings()
-                    } label: {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                    Button {
-                        showingConnections = true
-                    } label: {
-                        Label("Connect to…", systemImage: "desktopcomputer")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel("Workspace options")
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    showingCreateWorkspace = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .accessibilityLabel("Create workspace")
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView(session: session)
                 .environment(coordinator)
@@ -93,14 +68,67 @@ struct WorkspaceListView: View {
         )
     }
 
-    private var workspaceList: some View {
-        List { workspaceSections }
-            .contentMargins(.bottom, AssistantLaunchButton.scrollClearance, for: .scrollContent)
-            .scrollContentBackground(.hidden)
-            .listStyle(.plain)
-            #if !os(visionOS)
-            .scrollDismissesKeyboard(.immediately)
-            #endif
+    private var pageHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                workspaceOptions
+                Spacer()
+                Button {
+                    showingCreateWorkspace = true
+                } label: {
+                    Image(systemName: "plus")
+                        .frame(width: Constants.WorkspaceList.actionSize, height: Constants.WorkspaceList.actionSize)
+                }
+                .accessibilityLabel("Create workspace")
+            }
+            .font(.title2)
+            .buttonStyle(.plain)
+            Text("Workspaces")
+                .font(.largeTitle.bold())
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("workspaces.title")
+                .padding(.top, Constants.WorkspaceList.titleTopSpacing)
+                .padding(.bottom, Constants.WorkspaceList.titleBottomSpacing)
+        }
+        .foregroundStyle(Theme.foreground(for: colorScheme))
+        .padding(.horizontal, Constants.WorkspaceList.pageInset)
+    }
+
+    private var workspaceOptions: some View {
+        Menu {
+            Button {
+                coordinator.onOpenSettings()
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+            }
+            Button {
+                showingConnections = true
+            } label: {
+                Label("Connect to…", systemImage: "desktopcomputer")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .rotationEffect(.degrees(Constants.WorkspaceList.optionsRotation))
+                .frame(width: Constants.WorkspaceList.actionSize, height: Constants.WorkspaceList.actionSize)
+        }
+        .accessibilityLabel("Workspace options")
+    }
+
+    @ViewBuilder
+    private var workspaceContent: some View {
+        if viewModel.isLoading, viewModel.workspaces.isEmpty {
+            ProgressView("Loading workspaces...")
+                .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
+        } else if viewModel.filteredWorkspaces.isEmpty {
+            if viewModel.hasSearchQuery {
+                ContentUnavailableView.search
+            } else {
+                emptyState
+            }
+        } else {
+            workspaceSections
+                .padding(.horizontal, Constants.WorkspaceList.pageInset)
+        }
     }
 
     @ViewBuilder
@@ -112,21 +140,29 @@ struct WorkspaceListView: View {
             }
         case .repo:
             ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
-                Section(header: Text(repoName)) {
-                    ForEach(workspaces) { workspace in
-                        workspaceButton(workspace, showRepo: false)
-                    }
+                groupHeading(repoName)
+                ForEach(workspaces) { workspace in
+                    workspaceButton(workspace, showRepo: false)
                 }
             }
         case .status:
             ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
-                Section(header: Text(statusLabel)) {
-                    ForEach(workspaces) { workspace in
-                        workspaceButton(workspace, usesVisionHitTarget: false)
-                    }
+                groupHeading(statusLabel)
+                ForEach(workspaces) { workspace in
+                    workspaceButton(workspace, usesVisionHitTarget: false)
                 }
             }
         }
+    }
+
+    private func groupHeading(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.caption)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Constants.WorkspaceList.groupTopSpacing)
+            .padding(.bottom, Constants.WorkspaceList.groupBottomSpacing)
+            .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder
@@ -148,9 +184,12 @@ struct WorkspaceListView: View {
             searchFocused = false
             coordinator.onSelectWorkspace(workspace.id)
         } label: {
-            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
+            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo, spacious: true)
         }
         .buttonStyle(.plain)
         .contentShape(Rectangle())
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
     }
 }

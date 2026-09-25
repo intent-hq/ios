@@ -5,6 +5,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         static let timeout: TimeInterval = 30
         static let dismissDuration: TimeInterval = 0.1
         static let dismissEnd: CGFloat = 0.9
+        static let scrollAttempts = 4
         static let workspaceTitle = "Deflake payment integration tests"
     }
 
@@ -69,9 +70,41 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchWorkspaces() -> XCUIApplication {
+    func testFilterStaysPinnedAfterTitleScrollsAway() {
+        let app = launchWorkspaces(arguments: ["--demo-long-workspace-list"])
+        let list = app.scrollViews["workspaces.list"]
+        let title = app.staticTexts["workspaces.title"]
+        let search = app.buttons["workspaces.search.open"]
+        let expandedPosition = search.frame.minY
+        XCTAssertTrue(title.isHittable)
+        let expanded = XCTAttachment(screenshot: app.screenshot())
+        expanded.name = "Workspace header expanded"
+        expanded.lifetime = .keepAlways
+        add(expanded)
+        for _ in 0 ..< Fixture.scrollAttempts where title.isHittable {
+            list.swipeUp()
+        }
+        XCTAssertFalse(title.isHittable)
+        XCTAssertFalse(app.buttons["Create workspace"].isHittable)
+        XCTAssertTrue(search.isHittable)
+        XCTAssertLessThan(search.frame.minY, expandedPosition)
+        XCTAssertTrue(app.buttons["workspaces.viewMode.Repo"].isHittable)
+        let collapsed = XCTAttachment(screenshot: app.screenshot())
+        collapsed.name = "Workspace filters pinned after scrolling"
+        collapsed.lifetime = .keepAlways
+        add(collapsed)
+        search.tap()
+        let field = app.textFields["workspaces.search.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        field.typeText("payment")
+        XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.waitForExistence(timeout: Fixture.timeout))
+        app.buttons["workspaces.search.cancel"].tap()
+    }
+
+    @MainActor
+    private func launchWorkspaces(arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data"]
+        app.launchArguments += ["--demo-data"] + arguments
         app.launch()
         XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.waitForExistence(timeout: Fixture.timeout))
         return app

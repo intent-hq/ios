@@ -94,7 +94,8 @@ extension DemoFixtures {
         let trigger = URL(fileURLWithPath: String(argument.dropFirst(prefix.count)))
         store.messages = [
             ConversationMessage(
-                id: "workspace-stream", role: .assistant,
+                id: "workspace-stream",
+                role: .assistant,
                 contentBlocks: [ContentBlock(id: "text", type: .text, text: "Workspace links are loading.\n\n@@@work")],
                 streamingState: .streaming
             )

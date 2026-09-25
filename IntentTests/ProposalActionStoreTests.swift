@@ -6,7 +6,8 @@ import Testing
 struct ProposalActionStoreTests {
     private func proposal(operation: String = "workspace.bulkArchive") -> ActionProposal {
         ActionProposal(
-            kind: "bulk-op", payload: ["operation": AnyCodable(operation), "ids": AnyCodable(["alpha", "beta"])],
+            kind: "bulk-op",
+            payload: ["operation": AnyCodable(operation), "ids": AnyCodable(["alpha", "beta"])],
             preview: .init(title: "Archive workspaces", summary: nil, applyLabel: "Archive", bulkItems: [], warnings: []),
             applyToolCallId: "proposal"
         )
@@ -14,9 +15,8 @@ struct ProposalActionStoreTests {
 
     private func connection(messageId: String = "message") -> FakeConnectionManager {
         let connection = FakeConnectionManager()
-        connection.responseMap["agent.get"] = ["agent": ["metadata": [
-            "pendingProposals": [["proposalId": "proposal", "messageId": messageId]]
-        ]]]
+        let metadata = ["pendingProposals": [["proposalId": "proposal", "messageId": messageId]]]
+        connection.responseMap["agent.get"] = ["agent": ["metadata": metadata]]
         connection.responseMap["workspace.archive"] = ["workspace": ["id": "alpha"]]
         connection.responseMap["workspace.delete"] = ["success": true]
         connection.responseMap["agent.resolveProposal"] = ["success": true, "outcome": "applied"]

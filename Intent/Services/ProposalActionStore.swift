@@ -99,5 +99,6 @@ final class ProposalActionStore {
 
 private enum ProposalError: LocalizedError {
     case invalidResponse
+
     var errorDescription: String? { "The server returned an incomplete response. Please retry." }
 }

@@ -78,6 +78,7 @@ $(SRCROOT)/Intent/DesignSystem/ComposerLayout.swift
 $(SRCROOT)/Intent/DesignSystem/Layout.swift
 $(SRCROOT)/Intent/DesignSystem/Theme.swift
 $(SRCROOT)/Intent/DesignSystem/VisionHitTarget.swift
+$(SRCROOT)/Intent/DesignSystem/WorkspacePageLayout.swift
 $(SRCROOT)/Intent/Models
 $(SRCROOT)/Intent/Models.swift
 $(SRCROOT)/Intent/Models/ActionProposal.swift

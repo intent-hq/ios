@@ -5,6 +5,7 @@ struct WorkspaceSearchBar: View {
     @Binding var viewMode: ViewMode
     @Binding var text: String
     var isFocused: FocusState<Bool>.Binding
+    var horizontalPadding: CGFloat = Constants.WorkspaceList.pickerHorizontalPadding
     @State private var isExpanded = false
 
     var body: some View {
@@ -28,7 +29,7 @@ struct WorkspaceSearchBar: View {
                 searchInput
             }
         }
-        .padding(.horizontal, Constants.WorkspaceList.pickerHorizontalPadding)
+        .padding(.horizontal, horizontalPadding)
         .padding(.vertical, Constants.WorkspaceList.pickerVerticalPadding)
     }
 
