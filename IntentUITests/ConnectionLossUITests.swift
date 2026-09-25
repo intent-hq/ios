@@ -104,10 +104,10 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         assertNetworkTitle("No network connection", identifier: "connection-loss.status", in: app)
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         assertOverlay(in: app)
-        let offlineEvents = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+        let eventsBeforeBackground = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
         XCTAssertFalse(
             eventExists("overlay-dismissed", in: directory),
-            "Updating network copy must not recreate the overlay; events: \(offlineEvents)"
+            "Updating network copy must not recreate the overlay; events: \(eventsBeforeBackground)"
         )
 
         XCUIDevice.shared.press(.home)
@@ -360,7 +360,15 @@ extension ConnectionLossUITests {
     private func makeTriggerDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        addTeardownBlock { try FileManager.default.removeItem(at: directory) }
+        addTeardownBlock { [weak self] in
+            let events = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+            let attachment = XCTAttachment(string: events.joined(separator: "\n"))
+            attachment.name = "connection-loss-fixture-events"
+            attachment.lifetime = .keepAlways
+            self?.add(attachment)
+            print("Connection-loss fixture events: \(events)")
+            try FileManager.default.removeItem(at: directory)
+        }
         return directory
     }
 
