@@ -16,7 +16,11 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
     }
 
     deinit {
-        try? FileManager.default.removeItem(at: url)
+        // Last release may be on MainActor. Independent utility cleanup must
+        // neither inherit the UI executor nor retain the deinitializing owner.
+        Task.detached(priority: .utility) { [url] in
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     static func == (lhs: WorkspaceVideo, rhs: WorkspaceVideo) -> Bool { lhs === rhs }

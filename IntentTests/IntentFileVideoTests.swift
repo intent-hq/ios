@@ -107,9 +107,14 @@ struct IntentFileVideoTests {
         let bytes = try await Self.videoBytes()
         var video: WorkspaceVideo? = try await WorkspaceVideo.prepare(data: bytes, path: "clip.mp4")
         let url = try #require(video?.url)
-        #expect(FileManager.default.fileExists(atPath: url.path))
+        var playbackOwner = video
         video = nil
-        #expect(!FileManager.default.fileExists(atPath: url.path))
+        #expect(playbackOwner?.url == url)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        playbackOwner = nil
+        try await waitUntil("video removed after final owner releases it") {
+            !FileManager.default.fileExists(atPath: url.path)
+        }
     }
 
     @Test func unavailableVideoSymbolPreservesItsSquareAspectRatio() throws {
