@@ -135,6 +135,24 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkspaceBlockOpensWorkspaceOverview() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-assistant-workspace-links"]
+        app.launch()
+        let launcher = app.buttons["assistant.open"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
+        launcher.tap()
+        let link = app.buttons["assistant.workspace.demo-ws-flaky-tests"]
+        XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(link.label.contains(Fixture.workspaceTitle))
+        XCTAssertFalse(app.buttons["assistant.workspace.missing-workspace"].isEnabled)
+        XCTAssertTrue(app.staticTexts["Ready when you are."].exists)
+        link.tap()
+        XCTAssertTrue(app.staticTexts["Test Stabilizer"].firstMatch.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["assistant.back"].waitForNonExistence(timeout: Fixture.timeout))
+    }
+
+    @MainActor
     func testCompletedSuggestedPromptsReplaceStreamingMarkup() throws {
         try verifyPromptCompletion(splitAcrossBlocks: false)
     }

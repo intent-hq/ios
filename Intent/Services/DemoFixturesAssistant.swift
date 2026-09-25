@@ -79,14 +79,19 @@ extension DemoFixtures {
             [
                 "id": "demo-assistant-message",
                 "role": "assistant",
-                "contentBlocks": [
-                    [
-                        "type": "text",
-                        "text": "I can help you plan and follow up across your workspaces. What would you like to work on?"
-                    ]
-                ],
+                "contentBlocks": assistantReplyBlocks,
                 "timestamp": "2026-09-24T10:00:00Z"
             ]
         ]
+    }
+
+    private static var assistantReplyBlocks: [[String: Any]] {
+        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-links") {
+            return [
+                ["type": "text", "text": "Open this workspace.\n\n@@@work"],
+                ["type": "text", "text": "space\n\(longConversationWorkspaceId)\nmissing-workspace\n@@@\n\nReady when you are."]
+            ]
+        }
+        return [["type": "text", "text": "I can help you plan and follow up across your workspaces. What would you like to work on?"]]
     }
 }

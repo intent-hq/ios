@@ -36,22 +36,7 @@ struct ContentBlockView: View {
             if let text = block.resolvedText {
                 let cleaned = Self.stripSuggestedPrompts(text)
                 if !cleaned.isEmpty {
-                    MarkdownTextView(
-                        text: cleaned,
-                        onOpenURL: { url in
-                            if let link = NoteDetailView.parseIntentNoteLink(url) {
-                                let targetWorkspaceId = link.workspaceId ?? workspaceId
-                                if let onNavigateToNote {
-                                    onNavigateToNote(link.id, targetWorkspaceId, "Note")
-                                } else {
-                                    coordinator.onSelectNote(link.id, workspaceId: targetWorkspaceId, noteTitle: "Note")
-                                }
-                                return .handled
-                            }
-                            return .systemAction
-                        },
-                        workspaceId: workspaceId
-                    )
+                    textView(cleaned)
                 }
             }
 
@@ -97,6 +82,26 @@ struct ContentBlockView: View {
             // MIME regardless of payload validity (FE parity).
             EmptyView()
         }
+    }
+
+    @ViewBuilder
+    private func textView(_ text: String) -> some View {
+        if workspaceId == Workspace.chiefWorkspaceId {
+            WorkspaceLinkedTextView(text: text, workspaceId: workspaceId, onOpenURL: openTextURL)
+        } else {
+            MarkdownTextView(text: text, onOpenURL: openTextURL, workspaceId: workspaceId)
+        }
+    }
+
+    private func openTextURL(_ url: URL) -> OpenURLAction.Result {
+        guard let link = NoteDetailView.parseIntentNoteLink(url) else { return .systemAction }
+        let targetWorkspaceId = link.workspaceId ?? workspaceId
+        if let onNavigateToNote {
+            onNavigateToNote(link.id, targetWorkspaceId, "Note")
+        } else {
+            coordinator.onSelectNote(link.id, workspaceId: targetWorkspaceId, noteTitle: "Note")
+        }
+        return .handled
     }
 
     @ViewBuilder

@@ -37,7 +37,7 @@ struct AssistantMessageView: View {
         let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
         self.hasStrippedPrompts = strippedBlocks != blocks
         self.renderBlocks = MessageBlockPartitioning.groupContentBlocks(
-            strippedBlocks,
+            workspaceId == Workspace.chiefWorkspaceId ? WorkspaceLinks.coalescingTextBlocks(strippedBlocks) : strippedBlocks,
             isStreaming: message.isStreaming
         )
         self.copyText = MessageBlockPartitioning.assistantCopyText(from: blocks)
