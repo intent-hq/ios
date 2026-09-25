@@ -573,6 +573,8 @@ private struct PickerLayoutHost: View {
                 selectedProvider: $selectedProvider,
                 models: [Self.model],
                 selectedModel: $selectedModel,
+                reasoningLevels: [],
+                selectedReasoningEffort: .constant(nil),
                 messageText: $message,
                 isCreating: isCreating,
                 errorMessage: nil,

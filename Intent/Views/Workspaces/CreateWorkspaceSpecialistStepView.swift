@@ -12,6 +12,8 @@ struct CreateWorkspaceSpecialistStepView: View {
     @Binding var selectedProvider: ProviderInfo?
     let models: [ModelInfo]
     @Binding var selectedModel: ModelInfo?
+    let reasoningLevels: [String]
+    @Binding var selectedReasoningEffort: String?
     @Binding var messageText: String
     let isCreating: Bool
     let errorMessage: String?
@@ -115,6 +117,12 @@ struct CreateWorkspaceSpecialistStepView: View {
             if !providers.isEmpty, !models.isEmpty {
                 adaptiveField("Model") { modelPicker }
             }
+            adaptiveField("Reasoning") { reasoningPicker }
+            if reasoningLevels.isEmpty {
+                Text("Choose a model with reasoning options to override Auto.")
+                    .font(.caption)
+                    .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
+            }
         }
     }
 
@@ -170,6 +178,26 @@ struct CreateWorkspaceSpecialistStepView: View {
             ),
             usesFormStyle: true
         )
+    }
+
+    private var reasoningPicker: some View {
+        Menu {
+            Picker("Reasoning", selection: $selectedReasoningEffort) {
+                Text("Auto").tag(String?.none)
+                ForEach(reasoningLevels, id: \.self) { level in
+                    Text(level).tag(Optional(level))
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            CreateWorkspaceChoiceLabel(title: selectedReasoningEffort ?? String(localized: "Auto"))
+        }
+        .buttonStyle(.plain)
+        .disabled(reasoningLevels.isEmpty || isLoadingProviders)
+        .accessibilityLabel("Reasoning")
+        .accessibilityValue(selectedReasoningEffort ?? String(localized: "Auto"))
+        .accessibilityHint("Auto uses the host's defaults. Other options override reasoning for the selected model.")
+        .accessibilityIdentifier("creation.reasoningPicker")
     }
 
     @ViewBuilder
@@ -230,6 +258,7 @@ extension CreateWorkspaceView {
         let provider: ProviderInfo?
         let model: ModelInfo?
         let message: String
+        var reasoningEffort: String?
     }
 
     static var initialMessageLineCountRange: ClosedRange<Int> {
@@ -272,6 +301,7 @@ extension CreateWorkspaceView {
                 initialAgentParams["provider"] = provider.id
             }
             if let model = initialAgent.model { initialAgentParams["model"] = model.id }
+            if let effort = initialAgent.reasoningEffort { initialAgentParams["reasoningEffort"] = effort }
             if hasMessage { initialAgentParams["prompt"] = trimmedMessage }
             params["initialAgent"] = initialAgentParams
         }

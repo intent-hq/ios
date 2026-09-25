@@ -242,7 +242,8 @@ import Observation
                     id: id,
                     name: name,
                     provider: item["provider"] as? String ?? providerId,
-                    isDefault: item["isDefault"] as? Bool ?? false
+                    isDefault: item["isDefault"] as? Bool ?? false,
+                    effortLevels: item["effortLevels"] as? [String] ?? []
                 )
             }
         } catch {

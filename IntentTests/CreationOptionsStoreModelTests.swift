@@ -26,7 +26,12 @@ extension CreationOptionsStoreTests {
         fake.responseMap["models.list"] = [
             "models": [
                 ["id": "gpt-5", "name": "GPT-5"],
-                ["id": "gpt-5-mini", "name": "GPT-5 mini", "provider": "codex", "isDefault": true],
+                [
+                    "id": "gpt-5-mini", "name": "GPT-5 mini", "provider": "codex", "isDefault": true,
+                    "effortLevels": ["low", "high", "future-level"]
+                ],
+                ["id": "malformed", "name": "Malformed metadata", "effortLevels": "high"],
+                ["id": "mixed", "name": "Mixed metadata", "effortLevels": ["high", 3]],
                 ["id": "no-name"]
             ]
         ]
@@ -34,9 +39,10 @@ extension CreationOptionsStoreTests {
         await store.loadModelsIfNeeded(providerId: "codex")
 
         let models = store.models(for: "codex") ?? []
-        #expect(models.map(\.id) == ["gpt-5", "gpt-5-mini"])
-        #expect(models.map(\.provider) == ["codex", "codex"])
-        #expect(models.map(\.isDefault) == [false, true])
+        #expect(models.map(\.id) == ["gpt-5", "gpt-5-mini", "malformed", "mixed"])
+        #expect(models.map(\.provider) == ["codex", "codex", "codex", "codex"])
+        #expect(models.map(\.isDefault) == [false, true, false, false])
+        #expect(models.map(\.effortLevels) == [[], ["low", "high", "future-level"], [], []])
     }
 
     @Test func cachedModelLoadReturnsImmediatelyAndRevalidatesSilently() async throws {

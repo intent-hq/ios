@@ -33,7 +33,10 @@ extension DemoFixtures {
             return [
                 "models": [
                     ["id": "default-model", "name": "Default Model", "provider": provider, "isDefault": true],
-                    ["id": "named-model", "name": "Named Model", "provider": provider, "isDefault": false]
+                    [
+                        "id": "named-model", "name": "Named Model", "provider": provider, "isDefault": false,
+                        "effortLevels": ["low", "medium", "high"]
+                    ]
                 ]
             ]
         default:
