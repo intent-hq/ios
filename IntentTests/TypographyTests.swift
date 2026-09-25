@@ -5,14 +5,14 @@ import UIKit
 
 @MainActor
 struct TypographyTests {
-    private struct Fixture {
+    nonisolated private struct Fixture {
         let style: Constants.Typography.Style
         let fontName: String
         let size: CGFloat
         let role: Font.TextStyle
     }
 
-    private static let fixtures: [Fixture] = [
+    nonisolated private static let fixtures: [Fixture] = [
         Fixture(style: Constants.Typography.heading1, fontName: "Inter-SemiBold", size: 40, role: .largeTitle),
         Fixture(style: Constants.Typography.heading2, fontName: "Inter-SemiBold", size: 28, role: .title),
         Fixture(style: Constants.Typography.bodyM, fontName: "Inter-Medium", size: 18, role: .headline),
@@ -95,7 +95,8 @@ struct TypographyTests {
         #expect(try renderedImage(markdown.interFont(style)) == renderedImage(explicit.interFont(style)))
     }
 
-    @Test func uiKitFontsKeepTheirFaceAndScaleWithCurrentTraits() {
+    // Attachment layout is nonisolated; keep the font-resolution owner usable there.
+    @Test nonisolated func uiKitFontsKeepTheirFaceAndScaleWithCurrentTraits() {
         let normal = UITraitCollection(preferredContentSizeCategory: .large)
         let accessible = UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge)
         for fixture in Self.fixtures {

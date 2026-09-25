@@ -8,7 +8,7 @@ extension Constants {
     /// Apply to text only; preserve native control, SF Symbol, and monospaced fonts.
     /// Use `interFont` on SwiftUI text for Bold Text support. Unsupported scripts and emoji
     /// use the platform's glyph fallback; Inter does not cover every Unicode character.
-    enum Typography {
+    nonisolated enum Typography {
         private static let heading1Size: CGFloat = 40
         private static let heading2Size: CGFloat = 28
         private static let bodyMSize: CGFloat = 18
@@ -46,7 +46,7 @@ extension Constants {
 }
 
 extension Constants.Typography {
-    enum Face: String {
+    nonisolated enum Face: String {
         case regular = "Inter-Regular"
         case medium = "Inter-Medium"
         case semibold = "Inter-SemiBold"
@@ -71,7 +71,7 @@ extension Constants.Typography {
         }
     }
 
-    struct Style {
+    nonisolated struct Style {
         let face: Face
         let size: CGFloat
         let relativeTo: Font.TextStyle
