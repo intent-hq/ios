@@ -189,9 +189,11 @@ struct PersistenceBackendSyncTests {
         imported.syncUpdatedAt = 200
         imported.pendingSyncUpdatedAt = nil
         try store.seed([local, imported])
+        let pairedAt = try #require(store.manager.loadConnections().first?.server.pairedAt)
+        let expectedClock = pairedAt.timeIntervalSince1970 * 1000
         store.manager.publishPendingBackends()
         #expect(store.cloud.writeCount == 1)
-        #expect(try store.cloud.object()["updatedAt"] as? Double == 100)
+        #expect(try store.cloud.object()["updatedAt"] as? Double == expectedClock)
         #expect(store.manager.loadConnections().last == imported)
     }
 
