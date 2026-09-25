@@ -173,6 +173,7 @@ struct RootView: View {
     var body: some View {
         @Bindable var coordinator = coordinator
         rootContent
+        .modifier(ConnectionSceneBackdrop())
         .animation(
             .easeInOut(duration: Constants.Root.screenAnimationDuration),
             value: String(describing: coordinator.currentScreen)

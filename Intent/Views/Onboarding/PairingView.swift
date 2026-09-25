@@ -52,6 +52,11 @@ struct PairingView: View {
                 .sheet(isPresented: $showManualEntry) { ManualTokenEntryView() }
                 .sheet(isPresented: $showConnections) { ConnectionsView() }
         }
+        .preference(
+            key: ConnectionBackdropPreference.self,
+            value: showManualEntry ? ConnectionBackdropPreference.manualOpacity
+                : (showConnections ? ConnectionBackdropPreference.savedOpacity : 0)
+        )
     }
 
     private var pairingContent: some View {

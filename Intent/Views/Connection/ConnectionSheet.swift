@@ -16,21 +16,7 @@ struct ConnectionSheet<Content: View>: View {
         // swiftlint:disable:next geometry_reader_usage
         GeometryReader { geometry in
             VStack(alignment: .leading, spacing: 0) {
-                Button { dismiss() } label: {
-                    Image(.connectionClose)
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
-                        .frame(width: Constants.ConnectionSheet.closeSize, height: Constants.ConnectionSheet.closeSize)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(closeForeground ?? Constants.ConnectionSheet.defaultForeground(for: colorScheme))
-                .accessibilityLabel("Close")
-                .accessibilityIdentifier("connection-sheet.close")
-                .padding(.horizontal, Constants.ConnectionSheet.inset)
-                .padding(.top, Constants.ConnectionSheet.inset)
+                closeButton
 
                 ScrollView {
                     content
@@ -44,7 +30,9 @@ struct ConnectionSheet<Content: View>: View {
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                #if !os(visionOS)
                 .scrollDismissesKeyboard(.interactively)
+                #endif
             }
         }
         .background(backgroundColor ?? Constants.ConnectionSheet.defaultBackground(for: colorScheme))
@@ -56,5 +44,23 @@ struct ConnectionSheet<Content: View>: View {
                 ? contentHeight + Constants.ConnectionSheet.closeSize + Constants.ConnectionSheet.inset
                 : initialHeight)
         ])
+    }
+
+    private var closeButton: some View {
+        Button { dismiss() } label: {
+            Image(.connectionClose)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                .frame(width: Constants.ConnectionSheet.closeSize, height: Constants.ConnectionSheet.closeSize)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(closeForeground ?? Constants.ConnectionSheet.defaultForeground(for: colorScheme))
+        .accessibilityLabel("Close")
+        .accessibilityIdentifier("connection-sheet.close")
+        .padding(.horizontal, Constants.ConnectionSheet.inset)
+        .padding(.top, Constants.ConnectionSheet.inset)
     }
 }

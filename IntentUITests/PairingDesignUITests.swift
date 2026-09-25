@@ -83,24 +83,36 @@ nonisolated final class PairingDesignUITests: XCTestCase {
 
         // Remove only this test's in-memory fixture through the real saved sheet.
         saved.tap()
-        XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
-        machine.press(forDuration: 1)
-        app.buttons["Delete"].tap()
-        let confirmation = app.alerts["Delete Connection?"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
-        confirmation.buttons["Cancel"].tap()
-        XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout), "Cancel must keep the saved connection")
-        machine.press(forDuration: 1)
-        app.buttons["Delete"].tap()
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
-        confirmation.buttons["Delete"].tap()
-        XCTAssertTrue(machine.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.staticTexts["saved-connections.empty"].exists)
+        verifySavedConnectionDeletion(machine, in: app)
         app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(manual.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(scan.isHittable)
         XCTAssertFalse(saved.exists)
         capture(app, named: "saved-off")
+    }
+
+    @MainActor
+    private func verifySavedConnectionDeletion(
+        _ machine: XCUIElement,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout), file: file, line: line)
+        machine.press(forDuration: 1)
+        app.buttons["Delete"].tap()
+        let confirmation = app.alerts["Delete Connection?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout), file: file, line: line)
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertTrue(
+            machine.waitForExistence(timeout: Self.timeout), "Cancel must keep the saved connection", file: file, line: line
+        )
+        machine.press(forDuration: 1)
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout), file: file, line: line)
+        confirmation.buttons["Delete"].tap()
+        XCTAssertTrue(machine.waitForNonExistence(timeout: Self.timeout), file: file, line: line)
+        XCTAssertTrue(app.staticTexts["saved-connections.empty"].exists, file: file, line: line)
     }
 
     @MainActor

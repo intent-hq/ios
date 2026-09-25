@@ -5,6 +5,53 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
     @MainActor
+    func testSavedBlocksBackgroundNavigationAndRestoresItAfterDismissal() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data"]
+        app.launch()
+        let options = app.buttons["Workspace options"]
+        XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
+        let backgroundPoint = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: options.frame.midX, dy: options.frame.midY))
+        openSaved(in: app)
+        backgroundPoint.tap()
+        XCTAssertFalse(app.buttons["Settings"].exists, "The native modal shield must block the toolbar")
+        capture(app, named: "saved-background-blocked")
+        // The system may dismiss a short detent on a dimmer tap. It must not
+        // deliver that same tap to the menu underneath, whether it dismisses or not.
+        if !app.staticTexts["saved-connections.title"].exists { openSaved(in: app) }
+
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
+        capture(app, named: "saved-close-cleanup")
+        openSaved(in: app)
+        let close = app.buttons["connection-sheet.close"].frame
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let start = origin.withOffset(CGVector(dx: app.frame.midX, dy: close.minY))
+        // A short, slow pull cancels rather than finishing interactive dismissal.
+        let shortPull = origin.withOffset(CGVector(dx: app.frame.midX, dy: close.minY + 20))
+        start.press(forDuration: 0.1, thenDragTo: shortPull, withVelocity: .slow, thenHoldForDuration: 0.5)
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].exists)
+        XCTAssertFalse(app.buttons["Settings"].exists)
+        capture(app, named: "saved-cancelled-swipe")
+        start.press(forDuration: 0.1, thenDragTo: origin.withOffset(
+            CGVector(dx: app.frame.midX, dy: app.frame.maxY - 10)
+        ))
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
+        capture(app, named: "saved-swipe-cleanup")
+        options.tap()
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    private func openSaved(in app: XCUIApplication) {
+        app.buttons["Workspace options"].tap()
+        app.buttons["Connect to…"].tap()
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
     func testEmptyAndFilledReferencePlacement() throws {
         let app = try launchManual()
         guard app.frame.size == CGSize(width: 402, height: 874) else {
