@@ -4,12 +4,16 @@ import Testing
 
 struct DiagnosticExportTests {
     @Test func exportsReviewedSnapshotNotEventsArrivingAfterReview() async throws {
-        let store = DiagnosticStore(storage: DiagnosticTestStorage())
+        let clock = DiagnosticTestClock()
+        let limits = DiagnosticLimits(historyBytes: 2048)
+        let store = DiagnosticStore(storage: DiagnosticTestStorage(), limits: limits) { clock.now() }
         store.record(DiagnosticFixtures.event())
         let reviewed = await store.snapshot()
         store.record(DiagnosticFixtures.event(operation: .workspaceCreate))
         let current = await store.snapshot()
         #expect(current.metadata.retainedRecords == 2)
+        #expect(current.metadata.loss.rotatedRecords == 0)
+        #expect(current.jsonLines.count <= limits.historyBytes)
         #expect(current.historyRevision == reviewed.historyRevision)
         guard case .ready(let report) = await store.prepareExport(reviewing: reviewed) else {
             Issue.record("Expected a report for the reviewed snapshot")
@@ -19,6 +23,48 @@ struct DiagnosticExportTests {
         #expect(entries["events.jsonl"] == reviewed.jsonLines)
         #expect(entries["metadata.json"] == (try reviewed.metadataJSON()))
         #expect(await store.endReport(report))
+    }
+
+    @Test func byteRotationPermanentlyRejectsOldPreviewAndFreshReviewExportsRetainedEvents() async throws {
+        let clock = DiagnosticTestClock()
+        let storage = DiagnosticTestStorage()
+        let limits = DiagnosticLimits(historyBytes: 2048)
+        let store = DiagnosticStore(storage: storage, limits: limits) { clock.now() }
+        store.record(DiagnosticFixtures.event())
+        let reviewed = await store.snapshot()
+        #expect(reviewed.metadata.retainedRecords == 1)
+        for _ in 0..<20 {
+            #expect(store.record(DiagnosticFixtures.event(operation: .workspaceCreate), scope: store.makeScope()))
+        }
+        let rotated = await store.snapshot()
+        let retained = try DiagnosticFixtures.records(rotated)
+        #expect(!retained.isEmpty)
+        #expect(!retained.contains { $0.event.operation == .workspaceLoad })
+        #expect(rotated.metadata.loss.rotatedRecords > 0)
+        #expect(rotated.metadata.loss.expiredRecords == 0)
+        #expect(rotated.metadata.generatedAt == reviewed.metadata.generatedAt)
+        #expect(rotated.jsonLines.count <= limits.historyBytes)
+        guard case .needsReview(let updated) = await store.prepareExport(reviewing: reviewed) else {
+            Issue.record("Size-evicted records must not be exported from an older preview")
+            return
+        }
+        #expect(updated.jsonLines == rotated.jsonLines)
+        let reportDirectory = storage.files.directory.appendingPathComponent("report")
+        #expect(!FileManager.default.fileExists(atPath: reportDirectory.path))
+        guard case .ready(let report) = await store.prepareExport(reviewing: updated) else {
+            Issue.record("A fresh review of retained records must be exportable after size rotation")
+            return
+        }
+        let entries = try DiagnosticZIPTestReader.extract(Data(contentsOf: report.archiveURL))
+        #expect(entries["events.jsonl"] == updated.jsonLines)
+        #expect(entries["metadata.json"] == (try updated.metadataJSON()))
+        #expect(await store.endReport(report))
+        guard case .needsReview(let retried) = await store.prepareExport(reviewing: reviewed) else {
+            Issue.record("The old preview must stay invalid after a fresh export finishes")
+            return
+        }
+        #expect(retried.jsonLines == updated.jsonLines)
+        #expect(!FileManager.default.fileExists(atPath: reportDirectory.path))
     }
 
     @Test(arguments: [false, true])

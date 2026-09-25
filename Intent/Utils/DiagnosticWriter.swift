@@ -240,6 +240,9 @@ actor DiagnosticWriter {
             lines.append(line)
             kept.append(record)
         }
+        // Eviction invalidates older reviews, not an active consumer's report.
+        // Arrivals that fit leave the reviewed bytes shareable unchanged.
+        if full { historyRevision = UUID() }
         records = kept.reversed()
         return lines.reversed().reduce(into: Data()) { data, line in
             data.append(line)

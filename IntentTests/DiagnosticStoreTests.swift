@@ -110,20 +110,29 @@ struct DiagnosticStoreTests {
         #expect(snapshot.metadata.loss.expiredRecords == 1)
     }
 
-    @Test func byteRotationKeepsNewestWholeRecordsOnDiskAndInExport() async throws {
+    @Test func byteRotationKeepsNewestHistoryAndPreservesActiveReportUntilCompletion() async throws {
+        let clock = DiagnosticTestClock()
         let storage = DiagnosticTestStorage()
         let limits = DiagnosticLimits(historyBytes: 2048)
-        let store = DiagnosticStore(storage: storage, limits: limits)
-        for _ in 0..<20 {
+        let store = DiagnosticStore(storage: storage, limits: limits) { clock.now() }
+        store.record(DiagnosticFixtures.event(), scope: store.makeScope())
+        let report = try #require(await store.beginReport())
+        let originalArchive = try Data(contentsOf: report.archiveURL)
+        for _ in 1..<20 {
             store.record(DiagnosticFixtures.event(), scope: store.makeScope())
         }
         let snapshot = await store.snapshot()
         let records = try DiagnosticFixtures.records(snapshot)
         #expect(snapshot.jsonLines.count <= limits.historyBytes)
         #expect(records.last?.sequence == 20)
+        #expect(!records.contains { $0.sequence == 1 })
         #expect(snapshot.metadata.loss.rotatedRecords > 0)
         let disk = try storage.files.readHistory(maximumBytes: limits.historyBytes)
         #expect(disk == snapshot.jsonLines)
+        #expect(await store.beginReport() == nil)
+        #expect(try Data(contentsOf: report.archiveURL) == originalArchive)
+        #expect(await store.endReport(report))
+        #expect(!FileManager.default.fileExists(atPath: report.directory.path))
     }
 
     @Test func clearPreservesActiveConsumerAndStaleLeaseCannotDeleteNewReport() async throws {
