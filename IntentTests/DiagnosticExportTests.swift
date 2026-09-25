@@ -1,5 +1,6 @@
 import Foundation
 @testable import Intent
+import Synchronization
 import Testing
 
 struct DiagnosticExportTests {
