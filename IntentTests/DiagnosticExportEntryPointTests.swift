@@ -23,10 +23,13 @@ struct DiagnosticExportEntryPointTests {
         }
     }
 
-    @Test(arguments: ["Settings/SettingsView.swift", "Connection/ConnectionFailureView.swift"])
-    func settingsAndFailureKeepAnOfflinePreviewEntry(file: String) throws {
+    @Test(arguments: [
+        ("Settings/SettingsSupportSection.swift", "SettingsActionLabel(title: \"Export logs\""),
+        ("Connection/ConnectionFailureView.swift", "Label(\"Export logs\"")
+    ])
+    func settingsAndFailureKeepAnOfflinePreviewEntry(file: String, labelPrefix: String) throws {
         let source = try read("Intent/Views/" + file)
-        #expect(source.contains("Label(\"Export logs\""))
+        #expect(source.contains(labelPrefix))
         #expect(source.contains("showingDiagnosticLogs = true"))
         #expect(source.contains(".sheet(isPresented: $showingDiagnosticLogs)"))
         #expect(source.contains("DiagnosticExportView()"))

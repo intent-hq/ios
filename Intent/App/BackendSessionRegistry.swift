@@ -147,6 +147,7 @@ final class BackendSessionRegistry {
                     workspaceStore: workspaceStore,
                     connection: connection,
                     backendID: backendID,
+                    syncedRegistry: DemoMode.isEnabled ? SyncedBackendRegistry(accessGroup: nil) : SyncedBackendRegistry(),
                     claimScreenRestoration: claim
                 )
             },

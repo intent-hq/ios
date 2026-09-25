@@ -120,6 +120,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
+$(SRCROOT)/Intent/Services/DemoSettings.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
 $(SRCROOT)/Intent/Services/LifecycleDiagnostics.swift
@@ -286,6 +287,15 @@ $(SRCROOT)/Intent/Views/Settings/AcknowledgementsView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticExportView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticPreviewSection.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticShareSheet.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsActionLabel.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsAppearanceSelector.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsConnectionCard.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsConnectionsSection.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsHeader.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsPairingSection.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsSection.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsStyle.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsSupportSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
@@ -328,6 +338,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorMissingEntityTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorRegistryCorruptionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorReturnHomeTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorRoutingTests.swift
+$(SRCROOT)/IntentTests/AppCoordinatorSettingsTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorStartupTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorWorkspaceValidationTests.swift
@@ -562,6 +573,7 @@ $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
 $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift
 $(SRCROOT)/IntentUITests/PairingDesignUITests.swift
+$(SRCROOT)/IntentUITests/SettingsUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/WorkspaceEntryUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift

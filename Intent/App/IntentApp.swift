@@ -8,6 +8,7 @@ struct IntentApp: App {
     init() {
         LifecycleDiagnostics.sessionStarted()
         DemoConnectionLoss.seedSavedMachineIfNeeded()
+        DemoSettings.seedConnectionsIfNeeded()
         _ = NotificationManager.shared
         // Aggregate agent alerts across every live backend session: each
         // session attaches an observer on creation and detaches on

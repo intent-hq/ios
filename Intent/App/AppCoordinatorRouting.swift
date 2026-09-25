@@ -190,6 +190,13 @@ extension AppCoordinator {
     /// uses them.
     @discardableResult
     func refreshSyncedBackends() -> SyncedBackendMergeOutcome? {
+        defer {
+            savedConnections = dependencies.persistence.loadConnections().sorted { lhs, rhs in
+                if lhs.id == windowConnectionID { return rhs.id != windowConnectionID }
+                if rhs.id == windowConnectionID { return false }
+                return (lhs.lastConnectedAt ?? .distantPast) > (rhs.lastConnectedAt ?? .distantPast)
+            }
+        }
         dependencies.persistence.publishPendingBackends()
         guard case .available(let records) = dependencies.syncedRegistry.listBackends() else { return nil }
         let windowID = windowConnectionID
