@@ -66,6 +66,9 @@ jobs:
       - name: xcodebuild.sh self-tests
         run: scripts/test_xcodebuild.sh
 
+      - name: UI shard gate self-tests
+        run: python3 scripts/test-ui-test-shards.py
+
       # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
       # override in scripts/swiftlint.sh against a stubbed swiftlint; pure bash.
       - name: swiftlint.sh self-tests
@@ -423,15 +426,17 @@ jobs:
           echo "timed out waiting for the Go unit tests / SwiftLint jobs" >&2
           exit 1
 
-  ios-ui-tests:
-    name: iOS UI Tests
+  ios-ui-test-shards:
+    name: iOS UI Tests (shard ${{ matrix.shard }}/2)
     # Pull requests and unfiltered manual runs exercise the complete UI bundle.
     # Filtered dispatches already run their requested selector in build-and-test.
-    # A human adds this check to the ruleset after merge; build-and-test does not
-    # wait for it, so both macOS jobs release their runners independently.
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     runs-on: macos-15
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       GIT_TERMINAL_PROMPT: '0'
       SPM_CLONE_DIR: build/SourcePackages
@@ -510,14 +515,16 @@ jobs:
 
       - name: Run UI tests
         env:
-          ONLY_TESTING: IntentUITests
+          # Step-only: build-for-testing rejects UI_TEST_SHARD. The wrapper
+          # discovers and verifies disjoint, complete method-level selections.
+          UI_TEST_SHARD: ${{ matrix.shard }}
         run: scripts/xcodebuild.sh test-without-building
 
       - name: Upload UI test results
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
-          name: ios-ui-test-results
+          name: ios-ui-test-results-shard-${{ matrix.shard }}
           path: |
             UITestResults
             UITestResults-retry
@@ -567,10 +574,35 @@ jobs:
         if: always() && steps.recovery-evidence.outputs.count != '0'
         uses: actions/upload-artifact@v7
         with:
-          name: ios-transcript-recovery-evidence
+          name: ios-transcript-recovery-evidence-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/recovery-evidence
           retention-days: 14
           if-no-files-found: ignore
+
+  ios-ui-tests:
+    # A skipped filtered run must not publish the stable full-coverage gate.
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS UI Tests (non-gating)' || 'iOS UI Tests' }}
+    needs: ios-ui-test-shards
+    if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # always() above keeps failed/cancelled dependencies from skipping this
+      # check. Require both the matrix result and every expected job record;
+      # missing, unreadable or incomplete evidence fails closed. Read all
+      # attempts so a partial rerun can reuse an unchanged successful shard,
+      # but never let an older success hide its newer failed execution.
+      - name: Require every UI shard
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHARD_RESULT: ${{ needs.ios-ui-test-shards.result }}
+        run: |
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=all&per_page=100" \
+            | python3 scripts/check-ui-test-shards.py "$SHARD_RESULT" "$GITHUB_RUN_ATTEMPT"
 
   visionos-build:
     name: visionOS Build

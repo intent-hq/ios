@@ -71,6 +71,19 @@
 #                         result on a green run exits 83 (see the exit codes
 #                         below). Unset/empty skips all of this and leaves the
 #                         command line untouched.
+#   UI_TEST_SHARD         1 or 2, only with test-without-building and without
+#                         ONLY_TESTING. Enumerates the built catalog, sorts all
+#                         enabled IntentUITests methods and alternates them
+#                         between two nonempty shards (including within classes).
+#                         Uses one verified selector per method, serial execution
+#                         and the existing narrowed crash retry. Every assigned
+#                         method must have a known result; missing results exit
+#                         82, malformed catalogs/unverifiable or out-of-shard
+#                         results exit 83, and recorded failures exit 65 even if
+#                         xcodebuild exits 0. Runtime skips stay visible/allowed.
+#                         Unset/empty preserves the full local gate. Assignment
+#                         balances method counts, not measured duration; both
+#                         runners must build the same revision and run one shard.
 #   GITHUB_STEP_SUMMARY   When set (GitHub Actions does), the per-selector table
 #                         of a filtered run is also appended there as Markdown,
 #                         as is every test-process crash or restart (the crash
@@ -202,7 +215,7 @@ Usage: scripts/xcodebuild.sh <subcommand>
   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 
 Optional env knobs: BUILD_CONFIGURATION (Debug or Release; unset keeps defaults),
-SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING,
+SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING, UI_TEST_SHARD,
 TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see
 script header).
 Release tests enable @testable access, not DEBUG. Use focused release-compatible
@@ -211,6 +224,8 @@ for production build proof and executable ReleaseConfigurationTests commands.
 ONLY_TESTING selectors (Target[/Suite[/test]], not file names) are gated: each
 is resolved against the enumerated tests before the run and checked against
 the result bundle after it, with a per-selector table printed at the end.
+UI_TEST_SHARD=1 or 2 runs half the enabled UI methods with test-without-building
+only; it cannot be combined with ONLY_TESTING. Both shards must run to cover UI.
 A test-process crash re-runs the interrupted suites once, alone; a green
 re-run keeps the run green (TEST_CRASH_RETRY=0 disables this).
 Exit codes: xcodebuild's own, plus 80 (test process crashed/terminated, and
@@ -851,11 +866,13 @@ def excluded_message(selector, skip):
 # shows it as "resolved"). Exit 0 when every selector resolves to at least one
 # enabled test, 1 when any does not (each named on stderr, with up to five
 # look-alike targets/suites), 2 when the catalog is unreadable or lists no
-# tests at all.
+# tests at all. UI_TEST_SHARD instead creates method selectors from a strictly
+# validated catalog, then feeds them through this same resolution path.
 ONLY_TESTING_RESOLVER_PY='
-import difflib, json
+import difflib, json, os, re
 catalog_path = sys.argv[1]
 skips, selectors = split_skips(sys.argv[2:])
+shard = os.environ.get("UI_TEST_SHARD", "")
 def unverified(reason):
     sys.stderr.write("error: could not verify the ONLY_TESTING selection: %s\n" % reason)
     sys.exit(2)
@@ -864,19 +881,34 @@ try:
         document = json.load(f)
 except (OSError, ValueError) as e:
     unverified("the test enumeration output is unreadable (%s)" % e)
+if shard:
+    if not isinstance(document, dict) or document.get("errors") != []:
+        unverified("UI shard enumeration must report no errors")
+    values = document.get("values")
+    if not isinstance(values, list) or not values or any(
+            not isinstance(value, dict) or not isinstance(value.get("enabledTests"), list) for value in values):
+        unverified("UI shard enumeration must contain values[].enabledTests lists")
 enabled, disabled = [], []
 def identifiers(items):
+    if shard and not isinstance(items, list):
+        unverified("UI shard enumeration contains a malformed test list")
     found = []
     for item in items if isinstance(items, list) else []:
         if isinstance(item, str):
             found.append(item)
         elif isinstance(item, dict) and isinstance(item.get("identifier"), str):
             found.append(item["identifier"])
+        elif shard:
+            unverified("UI shard enumeration contains a test without an identifier")
+    if shard and any(not ident or ident != ident.strip() for ident in found):
+        unverified("UI shard enumeration contains an empty or malformed identifier")
     return found
 def walk(node):
     if isinstance(node, dict):
-        enabled.extend(identifiers(node.get("enabledTests")))
-        disabled.extend(identifiers(node.get("disabledTests")))
+        if "enabledTests" in node:
+            enabled.extend(identifiers(node["enabledTests"]))
+        if "disabledTests" in node:
+            disabled.extend(identifiers(node["disabledTests"]))
         for value in node.values():
             walk(value)
     elif isinstance(node, list):
@@ -885,6 +917,23 @@ def walk(node):
 walk(document)
 if not enabled and not disabled:
     unverified("the test enumeration output lists no tests (expected values[].enabledTests[].identifier)")
+if shard:
+    def ui_methods(tests):
+        methods = set()
+        for ident in tests:
+            if ident.split("/")[0] != "IntentUITests":
+                continue
+            if not re.fullmatch(r"IntentUITests/[^/()\s]+/[^/()\s]+(?:\(\))?", ident):
+                unverified("UI shard requires method-level identifiers, got %r" % ident)
+            methods.add(ident if ident.endswith("()") else ident + "()")
+        return methods
+    methods = ui_methods(enabled)
+    if methods & ui_methods(disabled):
+        unverified("UI shard enumeration marks a method both enabled and disabled")
+    if len(methods) < 2:
+        unverified("UI sharding requires at least two enabled IntentUITests methods")
+    selectors = sorted(methods)[int(shard) - 1::2]
+    sys.stderr.write("UI test shard %s/2: %d of %d enabled UI methods (sorted round-robin)\n" % (shard, len(selectors), len(methods)))
 known = enabled + disabled
 candidates = sorted(set(i.split("/")[0] for i in known)) + sorted(set("/".join(i.split("/")[:2]) for i in known if "/" in i))
 def suggest(selector):
@@ -927,7 +976,8 @@ if unmatched:
 '
 
 # Enumerates the tests of the built revision and resolves every ONLY_TESTING
-# selector against them; a no-op when ONLY_TESTING is empty. Runs under the
+# selector against them (or derives UI shard method selectors); a no-op when
+# both selection knobs are empty. Runs under the
 # simulator lock (enumeration loads the test bundles on the device) with the
 # same project/destination arguments as the real run plus the -skip-testing:
 # flags of the subcommand ($@), but without the -only-testing: arguments so the
@@ -935,15 +985,19 @@ if unmatched:
 # when any selector resolves to nothing and EXIT_SELECTION_UNVERIFIED when
 # the enumeration fails or is unparsable; the real test run never starts then.
 resolve_only_testing() {
-  local udid=$1 dir catalog log status=0
+  local udid=$1 dir catalog log status=0 _count id
   shift
-  [ "${#ONLY_TESTING_IDS[@]}" -gt 0 ] || return 0
+  [ "${#ONLY_TESTING_IDS[@]}" -gt 0 ] || [ -n "${UI_TEST_SHARD:-}" ] || return 0
   command -v python3 >/dev/null 2>&1 \
     || die "python3 is required to resolve ONLY_TESTING selectors (on macOS it ships with Xcode's Command Line Tools)"
   dir=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-enumerate.XXXXXX")
   catalog=$dir/tests.json
   log=$dir/enumerate.log
-  echo "resolving ${#ONLY_TESTING_IDS[@]} ONLY_TESTING selector(s) against the enumerated test catalog" >&2
+  if [ -n "${UI_TEST_SHARD:-}" ]; then
+    echo "resolving UI test shard $UI_TEST_SHARD/2 against the enumerated test catalog" >&2
+  else
+    echo "resolving ${#ONLY_TESTING_IDS[@]} ONLY_TESTING selector(s) against the enumerated test catalog" >&2
+  fi
   run_xcodebuild_logged "$log" test-without-building "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" \
     -enumerate-tests -test-enumeration-style flat -test-enumeration-format json \
@@ -956,7 +1010,7 @@ resolve_only_testing() {
 Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified), not $status." >&2
     exit "$EXIT_SELECTION_UNVERIFIED"
   fi
-  ONLY_TESTING_RESOLVED=$(python3 -c "$ONLY_TESTING_MATCH_PY$ONLY_TESTING_RESOLVER_PY" "$catalog" "$@" "${ONLY_TESTING_IDS[@]}" 9>&-) || status=$?
+  ONLY_TESTING_RESOLVED=$(python3 -c "$ONLY_TESTING_MATCH_PY$ONLY_TESTING_RESOLVER_PY" "$catalog" "$@" ${ONLY_TESTING_IDS+"${ONLY_TESTING_IDS[@]}"} 9>&-) || status=$?
   rm -rf -- "$dir"
   case "$status" in
     0) ;;
@@ -969,6 +1023,15 @@ Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified), not $status." >&
       echo "Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified)." >&2
       exit "$EXIT_SELECTION_UNVERIFIED" ;;
   esac
+  if [ -n "${UI_TEST_SHARD:-}" ]; then
+    while IFS=$'\t' read -r _count id; do
+      [ -n "$id" ] || die "UI shard resolver returned an empty selector"
+      ONLY_TESTING_IDS+=("$id")
+      ONLY_TESTING_ARGS+=("-only-testing:$id")
+    done <<< "$ONLY_TESTING_RESOLVED"
+    append_step_summary "### UI test shard $UI_TEST_SHARD/2" "" \
+      "Assigned ${#ONLY_TESTING_IDS[@]} enabled UI methods using sorted round-robin; every method is verified below." ""
+  fi
 }
 
 # Summarises a filtered run from its result bundle. argv: <xcresulttool tests
@@ -993,12 +1056,14 @@ Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified), not $status." >&
 # stderr; an all-skipped selector is only a notice) or the re-run recorded
 # nothing for one of its selectors or left a primary Failed unrecovered, or 2
 # when the JSON is unreadable or not the expected shape or a selector has an
-# unknown result (2 wins over 1).
+# unknown result (2 wins over 1). UI shards also reject unassigned results (2)
+# and report recorded failures even if xcodebuild was green (3, mapped to 65).
 ONLY_TESTING_SUMMARY_PY='
 import json, os
 results_path, summary_path, bundle = sys.argv[1], sys.argv[2], sys.argv[3]
 skips, selectors = split_skips(sys.argv[4:])
 retry_path = os.environ.get("ONLY_TESTING_RETRY_RESULTS", "")
+shard = os.environ.get("UI_TEST_SHARD", "")
 resolved = {}
 for line in os.environ.get("ONLY_TESTING_RESOLVED", "").splitlines():
     count, _, selector = line.partition("\t")
@@ -1060,6 +1125,7 @@ if retry_path:
     cases = kept + cases
     bundle += " merged with the re-run"
 rows, failing, notices, unknowns = [], [], [], []
+shard_failures = []
 for selector in selectors:
     parts = selector.split("/")
     hits = [result for ident, result in cases if matches(parts, ident)]
@@ -1069,6 +1135,8 @@ for selector in selectors:
     unknown = sorted(set(r for r in hits if r != "Skipped" and r not in EXECUTED_RESULTS))
     unknown_count = len(hits) - executed - skipped
     rows.append((selector, resolved.get(selector, "?"), str(executed), str(skipped), str(failed), str(unknown_count)))
+    if shard and failed:
+        shard_failures.append(selector)
     if unknown_count:
         unknowns.append((selector, unknown_count, unknown))
     elif executed == 0 and skipped == 0:
@@ -1115,10 +1183,17 @@ for ident in unrecovered:
     sys.stderr.write("error: %s failed in the crashed run and the re-run did not record it; the crashed run is no evidence either way, so it counts as unrecovered.\n" % ident)
 for selector, count, unknown in unknowns:
     sys.stderr.write("error: could not verify the ONLY_TESTING selection: %d test case(s) matching %r have a result the wrapper does not recognise (%s; expected Passed / Failed / Skipped / Expected Failure — xcresulttool output changed?).\n" % (count, selector, ", ".join(repr(u) for u in unknown)))
+if shard:
+    unexpected = sorted(set(ident for ident, _ in cases if not any(matches(selector.split("/"), ident) for selector in selectors)))
+    if unexpected:
+        unverified("UI shard result contains unassigned tests: %s" % ", ".join(unexpected))
 if unknowns:
     sys.exit(2)
 if failing or rerun_empty or unrecovered:
     sys.exit(1)
+if shard_failures:
+    sys.stderr.write("error: UI shard result records failed tests: %s\n" % ", ".join(shard_failures))
+    sys.exit(3)
 '
 
 # Reads the result bundle of a filtered run and prints the per-selector
@@ -1172,6 +1247,10 @@ summarize_only_testing() {
       fi
       echo "Exiting $EXIT_SELECTOR_UNMATCHED (an ONLY_TESTING selector executed nothing although xcodebuild exited 0${RETRY_SELECTORS:+, or the crash re-run left an interrupted suite or test unrecovered})." >&2
       return "$EXIT_SELECTOR_UNMATCHED" ;;
+    3)
+      [ "$status" -eq 0 ] || return "$status"
+      echo "Exiting 65 (the UI shard result records failed tests although xcodebuild exited 0)." >&2
+      return 65 ;;
     *)
       if [ "$status" -ne 0 ]; then
         echo "warning: the ONLY_TESTING selection could not be verified from the result bundle; keeping exit $status from the test run." >&2
@@ -1250,6 +1329,15 @@ case "${BUILD_CONFIGURATION:-}" in
   ''|Debug|Release) ;;
   *) die "BUILD_CONFIGURATION must be Debug or Release (or unset to preserve scheme defaults)" ;;
 esac
+
+if [ -n "${UI_TEST_SHARD:-}" ]; then
+  case "$UI_TEST_SHARD" in
+    1|2) ;;
+    *) die "UI_TEST_SHARD must be 1 or 2 (got '$UI_TEST_SHARD')" ;;
+  esac
+  [ "$subcommand" = test-without-building ] || die "UI_TEST_SHARD is supported only by test-without-building"
+  [ -z "${ONLY_TESTING:-}" ] || die "UI_TEST_SHARD cannot be combined with ONLY_TESTING; unset one selection"
+fi
 
 case "$subcommand" in
   resolve)               cmd_resolve ;;
