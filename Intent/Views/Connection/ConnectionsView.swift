@@ -68,7 +68,10 @@ enum ConnectionPairing {
         // Re-trigger the post-connect route refresh now that the record exists:
         // the refresh fired by connect() may have run before the upsert above
         // and found no stored record to persist the daemon-reported IPs into.
-        Task { await connection.refreshHostRoutes() }
+        Task {
+            await connection.refreshHostRoutes()
+            persistence.publishPendingBackends()
+        }
         return stored
     }
 }

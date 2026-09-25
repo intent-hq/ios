@@ -9,7 +9,9 @@ struct ConnectionUpsertOutcome {
 }
 
 class PersistenceManager {
-    static let shared = DemoMode.isEnabled ? PersistenceManager.ephemeral() : PersistenceManager()
+    static let shared = DemoMode.isEnabled
+        ? PersistenceManager.ephemeral()
+        : PersistenceManager(backendPublisher: SyncedBackendPublisher.production())
 
     static func ephemeral() -> PersistenceManager {
         let suiteName = "com.intent.companion.demo-data"
@@ -33,6 +35,9 @@ class PersistenceManager {
     /// Backend for Keychain-stored values. Tests substitute an in-memory
     /// implementation (SecItem calls fail in headless CI simulators).
     var keychainStorage: KeychainStorage
+    /// Explicit opt-in: custom/test/ephemeral stores never publish through a
+    /// production writer. Only `shared` installs it outside the test host.
+    let backendPublisher: SyncedBackendPublisher?
 
     /// Published only after a saved connection mutation succeeds. Window
     /// labels observe their own record, independently of the last-used pointer.
@@ -41,10 +46,12 @@ class PersistenceManager {
 
     init(
         defaults: UserDefaults = .standard,
-        keychainStorage: KeychainStorage = SecItemKeychainStorage()
+        keychainStorage: KeychainStorage = SecItemKeychainStorage(),
+        backendPublisher: SyncedBackendPublisher? = nil
     ) {
         self.defaults = defaults
         self.keychainStorage = keychainStorage
+        self.backendPublisher = backendPublisher
     }
 }
 
@@ -68,8 +75,8 @@ extension PersistenceManager {
     }
 
     /// Inserts the connection, or updates the existing entry in place (preserving its
-    /// id) when one at the same port shares at least one host or carries the same
-    /// tailcat tunnel address. Returns the stored value.
+    /// id) when its certificate fingerprint matches, or one at the same port
+    /// shares at least one host or tailcat tunnel address. Returns the stored value.
     ///
     /// Overlap (not set equality) is the match key because the post-connect route
     /// refresh grows stored host sets over time: a re-pair of the same daemon via a
@@ -101,14 +108,8 @@ extension PersistenceManager {
                 registryReadError: read.error
             )
         }
-        let stored: StoredConnection
-        let incomingHosts = Set(connection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
-        if let index = connections.firstIndex(where: { storedConnection in
-            storedConnection.server.port == connection.server.port
-                && (!incomingHosts.isDisjoint(with: storedConnection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
-                    || (connection.server.tcAddress != nil
-                        && storedConnection.server.tcAddress == connection.server.tcAddress))
-        }) {
+        var stored: StoredConnection
+        if let index = connections.firstIndex(where: { Self.matchesPairing($0, incoming: connection) }) {
             let existing = connections[index]
             let server = connection.server
             stored = StoredConnection(
@@ -130,14 +131,16 @@ extension PersistenceManager {
                 token: connection.token,
                 displayName: connection.displayName,
                 lastConnectedAt: connection.lastConnectedAt ?? existing.lastConnectedAt,
-                // The LWW clock survives a re-pair: the record is still the
-                // registry copy it was last synced from (write-back is the
-                // push path's job, not upsert's).
+                // Keep the last observed clock; a deliberate local pairing
+                // gets its own pending edit clock before the atomic save.
                 syncUpdatedAt: connection.syncUpdatedAt ?? existing.syncUpdatedAt
             )
+            stored.pendingSyncUpdatedAt = existing.pendingSyncUpdatedAt
+            preparePublication(&stored, incoming: connection)
             connections[index] = stored
         } else {
             stored = connection
+            preparePublication(&stored, incoming: connection)
             connections.append(stored)
         }
         return ConnectionUpsertOutcome(
@@ -145,6 +148,26 @@ extension PersistenceManager {
             persisted: saveConnectionsLocked(connections),
             registryReadError: nil
         )
+    }
+
+    private func preparePublication(_ stored: inout StoredConnection, incoming: StoredConnection) {
+        guard incoming.syncUpdatedAt == nil, let backendPublisher else { return }
+        stored.pendingSyncUpdatedAt = max(
+            backendPublisher.pairingClock(for: stored),
+            (suppressedPublicationClock(id: stored.id) ?? 0) + 1
+        )
+        stored.localPairingSyncClock = stored.pendingSyncUpdatedAt
+        stored.pendingRoutePublication = nil
+    }
+
+    private static func matchesPairing(_ stored: StoredConnection, incoming: StoredConnection) -> Bool {
+        let fingerprint = SyncedBackendConnectionMerge.normalizeFingerprint(incoming.server.certFingerprint)
+        if !fingerprint.isEmpty,
+           SyncedBackendConnectionMerge.normalizeFingerprint(stored.server.certFingerprint) == fingerprint { return true }
+        let incomingHosts = Set(incoming.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
+        return stored.server.port == incoming.server.port
+            && (!incomingHosts.isDisjoint(with: stored.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
+                || incoming.server.tcAddress != nil && stored.server.tcAddress == incoming.server.tcAddress)
     }
 
     /// Existing hosts keep their order and are never dropped; incoming hosts not
@@ -179,7 +202,10 @@ extension PersistenceManager {
             certFingerprint: server.certFingerprint,
             tcAddress: server.tcAddress
         )
-        return saveConnectionsLocked(connections)
+        if hosts != server.hosts { queueRoutePublication(&connections[index], previousRoute: server.tcAddress) }
+        guard saveConnectionsLocked(connections) else { return false }
+        publishPendingBackends()
+        return true
     }
 
     /// Replaces the stored tailcat tunnel address of the connection with the
@@ -199,7 +225,12 @@ extension PersistenceManager {
             certFingerprint: server.certFingerprint,
             tcAddress: tcAddress
         )
-        return saveConnectionsLocked(connections)
+        if tcAddress != server.tcAddress {
+            queueRoutePublication(&connections[index], previousRoute: server.tcAddress, newRoute: tcAddress)
+        }
+        guard saveConnectionsLocked(connections) else { return false }
+        publishPendingBackends()
+        return true
     }
 
     /// Replaces the stored display name of the connection with the given id,
@@ -319,7 +350,7 @@ extension PersistenceManager {
     }
 
     @discardableResult
-    private func saveConnectionsLocked(_ connections: [StoredConnection]) -> Bool {
+    func saveConnectionsLocked(_ connections: [StoredConnection]) -> Bool {
         guard let data = try? JSONEncoder().encode(connections) else { return false }
         guard saveDataToKeychain(data: data, account: keychainAccountConnections) else { return false }
         connectionsChanged.send()
@@ -384,7 +415,9 @@ extension PersistenceManager {
             StoredConnection(server: server, token: token)
         )
         guard outcome.persisted else { return false }
-        return setActiveConnection(id: outcome.connection.id)
+        guard setActiveConnection(id: outcome.connection.id) else { return false }
+        publishPendingBackends()
+        return true
     }
 
     func loadPairing() -> (server: PairedServer, token: String)? {
