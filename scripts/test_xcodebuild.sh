@@ -216,6 +216,7 @@ export TMPDIR=$work
 # The wrapper appends to a caller's step summary; the self-test's own CI job
 # must not receive the fixture tables.
 unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING BUILD_CONFIGURATION
+unset UI_TEST_SHARD_COUNT UI_TEST_SHARD_INDEX UI_TEST_SHARD_CONTEXT UI_TEST_SHARD_DIR UI_TEST_SHARD_WEIGHTS
 export SIM_UDID=00000000-0000-0000-0000-000000000001
 export SIM_LOCK_DIR=$work/locks
 lock=$SIM_LOCK_DIR/xcodebuild-sim-$SIM_UDID.lock
@@ -1067,6 +1068,113 @@ rm -rf -- "$work"/xcodebuild-result.*
 status=$(run_filtered nosummary "IntentTests/DemoFixturesTests" test-without-building)
 assert_eq "without GITHUB_STEP_SUMMARY the run exits 0" "$status" 0
 assert_eq "without GITHUB_STEP_SUMMARY no summary file appears" "$(ls "$work" | grep -c 'step-summary')" 3
+
+echo "# opt-in UI shards reuse discovery and preserve executable wrapper boundaries"
+python3 - "$work" "$(git rev-parse HEAD)" <<'EOF'
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+context = {"schema_version": 1, "run_id": "wrapper-selftest", "run_attempt": 1, "revision": sys.argv[2],
+           "environment": {"xcode": "stub", "sdk": "stub", "runtime": "stub", "device_type": "iPhone 16",
+                           "runner": "stub", "architecture": "arm64", "configuration": "Debug"},
+           "cache": {"spm": "disabled", "tailcat": "disabled"}, "build": {"started_at": 1, "finished_at": 2}}
+(root / "shard-context.json").write_text(json.dumps(context))
+catalog = {"errors": [], "values": [{"enabledTests": [
+    {"identifier": "IntentUITests/TrialTests/test" + letter + "()"} for letter in "ABCD"],
+    "disabledTests": [{"identifier": "IntentUITests/AppStoreScreenshotTests/testCapture()"}]}]}
+(root / "shard-catalog.json").write_text(json.dumps(catalog))
+EOF
+make_results "$work/shard-0.json" "IntentUITests/TrialTests/testA()=Passed" "IntentUITests/TrialTests/testC()=Skipped"
+make_results "$work/shard-1.json" "IntentUITests/TrialTests/testB()=Passed" "IntentUITests/TrialTests/testD()=Passed"
+make_results "$work/shard-all.json" "IntentUITests/TrialTests/testA()=Passed" "IntentUITests/TrialTests/testB()=Passed" \
+  "IntentUITests/TrialTests/testC()=Skipped" "IntentUITests/TrialTests/testD()=Passed"
+run_shard() {
+  local name=$1 count=$2 index=$3
+  shift 3
+  run_filtered "$name" "" test-without-building BUILD_CONFIGURATION=Debug UI_TEST_SHARD_COUNT="$count" \
+    UI_TEST_SHARD_INDEX="$index" UI_TEST_SHARD_CONTEXT="$work/shard-context.json" \
+    UI_TEST_SHARD_DIR="$work/$name-evidence" STUB_CATALOG="$work/shard-catalog.json" \
+    STUB_RESULTS="$work/shard-$index.json" "$@"
+}
+for index in 0 1; do
+  status=$(run_shard "shard-$index" 2 "$index")
+  assert_eq "shard $index exits 0" "$status" 0
+  assert_eq "shard $index enumerates only once then tests" "$(argv_count "shard-$index")" 2
+  assert_lacks "shard $index enumerates without filtering the catalog" "$(argv_line "shard-$index" 1)" -only-testing:
+  assert_contains "shard $index remains serial" "$(argv_line "shard-$index" 2)" '[-parallel-testing-enabled] [NO]'
+  assert_contains "shard $index uses Debug" "$(argv_line "shard-$index" 2)" '[-configuration] [Debug]'
+  assert_lacks "shard $index does not enable screenshot tests" "$(argv_line "shard-$index" 2)" AppStoreScreenshotTests
+  assert_eq "shard $index reads the result once" "$(xcresulttool_count "shard-$index")" 1
+  assert_lock_free "shard $index releases the lock"
+done
+assert_contains "first shard selects A" "$(argv_line shard-0 2)" '[-only-testing:IntentUITests/TrialTests/testA]'
+assert_contains "first shard selects C" "$(argv_line shard-0 2)" '[-only-testing:IntentUITests/TrialTests/testC]'
+assert_lacks "first shard excludes B" "$(argv_line shard-0 2)" 'testB]'
+status=$(run_shard shard-serial 1 0 STUB_RESULTS="$work/shard-all.json")
+assert_eq "serial control includes all current methods" "$status" 0
+assert_contains "serial control selects D" "$(argv_line shard-serial 2)" '[-only-testing:IntentUITests/TrialTests/testD]'
+status=$(run_shard shard-explicit 2 0 ONLY_TESTING=IntentUITests)
+assert_eq "whole UI selector is compatible" "$status" 0
+for option in 'UI_TEST_SHARD_COUNT=3' 'UI_TEST_SHARD_INDEX=2' 'UI_TEST_SHARD_INDEX=-1' \
+  'ONLY_TESTING=IntentTests' 'ONLY_TESTING=IntentUITests/TrialTests' 'BUILD_CONFIGURATION=Release'; do
+  status=$(run_shard badshard 2 0 "$option")
+  assert_eq "invalid trial input $option is rejected" "$status" 1
+  assert_eq "invalid trial input never invokes xcodebuild" "$(argv_count badshard)" 0
+done
+status=$(run_filtered shardunit "" test-without-building-unit UI_TEST_SHARD_COUNT=2)
+assert_eq "unit commands reject shard knobs before running" "$status" 1
+assert_eq "unit shard conflict never invokes xcodebuild" "$(argv_count shardunit)" 0
+status=$(run_shard shard-0 2 0)
+assert_eq "stale evidence directory is not reused" "$status" 83
+assert_eq "stale evidence stops before xcodebuild" "$(argv_count shard-0)" 0
+status=$(run_shard shard-enumfail 2 0 STUB_ENUMERATE_FAIL=1)
+assert_eq "trial enumeration failure preserves 83" "$status" 83
+assert_eq "trial enumeration failure starts no test" "$(argv_count shard-enumfail)" 1
+status=$(run_shard shard-empty 2 0 STUB_CATALOG="$work/empty.json")
+assert_eq "empty trial catalog is unverifiable" "$status" 83
+status=$(run_shard shard-foreign 2 0 STUB_RESULTS="$work/shard-all.json")
+assert_eq "extra unassigned cases reject a green xcodebuild" "$status" 83
+make_results "$work/shard-missing.json" "IntentUITests/TrialTests/testA()=Passed"
+status=$(run_shard shard-missing 2 0 STUB_RESULTS="$work/shard-missing.json")
+assert_eq "missing assigned case preserves 82" "$status" 82
+status=$(run_shard shard-unreadable 2 0 STUB_RESULTS_FAIL=1)
+assert_eq "unreadable trial bundle preserves 83" "$status" 83
+status=$(run_shard shard-fail 2 0 STUB_MODE=fail STUB_RESULTS_FAIL=1)
+assert_eq "trial process failure wins over unreadable evidence" "$status" 65
+
+echo "# UI shard crash retries stay inside the method assignment and retain provenance"
+marker='Restarting after unexpected exit, crash, or test timeout in IntentUITests.TrialTests/testA(); summary follows.'
+make_results "$work/shard-crashed.json" "IntentUITests/TrialTests/testA()=Failed"
+status=$(run_shard shard-recovered 2 0 STUB_MODE=marker STUB_MARKER="$marker" STUB_NO_FAILING=1 \
+  STUB_THEN=pass STUB_STATE="$work/shard-recovered.state" STUB_RESULTS="$work/shard-crashed.json" \
+  STUB_RESULTS_RETRY="$work/shard-0.json")
+assert_eq "UI shard recovers from a single crash" "$status" 0
+assert_eq "UI shard retry does not enumerate again" "$(argv_count shard-recovered)" 3
+assert_contains "retry keeps selected method A" "$(retry_argv shard-recovered)" '[-only-testing:IntentUITests/TrialTests/testA]'
+assert_contains "retry keeps selected method C" "$(retry_argv shard-recovered)" '[-only-testing:IntentUITests/TrialTests/testC]'
+assert_lacks "retry does not widen to the whole suite" "$(retry_argv shard-recovered)" '[-only-testing:IntentUITests/TrialTests]'
+assert_eq "both attempt bundles read once" "$(xcresulttool_count shard-recovered)" 2
+status=$(run_shard shard-unrecovered 2 0 STUB_MODE=marker STUB_MARKER="$marker" STUB_NO_FAILING=1 \
+  STUB_THEN=pass STUB_STATE="$work/shard-unrecovered.state" STUB_RESULTS="$work/shard-crashed.json" \
+  STUB_RESULTS_RETRY="$work/shard-missing.json")
+assert_eq "retry missing a selected method cannot recover" "$status" 82
+status=$(run_shard shard-disabled-retry 2 0 STUB_MODE=marker STUB_MARKER="$marker" STUB_NO_FAILING=1 TEST_CRASH_RETRY=0)
+assert_eq "disabled retry preserves crash exit 80" "$status" 80
+assert_eq "disabled retry makes no extra test call" "$(argv_count shard-disabled-retry)" 2
+assert_lock_free "trial crash paths release simulator lock"
+status=0
+python3 - "$work" <<'EOF' || status=$?
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+report = json.loads((root / "shard-recovered-evidence/worker.json").read_text())
+assert report["exit_code"] == 0
+assert [attempt["exit_code"] for attempt in report["attempts"]] == [65, 0]
+assert [attempt["restarted"] for attempt in report["attempts"]] == [True, False]
+assert [case["attempt"] for case in report["cases"]] == [2, 2]
+assert [case["outcome"] for case in report["cases"]] == ["Passed", "Skipped"]
+for name, code in [("shard-unrecovered", 82), ("shard-disabled-retry", 80), ("shard-fail", 65)]:
+    assert json.loads((root / (name + "-evidence") / "worker.json").read_text())["exit_code"] == code
+EOF
+assert_eq "worker JSON preserves retry, skip and failure evidence" "$status" 0
 
 echo
 if [ "$failures" -eq 0 ]; then

@@ -89,6 +89,32 @@
 #   SIM_LOCK_KILL_GRACE   Seconds an xcodebuild orphaned by this script's death
 #                         (with every process under it) gets to exit after
 #                         SIGTERM before the survivors are SIGKILLed; default 30.
+#   UI_TEST_SHARD_COUNT / UI_TEST_SHARD_INDEX
+#                         Opt-in UI trial: count 1 or 2, zero-based index. Only
+#                         test-without-building, explicit Debug, and ONLY_TESTING
+#                         empty or exactly IntentUITests are allowed. First build
+#                         this checkout with BUILD_CONFIGURATION=Debug using the
+#                         existing build-for-testing command (without shard knobs).
+#   UI_TEST_SHARD_CONTEXT Required JSON file: schema_version=1, run_id (string),
+#                         run_attempt (positive integer), revision (full git SHA),
+#                         environment {xcode,sdk,runtime,device_type,runner,
+#                         architecture,configuration}, cache {spm,tailcat} with
+#                         hit/miss/restored/disabled, build {started_at,finished_at}
+#                         as Unix seconds. Supply measured facts, not defaults.
+#   UI_TEST_SHARD_DIR     Required NEW evidence directory, never reused. Writes
+#                         plan.json and worker.json (versioned, content-free).
+#                         RESULT_BUNDLE defaults to this directory/Tests.xcresult.
+#                         Upload worker.json even on failure; preserve xcresults
+#                         separately for diagnostics. Missing evidence fails closed.
+#   UI_TEST_SHARD_WEIGHTS Optional JSON {schema_version:1,seconds:{method:seconds}}.
+#                         Advisory only; new methods use 150s, stale hints cannot
+#                         add coverage. Defaults to audited historical hot-method
+#                         hints. Stable longest-first greedy assignment, ties by
+#                         method ID then shard index; every whole method selected.
+#                         Runtime skips are recorded, never treated as executions.
+#                         A green worker is NOT full coverage: run the aggregate
+#                         CLI in ui-test-shards.py with all worker reports and
+#                         independent, same-run/attempt GitHub job conclusions.
 #
 # Release verification (intent-hq/ios#468):
 #   BUILD_CONFIGURATION=Release scripts/xcodebuild.sh build-ios
@@ -643,7 +669,7 @@ print(" ".join(suites))
 RETRY_BUNDLE=
 RETRY_SELECTORS=
 retry_crashed_suites() {
-  local udid=$1 log=$2 bundle=$3 suites suite id whole covered kept= nested=() selectors=() extra=() retry_log status=0 outcome=0 verdict
+  local udid=$1 log=$2 bundle=$3 suites suite id whole covered kept= nested=() selectors=() extra=() retry_log status=0 outcome=0 verdict started=
   shift 3
   if [ "${TEST_CRASH_RETRY:-1}" = "0" ]; then
     echo "TEST_CRASH_RETRY=0: not re-running the interrupted suite(s). Exiting $EXIT_TEST_PROCESS_CRASHED (test-process crash)." >&2
@@ -705,11 +731,13 @@ Exiting $EXIT_TEST_PROCESS_CRASHED (test-process crash), not 65." >&2
   echo "notice: re-running the interrupted suite(s) once, alone: $suites" >&2
   acquire_simulator_lock "$udid"
   retry_log=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-retry.XXXXXX")
+  [ "$UI_SHARD_ACTIVE" -eq 0 ] || started=$(ui_shard_now)
   run_xcodebuild_logged "$retry_log" test-without-building "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" \
     -parallel-testing-enabled NO ${extra+"${extra[@]}"} "${selectors[@]}" "$@" || status=$?
   echo done >&9
   release_simulator_lock
+  record_ui_shard_attempt "$status" "$retry_log" "$started" "$RETRY_SELECTORS" || UI_SHARD_RECORD_STATUS=83
   report_test_outcome "$status" "$retry_log" "the re-run" || outcome=$?
   case "$outcome" in
     0)
@@ -784,6 +812,43 @@ enable_simulator_accessibility() {
 ONLY_TESTING_IDS=()
 ONLY_TESTING_ARGS=()
 ONLY_TESTING_RESOLVED=
+UI_SHARD_ACTIVE=0
+UI_SHARD_RECORD_STATUS=0
+ui_shard_now() { python3 -c 'import time; print(time.time())'; }
+
+# No changes to generic selectors, builds or unit commands. Initialize evidence
+# before touching a simulator; an existing directory is refused, not overwritten.
+init_ui_shard() {
+  [ -n "${UI_TEST_SHARD_COUNT:-}${UI_TEST_SHARD_INDEX:-}${UI_TEST_SHARD_CONTEXT:-}${UI_TEST_SHARD_DIR:-}${UI_TEST_SHARD_WEIGHTS:-}" ] || return 0
+  [ "$subcommand" = test-without-building ] || die "UI sharding requires test-without-building"
+  [ "${BUILD_CONFIGURATION:-}" = Debug ] || die "UI sharding requires BUILD_CONFIGURATION=Debug"
+  case "${ONLY_TESTING:-}" in
+    ''|IntentUITests) ;;
+    *) die "UI sharding cannot be combined with other ONLY_TESTING selectors" ;;
+  esac
+  case "${UI_TEST_SHARD_COUNT:-}:${UI_TEST_SHARD_INDEX:-}" in
+    1:0|2:0|2:1) ;;
+    *) die "UI shard count must be 1 or 2 with a valid zero-based index" ;;
+  esac
+  [ -n "${UI_TEST_SHARD_CONTEXT:-}" ] && [ -n "${UI_TEST_SHARD_DIR:-}" ] \
+    || die "UI sharding requires UI_TEST_SHARD_CONTEXT and a new UI_TEST_SHARD_DIR"
+  python3 scripts/ui-test-shards.py init --directory "$UI_TEST_SHARD_DIR" \
+    --context "$UI_TEST_SHARD_CONTEXT" --revision "$(git rev-parse HEAD)" \
+    --count "$UI_TEST_SHARD_COUNT" --index "$UI_TEST_SHARD_INDEX"
+  UI_SHARD_ACTIVE=1
+  ONLY_TESTING=IntentUITests
+  RESULT_BUNDLE=${RESULT_BUNDLE:-$UI_TEST_SHARD_DIR/Tests.xcresult}
+}
+
+record_ui_shard_attempt() {
+  [ "$UI_SHARD_ACTIVE" -eq 1 ] || return 0
+  local restarted=0
+  grep -qiE "$TEST_CRASH_PATTERN" "$2" && restarted=1
+  python3 scripts/ui-test-shards.py attempt --directory "$UI_TEST_SHARD_DIR" \
+    --status "$1" --restarted "$restarted" --started-at "$3" --finished-at "$(ui_shard_now)" \
+    --selectors "$4"
+}
+
 parse_only_testing() {
   local ids=() id seen
   ONLY_TESTING_IDS=()
@@ -935,7 +1000,7 @@ if unmatched:
 # when any selector resolves to nothing and EXIT_SELECTION_UNVERIFIED when
 # the enumeration fails or is unparsable; the real test run never starts then.
 resolve_only_testing() {
-  local udid=$1 dir catalog log status=0
+  local udid=$1 dir catalog log status=0 started='' selected id weights=()
   shift
   [ "${#ONLY_TESTING_IDS[@]}" -gt 0 ] || return 0
   command -v python3 >/dev/null 2>&1 \
@@ -944,6 +1009,7 @@ resolve_only_testing() {
   catalog=$dir/tests.json
   log=$dir/enumerate.log
   echo "resolving ${#ONLY_TESTING_IDS[@]} ONLY_TESTING selector(s) against the enumerated test catalog" >&2
+  [ "$UI_SHARD_ACTIVE" -eq 0 ] || started=$(ui_shard_now)
   run_xcodebuild_logged "$log" test-without-building "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" \
     -enumerate-tests -test-enumeration-style flat -test-enumeration-format json \
@@ -955,6 +1021,23 @@ resolve_only_testing() {
     echo "error: could not verify the ONLY_TESTING selection: xcodebuild -enumerate-tests exited $status (see its output above).
 Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified), not $status." >&2
     exit "$EXIT_SELECTION_UNVERIFIED"
+  fi
+  if [ "$UI_SHARD_ACTIVE" -eq 1 ]; then
+    [ -z "${UI_TEST_SHARD_WEIGHTS:-}" ] || weights=(--weights "$UI_TEST_SHARD_WEIGHTS")
+    selected=$(python3 scripts/ui-test-shards.py plan --directory "$UI_TEST_SHARD_DIR" \
+      --catalog "$catalog" --simulator-udid "$udid" --started-at "$started" --finished-at "$(ui_shard_now)" \
+      ${weights+"${weights[@]}"} 9>&-) || status=$?
+    if [ "$status" -ne 0 ]; then
+      rm -rf -- "$dir"
+      release_simulator_lock
+      exit "$status"
+    fi
+    ONLY_TESTING_IDS=()
+    ONLY_TESTING_ARGS=()
+    while IFS= read -r id; do
+      ONLY_TESTING_IDS+=("$id")
+      ONLY_TESTING_ARGS+=("-only-testing:$id")
+    done <<< "$selected"
   fi
   ONLY_TESTING_RESOLVED=$(python3 -c "$ONLY_TESTING_MATCH_PY$ONLY_TESTING_RESOLVER_PY" "$catalog" "$@" "${ONLY_TESTING_IDS[@]}" 9>&-) || status=$?
   rm -rf -- "$dir"
@@ -1134,9 +1217,10 @@ if failing or rerun_empty or unrecovered:
 # interrupted suite or test unrecovered, or EXIT_SELECTION_UNVERIFIED when a
 # bundle cannot be read or records a result the classifier does not recognise.
 summarize_only_testing() {
-  local status=$1 bundle=$2 results retry_results= outcome=0
+  local status=$1 bundle=$2 results retry_results= outcome=0 shard_status=0 shard_result=0 shard_args=() validation_started=
   shift 2
   [ "${#ONLY_TESTING_IDS[@]}" -gt 0 ] || return "$status"
+  [ "$UI_SHARD_ACTIVE" -eq 0 ] || validation_started=$(ui_shard_now)
   results=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-results.XXXXXX")
   if [ ! -e "$bundle" ]; then
     echo "error: could not verify the ONLY_TESTING selection: no result bundle was written at $bundle" >&2
@@ -1161,6 +1245,22 @@ summarize_only_testing() {
         python3 -c "$ONLY_TESTING_MATCH_PY$ONLY_TESTING_SUMMARY_PY" \
         "$results" "${GITHUB_STEP_SUMMARY:-}" "$bundle" "$@" "${ONLY_TESTING_IDS[@]}" || outcome=$?
     fi
+  fi
+  if [ "$UI_SHARD_ACTIVE" -eq 1 ]; then
+    shard_status=$status
+    [ "$shard_status" -ne 0 ] || shard_status=$UI_SHARD_RECORD_STATUS
+    if [ "$shard_status" -eq 0 ]; then
+      case "$outcome" in
+        0) ;;
+        1) shard_status=$EXIT_SELECTOR_UNMATCHED ;;
+        *) shard_status=$EXIT_SELECTION_UNVERIFIED ;;
+      esac
+    fi
+    [ -z "$retry_results" ] || shard_args=(--retry-results "$retry_results")
+    python3 scripts/ui-test-shards.py finish --directory "$UI_TEST_SHARD_DIR" \
+      --results "$results" --status "$shard_status" --started-at "$validation_started" \
+      ${shard_args+"${shard_args[@]}"} || shard_result=$?
+    [ "$status" -ne 0 ] || status=$shard_result
   fi
   rm -f -- "$results" ${retry_results:+"$retry_results"}
   case "$outcome" in
@@ -1198,7 +1298,7 @@ summarize_only_testing() {
 # again (retry_crashed_suites), and, for a filtered run, the result bundle(s)
 # are checked (summarize_only_testing).
 cmd_test_without_building() {
-  local udid extra=() log bundle= bundle_dir= status=0 outcome=0
+  local udid extra=() log bundle= bundle_dir= status=0 outcome=0 started=
   parse_only_testing
   udid=$(pick_simulator)
   acquire_simulator_lock "$udid"
@@ -1213,12 +1313,14 @@ cmd_test_without_building() {
   fi
   [ -z "$bundle" ] || extra+=(-resultBundlePath "$bundle")
   log=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-test.XXXXXX")
+  [ "$UI_SHARD_ACTIVE" -eq 0 ] || started=$(ui_shard_now)
   run_xcodebuild_logged "$log" test-without-building "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" \
     -parallel-testing-enabled NO ${extra+"${extra[@]}"} \
     ${ONLY_TESTING_ARGS+"${ONLY_TESTING_ARGS[@]}"} "$@" || status=$?
   echo done >&9
   release_simulator_lock
+  record_ui_shard_attempt "$status" "$log" "$started" "" || UI_SHARD_RECORD_STATUS=83
   report_test_outcome "$status" "$log" || outcome=$?
   if [ "$outcome" -eq "$EXIT_TEST_PROCESS_CRASHED" ]; then
     outcome=0
@@ -1250,6 +1352,8 @@ case "${BUILD_CONFIGURATION:-}" in
   ''|Debug|Release) ;;
   *) die "BUILD_CONFIGURATION must be Debug or Release (or unset to preserve scheme defaults)" ;;
 esac
+
+init_ui_shard
 
 case "$subcommand" in
   resolve)               cmd_resolve ;;
