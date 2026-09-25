@@ -36,8 +36,11 @@ extension ConnectionManagerTests {
         // The fake tunnel terminates at a plaintext loopback fixture. The
         // import's pin is asserted above; production dials keep that pin.
         try await manager.connect(
-            hosts: imported.server.hosts, port: imported.server.port, token: imported.token,
-            certFingerprint: nil, tcAddress: imported.server.tcAddress
+            hosts: imported.server.hosts,
+            port: imported.server.port,
+            token: imported.token,
+            certFingerprint: nil,
+            tcAddress: imported.server.tcAddress
         )
         #expect(manager.connectionState == .connected)
         #expect(manager.tcAddress == BackendSyncFixtures.route)

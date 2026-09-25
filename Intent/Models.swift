@@ -38,7 +38,7 @@ struct StoredConnection: Codable, Identifiable, Equatable {
     var displayName: String
     var lastConnectedAt: Date?
     /// `updatedAt` (ms since epoch) of the last iCloud-synced registry record
-    /// applied to this connection — the last-writer-wins clock for
+    /// applied or successfully published — the last-writer-wins clock for
     /// `SyncedBackendConnectionMerge`. `nil` on connections that predate sync
     /// or were paired locally and never matched a registry record.
     var syncUpdatedAt: Double?

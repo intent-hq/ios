@@ -59,14 +59,22 @@ final class MemorySyncedKeychain: SyncedKeychainWriting {
 enum BackendSyncFixtures {
     static let accessGroup = "TESTTEAM.dev.intentapp.backends"
     static let route = "tcMiXeD_Case-Address"
+    private static let millisecondsPerSecond: Double = 1000
+    private static let port = 8843
+    private static let futureValues = [1, 2]
 
     static func local(clock: Double = 1000, hosts: [String] = ["Mac.Local"], token: String = "local-token") -> StoredConnection {
         var connection = StoredConnection(
             server: PairedServer(
-                hosts: hosts, port: 8843, name: "Mac", pairedAt: Date(timeIntervalSince1970: clock / 1000),
-                certFingerprint: "aa:bb", tcAddress: route
+                hosts: hosts,
+                port: port,
+                name: "Mac",
+                pairedAt: Date(timeIntervalSince1970: clock / millisecondsPerSecond),
+                certFingerprint: "aa:bb",
+                tcAddress: route
             ),
-            token: token, displayName: "My Mac"
+            token: token,
+            displayName: "My Mac"
         )
         connection.pendingSyncUpdatedAt = clock
         return connection
@@ -74,17 +82,19 @@ enum BackendSyncFixtures {
 
     static func remote(clock: Double = 100, deleted: Bool = false) -> [String: Any] {
         [
-            "v": 1, "host": "mac.local", "hosts": ["mac.local", "10.0.0.1"], "port": 8843,
+            "v": 1, "host": "mac.local", "hosts": ["mac.local", "10.0.0.1"], "port": port,
             "fingerprint": "AA:BB", "token": deleted ? "" : "remote-token", "label": "Desktop name",
             "updatedAt": clock, "deleted": deleted, "deletedAt": clock,
             "tcAddress": "tcDesktop", "detectHosts": false, "hostname": "real-hostname",
             "accent": "blue", "deviceIcon": "auto", "detectedDeviceKind": "mac",
-            "futureMetadata": ["enabled": true, "values": [1, 2, 3]]
+            "futureMetadata": ["enabled": true, "values": futureValues]
         ]
     }
 
     static func publisher(_ cloud: MemorySyncedKeychain, clock: Double = 1000) -> SyncedBackendPublisher {
-        SyncedBackendPublisher(keychain: cloud, accessGroup: accessGroup, now: { Date(timeIntervalSince1970: clock / 1000) })
+        SyncedBackendPublisher(keychain: cloud, accessGroup: accessGroup) {
+            Date(timeIntervalSince1970: clock / millisecondsPerSecond)
+        }
     }
 }
 
@@ -105,7 +115,8 @@ struct BackendSyncTestStore {
         self.local = local
         self.cloud = cloud
         manager = PersistenceManager(
-            defaults: defaults, keychainStorage: local,
+            defaults: defaults,
+            keychainStorage: local,
             backendPublisher: BackendSyncFixtures.publisher(cloud, clock: clock)
         )
     }

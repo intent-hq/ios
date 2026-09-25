@@ -56,30 +56,8 @@ enum SyncedBackendConnectionMerge {
                 result.connections.remove(at: index)
             } else if let index {
                 let existing = result.connections[index]
-                // Only a strictly newer remote copy overwrites. A local that
-                // never synced adopts the registry copy (gaining its
-                // fingerprint/token), but its pairing time stands in as the
-                // clock — same guard as the tombstone path — so a stale
-                // registry copy lagging behind a token rotation cannot
-                // clobber a fresh direct re-pairing.
-                if let pending = existing.pendingSyncUpdatedAt {
-                    // A deliberate pairing has a durable edit clock even
-                    // before publication. Equal remote clocks win a retry.
-                    if record.updatedAt < pending { continue }
-                } else if let applied = existing.syncUpdatedAt {
-                    if applied != 0, record.updatedAt == applied,
-                       SyncedBackendPayload.tunnelAddress(existing.server.tcAddress) == nil,
-                       let route = record.tcAddress {
-                        result.connections[index] = addingRoute(route, to: existing)
-                        result.updatedIds.append(existing.id)
-                        continue
-                    }
-                    if record.updatedAt <= applied { continue }
-                } else if record.updatedAt
-                    < existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond {
-                    continue
-                }
-                result.connections[index] = apply(record, to: existing)
+                guard let updated = mergeLive(record, into: existing) else { continue }
+                result.connections[index] = updated
                 result.updatedIds.append(existing.id)
             } else {
                 // Never auto-add a fingerprint-less record: without a pinned
@@ -97,6 +75,23 @@ enum SyncedBackendConnectionMerge {
             }
         }
         return result
+    }
+
+    /// A pending direct re-pair protects its new credentials even before
+    /// publication. Otherwise only newer shared clocks replace local fields,
+    /// except for the missing-route upgrade on already-imported records.
+    private static func mergeLive(_ record: SyncedBackendRecord, into existing: StoredConnection) -> StoredConnection? {
+        if let pending = existing.pendingSyncUpdatedAt {
+            if record.updatedAt < pending { return nil }
+        } else if let applied = existing.syncUpdatedAt {
+            if applied != 0, record.updatedAt == applied,
+               SyncedBackendPayload.tunnelAddress(existing.server.tcAddress) == nil,
+               let route = record.tcAddress { return addingRoute(route, to: existing) }
+            if record.updatedAt <= applied { return nil }
+        } else if record.updatedAt < existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond {
+            return nil
+        }
+        return apply(record, to: existing)
     }
 
     /// Additive-field upgrade for records imported before iOS read tcAddress.

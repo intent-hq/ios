@@ -196,7 +196,8 @@ struct SyncedBackendPublisher {
         ]
     }
 
-    private func readRows() -> [[String: Any]]? {
+    // nil is an unknown registry; an empty array is a successful empty read.
+    private func readRows() -> [[String: Any]]? { // swiftlint:disable:this discouraged_optional_collection
         guard let accessGroup else { return nil }
         switch keychain.list(matching: SyncedBackendRegistry.listQuery(accessGroup: accessGroup)) {
         case .notFound: return []
@@ -209,11 +210,13 @@ struct SyncedBackendPublisher {
         // Only account and bytes affect our decision. Keychain row ordering
         // and modification-date attributes are not part of the payload.
         func signatures(_ rows: [[String: Any]]) -> [String] {
-            rows.map { row in
-                let account = row[kSecAttrAccount as String] as? String ?? ""
-                let data = row[kSecValueData as String] as? Data ?? Data()
-                return "\(account)\u{1F}\(data.base64EncodedString())"
-            }.sorted()
+            rows
+                .map { row in
+                    let account = row[kSecAttrAccount as String] as? String ?? ""
+                    let data = row[kSecValueData as String] as? Data ?? Data()
+                    return "\(account)\u{1F}\(data.base64EncodedString())"
+                }
+                .sorted()
         }
         return signatures(lhs) == signatures(rhs)
     }

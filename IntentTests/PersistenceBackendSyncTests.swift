@@ -14,7 +14,9 @@ struct PersistenceBackendSyncTests {
         try store.cloud.put(BackendSyncFixtures.remote(clock: 200))
         let live = FakeConnectionManager()
         let coordinator = AppCoordinator(
-            workspaceStore: WorkspaceStore(forTesting: true), connection: live, backendID: BackendID(oldImport.id),
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: live,
+            backendID: BackendID(oldImport.id),
             persistence: store.manager,
             syncedRegistry: SyncedBackendRegistry(keychain: store.cloud, accessGroup: BackendSyncFixtures.accessGroup)
         )
@@ -33,10 +35,14 @@ struct PersistenceBackendSyncTests {
         connection.responseMap["host.status"] = ["prettyHostname": "Paired Mac"]
         let local = BackendSyncFixtures.local()
         let paired = try await ConnectionPairing.finalize(
-            server: local.server, token: local.token, connection: connection, persistence: store.manager
+            server: local.server,
+            token: local.token,
+            connection: connection,
+            persistence: store.manager
         )
         // The route refresh/publication task runs independently of pairing UI.
-        for _ in 0..<20 where store.cloud.writeCount == 0 { await Task.yield() }
+        let maxTaskYields = 20
+        for _ in 0..<maxTaskYields where store.cloud.writeCount == 0 { await Task.yield() }
         #expect(store.cloud.writeCount == 1)
         #expect(store.manager.activeConnection()?.id == paired.id)
         #expect(connection.refreshHostRoutesCallCount == 1)
@@ -78,7 +84,10 @@ struct PersistenceBackendSyncTests {
         let local = BackendSyncFixtures.local()
         await #expect(throws: ConnectionPairing.PersistenceError.saveFailed) {
             try await ConnectionPairing.finalize(
-                server: local.server, token: local.token, connection: FakeConnectionManager(), persistence: store.manager
+                server: local.server,
+                token: local.token,
+                connection: FakeConnectionManager(),
+                persistence: store.manager
             )
         }
         store.manager.publishPendingBackends()
@@ -98,7 +107,8 @@ struct PersistenceBackendSyncTests {
         #expect(store.cloud.writeCount == 1)
 
         let relaunched = PersistenceManager(
-            defaults: store.defaults, keychainStorage: store.local,
+            defaults: store.defaults,
+            keychainStorage: store.local,
             backendPublisher: BackendSyncFixtures.publisher(store.cloud, clock: 9000)
         )
         store.cloud.writeFailure = nil
@@ -136,7 +146,8 @@ struct PersistenceBackendSyncTests {
         store.cloud.readFailure = nil
         try store.cloud.put(BackendSyncFixtures.remote(clock: 3000))
         let coordinator = AppCoordinator(
-            workspaceStore: WorkspaceStore(forTesting: true), connection: FakeConnectionManager(),
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: FakeConnectionManager(),
             persistence: store.manager,
             syncedRegistry: SyncedBackendRegistry(keychain: store.cloud, accessGroup: BackendSyncFixtures.accessGroup)
         )
@@ -153,10 +164,12 @@ struct PersistenceBackendSyncTests {
         let local = BackendSyncFixtures.local()
         #expect(store.manager.savePairing(server: local.server, token: local.token))
         store.cloud.readFailure = nil
-        let clock = Date().timeIntervalSince1970 * 1000
+        let millisecondsPerSecond = 1000.0
+        let clock = Date().timeIntervalSince1970 * millisecondsPerSecond
         try store.cloud.put(BackendSyncFixtures.remote(clock: clock, deleted: true))
         let coordinator = AppCoordinator(
-            workspaceStore: WorkspaceStore(forTesting: true), connection: FakeConnectionManager(),
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: FakeConnectionManager(),
             persistence: store.manager,
             syncedRegistry: SyncedBackendRegistry(keychain: store.cloud, accessGroup: BackendSyncFixtures.accessGroup)
         )
@@ -230,11 +243,10 @@ struct PersistenceBackendSyncTests {
         #expect(store.cloud.writeCount == 0)
     }
 
-    @Test func demoAndDefaultTestStoresDoNotInstallProductionWriter() throws {
+    @Test func defaultTestStoresDoNotInstallProductionWriter() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
         #expect(PersistenceManager(defaults: store.defaults, keychainStorage: store.local).backendPublisher == nil)
-        #expect(PersistenceManager.ephemeral().backendPublisher == nil)
         #expect(SyncedBackendPublisher.production() == nil)
     }
 }

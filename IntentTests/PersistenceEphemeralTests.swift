@@ -48,5 +48,6 @@ struct EphemeralPersistenceTests {
     @Test func doesNotTouchTheStandardDefaults() {
         let ephemeral = PersistenceManager.ephemeral()
         #expect(ephemeral.defaults !== UserDefaults.standard)
+        #expect(ephemeral.backendPublisher == nil)
     }
 }

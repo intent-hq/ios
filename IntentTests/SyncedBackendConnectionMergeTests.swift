@@ -282,8 +282,8 @@ struct SyncedBackendConnectionMergeTests {
         #expect(updated.syncUpdatedAt == 200)
     }
 
-    /// Registry records carry no tunnel address; a registry-driven rewrite
-    /// must keep the locally learned one.
+    /// Legacy registry records carry no tunnel address; a registry-driven
+    /// rewrite must keep the locally learned one.
     @Test func newerRecordPreservesLocalTcAddress() {
         let existing = local(syncUpdatedAt: 100, tcAddress: "tc-local-tunnel")
         let newer = record(token: "tok-rotated", updatedAt: 200)

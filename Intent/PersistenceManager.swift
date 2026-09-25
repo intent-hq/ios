@@ -69,8 +69,8 @@ extension PersistenceManager {
     }
 
     /// Inserts the connection, or updates the existing entry in place (preserving its
-    /// id) when one at the same port shares at least one host or carries the same
-    /// tailcat tunnel address. Returns the stored value.
+    /// id) when its certificate fingerprint matches, or one at the same port
+    /// shares at least one host or tailcat tunnel address. Returns the stored value.
     ///
     /// Overlap (not set equality) is the match key because the post-connect route
     /// refresh grows stored host sets over time: a re-pair of the same daemon via a
@@ -103,16 +103,7 @@ extension PersistenceManager {
             )
         }
         var stored: StoredConnection
-        let incomingHosts = Set(connection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
-        let fingerprint = SyncedBackendConnectionMerge.normalizeFingerprint(connection.server.certFingerprint)
-        if let index = connections.firstIndex(where: { storedConnection in
-            (!fingerprint.isEmpty
-                && SyncedBackendConnectionMerge.normalizeFingerprint(storedConnection.server.certFingerprint) == fingerprint)
-                || storedConnection.server.port == connection.server.port
-                && (!incomingHosts.isDisjoint(with: storedConnection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
-                    || (connection.server.tcAddress != nil
-                        && storedConnection.server.tcAddress == connection.server.tcAddress))
-        }) {
+        if let index = connections.firstIndex(where: { Self.matchesPairing($0, incoming: connection) }) {
             let existing = connections[index]
             let server = connection.server
             stored = StoredConnection(
@@ -156,6 +147,16 @@ extension PersistenceManager {
     private func preparePublication(_ stored: inout StoredConnection, incoming: StoredConnection) {
         guard incoming.syncUpdatedAt == nil, let backendPublisher else { return }
         stored.pendingSyncUpdatedAt = backendPublisher.pairingClock(for: stored)
+    }
+
+    private static func matchesPairing(_ stored: StoredConnection, incoming: StoredConnection) -> Bool {
+        let fingerprint = SyncedBackendConnectionMerge.normalizeFingerprint(incoming.server.certFingerprint)
+        if !fingerprint.isEmpty,
+           SyncedBackendConnectionMerge.normalizeFingerprint(stored.server.certFingerprint) == fingerprint { return true }
+        let incomingHosts = Set(incoming.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
+        return stored.server.port == incoming.server.port
+            && (!incomingHosts.isDisjoint(with: stored.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
+                || incoming.server.tcAddress != nil && stored.server.tcAddress == incoming.server.tcAddress)
     }
 
     /// Existing hosts keep their order and are never dropped; incoming hosts not
