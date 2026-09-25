@@ -17,14 +17,7 @@ struct WorkspaceListSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("View", selection: $viewModel.viewMode) {
-                ForEach(ViewMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, Constants.WorkspaceList.pickerHorizontalPadding)
-            .padding(.vertical, Constants.WorkspaceList.pickerVerticalPadding)
+            WorkspaceSearchBar(viewMode: $viewModel.viewMode, text: $viewModel.searchText, isFocused: $searchFocused)
 
             ZStack {
                 Theme.sidebar(for: colorScheme).ignoresSafeArea()
@@ -51,7 +44,6 @@ struct WorkspaceListSidebar: View {
             }
         }
         .navigationTitle("Workspaces")
-        .workspaceSearch(text: $viewModel.searchText, isFocused: $searchFocused)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Menu {

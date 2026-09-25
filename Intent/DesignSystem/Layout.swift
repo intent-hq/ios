@@ -290,6 +290,7 @@ extension Constants.WorkspaceList {
 }
 
 extension Constants.WorkspaceSearch {
+    static let buttonSize: CGFloat = 48
     static let contentSpacing: CGFloat = 8
     static let horizontalPadding: CGFloat = 12
     static let verticalPadding: CGFloat = 10
