@@ -6,6 +6,7 @@ import UIKit
 @testable import Intent
 
 @MainActor
+@Suite(.serialized)
 struct AssistantPromptRenderingTests {
     private static let greeting = "Hey bro — what’s on your mind?"
     private static let prompt = "Show me what needs my attention."
@@ -13,9 +14,9 @@ struct AssistantPromptRenderingTests {
     private static let hostWidth: CGFloat = 390
     private static let hostHeight: CGFloat = 600
     private static let observationTimeout: TimeInterval = 3
-    private static let observationInterval: TimeInterval = 0.02
+    private static let observationInterval: Duration = .milliseconds(20)
 
-    @Observable fileprivate final class Model {
+    @Observable final class Model {
         var message: ConversationMessage
 
         init(message: ConversationMessage) {
@@ -32,7 +33,7 @@ struct AssistantPromptRenderingTests {
     }
 
     @Test(arguments: [false, true])
-    func closingStreamedPromptBlockRemovesItsRenderedText(splitAcrossBlocks: Bool) throws {
+    func closingStreamedPromptBlockRemovesItsRenderedText(splitAcrossBlocks: Bool) async throws {
         let prefix = Self.greeting + "\n\n<!-- suggested-prompts\n"
         let body = Self.prompt + "\n" + Self.secondPrompt
         let blocks = splitAcrossBlocks
@@ -49,23 +50,29 @@ struct AssistantPromptRenderingTests {
             streamingState: .streaming
         ))
         let coordinator = try makeCoordinator()
-        try SyntheticBadgeHost.render(
-            Transcript(model: model).environment(coordinator),
-            width: Self.hostWidth,
-            height: Self.hostHeight
-        ) { host, _ in
-            try observe(in: host) { $0.contains(Self.greeting) && $0.contains(Self.prompt) }
-            let lastIndex = model.message.contentBlocks.count - 1
-            let previousText = try #require(model.message.contentBlocks[lastIndex].text)
-            model.message.contentBlocks[lastIndex].text = previousText + "\n-->"
-            model.message.streamingState = .complete
-            #expect(SuggestedPrompts.parse(contentBlocks: model.message.contentBlocks).prompts == [
-                Self.prompt, Self.secondPrompt
-            ])
-            try observe(in: host) { text in
-                text.contains(Self.greeting) && !text.contains("suggested-prompts")
-                    && !text.contains(Self.prompt) && !text.contains(Self.secondPrompt)
-            }
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previousKeyWindow = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        let controller = UIHostingController(rootView: Transcript(model: model).environment(coordinator))
+        window.frame = CGRect(x: 0, y: 0, width: Self.hostWidth, height: Self.hostHeight)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            previousKeyWindow?.makeKey()
+        }
+        try await observe(in: controller.view) { $0.contains(Self.greeting) && $0.contains(Self.prompt) }
+        let lastIndex = model.message.contentBlocks.count - 1
+        let previousText = try #require(model.message.contentBlocks[lastIndex].text)
+        model.message.contentBlocks[lastIndex].text = previousText + "\n-->"
+        model.message.streamingState = .complete
+        #expect(SuggestedPrompts.parse(contentBlocks: model.message.contentBlocks).prompts == [
+            Self.prompt, Self.secondPrompt
+        ])
+        try await observe(in: controller.view) { text in
+            text.contains(Self.greeting) && !text.contains("suggested-prompts")
+                && !text.contains(Self.prompt) && !text.contains(Self.secondPrompt)
         }
     }
 
@@ -80,11 +87,11 @@ struct AssistantPromptRenderingTests {
         )
     }
 
-    private func observe(in host: UIView, matching predicate: (String) -> Bool) throws {
+    private func observe(in host: UIView, matching predicate: (String) -> Bool) async throws {
         let deadline = Date(timeIntervalSinceNow: Self.observationTimeout)
         var labels = ""
         repeat {
-            _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: Self.observationInterval))
+            try await Task.sleep(for: Self.observationInterval)
             host.layoutIfNeeded()
             var visited: Set<ObjectIdentifier> = []
             labels = accessibilityText(under: host, visited: &visited).joined(separator: "\n")
