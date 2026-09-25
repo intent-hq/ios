@@ -29,8 +29,9 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertTrue(context.waitForExistence(timeout: Fixture.timeout))
 
         app.buttons["Assistant"].firstMatch.tap()
-        let history = app.buttons["assistant.conversations"]
-        XCTAssertTrue(history.waitForExistence(timeout: Fixture.timeout))
+        let actions = app.buttons["assistant.actions"]
+        XCTAssertTrue(actions.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.tabBars.firstMatch.waitForNonExistence(timeout: Fixture.timeout))
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
         let assistantScreenshot = XCTAttachment(screenshot: app.screenshot())
@@ -38,13 +39,14 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         assistantScreenshot.lifetime = .keepAlways
         add(assistantScreenshot)
 
-        app.buttons["Workspaces"].firstMatch.tap()
+        app.buttons["assistant.back"].tap()
         XCTAssertTrue(context.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.staticTexts["Test Stabilizer"].firstMatch.exists)
 
         app.buttons["Assistant"].firstMatch.tap()
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(history.exists)
+        XCTAssertTrue(actions.exists)
     }
 
     /// iPhone: the Workspaces/Assistant tab bar stays on the workspace
@@ -96,7 +98,9 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         newConversation.tap()
         XCTAssertTrue(greeting.waitForNonExistence(timeout: Fixture.timeout))
 
+        app.buttons["assistant.actions"].tap()
         let history = app.buttons["assistant.conversations"]
+        XCTAssertTrue(history.waitForExistence(timeout: Fixture.timeout))
         history.tap()
         let menuAction = app.buttons["New Conversation"].firstMatch
         XCTAssertTrue(menuAction.waitForExistence(timeout: Fixture.timeout))
@@ -104,6 +108,29 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         menuAction.tap()
         XCTAssertTrue(newConversation.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(newConversation.isHittable)
+    }
+
+    @MainActor
+    func testConversationHistoryInActionsSwitchesReplies() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-assistant-history"]
+        app.launch()
+        let assistantTab = app.buttons["Assistant"].firstMatch
+        XCTAssertTrue(assistantTab.waitForExistence(timeout: Fixture.timeout))
+        assistantTab.tap()
+        let greeting = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "I can help you plan and follow up")
+        ).firstMatch
+        XCTAssertTrue(greeting.waitForExistence(timeout: Fixture.timeout))
+        let actions = app.buttons["assistant.actions"]
+        actions.tap()
+        app.buttons["assistant.conversations"].tap()
+        app.buttons["Earlier conversation 0"].firstMatch.tap()
+        XCTAssertTrue(greeting.waitForNonExistence(timeout: Fixture.timeout))
+        actions.tap()
+        app.buttons["assistant.conversations"].tap()
+        app.buttons["Assistant"].firstMatch.tap()
+        XCTAssertTrue(greeting.waitForExistence(timeout: Fixture.timeout))
     }
 
     @MainActor

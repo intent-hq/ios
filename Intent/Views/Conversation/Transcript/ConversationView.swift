@@ -4,15 +4,18 @@ import UIKit
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
     var onAgentUnavailable: (() -> Void)?
+    var assistantStore: AssistantStore?
 
     init(
         agentId: String,
         workspaceId: String,
         agentName: String,
         session: BackendSession,
+        assistantStore: AssistantStore? = nil,
         onAgentUnavailable: (() -> Void)? = nil
     ) {
         self.onAgentUnavailable = onAgentUnavailable
+        self.assistantStore = assistantStore
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
             workspaceId: workspaceId,
@@ -24,13 +27,18 @@ struct ConversationView: View {
     }
 
     var body: some View {
-        ConversationViewContent(viewModel: viewModel, onAgentUnavailable: onAgentUnavailable)
+        ConversationViewContent(
+            viewModel: viewModel,
+            onAgentUnavailable: onAgentUnavailable,
+            assistantStore: assistantStore
+        )
     }
 }
 
 private struct ConversationViewContent: View {
     let viewModel: ConversationViewModel
     var onAgentUnavailable: (() -> Void)?
+    var assistantStore: AssistantStore?
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
@@ -231,6 +239,10 @@ private struct ConversationViewContent: View {
     /// Ellipsis toolbar menu (model info, rename, delete).
     private var agentMenu: some View {
         Menu {
+            if let assistantStore {
+                AssistantHistoryMenu(store: assistantStore)
+                Divider()
+            }
             if let displayName = viewModel.currentModelDisplayName {
                 Text("Model: \(displayName)")
             }
@@ -257,7 +269,8 @@ private struct ConversationViewContent: View {
             Image(systemName: "ellipsis.circle")
                 .foregroundStyle(Theme.foreground(for: colorScheme))
         }
-        .accessibilityLabel("Agent actions")
+        .accessibilityLabel(assistantStore == nil ? "Agent actions" : "Assistant actions")
+        .accessibilityIdentifier(assistantStore == nil ? "agent.actions" : "assistant.actions")
     }
 
     /// Note detail sheet content for a tapped note reference.

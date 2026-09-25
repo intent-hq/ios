@@ -48,11 +48,12 @@ struct AgentDestination: Hashable, Identifiable {
 /// iPhone, so the bar doesn't sit under the message composer or note content.
 /// Regular width keeps it: there the tab bar is the top-level switcher.
 private struct HidesTabBarWhenPushed: ViewModifier {
+    var includingRegularWidth = false
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        content.toolbar(sizeClass == .compact ? .hidden : .automatic, for: .tabBar)
+        content.toolbar(includingRegularWidth || sizeClass == .compact ? .hidden : .automatic, for: .tabBar)
         #else
         content
         #endif
@@ -60,7 +61,7 @@ private struct HidesTabBarWhenPushed: ViewModifier {
 }
 
 extension View {
-    func hidesTabBarWhenPushed() -> some View {
-        modifier(HidesTabBarWhenPushed())
+    func hidesTabBarWhenPushed(includingRegularWidth: Bool = false) -> some View {
+        modifier(HidesTabBarWhenPushed(includingRegularWidth: includingRegularWidth))
     }
 }
