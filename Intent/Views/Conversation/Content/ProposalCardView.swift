@@ -61,7 +61,12 @@ struct ProposalCardView: View {
                 .accessibilityIdentifier("proposal.outcome")
         } else if let error = store.loadError {
             Text(error).font(.callout)
-            Button("Retry") { Task { await store.refresh() } }
+            Button {
+                Task { await store.refresh() }
+            } label: {
+                Text("Retry")
+                    .copyContextMenuPassthrough()
+            }
         } else {
             Text("Waiting for confirmation availability…").font(.callout)
         }
@@ -82,6 +87,7 @@ struct ProposalCardView: View {
                         if let summary = item.summary { Text(summary).font(.caption).foregroundStyle(.secondary) }
                         if completed.contains(item.id) { Text("Applied").font(.caption) }
                     }
+                    .copyContextMenuPassthrough()
                 }
                 .disabled(item.disabled == true || completed.contains(item.id) || store.isBusy)
                 .accessibilityIdentifier("proposal.item.\(item.id)")
@@ -91,12 +97,20 @@ struct ProposalCardView: View {
 
     private func actionButtons(_ store: ProposalActionStore) -> some View {
         HStack {
-            Button("Not now") { confirmingDismiss = true }
-                .accessibilityIdentifier("proposal.dismiss")
+            Button {
+                confirmingDismiss = true
+            } label: {
+                Text("Not now")
+                    .copyContextMenuPassthrough()
+            }
+            .accessibilityIdentifier("proposal.dismiss")
             Spacer()
             if proposal.method != nil {
-                Button(proposal.method == "workspace.delete" ? "Delete" : "Archive") {
+                Button {
                     Task { await store.apply(proposal, messageId: messageId, selection: selection) }
+                } label: {
+                    Text(proposal.method == "workspace.delete" ? "Delete" : "Archive")
+                        .copyContextMenuPassthrough()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(selection.isEmpty)

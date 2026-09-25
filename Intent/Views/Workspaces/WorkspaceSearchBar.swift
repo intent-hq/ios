@@ -81,7 +81,6 @@ struct WorkspaceSearchInput: View {
         .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
         .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
         .background(.regularMaterial)
-        .accessibilityIdentifier("workspaces.search.input")
     }
 
     private var searchField: some View {

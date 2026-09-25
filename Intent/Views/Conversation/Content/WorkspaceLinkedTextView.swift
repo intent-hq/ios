@@ -55,6 +55,7 @@ struct WorkspaceLinkedTextView: View {
                     .accessibilityHidden(true)
             }
             .padding(Layout.padding)
+            .copyContextMenuPassthrough()
             .background(Theme.muted(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius))
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
         }

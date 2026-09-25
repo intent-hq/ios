@@ -40,6 +40,11 @@ struct WorkspaceListView: View {
         .scrollDismissesKeyboard(.immediately)
         #endif
         .background(Theme.background(for: colorScheme))
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear.frame(height: 0)
+                .background(Theme.background(for: colorScheme), ignoresSafeAreaEdges: .top)
+                .allowsHitTesting(false)
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSearching {
                 WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
