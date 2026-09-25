@@ -45,6 +45,9 @@ struct IntentFileVideoFailureAttachment: Attachment {
         }
         .font(.caption)
         .foregroundStyle(.secondary)
+        // Textual resolves an ideal-sized Canvas symbol, then scales it into
+        // the square run bounds. Give it a square so the labels do not stretch.
+        .frame(width: SquareImageThumbnail.transcriptSide, height: SquareImageThumbnail.transcriptSide)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Video: \(name)")
         .accessibilityHint("Video unavailable")

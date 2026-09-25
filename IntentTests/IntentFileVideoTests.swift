@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 @testable import Intent
+import SwiftUI
 import Testing
 import Textual
 import UIKit
@@ -109,6 +110,17 @@ struct IntentFileVideoTests {
         #expect(FileManager.default.fileExists(atPath: url.path))
         video = nil
         #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test func unavailableVideoSymbolPreservesItsSquareAspectRatio() throws {
+        // Textual resolves the body at its ideal size before drawing that symbol
+        // into the square attachment bounds. A short intrinsic VStack stretches
+        // its text unless the rendered symbol has the same aspect ratio.
+        let placeholder = IntentFileVideoFailureAttachment(name: "unsupported-demo.webm")
+        let renderer = ImageRenderer(content: placeholder.body)
+        let image = try #require(renderer.uiImage)
+        #expect(image.size.width > 0)
+        #expect(image.size.width == image.size.height)
     }
 
     private static func chunk(_ data: Data, size: Int) -> [String: Any] {
