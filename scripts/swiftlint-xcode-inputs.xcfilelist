@@ -551,6 +551,7 @@ $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTabTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossUITests.swift
+$(SRCROOT)/IntentUITests/ConversationTranscriptFullGateUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Keyboard.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
