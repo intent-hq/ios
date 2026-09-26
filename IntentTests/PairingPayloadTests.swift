@@ -178,4 +178,9 @@ struct PairingPayloadTests {
     @Test func truncatesElevenCharTcAddress() {
         #expect(TcAddressDisplay.truncated("tc-abcdefgh") == "tc-abcdefg\u{2026}")
     }
+
+    @Test(arguments: ["token=", "token=t&token=other", "token=t&v=2", "token=t&port=0"])
+    func rejectsAmbiguousPersonalCredentials(query: String) {
+        #expect(PairingPayload.parse("intent://pair?host=test.invalid&port=443&\(query)") == nil)
+    }
 }

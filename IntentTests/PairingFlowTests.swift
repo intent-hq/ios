@@ -130,4 +130,47 @@ struct PairingFlowTests {
         #expect(setup.manager.activeConnection()?.id == stored.id)
         #expect(fake.disconnectCallCount == 0)
     }
+
+    @Test @MainActor func personalPairingsKeepTwoPeopleOnOnePinnedHost() async throws {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let pin = String(repeating: "ab", count: 32)
+        let fake = FakeConnectionManager()
+        fake.responseMap["client.hello"] = ["server": ["capabilities": ["hostMembership": 1]]]
+        for person in ["B", "C", "B"] {
+            fake.responseMap["principal.me"] = [
+                "principalId": person, "isAdministrator": false, "hostRole": "member", "hostMembershipRevision": 1
+            ]
+            _ = try await PairingFlow.connect(
+                payload: PairingPayload(hosts: ["test.invalid"], port: 443, token: "test-\(person)", certFingerprint: pin, tcAddress: "tc-test"),
+                certFingerprint: pin,
+                connectionManager: fake,
+                persistence: setup.manager
+            )
+        }
+        let relaunched = PersistenceManager(defaults: setup.manager.defaults, keychainStorage: storage)
+        #expect(relaunched.loadConnections().count == 2)
+        #expect(Set(relaunched.loadConnections().map(\.token)) == ["test-B", "test-C"])
+        #expect(relaunched.loadConnections().allSatisfy { $0.server.tcAddress == "tc-test" })
+    }
+
+    @Test @MainActor func malformedPersonalIdentityCannotBeSaved() async {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let fake = FakeConnectionManager()
+        fake.responseMap["client.hello"] = ["server": ["capabilities": ["hostMembership": 1]]]
+        fake.responseMap["principal.me"] = ["principalId": "B", "isAdministrator": false]
+        await #expect(throws: (any Error).self) {
+            try await PairingFlow.connect(
+                payload: payload(fingerprint: String(repeating: "ab", count: 32)),
+                certFingerprint: String(repeating: "ab", count: 32),
+                connectionManager: fake,
+                persistence: setup.manager
+            )
+        }
+        #expect(setup.manager.loadConnections().isEmpty)
+        #expect(fake.disconnectCallCount == 1)
+    }
 }
