@@ -44,6 +44,24 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     }
 
     @MainActor
+    func testCreateNewAgentMenuOpensAgentSetup() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
+        workspace.tap()
+        let actions = app.buttons["Workspace actions"]
+        XCTAssertTrue(actions.waitForExistence(timeout: Fixture.elementTimeout))
+        actions.tap()
+        let createAgent = app.buttons["Create New Agent"]
+        XCTAssertTrue(createAgent.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(createAgent.isEnabled)
+        createAgent.tap()
+        XCTAssertTrue(app.navigationBars["New Agent"].waitForExistence(timeout: Fixture.elementTimeout))
+    }
+
+    @MainActor
     func testWorkspaceTapLandsOnOverviewAndOnlyTheAgentRowOpensTheConversation() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["INTENT_UITEST_TRANSCRIPT_CRASH_REPRO"] == "1",
