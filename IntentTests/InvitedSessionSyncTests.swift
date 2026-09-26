@@ -4,6 +4,21 @@ import Security
 import Testing
 
 @MainActor struct InvitedSessionSyncTests {
+    @Test func importingAnExplicitRouteClearRemovesTheSavedTunnel() async throws {
+        let cloud = MemorySyncedKeychain()
+        let initial = try InvitedSessionFixtures.session(changes: ["tcAddress": "tcOld", "tcUpdatedAt": 100])
+        cloud.items[initial.account] = initial.data
+        let store = try InvitedSessionFixtures.Store(cloud)
+        defer { store.close() }
+        _ = await store.persistence.refreshInvitedSessions { _ in InvitedSessionFixtures.principal() }
+        #expect(store.persistence.loadConnections().first?.server.tcAddress == "tcOld")
+        let cleared = try InvitedSessionFixtures.session(changes: ["tcAddress": NSNull(), "tcUpdatedAt": 300, "updatedAt": 300])
+        cloud.items[cleared.account] = cleared.data
+        _ = await store.persistence.refreshInvitedSessions { _ in InvitedSessionFixtures.principal() }
+        #expect(store.persistence.loadConnections().first?.server.tcAddress == nil)
+        #expect(store.persistence.loadConnections().first?.token == "B-still-valid")
+    }
+
     @Test func freshClientHonorsIndependentRemovalAfterAStaleWriterWins() async throws {
         let cloud = MemorySyncedKeychain()
         let stale = try InvitedSessionFixtures.session(changes: ["updatedAt": 900, "tcAddress": "tcStale", "tcUpdatedAt": 900])
