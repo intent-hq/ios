@@ -132,11 +132,11 @@ struct ResponseGroupBody: View, Equatable {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.iconOpacity))
                     .accessibilityHidden(true)
                 Text(group.name)
-                    .font(.subheadline.weight(.semibold))
+                    .interFont(Constants.Typography.bodyXS.withFace(.semibold))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 if group.toolCallCount > 0 {
                     Text("\(group.toolCallCount)")
-                        .font(.caption2.weight(.bold))
+                        .interFont(Constants.Typography.subtextXXS.withFace(.bold))
                         .foregroundStyle(Theme.background(for: colorScheme))
                         .padding(.horizontal, Layout.countHorizontalPadding)
                         .padding(.vertical, Layout.countVerticalPadding)

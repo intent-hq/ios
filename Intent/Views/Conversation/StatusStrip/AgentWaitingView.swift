@@ -37,7 +37,7 @@ struct AgentWaitingView: View {
             ProgressView()
                 .scaleEffect(Constants.Conversation.AgentWaiting.progressScale)
             Text(headerText)
-                .font(.subheadline.weight(.medium))
+                .interFont(Constants.Typography.bodyXSEmphasized)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
             Spacer()
         }
@@ -105,7 +105,7 @@ struct AgentWaitingView: View {
             ProgressView()
                 .scaleEffect(Constants.Conversation.AgentWaiting.fallbackProgressScale)
             Text(agentId.prefix(Constants.Conversation.AgentWaiting.fallbackAgentIdMaximumLength) + "...")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             Spacer()
         }
@@ -187,22 +187,22 @@ struct AgentWaitingView: View {
     private func agentDescription(_ agent: AgentSession) -> some View {
         VStack(alignment: .leading, spacing: Layout.descriptionSpacing) {
             Text(agent.name)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .lineLimit(1)
             if let attention = agent.pendingAttentionRequest {
                 Text(attention.reason.map { "\(attention.kind.label) — \($0)" } ?? attention.kind.label)
-                    .font(.caption2)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(attention.kind.color)
                     .lineLimit(1)
             } else if let message = agent.displayMessage {
                 Text(message)
-                    .font(.caption2)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .lineLimit(1)
             } else {
                 Text(agent.isActive ? "Working..." : (agent.isErrored ? "Error" : "Idle"))
-                    .font(.caption2)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(agent.isErrored ? .red : Theme.mutedForeground(for: colorScheme))
             }
         }

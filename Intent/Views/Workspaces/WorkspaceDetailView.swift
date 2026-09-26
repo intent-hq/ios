@@ -196,8 +196,10 @@ struct WorkspaceDetailView: View {
             // visibly belongs to the workspace rather than the sidebar.
             ToolbarItem(placement: .topBarTrailing) {
                 Picker("Workspace Content", selection: $selectedTab) {
-                    Label("Agents", systemImage: "person.2").tag(WorkspaceTab.agents)
-                    Label("Context", systemImage: "doc.text").tag(WorkspaceTab.context)
+                    Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "person.2") }
+                    .tag(WorkspaceTab.agents)
+                    Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "doc.text") }
+                    .tag(WorkspaceTab.context)
                 }
                 .pickerStyle(.segmented)
             }
@@ -213,18 +215,18 @@ private extension WorkspaceDetailView {
     var workspaceActions: some View {
         Menu {
             Button { showSpecialistPicker = true } label: {
-                Label("Create New Agent", systemImage: "plus.circle")
+                Label { Text("Create New Agent").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "plus.circle") }
             }
             Button(action: createTerminal) {
-                Label("New terminal", systemImage: "terminal")
+                Label { Text("New terminal").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "terminal") }
             }
             .disabled(!terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId))
             Divider()
             Button { showArchiveConfirmation = true } label: {
-                Label("Archive", systemImage: "archivebox")
+                Label { Text("Archive").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "archivebox") }
             }
             Button(role: .destructive) { showDeleteConfirmation = true } label: {
-                Label("Delete", systemImage: "trash")
+                Label { Text("Delete").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "trash") }
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -268,8 +270,7 @@ private extension WorkspaceDetailView {
     @ViewBuilder
     var repositoryName: some View {
         if let owner = workspace?.repositoryOwner, let repo = workspace?.repositoryName {
-            Text("\(owner)/\(repo)")
-                .font(.caption)
+            Text("\(owner)/\(repo)").interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
                     contrast: colorSchemeContrast
@@ -295,8 +296,8 @@ private extension WorkspaceDetailView {
     var workspacePicker: some View {
         #if !os(visionOS)
         Picker("Workspace Content", selection: $selectedTab) {
-            Text("Agents").tag(WorkspaceTab.agents)
-            Text("Context").tag(WorkspaceTab.context)
+            Text("Agents").interFont(Constants.Typography.bodyXS).tag(WorkspaceTab.agents)
+            Text("Context").interFont(Constants.Typography.bodyXS).tag(WorkspaceTab.context)
         }
         .pickerStyle(.segmented)
         .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
@@ -313,15 +314,15 @@ private extension WorkspaceDetailView {
             if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty,
                terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty {
                 Spacer()
-                ProgressView("Loading agents...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 Spacer()
             } else if viewModel.agents.isEmpty, terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty {
-                ContentUnavailableView(
-                    "No Agents",
-                    systemImage: "person.2",
-                    description: Text("Agents will appear here when active.")
-                )
+                ContentUnavailableView {
+                    Label { Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold)) } icon: { Image(systemName: "person.2") }
+                } description: {
+                    Text("Agents will appear here when active.").interFont(Constants.Typography.bodyS)
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 agentListContent
@@ -471,23 +472,22 @@ struct WorkspaceActionConfirmationSheet: View {
 
     var body: some View {
         VStack(spacing: Constants.WorkspaceDetail.confirmationSheetSpacing) {
-            Text(title)
-                .font(.title2.weight(.semibold))
-            Text(message)
+            Text(title).interFont(Constants.Typography.heading2)
+            Text(message).interFont(Constants.Typography.bodyS)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             Button(role: isDestructive ? .destructive : nil) {
                 dismiss()
                 onConfirm()
             } label: {
-                Text(actionLabel)
+                Text(actionLabel).interFont(Constants.Typography.bodyS)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             Button {
                 dismiss()
             } label: {
-                Text("Cancel")
+                Text("Cancel").interFont(Constants.Typography.bodyS)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)

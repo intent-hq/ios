@@ -53,7 +53,12 @@ struct AgentNotificationsMuteButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label(agent.notificationsMuteToggleTitle, systemImage: agent.notificationsMuteToggleSymbol)
+            Label {
+                Text(agent.notificationsMuteToggleTitle)
+                    .interFont(Constants.Typography.bodyS)
+            } icon: {
+                Image(systemName: agent.notificationsMuteToggleSymbol)
+            }
         }
     }
 }
@@ -123,17 +128,17 @@ struct AgentRowView: View {
     private var agentStatusDescription: some View {
         if avatarState == .question {
             Text(avatarState.accessibilityLabel)
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(avatarState.cornerColor)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         } else if avatarState != .running, let attention = agent.pendingAttentionRequest {
             Text(attention.reason.map { "\(attention.kind.label) — \($0)" } ?? attention.kind.label)
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(attention.kind.color)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         } else if let message = agent.displayMessage {
             Text(message)
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
                     contrast: colorSchemeContrast
@@ -161,7 +166,7 @@ struct AgentRowView: View {
     private var agentIdentity: some View {
         HStack(alignment: .firstTextBaseline, spacing: Constants.AgentRow.titleSpacing) {
             Text(agent.name)
-                .font(.body)
+                .interFont(Constants.Typography.bodyS)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .layoutPriority(1)
@@ -189,7 +194,9 @@ struct AgentRowView: View {
     private var backgroundBadge: some View {
         if agent.isBackground {
             Text("BG")
-                .font(.system(size: Constants.AgentRow.badgeFontSize, weight: .bold))
+                .interFont(Constants.Typography.Style(
+                    face: .bold, size: Constants.AgentRow.badgeFontSize, relativeTo: .caption2
+                ))
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
                     contrast: colorSchemeContrast
@@ -218,7 +225,7 @@ struct AgentRowView: View {
     private var timestamp: some View {
         if let timestamp = agent.bestTimestamp {
             Text(relativeDate(from: timestamp))
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
                     contrast: colorSchemeContrast
@@ -269,7 +276,7 @@ struct DelegatedAgentsRow: View {
 
     private var summaryLabel: some View {
         Text(summaryTitle)
-            .font(.subheadline)
+            .interFont(Constants.Typography.bodyXS)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -321,7 +328,7 @@ struct BackgroundAgentsHeader: View {
                 }
 
                 Text("\(agents.count) background agents")
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
 
                 Spacer()

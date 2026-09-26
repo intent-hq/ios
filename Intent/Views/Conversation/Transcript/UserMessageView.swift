@@ -80,7 +80,7 @@ struct UserMessageView: View {
             )
         } else {
             Text("You")
-                .font(.caption.weight(.semibold))
+                .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
     }
@@ -177,7 +177,7 @@ struct UserMessageView: View {
 
     private func userText(_ text: String) -> some View {
         Text(text)
-            .font(.subheadline)
+            .interFont(Constants.Typography.bodyXS)
             .foregroundStyle(Theme.foreground(for: colorScheme).opacity(Layout.textOpacity))
             .textSelection(.enabled)
     }
@@ -189,11 +189,11 @@ struct UserMessageView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .accessibilityHidden(true)
             Text(block.fileName ?? "Attachment")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .lineLimit(1)
             if let size = block.size {
                 Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
-                    .font(.caption2)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
         }

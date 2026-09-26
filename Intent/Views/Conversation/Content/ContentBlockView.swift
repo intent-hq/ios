@@ -196,7 +196,7 @@ struct ContentBlockBody: View, Equatable {
     private var thinkingView: some View {
         DisclosureGroup(isExpanded: thinkingExpansion) {
             Text(block.resolvedText ?? "")
-                .font(.callout)
+                .interFont(Constants.Typography.bodyS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .italic()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -207,7 +207,7 @@ struct ContentBlockBody: View, Equatable {
                     .font(.caption)
                     .accessibilityHidden(true)
                 Text("Thinking")
-                    .font(.caption.weight(.medium))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
@@ -300,10 +300,12 @@ struct ContentBlockBody: View, Equatable {
                         ProgressView()
                             .controlSize(.mini)
                         Text("Loading image…")
+                            .interFont(Constants.Typography.subtextXXS)
                     } else {
                         Image(systemName: "photo")
                             .accessibilityHidden(true)
                         Text(imageNeedsHydration ? "Tap to load image" : "Image")
+                            .interFont(Constants.Typography.subtextXXS)
                     }
                 }
                 .font(.caption)

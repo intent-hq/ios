@@ -26,14 +26,14 @@ struct PrMonitorWakeAttributionView: View {
                 }
             } label: {
                 Text(attribution.chipLabel(workspaceRepo: workspaceRepo))
-                    .font(.caption.weight(.semibold))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .underline()
                     .lineLimit(1)
             }
             .buttonStyle(.plain)
             Text("woke the agent")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
     }

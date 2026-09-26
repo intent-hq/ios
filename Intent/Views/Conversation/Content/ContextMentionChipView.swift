@@ -30,7 +30,7 @@ struct ContextMentionChipView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Constants.Conversation.ContextMention.iconOpacity))
                 .accessibilityHidden(true)
             Text(Self.displayTitle(mention.title))
-                .font(.caption.weight(.medium))
+                .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                 .lineLimit(1)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }

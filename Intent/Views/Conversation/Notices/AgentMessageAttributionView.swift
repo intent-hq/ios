@@ -38,12 +38,12 @@ struct AgentMessageAttributionView: View {
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
                 Text("sent a message")
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .layoutPriority(1)
                 if !preview.isEmpty {
                     Text("— \(preview)")
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -69,7 +69,7 @@ struct AgentMessageAttributionView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .accessibilityHidden(true)
             Text(attribution.displayName)
-                .font(.caption.weight(.semibold))
+                .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .lineLimit(1)
         }

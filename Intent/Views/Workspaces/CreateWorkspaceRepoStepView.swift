@@ -14,9 +14,11 @@ struct CreateWorkspaceRepoStepView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", role: .cancel, action: onClose)
+                        .interFont(Constants.Typography.bodyS)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Next", action: onNext)
+                        .interFont(Constants.Typography.bodySEmphasized)
                         .disabled(selectedRepo == nil)
                 }
             }

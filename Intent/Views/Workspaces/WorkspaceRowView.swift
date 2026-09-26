@@ -87,7 +87,7 @@ struct WorkspaceRowView: View {
     private var title: some View {
         let isUntitled = workspace.title.trimmingCharacters(in: .whitespaces).isEmpty
         Text(isUntitled ? "<Untitled>" : workspace.title)
-            .font(.headline)
+            .interFont(Constants.Typography.bodyM.withFace(.semibold))
             .foregroundStyle(isUntitled
                 ? Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast)
                 : Theme.foreground(for: colorScheme))
@@ -118,7 +118,7 @@ struct WorkspaceRowView: View {
     private func repositoryLabel(lineLimit: Int?) -> some View {
         if showRepo, let repo = workspace.repositoryName {
             Text(repo)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
                     contrast: colorSchemeContrast
@@ -159,7 +159,7 @@ struct WorkspaceRowView: View {
 
         private var horizontalBadges: some View {
             HStack(
-                alignment: .firstTextBaseline,
+                alignment: .center,
                 spacing: Constants.WorkspaceRow.metadataSpacing
             ) {
                 badgeContent
@@ -177,12 +177,13 @@ struct WorkspaceRowView: View {
             if let pill = indicator.pill {
                 let pillColor = WorkspaceRowView.pillColor(for: pill.status)
                 HStack(
-                    alignment: .firstTextBaseline,
+                    alignment: .center,
                     spacing: Constants.WorkspaceRow.titleSpacing
                 ) {
                     Image(systemName: WorkspaceRowView.pillSystemImage(for: pill.status))
                         .foregroundStyle(pillColor)
                     Text("PR\(pill.number.map { " #\($0)" } ?? "")")
+                        .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(Theme.mutedForeground(
@@ -215,7 +216,7 @@ struct WorkspaceRowView: View {
 
             if indicator.otherMonitorCount > 0 {
                 Text("+\(indicator.otherMonitorCount)")
-                    .font(.caption.weight(.medium))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.mutedForeground(
                         for: colorScheme,
                         contrast: colorSchemeContrast
@@ -249,7 +250,7 @@ struct WorkspaceRowView: View {
         if let activity = workspace.lastActivity ?? workspace.updatedAt {
             let value = relativeDate(from: activity)
             Text(value)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
                     contrast: colorSchemeContrast

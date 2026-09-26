@@ -18,7 +18,7 @@ struct NewMessagesDividerView: View {
                     .font(.caption2)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.iconOpacity))
                 Text("New messages")
-                    .font(.caption.weight(.medium))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .lineLimit(1)
             }

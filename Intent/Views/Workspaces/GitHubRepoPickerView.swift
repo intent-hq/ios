@@ -50,8 +50,10 @@ struct GitHubRepoPickerView: View {
                     // rather than not-connected guidance or an endless spinner.
                     emptyState
                 } else {
-                    ProgressView("Checking GitHub connection...")
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    ProgressView {
+                        Text("Checking GitHub connection...").interFont(Constants.Typography.bodyS)
+                    }
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 }
             } else if !store.isConfigured {
                 notConnectedPlaceholder
@@ -72,17 +74,21 @@ struct GitHubRepoPickerView: View {
     private var repoList: some View {
         Group {
             if store.isLoading || pendingSearchQuery != nil, suggestions.isEmpty {
-                ProgressView("Loading repositories...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                ProgressView {
+                    Text("Loading repositories...").interFont(Constants.Typography.bodyS)
+                }
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if suggestions.isEmpty {
                 emptyState
             } else {
                 List {
                     if !suggestions.recents.isEmpty {
-                        Section("Recent") {
+                        Section {
                             ForEach(suggestions.recents) { repo in
                                 repoRow(repo)
                             }
+                        } header: {
+                            Text("Recent").interFont(Constants.Typography.eyebrow)
                         }
                     }
                     if !suggestions.others.isEmpty {
@@ -112,11 +118,11 @@ struct GitHubRepoPickerView: View {
                 RepoOwnerAvatarView(owner: repo.owner)
                 VStack(alignment: .leading, spacing: Constants.GitHubRepoPicker.rowTextSpacing) {
                     Text(repo.name)
-                        .font(.headline)
+                        .interFont(Constants.Typography.bodyM.withFace(.semibold))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.GitHubRepoPicker.repositoryNameLineLimit)
                     Text(repo.fullName)
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         .truncationMode(.middle)
@@ -140,19 +146,27 @@ struct GitHubRepoPickerView: View {
     @ViewBuilder
     private var emptyState: some View {
         if let lastError = store.lastError {
-            ContentUnavailableView(
-                "Repositories Unavailable",
-                systemImage: "exclamationmark.triangle",
-                description: Text(lastError)
-            )
+            ContentUnavailableView {
+                Label {
+                    Text("Repositories Unavailable").interFont(Constants.Typography.bodyM.withFace(.semibold))
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle")
+                }
+            } description: {
+                Text(lastError).interFont(Constants.Typography.bodyS)
+            }
         } else if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             ContentUnavailableView.search
         } else {
-            ContentUnavailableView(
-                "No Repositories",
-                systemImage: "folder.badge.questionmark",
-                description: Text("No GitHub repositories are available for your account.")
-            )
+            ContentUnavailableView {
+                Label {
+                    Text("No Repositories").interFont(Constants.Typography.bodyM.withFace(.semibold))
+                } icon: {
+                    Image(systemName: "folder.badge.questionmark")
+                }
+            } description: {
+                Text("No GitHub repositories are available for your account.").interFont(Constants.Typography.bodyS)
+            }
         }
     }
 
@@ -160,11 +174,16 @@ struct GitHubRepoPickerView: View {
     /// runs on the desktop seat and is not available on iOS (same pattern as
     /// the "no providers signed in" placeholder).
     private var notConnectedPlaceholder: some View {
-        ContentUnavailableView(
-            "GitHub Is Not Connected",
-            systemImage: "person.crop.circle.badge.xmark",
-            description: Text("Connect GitHub in the Intent desktop app, then come back and try again.")
-        )
+        ContentUnavailableView {
+            Label {
+                Text("GitHub Is Not Connected").interFont(Constants.Typography.bodyM.withFace(.semibold))
+            } icon: {
+                Image(systemName: "person.crop.circle.badge.xmark")
+            }
+        } description: {
+            Text("Connect GitHub in the Intent desktop app, then come back and try again.")
+                .interFont(Constants.Typography.bodyS)
+        }
     }
 
     // MARK: - Debounced search

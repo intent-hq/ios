@@ -193,7 +193,7 @@ private extension MessageInputView {
             if localText.isEmpty {
                 Text("Message...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .font(.body)
+                    .interFont(Constants.Typography.bodyS)
                     .padding(.horizontal, Constants.Conversation.Composer.placeholderHorizontalPadding)
                     .padding(.vertical, Constants.Conversation.Composer.placeholderVerticalPadding)
                     .allowsHitTesting(false)
@@ -316,7 +316,7 @@ private extension MessageInputView {
                 .font(.caption)
                 .accessibilityHidden(true)
             Text(hint)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -341,7 +341,7 @@ private extension MessageInputView {
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 .accessibilityHidden(true)
                             Text(prompt)
-                                .font(.body)
+                                .interFont(Constants.Typography.bodyS)
                                 .lineLimit(Constants.Conversation.Composer.suggestedPromptLineLimit)
                                 .foregroundStyle(Theme.foreground(for: colorScheme))
                         }

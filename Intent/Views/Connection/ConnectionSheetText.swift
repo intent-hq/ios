@@ -20,7 +20,7 @@ struct ConnectionSheetText: View {
     var body: some View {
         CapHeightLayout(capHeight: capHeight) {
             Text(text)
-                .font(style.font)
+                .interFont(style)
                 .tracking(tracking)
                 .fixedSize(horizontal: false, vertical: true)
         }

@@ -93,12 +93,12 @@ struct PairingView: View {
     private var pairingHeader: some View {
         PairingHeaderLayout(capHeights: [headingCapHeight, bodyCapHeight], spacing: Constants.Pairing.headerSpacing) {
             Text("Connect to Intent")
-                .font(Constants.Typography.heading2.font)
+                .interFont(Constants.Typography.heading2)
                 .tracking(Constants.Pairing.headingTracking)
                 .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                 .multilineTextAlignment(.center)
             Text("Pair with your desktop app to manage workspaces and chat with agents.")
-                .font(Constants.Typography.bodyS.font)
+                .interFont(Constants.Typography.bodyS)
                 .tracking(Constants.Pairing.bodyTracking)
                 .lineSpacing(bodyLineSpacing)
                 .foregroundStyle(Constants.Pairing.mutedForeground(for: colorScheme))
@@ -145,7 +145,7 @@ struct PairingView: View {
     private var visionPairingHint: some View {
         #if os(visionOS)
         Text("Pair from your iPhone or Mac: open the intent://pair link shown in the Intent desktop app.")
-            .font(.caption)
+            .interFont(Constants.Typography.subtextXXS)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .multilineTextAlignment(.center)
         #endif
@@ -216,11 +216,11 @@ struct PairingOptionButton: View {
 
                 VStack(alignment: .leading, spacing: max(0, Constants.Pairing.optionTextSpacing - nativeLeading)) {
                     Text(title)
-                        .font(Constants.Typography.bodySEmphasized.font)
+                        .interFont(Constants.Typography.bodySEmphasized)
                         .tracking(Constants.Pairing.optionTitleTracking)
                         .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                     Text(subtitle)
-                        .font(Constants.Typography.bodyS.font)
+                        .interFont(Constants.Typography.bodyS)
                         .tracking(Constants.Pairing.bodyTracking)
                         .foregroundStyle(Constants.Pairing.mutedForeground(for: colorScheme))
                 }
