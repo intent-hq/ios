@@ -168,11 +168,17 @@ jobs:
             xcodebuild -version
           fi
 
-      # Device selection lives in scripts/xcodebuild.sh (pick-simulator).
-      # Export the UDID so the pre-boot step and every later script
-      # invocation share one concrete device.
+      # Prefer the newest installed iOS runtime. This persistent Mac also has
+      # old iPhone 16 devices, which the wrapper would otherwise pick first.
+      # Export the UDID so pre-boot and every later script share one device.
       - name: Pick simulator device
-        run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
+        run: |
+          devices=$(xcrun simctl list devices available -j)
+          runtime=$(printf '%s' "$devices" | jq -r '.devices | keys[] | select(startswith("com.apple.CoreSimulator.SimRuntime.iOS-"))' | sort -V | tail -n 1)
+          udid=$(printf '%s' "$devices" | jq -r --arg runtime "$runtime" '.devices[$runtime] | map(select(.name | startswith("iPhone"))) | first | .udid')
+          [ -n "$udid" ] && [ "$udid" != null ] || { echo 'No available iPhone simulator' >&2; exit 1; }
+          echo "Selected $runtime simulator $udid"
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
@@ -477,7 +483,13 @@ jobs:
           fi
 
       - name: Pick simulator device
-        run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
+        run: |
+          devices=$(xcrun simctl list devices available -j)
+          runtime=$(printf '%s' "$devices" | jq -r '.devices | keys[] | select(startswith("com.apple.CoreSimulator.SimRuntime.iOS-"))' | sort -V | tail -n 1)
+          udid=$(printf '%s' "$devices" | jq -r --arg runtime "$runtime" '.devices[$runtime] | map(select(.name | startswith("iPhone"))) | first | .udid')
+          [ -n "$udid" ] && [ "$udid" != null ] || { echo 'No available iPhone simulator' >&2; exit 1; }
+          echo "Selected $runtime simulator $udid"
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
 
       - name: Pre-boot simulator
         run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
