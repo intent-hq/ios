@@ -47,9 +47,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
 
     @MainActor
     private func openCreationForm(in app: XCUIApplication) {
-        let create = app.buttons["Create workspace"]
-        XCTAssertTrue(create.waitForExistence(timeout: Self.elementTimeout))
-        create.tap()
+        app.openHomeAction("workspace")
         let repository = app.staticTexts["nova-labs/console"]
         XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
         repository.tap()

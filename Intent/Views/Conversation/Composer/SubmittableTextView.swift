@@ -62,16 +62,13 @@ class KeyCommandTextView: UITextView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        #if os(visionOS)
         centerShortContent()
-        #endif
         onLayoutChange?()
     }
 
     /// Content height measured with the base container inset, independent of
-    /// any live vertical-centering inset (visionOS), so the SwiftUI height
-    /// clamp sees a stable value. On iOS the insets always equal the base,
-    /// so this matches `sizeThatFits` exactly.
+    /// any live vertical-centering inset, so the SwiftUI height clamp sees
+    /// a stable value.
     var naturalHeight: CGFloat {
         let fitting = sizeThatFits(
             CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
@@ -80,9 +77,7 @@ class KeyCommandTextView: UITextView {
         return fitting - textContainerInset.top - textContainerInset.bottom + base * 2
     }
 
-    #if os(visionOS)
-    /// Vertically centers short content inside the fixed 60 pt minimum field
-    /// height by widening the vertical container insets symmetrically.
+    /// Centers short content within the minimum field height.
     private func centerShortContent() {
         let base = Constants.Conversation.Composer.textContainerInset
         let contentHeight = naturalHeight - base * 2
@@ -92,7 +87,6 @@ class KeyCommandTextView: UITextView {
         guard abs(textContainerInset.top - inset) > 0.5 else { return }
         textContainerInset = UIEdgeInsets(top: inset, left: base, bottom: inset, right: base)
     }
-    #endif
 
     #if os(visionOS)
     private static let isVisionOS = true

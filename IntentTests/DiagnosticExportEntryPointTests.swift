@@ -4,25 +4,6 @@ import Testing
 /// Source contracts complement the native UI tests; they do not claim that
 /// presentation, accessibility or system sharing has executed successfully.
 struct DiagnosticExportEntryPointTests {
-    @Test(arguments: ["WorkspaceListView.swift", "WorkspaceListSidebar.swift"])
-    func bothMenusKeepLiteralOrderAndOpenPreview(file: String) throws {
-        let source = try read("Intent/Views/Workspaces/" + file)
-        let settings = try #require(menuLabelRange("Settings", in: source))
-        let connect = try #require(menuLabelRange("Connect to…", in: source))
-        let export = try #require(menuLabelRange("Export logs", in: source))
-        #expect(settings.lowerBound < connect.lowerBound)
-        #expect(connect.lowerBound < export.lowerBound)
-        #expect(!source[connect.upperBound..<export.lowerBound].contains("Label"))
-        #expect(source.contains("showingDiagnosticLogs = true"))
-        #expect(source.contains(".sheet(isPresented: $showingDiagnosticLogs) {\n            DiagnosticExportView()"))
-        #expect(!source.contains("DiagnosticShareSheet"))
-        if file == "WorkspaceListSidebar.swift" {
-            let create = try #require(menuLabelRange("Create New Workspace", in: source))
-            #expect(create.lowerBound < settings.lowerBound)
-            #expect(source[settings.upperBound..<connect.lowerBound].contains("Divider()"))
-        }
-    }
-
     @Test(arguments: [
         ("Settings/SettingsSupportSection.swift", "SettingsActionLabel(title: \"Export logs\""),
         ("Connection/ConnectionFailureView.swift", "Text(\"Export logs\"")
@@ -51,14 +32,6 @@ struct DiagnosticExportEntryPointTests {
         #expect(source.contains("{ confirmsClear = true }"))
         // DiagnosticExportUITests verifies the visible Share ZIP action, independent of label construction.
         #expect(source.contains(".task { model.refresh() }"))
-    }
-
-    private func menuLabelRange(_ title: String, in source: String) -> Range<String.Index>? {
-        // Match the user-facing label in either initializer form; font modifiers
-        // and separating a native icon from its title must not change this contract.
-        let pattern = #"Label\s*(?:\(\s*|\{\s*Text\(\s*)"#
-            + "\"" + NSRegularExpression.escapedPattern(for: title) + "\""
-        return source.range(of: pattern, options: .regularExpression)
     }
 
     private func read(_ path: String) throws -> String {

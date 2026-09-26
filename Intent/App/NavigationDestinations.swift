@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 struct NoteDestination: Hashable {
     let id: UUID

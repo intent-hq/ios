@@ -116,6 +116,22 @@ struct RootView: View {
     }
 
     @ViewBuilder private var workspaceFlowContent: some View {
+        workspaceNavigationContent
+            .sheet(isPresented: assistantPresented) {
+                AssistantView(session: session)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+    }
+
+    private var assistantPresented: Binding<Bool> {
+        Binding(
+            get: { coordinator.selectedSection == .assistant },
+            set: { if !$0 { coordinator.selectedSection = .workspaces } }
+        )
+    }
+
+    @ViewBuilder private var workspaceNavigationContent: some View {
         if sizeClass == .compact {
             // iPhone: standard NavigationStack with push/pop
             compactNavigationView
