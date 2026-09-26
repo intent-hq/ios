@@ -22,7 +22,9 @@ enum Fixture {
     // DemoFixtures.longConversationSuggestedPrompts[0] — the text of the
     // optimistic user row the tap appends.
     static let firstSuggestedPromptIdentifier = "transcript.suggestedPrompt.0"
-    static let firstSuggestedPrompt = "Open a PR for the deflake changes"
+    static let firstSuggestedPrompt =
+        "Open a [**PR**](https://github.com/intent-hq/ios) for the `deflake` changes"
+    static let firstSuggestedPromptLabel = "Open a PR for the deflake changes"
     // The last of DemoFixtures.longConversationSuggestedPrompts (three
     // prompts): the transcript's final content row while no send is in
     // flight. A transcript resting with it inside its frame, `endRowGap`

@@ -554,7 +554,6 @@ $(SRCROOT)/Intent/Views/Onboarding/ManualTokenEntryView.swift
 $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift
 $(SRCROOT)/Intent/Views/Onboarding/Splash
-$(SRCROOT)/Intent/Views/Onboarding/Splash/LaunchAppearanceModifier.swift
 $(SRCROOT)/Intent/Views/Onboarding/Splash/SplashArtView.swift
 $(SRCROOT)/Intent/Views/Settings
 $(SRCROOT)/Intent/Views/Settings/AcknowledgementsView.swift

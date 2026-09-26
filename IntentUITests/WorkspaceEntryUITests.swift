@@ -152,4 +152,71 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
             "the fixture workspace row never appeared in the workspace list"
         )
     }
+
+    @MainActor
+    func testAgentRowOpensConversationFromPreviewAndEmptySpace() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        showWorkspaceList(in: app, workspaceRow: workspace)
+        workspace.tap()
+
+        let row = app.buttons["workspace.agent.demo-agent-implementor"]
+        let preview = app.staticTexts["Review CSV export"].firstMatch
+        let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
+        for target in ["Markdown preview", "row center", "trailing space", "bottom padding"] {
+            XCTAssertTrue(row.waitForExistence(timeout: Fixture.elementTimeout))
+            XCTAssertTrue(preview.waitForExistence(timeout: Fixture.elementTimeout))
+            let point = agentRowTapPoint(target, row: row.frame, preview: preview.frame)
+            app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: point.x, dy: point.y))
+                .tap()
+            XCTAssertTrue(
+                transcript.waitForExistence(timeout: Fixture.elementTimeout),
+                "Tapping \(target) must open the agent conversation"
+            )
+            XCTAssertTrue(app.navigationBars["Dashboard Implementor"].exists)
+            let agentsBack = app.navigationBars.buttons["Agents"].firstMatch
+            if agentsBack.exists {
+                agentsBack.tap()
+            } else {
+                app.navigationBars.buttons.element(boundBy: 0).tap()
+            }
+            XCTAssertTrue(transcript.waitForNonExistence(timeout: Fixture.elementTimeout))
+        }
+    }
+
+    @MainActor
+    func testDelegatedAgentRowOpensConversationFromIndentation() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
+        showWorkspaceList(in: app, workspaceRow: workspace)
+        workspace.tap()
+        let delegates = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "delegated agents")).firstMatch
+        XCTAssertTrue(delegates.waitForExistence(timeout: Fixture.elementTimeout))
+        delegates.tap()
+        let row = app.buttons["workspace.agent.demo-agent-deflake-capture"]
+        XCTAssertTrue(row.waitForExistence(timeout: Fixture.elementTimeout))
+        row.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+            .withOffset(CGVector(dx: 2, dy: 0))
+            .tap()
+        let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
+        XCTAssertTrue(
+            transcript.waitForExistence(timeout: Fixture.elementTimeout),
+            "Tapping the empty indentation must open the delegated agent conversation"
+        )
+        XCTAssertTrue(app.navigationBars["Capture Race Fixer"].exists)
+    }
+
+    private func agentRowTapPoint(_ target: String, row: CGRect, preview: CGRect) -> CGPoint {
+        switch target {
+        case "Markdown preview": CGPoint(x: preview.midX, y: preview.midY)
+        case "row center": CGPoint(x: row.midX, y: row.midY)
+        case "trailing space": CGPoint(x: row.maxX - 2, y: preview.midY)
+        default: CGPoint(x: row.midX, y: row.maxY - 2)
+        }
+    }
 }

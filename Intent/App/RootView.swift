@@ -181,9 +181,6 @@ struct RootView: View {
                 EmptyView()
             }
         }
-        // The launch artwork is light even when the rest of the app is dark.
-        // Include the connecting overlays without changing other launch destinations.
-        .environment(\.colorScheme, isLaunchSplash ? .light : colorScheme)
     }
 
     var body: some View {

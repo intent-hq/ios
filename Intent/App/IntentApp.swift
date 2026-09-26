@@ -44,7 +44,7 @@ struct IntentApp: App {
                 backendID: $backendID,
                 networkAvailability: DemoConnectionLoss.networkAvailability ?? .shared
             )
-                .modifier(LaunchAppearanceModifier(preferredColorScheme: resolvedColorScheme))
+                .preferredColorScheme(resolvedColorScheme)
                 #if os(visionOS)
                 .frame(
                     minWidth: Constants.Root.visionMinimumWindowWidth,

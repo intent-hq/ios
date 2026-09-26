@@ -12,6 +12,7 @@ struct ToolCallView: View {
     /// no hydration (the bounded preview stays).
     var onHydrate: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
+    @ScaledMetric(relativeTo: .caption2) private var iconSize = Constants.Conversation.ToolCall.iconSize
     @State private var isExpanded = false
 
     private typealias Layout = Constants.Conversation.ToolCall
@@ -70,8 +71,7 @@ struct ToolCallView: View {
             }
         } label: {
             HStack(spacing: Layout.headerSpacing) {
-                Text(classified.icon)
-                    .font(.caption2)
+                toolIcon
                 Text(classified.verb)
                     .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -101,6 +101,16 @@ struct ToolCallView: View {
             .copyContextMenuPassthrough()
         }
         .buttonStyle(.plain)
+    }
+
+    private var toolIcon: some View {
+        Image(classified.icon.rawValue)
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: iconSize, height: iconSize)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder

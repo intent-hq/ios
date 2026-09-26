@@ -7,6 +7,7 @@ import SwiftUI
 struct ConnectingView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
+    @Environment(\.colorScheme) private var colorScheme
     var networkStatus: NetworkAvailability.Status = .unknown
 
     private typealias Layout = Constants.Connecting
@@ -27,7 +28,7 @@ struct ConnectingView: View {
             if !session.connection.certMismatches.isEmpty {
                 CertMismatchListView(
                     mismatches: session.connection.certMismatches,
-                    warningForeground: Theme.foreground(for: .light)
+                    warningForeground: Theme.foreground(for: colorScheme)
                 )
                 .padding(.horizontal, Layout.mismatchHorizontalPadding)
             }

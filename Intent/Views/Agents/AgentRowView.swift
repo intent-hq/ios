@@ -87,6 +87,8 @@ struct AgentRowView: View {
         }
         .padding(.vertical, Constants.AgentRow.verticalPadding)
         .padding(.leading, indented ? Constants.AgentRow.nestedLeadingPadding : 0)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var avatar: some View {
@@ -137,14 +139,24 @@ struct AgentRowView: View {
                 .foregroundStyle(attention.kind.color)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         } else if let message = agent.displayMessage {
-            Text(message)
+            Text(Self.previewText(message))
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
                     contrast: colorSchemeContrast
                 ))
                 .lineLimit(1)
+                .allowsHitTesting(false)
         }
+    }
+
+    static func previewText(_ message: String) -> AttributedString {
+        var text = (try? AttributedString(
+            markdown: message,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(message)
+        text.link = nil
+        return text
     }
 
     @ViewBuilder
