@@ -81,6 +81,9 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
         next.tap()
+        let back = app.buttons["creation.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertEqual(back.label, "Back")
     }
 
     @MainActor
