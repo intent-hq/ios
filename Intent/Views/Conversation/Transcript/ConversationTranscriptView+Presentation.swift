@@ -163,10 +163,12 @@ extension ConversationTranscriptView {
                         Image(systemName: "paperplane")
                             .font(.caption)
                             .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
-                        Text(prompt)
+                            .accessibilityHidden(true)
+                        Text(LocalizedStringKey(prompt))
                             .interFont(Constants.Typography.bodyXS)
                             .foregroundStyle(Theme.foreground(for: transcriptColorScheme))
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .allowsHitTesting(false)
                     }
                     .padding(.horizontal, Layout.suggestedPromptHorizontalPadding)
                     .padding(.vertical, Layout.suggestedPromptVerticalPadding)

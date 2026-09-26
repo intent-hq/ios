@@ -340,10 +340,11 @@ private extension MessageInputView {
                                 .font(.callout)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 .accessibilityHidden(true)
-                            Text(prompt)
+                            Text(LocalizedStringKey(prompt))
                                 .interFont(Constants.Typography.bodyS)
                                 .lineLimit(Constants.Conversation.Composer.suggestedPromptLineLimit)
                                 .foregroundStyle(Theme.foreground(for: colorScheme))
+                                .allowsHitTesting(false)
                         }
                         .padding(.horizontal, Constants.Conversation.Composer.suggestedPromptHorizontalPadding)
                         .frame(minHeight: Constants.Conversation.Composer.suggestedPromptChipMinimumHeight)
