@@ -370,6 +370,7 @@ jobs:
       # xcodebuild; a separate result bundle preserves the full run's for the
       # artifact upload.
       - name: Source-independence check (ios#320)
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.only_testing != 'IntentUITests' }}
         env:
           RESULT_BUNDLE: TestResults-source-moved
           ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests IntentTests/ObjCCallbackIsolationTests IntentTests/ExternalLinkTests IntentTests/PrivacyManifestDriftTests
