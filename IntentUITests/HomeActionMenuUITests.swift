@@ -136,7 +136,10 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
             if viewport.contains(center) { break }
             carousel.swipeLeft()
         }
-        XCTAssertTrue(viewport.contains(CGPoint(x: tile.frame.midX, y: tile.frame.midY)))
+        XCTAssertTrue(
+            viewport.contains(CGPoint(x: tile.frame.midX, y: tile.frame.midY)),
+            "Horizontal swipes must bring \(action) into view: tile \(tile.frame), viewport \(viewport)"
+        )
         XCTAssertTrue(tile.isHittable)
         return tile
     }
