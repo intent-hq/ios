@@ -86,7 +86,7 @@ struct ToolClassifierClassificationTests {
                 "_acpTitle": AnyCodable(name),
                 "summary": AnyCodable(summary)
             ])
-            #expect(display.icon == "📁")
+            #expect(display.icon == .workspace)
             #expect(display.verb == summary)
             #expect(display.subject == nil)
             #expect(display.path == nil)
@@ -101,7 +101,7 @@ struct ToolClassifierClassificationTests {
             "summary": AnyCodable(" \n\(summary)\t ")
         ])
 
-        #expect(display.icon == "📁")
+        #expect(display.icon == .workspace)
         #expect(display.verb == summary)
         #expect(display.subject == nil)
     }
@@ -149,7 +149,7 @@ struct ToolClassifierClassificationTests {
     @Test func workspaceApiWithoutLabelsKeepsWorkspaceFallback() {
         for name in ["workspace_api", "mcp.workspace-mcp.workspace_api"] {
             let display = ToolClassifier.classify(name: name, input: [:])
-            #expect(display.icon == "📁")
+            #expect(display.icon == .workspace)
             #expect(display.verb == "Workspace")
             #expect(display.subject == nil)
         }
@@ -160,7 +160,7 @@ struct ToolClassifierClassificationTests {
             "_acpTitle": AnyCodable("mcp.browser.inspect"),
             "summary": AnyCodable("Inspect the page")
         ])
-        #expect(display.icon == "🖥️")
+        #expect(display.icon == .browser)
         #expect(display.verb == "Browser")
         #expect(display.subject == nil)
     }

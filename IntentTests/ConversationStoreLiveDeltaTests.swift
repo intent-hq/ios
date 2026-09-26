@@ -318,7 +318,7 @@ extension ConversationStoreLiveStateTests {
         #expect(block.type == .toolUse)
         #expect(block.input["summary"]?.value as? String == summary)
         let display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
-        #expect(display.icon == "📁")
+        #expect(display.icon == .workspace)
         #expect(display.verb == summary)
         #expect(display.subject == nil)
     }
@@ -362,7 +362,7 @@ extension ConversationStoreLiveStateTests {
         let updatedBlock = try #require(store.messages.first?.contentBlocks.first)
         #expect(updatedBlock.id == initialBlock.id)
         let updatedDisplay = ToolClassifier.classify(name: updatedBlock.resolvedName ?? "tool", input: updatedBlock.input)
-        #expect(updatedDisplay.icon == "📁")
+        #expect(updatedDisplay.icon == .workspace)
         #expect(updatedDisplay.verb == summary)
         #expect(updatedDisplay.subject == nil)
     }
