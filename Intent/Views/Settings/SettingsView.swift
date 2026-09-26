@@ -4,131 +4,92 @@ struct SettingsView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("appThemePreference") private var themePreference: String = "system"
     @State private var showLogOffConfirmation = false
-    @State private var showingDiagnosticLogs = false
 
     var body: some View {
         NavigationStack {
-            settingsForm
-                .navigationTitle("Settings")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { coordinator.onSettingsBack() }
-                    }
-                }
+            settingsSurface
+                .onAppear { coordinator.refreshSyncedBackends() }
+                .refreshable { coordinator.refreshSyncedBackends() }
+                .toolbar(.hidden, for: .navigationBar)
                 .alert("Log Off?", isPresented: $showLogOffConfirmation) {
                     Button("Cancel", role: .cancel) {}
                     Button("Log Off", role: .destructive) { coordinator.onLogOff() }
                 } message: {
                     Text("Are you sure? You'll need to pair again to reconnect.")
                 }
-                .sheet(isPresented: $showingDiagnosticLogs) {
-                    DiagnosticExportView()
+        }
+    }
+
+    private var settingsSurface: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SettingsStyle.sectionSpacing) {
+                SettingsHeader(onClose: coordinator.onSettingsBack)
+                    .padding(.bottom, SettingsStyle.headingSpacing - SettingsStyle.sectionSpacing)
+                SettingsSection(title: "APPEARANCE") {
+                    SettingsAppearanceSelector(selection: $themePreference)
                 }
-        }
-    }
-
-    private var settingsForm: some View {
-        Form {
-            appearanceSection
-            connectionSection
-            accountSection
-            aboutSection
-            Section("Diagnostics") {
-                Button {
-                    showingDiagnosticLogs = true
-                } label: {
-                    Label("Export logs", systemImage: "doc.zipper")
-                }
+                .padding(.bottom, SettingsStyle.appearanceBottomSpacing)
+                SettingsConnectionsSection(
+                    connections: coordinator.savedConnections,
+                    windowConnectionID: coordinator.windowConnectionID,
+                    status: session.connection.connectionState,
+                    mismatches: session.connection.certMismatches,
+                    onSelect: selectConnection
+                )
+                SettingsPairingSection()
+                SettingsSupportSection()
             }
+            .padding(SettingsStyle.contentMargin)
+            .frame(maxWidth: SettingsStyle.maximumContentWidth)
+            .frame(maxWidth: .infinity)
         }
-        .scrollContentBackground(.hidden)
-        .background(Theme.background(for: colorScheme))
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            logOffButton
+                .padding(SettingsStyle.contentMargin)
+                .frame(maxWidth: SettingsStyle.maximumContentWidth)
+                .frame(maxWidth: .infinity)
+                .background(SettingsStyle.surface(for: colorScheme))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(SettingsStyle.foreground(for: colorScheme))
+        .clipShape(UnevenRoundedRectangle(
+            topLeadingRadius: SettingsStyle.surfaceRadius,
+            topTrailingRadius: SettingsStyle.surfaceRadius
+        ))
+        .background {
+            UnevenRoundedRectangle(
+                topLeadingRadius: SettingsStyle.surfaceRadius,
+                topTrailingRadius: SettingsStyle.surfaceRadius
+            )
+            .fill(SettingsStyle.surface(for: colorScheme))
+            .ignoresSafeArea(edges: .bottom)
+        }
+        // Keep the real system status bar and its light/dark contrast. Do not
+        // draw the status bar or force the rest of Settings into dark mode.
+        .background((colorScheme == .dark ? SettingsStyle.charcoal : SettingsStyle.lightChrome).ignoresSafeArea())
     }
 
-    private var appearanceSection: some View {
-        Section("Appearance") {
-            Picker("Theme", selection: $themePreference) {
-                Text("Light").tag("light")
-                Text("Dark").tag("dark")
-                Text("System").tag("system")
-            }
-            .pickerStyle(.segmented)
-        }
-    }
-
-    @ViewBuilder
-    private var connectionSection: some View {
-        if let connection = coordinator.windowConnection {
-            Section("Connected To") {
-                connectionSummaryLayout {
-                    connectionIdentity(connection)
-                    HStack(spacing: Constants.Settings.statusSpacing) {
-                        Circle()
-                            .fill(.green)
-                            .frame(
-                                width: Constants.Settings.statusDotSize,
-                                height: Constants.Settings.statusDotSize
-                            )
-                        Text("Connected").font(.caption)
-                    }
-                }
-                if !session.connection.certMismatches.isEmpty {
-                    CertMismatchListView(mismatches: session.connection.certMismatches)
-                }
-            }
-        }
-    }
-
-    private func connectionIdentity(_ connection: StoredConnection) -> some View {
-        HStack(spacing: Constants.Settings.connectionRowSpacing) {
-            Image(systemName: "desktopcomputer")
-                .font(.title2)
-                .foregroundStyle(Theme.primary(for: colorScheme))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Constants.Settings.connectionTextSpacing) {
-                Text(connection.displayName).font(.body.weight(.medium))
-                Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(
-                        for: colorScheme,
-                        contrast: colorSchemeContrast
-                    ))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var accountSection: some View {
-        Section("Account") {
-            Button(role: .destructive) { showLogOffConfirmation = true } label: {
-                Label("Log Off", systemImage: "rectangle.portrait.and.arrow.right")
-            }
-        }
-    }
-
-    private var aboutSection: some View {
-        Section("About") {
-            NavigationLink { AcknowledgementsView() } label: {
-                Label("Acknowledgements", systemImage: "doc.text")
-            }
-        }
-    }
-
-    private var connectionSummaryLayout: AnyLayout {
-        if Self.stacksConnectionSummary(for: dynamicTypeSize) {
-            AnyLayout(VStackLayout(alignment: .leading, spacing: Constants.Settings.connectionRowSpacing))
+    private func selectConnection(_ id: UUID) {
+        if id == coordinator.windowConnectionID {
+            coordinator.onSettingsBack()
         } else {
-            AnyLayout(HStackLayout(spacing: Constants.Settings.connectionRowSpacing))
+            coordinator.onSwitchConnection(id: id)
         }
     }
 
-    static func stacksConnectionSummary(for dynamicTypeSize: DynamicTypeSize) -> Bool {
-        dynamicTypeSize.isAccessibilitySize
+    private var logOffButton: some View {
+        Button { showLogOffConfirmation = true } label: {
+            Label("Log Off", systemImage: "rectangle.portrait.and.arrow.right")
+                .font(.callout.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, SettingsStyle.rowVerticalPadding)
+                .frame(maxWidth: .infinity, minHeight: SettingsStyle.rowHeight)
+                .foregroundStyle(SettingsStyle.lightForeground)
+                .background(SettingsStyle.accent, in: .rect(cornerRadius: SettingsStyle.cardRadius))
+                .contentShape(.rect(cornerRadius: SettingsStyle.cardRadius))
+        }
     }
 }
 

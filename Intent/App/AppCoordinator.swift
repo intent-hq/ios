@@ -87,6 +87,8 @@ class AppCoordinator {
     var pairingShowsSavedConnections = false
     /// True when the saved-connections store exists but could not be decoded.
     var savedConnectionsUndecodable = false
+    /// Settings' snapshot, refreshed after the existing local/iCloud merge.
+    var savedConnections: [StoredConnection] = []
     /// Deep-link pairing awaiting user confirmation; drives the
     /// DeepLinkPairingView sheet in RootView.
     var pendingDeepLinkPairing: DeepLinkPairingRequest?

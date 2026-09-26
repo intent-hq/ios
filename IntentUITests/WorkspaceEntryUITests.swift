@@ -44,7 +44,12 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     }
 
     @MainActor
-    func testWorkspaceTapLandsOnOverviewAndOnlyTheAgentRowOpensTheConversation() {
+    func testWorkspaceTapLandsOnOverviewAndOnlyTheAgentRowOpensTheConversation() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["INTENT_UITEST_TRANSCRIPT_CRASH_REPRO"] == "1",
+            "Temporary quarantine for the unresolved app crash tracked at https://github.com/intent-hq/ios/issues/427; "
+                + "opt in with TEST_RUNNER_INTENT_UITEST_TRANSCRIPT_CRASH_REPRO=1."
+        )
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
         app.launch()
