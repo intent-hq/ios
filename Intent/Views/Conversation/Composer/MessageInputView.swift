@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 struct MessageInputView: View {
     @Bindable var viewModel: ConversationViewModel
     private let store: ConversationStore
+    private let usesWorkspaceDesign: Bool
+    private let onFocusChange: ((Bool) -> Void)?
     @Environment(\.colorScheme) var colorScheme
 
     @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
@@ -31,9 +33,16 @@ struct MessageInputView: View {
     // during streaming (every legacy-store publication triggers a re-render).
     @State private var localText: String = ""
 
-    init(viewModel: ConversationViewModel, store: ConversationStore) {
+    init(
+        viewModel: ConversationViewModel,
+        store: ConversationStore,
+        usesWorkspaceDesign: Bool = false,
+        onFocusChange: ((Bool) -> Void)? = nil
+    ) {
         self.viewModel = viewModel
         self.store = store
+        self.usesWorkspaceDesign = usesWorkspaceDesign
+        self.onFocusChange = onFocusChange
     }
 
     /// Overlay visibility is presentation policy, not permission to consume a
@@ -43,9 +52,33 @@ struct MessageInputView: View {
     var body: some View {
         VStack(spacing: 0) {
             supplementalRows
-            inputRow
+            if usesWorkspaceDesign {
+                WorkspaceComposerRow(
+                    text: $localText,
+                    isFocused: $isFocused,
+                    isStreaming: store.isStreaming,
+                    hasAttachments: viewModel.hasPendingAttachments,
+                    canSend: hasSendableContent,
+                    onSend: sendCurrentMessage,
+                    onStop: {
+                        HapticManager.impact(.light)
+                        Task { await viewModel.stopStreaming() }
+                    },
+                    onPhotos: { isPhotoPickerPresented = true },
+                    onFiles: { isFilePickerPresented = true }
+                )
+            } else {
+                inputRow
+            }
         }
-        .background(Theme.card(for: colorScheme))
+        .background {
+            if usesWorkspaceDesign {
+                RoundedRectangle(cornerRadius: workspaceCornerRadius)
+                    .fill(Constants.Conversation.Design.Palette.surface(for: colorScheme))
+            } else {
+                Theme.card(for: colorScheme)
+            }
+        }
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
@@ -66,6 +99,9 @@ struct MessageInputView: View {
         }
         .onAppear {
             localText = viewModel.messageText
+        }
+        .onChange(of: isFocused) { _, focused in
+            onFocusChange?(focused)
         }
         .onChange(of: localText) { _, newValue in
             // Push local edits to viewModel (for draft persistence)
@@ -91,6 +127,12 @@ struct MessageInputView: View {
 }
 
 private extension MessageInputView {
+    var workspaceCornerRadius: CGFloat {
+        let active = store.isStreaming || !localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || viewModel.hasPendingAttachments
+        return active ? Constants.Conversation.Design.Composer.activeCornerRadius : Constants.Conversation.Design.cornerRadius
+    }
+
     @ViewBuilder
     var supplementalRows: some View {
         #if os(visionOS)
