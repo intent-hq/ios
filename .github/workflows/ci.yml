@@ -142,7 +142,11 @@ jobs:
           test -d /Applications/Xcode.app
           echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
           DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -version
-          DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun metal -v
+
+      - name: Install Metal Toolchain
+        run: |
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun metal -v
 
       - name: Cache TailcatKit.xcframework
         id: tailcat-cache
