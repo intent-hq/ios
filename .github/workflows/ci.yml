@@ -147,16 +147,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Select the newest Xcode*.app bundle on the image: the Textual
-      # dependency needs a recent toolchain (its own CI builds iOS on
-      # Xcode 26.5), so older bundles hit a Swift 6.0 concurrency
-      # false-positive compiling Table.swift. List every bundle first for
-      # diagnostics. DEVELOPER_DIR needs no sudo.
+      # Prefer the stable Xcode.app installed on the dedicated Mac. Selecting
+      # Xcode-beta.app would require a separate Metal Toolchain download for
+      # that build. List all bundles for diagnostics. DEVELOPER_DIR needs no sudo.
       - name: Select Xcode
         run: |
           echo "Available Xcode bundles:"
           ls -d /Applications/Xcode*.app 2>/dev/null || true
-          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -d /Applications/Xcode.app ]; then
+            xcode=/Applications/Xcode.app
+          else
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          fi
           if [ -n "$xcode" ] && [ -d "$xcode" ]; then
             echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
             echo "Selected $xcode"
@@ -460,7 +462,11 @@ jobs:
         run: |
           echo "Available Xcode bundles:"
           ls -d /Applications/Xcode*.app 2>/dev/null || true
-          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -d /Applications/Xcode.app ]; then
+            xcode=/Applications/Xcode.app
+          else
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          fi
           if [ -n "$xcode" ] && [ -d "$xcode" ]; then
             echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
             echo "Selected $xcode"

@@ -60,7 +60,11 @@ jobs:
 
       - name: Select Xcode
         run: |
-          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -d /Applications/Xcode.app ]; then
+            xcode=/Applications/Xcode.app
+          else
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          fi
           if [ -n "$xcode" ] && [ -d "$xcode" ]; then
             echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
             echo "Selected $xcode"
