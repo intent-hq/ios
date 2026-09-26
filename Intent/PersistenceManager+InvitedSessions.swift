@@ -53,17 +53,21 @@ extension PersistenceManager {
         let host = connection.server.hosts.first ?? connection.server.tcAddress
         guard let host else { throw InvitedSyncKey.Invalid.input }
         var object = previous?.object ?? [:]
-        object.merge([
+        let route: Any = connection.server.tcAddress as Any? ?? previous?.object["tcAddress"] ?? NSNull()
+        let routeClock: Any = connection.server.tcAddress == nil ? previous?.object["tcUpdatedAt"] ?? NSNull() : clock
+        let pairing: [String: Any] = [
             "v": 2, "kind": "session", "fingerprint": try InvitedSyncKey.fingerprint(pin), "principalId": principal.id,
             "label": connection.displayName, "login": principal.login as Any? ?? NSNull(),
             "host": host, "hosts": connection.server.hosts, "port": connection.server.port,
-            "hostname": previous?.object["hostname"] ?? NSNull(), "detectHosts": previous?.object["detectHosts"] ?? true,
-            "tcAddress": connection.server.tcAddress as Any? ?? previous?.object["tcAddress"] ?? NSNull(),
-            "tcUpdatedAt": connection.server.tcAddress == nil ? previous?.object["tcUpdatedAt"] ?? NSNull() : clock,
             "token": connection.token, "updatedAt": clock, "pairedAt": clock,
-            "removedThrough": journal.floors[key] ?? 0, "deleted": false, "deletedAt": NSNull(),
-            "legacyAccounts": previous?.legacyAccounts ?? []
-        ]) { _, new in new }
+            "removedThrough": journal.floors[key] ?? 0, "deleted": false, "deletedAt": NSNull()
+        ]
+        object.merge(pairing) { _, new in new }
+        object["hostname"] = previous?.object["hostname"] ?? NSNull()
+        object["detectHosts"] = previous?.object["detectHosts"] ?? true
+        object["tcAddress"] = route
+        object["tcUpdatedAt"] = routeClock
+        object["legacyAccounts"] = previous?.legacyAccounts ?? []
         let record = InvitedSyncRecord(object: object, account: key)
         guard let data = record.data, InvitedSyncRecord.parse(account: key, data: data) != nil else { throw InvitedSyncKey.Invalid.input }
         connection.invitedSyncPayload = data
