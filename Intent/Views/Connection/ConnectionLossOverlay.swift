@@ -12,6 +12,10 @@ struct ConnectionLossOverlay: View {
         static let actionSpacing: CGFloat = 40
         static let actionHeight: CGFloat = 48
         static let backdropOpacity = 0.65
+        // Resolved in Figma frame 2989:20669; keep these local to this overlay.
+        static let titleTracking: CGFloat = -0.36
+        static let bodyTracking: CGFloat = -0.16
+        static let actionTracking: CGFloat = -0.28
     }
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -71,17 +75,24 @@ struct ConnectionLossOverlay: View {
         let message = ConnectionNetworkMessage(status: networkStatus)
         return VStack(spacing: Constants.Root.reconnectPanelSpacing) {
             VStack(spacing: Layout.copySpacing) {
-                Text(message.isUnavailable ? message.title : "Reconnecting")
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("connection-loss.status")
-                Text("Connection to desktop was lost.")
-                    .font(.subheadline)
-                    .foregroundStyle(sourceColorScheme == .light ? .white : Color(.connectionLossSecondary))
-                    .accessibilityIdentifier("connection-loss.message")
+                ConnectionSheetText(
+                    "\(Text(message.isUnavailable ? message.title : "Reconnecting"))",
+                    style: Constants.Typography.bodyM,
+                    tracking: Layout.titleTracking
+                )
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("connection-loss.status")
+                ConnectionSheetText(
+                    "Connection to desktop was lost.",
+                    style: Constants.Typography.bodyS,
+                    tracking: Layout.bodyTracking
+                )
+                .foregroundStyle(sourceColorScheme == .light ? .white : Color(.connectionLossSecondary))
+                .accessibilityIdentifier("connection-loss.message")
                 if let guidance = message.guidance {
                     Text(guidance)
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyS)
+                        .tracking(Layout.bodyTracking)
                         .accessibilityIdentifier("connection-network.guidance")
                 }
             }
@@ -97,14 +108,15 @@ struct ConnectionLossOverlay: View {
 
     private var homeButton: some View {
         Button(action: onHome) {
-            Text("Back to Home")
-                .font(.headline)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, Layout.contentPadding)
-                .padding(.vertical, Constants.Root.reconnectButtonTopPadding)
-                .frame(minHeight: Layout.actionHeight)
-                .foregroundStyle(Color(.connectionLossActionForeground))
-                .background(.white, in: .rect(cornerRadius: Constants.Root.reconnectPanelCornerRadius))
+            ConnectionSheetText(
+                "Back to Home", style: Constants.Typography.bodySEmphasized, tracking: Layout.actionTracking
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Layout.contentPadding)
+            .padding(.vertical, Constants.Root.reconnectButtonTopPadding)
+            .frame(minHeight: Layout.actionHeight)
+            .foregroundStyle(Color(.connectionLossActionForeground))
+            .background(.white, in: .rect(cornerRadius: Constants.Root.reconnectPanelCornerRadius))
         }
         .buttonStyle(.plain)
         .accessibilityHint("Return to your saved machines without forgetting this connection.")
