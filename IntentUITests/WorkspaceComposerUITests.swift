@@ -125,10 +125,11 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
 
     @MainActor
     private func assertTapTargetGeometry(_ control: XCUIElement, in app: XCUIApplication) {
-        // Compare endpoints to avoid rounding introduced by subtracting their origins.
+        // Endpoint addition can differ by one representable value for the same
+        // 44pt frame. Admit only that single ULP, not a geometric tolerance.
         let frame = control.frame
-        XCTAssertGreaterThanOrEqual(frame.maxX, frame.minX + Fixture.minimumTapTarget)
-        XCTAssertGreaterThanOrEqual(frame.maxY, frame.minY + Fixture.minimumTapTarget)
+        XCTAssertGreaterThanOrEqual(frame.maxX.nextUp, frame.minX + Fixture.minimumTapTarget)
+        XCTAssertGreaterThanOrEqual(frame.maxY.nextUp, frame.minY + Fixture.minimumTapTarget)
         XCTAssertTrue(app.frame.contains(control.frame), "Control must not be clipped by the viewport")
     }
 }
