@@ -16,6 +16,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-Light-Actions")
         scrollToTop(app)
+        captureWorkspaceSurfaces(app, appearance: "Light")
         let dark = app.buttons["settings.appearance.dark"]
         dark.tap()
         XCTAssertTrue(dark.isSelected)
@@ -23,6 +24,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-Dark-Actions")
         scrollToTop(app)
+        captureWorkspaceSurfaces(app, appearance: "Dark")
         app.buttons["settings.close"].tap()
         openSettings(app)
         XCTAssertTrue(dark.isSelected)
@@ -192,6 +194,23 @@ nonisolated final class SettingsUITests: XCTestCase {
     @MainActor
     private func scrollToTop(_ app: XCUIApplication) {
         for _ in 0..<Self.maximumSwipes where !app.buttons["settings.close"].isHittable { app.swipeDown() }
+    }
+
+    @MainActor
+    private func captureWorkspaceSurfaces(_ app: XCUIApplication, appearance: String) {
+        app.buttons["settings.close"].tap()
+        let options = app.buttons["Workspace options"]
+        XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
+        options.tap()
+        XCTAssertTrue(app.buttons["Connect to…"].waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Workspace-Menu-" + appearance)
+        app.buttons["Connect to…"].tap()
+        let title = app.staticTexts["saved-connections.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Connections-" + appearance)
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
+        openSettings(app)
     }
 
     @MainActor

@@ -44,6 +44,7 @@ struct DiagnosticExportView: View {
 }
 
 private struct DiagnosticExportActions: View {
+    @ScaledMetric private var iconSize: CGFloat = 17
     let model: DiagnosticExportModel
     @Binding var confirmsClear: Bool
 
@@ -54,7 +55,7 @@ private struct DiagnosticExportActions: View {
                 Label {
                     Text("Share ZIP").interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "square.and.arrow.up")
+                    icon(.upload)
                 }
             }
                 .disabled(model.isWorking || model.preview == nil || model.share != nil)
@@ -63,7 +64,7 @@ private struct DiagnosticExportActions: View {
                 Label {
                     Text("Refresh").interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "arrow.clockwise")
+                    icon(.clockwiseArrow)
                 }
             }
                 .disabled(model.isWorking || model.share != nil)
@@ -71,12 +72,20 @@ private struct DiagnosticExportActions: View {
                 Label {
                     Text("Clear").interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "trash")
+                    icon(.delete)
                 }
             }
                 .disabled(model.isWorking || model.share != nil)
                 .accessibilityIdentifier("diagnosticClear")
         }
+    }
+
+    private func icon(_ image: ImageResource) -> some View {
+        Image(image)
+            .resizable()
+            .scaledToFit()
+            .frame(width: iconSize, height: iconSize)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder private var preparationStatus: some View {

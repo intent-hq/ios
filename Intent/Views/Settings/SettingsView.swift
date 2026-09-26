@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.colorScheme) var colorScheme
     @AppStorage("appThemePreference") private var themePreference: String = "system"
     @State private var showLogOffConfirmation = false
+    @ScaledMetric(relativeTo: .callout) private var iconSize = SettingsStyle.iconWidth
 
     var body: some View {
         NavigationStack {
@@ -78,7 +79,10 @@ struct SettingsView: View {
             Label {
                 Text("Log Off").interFont(Constants.Typography.bodySEmphasized)
             } icon: {
-                Image(systemName: "rectangle.portrait.and.arrow.right")
+                Image(.logout)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
             }
                 .font(.callout.weight(.medium))
                 .fixedSize(horizontal: false, vertical: true)
