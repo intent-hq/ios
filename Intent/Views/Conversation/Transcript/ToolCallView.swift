@@ -71,13 +71,7 @@ struct ToolCallView: View {
             }
         } label: {
             HStack(spacing: Layout.headerSpacing) {
-                Image(classified.icon.rawValue)
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: iconSize, height: iconSize)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .accessibilityHidden(true)
+                toolIcon
                 Text(classified.verb)
                     .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -107,6 +101,16 @@ struct ToolCallView: View {
             .copyContextMenuPassthrough()
         }
         .buttonStyle(.plain)
+    }
+
+    private var toolIcon: some View {
+        Image(classified.icon.rawValue)
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: iconSize, height: iconSize)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder

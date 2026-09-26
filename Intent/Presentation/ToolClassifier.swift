@@ -5,21 +5,21 @@ import Foundation
 /// classification path is unit-testable.
 enum ToolClassifier {
     enum Icon: String {
-        case file = "File"
-        case edit = "Edit"
-        case delete = "Delete"
-        case terminal = "Terminal"
-        case search = "Search"
-        case context = "Thinking"
-        case github = "Github"
-        case web = "Globe"
-        case browser = "Browser"
         case agent = "Agents"
-        case note = "FileList"
-        case workspace = "Folders"
-        case task = "List"
+        case browser = "Browser"
+        case context = "Thinking"
+        case delete = "Delete"
+        case edit = "Edit"
+        case file = "File"
         case git = "Git"
+        case github = "Github"
+        case note = "FileList"
+        case search = "Search"
+        case task = "List"
+        case terminal = "Terminal"
         case tool = "Code"
+        case web = "Globe"
+        case workspace = "Folders"
     }
 
     struct ToolDisplay {
