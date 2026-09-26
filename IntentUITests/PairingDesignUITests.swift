@@ -123,7 +123,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path]
         app.launch()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         try Data().write(to: directory.appendingPathComponent("loss"))
         let home = app.buttons["connection-loss.home"]
         XCTAssertTrue(home.waitForExistence(timeout: Self.timeout))

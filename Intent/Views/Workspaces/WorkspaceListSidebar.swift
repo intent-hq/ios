@@ -9,7 +9,6 @@ struct WorkspaceListSidebar: View {
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @State private var isSearching = false
-    @State private var showingDiagnosticLogs = false
     @FocusState private var searchFocused: Bool
 
     init(workspaceStore: WorkspaceStore) {
@@ -55,37 +54,6 @@ struct WorkspaceListSidebar: View {
             onConnections: { showingConnections = true }
         ))
         .navigationTitle("Workspaces")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Menu {
-                    Button {
-                        showingCreateWorkspace = true
-                    } label: {
-                        Label("Create New Workspace", systemImage: "plus.rectangle")
-                    }
-                    Button {
-                        coordinator.onOpenSettings()
-                    } label: {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                    Divider()
-                    Button {
-                        showingConnections = true
-                    } label: {
-                        Label("Connect to…", systemImage: "desktopcomputer")
-                    }
-                    Button {
-                        showingDiagnosticLogs = true
-                    } label: {
-                        Label("Export logs", systemImage: "doc.zipper")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                }
-                .accessibilityLabel("Workspace options")
-            }
-        }
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView(session: session)
                 .environment(coordinator)
@@ -93,9 +61,6 @@ struct WorkspaceListSidebar: View {
         .sheet(isPresented: $showingConnections) {
             ConnectionsView()
                 .environment(coordinator)
-        }
-        .sheet(isPresented: $showingDiagnosticLogs) {
-            DiagnosticExportView()
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
     }

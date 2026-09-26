@@ -9,7 +9,6 @@ struct WorkspaceListView: View {
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @State private var isSearching = false
-    @State private var showingDiagnosticLogs = false
     @FocusState private var searchFocused: Bool
 
     init(workspaceStore: WorkspaceStore) {
@@ -69,9 +68,6 @@ struct WorkspaceListView: View {
             ConnectionsView()
                 .environment(coordinator)
         }
-        .sheet(isPresented: $showingDiagnosticLogs) {
-            DiagnosticExportView()
-        }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
         .preference(
             key: ConnectionBackdropPreference.self,
@@ -88,61 +84,15 @@ struct WorkspaceListView: View {
     }
 
     private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if !isSearching {
-                pageActions
-            }
-            Text("Workspaces")
-                .font(.largeTitle.bold())
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("workspaces.title")
-                .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
-                .padding(.bottom, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleBottomSpacing)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .foregroundStyle(Theme.foreground(for: colorScheme))
-        .padding(.horizontal, Constants.WorkspaceList.pageInset)
-    }
-
-    private var pageActions: some View {
-        HStack {
-            workspaceOptions
-            Spacer()
-            Button {
-                showingCreateWorkspace = true
-            } label: {
-                Image(systemName: "plus")
-                    .frame(width: Constants.WorkspaceList.actionSize, height: Constants.WorkspaceList.actionSize)
-            }
-            .accessibilityLabel("Create workspace")
-        }
-        .font(.title2)
-        .buttonStyle(.plain)
-    }
-
-    private var workspaceOptions: some View {
-        Menu {
-            Button {
-                coordinator.onOpenSettings()
-            } label: {
-                Label("Settings", systemImage: "gearshape")
-            }
-            Button {
-                showingConnections = true
-            } label: {
-                Label("Connect to…", systemImage: "desktopcomputer")
-            }
-            Button {
-                showingDiagnosticLogs = true
-            } label: {
-                Label("Export logs", systemImage: "doc.zipper")
-            }
-        } label: {
-            Image(systemName: "ellipsis")
-                .rotationEffect(.degrees(Constants.WorkspaceList.optionsRotation))
-                .frame(width: Constants.WorkspaceList.actionSize, height: Constants.WorkspaceList.actionSize)
-        }
-        .accessibilityLabel("Workspace options")
+        Text("Workspaces")
+            .font(.largeTitle.bold())
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("workspaces.title")
+            .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
+            .padding(.bottom, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleBottomSpacing)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(Theme.foreground(for: colorScheme))
+            .padding(.horizontal, Constants.WorkspaceList.pageInset)
     }
 
     @ViewBuilder

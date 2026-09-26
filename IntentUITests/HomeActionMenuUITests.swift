@@ -3,7 +3,6 @@ import XCTest
 nonisolated final class HomeActionMenuUITests: XCTestCase {
     private static let timeout: TimeInterval = 30
     private static let scrollTolerance: CGFloat = 4
-    private static let maximumSwipes = 5
     private static let backdropStartY: CGFloat = 0.2
     private static let backdropEndY: CGFloat = 0.4
 
@@ -127,20 +126,6 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
 
     @MainActor
     private func reveal(_ action: String, in app: XCUIApplication) -> XCUIElement {
-        let tile = app.buttons["intent.menu.\(action)"]
-        let carousel = app.scrollViews["intent.menu.tiles"]
-        XCTAssertTrue(tile.waitForExistence(timeout: Self.timeout))
-        let viewport = carousel.frame.intersection(app.frame)
-        for _ in 0..<Self.maximumSwipes {
-            let center = CGPoint(x: tile.frame.midX, y: tile.frame.midY)
-            if viewport.contains(center) { break }
-            carousel.swipeLeft()
-        }
-        XCTAssertTrue(
-            viewport.contains(CGPoint(x: tile.frame.midX, y: tile.frame.midY)),
-            "Horizontal swipes must bring \(action) into view: tile \(tile.frame), viewport \(viewport)"
-        )
-        XCTAssertTrue(tile.isHittable)
-        return tile
+        app.revealHomeAction(action)
     }
 }

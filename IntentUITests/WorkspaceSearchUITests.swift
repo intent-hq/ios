@@ -104,7 +104,6 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             list.swipeUp()
         }
         XCTAssertFalse(title.isHittable)
-        XCTAssertFalse(app.buttons["Create workspace"].isHittable)
         XCTAssertTrue(search.isHittable)
         XCTAssertLessThan(search.frame.minY, expandedPosition)
         XCTAssertTrue(app.buttons["workspaces.viewMode.Repo"].isHittable)

@@ -10,16 +10,16 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data"]
         app.launch()
-        let options = app.buttons["Workspace options"]
-        XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
+        let search = app.buttons["workspaces.search.open"]
+        XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
         let backgroundPoint = app.coordinate(withNormalizedOffset: .zero)
-            .withOffset(CGVector(dx: options.frame.midX, dy: options.frame.midY))
+            .withOffset(CGVector(dx: search.frame.midX, dy: search.frame.midY))
         openSaved(in: app)
         backgroundPoint.tap()
-        XCTAssertFalse(app.buttons["Settings"].exists, "The native modal shield must block the toolbar")
+        XCTAssertFalse(app.textFields["workspaces.search.field"].exists, "The native modal shield must block search")
         capture(app, named: "saved-background-blocked")
         // The system may dismiss a short detent on a dimmer tap. It must not
-        // deliver that same tap to the menu underneath, whether it dismisses or not.
+        // deliver that same tap to search underneath, whether it dismisses or not.
         if !app.staticTexts["saved-connections.title"].exists { openSaved(in: app) }
 
         app.buttons["connection-sheet.close"].tap()
@@ -33,21 +33,20 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         let shortPull = origin.withOffset(CGVector(dx: app.frame.midX, dy: close.minY + 20))
         start.press(forDuration: 0.1, thenDragTo: shortPull, withVelocity: .slow, thenHoldForDuration: 0.5)
         XCTAssertTrue(app.staticTexts["saved-connections.title"].exists)
-        XCTAssertFalse(app.buttons["Settings"].exists)
+        XCTAssertFalse(app.textFields["workspaces.search.field"].exists)
         capture(app, named: "saved-cancelled-swipe")
         start.press(forDuration: 0.1, thenDragTo: origin.withOffset(
             CGVector(dx: app.frame.midX, dy: app.frame.maxY - 10)
         ))
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
         capture(app, named: "saved-swipe-cleanup")
-        options.tap()
-        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: Self.timeout))
+        search.tap()
+        XCTAssertTrue(app.textFields["workspaces.search.field"].waitForExistence(timeout: Self.timeout))
     }
 
     @MainActor
     private func openSaved(in app: XCUIApplication) {
-        app.buttons["Workspace options"].tap()
-        app.buttons["Connect to…"].tap()
+        app.openHomeAction("connections")
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
     }
 
@@ -172,7 +171,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
         app.launch()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         try Data().write(to: directory.appendingPathComponent("loss"))
         XCTAssertTrue(app.buttons["connection-loss.home"].waitForExistence(timeout: Self.timeout))
         app.buttons["connection-loss.home"].tap()

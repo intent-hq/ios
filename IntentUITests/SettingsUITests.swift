@@ -41,10 +41,10 @@ nonisolated final class SettingsUITests: XCTestCase {
         openSettings(app)
         assertConnections(app, current: "Studio Mac", other: "Travel Mac")
         card(app, named: "Studio Mac").tap()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         openSettings(app)
         card(app, named: "Travel Mac").tap()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         openSettings(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
     }
@@ -125,10 +125,7 @@ nonisolated final class SettingsUITests: XCTestCase {
 
     @MainActor
     private func openSettings(_ app: XCUIApplication) {
-        let options = app.buttons["Workspace options"]
-        XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
-        options.tap()
-        app.buttons["Settings"].tap()
+        app.openHomeAction("settings")
         XCTAssertTrue(app.buttons["settings.close"].waitForExistence(timeout: Self.timeout))
     }
 

@@ -108,6 +108,7 @@ struct WorkspaceActionLauncher: ViewModifier {
         case .connections: onConnections()
         case .appearance: destination = .appearance
         case .acknowledgements: destination = .acknowledgements
+        case .settings: coordinator.onOpenSettings()
         case .logOff: break
         }
     }

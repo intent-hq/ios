@@ -4,25 +4,6 @@ import Testing
 /// Source contracts complement the native UI tests; they do not claim that
 /// presentation, accessibility or system sharing has executed successfully.
 struct DiagnosticExportEntryPointTests {
-    @Test(arguments: ["WorkspaceListView.swift", "WorkspaceListSidebar.swift"])
-    func bothMenusKeepLiteralOrderAndOpenPreview(file: String) throws {
-        let source = try read("Intent/Views/Workspaces/" + file)
-        let settings = try #require(source.range(of: "Label(\"Settings\""))
-        let connect = try #require(source.range(of: "Label(\"Connect to…\""))
-        let export = try #require(source.range(of: "Label(\"Export logs\""))
-        #expect(settings.lowerBound < connect.lowerBound)
-        #expect(connect.lowerBound < export.lowerBound)
-        #expect(!source[connect.upperBound..<export.lowerBound].contains("Label("))
-        #expect(source.contains("showingDiagnosticLogs = true"))
-        #expect(source.contains(".sheet(isPresented: $showingDiagnosticLogs) {\n            DiagnosticExportView()"))
-        #expect(!source.contains("DiagnosticShareSheet"))
-        if file == "WorkspaceListSidebar.swift" {
-            let create = try #require(source.range(of: "Label(\"Create New Workspace\""))
-            #expect(create.lowerBound < settings.lowerBound)
-            #expect(source[settings.upperBound..<connect.lowerBound].contains("Divider()"))
-        }
-    }
-
     @Test(arguments: [
         ("Settings/SettingsSupportSection.swift", "SettingsActionLabel(title: \"Export logs\""),
         ("Connection/ConnectionFailureView.swift", "Label(\"Export logs\"")

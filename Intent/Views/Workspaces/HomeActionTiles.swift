@@ -7,6 +7,7 @@ struct HomeActionTiles: View {
         case connections
         case appearance
         case acknowledgements
+        case settings
         case logOff
     }
 
@@ -92,6 +93,7 @@ struct HomeActionTiles: View {
         case .connections: "Connections:\n\(connectionCount) \(connectionCount == 1 ? "Device" : "Devices")"
         case .appearance: "Appearance:\n\(appearance)"
         case .acknowledgements: "Acks &\nLogs"
+        case .settings: "Settings"
         case .logOff: "Log Off"
         }
     }
@@ -103,6 +105,7 @@ struct HomeActionTiles: View {
         case .connections: "desktopcomputer"
         case .appearance: "moon"
         case .acknowledgements: "doc.text"
+        case .settings: "gearshape"
         case .logOff: "rectangle.portrait.and.arrow.right"
         }
     }
