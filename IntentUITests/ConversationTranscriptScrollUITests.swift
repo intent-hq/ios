@@ -230,7 +230,9 @@ extension ConversationTranscriptScrollUITests {
         //    the first message is on screen.
         let firstMessage = message(in: app, containing: Fixture.firstMessageFragment)
         var swipes = 0
-        while swipes < Fixture.maxSwipesToTop, !isVisible(firstMessage, in: transcript) {
+        while swipes < Fixture.maxSwipesToTop {
+            // Avoid snapshot retries while the lazy row is still unrealized.
+            if firstMessage.exists, isVisible(firstMessage, in: transcript) { break }
             transcript.swipeDown(velocity: .fast)
             swipes += 1
         }

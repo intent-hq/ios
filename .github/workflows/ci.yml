@@ -308,7 +308,14 @@ jobs:
         run: scripts/xcodebuild.sh resolve
 
       - name: Build for testing
-        run: scripts/xcodebuild.sh build-for-testing
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
+        run: |
+          if [ "$ONLY_TESTING" = IntentUITests ]; then
+            scripts/xcodebuild.sh build-for-testing-ui
+          else
+            scripts/xcodebuild.sh build-for-testing
+          fi
 
       # Diagnostics for the intermittent multi-minute stall before the test
       # host launches: show what the background boot printed and whether
@@ -342,7 +349,9 @@ jobs:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
-          if [ -n "$ONLY_TESTING" ]; then
+          if [ "$ONLY_TESTING" = IntentUITests ]; then
+            scripts/xcodebuild.sh test-without-building-ui
+          elif [ -n "$ONLY_TESTING" ]; then
             scripts/xcodebuild.sh test-without-building
           else
             scripts/xcodebuild.sh test-without-building-unit
@@ -517,7 +526,7 @@ jobs:
         run: scripts/xcodebuild.sh resolve
 
       - name: Build for testing
-        run: scripts/xcodebuild.sh build-for-testing
+        run: scripts/xcodebuild.sh build-for-testing-ui
 
       - name: Simulator state
         run: |
@@ -527,9 +536,7 @@ jobs:
           xcrun simctl list devices | grep -F "$SIM_UDID" || true
 
       - name: Run UI tests
-        env:
-          ONLY_TESTING: IntentUITests
-        run: scripts/xcodebuild.sh test-without-building
+        run: scripts/xcodebuild.sh test-without-building-ui
 
       - name: Upload UI test results
         if: failure()

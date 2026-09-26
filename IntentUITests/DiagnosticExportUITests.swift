@@ -57,7 +57,10 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         openMenu(app)
         app.buttons["Settings"].tap()
         let export = app.buttons["Export logs"]
-        for _ in 0..<Self.maximumSwipes where !export.isHittable { app.swipeUp() }
+        for _ in 0..<Self.maximumSwipes {
+            if export.isHittable { break }
+            app.swipeUp()
+        }
         XCTAssertTrue(export.isHittable)
         export.tap()
         assertPreview(app)

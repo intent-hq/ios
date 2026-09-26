@@ -232,7 +232,8 @@ nonisolated final class PairingDesignUITests: XCTestCase {
 
     @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication, scrollingUp: Bool = true) {
-        for _ in 0..<5 where !element.isHittable {
+        for _ in 0..<5 {
+            if element.isHittable { break }
             let scroll = app.scrollViews.firstMatch
             if scrollingUp { scroll.swipeUp() } else { scroll.swipeDown() }
         }

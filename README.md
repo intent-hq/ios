@@ -151,7 +151,9 @@ The wrapper supports these subcommands:
 | `build-ios` | Build for the generic iOS Simulator destination. |
 | `build-visionos` | Build for the generic visionOS Simulator destination. |
 | `build-for-testing` | Build the iOS test bundles for a later test-only run. |
+| `build-for-testing-ui` | Build the app and UI tests without compiling the unit-test bundle. |
 | `test-without-building` | Run previously built unit and UI tests. |
+| `test-without-building-ui` | Run previously built UI tests; exclude unit tests from enumeration and execution. Defaults `ONLY_TESTING` to `IntentUITests` and verifies the selected results. |
 | `test-without-building-unit` | Run previously built tests without `IntentUITests`. |
 | `test-ios` | Build and run the complete unit and UI test gate. |
 | `test-ios-unit` | Build and run tests without `IntentUITests`. |
