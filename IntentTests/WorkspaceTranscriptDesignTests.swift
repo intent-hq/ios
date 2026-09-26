@@ -32,7 +32,9 @@ struct WorkspaceTranscriptDesignTests {
             workspaceId: "workspace",
             onNavigateToAgent: nil,
             isAgentMessageExpanded: .constant(false)
-        ).environment(\.workspaceTranscriptDesign, true)
+        )
+        .environment(makeSession())
+        .environment(\.workspaceTranscriptDesign, true)
         let blocker = AttentionNoticeView(notice: AttentionNotice(kind: .blockerReport, reason: text))
             .environment(\.workspaceTranscriptDesign, true)
         let standardUser = size(user, width: width, category: .large)
@@ -53,9 +55,28 @@ struct WorkspaceTranscriptDesignTests {
         return controller.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
     }
 
+    private func makeSession() -> BackendSession {
+        let connection = FakeConnectionManager()
+        let fileLoader = WorkspaceFileImageLoader(connection: connection)
+        return BackendSession(
+            backendID: BackendID(UUID()),
+            connection: connection,
+            workspaceStore: WorkspaceStore(forTesting: true),
+            coordinatorFactory: { _ in fatalError("Rendering this user message must not create a coordinator") },
+            githubRepoStore: GitHubRepoStore(connectionManager: connection),
+            creationOptionsStore: CreationOptionsStore(connectionManager: connection),
+            prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
+            attachmentUploadService: AttachmentUploadService(connection: connection),
+            workspaceFileImageLoader: fileLoader,
+            attachmentImageLoader: AttachmentImageLoader(connection: connection, fileLoader: fileLoader),
+            attentionCueCenter: WorkspaceAttentionCueCenter {}
+        )
+    }
+
     private func bubblePixels(width: CGFloat, fullWidth: Bool, direction: LayoutDirection) throws -> [Int] {
         let renderer = ImageRenderer(content: WorkspaceUserBubbleLayout(usesFullWidth: fullWidth, layoutDirection: direction) {
-            Color.red.frame(height: 40)
+            // Semantic Color.red is not pure RGB red and can exceed the pixel probe's green threshold.
+            Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1).frame(height: 40)
         }.frame(width: width).background(.white))
         renderer.scale = 1
         let bitmap = try #require(renderer.cgImage)

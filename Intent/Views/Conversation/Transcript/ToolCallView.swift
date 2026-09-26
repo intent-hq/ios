@@ -106,7 +106,6 @@ struct ToolCallView: View {
             }
             .foregroundStyle(inlineForeground)
             .frame(minHeight: Design.minimumTapTarget, alignment: .center)
-            .contentShape(Rectangle())
         } else {
             HStack(spacing: Layout.headerSpacing) {
                 toolIcon
