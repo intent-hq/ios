@@ -24,6 +24,12 @@ extension Constants.Conversation.Design {
         static let fadeHeight: CGFloat = 32
     }
 
+    enum Column {
+        // Reserve a usable transcript band from the native keyboard-safe column.
+        // The remaining space, minus measured footer content, belongs to questions.
+        static let transcriptHeightFraction: CGFloat = 0.25
+    }
+
     enum Transcript {
         static let bubblePadding: CGFloat = 20
         // Adaptive implementation policy; accessibility text uses the full available width.

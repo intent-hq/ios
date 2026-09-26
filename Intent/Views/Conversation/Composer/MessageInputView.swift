@@ -6,6 +6,7 @@ struct MessageInputView: View {
     @Bindable var viewModel: ConversationViewModel
     private let store: ConversationStore
     private let usesWorkspaceDesign: Bool
+    private let allowsSending: Bool
     private let onFocusChange: ((Bool) -> Void)?
     @Environment(\.colorScheme) var colorScheme
 
@@ -37,11 +38,13 @@ struct MessageInputView: View {
         viewModel: ConversationViewModel,
         store: ConversationStore,
         usesWorkspaceDesign: Bool = false,
+        allowsSending: Bool = true,
         onFocusChange: ((Bool) -> Void)? = nil
     ) {
         self.viewModel = viewModel
         self.store = store
         self.usesWorkspaceDesign = usesWorkspaceDesign
+        self.allowsSending = allowsSending
         self.onFocusChange = onFocusChange
     }
 
@@ -251,6 +254,7 @@ private extension MessageInputView {
             || viewModel.hasPendingAttachments)
             && !viewModel.isUploadingFiles
             && isConnectionReadyForSending
+            && allowsSending
     }
 
     private func updateTextViewHeight(_ naturalHeight: CGFloat) {
@@ -434,7 +438,7 @@ private extension MessageInputView {
     // MARK: - Actions
 
     private func sendCurrentMessage() {
-        guard isConnectionReadyForSending else { return }
+        guard isConnectionReadyForSending, allowsSending else { return }
         #if os(visionOS)
         // Stop app dictation before the text is consumed; a late final
         // result must not resurrect the sent text (.send cancels outright).
@@ -456,7 +460,7 @@ private extension MessageInputView {
             // files, but the text view's submit callback still lands here —
             // pendingFiles clears only after success, so a second send
             // would duplicate the uploads.
-            guard !viewModel.isUploadingFiles, isConnectionReadyForSending else { return }
+            guard !viewModel.isUploadingFiles, isConnectionReadyForSending, allowsSending else { return }
             let text = localText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty || viewModel.hasPendingAttachments else {
                 isFocused = true

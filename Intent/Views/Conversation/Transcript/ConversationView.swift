@@ -189,8 +189,26 @@ private struct ConversationViewContent: View {
             }
     }
 
-    /// Navigation bar title and toolbar; the bar background is the system default.
+    private var usesWorkspaceDesign: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone
+            && assistantStore == nil && viewModel.workspaceId != Workspace.chiefWorkspaceId
+    }
+
+    /// Keep shared and non-phone navigation unchanged.
+    @ViewBuilder
     private var conversationChrome: some View {
+        if usesWorkspaceDesign {
+            conversationColumn
+                .toolbar(.hidden, for: .navigationBar, .tabBar)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    WorkspaceConversationHeader(title: viewModel.agentName, onBack: { dismiss() }, actions: { agentMenu })
+                }
+        } else {
+            legacyConversationChrome
+        }
+    }
+
+    private var legacyConversationChrome: some View {
         conversationColumn
             .navigationTitle(viewModel.agentName)
             .toolbarTitleDisplayMode(.inline)
@@ -210,7 +228,8 @@ private struct ConversationViewContent: View {
         ConversationColumnView(
             viewModel: viewModel,
             onNavigateToNote: navigateToNote,
-            onNavigateToAgent: navigateToAgent
+            onNavigateToAgent: navigateToAgent,
+            usesWorkspaceDesign: usesWorkspaceDesign
         )
     }
 
@@ -272,8 +291,20 @@ private struct ConversationViewContent: View {
                 Label("Delete Agent", systemImage: "trash")
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundStyle(Theme.foreground(for: colorScheme))
+            if usesWorkspaceDesign {
+                Image(.more)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Constants.Conversation.Design.iconSize, height: Constants.Conversation.Design.iconSize)
+                    .accessibilityHidden(true)
+                    .frame(width: Constants.Conversation.Design.Header.controlSize, height: Constants.Conversation.Design.Header.controlSize)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(Constants.Conversation.Design.Palette.foreground(for: colorScheme))
+            } else {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+            }
         }
         .accessibilityLabel(assistantStore == nil ? "Agent actions" : "Assistant actions")
         .accessibilityIdentifier(assistantStore == nil ? "agent.actions" : "assistant.actions")

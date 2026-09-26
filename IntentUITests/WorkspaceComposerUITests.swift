@@ -52,10 +52,22 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
     @MainActor
     func testMonitoringAndAttachmentMenusKeepTheirActions() {
         let app = launch(scenario: "conversation")
+        let actions = app.buttons["agent.actions"]
+        assertReachable(actions, in: app)
+        assertReachable(app.buttons["conversation.back"], in: app)
+        actions.tap()
+        XCTAssertTrue(app.buttons["Rename"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["Delete Agent"].exists)
+        app.scrollViews["transcript.scrollView"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["Rename"].waitForNonExistence(timeout: Fixture.timeout))
         let monitor = app.buttons[Fixture.monitor]
         XCTAssertTrue(monitor.waitForExistence(timeout: Fixture.timeout))
-        assertReachable(monitor, in: app)
-        monitor.tap()
+        XCTAssertEqual(app.buttons.matching(identifier: Fixture.monitor).count, 1)
+        XCTAssertEqual(monitor.label, "Monitoring PR #56")
+        assertTapTargetGeometry(monitor, in: app)
+        // iOS 18 reports this native Menu wrapper as non-hittable even though
+        // physical touch opens it. Prove routing and actions, not that AX hint.
+        monitor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["Check and flush"].waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["Open PR"].exists)
         let cancel = app.buttons["Cancel monitor"]
@@ -107,9 +119,16 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
 
     @MainActor
     private func assertReachable(_ control: XCUIElement, in app: XCUIApplication) {
-        XCTAssertTrue(control.isHittable)
-        XCTAssertGreaterThanOrEqual(control.frame.width, Fixture.minimumTapTarget)
-        XCTAssertGreaterThanOrEqual(control.frame.height, Fixture.minimumTapTarget)
+        XCTAssertTrue(control.isHittable, control.debugDescription)
+        assertTapTargetGeometry(control, in: app)
+    }
+
+    @MainActor
+    private func assertTapTargetGeometry(_ control: XCUIElement, in app: XCUIApplication) {
+        // Compare endpoints to avoid rounding introduced by subtracting their origins.
+        let frame = control.frame
+        XCTAssertGreaterThanOrEqual(frame.maxX, frame.minX + Fixture.minimumTapTarget)
+        XCTAssertGreaterThanOrEqual(frame.maxY, frame.minY + Fixture.minimumTapTarget)
         XCTAssertTrue(app.frame.contains(control.frame), "Control must not be clipped by the viewport")
     }
 }

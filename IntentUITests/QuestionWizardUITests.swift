@@ -65,7 +65,34 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         tap(app.buttons["Dismiss questions"])
         XCTAssertTrue(app.buttons["question.actions"].waitForNonExistence(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["question.answer"].exists)
-        XCTAssertTrue(app.textViews["Message…"].firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].firstMatch.waitForExistence(timeout: Self.timeout))
+    }
+
+    /// Unlike hosted component tests, this exercises native keyboard avoidance
+    /// and the host's send hold while a draft coexists with expanded questions.
+    @MainActor
+    func testExpandedQuestionsKeepDraftWithoutSendingAboveKeyboard() throws {
+        let app = try openQuestions()
+        tap(app.buttons["question.answer"])
+        let composer = app.textViews["composer.textView"]
+        tap(composer)
+        let draft = "Keep this draft\nfor later"
+        composer.typeText(draft)
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(keyboard.isHittable)
+        XCTAssertEqual(composer.value as? String, draft, "Return remains a newline, not a question-bypassing submit")
+        let send = app.buttons["composer.send"]
+        XCTAssertTrue(send.exists)
+        XCTAssertFalse(send.isEnabled, "Expanded questions retain the old composer send hold")
+        XCTAssertLessThanOrEqual(composer.frame.maxY, keyboard.frame.minY)
+        XCTAssertGreaterThan(app.scrollViews["transcript.scrollView"].frame.height, 0)
+        XCTAssertTrue(app.buttons["question.actions"].isHittable)
+        tap(app.buttons["question.actions"])
+        tap(app.buttons["Collapse questions"])
+        XCTAssertTrue(app.buttons["question.answer"].waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, draft)
+        XCTAssertTrue(send.isEnabled, "Explicit collapse keeps the existing ordinary-message escape hatch")
     }
 
     @MainActor

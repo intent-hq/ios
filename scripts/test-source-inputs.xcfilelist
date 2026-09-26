@@ -553,6 +553,7 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/MessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ResponseGroupView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ToolCallView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/UserMessageView.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/WorkspaceConversationHeader.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/WorkspaceTranscriptDesign.swift
 $(SRCROOT)/Intent/Views/Notes
 $(SRCROOT)/Intent/Views/Notes/NoteContentView.swift

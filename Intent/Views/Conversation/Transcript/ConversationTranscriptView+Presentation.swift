@@ -112,6 +112,23 @@ extension ConversationTranscriptView {
             scrollState.goToEndRequested = true
             scrollState.userIsScrolledAway = false
         } label: {
+            goToEndLabel
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("transcript.goToEnd")
+        .padding(.bottom, Layout.goToEndBottomPadding)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .animation(
+            .easeInOut(duration: Constants.Conversation.Transcript.goToEndVisibilityAnimationDuration),
+            value: userIsScrolledAway
+        )
+    }
+
+    @ViewBuilder
+    private var goToEndLabel: some View {
+        if usesWorkspaceDesign {
+            WorkspaceGoToEndLabel()
+        } else {
             HStack(spacing: Layout.goToEndSpacing) {
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.semibold))
@@ -128,14 +145,6 @@ extension ConversationTranscriptView {
                 y: Layout.goToEndShadowYOffset
             )
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("transcript.goToEnd")
-        .padding(.bottom, Layout.goToEndBottomPadding)
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
-        .animation(
-            .easeInOut(duration: Constants.Conversation.Transcript.goToEndVisibilityAnimationDuration),
-            value: userIsScrolledAway
-        )
     }
 
     private var thinkingIndicatorView: some View {
