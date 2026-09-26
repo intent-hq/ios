@@ -137,7 +137,7 @@ struct AgentRowView: View {
                 .foregroundStyle(attention.kind.color)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         } else if let message = agent.displayMessage {
-            Text(LocalizedStringKey(message))
+            Text(Self.previewText(message))
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
@@ -146,6 +146,15 @@ struct AgentRowView: View {
                 .lineLimit(1)
                 .allowsHitTesting(false)
         }
+    }
+
+    static func previewText(_ message: String) -> AttributedString {
+        var text = (try? AttributedString(
+            markdown: message,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(message)
+        text.link = nil
+        return text
     }
 
     @ViewBuilder

@@ -243,6 +243,32 @@ extension AgentSessionTests {
     }
 }
 
+@MainActor
+struct AgentRowPreviewTests {
+    @Test(arguments: [
+        ("[Review](https://example.com) and [spec](intent://local/note/spec)", "Review and spec"),
+        ("<https://example.com>", "https://example.com"),
+        ("[Email](mailto:hello@example.com)", "Email")
+    ])
+    func previewRemovesEveryLinkDestination(markdown: String, expected: String) {
+        let preview = AgentRowView.previewText(markdown)
+        #expect(String(preview.characters) == expected)
+        #expect(preview.runs.allSatisfy { $0.link == nil })
+    }
+
+    @Test func previewKeepsInlineStylesAndWhitespace() throws {
+        let preview = AgentRowView.previewText("[**Review** `code`](https://example.com)  with\n*care*")
+        #expect(String(preview.characters) == "Review code  with\ncare")
+        let bold = try #require(preview.range(of: "Review"))
+        let code = try #require(preview.range(of: "code"))
+        let italic = try #require(preview.range(of: "care"))
+        #expect(preview[bold].inlinePresentationIntent?.contains(.stronglyEmphasized) == true)
+        #expect(preview[code].inlinePresentationIntent?.contains(.code) == true)
+        #expect(preview[italic].inlinePresentationIntent?.contains(.emphasized) == true)
+        #expect(preview.runs.allSatisfy { $0.link == nil })
+    }
+}
+
 extension AgentSessionTests {
     @Test func pendingQuestionMarkerAloneIsPending() {
         let dict: [String: Any] = [
