@@ -159,6 +159,7 @@ private final class SyntheticBadgeHostSession<Content: View> {
         rootView: Content,
         width: CGFloat,
         height: CGFloat,
+        safeAreaRegions: SafeAreaRegions,
         callbackTimeout: TimeInterval,
         afterShowingWindow: (() -> Void)?,
         observeLifecycle: ((SyntheticBadgeHostLifecycleWaiter.Event) -> Void)?
@@ -167,6 +168,7 @@ private final class SyntheticBadgeHostSession<Content: View> {
             rootView: rootView,
             observeLifecycle: observeLifecycle
         )
+        controller.safeAreaRegions = safeAreaRegions
         window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
         self.callbackTimeout = callbackTimeout
         self.afterShowingWindow = afterShowingWindow
@@ -228,6 +230,7 @@ enum SyntheticBadgeHost {
         _ content: Content,
         width: CGFloat,
         height: CGFloat,
+        safeAreaRegions: SafeAreaRegions = .all,
         lifecycleHooks: LifecycleHooks? = nil,
         observeLifecycle: ((LifecycleEvent) -> Void)? = nil,
         inspect: (_ hostView: UIView, _ window: UIWindow) throws -> Result
@@ -238,6 +241,7 @@ enum SyntheticBadgeHost {
                 rootView: rootView,
                 width: width,
                 height: height,
+                safeAreaRegions: safeAreaRegions,
                 callbackTimeout: callbackTimeout,
                 afterShowingWindow: lifecycleHooks?.afterShowingWindow,
                 observeLifecycle: observeLifecycle

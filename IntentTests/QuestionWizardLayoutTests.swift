@@ -19,6 +19,8 @@ struct QuestionWizardLayoutTests {
             #expect(abs(previous.minX - next.minX) < 1)
         }
         #expect(tall.options.allSatisfy { tall.hostFrame.contains($0) && $0.height >= 44 })
+        #expect(tall.hostFrame.contains(tall.sendFrame))
+        #expect(tall.sendFrame.height >= 44)
 
         let compact = try await render(width: width, height: 400)
         #expect(compact.scrollsHorizontally)
@@ -69,7 +71,8 @@ struct QuestionWizardLayoutTests {
             footer: footer
         )
         .environment(\.dynamicTypeSize, typeSize)
-        return try await SyntheticBadgeHost.render(view, width: width, height: height) { hostView, _ in
+        // This models the question region after the parent has already resolved safe areas.
+        return try await SyntheticBadgeHost.render(view, width: width, height: height, safeAreaRegions: []) { hostView, _ in
             try inspect(hostView)
         }
     }
