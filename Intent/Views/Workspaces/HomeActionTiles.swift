@@ -69,8 +69,9 @@ struct HomeActionTiles: View {
         if action == .assistant {
             Image(.intentDandelion).resizable().scaledToFit().accessibilityHidden(true)
         } else {
-            Image(systemName: symbol(action))
-                .font(.title3)
+            Image(asset(action))
+                .resizable()
+                .scaledToFit()
                 .overlay(alignment: .topTrailing) {
                     if action == .connections, connectionCount > 0 {
                         Text(connectionCount.formatted())
@@ -98,15 +99,15 @@ struct HomeActionTiles: View {
         }
     }
 
-    private func symbol(_ action: Action) -> String {
+    private func asset(_ action: Action) -> ImageResource {
         switch action {
-        case .assistant: "bubble.left"
-        case .workspace: "plus"
-        case .connections: "desktopcomputer"
-        case .appearance: "moon"
-        case .acknowledgements: "doc.text"
-        case .settings: "gearshape"
-        case .logOff: "rectangle.portrait.and.arrow.right"
+        case .assistant: .intentDandelion
+        case .workspace: .add
+        case .connections: .connectionLaptop
+        case .appearance: .night
+        case .acknowledgements: .file
+        case .settings: .settings2
+        case .logOff: .logout
         }
     }
 
