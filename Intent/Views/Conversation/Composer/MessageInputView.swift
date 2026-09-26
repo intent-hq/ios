@@ -7,6 +7,10 @@ struct MessageInputView: View {
     private let store: ConversationStore
     @Environment(\.colorScheme) var colorScheme
 
+    @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
+    @ScaledMetric(relativeTo: .caption) var attachmentIconSide: CGFloat = 12
+    private let sendArrowScale: CGFloat = 0.75
+
     @State private var isFocused: Bool = false
     @State private var textViewHeight: CGFloat = Constants.Conversation.Composer.minimumTextViewHeight
     @State private var isPhotoPickerPresented: Bool = false
@@ -132,8 +136,10 @@ private extension MessageInputView {
             HapticManager.impact(.light)
             Task { await viewModel.stopStreaming() }
         } label: {
-            Image(systemName: "stop.circle.fill")
-                .font(.title2)
+            Image(.stopFill)
+                .resizable()
+                .scaledToFit()
+                .frame(width: controlIconSide, height: controlIconSide)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .frame(
                     minWidth: Constants.Conversation.Composer.controlTarget,
@@ -153,11 +159,17 @@ private extension MessageInputView {
             Button {
                 isFilePickerPresented = true
             } label: {
-                Label("Files", systemImage: "folder")
+                Label {
+                    Text("Files")
+                } icon: {
+                    Image(.folder)
+                }
             }
         } label: {
-            Image(systemName: "plus.circle.fill")
-                .font(.title2)
+            Image(.addCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: controlIconSide, height: controlIconSide)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(
                     minWidth: Constants.Conversation.Composer.controlTarget,
@@ -168,24 +180,13 @@ private extension MessageInputView {
     }
 
     var textEditor: some View {
-        ZStack(alignment: placeholderAlignment) {
+        ZStack(alignment: .leading) {
             SubmittableTextView(
                 text: $localText,
                 isFocused: $isFocused,
                 onSubmit: { sendCurrentMessage() },
-                onHeightChange: { newHeight in
-                    textViewHeight = min(
-                        max(newHeight, Constants.Conversation.Composer.minimumTextViewHeight),
-                        Constants.Conversation.Composer.maximumTextViewHeight
-                    )
-                },
-                onCaretChange: { offset in
-                    #if os(visionOS)
-                    caretOffset = offset
-                    #else
-                    _ = offset
-                    #endif
-                }
+                onHeightChange: updateTextViewHeight,
+                onCaretChange: updateCaretOffset
             )
             .padding(.horizontal, Constants.Conversation.Composer.textEditorHorizontalPadding)
             .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)
@@ -210,19 +211,43 @@ private extension MessageInputView {
             && isConnectionReadyForSending
     }
 
+    private func updateTextViewHeight(_ naturalHeight: CGFloat) {
+        textViewHeight = min(
+            max(
+                naturalHeight + Constants.Conversation.Composer.fieldVerticalPadding * 2,
+                Constants.Conversation.Composer.minimumTextViewHeight
+            ),
+            Constants.Conversation.Composer.maximumTextViewHeight
+        )
+    }
+
+    private func updateCaretOffset(_ offset: Int) {
+        #if os(visionOS)
+        caretOffset = offset
+        #else
+        _ = offset
+        #endif
+    }
+
     var sendButtonStack: some View {
         VStack(spacing: Constants.Conversation.Composer.sendButtonStackSpacing) {
             if !store.isStreaming || hasSendableContent {
                 Button {
                     sendCurrentMessage()
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(
-                            hasSendableContent
-                                ? Theme.primary(for: colorScheme)
-                                : Theme.mutedForeground(for: colorScheme)
-                        )
+                    Image(.arrowUp)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: controlIconSide * sendArrowScale, height: controlIconSide * sendArrowScale)
+                        .foregroundStyle(Theme.card(for: colorScheme))
+                        .frame(width: controlIconSide, height: controlIconSide)
+                        .background {
+                            Circle().fill(
+                                hasSendableContent
+                                    ? Theme.primary(for: colorScheme)
+                                    : Theme.mutedForeground(for: colorScheme)
+                            )
+                        }
                         .frame(
                             minWidth: Constants.Conversation.Composer.controlTarget,
                             minHeight: Constants.Conversation.Composer.controlTarget
@@ -232,16 +257,6 @@ private extension MessageInputView {
                 .accessibilityLabel("Send message")
             }
         }
-    }
-
-    /// visionOS centers the placeholder vertically in the 60 pt field;
-    /// iOS keeps the original top-leading placement.
-    private var placeholderAlignment: Alignment {
-        #if os(visionOS)
-        return .leading
-        #else
-        return .topLeading
-        #endif
     }
 }
 
@@ -256,8 +271,17 @@ private extension MessageInputView {
         Button {
             toggleDictation()
         } label: {
-            Image(systemName: dictation.isActive ? "stop.circle.fill" : "mic.fill")
-                .font(.title2)
+            Group {
+                if dictation.isActive {
+                    Image(.stopFill)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: controlIconSide, height: controlIconSide)
+                } else {
+                    Image(systemName: "mic.fill")
+                        .font(.title2)
+                }
+            }
                 .foregroundStyle(
                     dictation.isActive
                         ? Theme.destructive(for: colorScheme)

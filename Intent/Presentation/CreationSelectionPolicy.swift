@@ -1,3 +1,5 @@
+import Foundation
+
 /// Stateless selection rules shared by the workspace and agent creation flows.
 enum CreationSelectionPolicy {
     /// Workspace enablement is authoritative even when empty or unavailable;
@@ -83,5 +85,25 @@ enum CreationSelectionPolicy {
     static func reconciledModel(current: ModelInfo?, models: [ModelInfo]) -> ModelInfo? {
         guard let current else { return nil }
         return models.first { $0.id == current.id && $0.provider == current.provider }
+    }
+
+    /// Only an explicit model in the current provider's catalog proves which
+    /// efforts can be offered. A default-model preview is advisory, not a pin.
+    static func workspaceReasoningLevels(
+        provider: ProviderInfo?, model: ModelInfo?, models: [ModelInfo]
+    ) -> [String] {
+        guard let provider, provider.isSelectable, model?.provider == provider.id,
+              let fresh = reconciledModel(current: model, models: models) else { return [] }
+        var seen = Set<String>()
+        return fresh.effortLevels.filter { level in
+            !level.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && seen.insert(level).inserted
+        }
+    }
+
+    /// nil means Auto: omit reasoningEffort and inherit the daemon's defaults.
+    /// Never send a blank string, which would explicitly clear those defaults.
+    static func reconciledReasoningEffort(current: String?, effortLevels: [String]) -> String? {
+        guard let current, effortLevels.contains(current) else { return nil }
+        return current
     }
 }

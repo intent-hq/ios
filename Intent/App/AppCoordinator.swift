@@ -24,6 +24,11 @@ enum AppScreen {
     }
 }
 
+enum AppSection: Hashable {
+    case assistant
+    case workspaces
+}
+
 enum ConnectionFailureRetryPolicy: Equatable {
     case automaticConnection
     case manualLogOff
@@ -65,6 +70,8 @@ class AppCoordinator {
             }
         }
     }
+    var selectedSection: AppSection = .workspaces
+    var assistantAgentId: String?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false {
         didSet {

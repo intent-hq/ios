@@ -12,6 +12,7 @@ name: CI
 # receive a filter.
 on:
   pull_request:
+  merge_group:
   workflow_dispatch:
     inputs:
       only_testing:
@@ -58,7 +59,7 @@ jobs:
     # TailcatKit is pure Go and cross-compiles for Linux, so its tests run
     # here on a cheap, fast Linux runner instead of serialising 2-12 minutes
     # of Tailscale compilation onto the 3-core macOS VM.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -80,9 +81,14 @@ jobs:
         run: scripts/test_xcodebuild.sh
 
       # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
-      # override in scripts/swiftlint.sh against a stubbed swiftlint; pure bash.
+      # override on both Darwin and Linux paths against a stubbed swiftlint.
       - name: swiftlint.sh self-tests
         run: scripts/test-swiftlint.sh
+
+      - name: SwiftLint prerequisite and setup tests
+        run: |
+          scripts/test-swiftlint-prerequisites.sh
+          scripts/test-setup-swiftlint.sh
 
       # Exercises the xcfilelist drift check in scripts/check-swiftlint-inputs.sh
       # against a fixture git repo (missing, stale, unsorted, pruned entries);
@@ -99,9 +105,9 @@ jobs:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
     # SwiftLint" step in build-and-test never sees a skipped job. The official
-    # Linux release uses its in-process sourcekitd, so lint needs no macOS,
-    # Xcode, Go, SPM or simulator work.
-    runs-on: ubuntu-latest
+    # Linux release requires a compatible SourceKit runtime. Use the same
+    # supported native setup as developers; no Xcode or simulator work needed.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -113,24 +119,15 @@ jobs:
       - name: Check SwiftLint Xcode input list
         run: scripts/check-swiftlint-inputs.sh
 
-      # scripts/swiftlint.sh rejects any version but the pinned one, so
-      # install exactly the official Linux release asset rather than whatever
-      # the image preinstalls.
-      # The sha256 is the release asset's; recompute it from a fresh download
-      # when bumping the version.
-      - name: Install SwiftLint 0.65.1
-        env:
-          SWIFTLINT_VERSION: 0.65.1
-          SWIFTLINT_SHA256: caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d
+      # setup-swiftlint.sh retains the official 0.65.1 release checksum and
+      # reuses an installed runtime only after a real SourceKit lint probe.
+      - name: Set up SwiftLint 0.65.1 and SourceKit
         run: |
-          cd "$RUNNER_TEMP"
-          curl -fsSL -o swiftlint_linux_amd64.zip \
-            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/swiftlint_linux_amd64.zip"
-          echo "${SWIFTLINT_SHA256}  swiftlint_linux_amd64.zip" | sha256sum -c -
-          mkdir -p swiftlint
-          unzip -q swiftlint_linux_amd64.zip -d swiftlint
-          echo "$RUNNER_TEMP/swiftlint" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/swiftlint/swiftlint" version
+          scripts/setup-swiftlint.sh
+          scripts/setup-swiftlint.sh --check
+
+      - name: Real SwiftLint runtime smoke test
+        run: scripts/test-swiftlint-runtime.sh
 
       # The wrapper passes --strict --no-cache and enforces the version pin;
       # the reporter override renders violations as PR annotations.
@@ -160,6 +157,49 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: SwiftLint wrapper tests on the native shell
+        run: scripts/test-swiftlint.sh
+
+      - name: Set up Node for Keychain fixture verification
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Read pinned Keychain fixture revision
+        id: keychain-fixtures
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const lock = JSON.parse(readFileSync('IntentTests/Fixtures/backend-keychain.lock.json', 'utf8'));
+          if (lock.sourceRepository !== 'intent-hq/intent' || !/^[0-9a-f]{40}$/.test(lock.sourceCommit)) {
+            throw new Error('Keychain fixture lock must pin a full intent-hq/intent commit');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `source-commit=${lock.sourceCommit}\n`);
+          NODE
+
+      - name: Checkout exact canonical Keychain fixture source
+        uses: actions/checkout@v7
+        with:
+          repository: intent-hq/intent
+          ref: ${{ steps.keychain-fixtures.outputs.source-commit }}
+          path: .keychain-contract-source
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/backend-keychain-contract.mjs
+            /docs/protocol/fixtures/backend-keychain/v1/
+
+      - name: Verify Keychain fixture provenance
+        env:
+          SOURCE_COMMIT: ${{ steps.keychain-fixtures.outputs.source-commit }}
+        run: |
+          set -euo pipefail
+          node .keychain-contract-source/scripts/backend-keychain-contract.mjs verify \
+            --source-root "$GITHUB_WORKSPACE/.keychain-contract-source" \
+            --source-commit "$SOURCE_COMMIT" --component ios --component-root "$GITHUB_WORKSPACE" \
+            | tee "$RUNNER_TEMP/keychain-fixture-provenance.txt"
+          cat "$RUNNER_TEMP/keychain-fixture-provenance.txt" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Select Xcode
         run: |
@@ -336,6 +376,12 @@ jobs:
         run: |
           echo "Filtered test run (non-gating): ONLY_TESTING='$ONLY_TESTING'" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Run Keychain conformance and existing registry/publisher tests
+        env:
+          RESULT_BUNDLE: TestResults-keychain
+          ONLY_TESTING: IntentTests/BackendKeychainConformanceTests IntentTests/BackendKeychainFixtureTests IntentTests/SyncedBackendRegistryTests IntentTests/SyncedBackendPublisherTests
+        run: scripts/xcodebuild.sh test-ios-unit
+
       # The script removes any existing result bundle at RESULT_BUNDLE
       # (xcodebuild refuses an existing path). xcodebuild forwards its
       # TEST_RUNNER_-prefixed environment variables into the test process
@@ -364,7 +410,8 @@ jobs:
       # checkout the bundle was compiled in: that path does not exist on a
       # physical device (intent-hq/ios#320, intent-hq/ios#364,
       # intent-hq/ios#373, intent-hq/ios#381). Re-run just
-      # those suites against the same build with the source tree moved aside,
+      # those suites and the Keychain fixture suites against the same build
+      # with the source tree moved aside,
       # so they can only pass by reading the bundled copies. Empty stand-in
       # directories keep the project's synchronized folders resolvable for
       # xcodebuild; a separate result bundle preserves the full run's for the
@@ -372,7 +419,7 @@ jobs:
       - name: Source-independence check (ios#320)
         env:
           RESULT_BUNDLE: TestResults-source-moved
-          ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests IntentTests/ObjCCallbackIsolationTests IntentTests/ExternalLinkTests IntentTests/PrivacyManifestDriftTests
+          ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests IntentTests/ObjCCallbackIsolationTests IntentTests/ExternalLinkTests IntentTests/PrivacyManifestDriftTests IntentTests/BackendKeychainConformanceTests IntentTests/BackendKeychainFixtureTests
         run: |
           moved="$RUNNER_TEMP/source-moved"
           mkdir -p "$moved"
@@ -414,6 +461,7 @@ jobs:
           path: |
             TestResults
             TestResults-source-moved
+            TestResults-keychain
 
       # See the job comment: turns a go-test or swiftlint failure into a
       # failure of this (the only ruleset-required) job. Both normally finish
@@ -459,7 +507,8 @@ jobs:
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     needs: select-macos-runner
     runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
-    timeout-minutes: 45
+    # Setup/build plus the complete UI suite can take 45 minutes; allow result export too (ios#429).
+    timeout-minutes: 60
     env:
       GIT_TERMINAL_PROMPT: '0'
       SPM_CLONE_DIR: build/SourcePackages

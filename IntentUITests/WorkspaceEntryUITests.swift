@@ -14,10 +14,7 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         /// workspace with exactly one top-level agent (its delegates are
         /// background sub-agents).
         static let workspaceTitle = "Deflake payment integration tests"
-        /// `WorkspaceListView`'s navigation title: the list is the only
-        /// screen that shows it, whereas `workspaceTitle` is also the
-        /// overview's navigation title and the conversation's back button.
-        static let workspaceListTitle = "Workspaces"
+        static let workspaceListIdentifier = "workspaces.search.open"
         /// `DemoFixtures.longConversationAgents`' top-level agent name: the
         /// agent row on the overview and, once opened, the conversation title.
         static let agentName = "Test Stabilizer"
@@ -44,6 +41,31 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     override func tearDownWithError() throws {
         continueAfterFailure = true
         try super.tearDownWithError()
+    }
+
+    @MainActor
+    func testCreateNewAgentMenuOpensAgentSetup() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
+            app.launchArguments += ["-appThemePreference", appearance]
+        }
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
+        workspace.tap()
+        let actions = app.buttons["Workspace actions"]
+        XCTAssertTrue(actions.waitForExistence(timeout: Fixture.elementTimeout))
+        actions.tap()
+        let createAgent = app.buttons["Create New Agent"]
+        XCTAssertTrue(createAgent.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(createAgent.isEnabled)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "create-agent-menu"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        createAgent.tap()
+        XCTAssertTrue(app.navigationBars["New Agent"].waitForExistence(timeout: Fixture.elementTimeout))
     }
 
     @MainActor
@@ -110,13 +132,13 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         XCTAssertTrue(overviewOnly.exists, "\(context): the workspace overview was left")
     }
 
-    /// Navigates back until the workspace list's own navigation bar shows,
+    /// Navigates back until the workspace list's search button shows,
     /// then waits for `workspaceRow` in it; on a collapsed iPad sidebar the
     /// first nav button reveals the list. Gating on the row's text alone
     /// would stop on the overview, whose navigation title is the same text.
     @MainActor
     private func showWorkspaceList(in app: XCUIApplication, workspaceRow: XCUIElement) {
-        let workspaceList = app.navigationBars[Fixture.workspaceListTitle].firstMatch
+        let workspaceList = app.buttons[Fixture.workspaceListIdentifier].firstMatch
         var backTapsLeft = Fixture.backNavigationAttempts
         while backTapsLeft > 0, !workspaceList.waitForExistence(timeout: Fixture.backNavigationTimeout) {
             let back = app.navigationBars.buttons.element(boundBy: 0)

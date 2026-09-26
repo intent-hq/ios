@@ -5,10 +5,7 @@ import XCTest
 
 enum Fixture {
     static let workspaceTitle = "Deflake payment integration tests"
-    // WorkspaceListView's navigation title: the list is the only screen
-    // that shows it, whereas `workspaceTitle` is also the overview's
-    // navigation title and the conversation's back-button label.
-    static let workspaceListTitle = "Workspaces"
+    static let workspaceListIdentifier = "workspaces.search.open"
     // DemoFixtures.longConversationAgents' top-level agent name: the row
     // tapped on the workspace overview to reach the transcript.
     static let agentName = "Test Stabilizer"
@@ -396,12 +393,12 @@ func rows(intersecting transcript: XCUIElement) -> [XCUIElement] {
 /// Navigates back out of the transcript to the workspace list so the
 /// next `openLongConversation` is a fresh entry; relaunches when no back
 /// path leads there (a split view keeps the transcript in its detail column).
-/// Gates on the list's own navigation bar: the workspace title alone also
+/// Gates on the list's search button: the workspace title alone also
 /// exists on the overview (its navigation title) and on the transcript
 /// (its back button), where tapping it navigates nowhere.
 @MainActor
 func leaveConversation(in app: XCUIApplication) {
-    let workspaceList = app.navigationBars[Fixture.workspaceListTitle].firstMatch
+    let workspaceList = app.buttons[Fixture.workspaceListIdentifier].firstMatch
     let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
     var backTapsLeft = Fixture.backNavigationAttempts
     while backTapsLeft > 0, !workspaceList.waitForExistence(timeout: Fixture.backNavigationTimeout) {

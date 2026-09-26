@@ -108,7 +108,7 @@ Managed via Swift Package Manager (integrated in Xcode):
 
 ### Clean-checkout prerequisites
 
-- macOS with Xcode and its command-line tools. Tests require an available iPhone
+- For app builds: macOS with Xcode and its command-line tools. Tests require an available iPhone
   simulator.
 - Network access for the first Swift package resolution and pinned Go tool download.
 - A Go toolchain compatible with the version in `TailcatKit/go.mod`. iOS commands
@@ -143,7 +143,69 @@ scripts/swiftlint.sh
 scripts/test-swiftlint.sh
 ```
 
-The wrapper supports these subcommands:
+### Strict lint on Linux
+
+The no-argument `scripts/swiftlint.sh` gate uses SwiftLint **0.65.1** with the same
+strict rules on both hosts. Linux also needs a loadable SourceKit runtime; a
+successful `swiftlint version` does not prove that prerequisite is met.
+
+| Host | Supported route |
+| --- | --- |
+| Ubuntu 24.04, x86_64 (development and Linux CI) | Native setup below; lint only. |
+| macOS with Xcode (native CI: macOS 15, arm64) | Existing SwiftLint 0.65.1 on `PATH` and Xcode toolchain; unchanged invocation. |
+| Other Linux distributions / architectures | Automatic setup is unsupported; use one of the hosts above. |
+
+From this repository's root:
+
+```bash
+# One-time system prerequisites, if the setup command reports them missing.
+sudo apt-get update
+sudo apt-get install -y ca-certificates coreutils curl gnupg libc-bin libxml2 tar python3
+
+# Install or reuse SwiftLint and a working SourceKit runtime.
+scripts/setup-swiftlint.sh
+scripts/setup-swiftlint.sh --check  # read-only prerequisite check
+scripts/test-swiftlint-runtime.sh  # real clean and violating fixtures
+scripts/swiftlint.sh               # full strict gate; never installs tools
+
+# Offline wrapper, prerequisite, and setup regressions.
+scripts/test-swiftlint.sh
+scripts/test-swiftlint-prerequisites.sh
+scripts/test-setup-swiftlint.sh
+```
+
+Setup reuses SwiftLint 0.65.1 from `PATH` and an existing usable runtime. If tools
+are missing, it installs the checksum-pinned [official SwiftLint release](https://github.com/realm/SwiftLint/releases/tag/0.65.1)
+and [Swiftly 1.1.2](https://www.swift.org/install/linux/swiftly/) into
+`${XDG_DATA_HOME:-$HOME/.local/share}/intent/swiftlint` (override with the absolute
+`INTENT_SWIFTLINT_HOME` path). Swiftly's bootstrap has a pinned SHA256, verified
+against its official signature; Swiftly verifies the **Swift 6.3.2** toolchain's
+PGP signature before extraction. This runtime matches
+[SwiftLint 0.65.1's upstream image](https://github.com/realm/SwiftLint/blob/0.65.1/Dockerfile)
+and is exercised by the real fixture check. A fresh runtime download is about
+1 GiB and extracts to 3.3 GiB; allow room for both (set `TMPDIR` if needed).
+
+No shell profiles or existing toolchains are changed. The gate finds the managed
+installation automatically, while a `swiftlint` already on `PATH` keeps priority
+and must match the pin. Remove a mismatched binary from `PATH` before re-running
+setup. To select another installed runtime, set `LINUX_SOURCEKIT_LIB_PATH` to the
+directory containing `libsourcekitdInProc.so`; an invalid or unloadable override
+fails even if a system runtime could otherwise be used. Unset it to return to
+automatic selection. The preflight loads an explicit library and runs a small
+real lint probe, with crashes and timeouts reported as prerequisite errors.
+SwiftLint's executable libraries (including `libxml2`) are checked with `ldd`
+before running its version command; missing libraries report the prerequisite
+command above. Additional Swift runtime libraries are reported with Swiftly's
+package-install command; setup never runs `sudo` for you. Linux support does not
+include SwiftUI builds.
+
+To remove the managed tools, delete only the installation directory (by default
+`rm -rf ~/.local/share/intent/swiftlint`); if `XDG_DATA_HOME` or
+`INTENT_SWIFTLINT_HOME` was set, use that installation's path instead.
+
+### Xcode wrapper commands
+
+The Xcode wrapper supports these subcommands:
 
 | Subcommand | Purpose |
 | --- | --- |

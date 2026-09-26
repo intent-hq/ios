@@ -283,3 +283,46 @@ struct SpecialistPickerSelectionTests {
         #expect(selection.model == nil)
     }
 }
+
+extension SpecialistPickerSelectionTests {
+    @Test func workspaceReasoningRequiresExplicitModelAndCurrentProviderEvidence() {
+        let provider = ProviderInfo(id: "provider-a")
+        let selected = ModelInfo(id: "shared-id", name: "Model", provider: provider.id, effortLevels: ["old"])
+        let refreshed = ModelInfo(
+            id: selected.id,
+            name: "Model",
+            provider: provider.id,
+            effortLevels: ["future-level", "", "  \n", "future-level", "high"]
+        )
+        let levels = CreationSelectionPolicy.workspaceReasoningLevels(
+            provider: provider, model: selected, models: [refreshed]
+        )
+        #expect(levels == ["future-level", "high"])
+        #expect(CreationSelectionPolicy.reconciledReasoningEffort(current: "old", effortLevels: levels) == nil)
+        #expect(CreationSelectionPolicy.reconciledReasoningEffort(current: "future-level", effortLevels: levels) == "future-level")
+        #expect(CreationSelectionPolicy.reconciledReasoningEffort(current: nil, effortLevels: levels) == nil)
+
+        // An unresolved default never borrows capabilities from the first or default row.
+        #expect(CreationSelectionPolicy.workspaceReasoningLevels(provider: provider, model: nil, models: [refreshed]).isEmpty)
+        let otherProviderModel = ModelInfo(
+            id: selected.id, name: "Model", provider: "provider-b", effortLevels: ["future-level"]
+        )
+        #expect(CreationSelectionPolicy.workspaceReasoningLevels(
+            provider: ProviderInfo(id: "provider-b"), model: selected, models: [otherProviderModel]
+        ).isEmpty)
+    }
+
+    @Test func workspaceReasoningReturnsToAutoWhenModelCapabilityDisappears() {
+        let provider = ProviderInfo(id: "provider-a")
+        let selected = ModelInfo(id: "model", name: "Model", provider: provider.id, effortLevels: ["high"])
+        let noMetadata = ModelInfo(id: selected.id, name: "Model", provider: provider.id)
+        let changedModel = ModelInfo(id: "other", name: "Other", provider: provider.id, effortLevels: ["low"])
+        for catalog in [[], [noMetadata], [changedModel]] {
+            let levels = CreationSelectionPolicy.workspaceReasoningLevels(provider: provider, model: selected, models: catalog)
+            #expect(CreationSelectionPolicy.reconciledReasoningEffort(current: "high", effortLevels: levels) == nil)
+        }
+        let signedOut = ProviderInfo(id: provider.id, authenticated: .signedOut)
+        #expect(CreationSelectionPolicy.workspaceReasoningLevels(provider: signedOut, model: selected, models: [selected]).isEmpty)
+        #expect(CreationSelectionPolicy.workspaceReasoningLevels(provider: nil, model: selected, models: [selected]).isEmpty)
+    }
+}

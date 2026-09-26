@@ -40,28 +40,34 @@ extension MessageInputView {
                     height: Constants.Conversation.Composer.pendingImageSide
                 )
                 .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.pendingImageCornerRadius))
-            Button {
-                viewModel.removeImage(at: index)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .background(Circle().fill(.black.opacity(
-                        Constants.Conversation.Composer.imageRemoveButtonBackgroundOpacity
-                    )))
-                    .frame(
-                        minWidth: Constants.Conversation.Composer.controlTarget,
-                        minHeight: Constants.Conversation.Composer.controlTarget,
-                        alignment: .topTrailing
-                    )
-                    .contentShape(Rectangle())
-            }
-            .offset(
-                x: Constants.Conversation.Composer.pendingImageRemoveButtonHorizontalOffset,
-                y: Constants.Conversation.Composer.pendingImageRemoveButtonVerticalOffset
-            )
-            .accessibilityLabel("Remove image \(index + 1)")
+            removeImageButton(index: index)
+                .offset(
+                    x: Constants.Conversation.Composer.pendingImageRemoveButtonHorizontalOffset,
+                    y: Constants.Conversation.Composer.pendingImageRemoveButtonVerticalOffset
+                )
         }
+    }
+
+    private func removeImageButton(index: Int) -> some View {
+        Button {
+            viewModel.removeImage(at: index)
+        } label: {
+            Image(.closeCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: attachmentIconSide, height: attachmentIconSide)
+                .foregroundStyle(.white)
+                .background(Circle().fill(.black.opacity(
+                    Constants.Conversation.Composer.imageRemoveButtonBackgroundOpacity
+                )))
+                .frame(
+                    minWidth: Constants.Conversation.Composer.controlTarget,
+                    minHeight: Constants.Conversation.Composer.controlTarget,
+                    alignment: .topTrailing
+                )
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Remove image \(index + 1)")
     }
 
     private func pendingFile(_ file: PendingFile, index: Int) -> some View {
@@ -73,8 +79,10 @@ extension MessageInputView {
                 Button {
                     viewModel.removePendingFile(at: index)
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.caption)
+                    Image(.closeCircle)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: attachmentIconSide, height: attachmentIconSide)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .contentShape(Rectangle().inset(
                             by: -Constants.Conversation.Composer.controlTarget / 2
@@ -108,8 +116,10 @@ extension MessageInputView {
 
     @ViewBuilder
     private func pendingFileContent(_ file: PendingFile) -> some View {
-        Image(systemName: "doc.fill")
-            .font(.caption)
+        Image(.file)
+            .resizable()
+            .scaledToFit()
+            .frame(width: attachmentIconSide, height: attachmentIconSide)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 0) {
