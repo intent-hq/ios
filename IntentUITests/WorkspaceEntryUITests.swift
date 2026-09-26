@@ -47,6 +47,9 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     func testCreateNewAgentMenuOpensAgentSetup() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
+        if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
+            app.launchArguments += ["-appThemePreference", appearance]
+        }
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
@@ -57,6 +60,10 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         let createAgent = app.buttons["Create New Agent"]
         XCTAssertTrue(createAgent.waitForExistence(timeout: Fixture.elementTimeout))
         XCTAssertTrue(createAgent.isEnabled)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "create-agent-menu"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
         createAgent.tap()
         XCTAssertTrue(app.navigationBars["New Agent"].waitForExistence(timeout: Fixture.elementTimeout))
     }

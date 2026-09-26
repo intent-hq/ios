@@ -13,6 +13,9 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         try Data().write(to: gate)
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-workspace-provider-trigger-file=" + gate.path]
+        if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
+            app.launchArguments += ["-appThemePreference", appearance]
+        }
         app.launch()
         openCreationForm(in: app)
 
