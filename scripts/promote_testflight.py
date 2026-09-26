@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Append the newest processed, unexpired iOS internal Alpha build to external Alpha.
+"""Append the newest processed, unexpired iOS internal Alpha build to internal Beta.
 
 Default: read-only. --apply permits ONE additive group-build linkage request only.
 Credentials (environment only): ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY_PATH.
 The key must be a private, regular .p8 file (0600), used by installed OpenSSL.
-Optional ASC_INTERNAL_GROUP_ID / ASC_EXTERNAL_GROUP_ID disambiguate groups but
-must still match this app, the exact name Alpha, and the expected group type.
+Optional ASC_SOURCE_GROUP_ID / ASC_DESTINATION_GROUP_ID disambiguate groups but
+must still match this app, exact names Alpha / Beta, and internal group type.
+Beta must report hasAccessToAllBuilds=false. Confirm automatic distribution is
+off manually before activation; the API flag alone does not prove that setting.
 No review submissions, notifications, tester edits, removals, expiry, or releases.
 Exit 0: decision reported (including blocked/no candidate); 1: safe failure; 2: CLI.
 
-Contracts checked against Apple's OpenAPI 4.5 on 2026-09-25:
+Contracts checked against Apple's OpenAPI 4.5 on 2026-09-26:
 https://developer.apple.com/sample-code/app-store-connect/app-store-connect-openapi-specification.zip
-https://developer.apple.com/documentation/appstoreconnectapi/externalbetastate
-https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers
+https://developer.apple.com/documentation/appstoreconnectapi/internalbetastate
+https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers
 """
 
 import argparse
@@ -31,18 +33,13 @@ import urllib.request
 
 ORIGIN = "https://api.appstoreconnect.apple.com"
 BUNDLE_ID = "dev.intentapp.ios"
-READY = {"READY_FOR_BETA_TESTING", "BETA_APPROVED", "IN_BETA_TESTING"}
+READY = {"READY_FOR_BETA_TESTING", "IN_BETA_TESTING"}
 BLOCKERS = {
-    "READY_FOR_BETA_SUBMISSION": "Submit this build for beta review manually in App Store Connect.",
-    "WAITING_FOR_BETA_REVIEW": "Wait for Apple's beta review; no submission was made.",
-    "IN_BETA_REVIEW": "Wait for Apple's beta review; no submission was made.",
-    "BETA_REJECTED": "Resolve Apple's beta rejection manually in App Store Connect.",
     "MISSING_EXPORT_COMPLIANCE": "Complete export compliance manually in App Store Connect.",
     "IN_EXPORT_COMPLIANCE_REVIEW": "Wait for Apple's export compliance review.",
     "PROCESSING": "Wait for Apple to finish beta processing.",
     "PROCESSING_EXCEPTION": "Resolve the beta processing error in App Store Connect.",
     "EXPIRED": "This build expired; no older build was substituted.",
-    "NOT_APPLICABLE": "External testing is not available for this build.",
 }
 BUILD_FIELDS = "version,uploadedDate,expirationDate,expired,processingState,buildAudienceType,app,preReleaseVersion"
 BUILD_QUERY = {
@@ -163,7 +160,7 @@ class Client:
     def request(self, path, query=None, body=None):
         method = "GET" if body is None else "POST"
         if body is not None and (not self.apply or path != self.write_path):
-            raise PromotionError("Write refused: only the resolved external Alpha build linkage is permitted in apply mode.")
+            raise PromotionError("Write refused: only the resolved internal Beta build linkage is permitted in apply mode.")
         url = ORIGIN + path if path.startswith("/v1/") else path
         if query:
             url += "?" + urllib.parse.urlencode(query)
@@ -243,29 +240,30 @@ def resolve(client):
     apps = client.collection("/v1/apps", {"filter[bundleId]": BUNDLE_ID, "fields[apps]": "bundleId", "limit": 200})
     app = unique([resource(a, "apps") for a in apps if attributes(a).get("bundleId") == BUNDLE_ID],
                  "Expected exactly one app for dev.intentapp.ios; check API access.")
-    groups = client.collection(f"/v1/apps/{app['id']}/betaGroups", {"fields[betaGroups]": "name,isInternalGroup", "limit": 200})
-    alpha = [resource(g, "betaGroups") for g in groups if attributes(g).get("name") == "Alpha"]
-    if any(type(attributes(g).get("isInternalGroup")) is not bool for g in alpha):
-        raise PromotionError("Alpha group has missing or invalid internal/external type; stopped safely.")
+    groups = client.collection(f"/v1/apps/{app['id']}/betaGroups",
+                               {"fields[betaGroups]": "name,isInternalGroup,hasAccessToAllBuilds", "limit": 200})
     chosen = []
-    for internal, env in ((True, "ASC_INTERNAL_GROUP_ID"), (False, "ASC_EXTERNAL_GROUP_ID")):
+    for name, env in (("Alpha", "ASC_SOURCE_GROUP_ID"), ("Beta", "ASC_DESTINATION_GROUP_ID")):
+        named = [resource(g, "betaGroups") for g in groups if attributes(g).get("name") == name]
+        if any(type(attributes(g).get("isInternalGroup")) is not bool for g in named):
+            raise PromotionError("Group has missing or invalid internal/external type; stopped safely.")
         pinned = os.environ.get(env)
         if pinned:
             resource_id(pinned)
-        matches = [g for g in alpha if attributes(g)["isInternalGroup"] is internal and (not pinned or g["id"] == pinned)]
-        chosen.append(unique(matches, f"Cannot uniquely resolve Alpha group; verify app, name, type, and {env}."))
+        matches = [g for g in named if attributes(g)["isInternalGroup"] is True and (not pinned or g["id"] == pinned)]
+        chosen.append(unique(matches, f"Cannot uniquely resolve internal {name} group; verify app, name, type, and {env}."))
     if chosen[0]["id"] == chosen[1]["id"]:
-        raise PromotionError("Internal and external groups must be different resources.")
+        raise PromotionError("Source Alpha and destination Beta must be different resources.")
+    if attributes(chosen[1]).get("hasAccessToAllBuilds") is not False:
+        raise PromotionError("Internal Beta all-build access must be explicitly false. Verify Beta settings manually; no settings were changed.")
     return app["id"], chosen[0]["id"], chosen[1]["id"]
 
 
-def related(build, name, included, kind, optional=False):
+def related(build, name, included, kind):
     relation = build.get("relationships", {}).get(name, {})
     if "data" not in relation:
         raise PromotionError("Missing build relationship metadata; stopped safely.")
     linkage = relation["data"]
-    if linkage is None and optional:
-        return None
     resource(linkage, kind)
     matches = [r for r in included if r.get("type") == kind and r.get("id") == linkage["id"]]
     return unique(matches, "Missing included build metadata; stopped safely.")
@@ -295,8 +293,8 @@ def candidate(build, included, app_id, now):
     return True
 
 
-def latest(client, app_id, internal_id):
-    query = dict(BUILD_QUERY, **{"filter[app]": app_id, "filter[betaGroups]": internal_id, "limit": 200, "sort": "-uploadedDate"})
+def latest(client, app_id, source_id):
+    query = dict(BUILD_QUERY, **{"filter[app]": app_id, "filter[betaGroups]": source_id, "limit": 200, "sort": "-uploadedDate"})
     builds = {}
     now = datetime.now(timezone.utc)
     for page in client.pages("/v1/builds", query):
@@ -311,10 +309,9 @@ def latest(client, app_id, internal_id):
 
 def inspect(client, build_id, app_id):
     query = dict(BUILD_QUERY)
-    query.update({"include": "app,preReleaseVersion,buildBetaDetail,betaAppReviewSubmission",
-                  "fields[builds]": BUILD_FIELDS + ",buildBetaDetail,betaAppReviewSubmission",
-                  "fields[buildBetaDetails]": "externalBuildState",
-                  "fields[betaAppReviewSubmissions]": "betaReviewState"})
+    query.update({"include": "app,preReleaseVersion,buildBetaDetail",
+                  "fields[builds]": BUILD_FIELDS + ",buildBetaDetail",
+                  "fields[buildBetaDetails]": "internalBuildState"})
     result = client.request(f"/v1/builds/{build_id}", query)
     build = resource(result.get("data"), "builds")
     if build["id"] != build_id:
@@ -323,65 +320,57 @@ def inspect(client, build_id, app_id):
     if not candidate(build, included, app_id, datetime.now(timezone.utc)):
         return "UNKNOWN", "Selected build is no longer processed, unexpired iOS; no older build was substituted."
     audience = attributes(build).get("buildAudienceType")
-    if audience == "INTERNAL_ONLY":
-        return "INTERNAL_ONLY", "This upload is Internal Only. Use a future externally eligible upload; no older build was substituted."
-    if audience != "APP_STORE_ELIGIBLE":
-        raise PromotionError("Missing or unknown build audience; cannot establish external eligibility.")
-    state = attributes(related(build, "buildBetaDetail", included, "buildBetaDetails")).get("externalBuildState")
+    if audience not in ("INTERNAL_ONLY", "APP_STORE_ELIGIBLE"):
+        raise PromotionError("Missing or unknown build audience; cannot establish internal eligibility.")
+    state = attributes(related(build, "buildBetaDetail", included, "buildBetaDetails")).get("internalBuildState")
     if state not in READY and state not in BLOCKERS:
-        raise PromotionError("Missing or unknown external beta state; inspect this build manually.")
-    review = related(build, "betaAppReviewSubmission", included, "betaAppReviewSubmissions", optional=True)
-    if review is not None:
-        review_state = attributes(review).get("betaReviewState")
-        if review_state not in ("APPROVED", "WAITING_FOR_REVIEW", "IN_REVIEW", "REJECTED"):
-            raise PromotionError("Unknown beta review state; inspect this build manually.")
-        if review_state != "APPROVED":
-            return state, "Apple beta review is pending or rejected. Resolve or await review manually; no older build was substituted."
+        raise PromotionError("Missing or unknown internal beta state; inspect this build manually.")
     return state, BLOCKERS.get(state)
 
 
-def assigned(client, external_id, build_id):
-    members = client.collection(f"/v1/betaGroups/{external_id}/relationships/builds", {"limit": 200})
+def assigned(client, destination_id, build_id):
+    members = client.collection(f"/v1/betaGroups/{destination_id}/relationships/builds", {"limit": 200})
     return build_id in {resource(b, "builds")["id"] for b in members}
 
 
 def promote(client):
-    app_id, internal_id, external_id = resolve(client)
+    app_id, source_id, destination_id = resolve(client)
     summary = {"mode": "apply" if client.apply else "dry-run", "app_id": app_id,
-               "internal_group_id": internal_id, "external_group_id": external_id}
-    build = latest(client, app_id, internal_id)
+               "source_group_id": source_id, "destination_group_id": destination_id,
+               "destination_has_access_to_all_builds": False}
+    build = latest(client, app_id, source_id)
     if build is None:
         return dict(summary, result="no_candidate", action="No fully processed, nonexpired iOS build in internal Alpha.")
     build_id = build["id"]
     summary.update(build_id=build_id, uploaded_date=date(attributes(build)["uploadedDate"]).isoformat())
     # Read membership before checking current eligibility, minimizing stale state before a write.
-    is_assigned = assigned(client, external_id, build_id)
+    is_assigned = assigned(client, destination_id, build_id)
     state, blocker = inspect(client, build_id, app_id)
-    summary.update(external_state=state, assigned=is_assigned)
+    summary.update(internal_state=state, assigned=is_assigned)
     if blocker:
         return dict(summary, result="blocked", action=blocker)
     if not is_assigned and not client.apply:
-        return dict(summary, result="would_assign", action="Would append this build to external Alpha; tester availability is not yet confirmed.")
+        return dict(summary, result="would_assign", action="Would append this build to internal Beta; confirm automatic distribution is off before activation. Tester availability is not yet confirmed.")
     if not is_assigned:
-        path = f"/v1/betaGroups/{external_id}/relationships/builds"
+        path = f"/v1/betaGroups/{destination_id}/relationships/builds"
         client.write_path = path
         try:
             client.request(path, body={"data": [{"type": "builds", "id": build_id}]})
         except APIError as error:
             # A concurrent assignment can yield 409. Reconcile, never resend the write.
-            if error.status != 409 or not assigned(client, external_id, build_id):
+            if error.status != 409 or not assigned(client, destination_id, build_id):
                 raise
-        if not assigned(client, external_id, build_id):
+        if not assigned(client, destination_id, build_id):
             raise PromotionError("Assignment not yet visible. No write retry; run a dry run to reconcile.")
         state, blocker = inspect(client, build_id, app_id)
-        summary.update(external_state=state, assigned=True)
+        summary.update(internal_state=state, assigned=True)
         if blocker:
             return dict(summary, result="assigned_but_blocked", action=blocker)
     if state == "IN_BETA_TESTING":
         return dict(summary, result="already_assigned" if is_assigned else "assigned",
-                    action="External Alpha assignment is confirmed and Apple reports external testing. No notification was sent by this script.")
+                    action="Internal Beta assignment is confirmed and Apple reports internal testing. This does not confirm each tester's access or installation. No notification was sent by this script.")
     return dict(summary, result="assigned_pending_testing",
-                action="Assignment exists, but testing is not confirmed. Check Start Testing / Notify Testers manually in App Store Connect; no notification was sent by this script.")
+                action="Assignment exists, but internal testing is not confirmed. Inspect Internal Testing > Beta, build compliance, What to Test, and tester access in App Store Connect. No notification was sent by this script.")
 
 
 class SafeParser(argparse.ArgumentParser):
@@ -394,7 +383,7 @@ class SafeParser(argparse.ArgumentParser):
 def main(argv=None):
     parser = SafeParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     modes = parser.add_mutually_exclusive_group()
-    modes.add_argument("--apply", action="store_true", help="append one eligible build to external Alpha")
+    modes.add_argument("--apply", action="store_true", help="append one eligible build to internal Beta")
     modes.add_argument("--dry-run", action="store_true", help="read-only (the default)")
     args = parser.parse_args(argv)
     try:

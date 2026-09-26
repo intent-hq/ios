@@ -31,7 +31,7 @@ def workflow(path):
     return json.loads(parsed.stdout)
 
 
-CONFIG = workflow(ROOT / ".github/workflows/testflight-alpha.yml")
+CONFIG = workflow(ROOT / ".github/workflows/testflight-beta.yml")
 JOB = CONFIG["jobs"]["promote"]
 GATE, CHECKOUT, PROMOTE = JOB["steps"]
 
@@ -48,7 +48,7 @@ receipt = {
     "mode": stat.S_IMODE(info.st_mode), "directory_mode": stat.S_IMODE(key.parent.stat().st_mode),
     "digest": hashlib.sha256(key.read_bytes()).hexdigest(),
     "raw_key_in_env": "ASC_PRIVATE_KEY" in os.environ,
-    "pins": [os.environ.get("ASC_INTERNAL_GROUP_ID"), os.environ.get("ASC_EXTERNAL_GROUP_ID")],
+    "pins": [os.environ.get("ASC_SOURCE_GROUP_ID"), os.environ.get("ASC_DESTINATION_GROUP_ID")],
 }
 Path("receipt.json").write_text(json.dumps(receipt))
 behavior = os.environ.get("FIXTURE_BEHAVIOR", "success")
@@ -88,7 +88,7 @@ class WorkflowExecutionTests(unittest.TestCase):
             "GITHUB_STEP_SUMMARY": str(self.root / "summary"),
             "GITHUB_REF": "refs/heads/main", "DEFAULT_BRANCH": "main",
             "GITHUB_EVENT_NAME": "workflow_dispatch", "PROMOTION_MODE": "preview",
-            "TESTFLIGHT_ALPHA_PROMOTION_ENABLED": "", "PYTHONDONTWRITEBYTECODE": "1",
+            "TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED": "", "PYTHONDONTWRITEBYTECODE": "1",
         }
 
     def run_step(self, step, **env):
@@ -104,7 +104,7 @@ class WorkflowExecutionTests(unittest.TestCase):
     def credentials(self):
         key = secrets.token_urlsafe(32) + "\n" + secrets.token_urlsafe(32) + "\n"
         return {"ASC_KEY_ID": "fixture-key-id", "ASC_ISSUER_ID": "fixture-issuer",
-                "ASC_PRIVATE_KEY": key, "ASC_INTERNAL_GROUP_ID": "101", "ASC_EXTERNAL_GROUP_ID": "102",
+                "ASC_PRIVATE_KEY": key, "ASC_SOURCE_GROUP_ID": "101", "ASC_DESTINATION_GROUP_ID": "102",
                 "FIXTURE_PRIVATE_MARKER": secrets.token_urlsafe(32)}
 
     def assert_clean(self):
@@ -115,7 +115,8 @@ class WorkflowExecutionTests(unittest.TestCase):
             for enabled in ("", "false", "TRUE", "1", "yes", "true "):
                 with self.subTest(event=event, enabled=enabled):
                     self.assertEqual(self.gate(GITHUB_EVENT_NAME=event, PROMOTION_MODE="apply",
-                                              TESTFLIGHT_ALPHA_PROMOTION_ENABLED=enabled), "mode=skip")
+                                              TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED=enabled,
+                                              TESTFLIGHT_ALPHA_PROMOTION_ENABLED="true"), "mode=skip")
         self.assertIn("explicit approval", (self.root / "summary").read_text())
         self.assertFalse((self.root / "receipt.json").exists())
 
@@ -124,14 +125,14 @@ class WorkflowExecutionTests(unittest.TestCase):
             for enabled in ("", "false", "true"):
                 with self.subTest(mode=mode, enabled=enabled):
                     self.assertEqual(self.gate(PROMOTION_MODE=mode,
-                                              TESTFLIGHT_ALPHA_PROMOTION_ENABLED=enabled), "mode=preview")
+                                              TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED=enabled), "mode=preview")
         self.assertEqual(CONFIG["on"]["workflow_dispatch"]["inputs"]["mode"]["default"], "preview")
 
     def test_activation_allows_schedule_and_explicit_manual_apply_only(self):
         for event in ("schedule", "workflow_dispatch"):
             with self.subTest(event=event):
                 self.assertEqual(self.gate(GITHUB_EVENT_NAME=event, PROMOTION_MODE="apply",
-                                          TESTFLIGHT_ALPHA_PROMOTION_ENABLED="true"), "mode=apply")
+                                          TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED="true"), "mode=apply")
 
     def test_nondefault_refs_and_missing_default_branch_never_access_asc(self):
         for event in ("schedule", "workflow_dispatch"):
@@ -139,7 +140,7 @@ class WorkflowExecutionTests(unittest.TestCase):
                                 ("refs/heads/", "")):
                 with self.subTest(event=event, ref=ref):
                     self.assertEqual(self.gate(GITHUB_EVENT_NAME=event, GITHUB_REF=ref, DEFAULT_BRANCH=branch,
-                                              TESTFLIGHT_ALPHA_PROMOTION_ENABLED="true"), "mode=skip")
+                                              TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED="true"), "mode=skip")
 
     def test_unknown_events_and_modes_are_rejected_without_echoing_inputs(self):
         for env in ({"GITHUB_EVENT_NAME": "pull_request"}, {"PROMOTION_MODE": "invalid-$(exit 0)"}):
@@ -157,14 +158,14 @@ class WorkflowExecutionTests(unittest.TestCase):
                         "2026-07-16T08:01:00-07:00"):
             with self.subTest(start=instant):
                 self.assertEqual(self.gate(GITHUB_EVENT_NAME="schedule", FIXTURE_CLOCK=instant,
-                                          TESTFLIGHT_ALPHA_PROMOTION_ENABLED="true"), "mode=apply")
+                                          TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED="true"), "mode=apply")
 
     def test_key_is_private_child_arguments_are_safe_and_file_is_cleaned(self):
         for mode, argument in (("preview", "--dry-run"), ("apply", "--apply")):
             with self.subTest(mode=mode):
                 credentials = self.credentials()
                 result = self.run_step(PROMOTE, **credentials, PROMOTION_MODE=mode,
-                                       TESTFLIGHT_ALPHA_PROMOTION_ENABLED="true")
+                                       TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED="true")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 receipt = json.loads((self.root / "receipt.json").read_text())
                 self.assertEqual(receipt["args"], [argument])
@@ -184,7 +185,8 @@ class WorkflowExecutionTests(unittest.TestCase):
         for mode, enabled in (("apply", ""), ("apply", "false"), ("apply", "TRUE"), ("invalid", "true")):
             with self.subTest(mode=mode, enabled=enabled):
                 result = self.run_step(PROMOTE, **self.credentials(), PROMOTION_MODE=mode,
-                                       TESTFLIGHT_ALPHA_PROMOTION_ENABLED=enabled)
+                                       TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED=enabled,
+                                       TESTFLIGHT_ALPHA_PROMOTION_ENABLED="true")
                 self.assertEqual(result.returncode, 1)
                 self.assertFalse((self.root / "receipt.json").exists())
                 self.assert_clean()
@@ -237,7 +239,7 @@ class WorkflowExecutionTests(unittest.TestCase):
             with patch.dict(os.environ, dict(self.env, **self.credentials()), clear=True), \
                     patch.object(subprocess, "run", side_effect=timeout), redirect_stdout(output), \
                     self.assertRaises(SystemExit) as stopped:
-                exec(compile(source, ".github/workflows/testflight-alpha.yml", "exec"), {})
+                exec(compile(source, ".github/workflows/testflight-beta.yml", "exec"), {})
         finally:
             for sig, handler in handlers.items():
                 signal.signal(sig, handler)
@@ -261,20 +263,20 @@ class WorkflowExecutionTests(unittest.TestCase):
 
 
 class WorkflowConfigurationTests(unittest.TestCase):
-    def test_one_native_pacific_schedule_at_five_pm_including_dst_boundaries(self):
+    def test_one_native_pacific_schedule_at_four_pm_including_dst_boundaries(self):
         self.assertEqual(set(CONFIG["on"]), {"schedule", "workflow_dispatch"})
         self.assertEqual(len(CONFIG["on"]["schedule"]), 1)
         schedule = CONFIG["on"]["schedule"][0]
-        self.assertEqual(schedule["cron"], "0 17 * * *")
+        self.assertEqual(schedule["cron"], "0 16 * * *")
         self.assertEqual(schedule["timezone"], "America/Los_Angeles")
         zone = ZoneInfo(schedule["timezone"])
         for local_day, expected_utc in (
-            ("2026-01-15", "2026-01-16T01:00:00+00:00"),
-            ("2026-07-15", "2026-07-16T00:00:00+00:00"),
-            ("2026-03-07", "2026-03-08T01:00:00+00:00"),
-            ("2026-03-08", "2026-03-09T00:00:00+00:00"),
-            ("2026-10-31", "2026-11-01T00:00:00+00:00"),
-            ("2026-11-01", "2026-11-02T01:00:00+00:00"),
+            ("2026-01-15", "2026-01-16T00:00:00+00:00"),
+            ("2026-07-15", "2026-07-15T23:00:00+00:00"),
+            ("2026-03-07", "2026-03-08T00:00:00+00:00"),
+            ("2026-03-08", "2026-03-08T23:00:00+00:00"),
+            ("2026-10-31", "2026-10-31T23:00:00+00:00"),
+            ("2026-11-01", "2026-11-02T00:00:00+00:00"),
         ):
             with self.subTest(day=local_day):
                 minute, hour, *_ = schedule["cron"].split()
@@ -293,8 +295,11 @@ class WorkflowConfigurationTests(unittest.TestCase):
         allowed = "steps.gate.outputs.mode == 'preview' || steps.gate.outputs.mode == 'apply'"
         self.assertEqual(CHECKOUT["if"], allowed)
         self.assertEqual(PROMOTE["if"], allowed)
-        self.assertEqual(GATE["env"]["TESTFLIGHT_ALPHA_PROMOTION_ENABLED"],
-                         "${{ vars.TESTFLIGHT_ALPHA_PROMOTION_ENABLED }}")
+        for step in (GATE, PROMOTE):
+            self.assertEqual(step["env"]["TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED"],
+                             "${{ vars.TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED }}")
+        for name in ("ASC_SOURCE_GROUP_ID", "ASC_DESTINATION_GROUP_ID"):
+            self.assertEqual(PROMOTE["env"][name], "${{ vars." + name + " }}")
         self.assertNotIn("secrets.", json.dumps(GATE))
         for name in ("ASC_KEY_ID", "ASC_ISSUER_ID", "ASC_PRIVATE_KEY"):
             self.assertEqual(PROMOTE["env"][name], "${{ secrets." + name + " }}")

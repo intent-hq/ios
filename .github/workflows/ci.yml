@@ -90,7 +90,7 @@ jobs:
 
       # Offline API fixtures and actual workflow gate/key-lifecycle checks;
       # Python/OpenSSL and Ruby's standard-library YAML parser are preinstalled.
-      - name: TestFlight promotion offline tests
+      - name: Internal Beta TestFlight promotion offline tests
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test*testflight*.py' -v
 
   swiftlint:

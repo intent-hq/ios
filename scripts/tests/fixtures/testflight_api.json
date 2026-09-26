@@ -1,7 +1,7 @@
 {
   "source": "https://developer.apple.com/sample-code/app-store-connect/app-store-connect-openapi-specification.zip",
   "version": "4.5",
-  "checked": "2026-09-25",
+  "checked": "2026-09-26",
   "description": "Synthetic JSON:API resources; contract subset transcribed from Apple's OpenAPI, not production data.",
   "query_contracts": {
     "/v1/apps": {
@@ -10,7 +10,7 @@
       "limit": null
     },
     "/v1/apps/100/betaGroups": {
-      "fields[betaGroups]": ["name", "isInternalGroup"],
+      "fields[betaGroups]": ["name", "isInternalGroup", "hasAccessToAllBuilds"],
       "limit": null
     },
     "/v1/builds": {
@@ -18,31 +18,30 @@
       "filter[betaGroups]": null,
       "sort": ["uploadedDate", "-uploadedDate", "version", "-version", "preReleaseVersion", "-preReleaseVersion"],
       "limit": null,
-      "fields[builds]": ["version", "uploadedDate", "expirationDate", "expired", "processingState", "buildAudienceType", "app", "preReleaseVersion", "buildBetaDetail", "betaAppReviewSubmission"],
+      "fields[builds]": ["version", "uploadedDate", "expirationDate", "expired", "processingState", "buildAudienceType", "app", "preReleaseVersion", "buildBetaDetail"],
       "fields[apps]": ["bundleId"],
       "fields[preReleaseVersions]": ["platform"],
-      "include": ["app", "preReleaseVersion", "buildBetaDetail", "betaAppReviewSubmission"],
-      "fields[buildBetaDetails]": ["externalBuildState"],
-      "fields[betaAppReviewSubmissions]": ["betaReviewState"]
+      "include": ["app", "preReleaseVersion", "buildBetaDetail"],
+      "fields[buildBetaDetails]": ["internalBuildState"]
     },
     "/v1/builds/{id}": {
-      "fields[builds]": ["version", "uploadedDate", "expirationDate", "expired", "processingState", "buildAudienceType", "app", "preReleaseVersion", "buildBetaDetail", "betaAppReviewSubmission"],
+      "fields[builds]": ["version", "uploadedDate", "expirationDate", "expired", "processingState", "buildAudienceType", "app", "preReleaseVersion", "buildBetaDetail"],
       "fields[apps]": ["bundleId"],
       "fields[preReleaseVersions]": ["platform"],
-      "include": ["app", "preReleaseVersion", "buildBetaDetail", "betaAppReviewSubmission"],
-      "fields[buildBetaDetails]": ["externalBuildState"],
-      "fields[betaAppReviewSubmissions]": ["betaReviewState"]
+      "include": ["app", "preReleaseVersion", "buildBetaDetail"],
+      "fields[buildBetaDetails]": ["internalBuildState"]
     },
     "/v1/betaGroups/102/relationships/builds": {"limit": null}
   },
-  "external_states": ["PROCESSING", "PROCESSING_EXCEPTION", "MISSING_EXPORT_COMPLIANCE", "READY_FOR_BETA_TESTING", "IN_BETA_TESTING", "EXPIRED", "READY_FOR_BETA_SUBMISSION", "IN_EXPORT_COMPLIANCE_REVIEW", "WAITING_FOR_BETA_REVIEW", "IN_BETA_REVIEW", "BETA_REJECTED", "BETA_APPROVED", "NOT_APPLICABLE"],
+  "internal_states": ["PROCESSING", "PROCESSING_EXCEPTION", "MISSING_EXPORT_COMPLIANCE", "READY_FOR_BETA_TESTING", "IN_BETA_TESTING", "EXPIRED", "IN_EXPORT_COMPLIANCE_REVIEW"],
   "apps": [
     {"type": "apps", "id": "100", "attributes": {"bundleId": "dev.intentapp.ios"}}
   ],
   "groups": [
-    {"type": "betaGroups", "id": "101", "attributes": {"name": "Alpha", "isInternalGroup": true}},
-    {"type": "betaGroups", "id": "102", "attributes": {"name": "Alpha", "isInternalGroup": false}},
-    {"type": "betaGroups", "id": "103", "attributes": {"name": "Beta", "isInternalGroup": false}}
+    {"type": "betaGroups", "id": "101", "attributes": {"name": "Alpha", "isInternalGroup": true, "hasAccessToAllBuilds": true}},
+    {"type": "betaGroups", "id": "102", "attributes": {"name": "Beta", "isInternalGroup": true, "hasAccessToAllBuilds": false}},
+    {"type": "betaGroups", "id": "103", "attributes": {"name": "Beta", "isInternalGroup": false, "hasAccessToAllBuilds": false}},
+    {"type": "betaGroups", "id": "104", "attributes": {"name": "Alpha", "isInternalGroup": false, "hasAccessToAllBuilds": false}}
   ],
   "builds": [
     {
@@ -59,17 +58,16 @@
       "relationships": {
         "app": {"data": {"type": "apps", "id": "100"}},
         "preReleaseVersion": {"data": {"type": "preReleaseVersions", "id": "300"}},
-        "buildBetaDetail": {"data": {"type": "buildBetaDetails", "id": "400"}},
-        "betaAppReviewSubmission": {"data": null}
+        "buildBetaDetail": {"data": {"type": "buildBetaDetails", "id": "400"}}
       }
     }
   ],
   "included": [
     {"type": "apps", "id": "100", "attributes": {"bundleId": "dev.intentapp.ios"}},
     {"type": "preReleaseVersions", "id": "300", "attributes": {"platform": "IOS"}},
-    {"type": "buildBetaDetails", "id": "400", "attributes": {"externalBuildState": "IN_BETA_TESTING"}}
+    {"type": "buildBetaDetails", "id": "400", "attributes": {"internalBuildState": "IN_BETA_TESTING"}}
   ],
-  "external_members": [{"type": "builds", "id": "199"}],
+  "destination_members": [{"type": "builds", "id": "199"}],
   "assignment_request": {"data": [{"type": "builds", "id": "200"}]},
   "assignment_response_status": 204
 }

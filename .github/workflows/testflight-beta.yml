@@ -1,11 +1,11 @@
-name: TestFlight external Alpha
+name: TestFlight internal Beta
 
 'on':
   schedule:
     # Native IANA scheduling follows PST/PDT; never filter by runner start time.
     # GitHub can delay or drop scheduled runs, especially at the top of the hour.
     # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
-    - cron: '0 17 * * *'
+    - cron: '0 16 * * *'
       timezone: America/Los_Angeles
   workflow_dispatch:
     inputs:
@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   # Share one lock across schedule, dispatch, and reruns; never cancel a write.
-  group: testflight-external-alpha
+  group: testflight-internal-beta
   cancel-in-progress: false
 
 jobs:
@@ -34,7 +34,8 @@ jobs:
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PROMOTION_MODE: ${{ inputs.mode }}
-          TESTFLIGHT_ALPHA_PROMOTION_ENABLED: ${{ vars.TESTFLIGHT_ALPHA_PROMOTION_ENABLED }}
+          # Fresh opt-in: never reuse the superseded external-Alpha approval.
+          TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED: ${{ vars.TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED }}
         shell: bash
         run: |
           set -euo pipefail
@@ -49,18 +50,18 @@ jobs:
             case "$mode" in
               preview) message='Read-only preview; no changes will be made.' ;;
               apply)
-                if [[ "$TESTFLIGHT_ALPHA_PROMOTION_ENABLED" == 'true' ]]; then
+                if [[ "$TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED" == 'true' ]]; then
                   message='Live assignment enabled by the separately approved repository variable.'
                 else
                   mode=skip
-                  message='Live promotion is disabled. Review a manual preview and obtain explicit approval before setting TESTFLIGHT_ALPHA_PROMOTION_ENABLED to true.'
+                  message='Live promotion is disabled. Review a manual preview and obtain explicit approval before setting TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED to true.'
                 fi
                 ;;
               *) echo 'Unsupported mode; no App Store Connect access.' >&2; exit 1 ;;
             esac
           fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
-          printf '## TestFlight Alpha gate\n\n%s\n' "$message" >> "$GITHUB_STEP_SUMMARY"
+          printf '## TestFlight internal Beta gate\n\n%s\n' "$message" >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' "$message"
 
       - name: Checkout
@@ -73,12 +74,12 @@ jobs:
         if: steps.gate.outputs.mode == 'preview' || steps.gate.outputs.mode == 'apply'
         env:
           PROMOTION_MODE: ${{ steps.gate.outputs.mode }}
-          TESTFLIGHT_ALPHA_PROMOTION_ENABLED: ${{ vars.TESTFLIGHT_ALPHA_PROMOTION_ENABLED }}
+          TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED: ${{ vars.TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
-          ASC_INTERNAL_GROUP_ID: ${{ vars.ASC_INTERNAL_GROUP_ID }}
-          ASC_EXTERNAL_GROUP_ID: ${{ vars.ASC_EXTERNAL_GROUP_ID }}
+          ASC_SOURCE_GROUP_ID: ${{ vars.ASC_SOURCE_GROUP_ID }}
+          ASC_DESTINATION_GROUP_ID: ${{ vars.ASC_DESTINATION_GROUP_ID }}
         shell: bash
         run: |
           python3 - <<'PY'
@@ -101,7 +102,7 @@ jobs:
           try:
               mode = os.environ.get("PROMOTION_MODE")
               if mode not in ("preview", "apply") or (
-                  mode == "apply" and os.environ.get("TESTFLIGHT_ALPHA_PROMOTION_ENABLED") != "true"
+                  mode == "apply" and os.environ.get("TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED") != "true"
               ):
                   raise ValueError
               key = os.environ.pop("ASC_PRIVATE_KEY", "")
@@ -131,9 +132,9 @@ jobs:
               outcome = {"result": "error", "action": "Workflow setup or script output failed. Check credentials and run a read-only preview before retrying; no unsafe details were logged."}
           print(json.dumps(outcome, sort_keys=True))
           with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
-              summary.write("\n## TestFlight Alpha result\n\n```json\n" + json.dumps(outcome, indent=2) + "\n```\n\n")
-              summary.write("A successful job is not proof of tester availability. Follow the action above; beta review and any Start Testing / Notify Testers step remain manual.\n")
+              summary.write("\n## TestFlight internal Beta result\n\n```json\n" + json.dumps(outcome, indent=2) + "\n```\n\n")
+              summary.write("A successful job is not proof of tester availability. Verify Internal Testing > Beta, compliance, What to Test, and tester access. Confirm Beta automatic distribution is off before activation.\n")
           if outcome["result"] in ("blocked", "assigned_pending_testing", "assigned_but_blocked"):
-              print("::warning::External testing needs attention; see the action in the job summary.")
+              print("::warning::Internal testing needs attention; see the action in the job summary.")
           sys.exit(status)
           PY

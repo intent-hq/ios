@@ -83,7 +83,7 @@ class FixtureAPI:
             self.case.assertEqual(url.path, "/v1/betaGroups/102/relationships/builds")
             self.case.assertEqual(body, self.data["assignment_request"])
             if self.post_persists:
-                self.data["external_members"].extend(copy.deepcopy(body["data"]))
+                self.data["destination_members"].extend(copy.deepcopy(body["data"]))
             if self.on_post:
                 self.on_post()
             if self.post_status != 204:
@@ -107,7 +107,7 @@ class FixtureAPI:
             build = next(b for b in self.data["builds"] if b["id"] == url.path.rsplit("/", 1)[1])
             return Response({"data": build, "included": self.data["included"]})
         else:
-            items = self.data["external_members"]
+            items = self.data["destination_members"]
         cursor = int(query.get("cursor", "0"))
         end = cursor + self.page_size
         next_url = f"https://api.appstoreconnect.apple.com{url.path}?cursor={end}" if end < len(items) else None
@@ -146,27 +146,32 @@ class PromotionTests(unittest.TestCase):
         return build
 
     def set_state(self, state):
-        self.api.data["included"][2]["attributes"]["externalBuildState"] = state
+        self.api.data["included"][2]["attributes"]["internalBuildState"] = state
 
     def test_default_is_read_only_and_resolves_exact_group_types(self):
-        status, result = self.run_cli()
+        # Legacy pins must not silently redirect the revised source/destination.
+        with patch.dict(os.environ, {"ASC_INTERNAL_GROUP_ID": "104", "ASC_EXTERNAL_GROUP_ID": "103"}):
+            status, result = self.run_cli()
         self.assertEqual(status, 0)
         self.assertEqual(result["result"], "would_assign")
-        self.assertEqual((result["internal_group_id"], result["external_group_id"]), ("101", "102"))
+        self.assertEqual((result["source_group_id"], result["destination_group_id"]), ("101", "102"))
+        self.assertIs(result["destination_has_access_to_all_builds"], False)
         self.assertFalse(self.api.writes)
 
     def test_apply_appends_only_selected_build_and_second_run_is_noop(self):
+        before = copy.deepcopy(self.api.data)
         for expected in ("assigned", "already_assigned"):
             status, result = self.run_cli(apply=True)
             self.assertEqual((status, result["result"]), (0, expected))
         self.assertEqual(len(self.api.writes), 1)
-        self.assertEqual(self.api.data["external_members"], [{"type": "builds", "id": "199"}, {"type": "builds", "id": "200"}])
+        before["destination_members"].append({"type": "builds", "id": "200"})
+        self.assertEqual(self.api.data, before)
 
     def test_pagination_selects_by_upload_instant_not_version_or_response_order(self):
         self.api.page_size = 1
         self.clone_build("201", version="999", uploadedDate="2026-09-24T13:00:00+02:00")
         self.clone_build("202", version="1", uploadedDate="2026-09-24T08:30:00-07:00")
-        self.api.data["external_members"].append({"type": "builds", "id": "202"})
+        self.api.data["destination_members"].append({"type": "builds", "id": "202"})
         status, result = self.run_cli(apply=True)
         self.assertEqual((status, result["build_id"], result["result"]), (0, "202", "already_assigned"))
         self.assertFalse(self.api.writes)
@@ -199,65 +204,97 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual((status, result["result"]), (0, "no_candidate"))
         self.assertFalse(self.api.writes)
 
-    def test_internal_only_newest_build_does_not_fall_back(self):
+    def test_internal_only_newest_build_is_assigned_without_falling_back(self):
         self.clone_build("201", uploadedDate="2026-09-25T12:00:00Z", buildAudienceType="INTERNAL_ONLY")
+        self.api.data["assignment_request"]["data"][0]["id"] = "201"
         status, result = self.run_cli(apply=True)
-        self.assertEqual((status, result["result"], result["build_id"]), (0, "blocked", "201"))
-        self.assertEqual(result["external_state"], "INTERNAL_ONLY")
-        self.assertFalse(self.api.writes)
+        self.assertEqual(status, 0, result)
+        self.assertEqual((status, result["result"], result["build_id"]), (0, "assigned", "201"))
+        self.assertEqual(result["internal_state"], "IN_BETA_TESTING")
+        self.assertEqual(len(self.api.writes), 1)
 
-    def test_every_apple_external_state_and_review_blocker_never_falls_back(self):
-        self.clone_build("199", uploadedDate="2026-09-23T12:00:00Z")
-        for state in FIXTURE["external_states"]:
+    def test_every_apple_internal_state_and_blocker_never_falls_back(self):
+        older = self.clone_build("199", uploadedDate="2026-09-23T12:00:00Z")
+        older["relationships"]["buildBetaDetail"]["data"]["id"] = "401"
+        self.api.data["included"].append({"type": "buildBetaDetails", "id": "401",
+                                          "attributes": {"internalBuildState": "IN_BETA_TESTING"}})
+        for state in FIXTURE["internal_states"]:
             with self.subTest(state=state):
                 self.set_state(state)
-                expected = "would_assign" if state in ("READY_FOR_BETA_TESTING", "BETA_APPROVED", "IN_BETA_TESTING") else "blocked"
+                expected = "would_assign" if state in ("READY_FOR_BETA_TESTING", "IN_BETA_TESTING") else "blocked"
                 status, result = self.run_cli(apply=expected == "blocked")
                 self.assertEqual(status, 0)
                 self.assertEqual((result["result"], result["build_id"]), (expected, "200"))
         self.assertFalse(self.api.writes)
 
-    def test_assigned_build_waiting_for_review_is_not_reported_as_distributed(self):
-        self.api.data["external_members"].append({"type": "builds", "id": "200"})
-        self.set_state("WAITING_FOR_BETA_REVIEW")
+    def test_assigned_build_missing_compliance_is_not_reported_as_distributed(self):
+        self.api.data["destination_members"].append({"type": "builds", "id": "200"})
+        self.set_state("MISSING_EXPORT_COMPLIANCE")
         status, result = self.run_cli(apply=True)
         self.assertEqual((status, result["result"], result["assigned"]), (0, "blocked", True))
         self.assertFalse(self.api.writes)
 
-    def test_approved_assignment_does_not_claim_testing_or_send_notifications(self):
-        for state in ("READY_FOR_BETA_TESTING", "BETA_APPROVED"):
-            with self.subTest(state=state):
-                self.set_state(state)
-                status, result = self.run_cli(apply=True)
-                self.assertEqual((status, result["result"]), (0, "assigned_pending_testing"))
-                self.assertIn("Notify Testers manually", result["action"])
+    def test_ready_assignment_does_not_claim_testing_or_send_notifications(self):
+        self.set_state("READY_FOR_BETA_TESTING")
+        for _ in range(2):
+            status, result = self.run_cli(apply=True)
+            self.assertEqual((status, result["result"]), (0, "assigned_pending_testing"))
+            self.assertIn("Internal Testing", result["action"])
+            self.assertNotIn("Notify Testers", result["action"])
         self.assertEqual(len(self.api.writes), 1)
 
-    def test_conflicting_review_submission_blocks_even_ready_state(self):
+    def test_external_review_metadata_cannot_gate_internal_distribution(self):
         linkage = {"type": "betaAppReviewSubmissions", "id": "500"}
-        self.api.data["builds"][0]["relationships"]["betaAppReviewSubmission"]["data"] = linkage
-        for state in ("WAITING_FOR_REVIEW", "IN_REVIEW", "REJECTED", "APPROVED"):
-            self.api.data["included"] = self.api.data["included"][:3] + [dict(linkage, attributes={"betaReviewState": state})]
-            status, result = self.run_cli(apply=state != "APPROVED")
-            self.assertEqual((status, result["result"]), (0, "would_assign" if state == "APPROVED" else "blocked"))
-        self.assertFalse(self.api.writes)
+        for state in (None, "WAITING_FOR_REVIEW", "IN_REVIEW", "REJECTED", "APPROVED", "FUTURE"):
+            with self.subTest(review=state):
+                self.api = FixtureAPI(self)
+                self.api.data["included"][2]["attributes"]["externalBuildState"] = "NOT_APPLICABLE"
+                if state is not None:
+                    self.api.data["builds"][0]["relationships"]["betaAppReviewSubmission"] = {"data": linkage}
+                    self.api.data["included"].append(dict(linkage, attributes={"betaReviewState": state}))
+                status, result = self.run_cli(apply=True)
+                self.assertEqual((status, result["result"]), (0, "assigned"))
+                self.assertEqual(len(self.api.writes), 1)
 
     def test_ambiguous_groups_require_matching_pinned_id(self):
-        self.api.page_size = 1
-        self.api.data["groups"].append({"type": "betaGroups", "id": "104", "attributes": {"name": "Alpha", "isInternalGroup": False}})
-        status, result = self.run_cli(apply=True)
-        self.assertEqual((status, result["result"]), (1, "error"))
-        self.assertIn("ASC_EXTERNAL_GROUP_ID", result["action"])
-        with patch.dict(os.environ, {"ASC_EXTERNAL_GROUP_ID": "102"}):
-            status, result = self.run_cli()
-            self.assertEqual((status, result["external_group_id"]), (0, "102"))
-        self.assertFalse(self.api.writes)
+        for index, env, field in ((0, "ASC_SOURCE_GROUP_ID", "source_group_id"),
+                                  (1, "ASC_DESTINATION_GROUP_ID", "destination_group_id")):
+            with self.subTest(group=field):
+                self.api = FixtureAPI(self)
+                self.api.page_size = 1
+                original = self.api.data["groups"][index]
+                self.api.data["groups"].append(dict(copy.deepcopy(original), id="105"))
+                status, result = self.run_cli(apply=True)
+                self.assertEqual((status, result["result"]), (1, "error"))
+                self.assertIn(env, result["action"])
+                with patch.dict(os.environ, {env: original["id"]}):
+                    status, result = self.run_cli()
+                    self.assertEqual((status, result[field]), (0, original["id"]))
+                self.assertFalse(self.api.writes)
 
     def test_group_pins_cannot_bypass_app_name_or_type(self):
-        for value in ("101", "103", "999"):
-            with self.subTest(pin=value), patch.dict(os.environ, {"ASC_EXTERNAL_GROUP_ID": value}):
-                status, _ = self.run_cli(apply=True)
-                self.assertEqual(status, 1)
+        for name, values in (("ASC_SOURCE_GROUP_ID", ("102", "104", "999")),
+                             ("ASC_DESTINATION_GROUP_ID", ("101", "103", "999"))):
+            for value in values:
+                with self.subTest(env=name, pin=value), patch.dict(os.environ, {name: value}):
+                    status, _ = self.run_cli(apply=True)
+                    self.assertEqual(status, 1)
+        self.assertFalse(self.api.writes)
+
+    def test_destination_must_explicitly_disable_all_build_access(self):
+        for value in (True, None, "false", 0):
+            with self.subTest(value=value):
+                self.api.data["groups"][1]["attributes"]["hasAccessToAllBuilds"] = value
+                status, result = self.run_cli(apply=True)
+                self.assertEqual((status, result["result"]), (1, "error"))
+                self.assertIn("all-build access", result["action"])
+        self.assertFalse(self.api.writes)
+
+    def test_source_and_destination_must_be_distinct_resources(self):
+        self.api.data["groups"][1]["id"] = "101"
+        status, result = self.run_cli(apply=True)
+        self.assertEqual((status, result["result"]), (1, "error"))
+        self.assertIn("different resources", result["action"])
         self.assertFalse(self.api.writes)
 
     def test_group_type_requires_boolean_not_truthiness(self):
@@ -275,8 +312,10 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertFalse(self.api.writes)
 
-    def test_missing_or_wrong_app_and_missing_alpha_fail(self):
-        for field, value in (("apps", []), ("apps", [{"type": "apps", "id": "100", "attributes": {"bundleId": "other"}}]), ("groups", [])):
+    def test_missing_or_wrong_app_and_missing_internal_groups_fail(self):
+        for field, value in (("apps", []), ("apps", [{"type": "apps", "id": "100", "attributes": {"bundleId": "other"}}]),
+                             ("groups", FIXTURE["groups"][1:]),
+                             ("groups", [g for g in FIXTURE["groups"] if g["id"] != "102"]), ("groups", [])):
             with self.subTest(field=field):
                 self.api.data = copy.deepcopy(FIXTURE)
                 self.api.data[field] = value
@@ -292,13 +331,17 @@ class PromotionTests(unittest.TestCase):
             lambda d: d["builds"][0]["attributes"].update(processingState="FUTURE"),
             lambda d: d["builds"][0]["attributes"].update(uploadedDate="2026-09-25"),
             lambda d: d["included"][1]["attributes"].update(platform="UNKNOWN"),
-            lambda d: d["included"][2]["attributes"].update(externalBuildState="UNKNOWN"),
+            lambda d: d["included"][2]["attributes"].update(internalBuildState="UNKNOWN"),
+            lambda d: d["included"][2]["attributes"].update(internalBuildState="BETA_APPROVED"),
+            lambda d: d["included"][2]["attributes"].pop("internalBuildState"),
             lambda d: d["included"][0]["attributes"].update(bundleId="other"),
-            lambda d: d["builds"][0]["relationships"].pop("betaAppReviewSubmission"),
+            lambda d: d["builds"][0]["relationships"].pop("buildBetaDetail"),
         ]
         for index, mutate in enumerate(mutations):
             with self.subTest(index=index):
                 self.api.data = copy.deepcopy(FIXTURE)
+                # Even a ready external state cannot substitute for internal metadata.
+                self.api.data["included"][2]["attributes"]["externalBuildState"] = "IN_BETA_TESTING"
                 mutate(self.api.data)
                 self.assertEqual(self.run_cli(apply=True)[0], 1)
         self.assertFalse(self.api.writes)
@@ -310,7 +353,7 @@ class PromotionTests(unittest.TestCase):
         self.assertFalse(self.api.writes)
 
     def test_post_assignment_state_is_rechecked_without_claiming_availability(self):
-        self.api.on_post = lambda: self.set_state("WAITING_FOR_BETA_REVIEW")
+        self.api.on_post = lambda: self.set_state("IN_EXPORT_COMPLIANCE_REVIEW")
         status, result = self.run_cli(apply=True)
         self.assertEqual((status, result["result"]), (0, "assigned_but_blocked"))
         self.assertEqual(len(self.api.writes), 1)
@@ -400,10 +443,16 @@ class CredentialAndSafetyTests(unittest.TestCase):
         self.assertNotIn("synthetic-private-marker", output.getvalue())
 
     def test_write_guard_and_redirect_guard_prevent_unapproved_operations(self):
-        client = promotion.Client(None)
-        for path in ("/v1/betaAppReviewSubmissions", "/v1/buildBetaNotifications", "/v1/betaGroups/102/relationships/builds"):
-            with self.assertRaises(promotion.PromotionError):
-                client.request(path, body={})
+        for apply in (False, True):
+            client = promotion.Client(None, apply=apply)
+            client.write_path = "/v1/betaGroups/102/relationships/builds" if apply else None
+            for path in ("/v1/betaAppReviewSubmissions", "/v1/buildBetaNotifications", "/v1/betaGroups/102",
+                         "/v1/betaGroups/101/relationships/builds", "/v1/betaGroups/103/relationships/builds",
+                         "/v1/builds/200"):
+                with self.subTest(apply=apply, path=path), self.assertRaises(promotion.PromotionError):
+                    client.request(path, body={})
+        with self.assertRaises(promotion.PromotionError):
+            promotion.Client(None).request("/v1/betaGroups/102/relationships/builds", body={})
         with self.assertRaises(promotion.PromotionError):
             promotion.NoRedirects().redirect_request(None, None, 302, "private-marker", {}, "https://other.invalid")
 
