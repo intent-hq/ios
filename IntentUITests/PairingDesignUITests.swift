@@ -4,6 +4,7 @@ import XCTest
 /// Never enters credentials, scans a code, or attempts a live connection.
 nonisolated final class PairingDesignUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
+    private static let scannerUnavailable = "Camera scanning isn't available — use manual token entry instead"
 
     @MainActor
     func testSavedConnectionActionsPreserveCurrentConnection() throws {
@@ -102,8 +103,10 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
 
         scan.tap()
-        XCTAssertTrue(app.staticTexts["Point at the QR code in Intent Settings"].waitForExistence(timeout: Self.timeout))
-        capture(app, named: "scanner-sheet")
+        XCTAssertTrue(app.staticTexts[Self.scannerUnavailable].waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.staticTexts["Point at the QR code in the Intent Settings"].exists)
+        XCTAssertTrue(app.buttons["Cancel"].isHittable)
+        capture(app, named: "scanner-full-screen")
         app.buttons["Cancel"].tap()
         XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
 
@@ -202,7 +205,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["Add Connection"].exists, "Add Connection must be a heading, not a chooser")
         for (identifier, destination, closeIdentifier) in [
-            ("saved-connections.scan", "Point at the QR code in Intent Settings", "Cancel"),
+            ("saved-connections.scan", Self.scannerUnavailable, "Cancel"),
             ("saved-connections.manual", "manual.title", "connection-sheet.close")
         ] {
             let action = app.buttons[identifier]
