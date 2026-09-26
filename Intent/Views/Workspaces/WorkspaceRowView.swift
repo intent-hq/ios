@@ -4,6 +4,7 @@ struct WorkspaceRowView: View {
     let workspace: Workspace
     let colorScheme: ColorScheme
     var showRepo: Bool = true
+    var spacious = false
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Workspace-scoped PR monitors feeding the pill pool and the "+N"
@@ -24,15 +25,15 @@ struct WorkspaceRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.rowSpacing) {
+        HStack(alignment: .firstTextBaseline, spacing: spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
             // Status icon with agent activity / unread dot overlays
             WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme)
                 .alignmentGuide(.firstTextBaseline) { dimensions in
                     dimensions[.bottom]
                 }
 
-            VStack(alignment: .leading, spacing: Constants.WorkspaceRow.titleSpacing) {
-                title
+            VStack(alignment: .leading, spacing: spacious ? Constants.WorkspaceRow.spaciousTitleSpacing : Constants.WorkspaceRow.titleSpacing) {
+                titleRow
 
                 if Self.usesExpandedMetadataLayout(for: dynamicTypeSize) {
                     expandedMetadata
@@ -56,8 +57,8 @@ struct WorkspaceRowView: View {
             }
         }
         .contentShape(Rectangle())
-        .padding(.vertical, Constants.WorkspaceRow.verticalPadding)
-        .padding(.horizontal, Constants.WorkspaceRow.horizontalPadding)
+        .padding(.vertical, spacious ? Constants.WorkspaceRow.spaciousPadding : Constants.WorkspaceRow.verticalPadding)
+        .padding(.horizontal, spacious ? 0 : Constants.WorkspaceRow.horizontalPadding)
         .visionAttentionCue(workspaceNeedsInput(workspace))
         .task {
             await monitorsSource.seed(workspaceId: workspace.id)
@@ -84,6 +85,19 @@ struct WorkspaceRowView: View {
     }
 
     @ViewBuilder
+    private var titleRow: some View {
+        if spacious, !Self.usesExpandedMetadataLayout(for: dynamicTypeSize) {
+            HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.metadataSpacing) {
+                title
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                timestampLabel
+            }
+        } else {
+            title
+        }
+    }
+
+    @ViewBuilder
     private var title: some View {
         let isUntitled = workspace.title.trimmingCharacters(in: .whitespaces).isEmpty
         Text(isUntitled ? "<Untitled>" : workspace.title)
@@ -99,8 +113,10 @@ struct WorkspaceRowView: View {
         HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.metadataSpacing) {
             repositoryLabel(lineLimit: 1)
             pullRequestBadges(expanded: false)
-            Spacer(minLength: Constants.WorkspaceRow.metadataSpacing)
-            timestampLabel
+            if !spacious {
+                Spacer(minLength: Constants.WorkspaceRow.metadataSpacing)
+                timestampLabel
+            }
         }
     }
 

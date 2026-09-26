@@ -100,7 +100,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         assertOverlay(in: app)
         XCTAssertEqual(app.staticTexts["connection-loss.status"].label, "Reconnecting…", "Unknown is not offline")
         XCTAssertFalse(composer.exists, "The background editor must be excluded from accessibility")
-        XCTAssertFalse(app.buttons["Workspace options"].exists)
+        XCTAssertFalse(app.buttons["intent.menu.open"].exists)
         XCTAssertFalse(app.keyboards.firstMatch.exists)
         capture(app, named: "conversation-loss")
 
@@ -148,7 +148,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         assertOverlay(in: app)
         try trigger("recover", in: directory)
         XCTAssertTrue(app.buttons[Fixture.homeIdentifier].waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.buttons["Workspace options"].exists)
+        XCTAssertTrue(app.buttons["intent.menu.open"].exists)
     }
 
     @MainActor
@@ -158,8 +158,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
             "--demo-connection-loss-reconnecting", "--demo-connection-loss-cert-mismatch",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"
         ])
-        app.buttons["Workspace options"].tap()
-        app.buttons["Connect to…"].tap()
+        app.openHomeAction("connections")
         // Wait for the parent sheet and its action before presenting a nested sheet.
         let machine = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Demo Mac")).firstMatch
         XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
@@ -233,7 +232,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
         capture(app, named: "home-saved-machine-retained")
         machine.tap()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         capture(app, named: "saved-machine-reselected")
     }
@@ -254,7 +253,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         try trigger("recover", in: directory)
         assertStartupState("connected", in: app)
         try trigger("initial-data", in: directory)
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists, "Startup loss must not surface after entry")
     }
 
@@ -271,13 +270,12 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         try trigger("loss", in: directory)
         assertStartupState("disconnected", in: app)
         try trigger("initial-timeout", in: directory)
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         XCTAssertFalse(app.staticTexts["Can't Connect"].exists, "Data timeout must not add a second retry owner")
         assertNetworkTitle("No network connection", identifier: "connection-network.status", in: app)
         capture(app, named: "startup-timeout-fallback")
-        app.buttons["Workspace options"].tap()
-        app.buttons["Connect to…"].tap()
+        app.openHomeAction("connections")
         let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
         XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(machine.isHittable, "Saved machines must remain accessible without forgetting credentials")
@@ -329,7 +327,7 @@ extension ConnectionLossUITests {
             format: "identifier == %@ AND label == %@", "demo-connection-startup", state
         )).firstMatch
         XCTAssertTrue(status.waitForExistence(timeout: Fixture.timeout), "Must observe the pending startup, not the workspace UI")
-        XCTAssertFalse(app.buttons["Workspace options"].exists)
+        XCTAssertFalse(app.buttons["intent.menu.open"].exists)
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
     }
 
@@ -346,7 +344,7 @@ extension ConnectionLossUITests {
             allowNotifications.tap()
         }
         if waitForStartup {
-            XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Fixture.timeout))
             XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         }
         return app
@@ -364,12 +362,7 @@ extension ConnectionLossUITests {
 
     @MainActor
     private func openCreateWorkspace(in app: XCUIApplication) {
-        if app.buttons["Create workspace"].exists {
-            app.buttons["Create workspace"].tap()
-        } else {
-            app.buttons["Workspace options"].tap()
-            app.buttons["Create New Workspace"].tap()
-        }
+        app.openHomeAction("workspace")
         XCTAssertTrue(app.navigationBars["Select Repository"].waitForExistence(timeout: Fixture.timeout))
     }
 
