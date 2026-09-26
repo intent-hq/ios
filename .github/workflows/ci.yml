@@ -40,6 +40,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  select-macos-runner:
+    name: Select macOS runner
+    runs-on: ubuntu-latest
+    outputs:
+      runs-on: ${{ steps.select.outputs.runs-on || '"macos-15"' }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check local Mac status
+        id: select
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+        run: bash .github/scripts/select-macos-runner.sh
+
   go-test:
     name: Go unit tests (TailcatKit)
     # TailcatKit is pure Go and cross-compiles for Linux, so its tests run
@@ -126,72 +139,17 @@ jobs:
           SWIFTLINT_REPORTER: github-actions-logging
         run: scripts/swiftlint.sh
 
-  ios-build-self-hosted:
-    name: iOS Build (self-hosted)
-    runs-on: [self-hosted, macOS, ARM64, intent-ios]
-    timeout-minutes: 45
-    env:
-      GIT_TERMINAL_PROMPT: '0'
-      SPM_CLONE_DIR: build/SourcePackages
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Select stable Xcode
-        run: |
-          test -d /Applications/Xcode.app
-          echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
-          DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -version
-
-      - name: Install Metal Toolchain
-        run: |
-          xcodebuild -downloadComponent MetalToolchain
-          xcrun metal -v
-
-      - name: Cache TailcatKit.xcframework
-        id: tailcat-cache
-        uses: actions/cache@v6
-        with:
-          path: TailcatKit/build/TailcatKit.xcframework
-          key: ${{ runner.os }}-tailcatkit-build-v1-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
-
-      - name: Set up Go
-        if: steps.tailcat-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: TailcatKit/go.mod
-          cache-dependency-path: TailcatKit/go.sum
-
-      - name: Build TailcatKit.xcframework
-        if: steps.tailcat-cache.outputs.cache-hit != 'true'
-        run: ./TailcatKit/build_xcframework.sh
-
-      - name: Cache SPM packages
-        uses: actions/cache@v6
-        with:
-          path: build/SourcePackages
-          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: |
-            ${{ runner.os }}-spm-
-
-      - name: Resolve SPM packages
-        run: scripts/xcodebuild.sh resolve
-
-      - name: Build iOS simulator app
-        run: scripts/xcodebuild.sh build-ios
-
   build-and-test:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
+    if: ${{ !cancelled() }}
     # The repo ruleset requires only this job. A job skipped because a
     # `needs` dependency failed counts as passing for required checks, so
     # `needs: [go-test, swiftlint]` would not keep a Go or lint failure
     # merge-blocking; instead the final "Require Go unit tests and SwiftLint"
     # step below waits for those jobs and fails this one if either did not
     # succeed. All three jobs still run in parallel.
-    # GitHub-hosted arm64 macOS runner; ships Xcode and iOS simulator
-    # runtimes preinstalled. Timeout allows a cold SPM resolve + full build
-    # on the 3-core M-series VM.
-    runs-on: macos-15
+    needs: select-macos-runner
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -203,24 +161,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Select the newest Xcode*.app bundle on the image: the Textual
-      # dependency needs a recent toolchain (its own CI builds iOS on
-      # Xcode 26.5), so older bundles hit a Swift 6.0 concurrency
-      # false-positive compiling Table.swift. List every bundle first for
-      # diagnostics. DEVELOPER_DIR needs no sudo.
       - name: Select Xcode
         run: |
-          echo "Available Xcode bundles:"
-          ls -d /Applications/Xcode*.app 2>/dev/null || true
-          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
-          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
-            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-            echo "Selected $xcode"
-            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+          if [ '${{ runner.environment }}' = self-hosted ]; then
+            xcode=/Applications/Xcode.app
           else
-            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
-            xcodebuild -version
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
           fi
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+
+      - name: Check Metal Toolchain on local Mac
+        if: runner.environment == 'self-hosted'
+        run: |
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun metal -v
 
       # Device selection lives in scripts/xcodebuild.sh (pick-simulator).
       # Export the UDID so the pre-boot step and every later script
@@ -500,9 +455,10 @@ jobs:
     # Pull requests and unfiltered manual runs exercise the complete UI bundle.
     # Filtered dispatches already run their requested selector in build-and-test.
     # A human adds this check to the ruleset after merge; build-and-test does not
-    # wait for it, so both macOS jobs release their runners independently.
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
-    runs-on: macos-15
+    # wait for it; the macOS jobs queue on the dedicated Mac.
+    if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
+    needs: select-macos-runner
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -514,17 +470,19 @@ jobs:
 
       - name: Select Xcode
         run: |
-          echo "Available Xcode bundles:"
-          ls -d /Applications/Xcode*.app 2>/dev/null || true
-          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
-          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
-            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-            echo "Selected $xcode"
-            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+          if [ '${{ runner.environment }}' = self-hosted ]; then
+            xcode=/Applications/Xcode.app
           else
-            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
-            xcodebuild -version
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
           fi
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+
+      - name: Check Metal Toolchain on local Mac
+        if: runner.environment == 'self-hosted'
+        run: |
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun metal -v
 
       - name: Pick simulator device
         run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
@@ -649,9 +607,10 @@ jobs:
     # Build-only job (no tests) keeping the xros destination green.
     # TailcatKit is linked with an iOS-only platform filter, so this job
     # needs no Go toolchain and no xcframework build. Skipped on a filtered
-    # dispatch to save a macOS runner.
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
-    runs-on: macos-15
+    # dispatch to save runner time.
+    if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
+    needs: select-macos-runner
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -661,32 +620,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Same Xcode selection logic as the iOS job above.
       - name: Select Xcode
         run: |
-          echo "Available Xcode bundles:"
-          ls -d /Applications/Xcode*.app 2>/dev/null || true
-          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
-          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
-            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-            echo "Selected $xcode"
-            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+          if [ '${{ runner.environment }}' = self-hosted ]; then
+            xcode=/Applications/Xcode.app
           else
-            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
-            xcodebuild -version
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
           fi
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
 
-      # The macos-15 image is expected to ship a visionOS simulator runtime;
-      # download it only if absent (several GB, so guard on presence).
-      - name: Ensure visionOS simulator runtime
+      - name: Check Metal Toolchain on local Mac
+        if: runner.environment == 'self-hosted'
         run: |
-          if xcrun simctl list runtimes | grep -q '^visionOS '; then
-            echo "visionOS simulator runtime present:"
-            xcrun simctl list runtimes | grep '^visionOS '
-          else
-            echo "No visionOS simulator runtime on this runner; downloading..."
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun metal -v
+
+      - name: Ensure hosted visionOS simulator runtime
+        if: runner.environment == 'github-hosted'
+        run: |
+          if ! xcrun simctl list runtimes | grep -q '^visionOS '; then
             sudo xcodebuild -downloadPlatform visionOS
-            xcrun simctl list runtimes | grep '^visionOS '
           fi
 
       - name: Cache SPM packages
