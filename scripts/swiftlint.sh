@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly EXPECTED_SWIFTLINT_VERSION="0.65.1"
-readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+readonly SCRIPT_DIR REPO_ROOT
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=swiftlint-tools.sh
+source "$SCRIPT_DIR/swiftlint-tools.sh"
 
 die() {
   echo "error: $*" >&2
@@ -12,17 +15,9 @@ die() {
 
 [ "$#" -eq 0 ] || die "scripts/swiftlint.sh takes no arguments"
 
-if ! SWIFTLINT_PATH=$(command -v swiftlint); then
-  die "SwiftLint $EXPECTED_SWIFTLINT_VERSION is required, but swiftlint was not found on PATH"
-fi
-
-if ! ACTUAL_SWIFTLINT_VERSION=$("$SWIFTLINT_PATH" version); then
-  die "unable to run '$SWIFTLINT_PATH version'"
-fi
-
-if [ "$ACTUAL_SWIFTLINT_VERSION" != "$EXPECTED_SWIFTLINT_VERSION" ]; then
-  die "SwiftLint $EXPECTED_SWIFTLINT_VERSION is required; found $ACTUAL_SWIFTLINT_VERSION at $SWIFTLINT_PATH"
-fi
+swiftlint_find
+swiftlint_version_check
+swiftlint_linux_preflight
 
 lint_args=(
   lint
