@@ -49,6 +49,13 @@ private extension ToolClassifier {
         classifyWorkspaceAndReads(context) ?? classifyFileMutations(context)
     }
 
+    static func isWorkspaceApiName(_ name: String) -> Bool {
+        let clean = cleanToolName(name).lowercased()
+        // Codex uses mcp.<server>.<tool>; keep this recognition local to workspace_api.
+        return clean == "workspace_api"
+            || clean.range(of: #"^mcp\.[a-z0-9_-]+\.workspace_api$"#, options: .regularExpression) != nil
+    }
+
     static func classifyWorkspaceAndReads(_ context: ClassificationContext) -> ToolDisplay? {
         let input = context.input
         let clean = context.clean
@@ -57,10 +64,10 @@ private extension ToolClassifier {
         let summary = context.summary
         // workspace_api: prefer human-readable label over the raw tool name
         // (detected by name, or by input shape: code + summary)
-        if clean == "workspace_api"
+        if isWorkspaceApiName(context.name)
             || (input["code"]?.value is String && summary != nil) {
             let titleIsRawName = acpTitle.map { title in
-                cleanToolName(title).lowercased() == "workspace_api"
+                isWorkspaceApiName(title)
             } ?? true
             if let label = titleIsRawName ? (summary ?? acpTitle) : (acpTitle ?? summary) {
                 return ToolDisplay(

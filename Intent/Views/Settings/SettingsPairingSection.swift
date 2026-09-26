@@ -21,7 +21,7 @@ struct SettingsPairingSection: View {
             }
             .background(SettingsStyle.card(for: colorScheme), in: .rect(cornerRadius: SettingsStyle.cardRadius))
         }
-        .sheet(isPresented: $showQRScanner, onDismiss: refreshConnections) { QRScannerView(onPaired: handlePaired) }
+        .fullScreenCover(isPresented: $showQRScanner, onDismiss: refreshConnections) { QRScannerView(onPaired: handlePaired) }
         .sheet(isPresented: $showManualEntry, onDismiss: refreshConnections) { ManualTokenEntryView(onPaired: handlePaired) }
     }
 
