@@ -29,7 +29,10 @@ struct ConnectionLossPresenter: UIViewRepresentable {
         #endif
         let coordinator = context.coordinator
         let content = ConnectionLossOverlay(
-            mismatches: mismatches, networkStatus: networkStatus, onHome: coordinator.homeAction(onHome)
+            mismatches: mismatches,
+            networkStatus: networkStatus,
+            sourceColorScheme: context.environment.colorScheme,
+            onHome: coordinator.homeAction(onHome)
         )
         coordinator.update(
             isPresented: isPresented,
@@ -60,9 +63,11 @@ struct ConnectionLossPresenter: UIViewRepresentable {
 
     @MainActor
     final class Coordinator {
+        private static let backdropBlurRadius: CGFloat = 12
         private weak var sourceWindow: UIWindow?
         private var overlayWindow: UIWindow?
         private var host: UIHostingController<AnyView>?
+        private var sourceSnapshot: UIImage?
         private var sourceAccessibilityHidden = false
         private var sourceInteractionEnabled = true
         private var isPresented = false
@@ -114,16 +119,20 @@ struct ConnectionLossPresenter: UIViewRepresentable {
             withTransaction(transaction) {
                 UIView.performWithoutAnimation {
                     if let host {
-                        host.rootView = content
+                        host.rootView = presentedContent
                         return
                     }
                     sourceAccessibilityHidden = sourceWindow.accessibilityElementsHidden
                     sourceInteractionEnabled = sourceWindow.isUserInteractionEnabled
                     sourceWindow.endEditing(true)
+                    // Freeze the actual page, including presented sheets, before
+                    // showing our window. A material would add its own tint on
+                    // top of the design's tint and flatten the frosted detail.
+                    sourceSnapshot = snapshot(of: sourceWindow)
                     sourceWindow.accessibilityElementsHidden = true
                     sourceWindow.isUserInteractionEnabled = false
 
-                    let host = UIHostingController(rootView: content)
+                    let host = UIHostingController(rootView: presentedContent)
                     host.view.backgroundColor = .clear
                     host.view.accessibilityViewIsModal = true
                     let window = UIWindow(windowScene: scene)
@@ -141,6 +150,34 @@ struct ConnectionLossPresenter: UIViewRepresentable {
             }
         }
 
+        private var presentedContent: AnyView {
+            AnyView(content.background {
+                if let sourceSnapshot {
+                    Image(uiImage: sourceSnapshot)
+                        .resizable()
+                        .blur(radius: Self.backdropBlurRadius, opaque: true)
+                        .ignoresSafeArea()
+                        .accessibilityHidden(true)
+                } else {
+                    Color(.connectionLossBackdrop).ignoresSafeArea()
+                }
+            })
+        }
+
+        private func snapshot(of window: UIWindow) -> UIImage? {
+            guard !window.bounds.isEmpty else { return nil }
+            // One point per pixel is sufficient for this diffuse backdrop. Keep this
+            // transient image in memory only; hide releases it on every exit.
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let renderer = UIGraphicsImageRenderer(bounds: window.bounds, format: format)
+            var captured = false
+            let image = renderer.image { _ in
+                captured = window.drawHierarchy(in: window.bounds, afterScreenUpdates: false)
+            }
+            return captured ? image : nil
+        }
+
         func hide(reason: HideReason = .explicit) {
             guard let overlayWindow else { return }
             UIView.performWithoutAnimation {
@@ -155,6 +192,7 @@ struct ConnectionLossPresenter: UIViewRepresentable {
                 if wasKey { sourceWindow?.makeKey() }
                 self.overlayWindow = nil
                 host = nil
+                sourceSnapshot = nil
             }
             UIAccessibility.post(notification: .screenChanged, argument: nil)
         }

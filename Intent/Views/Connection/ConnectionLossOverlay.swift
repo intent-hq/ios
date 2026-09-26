@@ -1,14 +1,24 @@
 import SwiftUI
 
-/// Only the backdrop ignores safe areas. The action stays inside the window's
-/// bottom safe area, independent of any editor/keyboard underneath the block.
+/// Only the backdrop ignores safe areas. Content and the action scroll together
+/// when large text or certificate warnings need more than the available height.
 struct ConnectionLossOverlay: View {
-    private static let maximumContentWidth: CGFloat = 420
+    private enum Layout {
+        static let maximumContentWidth: CGFloat = 354
+        static let contentPadding: CGFloat = 24
+        static let markSize: CGFloat = 128
+        static let markSpacing: CGFloat = 48
+        static let copySpacing: CGFloat = 12
+        static let actionSpacing: CGFloat = 40
+        static let actionHeight: CGFloat = 48
+        static let backdropOpacity = 0.65
+    }
 
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let mismatches: [HostCertMismatch]
     var networkStatus: NetworkAvailability.Status = .unknown
+    // The source page can be light even though this overlay always renders dark.
+    var sourceColorScheme: ColorScheme = .dark
     let onHome: () -> Void
 
     var body: some View {
@@ -16,57 +26,89 @@ struct ConnectionLossOverlay: View {
         // swiftlint:disable:next geometry_reader_usage
         GeometryReader { geometry in
             ScrollView {
-                VStack(spacing: Constants.Root.reconnectPanelSpacing) {
-                    if ConnectionNetworkMessage(status: networkStatus).isUnavailable {
-                        Image(systemName: "wifi.slash")
-                            .accessibilityHidden(true)
-                    } else {
-                        ProgressView()
-                            .tint(.primary)
-                            .accessibilityHidden(true)
+                VStack(spacing: Layout.markSpacing) {
+                    Image(.connectionLossMark)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: Layout.markSize, height: Layout.markSize)
+                        .accessibilityHidden(true)
+                    VStack(spacing: Layout.actionSpacing) {
+                        messages
+                        homeButton
                     }
-                    ConnectionNetworkStatusView(status: networkStatus, statusIdentifier: "connection-loss.status")
-                    if !mismatches.isEmpty {
-                        CertMismatchListView(mismatches: mismatches)
-                    }
-                    #if DEBUG
-                    networkDiagnostic
-                    #endif
                 }
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: Self.maximumContentWidth)
-                .padding(Constants.Root.reconnectPanelPadding)
+                .frame(maxWidth: Layout.maximumContentWidth)
+                .padding(Layout.contentPadding)
+                // Balance the artwork around the full window center, not the
+                // asymmetric status-bar/home-indicator safe-area center.
+                .padding(.bottom, max(0, geometry.safeAreaInsets.top - geometry.safeAreaInsets.bottom))
                 .frame(maxWidth: .infinity, minHeight: geometry.size.height)
             }
+            .scrollBounceBehavior(.basedOnSize)
+            .clipped()
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Button(action: onHome) {
-                Text("Back to Home")
-                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Constants.Root.reconnectButtonTopPadding)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .accessibilityHint("Return to your saved machines without forgetting this connection.")
-            .accessibilityIdentifier("connection-loss.home")
-            .frame(maxWidth: Self.maximumContentWidth)
-            .padding(Constants.Root.reconnectPanelPadding)
-            .frame(maxWidth: .infinity)
-        }
+        .foregroundStyle(.white)
         .background {
             if reduceTransparency {
-                Theme.background(for: colorScheme).ignoresSafeArea()
+                Color(.connectionLossBackdrop).ignoresSafeArea()
             } else {
-                Color.black.opacity(Constants.Root.reconnectBackdropOpacity)
-                    .background(.ultraThinMaterial)
+                Color(.connectionLossBackdrop).opacity(Layout.backdropOpacity)
                     .ignoresSafeArea()
             }
         }
+        // Override the source environment copied by the presenter, as well as
+        // this window's appearance, so refreshed warnings and chrome stay dark.
+        .environment(\.colorScheme, .dark)
+        .preferredColorScheme(.dark)
         .transaction { transaction in
             transaction.animation = nil
             transaction.disablesAnimations = true
         }
+    }
+
+    private var messages: some View {
+        let message = ConnectionNetworkMessage(status: networkStatus)
+        return VStack(spacing: Constants.Root.reconnectPanelSpacing) {
+            VStack(spacing: Layout.copySpacing) {
+                Text(message.isUnavailable ? message.title : "Reconnecting")
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("connection-loss.status")
+                Text("Connection to desktop was lost.")
+                    .font(.subheadline)
+                    .foregroundStyle(sourceColorScheme == .light ? .white : Color(.connectionLossSecondary))
+                    .accessibilityIdentifier("connection-loss.message")
+                if let guidance = message.guidance {
+                    Text(guidance)
+                        .font(.subheadline)
+                        .accessibilityIdentifier("connection-network.guidance")
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            if !mismatches.isEmpty {
+                CertMismatchListView(mismatches: mismatches)
+            }
+            #if DEBUG
+            networkDiagnostic
+            #endif
+        }
+    }
+
+    private var homeButton: some View {
+        Button(action: onHome) {
+            Text("Back to Home")
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Layout.contentPadding)
+                .padding(.vertical, Constants.Root.reconnectButtonTopPadding)
+                .frame(minHeight: Layout.actionHeight)
+                .foregroundStyle(Color(.connectionLossActionForeground))
+                .background(.white, in: .rect(cornerRadius: Constants.Root.reconnectPanelCornerRadius))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Return to your saved machines without forgetting this connection.")
+        .accessibilityIdentifier("connection-loss.home")
     }
 
     #if DEBUG

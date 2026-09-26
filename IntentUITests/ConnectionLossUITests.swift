@@ -5,7 +5,8 @@ import XCTest
 nonisolated final class ConnectionLossUITests: XCTestCase {
     private enum Fixture {
         static let timeout: TimeInterval = 15
-        static let bottomActionRegion: CGFloat = 0.75
+        static let maximumCompactActionWidth: CGFloat = 0.75
+        static let layoutTolerance: CGFloat = 2
         static let homeIdentifier = "connection-loss.home"
         static let workspaceTitle = "Deflake payment integration tests"
         static let agentName = "Test Stabilizer"
@@ -73,14 +74,24 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
     func testSustainedBackgroundLossPresentsOverlayAndHomeStillWorks() throws {
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory, arguments: ["--demo-background-loss=sustained"])
+        capture(app, named: "source-before-loss")
+        let sourceImage = app.screenshot().image
         backgroundAndActivate(app, directory: directory)
         assertOverlay(in: app)
+        assertNetworkTitle("Reconnecting", identifier: "connection-loss.status", in: app)
+        XCTAssertEqual(app.staticTexts["connection-loss.message"].label, "Connection to desktop was lost.")
+        XCTAssertEqual(app.buttons[Fixture.homeIdentifier].label, "Back to Home")
+        XCTAssertLessThan(app.buttons[Fixture.homeIdentifier].frame.width, app.frame.width * Fixture.maximumCompactActionWidth)
+        XCTAssertEqual(app.buttons[Fixture.homeIdentifier].frame.midX, app.frame.midX, accuracy: Fixture.layoutTolerance)
+        XCTAssertFalse(app.activityIndicators.firstMatch.exists)
         XCTAssertTrue(eventExists("overlay-presented", in: directory), "Also validates the transient-presentation recorder")
         capture(app, named: "sustained-background-loss")
+        try assertConnectionLossSubtitleContrast(in: app, sourceImage: sourceImage)
         app.buttons[Fixture.homeIdentifier].tap()
         let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
+        capture(app, named: "source-after-home")
     }
 
     @MainActor
@@ -98,7 +109,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
 
         try trigger("loss", in: directory)
         assertOverlay(in: app)
-        XCTAssertEqual(app.staticTexts["connection-loss.status"].label, "Reconnecting…", "Unknown is not offline")
+        XCTAssertEqual(app.staticTexts["connection-loss.status"].label, "Reconnecting", "Unknown is not offline")
         XCTAssertFalse(composer.exists, "The background editor must be excluded from accessibility")
         XCTAssertFalse(app.buttons["intent.menu.open"].exists)
         XCTAssertFalse(app.keyboards.firstMatch.exists)
@@ -115,16 +126,18 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
     @MainActor
     func testPresentedLossUpdatesNetworkCopyAcrossForegroundReturn() throws {
         let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory, arguments: ["--demo-connection-loss-cert-mismatch"])
+        let app = launch(directory: directory, arguments: ["--demo-connection-loss-cert-mismatch", "--demo-network-local-denied"])
         try trigger("loss", in: directory)
         assertOverlay(in: app)
-        assertNetworkTitle("Reconnecting…", identifier: "connection-loss.status", in: app)
+        assertNetworkTitle("Reconnecting", identifier: "connection-loss.status", in: app)
 
         // Only advisory status changes: the already-presented host must refresh.
         try trigger("network-offline", in: directory)
         assertNetworkTitle("No network connection", identifier: "connection-loss.status", in: app)
+        XCTAssertTrue(app.staticTexts["Allow Local Network access for Intent in Settings, then try again."].exists)
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         assertOverlay(in: app)
+        capture(app, named: "permission-and-certificate")
         let eventsBeforeBackground = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
         XCTAssertFalse(
             eventExists("overlay-dismissed", in: directory),
@@ -143,7 +156,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         )
 
         try trigger("network-restored", in: directory)
-        assertNetworkTitle("Reconnecting…", identifier: "connection-loss.status", in: app)
+        assertNetworkTitle("Reconnecting", identifier: "connection-loss.status", in: app)
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         assertOverlay(in: app)
         try trigger("recover", in: directory)
@@ -194,7 +207,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         capture(app, named: "sheet-offline-large-text-certificate")
 
         try trigger("network-restored", in: directory)
-        assertNetworkTitle("Reconnecting…", identifier: "connection-loss.status", in: app)
+        assertNetworkTitle("Reconnecting", identifier: "connection-loss.status", in: app)
         assertOverlay(in: app)
         XCTAssertFalse(detailsTitle.exists, "A general path recovery must not dismiss the loss surface")
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
@@ -314,6 +327,93 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
 
 extension ConnectionLossUITests {
     @MainActor
+    func testPresentedLossRemainsUsableAcrossRotation() async throws {
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let directory = try makeTriggerDirectory()
+        let app = launch(directory: directory)
+        try trigger("loss", in: directory)
+        assertOverlay(in: app)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        try await waitForRotatedViewport(in: app, landscape: true)
+        XCTAssertGreaterThan(app.frame.width, app.frame.height)
+        XCTAssertGreaterThan(app.scrollViews.firstMatch.frame.width, app.scrollViews.firstMatch.frame.height)
+        app.scrollViews.firstMatch.swipeUp()
+        assertOverlay(in: app)
+        // app.screenshot() crops the rotated image incorrectly on iOS 18.
+        let screenshot = XCUIScreen.main.screenshot()
+        try assertBackdropCoversScreen(screenshot)
+        let screen = XCTAttachment(screenshot: screenshot)
+        screen.name = "connection-loss-landscape-full-screen"
+        screen.lifetime = .keepAlways
+        add(screen)
+        XCUIDevice.shared.orientation = .portrait
+        try await waitForRotatedViewport(in: app, landscape: false)
+        assertOverlay(in: app)
+        capture(app, named: "portrait-after-rotation")
+        try trigger("recover", in: directory)
+        XCTAssertTrue(app.buttons[Fixture.homeIdentifier].waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].exists)
+    }
+
+    @MainActor
+    private func waitForRotatedViewport(in app: XCUIApplication, landscape: Bool) async throws {
+        let deadline = Date().addingTimeInterval(Fixture.timeout)
+        while Date() < deadline {
+            let frame = app.scrollViews.firstMatch.frame
+            if (frame.width > frame.height) == landscape,
+               frame.width <= app.frame.width + Fixture.layoutTolerance,
+               frame.height <= app.frame.height + Fixture.layoutTolerance { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTFail("The overlay viewport must finish resizing after rotation")
+    }
+
+    @MainActor
+    private func assertBackdropCoversScreen(_ screenshot: XCUIScreenshot) throws {
+        let image = try XCTUnwrap(screenshot.image.cgImage)
+        for (xPosition, yPosition) in [(0.1, 0.1), (0.9, 0.1), (0.1, 0.9), (0.9, 0.9)] {
+            let region = CGRect(x: Double(image.width) * xPosition, y: Double(image.height) * yPosition, width: 1, height: 1)
+            let pixel = try XCTUnwrap(image.cropping(to: region))
+            var bytes = [UInt8](repeating: 0, count: 4)
+            let context = try XCTUnwrap(CGContext(
+                data: &bytes,
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            // Single-tinted source ranges from 17 to 106; reject a black gap or exposed page.
+            XCTAssertTrue((12...125).contains(Int(bytes[0])), "The backdrop must cover every screen quadrant")
+        }
+    }
+
+    @MainActor
+    func testLargestTextCanScrollToWarningsAndHome() throws {
+        let directory = try makeTriggerDirectory()
+        let app = launch(directory: directory, arguments: [
+            "--demo-connection-loss-cert-mismatch",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ])
+        try trigger("network-offline", in: directory)
+        try trigger("loss", in: directory)
+        let home = app.buttons[Fixture.homeIdentifier]
+        XCTAssertTrue(home.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["Check your Wi-Fi or cellular connection."].exists)
+        capture(app, named: "largest-text-before-scroll")
+        app.scrollViews.firstMatch.swipeUp()
+        XCTAssertTrue(app.staticTexts["Certificate mismatch"].isHittable)
+        XCTAssertTrue(home.isHittable)
+        capture(app, named: "largest-text-home-visible")
+        home.tap()
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertFalse(home.exists)
+    }
+
+    @MainActor
     private func assertNetworkTitle(_ title: String, identifier: String, in app: XCUIApplication) {
         let text = app.staticTexts.matching(NSPredicate(
             format: "identifier == %@ AND label == %@", identifier, title
@@ -372,7 +472,7 @@ extension ConnectionLossUITests {
         XCTAssertTrue(home.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(home.isHittable)
         XCTAssertTrue(app.staticTexts["connection-loss.status"].exists)
-        XCTAssertGreaterThan(home.frame.minY, app.frame.height * Fixture.bottomActionRegion)
+        XCTAssertGreaterThan(home.frame.minY, app.staticTexts["connection-loss.message"].frame.maxY)
         XCTAssertLessThan(home.frame.maxY, app.frame.maxY)
         XCTAssertEqual(app.buttons.count, 1, "Only the overlay action should be exposed to accessibility")
     }
