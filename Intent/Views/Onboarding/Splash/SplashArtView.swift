@@ -83,6 +83,7 @@ struct SplashArtView: View {
             // Preserve the exported light artwork and both gradient endpoints.
             Image(.launchBackground)
                 .resizable()
+                .accessibilityHidden(true)
         }
     }
 }
