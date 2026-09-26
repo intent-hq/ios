@@ -116,9 +116,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(app.staticTexts["Pair New"].exists)
         XCTAssertFalse(app.staticTexts["Connected"].exists, "Home is unbound; another window must not lend its badge")
-        XCTAssertEqual(machine.frame.height, 96, accuracy: 0.5)
-        XCTAssertEqual(machine.frame.minX, 24, accuracy: 0.5)
-        XCTAssertEqual(machine.frame.width, app.frame.width - 48, accuracy: 0.5)
+        verifySavedCardGeometry(machine, in: app)
         capture(app, named: "saved-sheet")
         machine.press(forDuration: 1)
         app.buttons["Connection Details"].tap()
@@ -137,6 +135,25 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(scan.isHittable)
         XCTAssertFalse(saved.exists)
         capture(app, named: "saved-off")
+    }
+
+    @MainActor
+    private func verifySavedCardGeometry(_ machine: XCUIElement, in app: XCUIApplication) {
+        let appWidth = app.frame.width
+        XCTAssertGreaterThan(appWidth, 0)
+        XCTAssertFalse(machine.identifier.isEmpty)
+        let sheet = app.scrollViews.containing(.button, identifier: machine.identifier).firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: Self.timeout))
+        let sheetFrame = sheet.frame
+        // iOS 26 floating sheets stay scaled after presentation. Recover layout
+        // coordinates from the scroll container, never from the card under test.
+        let scale = sheetFrame.width / appWidth
+        XCTAssertGreaterThanOrEqual(scale, 0.9)
+        XCTAssertLessThanOrEqual(scale, 1)
+        let cardFrame = machine.frame
+        XCTAssertEqual(cardFrame.height / scale, 96, accuracy: 0.5)
+        XCTAssertEqual((cardFrame.minX - sheetFrame.minX) / scale, 24, accuracy: 0.5)
+        XCTAssertEqual(cardFrame.width / scale, appWidth - 48, accuracy: 0.5)
     }
 
     @MainActor
