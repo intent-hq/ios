@@ -6,6 +6,51 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
     @MainActor
+    func testSavedConnectionActionsPreserveCurrentConnection() throws {
+        let app = try launchConnected()
+        try verifyBoundConnectionActions(in: app)
+        app.buttons["intent.menu.connections"].tap()
+        let scan = app.buttons["saved-connections.scan"]
+        let manual = app.buttons["saved-connections.manual"]
+        XCTAssertTrue(manual.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(scan.label, "Scan QR Code")
+        XCTAssertEqual(manual.label, "Manual Connection")
+        for row in [scan, manual] {
+            XCTAssertGreaterThanOrEqual(row.frame.height, 44)
+            XCTAssertLessThanOrEqual(row.frame.height, 60, "Normal text should use a compact single-title row")
+        }
+        XCTAssertEqual(scan.frame.height, manual.frame.height, accuracy: 1)
+        XCTAssertEqual(scan.frame.width, manual.frame.width, accuracy: 1)
+        XCTAssertEqual(scan.frame.maxY, manual.frame.minY, accuracy: 1, "Rows share one card with only a thin divider")
+        let heading = app.staticTexts["Add Connection"]
+        XCTAssertEqual(heading.frame.minX, scan.frame.minX, accuracy: 1)
+        XCTAssertLessThan(heading.frame.height, app.staticTexts["Scan QR Code"].frame.height)
+        capture(app, named: "populated-compact-actions")
+    }
+
+    @MainActor
+    func testSavedConnectionActionsAtAccessibilityTextSize() throws {
+        let app = try launchConnected(arguments: [
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ])
+        try verifyBoundConnectionActions(in: app)
+    }
+
+    @MainActor
+    func testSavedConnectionActionsRemainAvailableWhenEmpty() throws {
+        continueAfterFailure = false
+        let app = try launchAtHome()
+        let saved = option("Saved Connections", in: app)
+        XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
+        saved.tap()
+        verifySavedConnectionDeletion(option("Demo Mac", in: app), in: app)
+        try verifyDirectConnectionActions(in: app)
+        XCTAssertTrue(app.staticTexts["saved-connections.empty"].exists)
+        XCTAssertFalse(option("Demo Mac", in: app).exists)
+        capture(app, named: "empty-direct-actions")
+    }
+
+    @MainActor
     func testReferencePlacementMatchesFigma() throws {
         let app = try launchAtHome()
         let saved = option("Saved Connections", in: app)
@@ -76,7 +121,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         app.buttons["Connection Details"].tap()
         XCTAssertTrue(app.staticTexts["saved-connection.details-title"].waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
-        app.buttons["connection-sheet.close"].tap()
+        try closePresentedSheet(in: app)
         XCTAssertTrue(app.staticTexts["saved-connection.details-title"].waitForNonExistence(timeout: Self.timeout))
         app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
@@ -116,14 +161,93 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchAtHome() throws -> XCUIApplication {
+    private func launchConnected(arguments: [String] = [], directory: URL? = nil) throws -> XCUIApplication {
+        continueAfterFailure = false
+        let directory = try directory ?? makeDemoDirectory()
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
+        app.launch()
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        return app
+    }
+
+    @MainActor
+    private func verifyBoundConnectionActions(in app: XCUIApplication) throws {
+        app.openHomeAction("connections")
+        let machine = option("Demo Mac", in: app)
+        XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
+        // Select the fixture through the real row before asserting window ownership.
+        // A restored demo scene may initially be unbound (ios#515).
+        machine.tap()
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
+        app.openHomeAction("connections")
+        XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
+        let originalIdentifier = machine.identifier
+        XCTAssertTrue(app.staticTexts["Connected"].exists)
+        try verifyDirectConnectionActions(in: app)
+        XCTAssertEqual(machine.identifier, originalIdentifier, "Cancel must preserve the saved connection")
+        XCTAssertTrue(app.staticTexts["Connected"].exists, "Cancel must preserve this window's binding")
+        reveal(machine, in: app, scrollingUp: false)
+        machine.tap()
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
+        app.buttons["intent.menu.open"].tap()
+        XCTAssertTrue(app.revealHomeAction("connections").isHittable)
+    }
+
+    @MainActor
+    private func verifyDirectConnectionActions(in app: XCUIApplication) throws {
+        let heading = app.staticTexts["Add Connection"]
+        XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.buttons["Add Connection"].exists, "Add Connection must be a heading, not a chooser")
+        for (identifier, destination, closeIdentifier) in [
+            ("saved-connections.scan", "Point at the QR code in Intent Settings", "Cancel"),
+            ("saved-connections.manual", "manual.title", "connection-sheet.close")
+        ] {
+            let action = app.buttons[identifier]
+            XCTAssertTrue(action.waitForExistence(timeout: Self.timeout))
+            reveal(action, in: app)
+            XCTAssertTrue(action.isHittable)
+            XCTAssertGreaterThanOrEqual(action.frame.height, 44)
+            capture(app, named: identifier)
+            action.tap()
+            let title = app.staticTexts[destination]
+            XCTAssertTrue(title.waitForExistence(timeout: Self.timeout), "One tap must open the destination")
+            capture(app, named: identifier + "-destination")
+            try closePresentedSheet(in: app, identifier: closeIdentifier)
+            XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.staticTexts["saved-connections.title"].exists, "Cancel must return to Saved Connections")
+            XCTAssertTrue(heading.exists)
+        }
+    }
+
+    @MainActor
+    private func closePresentedSheet(in app: XCUIApplication, identifier: String = "connection-sheet.close") throws {
+        // Nested native sheets both expose Close; only the top sheet is interactive (ios#482).
+        let close = try XCTUnwrap(app.buttons.matching(identifier: identifier)
+            .allElementsBoundByIndex.first { $0.isHittable })
+        close.tap()
+    }
+
+    @MainActor
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, scrollingUp: Bool = true) {
+        for _ in 0..<5 where !element.isHittable {
+            let scroll = app.scrollViews.firstMatch
+            if scrollingUp { scroll.swipeUp() } else { scroll.swipeDown() }
+        }
+    }
+
+    @MainActor
+    private func makeDemoDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock { try FileManager.default.removeItem(at: directory) }
-        let app = XCUIApplication()
-        app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path]
-        app.launch()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        return directory
+    }
+
+    @MainActor
+    private func launchAtHome() throws -> XCUIApplication {
+        let directory = try makeDemoDirectory()
+        let app = try launchConnected(directory: directory)
         try Data().write(to: directory.appendingPathComponent("loss"))
         let home = app.buttons["connection-loss.home"]
         XCTAssertTrue(home.waitForExistence(timeout: Self.timeout))
