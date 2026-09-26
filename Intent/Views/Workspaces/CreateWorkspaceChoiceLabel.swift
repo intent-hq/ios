@@ -3,6 +3,7 @@ import SwiftUI
 struct CreateWorkspaceChoiceLabel: View {
     let title: String
     @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .caption) private var chevronSize: CGFloat = 16
 
     var body: some View {
         HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
@@ -10,8 +11,10 @@ struct CreateWorkspaceChoiceLabel: View {
                 .interFont(Constants.Typography.bodyS)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Image(systemName: "chevron.down")
-                .font(.caption.weight(.semibold))
+            Image(.chevronDown)
+                .resizable()
+                .scaledToFit()
+                .frame(width: chevronSize, height: chevronSize)
                 .accessibilityHidden(true)
         }
         .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))

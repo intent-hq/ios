@@ -13,6 +13,9 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         try Data().write(to: gate)
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-workspace-provider-trigger-file=" + gate.path]
+        if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
+            app.launchArguments += ["-appThemePreference", appearance]
+        }
         app.launch()
         openCreationForm(in: app)
 
@@ -81,6 +84,9 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
         next.tap()
+        let back = app.buttons["creation.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertEqual(back.label, "Back")
     }
 
     @MainActor

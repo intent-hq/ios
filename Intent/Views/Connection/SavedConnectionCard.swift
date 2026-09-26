@@ -9,9 +9,8 @@ struct SavedConnectionCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Constants.ConnectionSheet.inset) {
-            // Saved records have no device-kind metadata. The exported server
-            // glyph represents a daemon, not an inferred physical machine type.
-            Image(.connectionServer)
+            // The laptop icon matches Figma for all saved connections.
+            Image(.connectionLaptop)
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()

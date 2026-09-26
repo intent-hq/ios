@@ -6,6 +6,7 @@ struct SettingsConnectionCard: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .title2) private var iconSize = SettingsStyle.iconWidth
     let name: String
     let address: String
     let status: ConnectionState?
@@ -15,9 +16,11 @@ struct SettingsConnectionCard: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: SettingsStyle.metadataSpacing))
             : AnyLayout(HStackLayout(spacing: SettingsStyle.rowSpacing))
         layout {
-            Image(systemName: "desktopcomputer")
-                .font(.title2)
-                .frame(width: SettingsStyle.iconWidth)
+            // The laptop icon matches Figma for all saved connections.
+            Image(.connectionLaptop)
+                .resizable()
+                .scaledToFit()
+                .frame(width: iconSize, height: iconSize)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: SettingsStyle.textSpacing) {
                 Text(name).interFont(Constants.Typography.bodySEmphasized)

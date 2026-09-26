@@ -16,6 +16,7 @@ struct CreateWorkspaceBranchStepView: View {
     let onSearchTextChanged: (String) -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var selectionIconSize: CGFloat = 17
 
     var body: some View {
         ZStack {
@@ -116,9 +117,11 @@ struct CreateWorkspaceBranchStepView: View {
                         .clipShape(Capsule())
                 }
                 if selectedBranch == branch {
-                    Image(systemName: "checkmark")
+                    Image(.check)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: selectionIconSize, height: selectionIconSize)
                         .foregroundStyle(Theme.primary(for: colorScheme))
-                        .bold()
                         .accessibilityLabel("Selected")
                 }
             }

@@ -16,6 +16,7 @@ struct DeepLinkPairingView: View {
     @State private var errorMessage: String?
     @State private var probedFingerprint: String?
     @State private var showFingerprintConfirmation = false
+    @ScaledMetric private var iconSize: CGFloat = 17
     /// In-flight probe/connect task, cancelled when the sheet goes away so a
     /// dismissed pairing can't complete (and persist + navigate) afterwards.
     @State private var pairingTask: Task<Void, Never>?
@@ -62,7 +63,10 @@ struct DeepLinkPairingView: View {
                     Text(verbatim: "\(host):\(payload.port)")
                         .interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "desktopcomputer")
+                    Image(.connectionLaptop)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: iconSize, height: iconSize)
                 }
             }
             if let tcAddress = payload.tcAddress {

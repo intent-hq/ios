@@ -6,17 +6,25 @@ struct CreateWorkspaceFormHeader: View {
     let onBack: () -> Void
     let onCreate: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .title3) private var backIconSize: CGFloat = 24
 
     var body: some View {
         HStack {
-            Button("Back", systemImage: "arrow.left", action: onBack)
-                .labelStyle(.iconOnly)
-                .font(.title3)
-                .frame(minWidth: CreateWorkspaceFormStyle.controlHeight, minHeight: CreateWorkspaceFormStyle.controlHeight)
-                .contentShape(.rect)
-                .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))
-                .disabled(isCreating)
-                .accessibilityIdentifier("creation.back")
+            Button(action: onBack) {
+                Label { Text("Back") } icon: {
+                    Image(.arrowLeft)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: backIconSize, height: backIconSize)
+                }
+            }
+            .labelStyle(.iconOnly)
+            .font(.title3)
+            .frame(minWidth: CreateWorkspaceFormStyle.controlHeight, minHeight: CreateWorkspaceFormStyle.controlHeight)
+            .contentShape(.rect)
+            .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))
+            .disabled(isCreating)
+            .accessibilityIdentifier("creation.back")
             Spacer()
             Button(action: onCreate) {
                 Text("Create")

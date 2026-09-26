@@ -5,6 +5,8 @@ struct ModelPickerView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
 
+    @ScaledMetric(relativeTo: .body) private var selectionIconSide: CGFloat = 17
+
     var body: some View {
         NavigationStack {
             Group {
@@ -71,9 +73,7 @@ struct ModelPickerView: View {
                                         .foregroundStyle(Theme.foreground(for: colorScheme))
                                     Spacer()
                                     if viewModel.currentModelId == model.id {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(Theme.primary(for: colorScheme))
-                                            .accessibilityHidden(true)
+                                        selectionIndicator
                                     }
                                 }
                             }
@@ -82,5 +82,14 @@ struct ModelPickerView: View {
                 }
             }
         }
+    }
+
+    private var selectionIndicator: some View {
+        Image(.check)
+            .resizable()
+            .scaledToFit()
+            .frame(width: selectionIconSide, height: selectionIconSide)
+            .foregroundStyle(Theme.primary(for: colorScheme))
+            .accessibilityHidden(true)
     }
 }

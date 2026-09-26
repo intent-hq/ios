@@ -6,13 +6,13 @@ struct CreateWorkspaceSourceCard: View {
     let onEdit: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @ScaledMetric(relativeTo: .callout) private var folderSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .caption) private var chevronSize: CGFloat = 16
 
     var body: some View {
         Button(action: onEdit) {
             HStack(spacing: CreateWorkspaceFormStyle.controlPadding) {
-                Image(systemName: "folder")
-                    .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
-                    .accessibilityHidden(true)
+                folderIcon
                 VStack(alignment: .leading, spacing: 0) {
                     Text(repositoryFullName)
                         .interFont(Constants.Typography.bodyS)
@@ -22,8 +22,10 @@ struct CreateWorkspaceSourceCard: View {
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                Image(.chevronRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: chevronSize, height: chevronSize)
                     .accessibilityHidden(true)
             }
             .font(.callout)
@@ -40,5 +42,14 @@ struct CreateWorkspaceSourceCard: View {
         .accessibilityIdentifier("creation.sourceCard")
         .accessibilityLabel("Source. Repository: \(repositoryFullName). Branch: \(branch)")
         .accessibilityHint("Change the branch, or go back again to change the repository.")
+    }
+
+    private var folderIcon: some View {
+        Image(.folder)
+            .resizable()
+            .scaledToFit()
+            .frame(width: folderSize, height: folderSize)
+            .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
+            .accessibilityHidden(true)
     }
 }
