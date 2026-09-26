@@ -38,6 +38,7 @@ struct CreateWorkspaceView: View {
     @State private var selectedSpecialist: SpecialistInfo?
     @State private var selectedProvider: ProviderInfo?
     @State private var selectedModel: ModelInfo?
+    @State private var selectedReasoningEffort: String?
     @State private var messageText = ""
     @State private var isCreating = false
     @State private var errorMessage: String?
@@ -66,6 +67,16 @@ struct CreateWorkspaceView: View {
     /// hides the model row (the daemon default applies).
     private var models: [ModelInfo] {
         selectedProvider.flatMap { optionsStore.models(for: $0.id) } ?? []
+    }
+    private var reasoningLevels: [String] {
+        CreationSelectionPolicy.workspaceReasoningLevels(
+            provider: selectedProvider, model: selectedModel, models: models
+        )
+    }
+    private var validatedReasoningEffort: String? {
+        CreationSelectionPolicy.reconciledReasoningEffort(
+            current: selectedReasoningEffort, effortLevels: reasoningLevels
+        )
     }
     /// Derived from the store, never a local snapshot: a cache that warms
     /// between construction and the step's load (another sheet, a reconnect
@@ -152,6 +163,9 @@ struct CreateWorkspaceView: View {
         .onChange(of: models) { _, models in
             selectedModel = CreationSelectionPolicy.reconciledModel(current: selectedModel, models: models)
         }
+        .onChange(of: reasoningLevels) { _, _ in
+            selectedReasoningEffort = validatedReasoningEffort
+        }
     }
 
     private func reloadBranchesAfterInvalidation() {
@@ -207,6 +221,8 @@ struct CreateWorkspaceView: View {
                 selectedProvider: $selectedProvider,
                 models: models,
                 selectedModel: $selectedModel,
+                reasoningLevels: reasoningLevels,
+                selectedReasoningEffort: $selectedReasoningEffort,
                 messageText: $messageText,
                 isCreating: isCreating,
                 errorMessage: errorMessage,
@@ -214,6 +230,10 @@ struct CreateWorkspaceView: View {
                 colorScheme: colorScheme,
                 onSelectProvider: selectProvider,
                 onRetryProviders: { Task { await fetchCreationOptions() } },
+                onBack: {
+                    guard !isCreating, navigationPath.last == .create else { return }
+                    navigationPath.removeLast()
+                },
                 onCreate: createWorkspace,
                 onLoad: fetchCreationOptions
             )
@@ -421,7 +441,10 @@ extension CreateWorkspaceView {
                     specialist: selectedSpecialist,
                     provider: selectedProvider,
                     model: selectedModel,
-                    message: messageText
+                    message: messageText,
+                    // Read the current catalog here too: a refresh can arrive
+                    // before SwiftUI runs the selection reconciliation observer.
+                    reasoningEffort: validatedReasoningEffort
                 )
             )
             let result = try await session.connection.request(

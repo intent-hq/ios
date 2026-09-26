@@ -16,8 +16,8 @@ $(SRCROOT)/Intent/App/RootView.swift
 $(SRCROOT)/Intent/App/WindowSceneTitle.swift
 $(SRCROOT)/Intent/Assets.xcassets
 $(SRCROOT)/Intent/Assets.xcassets/AccentColor.colorset
-$(SRCROOT)/Intent/Assets.xcassets/Add.imageset
 $(SRCROOT)/Intent/Assets.xcassets/AddCircle.imageset
+$(SRCROOT)/Intent/Assets.xcassets/AddIcon.imageset
 $(SRCROOT)/Intent/Assets.xcassets/AgentAvatarActiveStrokeStrong.colorset
 $(SRCROOT)/Intent/Assets.xcassets/AgentAvatarActiveStrokeWeak.colorset
 $(SRCROOT)/Intent/Assets.xcassets/AgentAvatarGlyph.colorset
@@ -94,6 +94,10 @@ $(SRCROOT)/Intent/Assets.xcassets/Connection.imageset
 $(SRCROOT)/Intent/Assets.xcassets/ConnectionClipboard.imageset
 $(SRCROOT)/Intent/Assets.xcassets/ConnectionClose.imageset
 $(SRCROOT)/Intent/Assets.xcassets/ConnectionLaptop.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionLossActionForeground.colorset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionLossBackdrop.colorset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionLossMark.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionLossSecondary.colorset
 $(SRCROOT)/Intent/Assets.xcassets/ConnectionServer.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Copy.imageset
 $(SRCROOT)/Intent/Assets.xcassets/CounterClockwiseArrow.imageset
@@ -568,7 +572,11 @@ $(SRCROOT)/Intent/Views/Settings/SettingsSupportSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsView.swift
 $(SRCROOT)/Intent/Views/Workspaces
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormStyle.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSourceCard.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceView.swift
 $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
@@ -693,6 +701,7 @@ $(SRCROOT)/IntentTests/CreateWorkspaceParamsTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreModelTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
+$(SRCROOT)/IntentTests/CreationPickerRenderedGeometry.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesTests.swift
 $(SRCROOT)/IntentTests/DemoInlineImageFixtureTests.swift

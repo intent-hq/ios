@@ -7,6 +7,10 @@ struct MessageInputView: View {
     private let store: ConversationStore
     @Environment(\.colorScheme) var colorScheme
 
+    @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
+    @ScaledMetric(relativeTo: .caption) var attachmentIconSide: CGFloat = 12
+    private let sendArrowScale: CGFloat = 0.75
+
     @State private var isFocused: Bool = false
     @State private var textViewHeight: CGFloat = Constants.Conversation.Composer.minimumTextViewHeight
     @State private var isPhotoPickerPresented: Bool = false
@@ -132,8 +136,10 @@ private extension MessageInputView {
             HapticManager.impact(.light)
             Task { await viewModel.stopStreaming() }
         } label: {
-            Image(systemName: "stop.circle.fill")
-                .font(.title2)
+            Image(.stopFill)
+                .resizable()
+                .scaledToFit()
+                .frame(width: controlIconSide, height: controlIconSide)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .frame(
                     minWidth: Constants.Conversation.Composer.controlTarget,
@@ -153,11 +159,17 @@ private extension MessageInputView {
             Button {
                 isFilePickerPresented = true
             } label: {
-                Label("Files", systemImage: "folder")
+                Label {
+                    Text("Files")
+                } icon: {
+                    Image(.folder)
+                }
             }
         } label: {
-            Image(systemName: "plus.circle.fill")
-                .font(.title2)
+            Image(.addCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: controlIconSide, height: controlIconSide)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(
                     minWidth: Constants.Conversation.Composer.controlTarget,
@@ -223,13 +235,19 @@ private extension MessageInputView {
                 Button {
                     sendCurrentMessage()
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(
-                            hasSendableContent
-                                ? Theme.primary(for: colorScheme)
-                                : Theme.mutedForeground(for: colorScheme)
-                        )
+                    Image(.arrowUp)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: controlIconSide * sendArrowScale, height: controlIconSide * sendArrowScale)
+                        .foregroundStyle(Theme.card(for: colorScheme))
+                        .frame(width: controlIconSide, height: controlIconSide)
+                        .background {
+                            Circle().fill(
+                                hasSendableContent
+                                    ? Theme.primary(for: colorScheme)
+                                    : Theme.mutedForeground(for: colorScheme)
+                            )
+                        }
                         .frame(
                             minWidth: Constants.Conversation.Composer.controlTarget,
                             minHeight: Constants.Conversation.Composer.controlTarget
@@ -253,8 +271,17 @@ private extension MessageInputView {
         Button {
             toggleDictation()
         } label: {
-            Image(systemName: dictation.isActive ? "stop.circle.fill" : "mic.fill")
-                .font(.title2)
+            Group {
+                if dictation.isActive {
+                    Image(.stopFill)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: controlIconSide, height: controlIconSide)
+                } else {
+                    Image(systemName: "mic.fill")
+                        .font(.title2)
+                }
+            }
                 .foregroundStyle(
                     dictation.isActive
                         ? Theme.destructive(for: colorScheme)

@@ -17,9 +17,11 @@ import SwiftUI
 struct GitHubRepoPickerView: View {
     var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
+    var usesCreationTypography = false
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var selectionIconSize: CGFloat = 17
 
     @State private var searchText = ""
     @State private var searchResults: [GitHubRepo] = []
@@ -118,7 +120,9 @@ struct GitHubRepoPickerView: View {
                 RepoOwnerAvatarView(owner: repo.owner)
                 VStack(alignment: .leading, spacing: Constants.GitHubRepoPicker.rowTextSpacing) {
                     Text(repo.name)
-                        .interFont(Constants.Typography.bodyM.withFace(.semibold))
+                        .interFont(usesCreationTypography
+                            ? Constants.Typography.bodyM
+                            : Constants.Typography.bodyM.withFace(.semibold))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.GitHubRepoPicker.repositoryNameLineLimit)
                     Text(repo.fullName)
@@ -131,9 +135,11 @@ struct GitHubRepoPickerView: View {
                 .layoutPriority(1)
                 Spacer()
                 if selectedRepo?.id == repo.id {
-                    Image(systemName: "checkmark")
+                    Image(.check)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: selectionIconSize, height: selectionIconSize)
                         .foregroundStyle(Theme.primary(for: colorScheme))
-                        .bold()
                         .accessibilityLabel("Selected")
                 }
             }

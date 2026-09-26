@@ -311,7 +311,11 @@ $(SRCROOT)/Intent/Views/Settings/SettingsStyle.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsSupportSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormStyle.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSourceCard.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceView.swift
 $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
@@ -435,6 +439,7 @@ $(SRCROOT)/IntentTests/CreateWorkspaceParamsTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreModelTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
+$(SRCROOT)/IntentTests/CreationPickerRenderedGeometry.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesTests.swift
 $(SRCROOT)/IntentTests/DemoInlineImageFixtureTests.swift
@@ -587,6 +592,7 @@ $(SRCROOT)/IntentTests/WorkspaceTabTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/AssistantNavigationUITests.swift
 $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
+$(SRCROOT)/IntentUITests/ConnectionLossContrastAssertions.swift
 $(SRCROOT)/IntentUITests/ConnectionLossUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptFullGateUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift

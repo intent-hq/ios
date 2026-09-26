@@ -1,13 +1,16 @@
 import SwiftUI
 
 struct SettingsActionLabel: View {
+    @ScaledMetric(relativeTo: .callout) private var iconSize = SettingsStyle.iconWidth
     let title: LocalizedStringKey
-    let systemImage: String
+    let image: ImageResource
 
     var body: some View {
         HStack(spacing: SettingsStyle.rowSpacing) {
-            Image(systemName: systemImage)
-                .frame(width: SettingsStyle.iconWidth)
+            Image(image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: iconSize, height: iconSize)
                 .accessibilityHidden(true)
             Text(title)
                 .interFont(Constants.Typography.bodySEmphasized)

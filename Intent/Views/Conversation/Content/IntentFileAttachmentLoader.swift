@@ -217,10 +217,11 @@ struct IntentFileFailureAttachment: Attachment {
 
     func sizeThatFits(_: ProposedViewSize, in environment: TextEnvironmentValues) -> CGSize {
         // Match the Inter label and native SF Symbol at the current text traits.
-        let traits = UITraitCollection(traitsFrom: [
-            UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(environment.dynamicTypeSize)),
-            UITraitCollection(legibilityWeight: environment.legibilityWeight == .bold ? .bold : .regular)
-        ])
+        // Typed setters support Textual's off-main measurement without actor-isolated property access.
+        let traits = UITraitCollection { mutableTraits in
+            mutableTraits[UITraitPreferredContentSizeCategory.self] = UIContentSizeCategory(environment.dynamicTypeSize)
+            mutableTraits[UITraitLegibilityWeight.self] = environment.legibilityWeight == .bold ? .bold : .regular
+        }
         let font = Constants.Typography.subtextXXS.uiFont(compatibleWith: traits)
         let symbolHeight = UIFont.preferredFont(forTextStyle: .caption1, compatibleWith: traits).lineHeight
         let label = "Image".size(withAttributes: [.font: font])

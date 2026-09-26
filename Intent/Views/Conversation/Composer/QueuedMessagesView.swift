@@ -4,6 +4,8 @@ struct QueuedMessagesView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) var colorScheme
 
+    @ScaledMetric(relativeTo: .body) private var actionIconSide: CGFloat = 17
+
     private typealias Layout = Constants.Conversation.QueuedMessage
 
     @State private var editingId: String?
@@ -70,8 +72,10 @@ struct QueuedMessagesView: View {
         Button {
             saveEdit(messageId: message.id)
         } label: {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.body)
+            Image(.checkCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(Theme.primary(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,
@@ -86,8 +90,10 @@ struct QueuedMessagesView: View {
         Button {
             editingId = nil
         } label: {
-            Image(systemName: "xmark.circle")
-                .font(.body)
+            Image(.closeCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,
@@ -103,8 +109,10 @@ struct QueuedMessagesView: View {
             editingId = message.id
             editText = message.content
         } label: {
-            Image(systemName: "pencil")
-                .font(.body)
+            Image(.edit)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,
@@ -135,8 +143,10 @@ struct QueuedMessagesView: View {
         Button {
             Task { await viewModel.removeQueuedMessage(messageId: message.id) }
         } label: {
-            Image(systemName: "xmark")
-                .font(.body)
+            Image(.close)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,

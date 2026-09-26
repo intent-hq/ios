@@ -215,7 +215,7 @@ private extension WorkspaceDetailView {
     var workspaceActions: some View {
         Menu {
             Button { showSpecialistPicker = true } label: {
-                Label { Text("Create New Agent").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "plus.circle") }
+                Label { Text("Create New Agent").interFont(Constants.Typography.bodyS) } icon: { Image(.addCircle) }
             }
             Button(action: createTerminal) {
                 Label { Text("New terminal").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "terminal") }

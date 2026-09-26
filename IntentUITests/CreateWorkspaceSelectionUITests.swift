@@ -13,6 +13,9 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         try Data().write(to: gate)
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-workspace-provider-trigger-file=" + gate.path]
+        if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
+            app.launchArguments += ["-appThemePreference", appearance]
+        }
         app.launch()
         openCreationForm(in: app)
 
@@ -27,7 +30,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         attachEvidence(in: app, name: "selected-before-back")
         assertSelections(in: app)
 
-        app.navigationBars["Create Workspace"].buttons.element(boundBy: 0).tap()
+        app.buttons["creation.back"].tap()
         XCTAssertTrue(app.navigationBars["Select Branch"].waitForExistence(timeout: Self.elementTimeout))
         try FileManager.default.removeItem(at: gate)
         app.buttons["Next"].tap()
@@ -42,7 +45,31 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         attachEvidence(in: app, name: "selected-after-refresh")
         assertSelections(in: app)
         XCTAssertTrue(app.buttons["Create"].isEnabled)
+        editSourceAndCheckDraft(in: app)
         // Never tap Create: this check only navigates and edits a draft.
+    }
+
+    @MainActor
+    private func editSourceAndCheckDraft(in app: XCUIApplication) {
+        let prompt = app.textFields["creation.prompt"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        let draft = "Keep these instructions when editing the source."
+        prompt.tap()
+        prompt.typeText(draft)
+        app.buttons["creation.sourceCard"].tap()
+        XCTAssertTrue(app.navigationBars["Select Branch"].waitForExistence(timeout: Self.elementTimeout))
+        app.navigationBars["Select Branch"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["Select Repository"].waitForExistence(timeout: Self.elementTimeout))
+        app.staticTexts["nova-labs/docs"].tap()
+        app.buttons["Next"].tap()
+        XCTAssertTrue(app.navigationBars["Select Branch"].waitForExistence(timeout: Self.elementTimeout))
+        app.buttons["feature/docs"].tap()
+        app.buttons["Next"].tap()
+        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertEqual(prompt.value as? String, draft)
+        XCTAssertEqual(app.buttons["creation.sourceCard"].label, "Source. Repository: nova-labs/docs. Branch: feature/docs")
+        assertSelections(in: app)
+        attachEvidence(in: app, name: "draft-after-source-edit")
     }
 
     @MainActor
@@ -57,13 +84,16 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
         next.tap()
+        let back = app.buttons["creation.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertEqual(back.label, "Back")
     }
 
     @MainActor
     private func assertSelections(in app: XCUIApplication) {
-        XCTAssertTrue(app.buttons["creation.providerPicker"].staticTexts["Codex"].exists)
-        XCTAssertTrue(app.buttons["creation.modelPicker"].staticTexts["Named Model"].exists)
-        XCTAssertTrue(app.staticTexts["Implementor"].exists, "The specialist must stay unchanged")
+        XCTAssertEqual(app.buttons["creation.providerPicker"].value as? String, "Codex")
+        XCTAssertEqual(app.buttons["creation.modelPicker"].value as? String, "Named Model")
+        XCTAssertEqual(app.buttons["creation.specialistPicker"].value as? String, "Implementor")
     }
 
     @MainActor
