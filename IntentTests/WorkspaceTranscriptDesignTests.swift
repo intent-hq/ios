@@ -5,17 +5,37 @@ import UIKit
 
 @MainActor
 struct WorkspaceTranscriptDesignTests {
+    // The 354pt fixture has a valid 265.5pt bubble: 2× represents both mirrored edges exactly.
+    private let rasterScale: CGFloat = 2
+
     @Test(arguments: [CGFloat(272), CGFloat(354), CGFloat(620)])
-    func bubbleAlignsToTrailingEdgeAndAccessibilityCanUseEntireWidth(width: CGFloat) throws {
+    func bubbleAlignsToTrailingEdgeAndAccessibilityCanUseEntireWidth(width: CGFloat) async throws {
         let leftToRight = try bubblePixels(width: width, fullWidth: false, direction: .leftToRight)
         let rightToLeft = try bubblePixels(width: width, fullWidth: false, direction: .rightToLeft)
         let full = try bubblePixels(width: width, fullWidth: true, direction: .leftToRight)
+        let fullRTL = try bubblePixels(width: width, fullWidth: true, direction: .rightToLeft)
+        let leftGeometry = try await bubbleGeometry(width: width, fullWidth: false, direction: .leftToRight)
+        let rightGeometry = try await bubbleGeometry(width: width, fullWidth: false, direction: .rightToLeft)
+        #expect(leftGeometry.width == width * 0.75, "The fully flexible child must honor the approved width cap")
+        #expect(rightGeometry.width == leftGeometry.width)
+        #expect(leftGeometry.maxX == width)
+        #expect(leftGeometry.minX > 0)
+        #expect(rightGeometry.minX == 0)
+        #expect(rightGeometry.maxX == width * 0.75)
+        for direction in [LayoutDirection.leftToRight, .rightToLeft] {
+            let fullGeometry = try await bubbleGeometry(width: width, fullWidth: true, direction: direction)
+            #expect(fullGeometry.minX == 0)
+            #expect(fullGeometry.maxX == width)
+            #expect(fullGeometry.width == width)
+        }
         let leading = try #require(leftToRight.first)
         #expect(leading > 0, "Ordinary bubbles must leave a leading gutter")
-        #expect(leftToRight.last == Int(width) - 1)
+        #expect(leftToRight.last == Int(width * rasterScale) - 1)
         #expect(rightToLeft.first == 0)
         #expect(rightToLeft.count == leftToRight.count)
-        #expect(full.count == Int(width), "Accessibility layout must not retain the narrow width cap")
+        #expect(leftToRight.count == Int(width * 0.75 * rasterScale))
+        #expect(full.count == Int(width * rasterScale), "Accessibility layout must not retain the narrow width cap")
+        #expect(fullRTL == full)
     }
 
     @Test(arguments: [CGFloat(272), CGFloat(354)])
@@ -73,12 +93,27 @@ struct WorkspaceTranscriptDesignTests {
         )
     }
 
+    private func bubbleGeometry(width: CGFloat, fullWidth: Bool, direction: LayoutDirection) async throws -> CGRect {
+        var frame: CGRect?
+        let view = WorkspaceUserBubbleLayout(usesFullWidth: fullWidth, layoutDirection: direction) {
+            Color.red.frame(height: 40)
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .named("bubbleContainer"))
+                } action: { frame = $0 }
+        }
+        .frame(width: width)
+        .coordinateSpace(name: "bubbleContainer")
+        return try await SyntheticBadgeHost.render(view, width: width, height: 40, safeAreaRegions: []) { _, _ in
+            try #require(frame)
+        }
+    }
+
     private func bubblePixels(width: CGFloat, fullWidth: Bool, direction: LayoutDirection) throws -> [Int] {
         let renderer = ImageRenderer(content: WorkspaceUserBubbleLayout(usesFullWidth: fullWidth, layoutDirection: direction) {
             // Semantic Color.red is not pure RGB red and can exceed the pixel probe's green threshold.
             Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1).frame(height: 40)
         }.frame(width: width).background(.white))
-        renderer.scale = 1
+        renderer.scale = rasterScale
         let bitmap = try #require(renderer.cgImage)
         var pixels = [UInt8](repeating: 0, count: bitmap.width * bitmap.height * 4)
         try pixels.withUnsafeMutableBytes { bytes in
