@@ -16,8 +16,8 @@ $(SRCROOT)/Intent/App/RootView.swift
 $(SRCROOT)/Intent/App/WindowSceneTitle.swift
 $(SRCROOT)/Intent/Assets.xcassets
 $(SRCROOT)/Intent/Assets.xcassets/AccentColor.colorset
-$(SRCROOT)/Intent/Assets.xcassets/Add.imageset
 $(SRCROOT)/Intent/Assets.xcassets/AddCircle.imageset
+$(SRCROOT)/Intent/Assets.xcassets/AddIcon.imageset
 $(SRCROOT)/Intent/Assets.xcassets/AgentAvatarActiveStrokeStrong.colorset
 $(SRCROOT)/Intent/Assets.xcassets/AgentAvatarActiveStrokeWeak.colorset
 $(SRCROOT)/Intent/Assets.xcassets/AgentAvatarGlyph.colorset
