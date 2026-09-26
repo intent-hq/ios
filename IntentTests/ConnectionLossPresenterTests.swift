@@ -9,6 +9,86 @@ struct ConnectionLossPresenterTests {
     private static let inheritedAnimationDuration: TimeInterval = 10
     private static let teardownTimeout: TimeInterval = 2
 
+    @Test func backdropPreservesSingleTintAndSoftensSourceEdges() throws {
+        let reduceTransparency = UIAccessibility.isReduceTransparencyEnabled
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previousKey = scene.keyWindow
+        let source = UIWindow(windowScene: scene)
+        let page = UIViewController()
+        page.view.backgroundColor = .black
+        source.rootViewController = page
+        source.makeKeyAndVisible()
+        source.layoutIfNeeded()
+        let panel = UIView(frame: CGRect(
+            x: 0, y: 0, width: source.bounds.width / 2, height: source.bounds.height
+        ))
+        page.view.addSubview(panel)
+        let presenter = ConnectionLossPresenter.Coordinator()
+        defer {
+            presenter.detach()
+            source.isHidden = true
+            previousKey?.makeKey()
+        }
+        presenter.attach(to: source)
+        // A new loss must capture the new page, not reuse pixels from the last loss.
+        for panelColor in [UIColor.white, .black] {
+            panel.backgroundColor = panelColor
+            _ = try render(source)
+            presenter.update(isPresented: true, content: AnyView(
+                ConnectionLossOverlay(mismatches: []) {}
+            ))
+            let overlay = try #require(scene.windows.first { $0.windowLevel > .alert && !$0.isHidden })
+            let image = try render(overlay)
+            try assertBackdrop(image, hasWhitePanel: panelColor == .white, reduced: reduceTransparency)
+            presenter.update(isPresented: false, content: AnyView(EmptyView()))
+        }
+    }
+
+    private func assertBackdrop(_ image: UIImage, hasWhitePanel: Bool, reduced: Bool) throws {
+        let row = image.size.height * 0.18
+        let left = try red(in: image, at: CGPoint(x: image.size.width * 0.2, y: row))
+        let right = try red(in: image, at: CGPoint(x: image.size.width * 0.8, y: row))
+        // Approved native treatment: 255 * 0.35 + 26 * 0.65 = 106;
+        // black beneath the same tint = 17. Allow rounding, not a second material tint.
+        let expectedLeft = reduced ? 26 : hasWhitePanel ? 106 : 17
+        let expectedRight = reduced ? 26 : 17
+        #expect(abs(left - expectedLeft) <= 4, "Source contrast must survive one dark tint")
+        #expect(abs(right - expectedRight) <= 4)
+        if hasWhitePanel, !reduced {
+            let edge = try red(in: image, at: CGPoint(x: image.size.width / 2 - 10, y: row))
+            #expect(edge > right + 8 && edge < left - 8, "The source boundary must be blurred, not just dimmed")
+        }
+    }
+
+    private func render(_ window: UIWindow) throws -> UIImage {
+        window.layoutIfNeeded()
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        var complete = false
+        let image = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
+            complete = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        try #require(complete)
+        return image
+    }
+
+    private func red(in image: UIImage, at point: CGPoint) throws -> Int {
+        let pixel = try #require(image.cgImage?.cropping(to: CGRect(origin: point, size: CGSize(width: 1, height: 1))))
+        var bytes = [UInt8](repeating: 0, count: 4)
+        let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try #require(CGContext(
+            data: &bytes,
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return Int(bytes[0])
+    }
+
     @Test func showsAndHidesSynchronouslyInsideInheritedAnimation() throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previousKey = scene.keyWindow

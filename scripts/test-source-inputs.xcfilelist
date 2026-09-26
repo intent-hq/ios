@@ -94,6 +94,10 @@ $(SRCROOT)/Intent/Assets.xcassets/Connection.imageset
 $(SRCROOT)/Intent/Assets.xcassets/ConnectionClipboard.imageset
 $(SRCROOT)/Intent/Assets.xcassets/ConnectionClose.imageset
 $(SRCROOT)/Intent/Assets.xcassets/ConnectionLaptop.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionLossActionForeground.colorset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionLossBackdrop.colorset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionLossMark.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ConnectionLossSecondary.colorset
 $(SRCROOT)/Intent/Assets.xcassets/ConnectionServer.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Copy.imageset
 $(SRCROOT)/Intent/Assets.xcassets/CounterClockwiseArrow.imageset
