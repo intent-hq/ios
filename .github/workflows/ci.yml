@@ -46,7 +46,7 @@ jobs:
     # TailcatKit is pure Go and cross-compiles for Linux, so its tests run
     # here on a cheap, fast Linux runner instead of serialising 2-12 minutes
     # of Tailscale compilation onto the 3-core macOS VM.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -68,9 +68,14 @@ jobs:
         run: scripts/test_xcodebuild.sh
 
       # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
-      # override in scripts/swiftlint.sh against a stubbed swiftlint; pure bash.
+      # override on both Darwin and Linux paths against a stubbed swiftlint.
       - name: swiftlint.sh self-tests
         run: scripts/test-swiftlint.sh
+
+      - name: SwiftLint prerequisite and setup tests
+        run: |
+          scripts/test-swiftlint-prerequisites.sh
+          scripts/test-setup-swiftlint.sh
 
       # Exercises the xcfilelist drift check in scripts/check-swiftlint-inputs.sh
       # against a fixture git repo (missing, stale, unsorted, pruned entries);
@@ -87,9 +92,9 @@ jobs:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
     # SwiftLint" step in build-and-test never sees a skipped job. The official
-    # Linux release uses its in-process sourcekitd, so lint needs no macOS,
-    # Xcode, Go, SPM or simulator work.
-    runs-on: ubuntu-latest
+    # Linux release requires a compatible SourceKit runtime. Use the same
+    # supported native setup as developers; no Xcode or simulator work needed.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -101,24 +106,15 @@ jobs:
       - name: Check SwiftLint Xcode input list
         run: scripts/check-swiftlint-inputs.sh
 
-      # scripts/swiftlint.sh rejects any version but the pinned one, so
-      # install exactly the official Linux release asset rather than whatever
-      # the image preinstalls.
-      # The sha256 is the release asset's; recompute it from a fresh download
-      # when bumping the version.
-      - name: Install SwiftLint 0.65.1
-        env:
-          SWIFTLINT_VERSION: 0.65.1
-          SWIFTLINT_SHA256: caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d
+      # setup-swiftlint.sh retains the official 0.65.1 release checksum and
+      # reuses an installed runtime only after a real SourceKit lint probe.
+      - name: Set up SwiftLint 0.65.1 and SourceKit
         run: |
-          cd "$RUNNER_TEMP"
-          curl -fsSL -o swiftlint_linux_amd64.zip \
-            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/swiftlint_linux_amd64.zip"
-          echo "${SWIFTLINT_SHA256}  swiftlint_linux_amd64.zip" | sha256sum -c -
-          mkdir -p swiftlint
-          unzip -q swiftlint_linux_amd64.zip -d swiftlint
-          echo "$RUNNER_TEMP/swiftlint" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/swiftlint/swiftlint" version
+          scripts/setup-swiftlint.sh
+          scripts/setup-swiftlint.sh --check
+
+      - name: Real SwiftLint runtime smoke test
+        run: scripts/test-swiftlint-runtime.sh
 
       # The wrapper passes --strict --no-cache and enforces the version pin;
       # the reporter override renders violations as PR annotations.
@@ -149,6 +145,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: SwiftLint wrapper tests on the native shell
+        run: scripts/test-swiftlint.sh
 
       - name: Set up Node for Keychain fixture verification
         uses: actions/setup-node@v6
