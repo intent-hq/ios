@@ -23,7 +23,7 @@ struct ModelChangeNoticeView: View {
                 Image(systemName: "arrow.left.arrow.right")
                     .font(.caption2)
                 Text(label)
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .multilineTextAlignment(.center)
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))

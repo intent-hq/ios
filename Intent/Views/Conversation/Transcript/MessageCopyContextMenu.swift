@@ -27,7 +27,7 @@ struct MessageCopyContextMenu: ViewModifier {
 
     private var preview: some View {
         Text(text)
-            .font(.subheadline)
+            .interFont(Constants.Typography.bodyXS)
             .foregroundStyle(Theme.foreground(for: colorScheme).opacity(
                 userStyled ? Constants.Conversation.UserMessage.textOpacity : 1
             ))

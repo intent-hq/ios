@@ -46,12 +46,12 @@ struct AttentionNoticeView: View {
 
             VStack(alignment: .leading, spacing: Layout.attentionTextSpacing) {
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
+                    .interFont(Constants.Typography.bodyXS.withFace(.semibold))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
 
                 if !notice.reason.isEmpty {
                     Text(notice.reason)
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyXS)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .textSelection(.enabled)
                 }

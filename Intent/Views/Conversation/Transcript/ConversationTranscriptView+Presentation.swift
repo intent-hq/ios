@@ -116,7 +116,7 @@ extension ConversationTranscriptView {
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.semibold))
                 Text("Go to End")
-                    .font(.caption.weight(.medium))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
             }
             .padding(.horizontal, Layout.goToEndHorizontalPadding)
             .padding(.vertical, Layout.goToEndVerticalPadding)
@@ -144,7 +144,7 @@ extension ConversationTranscriptView {
                 .scaleEffect(Layout.thinkingIndicatorScale)
                 .frame(width: Layout.thinkingIndicatorSide, height: Layout.thinkingIndicatorSide)
             Text("Thinking...")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
         }
         .padding(.horizontal, Layout.thinkingIndicatorHorizontalPadding)
@@ -164,7 +164,7 @@ extension ConversationTranscriptView {
                             .font(.caption)
                             .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
                         Text(prompt)
-                            .font(.subheadline)
+                            .interFont(Constants.Typography.bodyXS)
                             .foregroundStyle(Theme.foreground(for: transcriptColorScheme))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -193,7 +193,7 @@ extension ConversationTranscriptView {
                 .font(.footnote)
                 .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
             Text("Showing the most recent \(viewModel.filteredMessages.count) of \(viewModel.totalMessageCount) messages.\nSee the full conversation on the desktop app.")
-                .font(.footnote)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
                 .multilineTextAlignment(.center)
         }

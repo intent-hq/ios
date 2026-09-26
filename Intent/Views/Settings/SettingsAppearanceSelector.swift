@@ -26,7 +26,7 @@ struct SettingsAppearanceSelector: View {
         let selectedBackground = colorScheme == .dark ? SettingsStyle.lightSurface : SettingsStyle.charcoal
         return Button { selection = value } label: {
             Text(title)
-                .font(.callout.weight(.medium))
+                .interFont(Constants.Typography.bodySEmphasized)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, SettingsStyle.trackInset)
                 .padding(.vertical, SettingsStyle.trackInset)

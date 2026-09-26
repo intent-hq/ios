@@ -131,6 +131,7 @@ struct ManualTokenEntryView: View {
         VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
             ManualConnectionField(label: hostLabel) {
                 TextField("192.168.1.42", text: $host, prompt: placeholder("192.168.1.42"))
+                    .interFont(Constants.Typography.bodySEmphasized)
                     .accessibilityLabel("Host / Tailcat Address")
                     .accessibilityIdentifier("manual.host")
                     .focused($focusedField, equals: .host)
@@ -142,7 +143,7 @@ struct ManualTokenEntryView: View {
                 .keyboardType(.URL)
             #if os(visionOS)
             Text("Tailcat addresses aren't supported on visionOS yet — pair over your local network.")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             #endif
         }
@@ -159,6 +160,7 @@ struct ManualTokenEntryView: View {
     private var portField: some View {
         ManualConnectionField(label: "PORT") {
             TextField("5180", text: $port, prompt: placeholder("5180"))
+                .interFont(Constants.Typography.bodySEmphasized)
                 .accessibilityLabel("Port")
                 .accessibilityIdentifier("manual.port")
                 .focused($focusedField, equals: .port)
@@ -170,6 +172,7 @@ struct ManualTokenEntryView: View {
         ManualConnectionField(label: "API TOKEN", verticalPadding: Constants.ManualTokenEntry.pasteVerticalPadding) {
             HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
                 TextField("Paste token", text: $token, prompt: placeholder("Paste token"))
+                    .interFont(Constants.Typography.bodySEmphasized)
                     .accessibilityLabel("API Token")
                     .accessibilityIdentifier("manual.token")
                     .focused($focusedField, equals: .token)
@@ -211,7 +214,7 @@ struct ManualTokenEntryView: View {
     private var validationError: some View {
         if let error = errorMessage {
             Text(error)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .accessibilityIdentifier("manual.error")
         }
@@ -224,12 +227,13 @@ struct ManualTokenEntryView: View {
                     HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
                         ProgressView().tint(Constants.Pairing.onAccent)
                         Text("Cancel")
+                            .interFont(Constants.Typography.bodySEmphasized)
                     }
                 } else {
                     Text("Connect")
+                        .interFont(Constants.Typography.bodySEmphasized)
                 }
             }
-            .font(Constants.Typography.bodySEmphasized.font)
             .tracking(Constants.Pairing.optionTitleTracking)
             .foregroundStyle(
                 !isValidating && (host.isEmpty || token.isEmpty)

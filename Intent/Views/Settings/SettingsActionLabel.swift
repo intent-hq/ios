@@ -10,6 +10,7 @@ struct SettingsActionLabel: View {
                 .frame(width: SettingsStyle.iconWidth)
                 .accessibilityHidden(true)
             Text(title)
+                .interFont(Constants.Typography.bodySEmphasized)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

@@ -6,11 +6,14 @@ struct ProviderPicker: View {
     let onSelect: (ProviderInfo) -> Void
 
     var body: some View {
-        Picker("Provider", selection: selection) {
+        Picker(selection: selection) {
             ForEach(providers) { provider in
                 Text(Self.optionLabel(for: provider))
+                    .interFont(Constants.Typography.bodyS)
                     .tag(provider.id)
             }
+        } label: {
+            Text("Provider").interFont(Constants.Typography.bodyS)
         }
         .pickerStyle(.menu)
         .accessibilityIdentifier("creation.providerPicker")

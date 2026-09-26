@@ -96,12 +96,12 @@ extension MessageInputView {
             .controlSize(.small)
         VStack(alignment: .leading, spacing: 0) {
             Text(file.displayName)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .lineLimit(1)
             Text(progress > 0 && progress < 1
                  ? "Uploading… \(Int(progress * 100))%"
                  : "Uploading…")
-                .font(.caption2)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
     }
@@ -114,11 +114,11 @@ extension MessageInputView {
             .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 0) {
             Text(file.displayName)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .lineLimit(1)
             if let formattedSize = file.formattedSize {
                 Text(formattedSize)
-                    .font(.caption2)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
         }

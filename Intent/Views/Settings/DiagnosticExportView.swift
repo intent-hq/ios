@@ -49,16 +49,42 @@ private struct DiagnosticExportActions: View {
 
     var body: some View {
         Section {
-            if model.isWorking { ProgressView("Preparing logs…") }
-            if let notice = model.notice { Text(notice).accessibilityIdentifier("diagnosticNotice") }
-            Button("Share ZIP", systemImage: "square.and.arrow.up") { model.shareZIP() }
+            preparationStatus
+            Button { model.shareZIP() } label: {
+                Label {
+                    Text("Share ZIP").interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
                 .disabled(model.isWorking || model.preview == nil || model.share != nil)
                 .accessibilityIdentifier("diagnosticShareZIP")
-            Button("Refresh", systemImage: "arrow.clockwise") { model.refresh() }
+            Button { model.refresh() } label: {
+                Label {
+                    Text("Refresh").interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
                 .disabled(model.isWorking || model.share != nil)
-            Button("Clear", systemImage: "trash", role: .destructive) { confirmsClear = true }
+            Button(role: .destructive) { confirmsClear = true } label: {
+                Label {
+                    Text("Clear").interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(systemName: "trash")
+                }
+            }
                 .disabled(model.isWorking || model.share != nil)
                 .accessibilityIdentifier("diagnosticClear")
+        }
+    }
+
+    @ViewBuilder private var preparationStatus: some View {
+        if model.isWorking {
+            ProgressView { Text("Preparing logs…").interFont(Constants.Typography.bodyS) }
+        }
+        if let notice = model.notice {
+            Text(notice).interFont(Constants.Typography.bodyS).accessibilityIdentifier("diagnosticNotice")
         }
     }
 }

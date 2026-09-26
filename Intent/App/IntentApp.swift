@@ -211,6 +211,12 @@ struct BackendWindowRoot: View {
         }
         .onAppear {
             windowSession.updateNetworkObservation(for: scenePhase)
+            if let demoBackendID = DemoSettings.consumeStartupBackendID() {
+                // Settings demos start from this process's fresh fixtures,
+                // not an obsolete native scene value or restored Home state.
+                restoresSavedMachines = false
+                backendID = demoBackendID
+            }
             if restoresSavedMachines {
                 windowSession.returnToSavedMachines()
             }
@@ -374,13 +380,16 @@ private struct RemovedBackendPlaceholderView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text("Connection Removed")
-                .font(.headline)
+                .interFont(Constants.Typography.bodyM.withFace(.semibold))
             Text("This connection is no longer saved.")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Close Window") { onClose() }
-                .buttonStyle(.bordered)
+            Button(action: onClose) {
+                Text("Close Window")
+                    .interFont(Constants.Typography.bodyS)
+            }
+            .buttonStyle(.bordered)
         }
         .padding()
     }

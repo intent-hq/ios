@@ -37,6 +37,7 @@ struct CodeBlockView: View {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         .accessibilityHidden(true)
                     Text(copied ? "Copied" : "Copy")
+                        .interFont(Constants.Typography.subtextXXS)
                 }
                 .font(.caption)
                 .foregroundStyle(Constants.Colors.CodeBlock.action)

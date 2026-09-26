@@ -13,20 +13,26 @@ struct SavedConnectionDetails: View {
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("saved-connection.details-title")
                 Text(connection.displayName)
-                    .font(Constants.Typography.bodySEmphasized.font)
+                    .interFont(Constants.Typography.bodySEmphasized)
                 Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
-                    .font(Constants.Typography.bodyS.font)
+                    .interFont(Constants.Typography.bodyS)
                     .textSelection(.enabled)
                 if let tcAddress = connection.server.tcAddress {
                     VStack(alignment: .leading, spacing: Constants.Connections.infoSpacing) {
-                        Label("Tailcat", systemImage: "point.3.connected.trianglepath.dotted")
-                        Text(tcAddress).textSelection(.enabled)
+                        Label {
+                            Text("Tailcat").interFont(Constants.Typography.bodyXS)
+                        } icon: {
+                            Image(systemName: "point.3.connected.trianglepath.dotted")
+                                .font(.subheadline)
+                        }
+                        Text(tcAddress)
+                            .interFont(Constants.Typography.bodyXS)
+                            .textSelection(.enabled)
                     }
-                    .font(Constants.Typography.bodyXS.font)
                 }
                 if let lastConnected = connection.lastConnectedAt {
                     Text("Last connected \(lastConnected.formatted(.relative(presentation: .named)))")
-                        .font(Constants.Typography.bodyXS.font)
+                        .interFont(Constants.Typography.bodyXS)
                 }
             }
             .foregroundStyle(Constants.ConnectionSheet.defaultForeground(for: colorScheme))

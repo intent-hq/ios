@@ -20,21 +20,24 @@ struct SettingsConnectionCard: View {
                 .frame(width: SettingsStyle.iconWidth)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: SettingsStyle.textSpacing) {
-                Text(name).font(.callout.weight(.medium))
+                Text(name).interFont(Constants.Typography.bodySEmphasized)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: SettingsStyle.metadataSpacing) {
                         if status != nil {
                             statusLabel
-                            Text("|").accessibilityHidden(true)
+                            Text("|")
+                                .interFont(Constants.Typography.subtextXXS)
+                                .accessibilityHidden(true)
                         }
                         Text(address)
+                            .interFont(Constants.Typography.subtextXXS)
                     }
                     VStack(alignment: .leading, spacing: SettingsStyle.textSpacing) {
                         if status != nil { statusLabel }
                         Text(address)
+                            .interFont(Constants.Typography.subtextXXS)
                     }
                 }
-                .font(.caption)
                 .foregroundStyle(SettingsStyle.muted(for: colorScheme, contrast: contrast))
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -54,6 +57,7 @@ struct SettingsConnectionCard: View {
                 .frame(width: SettingsStyle.statusDotSize, height: SettingsStyle.statusDotSize)
                 .accessibilityHidden(true)
             statusText
+                .interFont(Constants.Typography.subtextXXS)
         }
         .foregroundStyle(contrast == .increased ? SettingsStyle.foreground(for: colorScheme) : statusColor)
     }

@@ -42,7 +42,7 @@ struct ConnectionLossOverlay: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Button(action: onHome) {
                 Text("Back to Home")
-                    .font(.headline)
+                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Constants.Root.reconnectButtonTopPadding)
             }

@@ -73,7 +73,10 @@ struct AttachmentReferenceImageView: View {
             Button { attempt += 1 } label: {
                 placeholder {
                     Image(systemName: "arrow.clockwise")
-                    if style == .inline { Text("Tap to retry") }
+                    if style == .inline {
+                        Text("Tap to retry")
+                            .interFont(Constants.Typography.subtextXXS)
+                    }
                 }
                 .copyContextMenuPassthrough()
             }
@@ -83,7 +86,10 @@ struct AttachmentReferenceImageView: View {
             placeholder {
                 ProgressView()
                     .controlSize(.mini)
-                if style == .inline { Text("Loading image…") }
+                if style == .inline {
+                    Text("Loading image…")
+                        .interFont(Constants.Typography.subtextXXS)
+                }
             }
         }
     }

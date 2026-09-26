@@ -26,7 +26,7 @@ struct ProviderModelStepView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Create", action: onCreate)
                     .disabled(isCreateDisabled)
-                    .fontWeight(.semibold)
+                    .interFont(Constants.Typography.bodyS.withFace(.semibold))
             }
         }
     }
@@ -34,8 +34,10 @@ struct ProviderModelStepView: View {
     @ViewBuilder
     private var providerContent: some View {
         if isLoadingProviders {
-            ProgressView("Loading providers...")
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            ProgressView {
+                Text("Loading providers...").interFont(Constants.Typography.bodyS)
+            }
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         } else if providers.noneSelectable {
             noSelectableProvidersList
         } else {
@@ -45,9 +47,11 @@ struct ProviderModelStepView: View {
 
     private var noSelectableProvidersList: some View {
         List {
-            Section("Provider") {
+            Section {
                 noProvidersSignedInPlaceholder
                     .listRowBackground(Theme.card(for: colorScheme))
+            } header: {
+                Text("Provider").interFont(Constants.Typography.eyebrow)
             }
         }
         .listStyle(.insetGrouped)
@@ -65,15 +69,17 @@ struct ProviderModelStepView: View {
 
     @ViewBuilder
     private var providerSection: some View {
-        Section("Provider") {
+        Section {
             if providers.isEmpty {
                 Text("No providers found — the default provider will be used.")
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .listRowBackground(Theme.card(for: colorScheme))
             } else {
                 providerPicker
             }
+        } header: {
+            Text("Provider").interFont(Constants.Typography.eyebrow)
         }
     }
 
@@ -94,17 +100,19 @@ struct ProviderModelStepView: View {
 
     @ViewBuilder
     private var modelSection: some View {
-        Section("Model") {
+        Section {
             if isLoadingModels {
                 modelLoadingIndicator
             } else if models.isEmpty {
                 Text("The provider's default model will be used.")
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .listRowBackground(Theme.card(for: colorScheme))
             } else {
                 modelPicker
             }
+        } header: {
+            Text("Model").interFont(Constants.Typography.eyebrow)
         }
     }
 
@@ -112,7 +120,7 @@ struct ProviderModelStepView: View {
         HStack(spacing: Constants.ModalPicker.modelLoadingSpacing) {
             ProgressView().controlSize(.small)
             Text("Loading models...")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .listRowBackground(Theme.card(for: colorScheme))
@@ -137,7 +145,7 @@ struct ProviderModelStepView: View {
             VStack(spacing: Constants.ModalPicker.loadingOverlaySpacing) {
                 ProgressView()
                 Text("Creating agent...")
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
             }
             .padding(Constants.ModalPicker.loadingOverlayPadding)
@@ -151,10 +159,10 @@ struct ProviderModelStepView: View {
     private var noProvidersSignedInPlaceholder: some View {
         VStack(alignment: .leading, spacing: Constants.ModalPicker.placeholderSpacing) {
             Text("No providers are signed in")
-                .font(.subheadline.weight(.semibold))
+                .interFont(Constants.Typography.bodyXS.withFace(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
             Text("Set up a provider in the Intent desktop app, then come back and try again.")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .padding(.vertical, Constants.ModalPicker.rowVerticalPadding)

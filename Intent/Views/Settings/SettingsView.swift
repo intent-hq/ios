@@ -40,17 +40,11 @@ struct SettingsView: View {
                 )
                 SettingsPairingSection()
                 SettingsSupportSection()
+                logOffButton
             }
             .padding(SettingsStyle.contentMargin)
             .frame(maxWidth: SettingsStyle.maximumContentWidth)
             .frame(maxWidth: .infinity)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            logOffButton
-                .padding(SettingsStyle.contentMargin)
-                .frame(maxWidth: SettingsStyle.maximumContentWidth)
-                .frame(maxWidth: .infinity)
-                .background(SettingsStyle.surface(for: colorScheme))
         }
         .buttonStyle(.plain)
         .foregroundStyle(SettingsStyle.foreground(for: colorScheme))
@@ -81,7 +75,11 @@ struct SettingsView: View {
 
     private var logOffButton: some View {
         Button { showLogOffConfirmation = true } label: {
-            Label("Log Off", systemImage: "rectangle.portrait.and.arrow.right")
+            Label {
+                Text("Log Off").interFont(Constants.Typography.bodySEmphasized)
+            } icon: {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+            }
                 .font(.callout.weight(.medium))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, SettingsStyle.rowVerticalPadding)

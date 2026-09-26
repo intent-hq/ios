@@ -45,7 +45,8 @@ struct PairingOptionTests {
     }
 
     @Test func connectTextUsesApprovedTypography() throws {
-        // Audit the actual call sites; TypographyTests separately exercises runtime font scaling.
+        // Keep the approved Connect token mapping; the local modifier also honors Bold Text.
+        // TypographyTests and PairingDesignTests separately exercise rendering and scaling.
         let source = try pairingSource()
         let mappings = [
             (#"Text("Connect to Intent")"#, "heading2"),
@@ -54,15 +55,16 @@ struct PairingOptionTests {
             ("Text(subtitle)", "bodyS")
         ]
         for (text, style) in mappings {
-            #expect(source.contains("\(text) .font(Constants.Typography.\(style).font)"))
+            #expect(source.contains("\(text) .interFont(Constants.Typography.\(style))"))
         }
-        #expect(source.components(separatedBy: ".font(Constants.Typography.").count - 1 == mappings.count)
+        // The additional caption is the visionOS pairing hint, checked below.
+        #expect(source.components(separatedBy: ".interFont(Constants.Typography.").count - 1 == mappings.count + 1)
     }
 
-    @Test func connectKeepsVisionHintFont() throws {
+    @Test func connectKeepsVisionHintCaptionRole() throws {
         let source = try pairingSource()
         let hint = "Pair from your iPhone or Mac: open the intent://pair link shown in the Intent desktop app."
-        #expect(source.contains("Text(\"\(hint)\") .font(.caption)"))
+        #expect(source.contains("Text(\"\(hint)\") .interFont(Constants.Typography.subtextXXS)"))
     }
 
     private func pairingSource() throws -> String {

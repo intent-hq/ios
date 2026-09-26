@@ -30,8 +30,7 @@ struct BackgroundHooksRow: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("Running hooks")
-                    .font(.caption)
-                    .fontWeight(.medium)
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
 
                 ForEach(hookStore.activeHooks.filter { $0.agentId == viewModel.agentId }) { hook in
@@ -79,7 +78,7 @@ struct BackgroundHooksRow: View {
     private func chipLabel(_ hook: BackgroundHook) -> some View {
         HStack(spacing: Constants.Conversation.StatusStrip.chipSpacing) {
             Text(truncatedName(hook.name))
-                .font(.caption2)
+                .interFont(Constants.Typography.subtextXXS)
                 .lineLimit(1)
             if hook.perpetual {
                 Image(systemName: "repeat")

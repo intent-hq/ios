@@ -10,7 +10,7 @@ struct WorkspaceMobileTerminalsView: View {
         let terminals = store.activeTerminals(workspaceId: workspaceId)
         if !terminals.isEmpty {
             Text("Terminals")
-                .font(.headline)
+                .interFont(Constants.Typography.bodyM.withFace(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical)
             ForEach(terminals) { terminal in
@@ -35,9 +35,9 @@ struct WorkspaceMobileTerminalsView: View {
                 .background(TerminalAppearance.background, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: TerminalAppearance.groupInset) {
-                Text(terminal.name).font(.subheadline.weight(.semibold))
+                Text(terminal.name).interFont(Constants.Typography.bodyXS.withFace(.semibold))
                 Text(store.isConnected ? "Mobile terminal" : "Disconnected")
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
             Spacer()
