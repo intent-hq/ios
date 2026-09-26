@@ -18,11 +18,26 @@ assert_contains() {
   grep -Fq -- "$expected" <<< "$text" || fail "expected output to contain: $expected"
 }
 
+# Reproduce a host without ldd (such as macOS), even when running on Linux.
+# Keep both platform cases independent of any installed Linux tooling.
+mkdir -p "$TEMP_ROOT/host-bin"
+for tool in bash cat chmod cmp dirname grep ln mkdir python3 rm; do
+  ln -s "$(command -v "$tool")" "$TEMP_ROOT/host-bin/$tool"
+done
+export PATH="$TEMP_ROOT/host-bin"
+if command -v ldd >/dev/null; then
+  fail "isolated host PATH unexpectedly contains ldd"
+fi
+
 mkdir -p "$TEMP_ROOT/bin" "$TEMP_ROOT/log" "$TEMP_ROOT/outside"
 export INTENT_SWIFTLINT_HOME="$TEMP_ROOT/install"
 cat > "$TEMP_ROOT/bin/uname" <<'EOF'
 #!/bin/bash
 echo "${FAKE_UNAME:?}"
+EOF
+cat > "$TEMP_ROOT/bin/ldd" <<'EOF'
+#!/bin/bash
+exit 0
 EOF
 cat > "$TEMP_ROOT/bin/swiftlint" <<'EOF'
 #!/usr/bin/env bash
@@ -46,6 +61,7 @@ esac
 EOF
 chmod +x "$TEMP_ROOT/bin/swiftlint"
 chmod +x "$TEMP_ROOT/bin/uname"
+chmod +x "$TEMP_ROOT/bin/ldd"
 
 for FAKE_UNAME in Darwin Linux; do
 export FAKE_UNAME
