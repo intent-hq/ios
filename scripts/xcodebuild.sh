@@ -23,6 +23,8 @@
 #                           test-without-building minus IntentUITests
 #   test-without-building-ui
 #                           Run and verify UI tests, skipping IntentTests
+#                           Both UI-only commands use the IntentUI scheme;
+#                           build-for-testing's skip flag alone still builds units.
 #   test-ios                build-for-testing then test-without-building
 #   test-ios-unit           test-ios minus the IntentUITests bundle (-skip-testing)
 #   pick-simulator          Print the chosen iPhone simulator UDID on stdout
@@ -1261,11 +1263,16 @@ case "${BUILD_CONFIGURATION:-}" in
 esac
 
 case "$subcommand" in
+  build-for-testing-ui|test-without-building-ui)
+    PROJECT_ARGS=(-project Intent.xcodeproj -scheme IntentUI) ;;
+esac
+
+case "$subcommand" in
   resolve)               cmd_resolve ;;
   build-ios)             cmd_build_ios ;;
   build-visionos)        cmd_build_visionos ;;
   build-for-testing)     cmd_build_for_testing ;;
-  build-for-testing-ui)  cmd_build_for_testing -skip-testing:IntentTests ;;
+  build-for-testing-ui)  cmd_build_for_testing ;;
   test-without-building) cmd_test_without_building ;;
   test-without-building-unit) cmd_test_without_building -skip-testing:IntentUITests ;;
   test-without-building-ui) ONLY_TESTING=${ONLY_TESTING:-IntentUITests} cmd_test_without_building -skip-testing:IntentTests ;;

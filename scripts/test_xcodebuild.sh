@@ -827,14 +827,17 @@ echo "# UI-only builds and runs exclude unit tests without bypassing selector va
 status=$(run_filtered uibuild "" build-for-testing-ui)
 assert_eq "UI-only build exits 0" "$status" 0
 assert_eq "UI-only build compiles once without launching tests" "$(argv_count uibuild)" 1
-assert_contains "UI-only build excludes the unit bundle" "$(argv_line uibuild 1)" \
-  '[CODE_SIGN_IDENTITY=] [CODE_SIGNING_REQUIRED=NO] [CODE_SIGNING_ALLOWED=NO] [-skip-testing:IntentTests]'
+assert_contains "UI-only build uses the UI scheme" "$(argv_line uibuild 1)" '[-scheme] [IntentUI]'
+assert_contains "UI-only build preserves signing" "$(argv_line uibuild 1)" \
+  '[CODE_SIGN_IDENTITY=] [CODE_SIGNING_REQUIRED=NO] [CODE_SIGNING_ALLOWED=NO]'
 status=$(run_filtered ui "" test-without-building-ui)
 assert_eq "UI-only run defaults to the whole UI bundle" "$status" 0
 assert_eq "UI-only run enumerates then executes" "$(argv_count ui)" 2
 assert_contains "UI enumeration excludes unit tests" "$(argv_line ui 1)" '[-skip-testing:IntentTests]'
+assert_contains "UI enumeration uses the UI scheme" "$(argv_line ui 1)" '[-scheme] [IntentUI]'
 assert_lacks "UI enumeration preserves the unfiltered UI catalog" "$(argv_line ui 1)" '-only-testing:'
 assert_contains "UI run remains serial" "$(argv_line ui 2)" '[-parallel-testing-enabled] [NO]'
+assert_contains "UI run uses the same scheme as its build" "$(argv_line ui 2)" '[-scheme] [IntentUI]'
 assert_contains "UI run selects all UI tests and excludes units" "$(argv_line ui 2)" \
   '[-only-testing:IntentUITests] [-skip-testing:IntentTests]'
 assert_contains "UI run validates execution from the result bundle" "$(cat "$work/ui.out")" \
@@ -862,7 +865,36 @@ assert_eq "UI-only crash makes one enumeration and exactly two test calls" "$(ar
 assert_contains "UI retry stays serial and scoped to the interrupted suite" "$(retry_argv uicrash)" \
   '[-only-testing:IntentUITests/ConversationTranscriptScrollUITests] [-skip-testing:IntentTests]'
 assert_contains "UI retry stays serial" "$(retry_argv uicrash)" '[-parallel-testing-enabled] [NO]'
+assert_contains "UI retry uses the same scheme" "$(retry_argv uicrash)" '[-scheme] [IntentUI]'
 assert_lock_free "UI-only crash retry releases the simulator lock"
+if python3 - <<'PY'
+from pathlib import Path
+import xml.etree.ElementTree as ET
+
+schemes = Path("Intent.xcodeproj/xcshareddata/xcschemes")
+full = ET.parse(schemes / "Intent.xcscheme").getroot()
+ui = ET.parse(schemes / "IntentUI.xcscheme").getroot()
+def structure(element):
+    return (element.tag, element.attrib, (element.text or "").strip(),
+            [structure(child) for child in element])
+def name(testable):
+    return testable.find("BuildableReference").get("BlueprintName")
+full_tests = full.findall("TestAction/Testables/TestableReference")
+ui_tests = ui.findall("TestAction/Testables/TestableReference")
+assert [name(t) for t in ui_tests] == ["IntentUITests"], "UI scheme must contain only the UI bundle"
+original = next(t for t in full_tests if name(t) == "IntentUITests")
+assert structure(original) == structure(ui_tests[0]), "UI coverage/skips must match the full scheme"
+assert full.find("TestAction").attrib == ui.find("TestAction").attrib, "Test configurations must match"
+app = full.find("BuildAction/BuildActionEntries/BuildActionEntry/BuildableReference")
+ui_builds = ui.findall("BuildAction/BuildActionEntries/BuildActionEntry")
+assert len(ui_builds) == 1 and ui_builds[0].get("buildForTesting") == "YES"
+assert structure(app) == structure(ui_builds[0].find("BuildableReference")), "Both schemes must build the same app"
+PY
+then
+  pass "UI scheme preserves full-scheme coverage and excludes unit build inputs"
+else
+  fail "UI scheme differs from the full scheme's UI test contract"
+fi
 for sub in build-for-testing-ui test-without-building-ui; do
   status=$(run_filtered "release-$sub" '' "$sub" BUILD_CONFIGURATION=Release)
   assert_eq "Release $sub exits 0" "$status" 0
