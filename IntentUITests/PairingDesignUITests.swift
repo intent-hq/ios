@@ -10,7 +10,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     func testSavedConnectionActionsPreserveCurrentConnection() throws {
         let app = try launchConnected()
         try verifyBoundConnectionActions(in: app)
-        app.buttons["Connect to…"].tap()
+        app.buttons["intent.menu.connections"].tap()
         let scan = app.buttons["saved-connections.scan"]
         let manual = app.buttons["saved-connections.manual"]
         XCTAssertTrue(manual.waitForExistence(timeout: Self.timeout))
@@ -116,6 +116,8 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(app.staticTexts["Pair New"].exists)
         XCTAssertFalse(app.staticTexts["Connected"].exists, "Home is unbound; another window must not lend its badge")
+        XCTAssertTrue(machine.isHittable)
+        XCTAssertGreaterThanOrEqual(machine.frame.height, 44)
         verifySavedCardGeometry(machine, in: app)
         capture(app, named: "saved-sheet")
         machine.press(forDuration: 1)
@@ -187,22 +189,20 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
         app.launch()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         return app
     }
 
     @MainActor
     private func verifyBoundConnectionActions(in app: XCUIApplication) throws {
-        app.buttons["Workspace options"].tap()
-        app.buttons["Connect to…"].tap()
+        app.openHomeAction("connections")
         let machine = option("Demo Mac", in: app)
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
         // Select the fixture through the real row before asserting window ownership.
         // A restored demo scene may initially be unbound (ios#515).
         machine.tap()
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
-        app.buttons["Workspace options"].tap()
-        app.buttons["Connect to…"].tap()
+        app.openHomeAction("connections")
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
         let originalIdentifier = machine.identifier
         XCTAssertTrue(app.staticTexts["Connected"].exists)
@@ -212,8 +212,8 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         reveal(machine, in: app, scrollingUp: false)
         machine.tap()
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
-        app.buttons["Workspace options"].tap()
-        XCTAssertTrue(app.buttons["Connect to…"].waitForExistence(timeout: Self.timeout))
+        app.buttons["intent.menu.open"].tap()
+        XCTAssertTrue(app.revealHomeAction("connections").isHittable)
     }
 
     @MainActor

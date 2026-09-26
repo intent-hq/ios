@@ -168,24 +168,13 @@ private extension MessageInputView {
     }
 
     var textEditor: some View {
-        ZStack(alignment: placeholderAlignment) {
+        ZStack(alignment: .leading) {
             SubmittableTextView(
                 text: $localText,
                 isFocused: $isFocused,
                 onSubmit: { sendCurrentMessage() },
-                onHeightChange: { newHeight in
-                    textViewHeight = min(
-                        max(newHeight, Constants.Conversation.Composer.minimumTextViewHeight),
-                        Constants.Conversation.Composer.maximumTextViewHeight
-                    )
-                },
-                onCaretChange: { offset in
-                    #if os(visionOS)
-                    caretOffset = offset
-                    #else
-                    _ = offset
-                    #endif
-                }
+                onHeightChange: updateTextViewHeight,
+                onCaretChange: updateCaretOffset
             )
             .padding(.horizontal, Constants.Conversation.Composer.textEditorHorizontalPadding)
             .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)
@@ -210,6 +199,24 @@ private extension MessageInputView {
             && isConnectionReadyForSending
     }
 
+    private func updateTextViewHeight(_ naturalHeight: CGFloat) {
+        textViewHeight = min(
+            max(
+                naturalHeight + Constants.Conversation.Composer.fieldVerticalPadding * 2,
+                Constants.Conversation.Composer.minimumTextViewHeight
+            ),
+            Constants.Conversation.Composer.maximumTextViewHeight
+        )
+    }
+
+    private func updateCaretOffset(_ offset: Int) {
+        #if os(visionOS)
+        caretOffset = offset
+        #else
+        _ = offset
+        #endif
+    }
+
     var sendButtonStack: some View {
         VStack(spacing: Constants.Conversation.Composer.sendButtonStackSpacing) {
             if !store.isStreaming || hasSendableContent {
@@ -232,16 +239,6 @@ private extension MessageInputView {
                 .accessibilityLabel("Send message")
             }
         }
-    }
-
-    /// visionOS centers the placeholder vertically in the 60 pt field;
-    /// iOS keeps the original top-leading placement.
-    private var placeholderAlignment: Alignment {
-        #if os(visionOS)
-        return .leading
-        #else
-        return .topLeading
-        #endif
     }
 }
 

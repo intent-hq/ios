@@ -29,9 +29,8 @@ enum DemoMode {
 /// `WorkspaceStore.parseWorkspaces`, `note.list` → `Note.parseNote`,
 /// `agent.list` → `AgentSession.parseAgent`, ...).
 ///
-/// Subscribe methods intentionally fall through to the empty-dictionary
-/// default: a response without a `subscriptionId` makes every store fall
-/// back to its legacy fetch path, which is exactly right for static data.
+/// Chat subscriptions deliver a fixture snapshot; other stores use the
+/// legacy fetch fallback when no subscription ID is returned.
 enum DemoFixtures {
     // Numeric values below are intentional status-image fixture geometry and color data.
     // swiftlint:disable no_magic_numbers number_separator
@@ -357,7 +356,9 @@ enum DemoFixtures {
             }
         }
     }
+}
 
+extension DemoFixtures {
     /// The subscription push a fixture method owes alongside its response:
     /// `chat.subscribe` answers with the seq-0 transcript snapshot the
     /// transcript is loaded from. Nil for every other method.
@@ -378,6 +379,8 @@ enum DemoFixtures {
            agentId == inlineImageAgentId {
             return inlineImageConversationMessages
         }
+        if agentId == assistantAgentId { return assistantMessages }
+        if assistantAgents.contains(where: { ($0["id"] as? String) == agentId }) { return [] }
         return agentId == longConversationAgentId ? longConversationMessages : conversationMessages
     }
 
@@ -392,6 +395,7 @@ enum DemoFixtures {
             return terminalResponse
         }
         return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
+            if let response = proposalResponse(for: method, params: params) { return response }
             switch method {
             case "workspace.list":
                 return ["workspaces": workspaces]
@@ -425,11 +429,17 @@ enum DemoFixtures {
     // swiftlint:disable:next cyclomatic_complexity
     private static func agentAndTaskResponse(for method: String, params: [String: Any]) -> Any {
         switch method {
+        case "agent.create" where params["workspaceId"] as? String == Workspace.chiefWorkspaceId:
+            return createAssistantAgent()
         case "agent.list":
             let workspaceId = params["workspaceId"] as? String
+            if workspaceId == Workspace.chiefWorkspaceId { return ["agents": assistantAgents] }
             return ["agents": workspaceId == longConversationWorkspaceId ? longConversationAgents : agents]
         case "agent.get":
             let agentId = params["agentId"] as? String
+            if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) {
+                return ["agent": assistant]
+            }
             let agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
             return ["agent": agent]
         case "agent.getConversation":

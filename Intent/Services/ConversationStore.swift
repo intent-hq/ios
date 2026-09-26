@@ -85,9 +85,9 @@ import SwiftUI
     var connectionObserver: AnyCancellable?
     var isSubscribing = false
     @ObservationIgnored var eventHandlerId: UUID?
+    var sessionMetadataGeneration = 0
     @ObservationIgnored var eventRegistrationGeneration = 0
     @ObservationIgnored var streamingEventsActive = false
-    @ObservationIgnored var sessionMetadataGeneration = 0
     @ObservationIgnored var pendingQuestionRecoveryTask: Task<Void, Never>?
     @ObservationIgnored var markedQuestionRetryDelays: [Duration] =
         ConversationStore.defaultMarkedQuestionRetryDelays
