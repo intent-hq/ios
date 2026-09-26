@@ -276,7 +276,7 @@ private struct ConnectionPairingActions: View {
             .background(Constants.Connections.surface(for: colorScheme))
             .clipShape(.rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius))
         }
-        .sheet(isPresented: $showQRScanner) { QRScannerView(onPaired: onPaired) }
+        .fullScreenCover(isPresented: $showQRScanner) { QRScannerView(onPaired: onPaired) }
         .sheet(isPresented: $showManualEntry) { ManualTokenEntryView(onPaired: onPaired) }
     }
 

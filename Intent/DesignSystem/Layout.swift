@@ -475,10 +475,18 @@ extension Constants.Toast {
 extension Constants.QRScanner {
     static let unavailableMessagePadding: CGFloat = 24
     static let statusSpacing: CGFloat = 8
-    static let statusPadding: CGFloat = 20
-    static let statusBackgroundOpacity: Double = 0.7
-    static let statusCornerRadius: CGFloat = 12
-    static let statusBottomPadding: CGFloat = 60
+    static let horizontalInset: CGFloat = 24
+    static let windowVerticalOffset: CGFloat = 12
+    static let windowCornerRadius: CGFloat = 28
+    static let dimmingOpacity: Double = 0.45
+    static let bracketWidth: CGFloat = 3
+    static let bracketArmLength: CGFloat = 70
+    static let instructionTopPadding: CGFloat = 24
+    static let hintIconSize: CGFloat = 16
+    static let cancelWidth: CGFloat = 92
+    static let cancelHeight: CGFloat = 48
+    static let cancelHorizontalPadding: CGFloat = 20
+    static let cancelTopPadding: CGFloat = 12
 }
 
 extension Constants.Loading {

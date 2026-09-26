@@ -48,7 +48,7 @@ struct PairingView: View {
         NavigationStack {
             pairingContent
                 .toolbar(.hidden, for: .navigationBar)
-                .sheet(isPresented: $showQRScanner) { QRScannerView() }
+                .fullScreenCover(isPresented: $showQRScanner) { QRScannerView() }
                 .sheet(isPresented: $showManualEntry) { ManualTokenEntryView() }
                 .sheet(isPresented: $showConnections) { ConnectionsView() }
         }
