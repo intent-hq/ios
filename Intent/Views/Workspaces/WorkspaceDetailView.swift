@@ -394,9 +394,11 @@ private extension WorkspaceDetailView {
             coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
         } label: {
             AgentRowView(agent: agent, colorScheme: colorScheme, indented: indented)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())
+        .accessibilityIdentifier("workspace.agent.\(agent.id)")
         .visionListRowHitTarget()
         .contextMenu {
             AgentNotificationsMuteButton(agent: agent) { toggleNotificationsMuted(agent) }
