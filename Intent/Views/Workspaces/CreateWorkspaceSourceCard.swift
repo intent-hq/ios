@@ -12,11 +12,7 @@ struct CreateWorkspaceSourceCard: View {
     var body: some View {
         Button(action: onEdit) {
             HStack(spacing: CreateWorkspaceFormStyle.controlPadding) {
-                Image(.folder)
-                    .resizable().scaledToFit()
-                    .frame(width: folderSize, height: folderSize)
-                    .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
-                    .accessibilityHidden(true)
+                folderIcon
                 VStack(alignment: .leading, spacing: 0) {
                     Text(repositoryFullName)
                         .interFont(Constants.Typography.bodyS)
@@ -46,5 +42,14 @@ struct CreateWorkspaceSourceCard: View {
         .accessibilityIdentifier("creation.sourceCard")
         .accessibilityLabel("Source. Repository: \(repositoryFullName). Branch: \(branch)")
         .accessibilityHint("Change the branch, or go back again to change the repository.")
+    }
+
+    private var folderIcon: some View {
+        Image(.folder)
+            .resizable()
+            .scaledToFit()
+            .frame(width: folderSize, height: folderSize)
+            .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
+            .accessibilityHidden(true)
     }
 }
