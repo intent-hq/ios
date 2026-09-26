@@ -183,6 +183,7 @@ $(SRCROOT)/Intent/Assets.xcassets/QRCode.imageset
 $(SRCROOT)/Intent/Assets.xcassets/QuestionCircle.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Redo.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Save.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ScanHint.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Screen.imageset
 $(SRCROOT)/Intent/Assets.xcassets/ScreenRecordingStart.imageset
 $(SRCROOT)/Intent/Assets.xcassets/ScreenRecordingStop.imageset
