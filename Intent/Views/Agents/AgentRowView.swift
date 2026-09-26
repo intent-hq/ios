@@ -87,6 +87,8 @@ struct AgentRowView: View {
         }
         .padding(.vertical, Constants.AgentRow.verticalPadding)
         .padding(.leading, indented ? Constants.AgentRow.nestedLeadingPadding : 0)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var avatar: some View {

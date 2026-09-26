@@ -145,7 +145,8 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
             XCTAssertTrue(preview.waitForExistence(timeout: Fixture.elementTimeout))
             let point = agentRowTapPoint(target, row: row.frame, preview: preview.frame)
             app.coordinate(withNormalizedOffset: .zero)
-                .withOffset(CGVector(dx: point.x, dy: point.y)).tap()
+                .withOffset(CGVector(dx: point.x, dy: point.y))
+                .tap()
             XCTAssertTrue(
                 transcript.waitForExistence(timeout: Fixture.elementTimeout),
                 "Tapping \(target) must open the agent conversation"
@@ -175,7 +176,8 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         let row = app.buttons["workspace.agent.demo-agent-deflake-capture"]
         XCTAssertTrue(row.waitForExistence(timeout: Fixture.elementTimeout))
         row.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
-            .withOffset(CGVector(dx: 2, dy: 0)).tap()
+            .withOffset(CGVector(dx: 2, dy: 0))
+            .tap()
         let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
         XCTAssertTrue(
             transcript.waitForExistence(timeout: Fixture.elementTimeout),
