@@ -33,7 +33,7 @@ struct QuestionWizardLayoutTests {
         #expect(!rendered.scrollsHorizontally)
         #expect(rendered.firstLabel == "Answer 1")
         #expect(rendered.firstValue == "Selected")
-        #expect(rendered.firstTraits.contains(.isSelected))
+        #expect(rendered.firstTraits.contains(.selected))
         #expect(rendered.firstTraits.contains(.button))
         #expect(rendered.options.allSatisfy { $0.width <= rendered.hostFrame.width && $0.height >= 44 })
     }
