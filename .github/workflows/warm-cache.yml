@@ -3,7 +3,7 @@ name: Warm caches
 # restore caches created on its own merge ref or on the default branch, and
 # ci.yml deliberately does not run on main, so without this every PR's first
 # run paid for a cold Go toolchain download, a full Tailscale compile, a
-# gomobile bind, and a cold SPM clone (12-20 minutes on the 3-core macOS VM).
+# gomobile bind, and a cold SPM clone.
 #
 # Keys, paths, and hash inputs must stay byte-identical to ci.yml; a hit on
 # an exact key skips the save, so PRs stop creating per-PR duplicate caches
@@ -49,7 +49,7 @@ jobs:
 
   warm-macos:
     name: Warm TailcatKit and SPM caches (macOS)
-    runs-on: macos-15
+    runs-on: [self-hosted, macOS, ARM64, intent-ios]
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'

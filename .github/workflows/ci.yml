@@ -134,10 +134,8 @@ jobs:
     # merge-blocking; instead the final "Require Go unit tests and SwiftLint"
     # step below waits for those jobs and fails this one if either did not
     # succeed. All three jobs still run in parallel.
-    # GitHub-hosted arm64 macOS runner; ships Xcode and iOS simulator
-    # runtimes preinstalled. Timeout allows a cold SPM resolve + full build
-    # on the 3-core M-series VM.
-    runs-on: macos-15
+    # Dedicated Apple Silicon Mac with Xcode and an iPhone simulator installed.
+    runs-on: [self-hosted, macOS, ARM64, intent-ios]
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -446,9 +444,9 @@ jobs:
     # Pull requests and unfiltered manual runs exercise the complete UI bundle.
     # Filtered dispatches already run their requested selector in build-and-test.
     # A human adds this check to the ruleset after merge; build-and-test does not
-    # wait for it, so both macOS jobs release their runners independently.
+    # wait for it; the iOS jobs queue on the same dedicated Mac.
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
-    runs-on: macos-15
+    runs-on: [self-hosted, macOS, ARM64, intent-ios]
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
