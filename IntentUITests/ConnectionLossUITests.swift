@@ -369,28 +369,6 @@ extension ConnectionLossUITests {
     }
 
     @MainActor
-    private func assertBackdropCoversScreen(_ screenshot: XCUIScreenshot) throws {
-        let image = try XCTUnwrap(screenshot.image.cgImage)
-        for (xPosition, yPosition) in [(0.1, 0.1), (0.9, 0.1), (0.1, 0.9), (0.9, 0.9)] {
-            let region = CGRect(x: Double(image.width) * xPosition, y: Double(image.height) * yPosition, width: 1, height: 1)
-            let pixel = try XCTUnwrap(image.cropping(to: region))
-            var bytes = [UInt8](repeating: 0, count: 4)
-            let context = try XCTUnwrap(CGContext(
-                data: &bytes,
-                width: 1,
-                height: 1,
-                bitsPerComponent: 8,
-                bytesPerRow: 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ))
-            context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-            // Single-tinted source ranges from 17 to 106; reject a black gap or exposed page.
-            XCTAssertTrue((12...125).contains(Int(bytes[0])), "The backdrop must cover every screen quadrant")
-        }
-    }
-
-    @MainActor
     func testLargestTextCanScrollToWarningsAndHome() throws {
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory, arguments: [
@@ -516,13 +494,5 @@ extension ConnectionLossUITests {
             FileManager.default.fileExists(atPath: path)
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: Fixture.timeout), .completed, "Missing fixture event: \(event)")
-    }
-
-    @MainActor
-    private func capture(_ app: XCUIApplication, named name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = "connection-loss-" + name
-        attachment.lifetime = .keepAlways
-        add(attachment)
     }
 }
