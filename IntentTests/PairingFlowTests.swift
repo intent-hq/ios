@@ -140,7 +140,7 @@ struct PairingFlowTests {
         fake.responseMap["client.hello"] = ["server": ["capabilities": ["hostMembership": 1]]]
         for person in ["B", "C", "B"] {
             fake.responseMap["principal.me"] = [
-                "principalId": person, "isAdministrator": false, "hostRole": "member", "hostMembershipRevision": 1
+                "id": person, "isAdministrator": false, "hostRole": "member", "hostMembershipRevision": 1
             ]
             _ = try await PairingFlow.connect(
                 payload: PairingPayload(hosts: ["test.invalid"], port: 443, token: "test-\(person)", certFingerprint: pin, tcAddress: "tc-test"),
@@ -161,7 +161,7 @@ struct PairingFlowTests {
         defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
         let fake = FakeConnectionManager()
         fake.responseMap["client.hello"] = ["server": ["capabilities": ["hostMembership": 1]]]
-        fake.responseMap["principal.me"] = ["principalId": "B", "isAdministrator": false]
+        fake.responseMap["principal.me"] = ["id": "B", "isAdministrator": false]
         await #expect(throws: (any Error).self) {
             try await PairingFlow.connect(
                 payload: payload(fingerprint: String(repeating: "ab", count: 32)),
