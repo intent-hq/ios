@@ -151,11 +151,16 @@ struct AgentRowView: View {
     }
 
     static func previewText(_ message: String) -> AttributedString {
-        var text = (try? AttributedString(
+        let parsed = (try? AttributedString(
             markdown: message,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(message)
-        text.link = nil
+        var text = AttributedString()
+        for run in parsed.runs {
+            var attributes = run.attributes
+            attributes.link = nil
+            text.append(AttributedString(String(parsed[run.range].characters), attributes: attributes))
+        }
         return text
     }
 

@@ -257,13 +257,15 @@ struct AgentRowPreviewTests {
     }
 
     @Test func previewKeepsInlineStylesAndWhitespace() throws {
-        let preview = AgentRowView.previewText("[**Review** `code`](https://example.com)  with\n*care*")
+        let markdown = "[**Review** `code`](https://example.com)  with\n*care*"
+        let parsed = try AttributedString(markdown: markdown, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+        let preview = AgentRowView.previewText(markdown)
         #expect(String(preview.characters) == "Review code  with\ncare")
         let bold = try #require(preview.range(of: "Review"))
         let code = try #require(preview.range(of: "code"))
         let italic = try #require(preview.range(of: "care"))
-        #expect(preview[bold].inlinePresentationIntent?.contains(.stronglyEmphasized) == true)
-        #expect(preview[code].inlinePresentationIntent?.contains(.code) == true)
+        #expect(preview[bold].inlinePresentationIntent?.contains(.stronglyEmphasized) == true, "Parsed: \(parsed); preview: \(preview)")
+        #expect(preview[code].inlinePresentationIntent?.contains(.code) == true, "Parsed: \(parsed); preview: \(preview)")
         #expect(preview[italic].inlinePresentationIntent?.contains(.emphasized) == true)
         #expect(preview.runs.allSatisfy { $0.link == nil })
     }
