@@ -130,22 +130,7 @@ struct ContentBlockBody: View, Equatable {
             if let text = block.resolvedText {
                 let cleaned = ContentBlockView.stripSuggestedPrompts(text)
                 if !cleaned.isEmpty {
-                    MarkdownTextView(
-                        text: cleaned,
-                        onOpenURL: { url in
-                            if let link = NoteDetailView.parseIntentNoteLink(url) {
-                                let targetWorkspaceId = link.workspaceId ?? workspaceId
-                                if let onNavigateToNote {
-                                    onNavigateToNote(link.id, targetWorkspaceId, "Note")
-                                } else {
-                                    coordinator.onSelectNote(link.id, workspaceId: targetWorkspaceId, noteTitle: "Note")
-                                }
-                                return .handled
-                            }
-                            return .systemAction
-                        },
-                        workspaceId: workspaceId
-                    )
+                    textView(cleaned)
                 }
             }
 
@@ -185,11 +170,31 @@ struct ContentBlockBody: View, Equatable {
             fileView
 
         case .resource:
-            // Standalone resource blocks (PROTOCOL §7.1) never render in the
-            // transcript; question resources are wizard-only and stripped by
-            // MIME regardless of payload validity (FE parity).
-            EmptyView()
+            // Action proposals render inline; question resources remain wizard-only.
+            if let proposal = ActionProposal.parse(block) {
+                ProposalCardView(proposal: proposal)
+            }
         }
+    }
+
+    @ViewBuilder
+    private func textView(_ text: String) -> some View {
+        if workspaceId == Workspace.chiefWorkspaceId {
+            WorkspaceLinkedTextView(text: text, workspaceId: workspaceId, onOpenURL: openTextURL)
+        } else {
+            MarkdownTextView(text: text, onOpenURL: openTextURL, workspaceId: workspaceId)
+        }
+    }
+
+    private func openTextURL(_ url: URL) -> OpenURLAction.Result {
+        guard let link = NoteDetailView.parseIntentNoteLink(url) else { return .systemAction }
+        let targetWorkspaceId = link.workspaceId ?? workspaceId
+        if let onNavigateToNote {
+            onNavigateToNote(link.id, targetWorkspaceId, "Note")
+        } else {
+            coordinator.onSelectNote(link.id, workspaceId: targetWorkspaceId, noteTitle: "Note")
+        }
+        return .handled
     }
 
     @ViewBuilder

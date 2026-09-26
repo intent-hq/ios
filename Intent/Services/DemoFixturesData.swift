@@ -8,6 +8,18 @@ extension DemoFixtures {
     // swiftlint:disable no_magic_numbers
 
     static var workspaces: [[String: Any]] {
+        guard ProcessInfo.processInfo.arguments.contains("--demo-long-workspace-list") else { return baseWorkspaces }
+        let extra = (0 ..< 20).map { index in
+            var workspace = baseWorkspaces[index % baseWorkspaces.count]
+            workspace["id"] = "demo-scroll-\(index)"
+            workspace["title"] = "Workspace scroll fixture \(index)"
+            workspace["lastActivity"] = iso(minutesAgo: Double(200 + index))
+            return workspace
+        }
+        return baseWorkspaces + extra
+    }
+
+    private static var baseWorkspaces: [[String: Any]] {
         [
             [
                 "id": "demo-ws-dashboard",

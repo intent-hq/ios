@@ -8,7 +8,7 @@ struct WorkspaceListView: View {
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
-    @State private var showingDiagnosticLogs = false
+    @State private var isSearching = false
     @FocusState private var searchFocused: Bool
 
     init(workspaceStore: WorkspaceStore) {
@@ -17,70 +17,49 @@ struct WorkspaceListView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("View", selection: $viewModel.viewMode) {
-                ForEach(ViewMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).interFont(Constants.Typography.bodyXS).tag(mode)
+        ScrollView {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                pageHeader
+                Section {
+                    workspaceContent
+                } header: {
+                    if !isSearching {
+                        WorkspaceSearchBar(
+                            viewMode: $viewModel.viewMode,
+                            isSearching: $isSearching,
+                            horizontalPadding: Constants.WorkspaceList.pageInset
+                        )
+                        .background(Theme.background(for: colorScheme))
+                    }
                 }
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, Constants.WorkspaceList.pickerHorizontalPadding)
-            .padding(.vertical, Constants.WorkspaceList.pickerVerticalPadding)
-
-            ZStack {
-                Theme.background(for: colorScheme).ignoresSafeArea()
-
-                if viewModel.isLoading, viewModel.workspaces.isEmpty {
-                    ProgressView {
-                        Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
-                    }
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                } else if viewModel.filteredWorkspaces.isEmpty {
-                    if viewModel.hasSearchQuery {
-                        ContentUnavailableView.search
-                    } else {
-                        emptyState
-                    }
-                } else {
-                    workspaceList
-                }
-            }
+            .padding(.bottom, isSearching ? 0 : AssistantLaunchButton.scrollClearance)
         }
+        .accessibilityIdentifier("workspaces.list")
+        #if !os(visionOS)
+        .scrollDismissesKeyboard(.immediately)
+        #endif
         .background(Theme.background(for: colorScheme))
-        .navigationTitle("Workspaces")
-        .workspaceSearch(text: $viewModel.searchText, isFocused: $searchFocused)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Menu {
-                    Button {
-                        coordinator.onOpenSettings()
-                    } label: {
-                        Label { Text("Settings").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "gearshape") }
-                    }
-                    Button {
-                        showingConnections = true
-                    } label: {
-                        Label { Text("Connect to…").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "desktopcomputer") }
-                    }
-                    Button {
-                        showingDiagnosticLogs = true
-                    } label: {
-                        Label { Text("Export logs").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "doc.zipper") }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel("Workspace options")
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    showingCreateWorkspace = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .accessibilityLabel("Create workspace")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear.frame(height: 0)
+                .background(Theme.background(for: colorScheme), ignoresSafeAreaEdges: .top)
+                .allowsHitTesting(false)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isSearching {
+                WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
             }
         }
+        .refreshable {
+            await workspaceStore.fetchAll()
+        }
+        .modifier(WorkspaceActionLauncher(
+            isSearching: isSearching,
+            onCreateWorkspace: { showingCreateWorkspace = true },
+            onConnections: { showingConnections = true }
+        ))
+        .navigationTitle("Workspaces")
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView(session: session)
                 .environment(coordinator)
@@ -88,12 +67,6 @@ struct WorkspaceListView: View {
         .sheet(isPresented: $showingConnections) {
             ConnectionsView()
                 .environment(coordinator)
-        }
-        .sheet(isPresented: $showingDiagnosticLogs) {
-            DiagnosticExportView()
-        }
-        .refreshable {
-            await workspaceStore.fetchAll()
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
         .preference(
@@ -114,13 +87,35 @@ struct WorkspaceListView: View {
         }
     }
 
-    private var workspaceList: some View {
-        List { workspaceSections }
-            .scrollContentBackground(.hidden)
-            .listStyle(.plain)
-            #if !os(visionOS)
-            .scrollDismissesKeyboard(.immediately)
-            #endif
+    private var pageHeader: some View {
+        Text("Workspaces")
+            .font(.largeTitle.bold())
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("workspaces.title")
+            .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
+            .padding(.bottom, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleBottomSpacing)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(Theme.foreground(for: colorScheme))
+            .padding(.horizontal, Constants.WorkspaceList.pageInset)
+    }
+
+    @ViewBuilder
+    private var workspaceContent: some View {
+        if viewModel.isLoading, viewModel.workspaces.isEmpty {
+            ProgressView {
+                Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+            }
+            .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
+        } else if viewModel.filteredWorkspaces.isEmpty {
+            if viewModel.hasSearchQuery {
+                ContentUnavailableView.search
+            } else {
+                emptyState
+            }
+        } else {
+            workspaceSections
+                .padding(.horizontal, Constants.WorkspaceList.pageInset)
+        }
     }
 
     @ViewBuilder
@@ -132,21 +127,29 @@ struct WorkspaceListView: View {
             }
         case .repo:
             ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
-                Section(header: Text(repoName).interFont(Constants.Typography.eyebrow)) {
-                    ForEach(workspaces) { workspace in
-                        workspaceButton(workspace, showRepo: false)
-                    }
+                groupHeading(repoName)
+                ForEach(workspaces) { workspace in
+                    workspaceButton(workspace, showRepo: false)
                 }
             }
         case .status:
             ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
-                Section(header: Text(statusLabel).interFont(Constants.Typography.eyebrow)) {
-                    ForEach(workspaces) { workspace in
-                        workspaceButton(workspace, usesVisionHitTarget: false)
-                    }
+                groupHeading(statusLabel)
+                ForEach(workspaces) { workspace in
+                    workspaceButton(workspace, usesVisionHitTarget: false)
                 }
             }
         }
+    }
+
+    private func groupHeading(_ title: String) -> some View {
+        Text(title.uppercased())
+            .interFont(Constants.Typography.eyebrow)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Constants.WorkspaceList.groupTopSpacing)
+            .padding(.bottom, Constants.WorkspaceList.groupBottomSpacing)
+            .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder
@@ -168,9 +171,12 @@ struct WorkspaceListView: View {
             searchFocused = false
             coordinator.onSelectWorkspace(workspace.id)
         } label: {
-            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
+            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo, spacious: true)
         }
         .buttonStyle(.plain)
         .contentShape(Rectangle())
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
     }
 }

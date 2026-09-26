@@ -16,6 +16,8 @@ struct AssistantMessageView: View {
     private let renderBlocks: [RenderBlock]
     private let toolResults: [String: ContentBlock]
     private let copyText: String
+    private let hasStrippedPrompts: Bool
+    private let proposalWorkspaceIDs: Set<String>
 
     init(
         message: ConversationMessage,
@@ -32,9 +34,11 @@ struct AssistantMessageView: View {
         self.onLayoutChange = onLayoutChange
         self.onHydrateBlock = onHydrateBlock
         let blocks = message.contentBlocks
+        self.proposalWorkspaceIDs = Set(blocks.compactMap(ActionProposal.parse).filter { $0.method != nil }.flatMap(\.workspaceIDs))
         let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
+        self.hasStrippedPrompts = strippedBlocks != blocks
         self.renderBlocks = MessageBlockPartitioning.groupContentBlocks(
-            strippedBlocks,
+            workspaceId == Workspace.chiefWorkspaceId ? WorkspaceLinks.coalescingTextBlocks(strippedBlocks) : strippedBlocks,
             isStreaming: message.isStreaming
         )
         self.toolResults = MessageBlockPartitioning.pairToolResults(blocks)
@@ -77,14 +81,10 @@ struct AssistantMessageView: View {
                         onHydrateBlock: onHydrateBlock
                     )
                 case .group(let group):
-                    let isLastGroup = !renderBlocks.suffix(from: index + 1).contains { candidate in
-                        if case .group = candidate { return true }
-                        return false
-                    }
                     let inputs = groupInputs(group)
                     ResponseGroupView(
                         group: group,
-                        isLast: isLastGroup,
+                        isLast: isLastGroup(at: index),
                         workspaceId: workspaceId,
                         onNavigateToNote: onNavigateToNote,
                         toolResults: inputs.toolResults,
@@ -94,13 +94,25 @@ struct AssistantMessageView: View {
                     )
                 }
             }
+            // Rebuild cached markdown when a streamed prompt block closes and disappears.
+            .id(hasStrippedPrompts)
         }
         .padding(.vertical, Layout.verticalPadding)
+        .environment(\.assistantMessageStreaming, message.isStreaming)
+        .environment(\.proposalMessageId, message.id)
+        .environment(\.proposalWorkspaceIDs, proposalWorkspaceIDs)
         .modifier(MessageCopyContextMenu(
             text: copyText,
             userStyled: false,
             isStreaming: message.isStreaming
         ))
+    }
+
+    private func isLastGroup(at index: Int) -> Bool {
+        !renderBlocks.suffix(from: index + 1).contains { candidate in
+            if case .group = candidate { return true }
+            return false
+        }
     }
 }
 

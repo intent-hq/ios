@@ -448,7 +448,8 @@ jobs:
     # wait for it, so both macOS jobs release their runners independently.
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     runs-on: macos-15
-    timeout-minutes: 45
+    # Setup/build plus the complete UI suite can take 45 minutes; allow result export too (ios#429).
+    timeout-minutes: 60
     env:
       GIT_TERMINAL_PROMPT: '0'
       SPM_CLONE_DIR: build/SourcePackages
