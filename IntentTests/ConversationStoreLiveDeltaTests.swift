@@ -296,18 +296,20 @@ extension ConversationStoreLiveStateTests {
             [
                 "id": "msg-1",
                 "role": "assistant",
-                "contentBlocks": [[
-                    "type": "tool_use",
-                    "id": "msg-1:0",
-                    "name": "mcp.workspace-mcp.workspace_api",
-                    "input": [
-                        "_acpTitle": "mcp.workspace-mcp.workspace_api",
-                        "code": "return await ws.workspace.details()",
-                        "summary": summary
-                    ],
-                    "toolCallId": "call-1",
-                    "metadata": ["toolKind": "other", "status": "completed"]
-                ]],
+                "contentBlocks": [
+                    [
+                        "type": "tool_use",
+                        "id": "msg-1:0",
+                        "name": "mcp.workspace-mcp.workspace_api",
+                        "input": [
+                            "_acpTitle": "mcp.workspace-mcp.workspace_api",
+                            "code": "return await ws.workspace.details()",
+                            "summary": summary
+                        ],
+                        "toolCallId": "call-1",
+                        "metadata": ["toolKind": "other", "status": "completed"]
+                    ]
+                ],
                 "timestamp": "2026-09-26T00:00:00.000Z"
             ]
         ]))
