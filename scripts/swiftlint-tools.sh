@@ -3,6 +3,7 @@
 EXPECTED_SWIFTLINT_VERSION=0.65.1
 SWIFTLINT_SWIFT_VERSION=6.3.2
 SWIFTLINT_INSTALL_DIR="${INTENT_SWIFTLINT_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/intent/swiftlint}"
+SWIFTLINT_APT_PREREQUISITES='ca-certificates coreutils curl gnupg libc-bin libxml2 tar python3'
 
 swiftlint_error() {
   echo "error: $*" >&2
@@ -21,6 +22,7 @@ swiftlint_find() {
 }
 
 swiftlint_version_check() {
+  swiftlint_linux_binary_preflight || return 1
   local actual
   if ! actual=$("$SWIFTLINT_PATH" version); then
     swiftlint_error "unable to run '$SWIFTLINT_PATH version'"
@@ -28,6 +30,25 @@ swiftlint_version_check() {
   fi
   if [ "$actual" != "$EXPECTED_SWIFTLINT_VERSION" ]; then
     swiftlint_error "SwiftLint $EXPECTED_SWIFTLINT_VERSION is required; found $actual at $SWIFTLINT_PATH"
+    return 1
+  fi
+}
+
+swiftlint_linux_binary_preflight() {
+  [ "$(uname -s)" = Linux ] || return 0
+  if ! command -v ldd >/dev/null; then
+    swiftlint_error "Linux SwiftLint needs ldd to check shared libraries. Run: sudo apt-get update && sudo apt-get install -y $SWIFTLINT_APT_PREREQUISITES; then re-run scripts/setup-swiftlint.sh"
+    return 1
+  fi
+  local dependencies
+  # ldd may exit 0 with missing libraries. Non-ELF launchers on PATH can fail
+  # ldd's format check; keep using their normal version/runtime checks.
+  dependencies=$(LC_ALL=C ldd "$SWIFTLINT_PATH" 2>&1) || true
+  if [[ "$dependencies" == *'not found'* ]]; then
+    swiftlint_error "SwiftLint shared libraries are missing for $SWIFTLINT_PATH:
+$dependencies
+On Ubuntu 24.04, run: sudo apt-get update && sudo apt-get install -y $SWIFTLINT_APT_PREREQUISITES
+Then re-run scripts/setup-swiftlint.sh."
     return 1
   fi
 }

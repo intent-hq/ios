@@ -42,7 +42,7 @@ if (swiftlint_find && swiftlint_version_check && swiftlint_linux_preflight) 2>/d
 fi
 for tool in curl sha256sum tar python3 gpg; do
   if ! command -v "$tool" >/dev/null; then
-    swiftlint_error "Missing $tool. Run: sudo apt-get update && sudo apt-get install -y ca-certificates coreutils curl gnupg tar python3"
+    swiftlint_error "Missing $tool. Run: sudo apt-get update && sudo apt-get install -y $SWIFTLINT_APT_PREREQUISITES"
     exit 1
   fi
 done

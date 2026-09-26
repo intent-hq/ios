@@ -160,7 +160,7 @@ From this repository's root:
 ```bash
 # One-time system prerequisites, if the setup command reports them missing.
 sudo apt-get update
-sudo apt-get install -y ca-certificates coreutils curl gnupg tar python3
+sudo apt-get install -y ca-certificates coreutils curl gnupg libc-bin libxml2 tar python3
 
 # Install or reuse SwiftLint and a working SourceKit runtime.
 scripts/setup-swiftlint.sh
@@ -193,8 +193,11 @@ directory containing `libsourcekitdInProc.so`; an invalid or unloadable override
 fails even if a system runtime could otherwise be used. Unset it to return to
 automatic selection. The preflight loads an explicit library and runs a small
 real lint probe, with crashes and timeouts reported as prerequisite errors.
-Missing system libraries are reported with Swiftly's package-install command;
-setup never runs `sudo` for you. Linux support does not include SwiftUI builds.
+SwiftLint's executable libraries (including `libxml2`) are checked with `ldd`
+before running its version command; missing libraries report the prerequisite
+command above. Additional Swift runtime libraries are reported with Swiftly's
+package-install command; setup never runs `sudo` for you. Linux support does not
+include SwiftUI builds.
 
 To remove the managed tools, delete only the installation directory (by default
 `rm -rf ~/.local/share/intent/swiftlint`); if `XDG_DATA_HOME` or
