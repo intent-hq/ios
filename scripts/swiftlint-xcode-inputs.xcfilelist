@@ -19,6 +19,8 @@ $(SRCROOT)/Intent/DesignSystem/Colors.swift
 $(SRCROOT)/Intent/DesignSystem/ComponentLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ComposerLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ConnectionSheetStyle.swift
+$(SRCROOT)/Intent/DesignSystem/ConversationDesign.swift
+$(SRCROOT)/Intent/DesignSystem/ConversationDesignColors.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationMediaLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationTranscriptLayout.swift
 $(SRCROOT)/Intent/DesignSystem/IntentButtonStyle.swift
@@ -122,6 +124,8 @@ $(SRCROOT)/Intent/Services/DemoConnectionLoss.swift
 $(SRCROOT)/Intent/Services/DemoFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixturesAssistant.swift
 $(SRCROOT)/Intent/Services/DemoFixturesData.swift
+$(SRCROOT)/Intent/Services/DemoFixturesDesign.swift
+$(SRCROOT)/Intent/Services/DemoFixturesDesignData.swift
 $(SRCROOT)/Intent/Services/DemoFixturesInlineImages.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
@@ -403,6 +407,7 @@ $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
 $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
+$(SRCROOT)/IntentTests/ConversationDesignTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreBindingGenerationTests.swift
@@ -441,6 +446,7 @@ $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
 $(SRCROOT)/IntentTests/CreationPickerRenderedGeometry.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
+$(SRCROOT)/IntentTests/DemoFixturesDesignTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesTests.swift
 $(SRCROOT)/IntentTests/DemoInlineImageFixtureTests.swift
 $(SRCROOT)/IntentTests/DiagnosticConcurrencyTests.swift
