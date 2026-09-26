@@ -22,7 +22,7 @@ struct ToolClassifierClassificationTests {
             let display = ToolClassifier.classify(name: "launch-process", input: [
                 "_acpTitle": AnyCodable(fixture.title)
             ])
-            #expect(display.icon == "▶️")
+            #expect(display.icon == .terminal)
             #expect(display.verb == fixture.verb)
             #expect(display.subject == fixture.subject)
         }
@@ -34,7 +34,7 @@ struct ToolClassifierClassificationTests {
             "_acpTitle": AnyCodable("Kill terminal 5")
         ])
 
-        #expect(display.icon == "▶️")
+        #expect(display.icon == .terminal)
         #expect(display.verb == "Run")
         #expect(display.subject == "swift test")
     }
@@ -45,7 +45,7 @@ struct ToolClassifierClassificationTests {
             "_acpTitle": AnyCodable("Kill terminal 5")
         ])
 
-        #expect(display.icon == "▶️")
+        #expect(display.icon == .terminal)
         #expect(display.verb == "Read")
         #expect(display.subject == "terminal")
     }
@@ -56,7 +56,7 @@ struct ToolClassifierClassificationTests {
             "_acpTitle": AnyCodable("Summarize recent activity for the user")
         ])
 
-        #expect(display.icon == "▶️")
+        #expect(display.icon == .terminal)
         #expect(display.verb == "Run")
         #expect(display.subject == "echo hello")
     }
@@ -66,7 +66,7 @@ struct ToolClassifierClassificationTests {
             "_acpTitle": AnyCodable("Inspect repository")
         ])
 
-        #expect(display.icon == "▶️")
+        #expect(display.icon == .terminal)
         #expect(display.verb == "Run")
         #expect(display.subject == nil)
     }

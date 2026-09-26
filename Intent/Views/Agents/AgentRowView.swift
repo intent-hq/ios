@@ -137,13 +137,14 @@ struct AgentRowView: View {
                 .foregroundStyle(attention.kind.color)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         } else if let message = agent.displayMessage {
-            Text(message)
+            Text(LocalizedStringKey(message))
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
                     contrast: colorSchemeContrast
                 ))
                 .lineLimit(1)
+                .allowsHitTesting(false)
         }
     }
 
