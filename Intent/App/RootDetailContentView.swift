@@ -68,11 +68,16 @@ extension RootView {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
-            ContentUnavailableView(
-                "Select a Workspace",
-                systemImage: "sidebar.left",
-                description: Text("Choose a workspace from the sidebar to see its agents and notes.")
-            )
+            ContentUnavailableView {
+                Label {
+                    Text("Select a Workspace").interFont(Constants.Typography.bodyM.withFace(.semibold))
+                } icon: {
+                    Image(systemName: "sidebar.left")
+                }
+            } description: {
+                Text("Choose a workspace from the sidebar to see its agents and notes.")
+                    .interFont(Constants.Typography.bodyS)
+            }
         }
     }
 }

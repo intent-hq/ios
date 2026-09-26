@@ -235,10 +235,12 @@ struct RootView: View {
                         .foregroundStyle(.orange)
                         .accessibilityHidden(true)
                     Text("Live updates unavailable")
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyXS)
                     Spacer(minLength: 0)
-                    Button("Retry") {
+                    Button {
                         session.connection.retryGlobalSubscription()
+                    } label: {
+                        Text("Retry").interFont(Constants.Typography.bodyXS)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)

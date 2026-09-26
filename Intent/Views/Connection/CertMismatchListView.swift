@@ -16,14 +16,19 @@ struct CertMismatchListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.contentSpacing) {
-            Label("Certificate mismatch", systemImage: "exclamationmark.shield")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(warningForeground)
+            Label {
+                Text("Certificate mismatch")
+                    .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
+            } icon: {
+                Image(systemName: "exclamationmark.shield")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(warningForeground)
 
             ForEach(mismatches, id: \.host) { mismatch in
                 VStack(alignment: .leading, spacing: Layout.hostSpacing) {
                     Text(mismatch.host)
-                        .font(.caption.weight(.medium))
+                        .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                     Text(Self.displayFingerprint(mismatch.fingerprint))
                         .font(.caption2.monospaced())

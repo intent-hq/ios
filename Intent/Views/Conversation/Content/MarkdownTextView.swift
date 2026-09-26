@@ -94,7 +94,7 @@ struct MarkdownTextView: View {
             // Textual resolves URLs once per attributed string. Recreate that
             // state on explicit retry; successful media still uses the cache.
             .id(attachmentAttempt)
-            .font(.body)
+            .interFont(Constants.Typography.bodyS)
             .foregroundStyle(Theme.foreground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in

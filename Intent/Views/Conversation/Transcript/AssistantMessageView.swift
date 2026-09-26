@@ -128,7 +128,7 @@ struct ErrorMessageView: View {
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .accessibilityHidden(true)
             Text(message.error ?? "An error occurred")
-                .font(.callout)
+                .interFont(Constants.Typography.bodyS)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
         }
         .padding(Layout.padding)

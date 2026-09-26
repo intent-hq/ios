@@ -34,13 +34,19 @@ struct ModelPickerView: View {
     /// explicit retry instead of an indefinite spinner.
     private var loadFailedState: some View {
         ContentUnavailableView {
-            Label("Models Unavailable", systemImage: "exclamationmark.triangle")
+            Label {
+                Text("Models Unavailable").interFont(Constants.Typography.bodyM)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle")
+            }
         } description: {
             Text("The model list could not be loaded.")
+                .interFont(Constants.Typography.bodyXS)
         } actions: {
             Button("Retry") {
                 Task { await viewModel.refreshSelectableModels() }
             }
+            .interFont(Constants.Typography.bodyS)
         }
     }
 
@@ -50,7 +56,7 @@ struct ModelPickerView: View {
             let sortedProviders = grouped.keys.sorted()
 
             ForEach(sortedProviders, id: \.self) { provider in
-                Section(header: Text(provider)) {
+                Section(header: Text(provider).interFont(Constants.Typography.eyebrow)) {
                     if let models = grouped[provider] {
                         ForEach(models) { model in
                             Button {
@@ -61,6 +67,7 @@ struct ModelPickerView: View {
                             } label: {
                                 HStack {
                                     Text(model.name)
+                                        .interFont(Constants.Typography.bodyS)
                                         .foregroundStyle(Theme.foreground(for: colorScheme))
                                     Spacer()
                                     if viewModel.currentModelId == model.id {

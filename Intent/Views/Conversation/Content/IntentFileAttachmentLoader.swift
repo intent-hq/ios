@@ -216,16 +216,17 @@ struct IntentFileFailureAttachment: Attachment {
     }
 
     func sizeThatFits(_: ProposedViewSize, in environment: TextEnvironmentValues) -> CGSize {
-        // Match ImageDecodeFailureView's intrinsic size (SF Symbol + caption
-        // label in a 4pt-spaced HStack) at the current Dynamic Type size.
-        let traits = UITraitCollection(
-            preferredContentSizeCategory: UIContentSizeCategory(environment.dynamicTypeSize)
-        )
-        let font = UIFont.preferredFont(forTextStyle: .caption1, compatibleWith: traits)
+        // Match the Inter label and native SF Symbol at the current text traits.
+        let traits = UITraitCollection(traitsFrom: [
+            UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(environment.dynamicTypeSize)),
+            UITraitCollection(legibilityWeight: environment.legibilityWeight == .bold ? .bold : .regular)
+        ])
+        let font = Constants.Typography.subtextXXS.uiFont(compatibleWith: traits)
+        let symbolHeight = UIFont.preferredFont(forTextStyle: .caption1, compatibleWith: traits).lineHeight
         let label = "Image".size(withAttributes: [.font: font])
         return CGSize(
-            width: (label.width + font.lineHeight + Constants.Conversation.ImagePlaceholder.failureLabelSpacing).rounded(.up),
-            height: font.lineHeight.rounded(.up)
+            width: (label.width + symbolHeight + Constants.Conversation.ImagePlaceholder.failureLabelSpacing).rounded(.up),
+            height: max(font.lineHeight, symbolHeight).rounded(.up)
         )
     }
 }

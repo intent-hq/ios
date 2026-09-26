@@ -76,11 +76,15 @@ struct WorkspaceListView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView(
-            "No Workspaces",
-            systemImage: "rectangle.stack.badge.plus",
-            description: Text("Create one in the desktop app.")
-        )
+        ContentUnavailableView {
+            Label {
+                Text("No Workspaces").interFont(Constants.Typography.bodyM.withFace(.semibold))
+            } icon: {
+                Image(systemName: "rectangle.stack.badge.plus")
+            }
+        } description: {
+            Text("Create one in the desktop app.").interFont(Constants.Typography.bodyS)
+        }
     }
 
     private var pageHeader: some View {
@@ -98,8 +102,10 @@ struct WorkspaceListView: View {
     @ViewBuilder
     private var workspaceContent: some View {
         if viewModel.isLoading, viewModel.workspaces.isEmpty {
-            ProgressView("Loading workspaces...")
-                .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
+            ProgressView {
+                Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+            }
+            .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
         } else if viewModel.filteredWorkspaces.isEmpty {
             if viewModel.hasSearchQuery {
                 ContentUnavailableView.search
@@ -138,7 +144,7 @@ struct WorkspaceListView: View {
 
     private func groupHeading(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.caption)
+            .interFont(Constants.Typography.eyebrow)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, Constants.WorkspaceList.groupTopSpacing)

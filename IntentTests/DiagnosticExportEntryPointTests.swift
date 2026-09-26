@@ -6,7 +6,7 @@ import Testing
 struct DiagnosticExportEntryPointTests {
     @Test(arguments: [
         ("Settings/SettingsSupportSection.swift", "SettingsActionLabel(title: \"Export logs\""),
-        ("Connection/ConnectionFailureView.swift", "Label(\"Export logs\"")
+        ("Connection/ConnectionFailureView.swift", "Text(\"Export logs\"")
     ])
     func settingsAndFailureKeepAnOfflinePreviewEntry(file: String, labelPrefix: String) throws {
         let source = try read("Intent/Views/" + file)
@@ -30,7 +30,7 @@ struct DiagnosticExportEntryPointTests {
         #expect(!source.contains("DiagnosticPrivacySection"))
         #expect(!source.contains("About these logs"))
         #expect(source.contains("{ confirmsClear = true }"))
-        #expect(source.contains("Button(\"Share ZIP\""))
+        // DiagnosticExportUITests verifies the visible Share ZIP action, independent of label construction.
         #expect(source.contains(".task { model.refresh() }"))
     }
 

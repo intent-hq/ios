@@ -26,8 +26,10 @@ struct WorkspaceListSidebar: View {
                 Theme.sidebar(for: colorScheme).ignoresSafeArea()
 
                 if viewModel.isLoading, viewModel.workspaces.isEmpty {
-                    ProgressView("Loading workspaces...")
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    ProgressView {
+                        Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+                    }
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 } else if viewModel.filteredWorkspaces.isEmpty {
                     if viewModel.hasSearchQuery {
                         ContentUnavailableView.search
@@ -66,11 +68,15 @@ struct WorkspaceListSidebar: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView(
-            "No Workspaces",
-            systemImage: "rectangle.stack.badge.plus",
-            description: Text("Create one in the desktop app.")
-        )
+        ContentUnavailableView {
+            Label {
+                Text("No Workspaces").interFont(Constants.Typography.bodyM.withFace(.semibold))
+            } icon: {
+                Image(systemName: "rectangle.stack.badge.plus")
+            }
+        } description: {
+            Text("Create one in the desktop app.").interFont(Constants.Typography.bodyS)
+        }
     }
 
     @ViewBuilder
@@ -99,6 +105,7 @@ struct WorkspaceListSidebar: View {
                             size: Constants.WorkspaceList.sidebarSectionAvatarSize
                         )
                         Text(repoName)
+                            .interFont(Constants.Typography.eyebrow)
                     }) {
                         ForEach(workspaces) { workspace in
                             sidebarRow(workspace, showRepo: false)
@@ -107,7 +114,7 @@ struct WorkspaceListSidebar: View {
                 }
             case .status:
                 ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
-                    Section(header: Text(statusLabel)) {
+                    Section(header: Text(statusLabel).interFont(Constants.Typography.eyebrow)) {
                         ForEach(workspaces) { workspace in
                             sidebarRow(workspace)
                         }

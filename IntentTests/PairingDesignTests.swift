@@ -74,7 +74,25 @@ struct PairingDesignTests {
         }
     }
 
+    @Test func optionRowsRespondToBoldText() throws {
+        for prominent in [false, true] {
+            let regular = try renderedRowImage(width: 354, prominent: prominent, category: .large)
+            let bold = try renderedRowImage(width: 354, prominent: prominent, category: .large, legibilityWeight: .bold)
+            #expect(try #require(UIImage(cgImage: regular).pngData()) != #require(UIImage(cgImage: bold).pngData()))
+        }
+    }
+
     private func renderedRowSize(width: CGFloat, prominent: Bool, category: DynamicTypeSize) throws -> CGSize {
+        let image = try renderedRowImage(width: width, prominent: prominent, category: category)
+        return CGSize(width: image.width, height: image.height)
+    }
+
+    private func renderedRowImage(
+        width: CGFloat,
+        prominent: Bool,
+        category: DynamicTypeSize,
+        legibilityWeight: LegibilityWeight = .regular
+    ) throws -> CGImage {
         let row = PairingOptionButton(
             icon: prominent ? .connectQR : .connectManual,
             title: prominent ? "Scan QR Code" : "Manual Connection",
@@ -82,10 +100,11 @@ struct PairingDesignTests {
             isProminent: prominent,
             colorScheme: .dark
         ) {}
-        let renderer = ImageRenderer(content: row.frame(width: width).environment(\.dynamicTypeSize, category))
+        let renderer = ImageRenderer(content: row.frame(width: width)
+            .environment(\.dynamicTypeSize, category)
+            .environment(\.legibilityWeight, legibilityWeight))
         renderer.scale = 1
-        let image = try #require(renderer.cgImage)
-        return CGSize(width: image.width, height: image.height)
+        return try #require(renderer.cgImage)
     }
 
     private func rgb(_ color: Color) -> [CGFloat] {

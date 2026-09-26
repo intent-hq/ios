@@ -72,11 +72,11 @@ struct MobileTerminalView: View {
     private var title: some View {
         VStack(spacing: TerminalAppearance.groupInset) {
             Text(terminal.name)
-                .font(.title3.weight(.semibold))
+                .interFont(Constants.Typography.bodyM.withFace(.semibold))
                 .foregroundStyle(.white)
                 .accessibilityIdentifier("mobile-terminal-title")
             Text(workspaceName)
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(TerminalAppearance.muted)
         }
         .lineLimit(1)
@@ -85,12 +85,24 @@ struct MobileTerminalView: View {
 
     private var terminalMenu: some View {
         Menu {
-            Button("Reconnect", systemImage: "arrow.clockwise") {
+            Button {
                 Task { await connection.attach() }
+            } label: {
+                Label {
+                    Text("Reconnect").interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(systemName: "arrow.clockwise")
+                }
             }
             .disabled(!store.isConnected || !store.isActive(terminal))
-            Button("Close terminal", systemImage: "xmark.circle", role: .destructive) {
+            Button(role: .destructive) {
                 confirmClose = true
+            } label: {
+                Label {
+                    Text("Close terminal").interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(systemName: "xmark.circle")
+                }
             }
             .disabled(!store.isConnected || isClosing)
         } label: {
@@ -124,15 +136,17 @@ struct MobileTerminalView: View {
         } else if let error = connection.errorMessage ?? store.errorMessage(workspaceId: terminal.workspaceId) {
             status(error)
         } else if !connection.isReady {
-            ProgressView("Connecting to terminal…")
-                .tint(TerminalAppearance.green)
-                .padding()
+            ProgressView {
+                Text("Connecting to terminal…").interFont(Constants.Typography.bodyS)
+            }
+            .tint(TerminalAppearance.green)
+            .padding()
         }
     }
 
     private func status(_ message: String) -> some View {
         Text(message)
-            .font(.callout)
+            .interFont(Constants.Typography.bodyS)
             .foregroundStyle(TerminalAppearance.muted)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, TerminalAppearance.horizontalInset)

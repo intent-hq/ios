@@ -15,11 +15,11 @@ struct HookWakeAttributionView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .accessibilityHidden(true)
             Text(attribution.displayName)
-                .font(.caption.weight(.semibold))
+                .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .lineLimit(1)
             Text(attribution.stateLabel)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
     }

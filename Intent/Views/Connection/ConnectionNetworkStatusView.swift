@@ -11,12 +11,12 @@ struct ConnectionNetworkStatusView: View {
         if showsReconnecting || message.isUnavailable {
             VStack(spacing: Constants.Root.reconnectButtonTopPadding) {
                 Text(message.title)
-                    .font(.headline)
+                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier(statusIdentifier)
                 if let guidance = message.guidance {
                     Text(guidance)
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyXS)
                         .accessibilityIdentifier("connection-network.guidance")
                 }
             }

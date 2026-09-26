@@ -16,8 +16,7 @@ struct QueuedMessagesView: View {
                     .font(.caption)
                     .accessibilityHidden(true)
                 Text("Queued Messages (\(viewModel.queuedMessages.count))")
-                    .font(.caption)
-                    .fontWeight(.medium)
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                 Spacer()
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -49,7 +48,7 @@ struct QueuedMessagesView: View {
     private func editingRow(_ message: QueuedMessage) -> some View {
         TextField("Edit message", text: $editText)
             .textFieldStyle(.plain)
-            .font(.subheadline)
+            .interFont(Constants.Typography.bodyXS)
             .onSubmit { saveEdit(messageId: message.id) }
         saveEditButton(message)
         cancelEditButton
@@ -58,7 +57,7 @@ struct QueuedMessagesView: View {
     @ViewBuilder
     private func displayRow(_ message: QueuedMessage) -> some View {
         Text(message.content)
-            .font(.subheadline)
+            .interFont(Constants.Typography.bodyXS)
             .foregroundStyle(Theme.foreground(for: colorScheme))
             .lineLimit(Layout.contentLineLimit)
             .frame(maxWidth: .infinity, alignment: .leading)

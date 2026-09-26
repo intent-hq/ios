@@ -22,18 +22,21 @@ struct CreateWorkspaceBranchStepView: View {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
             if isLoading {
-                ProgressView("Loading branches...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                ProgressView {
+                    Text("Loading branches...").interFont(Constants.Typography.bodyS)
+                }
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if let loadError {
                 VStack(spacing: Constants.CreateWorkspace.errorStateSpacing) {
                     Text("Couldn't load branches")
-                        .font(.subheadline.weight(.semibold))
+                        .interFont(Constants.Typography.bodyXS.withFace(.semibold))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                     Text(loadError)
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.center)
                     Button("Retry", action: onRetry)
+                        .interFont(Constants.Typography.bodyS)
                 }
                 .padding(Constants.CreateWorkspace.errorStatePadding)
             } else {
@@ -45,6 +48,7 @@ struct CreateWorkspaceBranchStepView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Next", action: onNext)
+                    .interFont(Constants.Typography.bodySEmphasized)
                     .disabled(selectedBranch == nil)
             }
         }
@@ -55,24 +59,28 @@ struct CreateWorkspaceBranchStepView: View {
 
     private var branchList: some View {
         List {
-            Section("Source") {
+            Section {
                 ForEach(CreateWorkspaceView.creationContextRows(
                     repositoryFullName: repositoryFullName
                 )) { row in
                     contextRow(row)
                 }
+            } header: {
+                Text("Source").interFont(Constants.Typography.eyebrow)
             }
-            Section("Branches") {
+            Section {
                 if displayedBranches.isEmpty {
                     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
                     Text(query.isEmpty ? "No branches found." : "No branches match \"\(query)\".")
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .listRowBackground(Theme.card(for: colorScheme))
                 }
                 ForEach(displayedBranches, id: \.self) { branch in
                     branchRow(branch)
                 }
+            } header: {
+                Text("Branches").interFont(Constants.Typography.eyebrow)
             }
         }
         .listStyle(.insetGrouped)
@@ -90,7 +98,7 @@ struct CreateWorkspaceBranchStepView: View {
         } label: {
             HStack(alignment: .firstTextBaseline) {
                 Text(branch)
-                    .font(.body)
+                    .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.CreateWorkspace.branchNameLineLimit)
                     .fixedSize(horizontal: false, vertical: true)
@@ -98,7 +106,7 @@ struct CreateWorkspaceBranchStepView: View {
                 Spacer()
                 if branch == defaultBranch {
                     Text("Default")
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .padding(.horizontal, Constants.CreateWorkspace.branchBadgeHorizontalPadding)
                         .padding(.vertical, Constants.CreateWorkspace.branchBadgeVerticalPadding)
                         .background(Theme.primary(for: colorScheme).opacity(
@@ -125,19 +133,23 @@ struct CreateWorkspaceBranchStepView: View {
         if CreateWorkspaceView.usesExpandedFormLayout(for: dynamicTypeSize) {
             VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
                 Text(row.label)
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 Text(row.value)
+                    .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else {
-            LabeledContent(row.label) {
+            LabeledContent {
                 Text(row.value)
+                    .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .multilineTextAlignment(.trailing)
                     .lineLimit(Constants.CreateWorkspace.contextValueLineLimit)
                     .truncationMode(.middle)
+            } label: {
+                Text(row.label).interFont(Constants.Typography.bodyS)
             }
         }
     }

@@ -183,6 +183,7 @@ struct WorkspaceStatusImageView: View {
                     .controlSize(.mini)
             }
             Text(text)
+                .interFont(Constants.Typography.subtextXXS)
         }
         .font(.caption)
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))

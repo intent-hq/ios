@@ -8,11 +8,13 @@ struct ModelPicker: View {
     let daemonDefaultLabel: String
 
     var body: some View {
-        Picker("Model", selection: selection) {
-            Text(daemonDefaultLabel).tag(Self.defaultSelectionID)
+        Picker(selection: selection) {
+            Text(daemonDefaultLabel).interFont(Constants.Typography.bodyS).tag(Self.defaultSelectionID)
             ForEach(models) { model in
-                Text(model.name).tag(model.id)
+                Text(model.name).interFont(Constants.Typography.bodyS).tag(model.id)
             }
+        } label: {
+            Text("Model").interFont(Constants.Typography.bodyS)
         }
         .pickerStyle(.menu)
         .accessibilityIdentifier("creation.modelPicker")

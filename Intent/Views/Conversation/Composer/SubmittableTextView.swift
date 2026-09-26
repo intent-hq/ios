@@ -31,6 +31,35 @@ class KeyCommandTextView: UITextView {
     /// software keyboard Return (submit).
     var isShiftHeld: Bool = false
 
+    override init(frame: CGRect, textContainer: NSTextContainer?) {
+        super.init(frame: frame, textContainer: textContainer)
+        configureTypography()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureTypography()
+    }
+
+    private func configureTypography() {
+        // The token already applies UIFontMetrics. Resolve from current traits
+        // rather than asking UITextView to scale the scaled font again.
+        adjustsFontForContentSizeCategory = false
+        updateTypography()
+        registerForTraitChanges([
+            UITraitPreferredContentSizeCategory.self, UITraitLegibilityWeight.self
+        ]) { (textView: Self, _: UITraitCollection) in
+            textView.updateTypography()
+        }
+    }
+
+    func updateTypography() {
+        let resolvedFont = Constants.Typography.bodyS.uiFont(compatibleWith: traitCollection)
+        guard font != resolvedFont else { return }
+        font = resolvedFont
+        setNeedsLayout()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         centerShortContent()
@@ -148,7 +177,6 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.onSubmit = onSubmit
         textView.accessibilityLabel = accessibilityLabel
         textView.accessibilityIdentifier = "composer.textView"
-        textView.font = UIFont.preferredFont(forTextStyle: .body)
         textView.backgroundColor = .clear
         #if os(visionOS)
         // Shape the system text-input hover/highlight effect to the composer
@@ -184,6 +212,7 @@ struct SubmittableTextView: UIViewRepresentable {
         // Update onSubmit closure so it always captures current state
         textView.onSubmit = onSubmit
         textView.accessibilityLabel = accessibilityLabel
+        textView.updateTypography()
 
         // Sync text from SwiftUI → UIKit (avoid cursor jump during editing)
         if textView.text != text {

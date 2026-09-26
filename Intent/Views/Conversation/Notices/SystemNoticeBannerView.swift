@@ -28,7 +28,7 @@ struct SystemNoticeBannerView: View {
                 .padding(.top, Constants.Conversation.NoticeCard.iconTopPadding)
 
             Text(displayText)
-                .font(.subheadline.weight(.medium))
+                .interFont(Constants.Typography.bodyXSEmphasized)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .textSelection(.enabled)
         }

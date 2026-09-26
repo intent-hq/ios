@@ -9,7 +9,7 @@ struct SettingsSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SettingsStyle.sectionHeaderSpacing) {
             Text(title)
-                .font(.caption)
+                .interFont(Constants.Typography.eyebrow)
                 .foregroundStyle(SettingsStyle.sectionForeground(for: colorScheme, contrast: contrast))
                 .accessibilityAddTraits(.isHeader)
             content

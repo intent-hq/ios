@@ -13,13 +13,16 @@ nonisolated final class SettingsUITests: XCTestCase {
         light.tap()
         XCTAssertTrue(light.isSelected)
         capture(app, named: "Settings-Light")
-        assertPinnedLogOffAndRevealActions(app)
+        assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-Light-Actions")
         scrollToTop(app)
         let dark = app.buttons["settings.appearance.dark"]
         dark.tap()
         XCTAssertTrue(dark.isSelected)
         capture(app, named: "Settings-Dark")
+        assertScrollingLogOffAndRevealActions(app)
+        capture(app, named: "Settings-Dark-Actions")
+        scrollToTop(app)
         app.buttons["settings.close"].tap()
         openSettings(app)
         XCTAssertTrue(dark.isSelected)
@@ -47,6 +50,23 @@ nonisolated final class SettingsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         openSettings(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
+
+        // Resuming this process must keep the user's selection. Backgrounding
+        // also gives the native scene its real restoration lifecycle.
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: Self.timeout))
+        app.activate()
+        assertConnections(app, current: "Travel Mac", other: "Studio Mac")
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: Self.timeout))
+        app.terminate()
+        app.launch()
+        openSettings(app)
+        assertConnections(app, current: "Studio Mac", other: "Travel Mac")
+        card(app, named: "Travel Mac").tap()
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        openSettings(app)
+        assertConnections(app, current: "Travel Mac", other: "Studio Mac")
     }
 
     @MainActor
@@ -55,10 +75,10 @@ nonisolated final class SettingsUITests: XCTestCase {
         openSettings(app)
         reveal(app.buttons["Manual Connection"], in: app)
         app.buttons["Manual Connection"].tap()
-        let manual = app.navigationBars["Manual Connection"]
+        let manual = app.staticTexts["manual.title"]
         XCTAssertTrue(manual.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["Connect"].exists)
-        manual.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["manual.connect"].exists)
+        app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(manual.waitForNonExistence(timeout: Self.timeout))
         reveal(app.buttons["QR Code"], in: app)
         app.buttons["QR Code"].tap()
@@ -70,6 +90,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         app.buttons["Acknowledgements"].tap()
         let acknowledgements = app.navigationBars["Acknowledgements"]
         XCTAssertTrue(acknowledgements.waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Settings-Acknowledgements")
         acknowledgements.buttons.firstMatch.tap()
         XCTAssertTrue(acknowledgements.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
@@ -83,7 +104,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         openSettings(app)
         app.buttons["settings.appearance.light"].tap()
         capture(app, named: "Settings-LargeText-Top")
-        assertPinnedLogOffAndRevealActions(app)
+        assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-LargeText-Actions")
         app.buttons["Log Off"].tap()
         let confirmation = app.alerts["Log Off?"]
@@ -95,19 +116,30 @@ nonisolated final class SettingsUITests: XCTestCase {
     }
 
     @MainActor
-    private func assertPinnedLogOffAndRevealActions(_ app: XCUIApplication) {
-        let logOff = app.buttons["Log Off"]
-        XCTAssertTrue(logOff.isHittable, "Log Off must be available before scrolling")
-        let initialFrame = logOff.frame
-        XCTAssertTrue(app.frame.contains(initialFrame), "The full Log Off button must remain on screen")
-        XCTAssertGreaterThanOrEqual(initialFrame.height, 44)
+    private func assertScrollingLogOffAndRevealActions(_ app: XCUIApplication) {
+        let close = app.buttons["settings.close"]
+        let initialCloseY = close.frame.minY
         for title in ["Manual Connection", "Acknowledgements", "Export logs"] {
             let button = app.buttons[title]
             reveal(button, in: app)
             XCTAssertGreaterThanOrEqual(button.frame.height, 44)
-            XCTAssertLessThanOrEqual(button.frame.maxY, logOff.frame.minY, "The footer must not obscure \(title)")
-            XCTAssertTrue(logOff.isHittable)
-            XCTAssertEqual(logOff.frame.minY, initialFrame.minY, accuracy: 1, "Log Off must stay anchored while scrolling")
+        }
+        let logOff = app.buttons["Log Off"]
+        reveal(logOff, in: app)
+        XCTAssertGreaterThanOrEqual(logOff.frame.height, 44)
+        XCTAssertLessThanOrEqual(
+            app.buttons["Export logs"].frame.maxY,
+            logOff.frame.minY,
+            "Log Off must follow the support actions without overlap"
+        )
+        if !close.isHittable || close.frame.minY < initialCloseY - 1 {
+            let lowerFrame = logOff.frame
+            scrollToTop(app)
+            XCTAssertTrue(
+                !logOff.isHittable || logOff.frame.minY > lowerFrame.minY + 1,
+                "Log Off must move with Settings content, not stay pinned to the viewport"
+            )
+            reveal(logOff, in: app)
         }
     }
 
@@ -148,11 +180,13 @@ nonisolated final class SettingsUITests: XCTestCase {
 
     @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        let logOff = app.buttons["Log Off"]
-        for _ in 0..<Self.maximumSwipes where !element.isHittable || element.frame.maxY > logOff.frame.minY {
-            app.swipeUp()
+        let scrollView = app.scrollViews.firstMatch
+        let viewport = scrollView.frame.intersection(app.frame)
+        for _ in 0..<Self.maximumSwipes where !element.isHittable || !viewport.contains(element.frame) {
+            scrollView.swipeUp()
         }
         XCTAssertTrue(element.isHittable)
+        XCTAssertTrue(viewport.contains(element.frame), "The full action must be reachable inside the Settings viewport")
     }
 
     @MainActor

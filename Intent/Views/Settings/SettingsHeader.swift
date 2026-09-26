@@ -13,7 +13,7 @@ struct SettingsHeader: View {
             }
             .accessibilityIdentifier("settings.close")
             Text("Settings")
-                .font(.title.weight(.semibold))
+                .interFont(Constants.Typography.heading2)
                 .accessibilityAddTraits(.isHeader)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

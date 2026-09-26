@@ -26,7 +26,7 @@ struct SettingsConnectionsSection: View {
             }
             if connections.isEmpty {
                 Text("No saved connections")
-                    .font(.callout)
+                    .interFont(Constants.Typography.bodyS)
             }
             if !mismatches.isEmpty {
                 CertMismatchListView(mismatches: mismatches)
