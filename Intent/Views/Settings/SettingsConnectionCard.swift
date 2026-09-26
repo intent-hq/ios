@@ -16,8 +16,8 @@ struct SettingsConnectionCard: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: SettingsStyle.metadataSpacing))
             : AnyLayout(HStackLayout(spacing: SettingsStyle.rowSpacing))
         layout {
-            // Like SavedConnectionCard, represent the daemon without inferring a device type.
-            Image(.connectionServer)
+            // The laptop icon matches Figma for all saved connections.
+            Image(.connectionLaptop)
                 .resizable()
                 .scaledToFit()
                 .frame(width: iconSize, height: iconSize)
