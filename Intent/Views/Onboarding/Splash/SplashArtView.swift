@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Full-screen launch splash using the supplied twist intro and pulse loop.
 struct SplashArtView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var playback: SplashPlaybackState
@@ -38,10 +39,7 @@ struct SplashArtView: View {
     }
 
     var body: some View {
-        // Exact exported background from Figma Launch 2989:19872 / 2989:19873.
-        // Stretch rather than aspect-fill so both gradient endpoints stay visible.
-        Image(.launchBackground)
-            .resizable()
+        background
             .overlay {
                 TimelineView(.animation(
                     minimumInterval: animation?.minimumFrameDuration,
@@ -52,7 +50,7 @@ struct SplashArtView: View {
                         SplashFrameView(
                             animation: sample.animation,
                             frame: sample.frame,
-                            colorScheme: .light
+                            colorScheme: colorScheme
                         )
                         .frame(
                             width: Constants.Splash.maximumLogoDimension,
@@ -62,7 +60,6 @@ struct SplashArtView: View {
                 }
             }
         .ignoresSafeArea()
-        .preference(key: LaunchAppearanceModifier.SplashVisibleKey.self, value: true)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .onAppear {
@@ -75,6 +72,17 @@ struct SplashArtView: View {
         .onDisappear {
             playback.setRunning(false)
             lease = nil
+        }
+    }
+
+    @ViewBuilder
+    private var background: some View {
+        if colorScheme == .dark {
+            Theme.background(for: colorScheme)
+        } else {
+            // Preserve the exported light artwork and both gradient endpoints.
+            Image(.launchBackground)
+                .resizable()
         }
     }
 }
