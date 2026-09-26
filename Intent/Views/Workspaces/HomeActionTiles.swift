@@ -102,7 +102,7 @@ struct HomeActionTiles: View {
     private func asset(_ action: Action) -> ImageResource {
         switch action {
         case .assistant: .intentDandelion
-        case .workspace: .add
+        case .workspace: .addIcon
         case .connections: .connectionLaptop
         case .appearance: .night
         case .acknowledgements: .file
