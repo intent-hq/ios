@@ -199,12 +199,12 @@ nonisolated final class SettingsUITests: XCTestCase {
     @MainActor
     private func captureWorkspaceSurfaces(_ app: XCUIApplication, appearance: String) {
         app.buttons["settings.close"].tap()
-        let options = app.buttons["Workspace options"]
+        let options = app.buttons["intent.menu.open"]
         XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
         options.tap()
-        XCTAssertTrue(app.buttons["Connect to…"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.assistant"].waitForExistence(timeout: Self.timeout))
         capture(app, named: "Workspace-Menu-" + appearance)
-        app.buttons["Connect to…"].tap()
+        app.revealHomeAction("connections").tap()
         let title = app.staticTexts["saved-connections.title"]
         XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
         capture(app, named: "Connections-" + appearance)
