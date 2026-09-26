@@ -365,6 +365,7 @@ struct ModelInfo: Identifiable, Equatable {
     let name: String     // display name (e.g. "sonnet4.5 (balanced)")
     let provider: String // provider id (e.g. "auggie")
     var isDefault: Bool = false // provider-reported default model (models.list)
+    var effortLevels: [String] = [] // provider-reported reasoning vocabulary (models.list, protocol 5.30)
 }
 
 enum ProviderAuthentication: Equatable, ExpressibleByBooleanLiteral {

@@ -51,10 +51,10 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Fixture.timeout), .completed)
         next.tap()
-        let sheet = app.navigationBars["Create Workspace"]
+        let sheet = app.buttons["creation.back"]
         XCTAssertTrue(sheet.waitForExistence(timeout: Fixture.timeout))
-        // The placeholder disappears after typing; this sheet has one editable field.
-        let message = app.textFields.firstMatch
+        // The identifier remains stable after typing; this sheet has one editable field.
+        let message = app.textFields["creation.prompt"]
         XCTAssertTrue(message.waitForExistence(timeout: Fixture.timeout))
         XCTAssertEqual(app.textFields.count, 1)
         message.tap()

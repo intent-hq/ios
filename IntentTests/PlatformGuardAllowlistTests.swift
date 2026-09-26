@@ -34,6 +34,7 @@ struct PlatformGuardAllowlistTests {
         "Intent/Views/Onboarding/ManualTokenEntryView.swift",
         "Intent/Views/Onboarding/PairingView.swift",
         "Intent/Views/Onboarding/QRScannerView.swift",
+        "Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift",
         "Intent/Views/Workspaces/WorkspaceAttentionCue.swift",
         "Intent/Views/Workspaces/WorkspaceDetailView.swift",
         "Intent/Views/Workspaces/WorkspaceListSidebar.swift",

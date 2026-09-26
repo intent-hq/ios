@@ -299,7 +299,9 @@ extension WorkspaceProviderOptionsTests {
         #expect(store.workspaceProviderOptions.providers.map(\.id) == ["auggie", "codex"])
         let allSelectable = store.workspaceProviderOptions.providers.allSatisfy(\.isSelectable)
         #expect(allSelectable)
-        #expect(store.models(for: "codex")?.last == ModelInfo(id: "named-model", name: "Named Model", provider: "codex"))
+        #expect(store.models(for: "codex")?.last == ModelInfo(
+            id: "named-model", name: "Named Model", provider: "codex", effortLevels: ["low", "medium", "high"]
+        ))
     }
 
     @Test func demoProviderGateIsOptInAndDoesNotPermitWorkspaceCreation() throws {
