@@ -8,6 +8,7 @@ struct IntentApp: App {
     init() {
         LifecycleDiagnostics.sessionStarted()
         DemoConnectionLoss.seedSavedMachineIfNeeded()
+        DemoSettings.seedConnectionsIfNeeded()
         _ = NotificationManager.shared
         // Aggregate agent alerts across every live backend session: each
         // session attaches an observer on creation and detaches on
@@ -43,7 +44,7 @@ struct IntentApp: App {
                 backendID: $backendID,
                 networkAvailability: DemoConnectionLoss.networkAvailability ?? .shared
             )
-                .preferredColorScheme(resolvedColorScheme)
+                .modifier(LaunchAppearanceModifier(preferredColorScheme: resolvedColorScheme))
                 #if os(visionOS)
                 .frame(
                     minWidth: Constants.Root.visionMinimumWindowWidth,
@@ -199,6 +200,14 @@ struct BackendWindowRoot: View {
             } else {
                 Color.clear
             }
+        }
+        .background {
+            #if os(iOS)
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                WindowSceneTitle(title: windowSession.sceneTitle)
+                    .frame(width: 0, height: 0)
+            }
+            #endif
         }
         .onAppear {
             windowSession.updateNetworkObservation(for: scenePhase)

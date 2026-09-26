@@ -14,7 +14,7 @@ final class BackendSessionRegistryTests {
     /// Per-test isolated persistence (same pattern as AppCoordinatorTests):
     /// a private UserDefaults suite plus in-memory keychain so no state
     /// leaks between tests or into the real app container.
-    private let persistence: PersistenceManager
+    let persistence: PersistenceManager
     private let suiteName: String
 
     /// Fakes created by the injected factory, in creation order.

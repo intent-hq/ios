@@ -1,0 +1,191 @@
+import XCTest
+
+/// Real native-sheet/editor boundaries; synthetic draft only, no live pairing.
+nonisolated final class ManualConnectionDesignUITests: XCTestCase {
+    private static let timeout: TimeInterval = 15
+
+    @MainActor
+    func testSavedBlocksBackgroundNavigationAndRestoresItAfterDismissal() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data"]
+        app.launch()
+        let options = app.buttons["Workspace options"]
+        XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
+        let backgroundPoint = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: options.frame.midX, dy: options.frame.midY))
+        openSaved(in: app)
+        backgroundPoint.tap()
+        XCTAssertFalse(app.buttons["Settings"].exists, "The native modal shield must block the toolbar")
+        capture(app, named: "saved-background-blocked")
+        // The system may dismiss a short detent on a dimmer tap. It must not
+        // deliver that same tap to the menu underneath, whether it dismisses or not.
+        if !app.staticTexts["saved-connections.title"].exists { openSaved(in: app) }
+
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
+        capture(app, named: "saved-close-cleanup")
+        openSaved(in: app)
+        let close = app.buttons["connection-sheet.close"].frame
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let start = origin.withOffset(CGVector(dx: app.frame.midX, dy: close.minY))
+        // A short, slow pull cancels rather than finishing interactive dismissal.
+        let shortPull = origin.withOffset(CGVector(dx: app.frame.midX, dy: close.minY + 20))
+        start.press(forDuration: 0.1, thenDragTo: shortPull, withVelocity: .slow, thenHoldForDuration: 0.5)
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].exists)
+        XCTAssertFalse(app.buttons["Settings"].exists)
+        capture(app, named: "saved-cancelled-swipe")
+        start.press(forDuration: 0.1, thenDragTo: origin.withOffset(
+            CGVector(dx: app.frame.midX, dy: app.frame.maxY - 10)
+        ))
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
+        capture(app, named: "saved-swipe-cleanup")
+        options.tap()
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    private func openSaved(in app: XCUIApplication) {
+        app.buttons["Workspace options"].tap()
+        app.buttons["Connect to…"].tap()
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    func testEmptyAndFilledReferencePlacement() throws {
+        let app = try launchManual()
+        guard app.frame.size == CGSize(width: 402, height: 874) else {
+            throw XCTSkip("Figma comparison requires the 402×874 iPhone 16 Pro at normal text size")
+        }
+        assertReference(in: app)
+        XCTAssertFalse(app.buttons["manual.connect"].isEnabled)
+        XCTAssertEqual(app.textFields["manual.port"].value as? String, "5180")
+        XCTAssertTrue(app.buttons["Paste API token"].exists)
+        capture(app, named: "empty")
+
+        app.textFields["manual.host"].tap()
+        app.textFields["manual.host"].typeText("192.0.2.42")
+        XCTAssertFalse(app.buttons["manual.connect"].isEnabled)
+        app.textFields["manual.token"].tap()
+        app.textFields["manual.token"].typeText("SYNTHETIC-NOT-A-CREDENTIAL")
+        capture(app, named: "keyboard")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["manual.connect"].isEnabled)
+        XCTAssertFalse(app.buttons["Paste API token"].exists)
+        assertReference(in: app)
+        capture(app, named: "filled")
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    func testIncompleteFormAndInvalidPortRemainEditable() throws {
+        let app = try launchManual()
+        app.textFields["manual.host"].tap()
+        app.textFields["manual.host"].typeText("draft.invalid")
+        app.textFields["manual.port"].tap()
+        app.textFields["manual.port"].typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
+        app.textFields["manual.token"].tap()
+        app.textFields["manual.token"].typeText("SYNTHETIC-NOT-A-CREDENTIAL")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        // Existing semantics only gate host/token; malformed port is a submit error.
+        XCTAssertTrue(app.buttons["manual.connect"].isEnabled)
+        app.buttons["manual.connect"].tap()
+        XCTAssertTrue(app.staticTexts["Invalid port number"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textFields["manual.host"].isEnabled)
+        XCTAssertTrue(app.textFields["manual.token"].isEnabled)
+        capture(app, named: "invalid-port")
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    func testLargeTextKeepsFieldsAndCloseReachable() throws {
+        let app = try launchManual(arguments: [
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ])
+        capture(app, named: "large-text-top")
+        let host = app.textFields["manual.host"]
+        scrollTo(host, in: app)
+        host.tap()
+        host.typeText("draft.invalid")
+        let token = app.textFields["manual.token"]
+        scrollTo(token, in: app)
+        token.tap()
+        token.typeText("SYNTHETIC-NOT-A-CREDENTIAL")
+        capture(app, named: "large-text-keyboard")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        let connect = app.buttons["manual.connect"]
+        scrollTo(connect, in: app)
+        XCTAssertTrue(connect.isEnabled)
+        capture(app, named: "large-text-bottom")
+        XCTAssertTrue(app.buttons["connection-sheet.close"].isHittable)
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    private func scrollTo(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<5 where !element.isHittable {
+            // XCUITest's default swipe uses the full scroll frame, which extends
+            // behind the keyboard. Drag the visible gutter, not the keyboard
+            // or a focused text field's selection gesture.
+            let scroll = app.scrollViews.firstMatch.frame.intersection(app.frame)
+            let keyboardTop = app.keyboards.firstMatch.exists ? app.keyboards.firstMatch.frame.minY : app.frame.maxY
+            let top = max(scroll.minY, app.buttons["connection-sheet.close"].frame.maxY)
+            let bottom = min(scroll.maxY, keyboardTop)
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let start = origin.withOffset(CGVector(dx: scroll.maxX - 12, dy: bottom - 24))
+            let end = origin.withOffset(CGVector(dx: scroll.maxX - 12, dy: top + 24))
+            start.press(forDuration: 0.1, thenDragTo: end)
+        }
+        XCTAssertTrue(element.isHittable)
+    }
+
+    @MainActor
+    private func assertReference(in app: XCUIApplication) {
+        // Independent Figma coordinates, not production layout constants. Native
+        // line boxes extend past cap edges, so compare centers for text/editors.
+        XCTAssertEqual(app.buttons["connection-sheet.close"].frame.minY, 231, accuracy: 1.5)
+        XCTAssertEqual(app.buttons["connection-sheet.close"].frame.minX, 24, accuracy: 0.5)
+        XCTAssertEqual(app.staticTexts["manual.title"].frame.midY, 325, accuracy: 1.5)
+        XCTAssertEqual(app.staticTexts["manual.subtitle"].frame.midY, 361, accuracy: 1.5)
+        for (field, center) in [("manual.host", 472.0), ("manual.port", 585.0), ("manual.token", 698.0)] {
+            XCTAssertEqual(app.textFields[field].frame.midY, center, accuracy: 1.5)
+            XCTAssertEqual(app.textFields[field].frame.minX, 48, accuracy: 0.5)
+        }
+        let button = app.buttons["manual.connect"]
+        XCTAssertEqual(button.frame.minY, 762, accuracy: 1.5)
+        XCTAssertEqual(button.frame.height, 64, accuracy: 0.5)
+        XCTAssertEqual(button.frame.width, 354, accuracy: 0.5)
+    }
+
+    @MainActor
+    private func launchManual(arguments: [String] = []) throws -> XCUIApplication {
+        continueAfterFailure = false
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try FileManager.default.removeItem(at: directory) }
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
+        app.launch()
+        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        try Data().write(to: directory.appendingPathComponent("loss"))
+        XCTAssertTrue(app.buttons["connection-loss.home"].waitForExistence(timeout: Self.timeout))
+        app.buttons["connection-loss.home"].tap()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Manual Connection")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["manual.title"].waitForExistence(timeout: Self.timeout))
+        return app
+    }
+
+    @MainActor
+    private func capture(_ app: XCUIApplication, named name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "manual-design-" + name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}

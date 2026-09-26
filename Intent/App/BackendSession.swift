@@ -74,6 +74,7 @@ final class BackendSession {
     /// Workspace final step; same reopen-instantly contract as the repo cache.
     let creationOptionsStore: CreationOptionsStore
     let prMonitorsStore: WorkspacePrMonitorsStore
+    let mobileTerminalStore: MobileTerminalStore
     let attachmentUploadService: AttachmentUploadService
     let workspaceFileImageLoader: WorkspaceFileImageLoader
     let attachmentImageLoader: AttachmentImageLoader
@@ -102,6 +103,10 @@ final class BackendSession {
         self.githubRepoStore = githubRepoStore
         self.creationOptionsStore = creationOptionsStore
         self.prMonitorsStore = prMonitorsStore
+        mobileTerminalStore = MobileTerminalStore(
+            connection: connection,
+            persistence: MobileTerminalPersistence(backendID: backendID)
+        )
         self.attachmentUploadService = attachmentUploadService
         self.workspaceFileImageLoader = workspaceFileImageLoader
         self.attachmentImageLoader = attachmentImageLoader

@@ -1,3 +1,4 @@
+import Combine
 import Observation
 import SwiftUI
 
@@ -10,17 +11,48 @@ final class BackendWindowSession {
     private(set) var session: BackendSession?
     private(set) var isShowingSavedMachines = false
     private let registry: BackendSessionRegistry
+    private let persistence: PersistenceManager
+    private var savedDisplayName: String?
     let networkAvailability: NetworkAvailability
+    @ObservationIgnored private var connectionsObservation: AnyCancellable?
     @ObservationIgnored private var networkLease: NetworkAvailability.Lease?
     @ObservationIgnored private let lifecycleDiagnostics = LifecycleDiagnostics()
 
-    init(registry: BackendSessionRegistry = .shared, networkAvailability: NetworkAvailability = .shared) {
+    init(
+        registry: BackendSessionRegistry = .shared,
+        networkAvailability: NetworkAvailability = .shared,
+        persistence: PersistenceManager = .shared
+    ) {
         self.registry = registry
         self.networkAvailability = networkAvailability
+        self.persistence = persistence
+        connectionsObservation = persistence.connectionsDidChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.refreshSceneTitle() }
+    }
+
+    /// Attachment identity survives navigation and connection loss. The
+    /// native scene value alone cannot distinguish a bound window from Home.
+    var sceneTitle: String? {
+        guard let backendID = session?.backendID,
+              !registry.isBackendRemoved(backendID) else { return nil }
+        return savedDisplayName
+    }
+
+    private func refreshSceneTitle() {
+        guard let backendID = session?.backendID else {
+            savedDisplayName = nil
+            return
+        }
+        // A temporarily locked/unavailable Keychain must not erase a known
+        // label. A successful read with no matching record does clear it.
+        guard let connections = persistence.loadConnectionsWithOutcome().connections else { return }
+        savedDisplayName = connections.first { $0.id == backendID.connectionID }?.displayName
     }
 
     /// Scene-owned, not session-owned: Home, rebinds and retries keep the same lease.
     func updateNetworkObservation(for phase: ScenePhase) {
+        if phase == .active { refreshSceneTitle() }
         if phase == .active, networkLease == nil {
             networkLease = networkAvailability.acquire()
         } else if phase == .background {
@@ -48,6 +80,7 @@ final class BackendWindowSession {
         } else {
             session = registry.makePairingSession()
         }
+        refreshSceneTitle()
     }
 
     func returnToSavedMachines() {
@@ -73,6 +106,7 @@ final class BackendWindowSession {
     func release() {
         guard let session else { return }
         self.session = nil
+        savedDisplayName = nil
         if let backendID = session.backendID {
             registry.detach(backendID)
         } else {

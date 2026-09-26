@@ -66,7 +66,7 @@ struct RootView: View {
     }
 
     /// True during the launch splash phases (loading and connecting), which
-    /// share a single SplashArtView so GIF playback doesn't reset between them.
+    /// share a single SplashArtView so animation playback doesn't reset between them.
     private var isLaunchSplash: Bool {
         switch coordinator.currentScreen {
         case .loading, .connecting:
@@ -103,7 +103,10 @@ struct RootView: View {
     #endif
 
     @ViewBuilder private var rootContent: some View {
-        Group {
+        // A real container keeps one presenter across the animated branch
+        // change. Group distributes its modifiers to both outgoing and
+        // incoming content, briefly giving each its own overlay window.
+        ZStack {
             if isWorkspaceFlow {
                 workspaceFlowContent
             } else {
@@ -135,7 +138,7 @@ struct RootView: View {
     private var launchContent: some View {
         ZStack {
             // One SplashArtView spans loading and connecting. Keeping
-            // it in this stable position preserves GIF playback across
+            // it in this stable position preserves animation playback across
             // the phase transition; the phase views render on top.
             if isLaunchSplash {
                 SplashArtView()
@@ -162,11 +165,15 @@ struct RootView: View {
                 EmptyView()
             }
         }
+        // The launch artwork is light even when the rest of the app is dark.
+        // Include the connecting overlays without changing other launch destinations.
+        .environment(\.colorScheme, isLaunchSplash ? .light : colorScheme)
     }
 
     var body: some View {
         @Bindable var coordinator = coordinator
         rootContent
+        .modifier(ConnectionSceneBackdrop())
         .animation(
             .easeInOut(duration: Constants.Root.screenAnimationDuration),
             value: String(describing: coordinator.currentScreen)
