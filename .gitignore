@@ -40,3 +40,8 @@ fastlane/report.xml
 
 # OS files
 .DS_Store
+
+# Local App Store Connect keys and credentials
+*.p8
+.env
+.env.*

@@ -1,0 +1,414 @@
+#!/usr/bin/env python3
+"""Append the newest processed, unexpired iOS internal Alpha build to external Alpha.
+
+Default: read-only. --apply permits ONE additive group-build linkage request only.
+Credentials (environment only): ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY_PATH.
+The key must be a private, regular .p8 file (0600), used by installed OpenSSL.
+Optional ASC_INTERNAL_GROUP_ID / ASC_EXTERNAL_GROUP_ID disambiguate groups but
+must still match this app, the exact name Alpha, and the expected group type.
+No review submissions, notifications, tester edits, removals, expiry, or releases.
+Exit 0: decision reported (including blocked/no candidate); 1: safe failure; 2: CLI.
+
+Contracts checked against Apple's OpenAPI 4.5 on 2026-09-25:
+https://developer.apple.com/sample-code/app-store-connect/app-store-connect-openapi-specification.zip
+https://developer.apple.com/documentation/appstoreconnectapi/externalbetastate
+https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers
+"""
+
+import argparse
+import base64
+from datetime import datetime, timezone
+import json
+import os
+import re
+import stat
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+ORIGIN = "https://api.appstoreconnect.apple.com"
+BUNDLE_ID = "dev.intentapp.ios"
+READY = {"READY_FOR_BETA_TESTING", "BETA_APPROVED", "IN_BETA_TESTING"}
+BLOCKERS = {
+    "READY_FOR_BETA_SUBMISSION": "Submit this build for beta review manually in App Store Connect.",
+    "WAITING_FOR_BETA_REVIEW": "Wait for Apple's beta review; no submission was made.",
+    "IN_BETA_REVIEW": "Wait for Apple's beta review; no submission was made.",
+    "BETA_REJECTED": "Resolve Apple's beta rejection manually in App Store Connect.",
+    "MISSING_EXPORT_COMPLIANCE": "Complete export compliance manually in App Store Connect.",
+    "IN_EXPORT_COMPLIANCE_REVIEW": "Wait for Apple's export compliance review.",
+    "PROCESSING": "Wait for Apple to finish beta processing.",
+    "PROCESSING_EXCEPTION": "Resolve the beta processing error in App Store Connect.",
+    "EXPIRED": "This build expired; no older build was substituted.",
+    "NOT_APPLICABLE": "External testing is not available for this build.",
+}
+BUILD_FIELDS = "version,uploadedDate,expirationDate,expired,processingState,buildAudienceType,app,preReleaseVersion"
+BUILD_QUERY = {
+    "fields[builds]": BUILD_FIELDS,
+    "include": "app,preReleaseVersion",
+    "fields[apps]": "bundleId",
+    "fields[preReleaseVersions]": "platform",
+}
+
+
+class PromotionError(Exception):
+    """Only fixed, credential-free messages may cross the CLI boundary."""
+
+
+class APIError(PromotionError):
+    def __init__(self, status, write=False):
+        self.status = status
+        message = f"App Store Connect HTTP {status}. Check API access and metadata; no automatic write retry."
+        if write:
+            message += " Assignment may have succeeded; run a dry run to reconcile before applying again."
+        super().__init__(message)
+
+
+def resource_id(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,100}", value):
+        raise PromotionError("Missing or invalid resource ID; stopped safely.")
+    return value
+
+
+def resource(value, kind):
+    if not isinstance(value, dict) or value.get("type") != kind:
+        raise PromotionError("Missing or unexpected API resource type; stopped safely.")
+    resource_id(value.get("id"))
+    return value
+
+
+def attributes(value):
+    result = value.get("attributes")
+    if not isinstance(result, dict):
+        raise PromotionError("Missing API attributes; stopped safely.")
+    return result
+
+
+def date(value):
+    try:
+        result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if result.tzinfo is not None:
+            return result
+    except (ValueError, AttributeError, TypeError):
+        pass
+    raise PromotionError("Missing or invalid timezone-aware build date; stopped safely.")
+
+
+def b64(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+class Credentials:
+    def __init__(self):
+        self.key_id = os.environ.get("ASC_KEY_ID", "")
+        self.issuer = os.environ.get("ASC_ISSUER_ID", "")
+        self.path = os.environ.get("ASC_PRIVATE_KEY_PATH", "")
+        if not all((self.key_id, self.issuer, self.path)):
+            raise PromotionError("Set ASC_KEY_ID, ASC_ISSUER_ID, and ASC_PRIVATE_KEY_PATH securely before running.")
+        try:
+            info = os.lstat(self.path)
+            if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_uid != os.getuid():
+                raise PromotionError("ASC_PRIVATE_KEY_PATH must be an owned regular file accessible only to its owner (0600).")
+        except OSError:
+            raise PromotionError("Cannot read ASC_PRIVATE_KEY_PATH; check the private key file.") from None
+
+    def token(self, method, path):
+        now = int(time.time())
+        header = {"alg": "ES256", "kid": self.key_id, "typ": "JWT"}
+        payload = {"iss": self.issuer, "iat": now, "exp": now + 120,
+                   "aud": "appstoreconnect-v1", "scope": [f"{method} {path}"]}
+        message = (b64(json.dumps(header).encode()) + "." + b64(json.dumps(payload).encode())).encode()
+        try:
+            signed = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-sign", self.path], input=message,
+                capture_output=True, timeout=10, check=True,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            raise PromotionError("OpenSSL could not sign the request; check the App Store Connect P-256 key and OpenSSL installation.") from None
+        # OpenSSL emits DER ECDSA; ES256 JWT needs two unsigned 32-byte integers.
+        try:
+            if signed[0] != 0x30 or signed[1] != len(signed) - 2:
+                raise ValueError
+            offset, parts = 2, []
+            for _ in range(2):
+                if signed[offset] != 2:
+                    raise ValueError
+                length = signed[offset + 1]
+                part = signed[offset + 2:offset + 2 + length]
+                if not 1 <= length <= 33 or len(part) != length or part[0] & 0x80:
+                    raise ValueError
+                parts.append(int.from_bytes(part, "big").to_bytes(32, "big"))
+                offset += 2 + length
+            if offset != len(signed):
+                raise ValueError
+        except (IndexError, ValueError, OverflowError):
+            raise PromotionError("OpenSSL returned an invalid ES256 signature; use an App Store Connect P-256 key.") from None
+        return message.decode() + "." + b64(b"".join(parts))
+
+
+class NoRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise PromotionError("API redirect refused to protect credentials.")
+
+
+class Client:
+    def __init__(self, credentials, apply=False):
+        self.credentials = credentials
+        self.apply = apply
+        self.write_path = None
+        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirects())
+
+    def request(self, path, query=None, body=None):
+        method = "GET" if body is None else "POST"
+        if body is not None and (not self.apply or path != self.write_path):
+            raise PromotionError("Write refused: only the resolved external Alpha build linkage is permitted in apply mode.")
+        url = ORIGIN + path if path.startswith("/v1/") else path
+        if query:
+            url += "?" + urllib.parse.urlencode(query)
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme != "https" or parsed.netloc != "api.appstoreconnect.apple.com" or parsed.fragment:
+            raise PromotionError("Untrusted API URL refused to protect credentials.")
+        for attempt in range(3 if body is None else 1):
+            token = self.credentials.token(method, parsed.path)
+            req = urllib.request.Request(url, method=method,
+                                         data=None if body is None else json.dumps(body).encode(),
+                                         headers={"Authorization": "Bearer " + token, "Accept": "application/json",
+                                                  "Content-Type": "application/json"})
+            try:
+                with self.opener.open(req, timeout=30) as response:
+                    if body is not None:
+                        if response.status != 204:
+                            raise PromotionError("Unexpected assignment response; run a dry run to reconcile.")
+                        return None
+                    if response.status != 200:
+                        raise PromotionError("Unexpected read response; stopped safely.")
+                    raw = response.read(8 * 1024 * 1024 + 1)
+                    if len(raw) > 8 * 1024 * 1024:
+                        raise PromotionError("API response too large; stopped safely.")
+                    result = json.loads(raw)
+                    if not isinstance(result, dict):
+                        raise ValueError
+                    return result
+            except urllib.error.HTTPError as error:
+                status = error.code
+                error.close()  # Never print Apple's error body, URL, or headers.
+                if body is not None or status not in (429, 500, 502, 503, 504) or attempt == 2:
+                    raise APIError(status, write=body is not None) from None
+            except (urllib.error.URLError, TimeoutError, OSError):
+                if body is not None or attempt == 2:
+                    raise PromotionError("API connection failed. Assignment may be uncertain after apply; run a dry run before retrying.") from None
+            except (ValueError, UnicodeError):
+                raise PromotionError("Invalid API JSON response; stopped safely.") from None
+            time.sleep(1 + attempt)
+
+    def pages(self, path, query=None):
+        seen = set()
+        expected_path = path
+        for _ in range(200):
+            page = self.request(path, query)
+            if not isinstance(page.get("data"), list):
+                raise PromotionError("Missing API collection; stopped safely.")
+            yield page
+            links = page.get("links")
+            if not isinstance(links, dict):
+                raise PromotionError("Missing API pagination links; cannot prove selection is complete.")
+            next_url = links.get("next")
+            if next_url is None:
+                return
+            if not isinstance(next_url, str) or next_url in seen or urllib.parse.urlsplit(next_url).path != expected_path:
+                raise PromotionError("Invalid or repeated pagination link; stopped safely.")
+            seen.add(next_url)
+            path, query = next_url, None
+        raise PromotionError("Pagination limit exceeded; no partial selection was applied.")
+
+    def collection(self, path, query=None):
+        return [item for page in self.pages(path, query) for item in page["data"]]
+
+
+def unique(items, message):
+    by_id = {}
+    for item in items:
+        key = resource_id(item.get("id"))
+        if key in by_id and item != by_id[key]:
+            raise PromotionError("API resources changed during pagination; rerun a dry run.")
+        by_id[key] = item
+    if len(by_id) != 1:
+        raise PromotionError(message)
+    return next(iter(by_id.values()))
+
+
+def resolve(client):
+    apps = client.collection("/v1/apps", {"filter[bundleId]": BUNDLE_ID, "fields[apps]": "bundleId", "limit": 200})
+    app = unique([resource(a, "apps") for a in apps if attributes(a).get("bundleId") == BUNDLE_ID],
+                 "Expected exactly one app for dev.intentapp.ios; check API access.")
+    groups = client.collection(f"/v1/apps/{app['id']}/betaGroups", {"fields[betaGroups]": "name,isInternalGroup", "limit": 200})
+    alpha = [resource(g, "betaGroups") for g in groups if attributes(g).get("name") == "Alpha"]
+    if any(type(attributes(g).get("isInternalGroup")) is not bool for g in alpha):
+        raise PromotionError("Alpha group has missing or invalid internal/external type; stopped safely.")
+    chosen = []
+    for internal, env in ((True, "ASC_INTERNAL_GROUP_ID"), (False, "ASC_EXTERNAL_GROUP_ID")):
+        pinned = os.environ.get(env)
+        if pinned:
+            resource_id(pinned)
+        matches = [g for g in alpha if attributes(g)["isInternalGroup"] is internal and (not pinned or g["id"] == pinned)]
+        chosen.append(unique(matches, f"Cannot uniquely resolve Alpha group; verify app, name, type, and {env}."))
+    if chosen[0]["id"] == chosen[1]["id"]:
+        raise PromotionError("Internal and external groups must be different resources.")
+    return app["id"], chosen[0]["id"], chosen[1]["id"]
+
+
+def related(build, name, included, kind, optional=False):
+    relation = build.get("relationships", {}).get(name, {})
+    if "data" not in relation:
+        raise PromotionError("Missing build relationship metadata; stopped safely.")
+    linkage = relation["data"]
+    if linkage is None and optional:
+        return None
+    resource(linkage, kind)
+    matches = [r for r in included if r.get("type") == kind and r.get("id") == linkage["id"]]
+    return unique(matches, "Missing included build metadata; stopped safely.")
+
+
+def candidate(build, included, app_id, now):
+    resource(build, "builds")
+    attrs = attributes(build)
+    if attrs.get("processingState") not in ("VALID", "PROCESSING", "FAILED", "INVALID"):
+        raise PromotionError("Missing or unknown processing state; stopped safely.")
+    # Processing/failed uploads may not have pre-release platform metadata yet.
+    if attrs["processingState"] != "VALID":
+        return False
+    app = related(build, "app", included, "apps")
+    if app["id"] != app_id or attributes(app).get("bundleId") != BUNDLE_ID:
+        raise PromotionError("Build belongs to an unexpected app; stopped safely.")
+    platform = attributes(related(build, "preReleaseVersion", included, "preReleaseVersions")).get("platform")
+    if platform not in ("IOS", "MAC_OS", "TV_OS", "VISION_OS"):
+        raise PromotionError("Missing or unknown build platform; stopped safely.")
+    if platform != "IOS":
+        return False
+    if type(attrs.get("expired")) is not bool:
+        raise PromotionError("Missing build expiry flag; stopped safely.")
+    if attrs["expired"] or date(attrs.get("expirationDate")) <= now:
+        return False
+    date(attrs.get("uploadedDate"))
+    return True
+
+
+def latest(client, app_id, internal_id):
+    query = dict(BUILD_QUERY, **{"filter[app]": app_id, "filter[betaGroups]": internal_id, "limit": 200, "sort": "-uploadedDate"})
+    builds = {}
+    now = datetime.now(timezone.utc)
+    for page in client.pages("/v1/builds", query):
+        for build in page["data"]:
+            if candidate(build, page.get("included", []), app_id, now):
+                key = build["id"]
+                if key in builds and builds[key] != build:
+                    raise PromotionError("Build changed during pagination; rerun a dry run.")
+                builds[key] = build
+    return max(builds.values(), key=lambda b: (date(attributes(b)["uploadedDate"]), b["id"]), default=None)
+
+
+def inspect(client, build_id, app_id):
+    query = dict(BUILD_QUERY)
+    query.update({"include": "app,preReleaseVersion,buildBetaDetail,betaAppReviewSubmission",
+                  "fields[builds]": BUILD_FIELDS + ",buildBetaDetail,betaAppReviewSubmission",
+                  "fields[buildBetaDetails]": "externalBuildState",
+                  "fields[betaAppReviewSubmissions]": "betaReviewState"})
+    result = client.request(f"/v1/builds/{build_id}", query)
+    build = resource(result.get("data"), "builds")
+    if build["id"] != build_id:
+        raise PromotionError("Unexpected selected build ID; stopped safely.")
+    included = result.get("included", [])
+    if not candidate(build, included, app_id, datetime.now(timezone.utc)):
+        return "UNKNOWN", "Selected build is no longer processed, unexpired iOS; no older build was substituted."
+    audience = attributes(build).get("buildAudienceType")
+    if audience == "INTERNAL_ONLY":
+        return "INTERNAL_ONLY", "This upload is Internal Only. Use a future externally eligible upload; no older build was substituted."
+    if audience != "APP_STORE_ELIGIBLE":
+        raise PromotionError("Missing or unknown build audience; cannot establish external eligibility.")
+    state = attributes(related(build, "buildBetaDetail", included, "buildBetaDetails")).get("externalBuildState")
+    if state not in READY and state not in BLOCKERS:
+        raise PromotionError("Missing or unknown external beta state; inspect this build manually.")
+    review = related(build, "betaAppReviewSubmission", included, "betaAppReviewSubmissions", optional=True)
+    if review is not None:
+        review_state = attributes(review).get("betaReviewState")
+        if review_state not in ("APPROVED", "WAITING_FOR_REVIEW", "IN_REVIEW", "REJECTED"):
+            raise PromotionError("Unknown beta review state; inspect this build manually.")
+        if review_state != "APPROVED":
+            return state, "Apple beta review is pending or rejected. Resolve or await review manually; no older build was substituted."
+    return state, BLOCKERS.get(state)
+
+
+def assigned(client, external_id, build_id):
+    members = client.collection(f"/v1/betaGroups/{external_id}/relationships/builds", {"limit": 200})
+    return build_id in {resource(b, "builds")["id"] for b in members}
+
+
+def promote(client):
+    app_id, internal_id, external_id = resolve(client)
+    summary = {"mode": "apply" if client.apply else "dry-run", "app_id": app_id,
+               "internal_group_id": internal_id, "external_group_id": external_id}
+    build = latest(client, app_id, internal_id)
+    if build is None:
+        return dict(summary, result="no_candidate", action="No fully processed, nonexpired iOS build in internal Alpha.")
+    build_id = build["id"]
+    summary.update(build_id=build_id, uploaded_date=date(attributes(build)["uploadedDate"]).isoformat())
+    # Read membership before checking current eligibility, minimizing stale state before a write.
+    is_assigned = assigned(client, external_id, build_id)
+    state, blocker = inspect(client, build_id, app_id)
+    summary.update(external_state=state, assigned=is_assigned)
+    if blocker:
+        return dict(summary, result="blocked", action=blocker)
+    if not is_assigned and not client.apply:
+        return dict(summary, result="would_assign", action="Would append this build to external Alpha; tester availability is not yet confirmed.")
+    if not is_assigned:
+        path = f"/v1/betaGroups/{external_id}/relationships/builds"
+        client.write_path = path
+        try:
+            client.request(path, body={"data": [{"type": "builds", "id": build_id}]})
+        except APIError as error:
+            # A concurrent assignment can yield 409. Reconcile, never resend the write.
+            if error.status != 409 or not assigned(client, external_id, build_id):
+                raise
+        if not assigned(client, external_id, build_id):
+            raise PromotionError("Assignment not yet visible. No write retry; run a dry run to reconcile.")
+        state, blocker = inspect(client, build_id, app_id)
+        summary.update(external_state=state, assigned=True)
+        if blocker:
+            return dict(summary, result="assigned_but_blocked", action=blocker)
+    if state == "IN_BETA_TESTING":
+        return dict(summary, result="already_assigned" if is_assigned else "assigned",
+                    action="External Alpha assignment is confirmed and Apple reports external testing. No notification was sent by this script.")
+    return dict(summary, result="assigned_pending_testing",
+                action="Assignment exists, but testing is not confirmed. Check Start Testing / Notify Testers manually in App Store Connect; no notification was sent by this script.")
+
+
+class SafeParser(argparse.ArgumentParser):
+    def error(self, message):
+        # Do not echo accidental credential arguments.
+        self.print_usage(sys.stderr)
+        self.exit(2, "Invalid arguments. Use --help; credentials belong only in the environment/private key file.\n")
+
+
+def main(argv=None):
+    parser = SafeParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--apply", action="store_true", help="append one eligible build to external Alpha")
+    modes.add_argument("--dry-run", action="store_true", help="read-only (the default)")
+    args = parser.parse_args(argv)
+    try:
+        result = promote(Client(Credentials(), apply=args.apply))
+    except PromotionError as error:
+        print(json.dumps({"result": "error", "action": str(error)}))
+        return 1
+    except Exception:
+        # No tracebacks: network/parsing/signing exceptions can contain credentials.
+        print(json.dumps({"result": "error", "action": "Unexpected failure; stopped safely. Run a dry run to reconcile before applying again."}))
+        return 1
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
