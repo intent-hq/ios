@@ -76,7 +76,7 @@ enum ConnectionPairing {
     }
 }
 
-/// Saved daemon connections. Pairing stays on the main Connect screen.
+/// Saved daemon connections and direct actions to pair another daemon.
 struct ConnectionsView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) var dismiss
@@ -104,6 +104,7 @@ struct ConnectionsView: View {
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("saved-connections.title")
                 connectionsList
+                ConnectionPairingActions(colorScheme: colorScheme, onPaired: handlePaired)
             }
         }
         .sheet(item: $connectionShowingDetails) { connection in
@@ -140,7 +141,7 @@ struct ConnectionsView: View {
     private var connectionsList: some View {
         VStack(spacing: Constants.Connections.cardSpacing) {
             if connections.isEmpty {
-                Text("No saved connections. Pair from the Connect screen to save a connection.")
+                Text("No saved connections. Add a connection below to get started.")
                     .font(Constants.Typography.bodyS.font)
                     // No empty-state design reference: preserve its existing semantic light color.
                     .foregroundStyle(colorScheme == .dark
@@ -204,6 +205,11 @@ struct ConnectionsView: View {
         }
     }
 
+    private func handlePaired(_ connection: StoredConnection) {
+        dismiss()
+        coordinator.onPaired(connection)
+    }
+
     private func delete(_ connection: StoredConnection) {
         let wasBound = connection.id == windowConnectionId
         guard coordinator.onDeleteConnection(id: connection.id) else {
@@ -217,5 +223,68 @@ struct ConnectionsView: View {
     private func reload() {
         connections = PersistenceManager.shared.loadConnections()
             .sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
+    }
+}
+
+private struct ConnectionPairingActions: View {
+    let colorScheme: ColorScheme
+    let onPaired: (StoredConnection) -> Void
+    @State private var showQRScanner = false
+    @State private var showManualEntry = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Constants.Connections.rowSpacing) {
+            Text("Add Connection")
+                .font(Constants.Typography.eyebrow.font)
+                .foregroundStyle(Constants.Connections.mutedForeground(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+
+            VStack(spacing: 0) {
+                let options = PairingOption.available(showsSavedConnections: false)
+                if options.contains(.qrScan) {
+                    pairingButton(icon: .connectQR, title: "Scan QR Code") { showQRScanner = true }
+                        .accessibilityIdentifier("saved-connections.scan")
+                }
+                if options.contains(.qrScan), options.contains(.manualEntry) {
+                    Rectangle()
+                        .fill(Constants.Connections.divider(for: colorScheme))
+                        .frame(height: Constants.Connections.dividerWidth)
+                        .accessibilityHidden(true)
+                }
+                if options.contains(.manualEntry) {
+                    pairingButton(icon: .connectManual, title: "Manual Connection") { showManualEntry = true }
+                        .accessibilityIdentifier("saved-connections.manual")
+                }
+            }
+            .background(Constants.Connections.surface(for: colorScheme))
+            .clipShape(.rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius))
+        }
+        .sheet(isPresented: $showQRScanner) { QRScannerView(onPaired: onPaired) }
+        .sheet(isPresented: $showManualEntry) { ManualTokenEntryView(onPaired: onPaired) }
+    }
+
+    private func pairingButton(icon: ImageResource, title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: Constants.Connections.rowSpacing) {
+                Image(icon)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(Constants.Typography.bodyS.font)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
+            .padding(.horizontal, Constants.ConnectionSheet.inset)
+            .padding(.vertical, Constants.ConnectionSheet.fieldVerticalPadding)
+            .frame(maxWidth: .infinity, minHeight: Constants.Connections.pairingRowMinimumHeight, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .buttonStyle(ConnectionSheetButtonStyle())
     }
 }
