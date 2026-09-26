@@ -344,6 +344,7 @@ struct CreationPickerControlsTests {
         let deadline = Date(timeIntervalSinceNow: pickerSettleTimeout)
         var previousFrames: (provider: CGRect, model: CGRect)?
         var stableFrameSamples = 0
+        var samples: [String] = []
 
         while Date() < deadline {
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
@@ -354,6 +355,7 @@ struct CreationPickerControlsTests {
             let model = try pickerElement(identifier: "creation.modelPicker", in: hostView)
             let providerFrame = try visibleControlFrame(of: provider, in: window)
             let modelFrame = try visibleControlFrame(of: model, in: window)
+            samples.append("Sample \(samples.count + 1): provider=\(providerFrame), model=\(modelFrame)")
             let framesMatch = previousFrames?.provider == providerFrame
                 && previousFrames?.model == modelFrame
             stableFrameSamples = framesMatch ? stableFrameSamples + 1 : 1
@@ -368,7 +370,7 @@ struct CreationPickerControlsTests {
             previousFrames = (providerFrame, modelFrame)
         }
 
-        throw PickerInspectionError.framesDidNotSettle
+        throw PickerInspectionError.framesDidNotSettle(samples: Array(samples.suffix(requiredStableFrameSamples)))
     }
 
     private static func visibleControlFrame(of element: NSObject, in window: UIWindow) throws -> CGRect {
@@ -411,7 +413,7 @@ struct CreationPickerControlsTests {
 }
 
 private enum PickerInspectionError: Error {
-    case framesDidNotSettle
+    case framesDidNotSettle(samples: [String])
 }
 
 private struct SettledPickerElements {
