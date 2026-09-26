@@ -159,7 +159,7 @@ struct WorkspaceRowView: View {
 
         private var horizontalBadges: some View {
             HStack(
-                alignment: .firstTextBaseline,
+                alignment: .center,
                 spacing: Constants.WorkspaceRow.metadataSpacing
             ) {
                 badgeContent
@@ -177,7 +177,7 @@ struct WorkspaceRowView: View {
             if let pill = indicator.pill {
                 let pillColor = WorkspaceRowView.pillColor(for: pill.status)
                 HStack(
-                    alignment: .firstTextBaseline,
+                    alignment: .center,
                     spacing: Constants.WorkspaceRow.titleSpacing
                 ) {
                     Image(systemName: WorkspaceRowView.pillSystemImage(for: pill.status))
