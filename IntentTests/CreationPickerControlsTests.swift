@@ -290,7 +290,8 @@ struct CreationPickerControlsTests {
         var previous: [CGRect] = []
         var stableSamples = 0
         var samples: [String] = []
-        while Date() < deadline {
+        // Slow image capture must still allow enough observations to establish stability.
+        while Date() < deadline || samples.count < requiredStableFrameSamples {
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
             window.layoutIfNeeded()
             let rendered = try CreationPickerRenderedGeometry(window: window)
@@ -484,7 +485,8 @@ struct CreationPickerControlsTests {
         var stableFrameSamples = 0
         var samples: [String] = []
 
-        while Date() < deadline {
+        // Slow image capture must still allow enough observations to establish stability.
+        while Date() < deadline || samples.count < requiredStableFrameSamples {
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
             window.layoutIfNeeded()
             hostView.layoutIfNeeded()
