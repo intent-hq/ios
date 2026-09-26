@@ -491,6 +491,7 @@ $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/ModelPickerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/QueuedMessagesView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/SubmittableTextView.swift
+$(SRCROOT)/Intent/Views/Conversation/Composer/WorkspaceComposerRow.swift
 $(SRCROOT)/Intent/Views/Conversation/Content
 $(SRCROOT)/Intent/Views/Conversation/Content/AttachmentReferenceImageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ChatImageActions.swift
@@ -524,6 +525,11 @@ $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardCollapsedBanner.swi
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardFooterRow.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardHeaderRow.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardView.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionAnswerCards.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionButtonStyle.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionFreeText.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionHeader.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionStepView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/AgentWaitingView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/BackgroundHooksRow.swift
@@ -547,6 +553,7 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/MessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ResponseGroupView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ToolCallView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/UserMessageView.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/WorkspaceTranscriptDesign.swift
 $(SRCROOT)/Intent/Views/Notes
 $(SRCROOT)/Intent/Views/Notes/NoteContentView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteDetailView.swift
@@ -792,6 +799,7 @@ $(SRCROOT)/IntentTests/PrivacyManifestDriftTests.swift
 $(SRCROOT)/IntentTests/ProposalActionStoreTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift
 $(SRCROOT)/IntentTests/QuestionTests.swift
+$(SRCROOT)/IntentTests/QuestionWizardLayoutTests.swift
 $(SRCROOT)/IntentTests/QueuedMessageImageDecodingTests.swift
 $(SRCROOT)/IntentTests/ReleaseConfigurationTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
@@ -862,3 +870,4 @@ $(SRCROOT)/IntentTests/WorkspaceStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTabTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTranscriptDesignTests.swift

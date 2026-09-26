@@ -364,6 +364,7 @@ struct AssistantMessageToolRowHitTestTests {
 
     private func hitTest(
         includeText: Bool,
+        workspaceDesign: Bool,
         probe: (_ hostView: UIView, _ window: UIWindow) throws -> Void
     ) async throws {
         let coordinator = try Self.makeCoordinator()
@@ -375,6 +376,7 @@ struct AssistantMessageToolRowHitTestTests {
             onHydrateBlock: nil
         )
         .environment(coordinator)
+        .environment(\.workspaceTranscriptDesign, workspaceDesign)
         try await SyntheticBadgeHost.render(view, width: Self.hostWidth, height: Self.hostHeight, inspect: probe)
     }
 
@@ -393,10 +395,10 @@ struct AssistantMessageToolRowHitTestTests {
 
     // Gated like the rendered badge tests: always true on the simulator, so a
     // missing header element there is a real failure, not a skip.
-    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() })
-    func toolRowHeaderTapReachesButtonInTextBearingMessage() async throws {
+    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() }, arguments: [false, true])
+    func toolRowHeaderTapReachesButtonInTextBearingMessage(workspaceDesign: Bool) async throws {
         let subject = try toolSubject
-        try await hitTest(includeText: true) { hostView, window in
+        try await hitTest(includeText: true, workspaceDesign: workspaceDesign) { hostView, window in
             // The copy interaction is live and spans the header: the overlay
             // is what would otherwise claim the tap.
             let overlay = try Self.copyOverlay(in: hostView, window: window)
@@ -411,10 +413,10 @@ struct AssistantMessageToolRowHitTestTests {
     /// to be unambiguously inside the text block rather than on its edge.
     private static let minimumTextBandHeight: CGFloat = 12
 
-    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() })
-    func textRegionKeepsCopyMenuInTextBearingMessage() async throws {
+    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() }, arguments: [false, true])
+    func textRegionKeepsCopyMenuInTextBearingMessage(workspaceDesign: Bool) async throws {
         let subject = try toolSubject
-        try await hitTest(includeText: true) { hostView, window in
+        try await hitTest(includeText: true, workspaceDesign: workspaceDesign) { hostView, window in
             let overlay = try Self.copyOverlay(in: hostView, window: window)
             #expect(
                 overlay.view.interactions.contains { $0 is UIContextMenuInteraction },
@@ -445,10 +447,10 @@ struct AssistantMessageToolRowHitTestTests {
         }
     }
 
-    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() })
-    func toolRowHeaderTapReachesButtonInToolOnlyMessage() async throws {
+    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() }, arguments: [false, true])
+    func toolRowHeaderTapReachesButtonInToolOnlyMessage(workspaceDesign: Bool) async throws {
         let subject = try toolSubject
-        try await hitTest(includeText: false) { hostView, window in
+        try await hitTest(includeText: false, workspaceDesign: workspaceDesign) { hostView, window in
             // No copy text: the overlay is present but inert, so the tap
             // reaches the header with or without the marker (this case
             // already worked before ios#344 was fixed).

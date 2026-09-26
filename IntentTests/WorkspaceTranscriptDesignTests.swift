@@ -1,0 +1,81 @@
+@testable import Intent
+import SwiftUI
+import Testing
+import UIKit
+
+@MainActor
+struct WorkspaceTranscriptDesignTests {
+    @Test(arguments: [CGFloat(272), CGFloat(354), CGFloat(620)])
+    func bubbleAlignsToTrailingEdgeAndAccessibilityCanUseEntireWidth(width: CGFloat) throws {
+        let leftToRight = try bubblePixels(width: width, fullWidth: false, direction: .leftToRight)
+        let rightToLeft = try bubblePixels(width: width, fullWidth: false, direction: .rightToLeft)
+        let full = try bubblePixels(width: width, fullWidth: true, direction: .leftToRight)
+        let leading = try #require(leftToRight.first)
+        #expect(leading > 0, "Ordinary bubbles must leave a leading gutter")
+        #expect(leftToRight.last == Int(width) - 1)
+        #expect(rightToLeft.first == 0)
+        #expect(rightToLeft.count == leftToRight.count)
+        #expect(full.count == Int(width), "Accessibility layout must not retain the narrow width cap")
+    }
+
+    @Test(arguments: [CGFloat(272), CGFloat(354)])
+    func realUserAndBlockerTextGrowRatherThanClip(width: CGFloat) {
+        let text = "Please check the repository permissions before running the hosted benchmark. "
+        let message = ConversationMessage(
+            id: "layout-user",
+            role: .user,
+            contentBlocks: [ContentBlock(id: "text", type: .text, text: text)],
+            timestamp: "2026-01-01T00:00:00Z"
+        )
+        let user = UserMessageView(
+            message: message,
+            workspaceId: "workspace",
+            onNavigateToAgent: nil,
+            isAgentMessageExpanded: .constant(false)
+        ).environment(\.workspaceTranscriptDesign, true)
+        let blocker = AttentionNoticeView(notice: AttentionNotice(kind: .blockerReport, reason: text))
+            .environment(\.workspaceTranscriptDesign, true)
+        let standardUser = size(user, width: width, category: .large)
+        let accessibleUser = size(user, width: width, category: .accessibility5)
+        let standardBlocker = size(blocker, width: width, category: .large)
+        let accessibleBlocker = size(blocker, width: width, category: .accessibility5)
+        #expect(accessibleUser.width <= width)
+        #expect(accessibleBlocker.width <= width)
+        #expect(accessibleUser.height > standardUser.height)
+        #expect(accessibleBlocker.height > standardBlocker.height)
+        let longer = AttentionNoticeView(notice: AttentionNotice(kind: .blockerReport, reason: String(repeating: text, count: 3)))
+            .environment(\.workspaceTranscriptDesign, true)
+        #expect(size(longer, width: width, category: .accessibility5).height > accessibleBlocker.height)
+    }
+
+    private func size(_ view: some View, width: CGFloat, category: DynamicTypeSize) -> CGSize {
+        let controller = UIHostingController(rootView: view.environment(\.dynamicTypeSize, category))
+        return controller.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+    }
+
+    private func bubblePixels(width: CGFloat, fullWidth: Bool, direction: LayoutDirection) throws -> [Int] {
+        let renderer = ImageRenderer(content: WorkspaceUserBubbleLayout(usesFullWidth: fullWidth, layoutDirection: direction) {
+            Color.red.frame(height: 40)
+        }.frame(width: width).background(.white))
+        renderer.scale = 1
+        let bitmap = try #require(renderer.cgImage)
+        var pixels = [UInt8](repeating: 0, count: bitmap.width * bitmap.height * 4)
+        try pixels.withUnsafeMutableBytes { bytes in
+            let context = try #require(CGContext(
+                data: bytes.baseAddress,
+                width: bitmap.width,
+                height: bitmap.height,
+                bitsPerComponent: 8,
+                bytesPerRow: bitmap.width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(bitmap, in: CGRect(x: 0, y: 0, width: bitmap.width, height: bitmap.height))
+        }
+        let row = bitmap.height / 2
+        return (0..<bitmap.width).filter { column in
+            let offset = (row * bitmap.width + column) * 4
+            return pixels[offset] > 200 && pixels[offset + 1] < 50 && pixels[offset + 2] < 50
+        }
+    }
+}

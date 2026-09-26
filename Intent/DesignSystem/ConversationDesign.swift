@@ -26,6 +26,8 @@ extension Constants.Conversation.Design {
 
     enum Transcript {
         static let bubblePadding: CGFloat = 20
+        // Adaptive implementation policy; accessibility text uses the full available width.
+        static let bubbleMaximumWidthFraction: CGFloat = 0.75
         static let toolRowSpacing: CGFloat = 12
         static let toolLabelSpacing: CGFloat = 16
         static let disclosureSpacing: CGFloat = 12
