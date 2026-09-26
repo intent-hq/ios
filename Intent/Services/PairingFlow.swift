@@ -32,6 +32,9 @@ enum PairingFlow {
     ) async -> FingerprintResolution {
         PairingDiagnostics.phase(.input, .started, store: diagnostics)
         if let fingerprint = payload.certFingerprint {
+            guard (try? InvitedSyncKey.fingerprint(fingerprint)) != nil else {
+                return .failed(message: "The pairing link has an invalid server fingerprint. Ask for a new link.")
+            }
             PairingDiagnostics.phase(.input, .succeeded, store: diagnostics)
             return .pinned(fingerprint)
         }

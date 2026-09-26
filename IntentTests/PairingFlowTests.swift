@@ -31,12 +31,12 @@ struct PairingFlowTests {
     @Test @MainActor func payloadFingerprintIsPinnedWithoutProbing() async {
         var probed = false
         let resolution = await PairingFlow.resolveFingerprint(
-            for: payload(fingerprint: "ab:cd")
+            for: payload(fingerprint: InvitedSessionFixtures.pin)
         ) { _, _ in
             probed = true
             return .noCertificate
         }
-        #expect(resolution == .pinned("ab:cd"))
+        #expect(resolution == .pinned(InvitedSessionFixtures.pin))
         #expect(!probed, "A payload fingerprint must be pinned without probing")
     }
 

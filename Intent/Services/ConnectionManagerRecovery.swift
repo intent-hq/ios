@@ -199,8 +199,7 @@ extension ConnectionManager {
                     guard let self else { return }
                     switch message {
                     case .string(let text):
-                        let preview = String(text.prefix(Constants.Connection.logPreviewCharacterLimit))
-                        AppLog.connection.debug("[ConnectionManager] Received text: \(preview)...")
+                        AppLog.connection.debug("[ConnectionManager] Received text bytes: \(text.utf8.count)")
                         let parseStart = CFAbsoluteTimeGetCurrent()
                         let frame = Self.parseInboundFrame(text)
                         let parseEnd = CFAbsoluteTimeGetCurrent()
@@ -252,7 +251,7 @@ extension ConnectionManager {
 
     func handleSocketFailure(_ error: any Error, from origin: WebSocketConnection) {
         guard socket === origin else { return }
-        AppLog.connection.debug("[ConnectionManager] Socket error: \(error.localizedDescription)")
+        if handleAuthoritativeSocketFailure(error) { return }
         handleDisconnection(cause: .socketFailure, failure: TransportDiagnosticFailure.classify(error))
     }
 
@@ -269,6 +268,7 @@ extension ConnectionManager {
         if socket != nil || connectionState == .connected {
             recordConnectionLoss(cause: cause, failure: failure)
         }
+        clearPrincipal()
         stopHeartbeat()
         stopPathMonitor()
         stopGlobalSubscription()
@@ -378,11 +378,10 @@ extension ConnectionManager {
             certFingerprint: parameters.certFingerprint,
             tcAddress: parameters.tcAddress
         )
-        let raceEnd = CFAbsoluteTimeGetCurrent()
-        AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms")
         let winner = raced.winner
         recordLateCertMismatches(from: raced.drain, generation: generation)
-        guard !Task.isCancelled, adoptReconnectWinner(winner, attempt: attempt, generation: generation) else {
+        let principal = try await admit(winner, token: parameters.token, fingerprint: parameters.certFingerprint)
+        guard !Task.isCancelled, adoptReconnectWinner(winner, principal: principal, attempt: attempt, generation: generation) else {
             await winner.disconnect()
             return true
         }
@@ -393,6 +392,7 @@ extension ConnectionManager {
 
     private func adoptReconnectWinner(
         _ winner: RacedConnection,
+        principal: ConnectionPrincipal,
         attempt: Int,
         generation: Int
     ) -> Bool {
@@ -401,7 +401,7 @@ extension ConnectionManager {
         activeTunnel = winner.tunnel
         host = winner.host
         configureSocketMessagePump()
-        connectionState = .connected
+        finishIdentityAdmission(principal)
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = attempt
         recordConnectionAttempt(.recovered, context: activeTunnel == nil ? .direct : .tunnel)
@@ -413,6 +413,7 @@ extension ConnectionManager {
     }
 
     private func handleReconnectFailure(_ error: Error, attempt: Int, generation: Int) -> Bool {
+        if stopAfterIdentityFailure(error, generation: generation) { return true }
         if !Task.isCancelled, !(error is CancellationError), connectionGeneration == generation {
             let failure = TransportDiagnosticFailure.classify(error)
             recordConnectionAttempt(
@@ -434,7 +435,6 @@ extension ConnectionManager {
     }
 
     // MARK: - Network path monitoring
-
     func startPathMonitor() {
         stopPathMonitor()
         pathMonitorID += 1

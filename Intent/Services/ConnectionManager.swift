@@ -37,6 +37,15 @@ import os
     var connectionState: ConnectionState = .disconnected {
         didSet { connectionStateSubject.send(connectionState) }
     }
+    private var admittedPrincipal: ConnectionPrincipal?
+    var currentPrincipal: ConnectionPrincipal? {
+        get { DemoMode.isEnabled ? .demoOwner : admittedPrincipal }
+        set { admittedPrincipal = newValue }
+    }
+    @ObservationIgnored var authorityRefreshTask: Task<Void, Never>?
+    @ObservationIgnored var pendingAuthorityRevision: Double = -1
+    @ObservationIgnored var authorityBeforeRefresh: ConnectionPrincipal?
+
     var certMismatchDetected = false {
         didSet { certMismatchSubject.send(certMismatchDetected) }
     }
@@ -53,6 +62,7 @@ import os
     @ObservationIgnored private let certMismatchesSubject = CurrentValueSubject<[HostCertMismatch], Never>([])
     @ObservationIgnored let subscriptionRouter: ConnectionSubscriptionRouter
     @ObservationIgnored let diagnostics: DiagnosticStore
+    @ObservationIgnored let persistence: PersistenceManager
 
     @ObservationIgnored var socket: WebSocketConnection?
     @ObservationIgnored var messagePumpTask: Task<Void, Never>?
@@ -122,12 +132,14 @@ import os
     /// Internal (not private) so `BackendSessionRegistry` can construct one
     /// additional instance per pinned backend session; `.shared` remains the
     /// process-wide default used by the default session and existing code.
-    init(diagnostics: DiagnosticStore = .shared) {
+    init(diagnostics: DiagnosticStore = .shared, persistence: PersistenceManager = .shared) {
         self.diagnostics = diagnostics
+        self.persistence = persistence
         subscriptionRouter = ConnectionSubscriptionRouter(diagnostics: diagnostics)
     }
 
     isolated deinit {
+        authorityRefreshTask?.cancel()
         stopPathMonitor()
     }
 }
@@ -202,6 +214,7 @@ extension ConnectionManager {
         defer {
             recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration)
         }
+        let principal = try await admit(winner, token: target.token, fingerprint: target.certFingerprint)
         let raceEnd = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms (at +\(Int((raceEnd - connectStart) * Self.millisecondsPerSecond))ms)")
         AppLog.connection.debug("[ConnectionManager] Race won by \(winner.host), generation=\(context.generation)")
@@ -218,6 +231,7 @@ extension ConnectionManager {
         }
         lateMismatchGeneration = adoptConnectedWinner(
             winner,
+            principal: principal,
             target: target,
             preservesLiveConnection: context.preservesLiveConnection,
             initialGeneration: context.generation
@@ -285,6 +299,7 @@ extension ConnectionManager {
 
     private func adoptConnectedWinner(
         _ winner: RacedConnection,
+        principal: ConnectionPrincipal,
         target: ConnectTarget,
         preservesLiveConnection: Bool,
         initialGeneration: Int
@@ -299,6 +314,8 @@ extension ConnectionManager {
         activeTunnel = winner.tunnel
         host = winner.host
         configureSocketMessagePump()
+        currentPrincipal = principal
+        bindSavedIdentity(principal)
         connectionState = .connected
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = 0
@@ -357,6 +374,7 @@ extension ConnectionManager {
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
         connectionGeneration += 1
+        clearPrincipal()
         stopHeartbeat()
         stopPathMonitor()
         stopGlobalSubscription()
@@ -406,7 +424,7 @@ extension ConnectionManager {
         hosts = refreshedHosts
     }
 
-    func applyRefreshedTunnelAddress(_ refreshedAddress: String) {
+    func applyRefreshedTunnelAddress(_ refreshedAddress: String?) {
         tcAddress = refreshedAddress
     }
 }

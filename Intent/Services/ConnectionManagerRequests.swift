@@ -238,6 +238,7 @@ extension ConnectionManager {
         case .subscriptionPush(let push):
             subscriptionRouter.route(push)
         case let .notification(method, params):
+            invalidatePrincipalIfNeeded(method: method, params: params.value)
             if !subscriptionRouter.route(method: method, params: params.value) {
                 for handler in eventHandlers.values {
                     handler(method, params.value)
@@ -318,7 +319,7 @@ extension ConnectionManager {
         handleTextMessage(text)
     }
 
-    nonisolated static let globalEventTypes = ["workspace:*", "note:*", "agent:*", "task:*"]
+    nonisolated static let globalEventTypes = ["workspace:*", "note:*", "agent:*", "task:*", "host:members-changed"]
     nonisolated static let globalSubscriptionMaxAttempts = 5
     nonisolated static let globalSubscriptionBackoffMaximumSeconds = 8
     nonisolated static let globalSubscriptionBackoffMaximumExponent = 3

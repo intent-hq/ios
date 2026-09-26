@@ -194,7 +194,7 @@ extension WorkspaceStore {
 
         switch Self.classify(type: eventType, data: data) {
         case .refetch:
-            if !workspaceLive {
+            if !workspaceLive || eventType == "host:members-changed" {
                 Task { await fetchAll() }
             }
         case .patchInPlace, .ignore:
@@ -212,9 +212,10 @@ extension WorkspaceStore {
 
     // MARK: - Event classification
 
-    nonisolated static let handledChannels = ["workspace:", "agent:"]
+    nonisolated static let handledChannels = ["workspace:", "agent:", "host:members-changed"]
 
     nonisolated static let refetchEventTypes: Set<String> = [
+        "host:members-changed",
         "workspace:created", "workspace:deleted",
         "workspace:activity-changed", "workspace:displayStatus-changed",
         "workspace:attention-changed",

@@ -144,6 +144,10 @@ nonisolated final class RecoveryWebSocketServer: @unchecked Sendable {
                     "code": Self.scriptedFailureCode,
                     "message": "scripted failure"
                 ]
+            } else if method == "principal.me" {
+                response["result"] = ["id": "test-owner", "isAdministrator": true]
+            } else if method == "client.hello" {
+                response["result"] = ["server": ["capabilities": [String: Int]()]]
             } else {
                 response["result"] = [String: Any]()
             }

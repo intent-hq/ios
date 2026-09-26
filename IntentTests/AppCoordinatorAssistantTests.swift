@@ -3,8 +3,15 @@ import Foundation
 import Testing
 
 extension AppCoordinatorTests {
+    @MainActor private func ownerCoordinator() -> AppCoordinator {
+        let connection = FakeConnectionManager()
+        connection.connectionState = .connected
+        connection.currentPrincipal = InvitedSessionFixtures.principal("owner", role: .owner)
+        return AppCoordinator(workspaceStore: WorkspaceStore(connectionManager: connection), connection: connection, persistence: persistence)
+    }
+
     @Test @MainActor func assistantSwitchPreservesWorkspaceConversation() {
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = ownerCoordinator()
         coordinator.onSelectAgent("workspace-agent", workspaceId: "workspace", agentName: "Coder")
 
         coordinator.onSelectAssistant()
@@ -22,7 +29,7 @@ extension AppCoordinatorTests {
     }
 
     @Test @MainActor func globalAgentSelectionOpensAssistantInsteadOfHiddenWorkspace() {
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = ownerCoordinator()
         coordinator.onSelectAgent("chief-agent", workspaceId: Workspace.chiefWorkspaceId, agentName: "Chief of Staff")
         #expect(coordinator.selectedSection == .assistant)
         #expect(coordinator.assistantAgentId == "chief-agent")
@@ -35,7 +42,7 @@ extension AppCoordinatorTests {
     }
 
     @Test @MainActor func workspaceAgentSelectionLeavesAssistant() {
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = ownerCoordinator()
         coordinator.onSelectAssistant(agentId: "chief-agent")
         coordinator.onSelectAgent("coder", workspaceId: "workspace", agentName: "Coder")
         #expect(coordinator.selectedSection == .workspaces)
@@ -44,7 +51,7 @@ extension AppCoordinatorTests {
     }
 
     @Test @MainActor func explicitWorkspaceSelectionLeavesAssistant() {
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = ownerCoordinator()
         coordinator.onSelectAssistant()
         coordinator.onSelectWorkspace("workspace")
         #expect(coordinator.selectedSection == .workspaces)

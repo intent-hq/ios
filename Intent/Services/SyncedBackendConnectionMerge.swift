@@ -124,13 +124,13 @@ enum SyncedBackendConnectionMerge {
         let fingerprint = normalizeFingerprint(record.fingerprint)
         if !fingerprint.isEmpty,
             let index = connections.firstIndex(where: { connection in
-                normalizeFingerprint(connection.server.certFingerprint) == fingerprint
+                connection.invitedPersonKey == nil && normalizeFingerprint(connection.server.certFingerprint) == fingerprint
             }) {
             return index
         }
         let hosts = Set(candidateHosts(of: record).map(normalizeHost))
         return connections.firstIndex { connection in
-            normalizeFingerprint(connection.server.certFingerprint).isEmpty
+            connection.invitedPersonKey == nil && normalizeFingerprint(connection.server.certFingerprint).isEmpty
                 && connection.server.port == record.port
                 && !hosts.isDisjoint(with: connection.server.hosts.map(normalizeHost))
         }

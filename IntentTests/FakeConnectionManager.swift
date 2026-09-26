@@ -153,6 +153,16 @@ class FakeConnectionManager: SessionConnectionManaging {
         _connectionState.eraseToAnyPublisher()
     }
 
+    var currentPrincipal: ConnectionPrincipal? = .demoOwner
+
+    func confirmedPrincipal() async throws -> ConnectionPrincipal {
+        let hello = try await request("client.hello")
+        let value = try await request("principal.me")
+        let principal = try ConnectionPrincipal.parse(value, hello: hello)
+        currentPrincipal = principal
+        return principal
+    }
+
     // MARK: - Session Connection Surface
 
     private let _certMismatchDetected = CurrentValueSubject<Bool, Never>(false)
@@ -237,7 +247,10 @@ class FakeConnectionManager: SessionConnectionManaging {
     // MARK: - Request/Response Mocking
 
     /// Map of method names to response values. If a method is not in this map, request() throws.
-    var responseMap: [String: Any] = [:]
+    var responseMap: [String: Any] = [
+        "client.hello": ["server": ["capabilities": [String: Int]()]],
+        "principal.me": ["id": "test-owner", "isAdministrator": true]
+    ]
 
     /// Per-method FIFO response queues. When non-empty for a method, each request()
     /// pops the next response — takes precedence over responseMap. Useful for

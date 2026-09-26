@@ -76,7 +76,13 @@ struct WorkspaceActionLauncher: ViewModifier {
         VStack(alignment: .trailing, spacing: Layout.footerSpacing) {
             Spacer(minLength: 0)
             if isOpen {
-                HomeActionTiles(connectionCount: connectionCount, appearance: appearanceTitle, onSelect: select)
+                HomeActionTiles(
+                    connectionCount: connectionCount,
+                    appearance: appearanceTitle,
+                    onSelect: select,
+                    allowsWorkspaceCreation: coordinator.canCreateWorkspace,
+                    allowsAssistant: coordinator.canUseAssistant
+                )
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
             }
             AssistantLaunchButton(isOpen: isOpen) {
@@ -104,7 +110,7 @@ struct WorkspaceActionLauncher: ViewModifier {
         isOpen = false
         switch action {
         case .assistant: coordinator.onSelectAssistant()
-        case .workspace: onCreateWorkspace()
+        case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
         case .connections: onConnections()
         case .appearance: destination = .appearance
         case .acknowledgements: destination = .acknowledgements

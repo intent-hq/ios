@@ -11,7 +11,7 @@ struct ConnectionUpsertOutcome {
 class PersistenceManager {
     static let shared = DemoMode.isEnabled
         ? PersistenceManager.ephemeral()
-        : PersistenceManager(backendPublisher: SyncedBackendPublisher.production())
+        : PersistenceManager(backendPublisher: SyncedBackendPublisher.production(), invitedRegistry: InvitedSessionRegistry.production())
 
     static func ephemeral() -> PersistenceManager {
         let suiteName = "com.intent.companion.demo-data"
@@ -38,6 +38,8 @@ class PersistenceManager {
     /// Explicit opt-in: custom/test/ephemeral stores never publish through a
     /// production writer. Only `shared` installs it outside the test host.
     let backendPublisher: SyncedBackendPublisher?
+    let invitedRegistry: InvitedSessionRegistry?
+    var invitedRefreshInProgress = false
 
     /// Published only after a saved connection mutation succeeds. Window
     /// labels observe their own record, independently of the last-used pointer.
@@ -47,11 +49,13 @@ class PersistenceManager {
     init(
         defaults: UserDefaults = .standard,
         keychainStorage: KeychainStorage = SecItemKeychainStorage(),
-        backendPublisher: SyncedBackendPublisher? = nil
+        backendPublisher: SyncedBackendPublisher? = nil,
+        invitedRegistry: InvitedSessionRegistry? = nil
     ) {
         self.defaults = defaults
         self.keychainStorage = keychainStorage
         self.backendPublisher = backendPublisher
+        self.invitedRegistry = invitedRegistry
     }
 }
 
@@ -135,7 +139,10 @@ extension PersistenceManager {
                 // gets its own pending edit clock before the atomic save.
                 syncUpdatedAt: connection.syncUpdatedAt ?? existing.syncUpdatedAt
             )
-            stored.pendingSyncUpdatedAt = existing.pendingSyncUpdatedAt
+            stored.principal = connection.principal ?? existing.principal
+            stored.invitedSyncPayload = connection.invitedSyncPayload ?? existing.invitedSyncPayload
+            stored.pendingSyncUpdatedAt = connection.invitedPersonKey == nil ? existing.pendingSyncUpdatedAt : connection.pendingSyncUpdatedAt
+            stored.localPairingSyncClock = connection.localPairingSyncClock ?? existing.localPairingSyncClock
             preparePublication(&stored, incoming: connection)
             connections[index] = stored
         } else {
@@ -151,7 +158,7 @@ extension PersistenceManager {
     }
 
     private func preparePublication(_ stored: inout StoredConnection, incoming: StoredConnection) {
-        guard incoming.syncUpdatedAt == nil, let backendPublisher else { return }
+        guard stored.principal?.isOwner == true, incoming.syncUpdatedAt == nil, let backendPublisher else { return }
         stored.pendingSyncUpdatedAt = max(
             backendPublisher.pairingClock(for: stored),
             (suppressedPublicationClock(id: stored.id) ?? 0) + 1
@@ -161,6 +168,12 @@ extension PersistenceManager {
     }
 
     private static func matchesPairing(_ stored: StoredConnection, incoming: StoredConnection) -> Bool {
+        if let key = incoming.invitedPersonKey {
+            return stored.invitedPersonKey == key
+        }
+        if stored.invitedPersonKey != nil { return false }
+        if let first = stored.principal, let second = incoming.principal,
+           !ConnectionPrincipal.samePerson(first.id, second.id) { return false }
         let fingerprint = SyncedBackendConnectionMerge.normalizeFingerprint(incoming.server.certFingerprint)
         if !fingerprint.isEmpty,
            SyncedBackendConnectionMerge.normalizeFingerprint(stored.server.certFingerprint) == fingerprint { return true }
@@ -248,12 +261,14 @@ extension PersistenceManager {
     @discardableResult
     func deleteConnection(id: UUID) -> Bool {
         guard var connections = loadConnectionsWithOutcome().connections else { return false }
-        guard connections.contains(where: { $0.id == id }) else { return true }
+        guard let existing = connections.first(where: { $0.id == id }) else { return true }
+        if existing.invitedPersonKey != nil, !rememberInvitedRemoval(existing) { return false }
         connections.removeAll { $0.id == id }
         guard saveConnectionsLocked(connections) else { return false }
         if activeConnectionIdLocked() == id {
             defaults.removeObject(forKey: activeConnectionIdKey)
         }
+        publishPendingInvitedSessions()
         return true
     }
 

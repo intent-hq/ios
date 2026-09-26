@@ -171,6 +171,7 @@ extension AppCoordinator {
     }
 
     func onSelectAssistant(agentId: String? = nil) {
+        guard canUseAssistant else { return }
         if let agentId { assistantAgentId = agentId }
         selectedSection = .assistant
         switch currentScreen {

@@ -14,6 +14,8 @@ struct HomeActionTiles: View {
     let connectionCount: Int
     let appearance: String
     let onSelect: (Action) -> Void
+    var allowsWorkspaceCreation = true
+    var allowsAssistant = true
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var tileWidth: CGFloat = 172
     @ScaledMetric(relativeTo: .body) private var tileHeight: CGFloat = 240
@@ -29,7 +31,9 @@ struct HomeActionTiles: View {
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Layout.spacing) {
-                ForEach(Action.allCases, id: \.self) { action in
+                ForEach(Action.allCases.filter { action in
+                    (action != .workspace || allowsWorkspaceCreation) && (action != .assistant || allowsAssistant)
+                }, id: \.self) { action in
                     tile(action)
                 }
             }

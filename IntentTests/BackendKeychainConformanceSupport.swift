@@ -37,6 +37,7 @@ enum BackendKeychainConformanceSupport {
             token: Fixtures.value("token", in: input),
             displayName: Fixtures.value("label", in: input)
         )
+        connection.principal = InvitedSessionFixtures.principal("owner", role: .owner)
         connection.pendingSyncUpdatedAt = try Fixtures.nullable("pendingSyncUpdatedAt", in: input)
         if let pending: Fixtures.Object = try Fixtures.nullable("pendingRoutePublication", in: input) {
             connection.pendingRoutePublication = try JSONDecoder().decode(

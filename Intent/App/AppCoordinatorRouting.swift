@@ -197,6 +197,7 @@ extension AppCoordinator {
                 return (lhs.lastConnectedAt ?? .distantPast) > (rhs.lastConnectedAt ?? .distantPast)
             }
         }
+        refreshInvitedConnections()
         dependencies.persistence.publishPendingBackends()
         guard case .available(let records) = dependencies.syncedRegistry.listBackends() else { return nil }
         let windowID = windowConnectionID
@@ -235,6 +236,30 @@ extension AppCoordinator {
             }
         }
         return outcome
+    }
+
+    private func refreshInvitedConnections() {
+        let persistence = dependencies.persistence
+        guard persistence.invitedRegistry != nil, invitedRefreshTask == nil else { return }
+        invitedRefreshTask = Task { [weak self] in
+            let removed = await persistence.refreshInvitedSessions { candidate in
+                let connection = ConnectionManager(persistence: persistence)
+                defer { connection.disconnect() }
+                try await connection.connect(
+                    hosts: candidate.server.hosts,
+                    port: candidate.server.port,
+                    token: candidate.token,
+                    certFingerprint: candidate.server.certFingerprint,
+                    tcAddress: candidate.server.tcAddress
+                )
+                return try await connection.confirmedPrincipal()
+            }
+            guard let self else { return }
+            invitedRefreshTask = nil
+            dependencies.sessionRegistry.markBackendsRemoved(removed.map(BackendID.init))
+            savedConnections = persistence.loadConnections()
+            if let windowID = windowConnectionID, removed.contains(windowID) { exitRemovedBackend() }
+        }
     }
 
     /// Keep the existing bounded startup fallback, even during transport-owned

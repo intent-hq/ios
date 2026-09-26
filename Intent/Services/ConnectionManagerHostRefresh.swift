@@ -50,6 +50,11 @@ extension ConnectionManager {
         case .stale:
             break
         case let .current(localIps, reportedTc):
+            if case .success(let value) = response, (value as? [String: Any])?["tcAddress"] is NSNull,
+               let saved = savedConnection(token: token, port: port), saved.invitedPersonKey != nil {
+                applyRefreshedTunnelAddress(nil)
+                _ = persistence.clearInvitedTunnelRoute(id: saved.id)
+            }
             applyReportedTunnelAddress(reportedTc, token: token, port: port)
             applyReportedHosts(localIps, token: token, port: port)
         }
@@ -64,10 +69,10 @@ extension ConnectionManager {
         // The active connection, verified against the live token + port
         // (same record-matching rules as the host persistence below).
         if let reportedTc,
-            let stored = PersistenceManager.shared.activeConnection(),
+            let stored = savedConnection(token: token, port: port),
             stored.token == token, stored.server.port == port,
             stored.server.tcAddress != reportedTc {
-            if !PersistenceManager.shared.updateConnectionTcAddress(
+            if !persistence.updateConnectionTcAddress(
                 id: stored.id,
                 tcAddress: reportedTc
             ) {
@@ -101,11 +106,11 @@ extension ConnectionManager {
         // record holds (e.g. a single-host manual re-pair while the record
         // also has a NAT hostname), and persisting the in-memory merge alone
         // would drop those hosts.
-        if let stored = PersistenceManager.shared.activeConnection(),
+        if let stored = savedConnection(token: token, port: port),
             stored.token == token, stored.server.port == port {
             let persistedHosts = Self.mergeHosts(existing: stored.server.hosts, reported: merged)
             if stored.server.hosts != persistedHosts {
-                if !PersistenceManager.shared.updateConnectionHosts(
+                if !persistence.updateConnectionHosts(
                     id: stored.id,
                     hosts: persistedHosts
                 ) {
@@ -145,16 +150,22 @@ extension ConnectionManager {
         // A newer connect() may have superseded us while the RPC was in flight.
         guard connectionGeneration == myGeneration else { return }
 
-        if let stored = PersistenceManager.shared.activeConnection(),
+        if let stored = savedConnection(token: token, port: port),
             stored.token == token, stored.server.port == port,
             stored.displayName != name {
-            AppLog.connection.debug("[ConnectionManager] Display name refresh: \(stored.displayName) -> \(name)")
-            if !PersistenceManager.shared.updateConnectionDisplayName(
+            AppLog.connection.debug("[ConnectionManager] Display name refreshed")
+            if !persistence.updateConnectionDisplayName(
                 id: stored.id,
                 displayName: name
             ) {
                 AppLog.connection.warning("[ConnectionManager] Could not persist refreshed display name")
             }
+        }
+    }
+
+    private func savedConnection(token: String, port: Int) -> StoredConnection? {
+        persistence.loadConnections().first { saved in
+            saved.token == token && saved.server.port == port && saved.server.certFingerprint == certFingerprint
         }
     }
 

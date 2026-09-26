@@ -49,18 +49,23 @@ enum ConnectionPairing {
         connection: any SessionConnectionManaging,
         persistence: PersistenceManager = .shared
     ) async throws -> StoredConnection {
+        let principal = try await connection.confirmedPrincipal()
+        try Task.checkCancellation()
         var displayName: String?
         if let result = try? await connection.request("host.status") {
             displayName = Self.displayName(fromHostStatus: result)
         }
-        let outcome = persistence.upsertConnectionWithOutcome(
-            StoredConnection(
+        try Task.checkCancellation()
+        var candidate = StoredConnection(
                 server: server,
                 token: token,
                 displayName: displayName,
                 lastConnectedAt: Date()
             )
-        )
+        candidate.principal = principal
+        try persistence.prepareInvitedPairing(&candidate)
+        try Task.checkCancellation()
+        let outcome = persistence.upsertConnectionWithOutcome(candidate)
         guard !outcome.registryUndecodable else { throw PersistenceError.registryUndecodable }
         guard outcome.persisted else { throw PersistenceError.saveFailed }
         let stored = outcome.connection
