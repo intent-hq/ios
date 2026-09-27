@@ -41,6 +41,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
         tcAddress: String?
     )
     func refreshHostRoutes() async
+    func connectDemo(serveFixtures: Bool)
     func disconnect()
 }
 

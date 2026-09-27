@@ -53,6 +53,11 @@ final class AgentDetailStore {
         let value: Any
     }
 
+    private struct PatchField: Hashable {
+        let name: String
+        let workspaceId: String?
+    }
+
     private final class Entry {
         var task: Task<AgentDetail, Error>?
         var requestID = UUID()
@@ -60,8 +65,8 @@ final class AgentDetailStore {
         var invalidation = 0
         var activationGeneration = 0
         var revision = 0
-        var fields: [String: Patch] = [:]
-        var metadata: [String: Patch] = [:]
+        var fields: [PatchField: Patch] = [:]
+        var metadata: [PatchField: Patch] = [:]
         var consumers: Set<UUID> = []
         var interests: [UUID: LoadInterest] = [:]
         var workspaceId: String?
@@ -129,7 +134,6 @@ final class AgentDetailStore {
         if entry.task == nil {
             let requestID = UUID()
             entry.requestID = requestID
-            entry.workspaceId = workspaceId
             let epoch = connectionEpoch
             entry.task = Task { try await self.read(agentId: agentId, entry: entry, requestID: requestID, epoch: epoch) }
         }
@@ -170,6 +174,7 @@ final class AgentDetailStore {
             entry.fresh = false
             entry.fields = [:]
             entry.metadata = [:]
+            entry.workspaceId = nil
         }
         snapshots = [:]
     }
@@ -192,22 +197,21 @@ final class AgentDetailStore {
                 let revision = entry.revision
                 // Agent ids are backend-wide. Do not accidentally scope a
                 // watched child to its parent's workspace; validate per caller.
-                var params: [String: Any] = ["agentId": agentId]
-                if let workspaceId = entry.workspaceId { params["workspaceId"] = workspaceId }
-                let response = try await connection.request("agent.get", params: params)
+                let response = try await connection.request("agent.get", params: ["agentId": agentId])
                 guard epoch == self.connectionEpoch, entry.requestID == requestID else { throw CancellationError() }
                 guard let envelope = response as? [String: Any],
                       let values = envelope["agent"] as? [String: Any], !values.isEmpty else {
                     throw AgentDetailError.invalidResponse
                 }
                 let received = AgentDetail(values)
-                try received.validate(agentId: agentId, workspaceId: entry.workspaceId)
+                try received.validate(agentId: agentId, workspaceId: nil)
                 let detail = applyingPatches(to: received, entry: entry, after: revision)
                 if invalidation != entry.invalidation {
                     if round == 0 { continue }
                     throw CancellationError()
                 }
                 snapshots[agentId] = detail
+                entry.workspaceId = detail.values["workspaceId"] as? String
                 entry.fresh = invalidation == entry.invalidation && activationGeneration == entry.activationGeneration
                 return detail
             }
@@ -229,17 +233,28 @@ final class AgentDetailStore {
     private func applyingPatches(to detail: AgentDetail, entry: Entry, after revision: Int) -> AgentDetail {
         var values = detail.values
         var metadata = detail.metadata
-        for (key, patch) in entry.fields where patch.revision > revision { values[key] = patch.value }
-        for (key, patch) in entry.metadata where patch.revision > revision { metadata[key] = patch.value }
+        let workspaceId = values["workspaceId"] as? String
+        for (field, patch) in entry.fields.sorted(by: { $0.value.revision < $1.value.revision })
+            where patch.revision > revision && (field.workspaceId == nil || field.workspaceId == workspaceId) {
+            values[field.name] = patch.value
+        }
+        for (field, patch) in entry.metadata.sorted(by: { $0.value.revision < $1.value.revision })
+            where patch.revision > revision && (field.workspaceId == nil || field.workspaceId == workspaceId) {
+            metadata[field.name] = patch.value
+        }
         values["metadata"] = metadata
         return AgentDetail(values)
     }
 
-    private func patch(agentId: String, fields: [String: Any], metadata: [String: Any]) {
+    private func patch(agentId: String, fields: [String: Any], metadata: [String: Any], workspaceId: String? = nil) {
         let entry = entry(for: agentId)
         entry.revision &+= 1
-        for (key, value) in fields { entry.fields[key] = Patch(revision: entry.revision, value: value) }
-        for (key, value) in metadata { entry.metadata[key] = Patch(revision: entry.revision, value: value) }
+        for (key, value) in fields {
+            entry.fields[PatchField(name: key, workspaceId: workspaceId)] = Patch(revision: entry.revision, value: value)
+        }
+        for (key, value) in metadata {
+            entry.metadata[PatchField(name: key, workspaceId: workspaceId)] = Patch(revision: entry.revision, value: value)
+        }
         if let detail = snapshots[agentId] {
             snapshots[agentId] = applyingPatches(to: detail, entry: entry, after: entry.revision - 1)
         }
@@ -271,12 +286,16 @@ final class AgentDetailStore {
         guard type == "agent:updated" else { return }
         let metadata = data.filter { Self.metadataKeys.contains($0.key) }
         let fields = data.filter { Self.fieldKeys.contains($0.key) }
-        patch(agentId: agentId, fields: fields, metadata: metadata)
+        patch(agentId: agentId, fields: fields, metadata: metadata, workspaceId: (data["workspaceId"] ?? event["workspaceId"]) as? String)
         if Self.requiresReconciliation(data) {
             invalidate(agentId: agentId)
             if !entry.consumers.isEmpty, entry.task == nil {
                 let activation = entry.activationGeneration
-                Task { _ = try? await self.load(agentId: agentId, workspaceId: nil, refresh: false, activation: activation) }
+                let epoch = connectionEpoch
+                Task { [weak self] in
+                    guard let self, connectionEpoch == epoch else { return }
+                    _ = try? await load(agentId: agentId, workspaceId: nil, refresh: false, activation: activation)
+                }
             }
         }
     }

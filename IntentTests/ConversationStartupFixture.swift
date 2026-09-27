@@ -56,10 +56,13 @@ final class ConversationStartupFixture {
         }
     }
 
-    func makeViewModel(agentId: String = ConversationStartupFixture.parentId) -> ConversationViewModel {
+    func makeViewModel(
+        agentId: String = ConversationStartupFixture.parentId,
+        workspaceId: String = ConversationStartupFixture.workspaceId
+    ) -> ConversationViewModel {
         let viewModel = ConversationViewModel(
             agentId: agentId,
-            workspaceId: Self.workspaceId,
+            workspaceId: workspaceId,
             agentName: "Startup fixture",
             connection: connection,
             uploadService: AttachmentUploadService(connection: connection),

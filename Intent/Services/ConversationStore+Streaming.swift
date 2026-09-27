@@ -7,7 +7,7 @@ extension ConversationStore {
     /// Binding is entirely local. ConnectionManager owns the backend-wide
     /// agent feed; a view must never wait for or open its own remote feed.
     @discardableResult
-    func bindStreaming(agentId: String, workspaceId: String) -> Int {
+    func bindStreaming(agentId: String, workspaceId: String?) -> Int {
         if streamingEventsActive, self.agentId == agentId, self.workspaceId == workspaceId {
             return eventRegistrationGeneration
         }
@@ -35,6 +35,7 @@ extension ConversationStore {
         eventRegistrationGeneration &+= 1
         cancelBootstrap()
         cancelMetadataRefreshes()
+        pendingWorkspaceEvents.removeAll()
         streamingEventsActive = false
         if let eventHandlerId { connectionManager.removeEventHandler(id: eventHandlerId) }
         eventHandlerId = nil
@@ -97,6 +98,14 @@ extension ConversationStore {
               let data = event["data"] as? [String: Any] else { return }
 
         let eventAgentId = data["agentId"] as? String
+        if workspaceId == nil, bootstrapWorkspaceHint != nil, eventAgentId == agentId,
+           (data["workspaceId"] ?? event["workspaceId"]) is String {
+            pendingWorkspaceEvents.append((method, params))
+            // The shared detail store coalesces these callers. Keep the event
+            // until authority succeeds, including after a failed initial read.
+            scheduleMetadataRefresh()
+            return
+        }
         guard shouldContinueAfterWorkspaceEvent(
             eventType,
             data: data,
@@ -257,10 +266,7 @@ extension ConversationStore {
 
     private func handleQueueProcessing(_ data: [String: Any]) {
         if let messageId = data["messageId"] as? String {
-            queuedMessages.removeAll { $0.id == messageId }
-            // A removal alone cannot seed the remaining rows. If it raced the
-            // initial read, reconcile after it rather than losing that queue.
-            if queueReadTask != nil { refreshQueue() }
+            commands.removeProcessingMessage(messageId)
         } else {
             refreshQueue()
         }

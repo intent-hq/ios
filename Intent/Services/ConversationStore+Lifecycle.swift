@@ -57,6 +57,7 @@ extension ConversationStore {
                       binding == agentBindingGeneration, isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
                 applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: issuedLiveVersion)
                 applyFetchedMarkers(state, revisions: revisions)
+                resolveWorkspaceFromDetail()
                 metadataReadyForEntry = connectionManager.globalSubscriptionState == .subscribed
                 notifyEntryStateChanged()
                 reconcilePendingQuestionRecovery()

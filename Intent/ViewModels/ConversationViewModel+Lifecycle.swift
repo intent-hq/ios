@@ -4,7 +4,7 @@ extension ConversationViewModel {
     /// Local ownership is installed before launching independent remote work.
     /// Repeated SwiftUI tasks and connected publisher replay share the same load.
     func load() async {
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, validateWorkspaceIfKnown() else { return }
         if activeLiveStoreActivation == nil {
             liveStoreActivationGeneration &+= 1
             activeLiveStoreActivation = liveStoreActivationGeneration
@@ -40,8 +40,24 @@ extension ConversationViewModel {
     /// authoritative marker, so a slow detail read cannot land at a wrong anchor.
     var isEntryScrollReady: Bool { hasLatchedNewMessagesDividerAnchor }
 
+    /// Route validation belongs to this window, never to the shared agent.
+    /// A stale route releases only its own lease after authority arrives.
+    @discardableResult
+    func validateWorkspaceIfKnown() -> Bool {
+        guard let detail = agentDetails.cached(agentId: agentId) else { return true }
+        do {
+            try detail.validate(agentId: agentId, workspaceId: workspaceId)
+            return true
+        } catch {
+            workspaceMismatch = true
+            teardownLiveStores()
+            return false
+        }
+    }
+
     func latchEntryWhenReady() {
-        guard activeLiveStoreActivation != nil, store.metadataReadyForEntry, store.liveTranscript.chatSeeded else { return }
+        guard activeLiveStoreActivation != nil, validateWorkspaceIfKnown(),
+              store.metadataReadyForEntry, store.liveTranscript.chatSeeded else { return }
         latchNewMessagesDividerAnchorIfNeeded()
     }
 
@@ -150,6 +166,7 @@ extension ConversationViewModel {
                 await fetchSpecialistInfo(specialistId: specialistId, activation: activation)
             }
         } catch {
+            if activation == liveStoreActivationGeneration, !Task.isCancelled { validateWorkspaceIfKnown() }
             AppLog.conversation.error("[ConversationViewModel] Fetch current model failed: \(error)")
         }
     }

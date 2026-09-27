@@ -80,6 +80,9 @@ import SwiftUI
     @ObservationIgnored let watchedAgentCoordinator: ConversationWatchedAgents
     var agentId: String?
     var workspaceId: String?
+    @ObservationIgnored var bootstrapWorkspaceHint: String?
+    @ObservationIgnored var pendingWorkspaceEvents: [(String, Any)] = []
+    @ObservationIgnored var isFoldingWorkspaceEvents = false
     var connectionObserver: AnyCancellable?
     @ObservationIgnored var feedObserver: AnyCancellable?
     @ObservationIgnored var observedConnectionState: ConnectionState
@@ -92,7 +95,9 @@ import SwiftUI
     @ObservationIgnored var entryObservers: [UUID: () -> Void] = [:]
     @ObservationIgnored var queueReadTask: Task<Void, Never>?
     @ObservationIgnored var queueReadPending = false
+    @ObservationIgnored var queueRefreshQueued = false
     @ObservationIgnored var subscriptionReadTask: Task<Void, Never>?
+    @ObservationIgnored var subscriptionRefreshQueued = false
     @ObservationIgnored var subscriptionRevision = 0
 
     @ObservationIgnored var eventHandlerId: UUID?

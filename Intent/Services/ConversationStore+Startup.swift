@@ -32,8 +32,26 @@ extension ConversationStore {
 
     func retainConversation(_ consumer: UUID, agentId: String, workspaceId: String) {
         consumers.insert(consumer)
-        bindStreaming(agentId: agentId, workspaceId: workspaceId)
+        guard !streamingEventsActive || self.agentId != agentId else { return }
+        // Agent ids are backend-wide. A second window's route hint cannot
+        // replace a live channel; only shared agent detail supplies authority.
+        bootstrapWorkspaceHint = workspaceId
+        let knownWorkspace = commands.agentDetails.cached(agentId: agentId)?.values["workspaceId"] as? String
+        bindStreaming(agentId: agentId, workspaceId: knownWorkspace)
         startBootstrap()
+    }
+
+    func resolveWorkspaceFromDetail() {
+        guard let agentId, let workspace = commands.agentDetails.cached(agentId: agentId)?.values["workspaceId"] as? String else { return }
+        let requestedWorkspace = workspaceId ?? bootstrapWorkspaceHint
+        workspaceId = workspace
+        liveTranscript.workspaceId = workspace
+        if streamingEventsActive, requestedWorkspace != workspace { invalidateSubscriptions() }
+        let events = pendingWorkspaceEvents
+        pendingWorkspaceEvents.removeAll()
+        isFoldingWorkspaceEvents = true
+        for (method, params) in events { handleStreamEvent(method, params: params) }
+        isFoldingWorkspaceEvents = false
     }
 
     func releaseConversation(_ consumer: UUID) {
@@ -43,19 +61,20 @@ extension ConversationStore {
 
     /// Idempotent for this activation/connection, even after all reads settle.
     func startBootstrap(reconnecting: Bool = false) {
-        guard bootstrapTask == nil, streamingEventsActive, let agentId, let workspaceId else { return }
+        guard bootstrapTask == nil, streamingEventsActive, let agentId,
+              let workspace = workspaceId ?? bootstrapWorkspaceHint else { return }
         let generation = bootstrapGeneration
         bootstrapTask = Task { [weak self] in
             guard let self, generation == bootstrapGeneration, !Task.isCancelled else { return }
-            async let transcript: () = loadInitialTranscript(agentId: agentId, workspaceId: workspaceId)
+            async let transcript: () = loadInitialTranscript(agentId: agentId)
             async let metadata: () = fetchAgentStreamingState(agentId: agentId, raiseOnly: !reconnecting, refresh: false)
             async let queue: () = fetchQueue(agentId: agentId)
-            async let subscriptions: () = fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
+            async let subscriptions: () = fetchSubscriptions(agentId: agentId, workspaceId: workspace)
             _ = await (transcript, metadata, queue, subscriptions)
         }
     }
 
-    private func loadInitialTranscript(agentId: String, workspaceId: String) async {
+    private func loadInitialTranscript(agentId: String) async {
         guard !Task.isCancelled else { return }
         await subscribeLiveChat(agentId: agentId, workspaceId: workspaceId)
         guard !Task.isCancelled else { return }
@@ -64,15 +83,18 @@ extension ConversationStore {
 
     func cancelBootstrap() {
         bootstrapGeneration &+= 1
+        pendingWorkspaceEvents.removeAll()
         metadataReadyForEntry = false
         bootstrapTask?.cancel()
         bootstrapTask = nil
         queueReadTask?.cancel()
         queueReadTask = nil
         queueReadPending = false
+        queueRefreshQueued = false
         commands.invalidateQueueReads()
         subscriptionReadTask?.cancel()
         subscriptionReadTask = nil
+        subscriptionRefreshQueued = false
         subscriptionRevision &+= 1
         watchedAgentCoordinator.invalidateReads()
     }
@@ -100,6 +122,7 @@ extension ConversationStore {
     }
 
     func notifyEntryStateChanged() {
+        guard !isFoldingWorkspaceEvents else { return }
         for observer in Array(entryObservers.values) { observer() }
     }
 }

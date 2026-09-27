@@ -27,7 +27,7 @@ extension ConnectionManager {
         params: [String: Any] = [:],
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
-        if DemoMode.isEnabled {
+        if DemoMode.isEnabled || servesDemoFixtures {
             if let gate = DemoFixtures.responseGate(for: method, params: params) {
                 try await DemoFixtures.wait(for: gate)
             }

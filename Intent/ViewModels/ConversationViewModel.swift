@@ -25,7 +25,8 @@ import SwiftUI
 
     var isTruncated: Bool { store.isTruncated }
     var totalMessageCount: Int { store.totalMessageCount }
-    var agentNotFound: Bool { store.agentNotFound }
+    var agentNotFound: Bool { store.agentNotFound || workspaceMismatch }
+    var workspaceMismatch = false
     var activeAgentHooks: [BackgroundHook] {
         hookStore.activeHooks.filter { $0.agentId == agentId }
     }
@@ -121,7 +122,7 @@ import SwiftUI
         self.agentName = agentName
         self.connection = connection
         self.optionsStore = optionsStore
-        let sharedStore = conversations?.store(agentId: agentId, workspaceId: workspaceId)
+        let sharedStore = conversations?.store(agentId: agentId)
         let details = sharedStore?.commands.agentDetails ?? agentDetails ?? AgentDetailStore(connection: connection)
         self.agentDetails = details
         self.store = sharedStore ?? ConversationStore(connectionManager: connection, agentDetails: details)
@@ -151,6 +152,10 @@ import SwiftUI
     }
 
     isolated deinit {
+        releaseOwnedResources()
+    }
+
+    private func releaseOwnedResources() {
         loadTask?.cancel()
         markSeenDebounceTask?.cancel()
         if let streamingObserverId { store.streamingObservers[streamingObserverId] = nil }

@@ -194,6 +194,11 @@ class FakeConnectionManager: SessionConnectionManaging {
     private(set) var disconnectCallCount = 0
     private(set) var refreshHostRoutesCallCount = 0
 
+    func connectDemo(serveFixtures _: Bool) {
+        globalSubscriptionState = .subscribed
+        connectionState = .connected
+    }
+
     func connect(
         hosts: [String],
         port: Int,

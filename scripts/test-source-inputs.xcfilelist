@@ -650,6 +650,7 @@ $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/ComposerSubmitPolicyTests.swift
 $(SRCROOT)/IntentTests/ConnectionFailureViewTests.swift
 $(SRCROOT)/IntentTests/ConnectionLossPresenterTests.swift
+$(SRCROOT)/IntentTests/ConnectionManagerDemoStartupTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerEndpointPathTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerFrameParsingTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerGlobalSubscriptionTests.swift
@@ -675,12 +676,14 @@ $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupCancellationTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupEpochTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupFixture.swift
 $(SRCROOT)/IntentTests/ConversationStartupLifecycleTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupOwnershipTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupRPCTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupReadinessTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupReplayTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupWorkspaceTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreBindingGenerationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreHydrationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreIntegrationTests.swift

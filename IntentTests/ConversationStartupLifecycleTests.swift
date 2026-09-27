@@ -94,10 +94,8 @@ struct ConversationStartupLifecycleTests {
         let remaining: [String: Any] = ["id": "remaining", "content": "Next", "queuedAt": "2026-09-27", "position": 1]
         let processed: [String: Any] = ["id": "processed", "content": "Now", "queuedAt": "2026-09-27", "position": 0]
         connection.resolvePending("agent.getQueue", with: ["queue": [processed, remaining]])
-        try await connection.waitForPendingRequests("agent.getQueue")
-        connection.resolvePending("agent.getQueue", with: ["queue": [remaining]])
         await load.value
         #expect(model.store.queuedMessages.map(\.id) == ["remaining"])
-        #expect(connection.paramsForMethod("agent.getQueue").count == 2)
+        #expect(connection.paramsForMethod("agent.getQueue").count == 1)
     }
 }

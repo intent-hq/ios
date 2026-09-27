@@ -4,29 +4,24 @@ import Foundation
 /// presentation state; only the final lease releases the shared live channel.
 @MainActor
 final class ConversationStorePool {
-    private struct StoreKey: Hashable {
-        let agentId: String
-        let workspaceId: String
-    }
     private struct Entry {
         weak var store: ConversationStore?
     }
 
     private let connection: any ConnectionManagerRouting
     private let details: AgentDetailStore
-    private var entries: [StoreKey: Entry] = [:]
+    private var entries: [String: Entry] = [:]
 
     init(connection: any ConnectionManagerRouting, details: AgentDetailStore) {
         self.connection = connection
         self.details = details
     }
 
-    func store(agentId: String, workspaceId: String) -> ConversationStore {
+    func store(agentId: String) -> ConversationStore {
         entries = entries.filter { $0.value.store != nil }
-        let key = StoreKey(agentId: agentId, workspaceId: workspaceId)
-        if let store = entries[key]?.store { return store }
+        if let store = entries[agentId]?.store { return store }
         let store = ConversationStore(connectionManager: connection, agentDetails: details)
-        entries[key] = Entry(store: store)
+        entries[agentId] = Entry(store: store)
         return store
     }
 

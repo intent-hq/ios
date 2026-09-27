@@ -69,6 +69,15 @@ final class ConversationCommands {
     }
     private var queueRevision = 0
     private var queueReadGeneration = 0
+
+    private final class QueueRead {
+        var revision: Int
+        var removed: Set<String> = []
+
+        init(revision: Int) { self.revision = revision }
+    }
+
+    private var queueReads: [UUID: QueueRead] = [:]
     @ObservationIgnored var onQueueSnapshot: (([QueuedMessage]) -> Void)?
     var pendingQuestionsMessageId: String? {
         didSet {
@@ -119,11 +128,8 @@ extension ConversationCommands {
         )
     }
 
-    /// Targeted seek for one message outside the loaded page
-    /// (`agent.getConversation` with `aroundMessageId` + `limit: 1`, PROTOCOL
-    /// §5.5). Returns the row when the page contains it, nil when the daemon
-    /// served a page without it. An unknown id surfaces as the daemon's
-    /// `-32602` (`unknown message id`) — the caller classifies it.
+    /// Seeks one message using `aroundMessageId` + `limit: 1` (PROTOCOL §5.5).
+    /// Returns nil if absent; the caller classifies an unknown id's `-32602`.
     func fetchMessage(
         agentId: String,
         messageId: String,
@@ -257,27 +263,34 @@ extension ConversationCommands {
         _ = try await connectionManager.request("agent.stop", params: ["agentId": agentId])
     }
 
-    /// Replaces the local queue with the daemon's `agent.getQueue` snapshot.
-    ///
-    /// Malformed-envelope policy: when the response is not an object carrying
-    /// a `queue` array, the previous local queue is kept unchanged — the
-    /// daemon told us nothing usable, so blanking would lose entries the user
-    /// can still see and act on. A well-formed empty `queue` is authoritative
-    /// and clears the queue. Elements are decoded one by one (see
-    /// `decodeQueueSnapshot`) so one malformed entry never blanks its siblings.
     func invalidateQueueReads() { queueReadGeneration &+= 1 }
 
+    /// Processing carries a removal, not a full snapshot. Fold it into every
+    /// pending seed so untouched rows survive without extending the read loop.
+    func removeProcessingMessage(_ messageId: String) {
+        for read in queueReads.values {
+            if read.revision == queueRevision { read.revision &+= 1 }
+            read.removed.insert(messageId)
+        }
+        queuedMessages.removeAll { $0.id == messageId }
+    }
+
+    /// Replaces the queue from agent.getQueue. Malformed envelopes preserve
+    /// existing rows; a valid empty array clears them. Processing removals fold in.
     func fetchQueue(agentId: String) async throws {
         let generation = resetGeneration
         let readGeneration = queueReadGeneration
-        let revision = queueRevision
+        let read = QueueRead(revision: queueRevision)
+        let readID = UUID()
+        queueReads[readID] = read
+        defer { queueReads[readID] = nil }
         let result = try await connectionManager.request(
             "agent.getQueue",
             params: ["agentId": agentId]
         )
         guard !Task.isCancelled, generation == resetGeneration,
               readGeneration == queueReadGeneration else { throw CancellationError() }
-        guard revision == queueRevision else { return }
+        guard read.revision == queueRevision else { return }
         guard let response = result as? [String: Any],
               let decoded = Self.decodeQueueSnapshot(response["queue"], source: "agent.getQueue")
         else {
@@ -287,17 +300,13 @@ extension ConversationCommands {
             )
             return
         }
-        queuedMessages = decoded
-        onQueueSnapshot?(decoded)
+        queuedMessages = decoded.filter { !read.removed.contains($0.id) }
+        onQueueSnapshot?(queuedMessages)
     }
 
-    /// Element-tolerant decoding shared by the `agent.getQueue` response and
-    /// the `agent:queue:updated` push (PROTOCOL §5.5). Returns `nil` when
-    /// `queue` is not an array (malformed envelope — callers decide the
-    /// policy); otherwise every element that fails to decode is dropped and
-    /// the valid siblings are returned in their original order with their
-    /// identities intact. Only safe metadata (position in the array, error
-    /// shape) is logged — never message content or metadata payloads.
+    /// Shared getQueue/queue:updated decoder (PROTOCOL §5.5). Non-arrays return
+    /// nil; invalid elements are dropped, retaining valid rows' order and ids.
+    /// Logs only array positions/error shapes, never content or metadata.
     static func decodeQueueSnapshot(
         _ queue: Any?, source: String
     ) -> [QueuedMessage]? { // swiftlint:disable:this discouraged_optional_collection
@@ -328,9 +337,7 @@ extension ConversationCommands {
         return messages
     }
 
-    /// Content-free description of a queue element decoding failure: the
-    /// `DecodingError` case and the coding path that failed, or the error
-    /// type for anything else.
+    /// Content-free failure description: decoding case/path or other error type.
     private static func describeDecodingFailure(_ error: Error) -> String {
         guard let decodingError = error as? DecodingError else {
             return String(describing: type(of: error))

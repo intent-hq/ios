@@ -77,11 +77,14 @@ extension ConversationStore {
     func refreshQueue() {
         commands.invalidateQueueReads()
         queueReadPending = true
-        guard let agentId else { return }
+        guard queueReadTask == nil, !queueRefreshQueued, let agentId else { return }
+        queueRefreshQueued = true
         let activation = eventRegistrationGeneration
+        let epoch = bootstrapGeneration
         Task { [weak self] in
-            guard let self, ownsStreamingRegistration(activation) else { return }
+            guard let self, ownsStreamingRegistration(activation), bootstrapGeneration == epoch else { return }
             await fetchQueue(agentId: agentId)
+            if bootstrapGeneration == epoch { queueRefreshQueued = false }
         }
     }
 
@@ -91,13 +94,16 @@ extension ConversationStore {
         let generation = bootstrapGeneration
         let task = Task { [weak self] in
             guard let self else { return }
-            repeat {
+            // One trailing read per owner. Further incomplete events leave the
+            // queue dirty for the next explicit read/event/reconnect, not a loop.
+            for _ in 0..<2 {
                 guard !Task.isCancelled, generation == bootstrapGeneration else { return }
                 queueReadPending = false
                 do { try await commands.fetchQueue(agentId: agentId) } catch {
                     AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
                 }
-            } while queueReadPending
+                if !queueReadPending { return }
+            }
         }
         queueReadTask = task
         await task.value
@@ -142,11 +148,15 @@ extension ConversationStore {
 
     func invalidateSubscriptions() {
         subscriptionRevision &+= 1
-        guard let agentId, let workspaceId else { return }
+        guard subscriptionReadTask == nil, !subscriptionRefreshQueued,
+              let agentId, let workspaceId = workspaceId ?? bootstrapWorkspaceHint else { return }
+        subscriptionRefreshQueued = true
         let activation = eventRegistrationGeneration
+        let epoch = bootstrapGeneration
         Task { [weak self] in
-            guard let self, ownsStreamingRegistration(activation) else { return }
+            guard let self, ownsStreamingRegistration(activation), bootstrapGeneration == epoch else { return }
             await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
+            if bootstrapGeneration == epoch { subscriptionRefreshQueued = false }
         }
     }
 
@@ -156,14 +166,17 @@ extension ConversationStore {
         let generation = bootstrapGeneration
         let task = Task { [weak self] in
             guard let self else { return }
-            var revision: Int
-            repeat {
+            // Match metadata/queue reconciliation: retain the invalidation
+            // revision after the trailing read, without scheduling a third.
+            for _ in 0..<2 {
                 guard !Task.isCancelled, generation == bootstrapGeneration else { return }
-                revision = subscriptionRevision
-                await watchedAgentCoordinator.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) {
+                let revision = subscriptionRevision
+                let workspace = self.workspaceId ?? workspaceId
+                await watchedAgentCoordinator.fetchSubscriptions(agentId: agentId, workspaceId: workspace) {
                     generation == self.bootstrapGeneration && revision == self.subscriptionRevision
                 }
-            } while revision != subscriptionRevision
+                if revision == subscriptionRevision { return }
+            }
         }
         subscriptionReadTask = task
         await task.value
