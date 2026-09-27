@@ -6,7 +6,6 @@ struct WorkspaceDetailView: View {
     @State private var agentStore: AgentStore
     @State private var viewModel = AgentListViewModel()
     @Environment(\.colorScheme) var colorScheme
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @State private var showBackgroundAgents = false
     @State private var expandedDelegates: Set<String> = []
     @State private var showDeleteConfirmation = false
@@ -49,7 +48,7 @@ struct WorkspaceDetailView: View {
 
     private var lifecycleContent: some View {
         ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
+            WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
             detailContent
         }
         .onAppear {
@@ -189,6 +188,10 @@ struct WorkspaceDetailView: View {
         }
         .navigationTitle(workspaceTitle)
         .toolbarTitleDisplayMode(.inline)
+        #if !os(visionOS)
+        .navigationBarBackButtonHidden()
+        .toolbarBackground(WorkspaceDetailStyle.background(for: colorScheme), for: .navigationBar)
+        #endif
         .toolbar {
             #if os(visionOS)
             // The Agents/Context switcher lives in the detail's top toolbar
@@ -203,7 +206,30 @@ struct WorkspaceDetailView: View {
                 }
                 .pickerStyle(.segmented)
             }
+            #else
+            ToolbarItem(placement: .topBarLeading) {
+                Button(action: coordinator.onBackToWorkspaceList) {
+                    Image(.arrowLeft)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
+                        .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
+                        .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                }
+                .accessibilityLabel("Back to workspaces")
+            }
             #endif
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: WorkspaceDetailStyle.tabInset) {
+                    Text(workspaceTitle)
+                        .interFont(Constants.Typography.bodyXSEmphasized)
+                        .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    Text("Workspace")
+                        .interFont(Constants.Typography.bodyXS)
+                        .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme))
+                }
+                .lineLimit(1)
+            }
             ToolbarItem(placement: .primaryAction) {
                 workspaceActions
             }
@@ -213,25 +239,13 @@ struct WorkspaceDetailView: View {
 
 private extension WorkspaceDetailView {
     var workspaceActions: some View {
-        Menu {
-            Button { showSpecialistPicker = true } label: {
-                Label { Text("Create New Agent").interFont(Constants.Typography.bodyS) } icon: { Image(.addCircle) }
-            }
-            Button(action: createTerminal) {
-                Label { Text("New terminal").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "terminal") }
-            }
-            .disabled(!terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId))
-            Divider()
-            Button { showArchiveConfirmation = true } label: {
-                Label { Text("Archive").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "archivebox") }
-            }
-            Button(role: .destructive) { showDeleteConfirmation = true } label: {
-                Label { Text("Delete").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "trash") }
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-        }
-        .accessibilityLabel("Workspace actions")
+        WorkspaceActionsMenu(
+            isTerminalDisabled: !terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId),
+            onCreateAgent: { showSpecialistPicker = true },
+            onCreateTerminal: createTerminal,
+            onArchive: { showArchiveConfirmation = true },
+            onDelete: { showDeleteConfirmation = true }
+        )
     }
 
     func createTerminal() {
@@ -245,12 +259,26 @@ private extension WorkspaceDetailView {
     }
 
     var detailContent: some View {
-        VStack(spacing: 0) {
-            repositoryName
-            statusImage
-            taskProgress
-            workspacePicker
-            tabContent
+        ScrollView {
+            VStack(spacing: 0) {
+                WorkspaceDetailHeading(
+                    title: workspaceTitle,
+                    repositoryOwner: workspace?.repositoryOwner,
+                    repositoryName: workspace?.repositoryName
+                )
+                statusImage
+                taskProgress
+                workspacePicker
+                tabContent
+            }
+        }
+        .refreshable {
+            if selectedTab == .agents {
+                await agentStore.fetchAgents(workspaceId: workspaceId)
+                await terminalStore.refresh(workspaceId: workspaceId)
+            } else {
+                await noteStore.fetchNotes(workspaceId: workspaceId)
+            }
         }
     }
 
@@ -262,25 +290,11 @@ private extension WorkspaceDetailView {
                 assetId: statusImageAssetId,
                 style: .detail
             )
-            .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
             .padding(.bottom, Constants.WorkspaceDetail.statusImageBottomPadding)
         }
     }
 
-    @ViewBuilder
-    var repositoryName: some View {
-        if let owner = workspace?.repositoryOwner, let repo = workspace?.repositoryName {
-            Text("\(owner)/\(repo)").interFont(Constants.Typography.subtextXXS)
-                .foregroundStyle(Theme.mutedForeground(
-                    for: colorScheme,
-                    contrast: colorSchemeContrast
-                ))
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
-                .padding(.bottom, Constants.WorkspaceDetail.titleBottomPadding)
-        }
-    }
     @ViewBuilder
     var taskProgress: some View {
         if let total = workspace?.taskStatsTotal,
@@ -295,16 +309,12 @@ private extension WorkspaceDetailView {
     @ViewBuilder
     var workspacePicker: some View {
         #if !os(visionOS)
-        Picker("Workspace Content", selection: $selectedTab) {
-            Text("Agents").interFont(Constants.Typography.bodyXS).tag(WorkspaceTab.agents)
-            Text("Context").interFont(Constants.Typography.bodyXS).tag(WorkspaceTab.context)
-        }
-        .pickerStyle(.segmented)
-        .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+        WorkspaceContentTabs(selection: $selectedTab)
+        .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.top, WorkspaceDetailHeaderLayout.tabTopPadding(
             hasTaskProgress: (workspace?.taskStatsTotal ?? 0) > 0
         ))
-        .padding(.bottom, Constants.WorkspaceDetail.tabVerticalPadding)
+        .padding(.bottom, WorkspaceDetailStyle.sectionSpacing)
         #endif
     }
 
@@ -313,17 +323,16 @@ private extension WorkspaceDetailView {
         if selectedTab == .agents {
             if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty,
                terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty {
-                Spacer()
                 ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                Spacer()
+                .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
             } else if viewModel.agents.isEmpty, terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty {
                 ContentUnavailableView {
                     Label { Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold)) } icon: { Image(systemName: "person.2") }
                 } description: {
                     Text("Agents will appear here when active.").interFont(Constants.Typography.bodyS)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
             } else {
                 agentListContent
             }
@@ -333,20 +342,15 @@ private extension WorkspaceDetailView {
     }
 
     var agentListContent: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                foregroundAgents
-                backgroundAgents
-                WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) { terminal in
-                    selectedTerminal = terminal
-                }
+        LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
+            foregroundAgents
+            backgroundAgents
+            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) { terminal in
+                selectedTerminal = terminal
             }
-            .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
         }
-        .refreshable {
-            await agentStore.fetchAgents(workspaceId: workspaceId)
-            await terminalStore.refresh(workspaceId: workspaceId)
-        }
+        .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+        .padding(.bottom, WorkspaceDetailStyle.pageInset)
     }
 
     var foregroundAgents: some View {
@@ -357,17 +361,19 @@ private extension WorkspaceDetailView {
 
     @ViewBuilder
     func foregroundAgent(_ agent: AgentSession) -> some View {
-        agentButton(agent)
-        let delegates = viewModel.delegatedAgents(for: agent.id)
-        if !delegates.isEmpty {
-            DelegatedAgentsRow(
-                agents: delegates,
-                isExpanded: expandedDelegates.contains(agent.id),
-                colorScheme: colorScheme
-            ) { toggleDelegates(agent.id) }
-            if expandedDelegates.contains(agent.id) {
-                ForEach(delegates) { delegate in
-                    agentButton(delegate, indented: true)
+        VStack(spacing: WorkspaceDetailStyle.stackTopSpacing) {
+            agentButton(agent)
+            let delegates = viewModel.delegatedAgents(for: agent.id)
+            if !delegates.isEmpty {
+                DelegatedAgentsRow(
+                    agents: delegates,
+                    isExpanded: expandedDelegates.contains(agent.id),
+                    colorScheme: colorScheme
+                ) { toggleDelegates(agent.id) }
+                if expandedDelegates.contains(agent.id) {
+                    ForEach(delegates) { delegate in
+                        agentButton(delegate, indented: true)
+                    }
                 }
             }
         }
@@ -455,45 +461,3 @@ private extension WorkspaceDetailView {
         }
     }
 }
-
-#if os(visionOS)
-/// Deliberate confirmation sheet for destructive/irreversible workspace
-/// actions: title, consequence copy, one primary action, and a plain
-/// cancel — replacing inline alerts per the visionOS HIG.
-struct WorkspaceActionConfirmationSheet: View {
-    let title: String
-    let message: String
-    let actionLabel: String
-    let isDestructive: Bool
-    let onConfirm: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        VStack(spacing: Constants.WorkspaceDetail.confirmationSheetSpacing) {
-            Text(title).interFont(Constants.Typography.heading2)
-            Text(message).interFont(Constants.Typography.bodyS)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            Button(role: isDestructive ? .destructive : nil) {
-                dismiss()
-                onConfirm()
-            } label: {
-                Text(actionLabel).interFont(Constants.Typography.bodyS)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            Button {
-                dismiss()
-            } label: {
-                Text("Cancel").interFont(Constants.Typography.bodyS)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-        }
-        .padding(Constants.WorkspaceDetail.confirmationSheetPadding)
-        .frame(width: Constants.WorkspaceDetail.confirmationSheetWidth)
-    }
-}
-#endif

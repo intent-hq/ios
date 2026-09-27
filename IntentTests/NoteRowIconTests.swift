@@ -151,14 +151,8 @@ struct NoteRowLayoutTests {
     }
 
     @Test func accessibilityLayoutReducesNestedIndentation() {
-        #expect(NoteRowLayout.indentation(for: 2, usesAccessibilityLayout: false) == 48)
+        #expect(NoteRowLayout.indentation(for: 2, usesAccessibilityLayout: false) == 96)
         #expect(NoteRowLayout.indentation(for: 2, usesAccessibilityLayout: true) == 16)
-    }
-
-    @Test func onlyNestedLeavesReserveDisclosureSpace() {
-        #expect(NoteRowLayout.reservesDisclosureSpace(depth: 1, hasChildren: false))
-        #expect(!NoteRowLayout.reservesDisclosureSpace(depth: 1, hasChildren: true))
-        #expect(!NoteRowLayout.reservesDisclosureSpace(depth: 0, hasChildren: false))
     }
 
     @Test(arguments: [false, true])

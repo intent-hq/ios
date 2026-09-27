@@ -1,5 +1,37 @@
 import SwiftUI
 
+struct WorkspaceDetailHeading: View {
+    let title: String
+    let repositoryOwner: String?
+    let repositoryName: String?
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
+            Text(title)
+                .interFont(Constants.Typography.heading2)
+                .tracking(WorkspaceDetailStyle.titleTracking)
+                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            if let repositoryOwner, let repositoryName {
+                Text("\(repositoryOwner)/\(repositoryName)")
+                    .interFont(Constants.Typography.subtextXXS)
+                    .foregroundStyle(colorScheme == .light && colorSchemeContrast == .standard
+                        ? WorkspaceDetailStyle.neutral
+                        : WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+        .padding(.top, dynamicTypeSize.isAccessibilitySize ? WorkspaceDetailStyle.headingSpacing : WorkspaceDetailStyle.headingTopSpacing)
+        .padding(.bottom, WorkspaceDetailStyle.headingBottomSpacing)
+    }
+}
+
 struct WorkspaceTaskProgressLayout: Equatable {
     let total: Int
     let completed: Int
@@ -42,35 +74,31 @@ struct WorkspaceTaskProgressView: View {
     @State private var progressWidth: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Constants.WorkspaceDetail.progressSectionSpacing) {
-            Text(progress.summary)
-                .interFont(Constants.Typography.bodyXSEmphasized)
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-                .fixedSize(horizontal: false, vertical: true)
-            progressBar
-        }
-        .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
-        .padding(.bottom, Constants.WorkspaceDetail.progressBottomPadding)
+        progressBar
+            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+            .padding(.bottom, WorkspaceDetailStyle.progressBottomSpacing)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Task progress")
+            .accessibilityValue(progress.summary)
     }
 
     private var progressBar: some View {
         HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
-            progressSegment(count: progress.completed, color: .green)
-            progressSegment(count: progress.inProgress, color: .blue)
+            progressSegment(count: progress.completed, color: WorkspaceDetailStyle.foreground(for: colorScheme))
+            progressSegment(count: progress.inProgress, color: WorkspaceDetailStyle.accent)
             remainingProgressSegment
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: Constants.WorkspaceDetail.progressHeight)
-        .clipShape(RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
+        .frame(height: WorkspaceDetailStyle.progressHeight)
+        .clipShape(Capsule())
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { progressWidth = $0 }
         .overlay { progressBorder }
-        .accessibilityHidden(true)
     }
 
     @ViewBuilder
     private func progressSegment(count: Int, color: Color) -> some View {
         if count > 0 {
-            RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
+            Rectangle()
                 .fill(color)
                 .frame(width: segmentWidth(for: count))
         }
@@ -79,15 +107,8 @@ struct WorkspaceTaskProgressView: View {
     @ViewBuilder
     private var remainingProgressSegment: some View {
         if progress.remaining > 0 {
-            RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                .fill(
-                    Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast)
-                        .opacity(
-                            colorSchemeContrast == .increased
-                                ? Constants.WorkspaceDetail.increasedRemainingOpacity
-                                : Constants.WorkspaceDetail.remainingProgressOpacity
-                        )
-                )
+            Rectangle()
+                .fill(WorkspaceDetailStyle.surface(for: colorScheme))
                 .frame(width: segmentWidth(for: progress.remaining))
         }
     }
@@ -105,7 +126,7 @@ struct WorkspaceTaskProgressView: View {
     @ViewBuilder
     private var progressBorder: some View {
         if colorSchemeContrast == .increased {
-            RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
+            Capsule()
                 .strokeBorder(
                     Theme.border(for: colorScheme, contrast: colorSchemeContrast),
                     lineWidth: Constants.WorkspaceDetail.increasedContrastProgressBorderWidth
@@ -119,3 +140,78 @@ enum WorkspaceDetailHeaderLayout {
         hasTaskProgress ? 0 : Constants.WorkspaceDetail.tabVerticalPadding
     }
 }
+
+struct WorkspaceActionsMenu: View {
+    let isTerminalDisabled: Bool
+    let onCreateAgent: () -> Void
+    let onCreateTerminal: () -> Void
+    let onArchive: () -> Void
+    let onDelete: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Menu {
+            Button(action: onCreateAgent) {
+                Label { Text("Create New Agent").interFont(Constants.Typography.bodyS) } icon: { Image(.addCircle) }
+            }
+            Button(action: onCreateTerminal) {
+                Label { Text("New terminal").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "terminal") }
+            }
+            .disabled(isTerminalDisabled)
+            Divider()
+            Button(action: onArchive) {
+                Label { Text("Archive").interFont(Constants.Typography.bodyS) } icon: { Image(.archive) }
+            }
+            Button(role: .destructive, action: onDelete) {
+                Label { Text("Delete").interFont(Constants.Typography.bodyS) } icon: { Image(.delete) }
+            }
+        } label: {
+            Image(.more)
+                .resizable()
+                .scaledToFit()
+                .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
+                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
+        }
+        .accessibilityLabel("Workspace actions")
+    }
+}
+
+#if os(visionOS)
+struct WorkspaceActionConfirmationSheet: View {
+    let title: String
+    let message: String
+    let actionLabel: String
+    let isDestructive: Bool
+    let onConfirm: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(spacing: Constants.WorkspaceDetail.confirmationSheetSpacing) {
+            Text(title).interFont(Constants.Typography.heading2)
+            Text(message).interFont(Constants.Typography.bodyS)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            Button(role: isDestructive ? .destructive : nil) {
+                dismiss()
+                onConfirm()
+            } label: {
+                Text(actionLabel).interFont(Constants.Typography.bodyS)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            Button {
+                dismiss()
+            } label: {
+                Text("Cancel").interFont(Constants.Typography.bodyS)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(Constants.WorkspaceDetail.confirmationSheetPadding)
+        .frame(width: Constants.WorkspaceDetail.confirmationSheetWidth)
+    }
+}
+#endif
