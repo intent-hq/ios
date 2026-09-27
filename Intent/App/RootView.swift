@@ -14,6 +14,9 @@ struct RootView: View {
     /// Token of this window's selection-handler registration, so disappear
     /// removes only this window's registration — never a successor's.
     @State private var selectionHandlerToken: UUID?
+    @State private var isSearchingWorkspaces = false
+    @State private var showingCreateWorkspace = false
+    @State private var showingConnections = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
@@ -138,16 +141,33 @@ struct RootView: View {
         } else {
             // iPad: NavigationSplitView with sidebar selection
             NavigationSplitView {
-                WorkspaceListSidebar(workspaceStore: session.workspaceStore)
-                    .navigationSplitViewColumnWidth(
-                        min: Constants.Root.sidebarMinimumWidth,
-                        ideal: Constants.Root.sidebarIdealWidth,
-                        max: Constants.Root.sidebarMaximumWidth
-                    )
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: $isSearchingWorkspaces
+                )
+                .navigationSplitViewColumnWidth(
+                    min: Constants.Root.sidebarMinimumWidth,
+                    ideal: Constants.Root.sidebarIdealWidth,
+                    max: Constants.Root.sidebarMaximumWidth
+                )
             } detail: {
                 detailContent
             }
             .navigationSplitViewStyle(.automatic)
+            .modifier(WorkspaceActionLauncher(
+                isSearching: isSearchingWorkspaces,
+                alignment: .leading,
+                onCreateWorkspace: { showingCreateWorkspace = true },
+                onConnections: { showingConnections = true }
+            ))
+            .sheet(isPresented: $showingCreateWorkspace) {
+                CreateWorkspaceView(session: session)
+                    .environment(coordinator)
+            }
+            .sheet(isPresented: $showingConnections) {
+                ConnectionsView()
+                    .environment(coordinator)
+            }
         }
     }
 

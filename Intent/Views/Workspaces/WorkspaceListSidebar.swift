@@ -2,18 +2,16 @@ import SwiftUI
 
 struct WorkspaceListSidebar: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
-    @State private var showingCreateWorkspace = false
-    @State private var showingConnections = false
-    @State private var isSearching = false
+    @Binding private var isSearching: Bool
     @FocusState private var searchFocused: Bool
 
-    init(workspaceStore: WorkspaceStore) {
+    init(workspaceStore: WorkspaceStore, isSearching: Binding<Bool>) {
         self.workspaceStore = workspaceStore
         _viewModel = State(initialValue: WorkspaceListViewModel(workspaceStore: workspaceStore))
+        _isSearching = isSearching
     }
 
     var body: some View {
@@ -50,20 +48,8 @@ struct WorkspaceListSidebar: View {
         .refreshable {
             await workspaceStore.fetchAll()
         }
-        .modifier(WorkspaceActionLauncher(
-            isSearching: isSearching,
-            onCreateWorkspace: { showingCreateWorkspace = true },
-            onConnections: { showingConnections = true }
-        ))
         .navigationTitle("Workspaces")
-        .sheet(isPresented: $showingCreateWorkspace) {
-            CreateWorkspaceView(session: session)
-                .environment(coordinator)
-        }
-        .sheet(isPresented: $showingConnections) {
-            ConnectionsView()
-                .environment(coordinator)
-        }
+        .onDisappear { isSearching = false }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
     }
 
