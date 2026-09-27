@@ -44,7 +44,7 @@ enum InvitedSessionFixtures {
         let suite: String
         let registry: InvitedSessionRegistry
 
-        init(_ cloud: MemorySyncedKeychain) throws {
+        init(_ cloud: any SyncedKeychainWriting) throws {
             suite = "InvitedSessionTests-\(UUID().uuidString)"
             defaults = try #require(UserDefaults(suiteName: suite))
             defaults.removePersistentDomain(forName: suite)
