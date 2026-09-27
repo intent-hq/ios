@@ -38,7 +38,9 @@ struct ConversationMetadataSharingTests {
                 ]
             ]
         ])
-        try await waitUntil("new marker event") { viewModel.store.lastSeenMessageId == "new-seen" }
+        try await waitUntil("buffered marker awaiting authority") { !viewModel.store.pendingWorkspaceEvents.isEmpty }
+        #expect(viewModel.store.lastSeenMessageId != "new-seen")
+        #expect(!viewModel.store.metadataReadyForEntry && !viewModel.isEntryScrollReady)
         // ConversationView's conditional metadata-generation task starts while
         // cards mount. All three consumers must join the same detail flight.
         let block = ContentBlock(type: .resource, resource: .init(
