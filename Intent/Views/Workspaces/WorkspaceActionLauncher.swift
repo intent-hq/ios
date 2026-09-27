@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Actions float above the navigation content without resetting its scroll position.
 struct WorkspaceActionLauncher: ViewModifier {
-    let isSearching: Bool
+    let isHidden: Bool
     var alignment: HorizontalAlignment = .trailing
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
@@ -48,8 +48,8 @@ struct WorkspaceActionLauncher: ViewModifier {
             } message: {
                 Text("Are you sure? You'll need to pair again to reconnect.")
             }
-            .onChange(of: isSearching) { _, searching in
-                if searching { isOpen = false }
+            .onChange(of: isHidden) { _, hidden in
+                if hidden { isOpen = false }
             }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
             .onDisappear { isOpen = false }
@@ -66,7 +66,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
-            if !isSearching { actionControls }
+            if !isHidden { actionControls }
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOpen ? .isModal : [])

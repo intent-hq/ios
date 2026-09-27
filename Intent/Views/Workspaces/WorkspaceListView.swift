@@ -54,7 +54,7 @@ struct WorkspaceListView: View {
             await workspaceStore.fetchAll()
         }
         .modifier(WorkspaceActionLauncher(
-            isSearching: isSearching,
+            isHidden: isSearching,
             onCreateWorkspace: { showingCreateWorkspace = true },
             onConnections: { showingConnections = true }
         ))

@@ -59,6 +59,11 @@ struct RootView: View {
         )
     }
 
+    private var isWorkspaceLauncherHidden: Bool {
+        if case .agentConversation = coordinator.currentScreen { return true }
+        return isSearchingWorkspaces || showingConversation
+    }
+
     private var isWorkspaceFlow: Bool {
         switch coordinator.currentScreen {
         case .workspaceList, .workspaceDetail, .agentConversation, .noteDetail:
@@ -155,7 +160,7 @@ struct RootView: View {
             }
             .navigationSplitViewStyle(.automatic)
             .modifier(WorkspaceActionLauncher(
-                isSearching: isSearchingWorkspaces,
+                isHidden: isWorkspaceLauncherHidden,
                 alignment: .trailing,
                 onCreateWorkspace: { showingCreateWorkspace = true },
                 onConnections: { showingConnections = true }

@@ -45,6 +45,44 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
+    func testIPadConversationKeepsSendAvailableAndRestoresMenuOnBack() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad window-level menu")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = launchHome()
+        app.staticTexts["Add usage analytics dashboard"].firstMatch.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        agent.tap()
+        let composer = app.textViews["composer.textView"]
+        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForNonExistence(timeout: Self.timeout))
+
+        composer.tap()
+        let draft = "iPad composer regression"
+        composer.typeText(draft)
+        let send = app.buttons["Send message"]
+        XCTAssertTrue(send.isEnabled)
+        XCTAssertTrue(send.isHittable)
+        send.tap()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", draft))
+            .firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, "")
+        XCTAssertFalse(app.buttons["intent.menu.close"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "iPad conversation composer without menu overlap"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        app.navigationBars["Dashboard Implementor"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        openMenu(app)
+        app.buttons["intent.menu.close"].tap()
+        XCTAssertTrue(agent.isHittable)
+    }
+
+    @MainActor
     func testConnectionsAndAppearanceTilesOpenTheirScreens() {
         let app = launchHome()
         openMenu(app)
