@@ -155,7 +155,6 @@ jobs:
       SPM_CLONE_DIR: build/SourcePackages
       RESULT_BUNDLE: TestResults
       SIMULATOR_FAMILY: ${{ github.event_name == 'workflow_dispatch' && inputs.simulator_family || 'iphone' }}
-      IPAD_EVIDENCE_DIR: ${{ runner.temp }}/ipad-evidence
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -163,7 +162,10 @@ jobs:
       - name: Validate simulator request
         env:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
-        run: python3 scripts/ci_simulator.py validate
+        run: |
+          export IPAD_EVIDENCE_DIR="$RUNNER_TEMP/ipad-evidence"
+          printf 'IPAD_EVIDENCE_DIR=%s\n' "$IPAD_EVIDENCE_DIR" >> "$GITHUB_ENV"
+          python3 scripts/ci_simulator.py validate
 
       - name: SwiftLint wrapper tests on the native shell
         run: scripts/test-swiftlint.sh
