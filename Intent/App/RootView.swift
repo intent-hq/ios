@@ -156,7 +156,7 @@ struct RootView: View {
             .navigationSplitViewStyle(.automatic)
             .modifier(WorkspaceActionLauncher(
                 isSearching: isSearchingWorkspaces,
-                alignment: .leading,
+                alignment: .trailing,
                 onCreateWorkspace: { showingCreateWorkspace = true },
                 onConnections: { showingConnections = true }
             ))
