@@ -3,6 +3,9 @@ import Foundation
 import Testing
 
 enum WorkspaceChangesFixture {
+    private static let additions = 12
+    private static let deletions = 3
+
     static func change(id: String = "change-1", path: String = "src/main.swift", stage: String = "unstaged") -> [String: Any] {
         [
             "id": id,
@@ -10,7 +13,7 @@ enum WorkspaceChangesFixture {
             "relativePath": path,
             "stage": stage,
             "status": "modified",
-            "stats": ["additions": 12, "deletions": 3, "binary": false],
+            "stats": ["additions": additions, "deletions": deletions, "binary": false],
             "attribution": ["agent": ["agentId": "agent-1", "agentName": "Implementor"]]
         ]
     }
