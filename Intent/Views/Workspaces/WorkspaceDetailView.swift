@@ -220,15 +220,7 @@ struct WorkspaceDetailView: View {
             }
             #endif
             ToolbarItem(placement: .principal) {
-                VStack(spacing: WorkspaceDetailStyle.tabInset) {
-                    Text(workspaceTitle)
-                        .interFont(Constants.Typography.bodyXSEmphasized)
-                        .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                    Text("Workspace")
-                        .interFont(Constants.Typography.bodyXS)
-                        .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme))
-                }
-                .lineLimit(1)
+                toolbarTitle
             }
             ToolbarItem(placement: .primaryAction) {
                 workspaceActions
@@ -238,6 +230,18 @@ struct WorkspaceDetailView: View {
 }
 
 private extension WorkspaceDetailView {
+    var toolbarTitle: some View {
+        VStack(spacing: WorkspaceDetailStyle.tabInset) {
+            Text(workspaceTitle)
+                .interFont(Constants.Typography.bodyXSEmphasized)
+                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+            Text("Workspace")
+                .interFont(Constants.Typography.bodyXS)
+                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme))
+        }
+        .lineLimit(1)
+    }
+
     var workspaceActions: some View {
         WorkspaceActionsMenu(
             isTerminalDisabled: !terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId),
