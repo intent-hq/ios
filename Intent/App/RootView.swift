@@ -15,6 +15,7 @@ struct RootView: View {
     /// removes only this window's registration — never a successor's.
     @State private var selectionHandlerToken: UUID?
     @State private var isSearchingWorkspaces = false
+    @State private var isConversationVisible = false
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
@@ -57,11 +58,8 @@ struct RootView: View {
             ),
             session: session
         )
-    }
-
-    private var isWorkspaceLauncherHidden: Bool {
-        if case .agentConversation = coordinator.currentScreen { return true }
-        return isSearchingWorkspaces || showingConversation
+        .onAppear { isConversationVisible = true }
+        .onDisappear { isConversationVisible = false }
     }
 
     private var isWorkspaceFlow: Bool {
@@ -160,7 +158,7 @@ struct RootView: View {
             }
             .navigationSplitViewStyle(.automatic)
             .modifier(WorkspaceActionLauncher(
-                isHidden: isWorkspaceLauncherHidden,
+                isHidden: isSearchingWorkspaces || isConversationVisible,
                 alignment: .trailing,
                 onCreateWorkspace: { showingCreateWorkspace = true },
                 onConnections: { showingConnections = true }
