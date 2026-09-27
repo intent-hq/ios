@@ -72,7 +72,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
         send.tap()
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", draft))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", draft))
             .firstMatch.waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, "")
         XCTAssertFalse(app.buttons["intent.menu.close"].exists)
