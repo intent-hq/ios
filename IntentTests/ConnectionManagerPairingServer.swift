@@ -2,6 +2,8 @@ import Foundation
 @testable import Intent
 import Network
 import os
+import Security
+import Testing
 
 extension ConnectionManagerTests {
     /// Loopback plain-WS listener with a minimal JSON-RPC responder: any
@@ -10,7 +12,7 @@ extension ConnectionManagerTests {
     /// a connection still serves round-trips. Nonisolated for the same
     /// reason as ManualTokenEntryViewTests' TLS listener: the handlers run
     /// on the listener queue and must not inherit MainActor isolation.
-    nonisolated private struct LoopbackWebSocketServerState {
+    nonisolated private struct LoopbackWebSocketServerState: Sendable {
         var accepted: [NWConnection] = []
         // Connections held back by a gated server: accepted but not
         // started, so the client's WS handshake stays pending until
@@ -19,7 +21,7 @@ extension ConnectionManagerTests {
         var pendingStart: [NWConnection] = []
         var isOpen: Bool
         var acceptedTotal = 0
-        var principal: [String: Any] = ["id": "test-owner", "isAdministrator": true]
+        var principal = Data(#"{"id":"test-owner","isAdministrator":true}"#.utf8)
         var modern = false
         var helloIDs: [String] = []
     }
@@ -36,7 +38,8 @@ extension ConnectionManagerTests {
         var helloIDs: [String] { state.withLock { $0.helloIDs } }
 
         func setPrincipal(_ principal: [String: Any], modern: Bool = true) {
-            state.withLock { $0.principal = principal; $0.modern = modern }
+            guard let data = try? JSONSerialization.data(withJSONObject: principal) else { return }
+            state.withLock { $0.principal = data; $0.modern = modern }
         }
 
         func dropConnections() {
@@ -53,8 +56,16 @@ extension ConnectionManagerTests {
             )
         }
 
-        static func start(gated: Bool = false) async throws -> LoopbackWebSocketServer {
-            let parameters = NWParameters.tcp
+        static func start(gated: Bool = false, tlsIdentity: SecIdentity? = nil) async throws -> LoopbackWebSocketServer {
+            let parameters: NWParameters
+            if let tlsIdentity {
+                let options = NWProtocolTLS.Options()
+                let identity = try #require(sec_identity_create(tlsIdentity))
+                sec_protocol_options_set_local_identity(options.securityProtocolOptions, identity)
+                parameters = NWParameters(tls: options)
+            } else {
+                parameters = .tcp
+            }
             let wsOptions = NWProtocolWebSocket.Options()
             wsOptions.autoReplyPing = true
             parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
@@ -120,14 +131,16 @@ extension ConnectionManagerTests {
         }
 
         private func response(to json: [String: Any]) -> [String: Any] {
-            state.withLock { state -> [String: Any] in
-                if json["method"] as? String == "principal.me" { return state.principal }
-                if json["method"] as? String == "client.hello",
-                   let parameters = json["params"] as? [String: Any], let clientID = parameters["clientId"] as? String {
+            let method = json["method"] as? String
+            let clientID = (json["params"] as? [String: Any])?["clientId"] as? String
+            let snapshot = state.withLock { state in
+                if method == "client.hello", let clientID {
                     state.helloIDs.append(clientID)
                 }
-                return ["server": ["capabilities": state.modern ? ["hostMembership": 1] : [String: Int]()]]
+                return (state.principal, state.modern)
             }
+            if method == "principal.me" { return (try? JSONSerialization.jsonObject(with: snapshot.0)) as? [String: Any] ?? [:] }
+            return ["server": ["capabilities": snapshot.1 ? ["hostMembership": 1] : [String: Int]()]]
         }
 
         private func receiveNext(on connection: NWConnection) {

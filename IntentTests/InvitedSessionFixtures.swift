@@ -3,9 +3,9 @@ import Foundation
 import Testing
 
 enum InvitedSessionFixtures {
-    private static let pinByteCount = 32
+    nonisolated private static let pinByteCount = 32
     private static let port = 443
-    static let pin = String(repeating: "ab", count: pinByteCount)
+    nonisolated static let pin = String(repeating: "ab", count: pinByteCount)
 
     static func principal(_ id: String = "B", role: ConnectionPrincipal.HostRole = .member) -> ConnectionPrincipal {
         ConnectionPrincipal(id: id, hostRole: role, revision: 1, login: nil, displayName: nil)

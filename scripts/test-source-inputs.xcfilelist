@@ -753,8 +753,10 @@ $(SRCROOT)/IntentTests/InvitedSessionFixtures.swift
 $(SRCROOT)/IntentTests/InvitedSessionKeyTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionMergeTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionMigrationTests.swift
+$(SRCROOT)/IntentTests/InvitedSessionRaceTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionRegistryTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionSyncTests.swift
+$(SRCROOT)/IntentTests/InvitedSessionTLSTests.swift
 $(SRCROOT)/IntentTests/LaunchPhaseTimelineTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
@@ -786,6 +788,7 @@ $(SRCROOT)/IntentTests/NotificationManagerTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerWindowRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationSessionAggregationTests.swift
 $(SRCROOT)/IntentTests/ObjCCallbackIsolationTests.swift
+$(SRCROOT)/IntentTests/PairingAuthorityRaceTests.swift
 $(SRCROOT)/IntentTests/PairingDesignTests.swift
 $(SRCROOT)/IntentTests/PairingFlowTests.swift
 $(SRCROOT)/IntentTests/PairingLifecycleDiagnosticTests.swift
