@@ -268,7 +268,8 @@ private extension WorkspaceDetailView {
                 WorkspaceDetailHeading(
                     title: workspaceTitle,
                     repositoryOwner: workspace?.repositoryOwner,
-                    repositoryName: workspace?.repositoryName
+                    repositoryName: workspace?.repositoryName,
+                    statusMessage: workspace?.statusMessage
                 )
                 statusImage
                 taskProgress

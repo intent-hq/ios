@@ -4,6 +4,7 @@ struct WorkspaceDetailHeading: View {
     let title: String
     let repositoryOwner: String?
     let repositoryName: String?
+    var statusMessage: String?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -23,6 +24,14 @@ struct WorkspaceDetailHeading: View {
                         ? WorkspaceDetailStyle.neutral
                         : WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            if let summary = statusMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty {
+                Text(summary)
+                    .interFont(Constants.Typography.bodyS)
+                    .tracking(WorkspaceDetailStyle.bodyTracking)
+                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("workspaceDetail.summary")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
