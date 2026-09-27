@@ -61,7 +61,7 @@ nonisolated private final class GroupedInvitedKeychain: SyncedKeychainWriting {
     }
 }
 
-nonisolated private final class MigrationJournalDefaults: UserDefaults, @unchecked Sendable {
+nonisolated private final class MigrationJournalDefaults: UserDefaults {
     var rejectPendingReceipts = false
 
     override func set(_ value: Any?, forKey defaultName: String) {
