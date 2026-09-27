@@ -85,6 +85,21 @@ extension ConversationTranscriptView {
 }
 
 extension View {
+    /// Only the startup demo exposes this live query surface. The one-point
+    /// overlay does not participate in transcript layout or receive gestures.
+    @ViewBuilder
+    func demoStartupGestureProbe(scrollState: ConversationTranscriptScrollState) -> some View {
+        if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript {
+            overlay(alignment: .topLeading) {
+                TranscriptGestureProbe(scrollState: scrollState)
+                    .frame(width: 1, height: 1)
+                    .allowsHitTesting(false)
+            }
+        } else {
+            self
+        }
+    }
+
     /// Under `--demo-data` only: exposes `value` as the view's accessibility
     /// value so the XCUITests can read the transcript's landing outcome.
     /// Zero-impact otherwise — the value is neither computed (so the observed
@@ -123,5 +138,27 @@ extension View {
         } else {
             self
         }
+    }
+}
+
+private struct TranscriptGestureProbe: UIViewRepresentable {
+    let scrollState: ConversationTranscriptScrollState
+
+    func makeUIView(context _: Context) -> TranscriptGestureAccessibilityView {
+        let view = TranscriptGestureAccessibilityView()
+        view.isAccessibilityElement = true
+        view.accessibilityIdentifier = "transcript.gestureState"
+        view.accessibilityLabel = "Transcript gesture state"
+        view.isUserInteractionEnabled = false
+        view.scrollState = scrollState
+        return view
+    }
+
+    func updateUIView(_ view: TranscriptGestureAccessibilityView, context _: Context) {
+        view.scrollState = scrollState
+    }
+
+    static func dismantleUIView(_ view: TranscriptGestureAccessibilityView, coordinator _: Void) {
+        view.scrollState = nil
     }
 }

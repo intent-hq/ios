@@ -155,6 +155,7 @@ private extension ConversationTranscriptView {
         .scrollBounceBehavior(.always)
         .accessibilityIdentifier("transcript.scrollView")
         .demoAccessibilityValue(transcriptDemoReport)
+        .demoStartupGestureProbe(scrollState: scrollState)
         .demoEndDerealization(
             triggerFile: DemoFixtures.configuredEndDerealizationTriggerFile,
             onTrigger: withdrawEndRowForDemo,

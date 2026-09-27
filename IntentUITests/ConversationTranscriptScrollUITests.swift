@@ -326,10 +326,7 @@ extension ConversationTranscriptScrollUITests {
         let last = message(in: app, containing: "Startup row 49.")
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { isInside(last, opened.transcript) })
         opened.transcript.swipeDown()
-        XCTAssertTrue(
-            waitUntil(timeout: Fixture.settleTimeout) { followReport(in: opened).contains("phase=idle") },
-            "release metadata only after the real gesture/deceleration has ended"
-        )
+        guard waitUntilStartupGestureEnded(in: app) else { return }
         let row = try startupVisibleRow(opened)
         XCTAssertTrue(startupReport(app).contains("metadata=pending"))
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch.exists)

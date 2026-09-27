@@ -762,6 +762,21 @@ func followReport(in opened: OpenConversation) -> String {
     (opened.transcript.value as? String) ?? "<no transcript value>"
 }
 
+/// UIKit flags can change without another SwiftUI render. This startup-only
+/// probe samples them on each accessibility query and fails closed if absent.
+@MainActor
+func waitUntilStartupGestureEnded(in app: XCUIApplication) -> Bool {
+    let probe = app.descendants(matching: .any).matching(identifier: "transcript.gestureState").firstMatch
+    var report = "<unavailable>"
+    let ended = waitUntil(timeout: Fixture.settleTimeout) {
+        guard probe.exists else { return false }
+        report = probe.value as? String ?? "<unavailable>"
+        return report.hasPrefix("phase=idle ")
+    }
+    XCTAssertTrue(ended, "release metadata only after the real gesture/deceleration has ended: \(report)")
+    return ended
+}
+
 /// No forced result is fabricated for late entry. Once a forced request has
 /// actually started, it must report a terminal outcome before any later settle.
 func viewportHasReportedSettlement(
