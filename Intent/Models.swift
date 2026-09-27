@@ -361,6 +361,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         if pullRequestsWereReported { try container.encode(pullRequests, forKey: .pullRequests) }
         try container.encodeIfPresent(activePullRequest, forKey: .activePullRequest)
         try container.encodeIfPresent(statusImageAssetId, forKey: .statusImageAssetId)
+        try container.encodeIfPresent(statusMessage, forKey: .statusMessage)
     }
 }
 
