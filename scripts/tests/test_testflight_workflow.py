@@ -15,6 +15,7 @@ from pathlib import Path
 import secrets
 import signal
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -33,7 +34,7 @@ def workflow(path):
 
 CONFIG = workflow(ROOT / ".github/workflows/testflight-beta.yml")
 JOB = CONFIG["jobs"]["promote"]
-GATE, CHECKOUT, PROMOTE = JOB["steps"]
+GATE, CHECKOUT, PROMOTE, RECOVER, PREPARE, CHECKPOINT, APPLY, OUTCOME = JOB["steps"]
 
 # This stub records what the real workflow supplied at the process boundary.
 # Synthetic key bytes remain only in memory and the workflow-owned private file.
@@ -72,6 +73,8 @@ class WorkflowExecutionTests(unittest.TestCase):
         self.root = Path(directory.name)
         (self.root / "scripts").mkdir()
         (self.root / "scripts/promote_testflight.py").write_text(CLI_FIXTURE)
+        for name in ("testflight_workflow.py", "testflight_notes.py", "release_notes.py"):
+            (self.root / "scripts" / name).write_text((ROOT / "scripts" / name).read_text())
         (self.root / "runner").mkdir()
         (self.root / "bin").mkdir()
         # Simulate late runner clocks without a test-only production clock flag.
@@ -88,6 +91,7 @@ class WorkflowExecutionTests(unittest.TestCase):
             "GITHUB_STEP_SUMMARY": str(self.root / "summary"),
             "GITHUB_REF": "refs/heads/main", "DEFAULT_BRANCH": "main",
             "GITHUB_EVENT_NAME": "workflow_dispatch", "PROMOTION_MODE": "preview",
+            "PROMOTION_PHASE": "select",
             "TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED": "", "PYTHONDONTWRITEBYTECODE": "1",
         }
 
@@ -108,7 +112,8 @@ class WorkflowExecutionTests(unittest.TestCase):
                 "FIXTURE_PRIVATE_MARKER": secrets.token_urlsafe(32)}
 
     def assert_clean(self):
-        self.assertEqual(list((self.root / "runner").iterdir()), [])
+        self.assertFalse(list((self.root / "runner").rglob("*.p8")))
+        self.assertFalse(list((self.root / "runner").glob("testflight-key-*")))
 
     def test_schedule_and_manual_apply_fail_closed_without_exact_opt_in(self):
         for event in ("schedule", "workflow_dispatch"):
@@ -161,14 +166,14 @@ class WorkflowExecutionTests(unittest.TestCase):
                                           TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED="true"), "mode=apply")
 
     def test_key_is_private_child_arguments_are_safe_and_file_is_cleaned(self):
-        for mode, argument in (("preview", "--dry-run"), ("apply", "--apply")):
+        for mode in ("preview", "apply"):
             with self.subTest(mode=mode):
                 credentials = self.credentials()
                 result = self.run_step(PROMOTE, **credentials, PROMOTION_MODE=mode,
                                        TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED="true")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 receipt = json.loads((self.root / "receipt.json").read_text())
-                self.assertEqual(receipt["args"], [argument])
+                self.assertEqual(receipt["args"], ["--repo", ".", "--select-only"])
                 self.assertTrue(receipt["owner"] and receipt["regular"])
                 self.assertEqual((receipt["mode"], receipt["directory_mode"]), (0o600, 0o700))
                 self.assertEqual(receipt["digest"], hashlib.sha256(credentials["ASC_PRIVATE_KEY"].encode()).hexdigest())
@@ -224,11 +229,11 @@ class WorkflowExecutionTests(unittest.TestCase):
     def test_bounded_subprocess_timeout_cleans_key_and_requires_preview_before_retry(self):
         # Run the actual embedded Python, replacing only the process boundary so
         # the timeout path is exercised without an eight-minute sleeping child.
-        source = PROMOTE["run"].split("\n", 1)[1].rsplit("\nPY", 1)[0]
+        source = (ROOT / "scripts/testflight_workflow.py").read_text()
         output = io.StringIO()
 
         def timeout(args, **kwargs):
-            self.assertEqual(args[1:], ["scripts/promote_testflight.py", "--dry-run"])
+            self.assertEqual(args[1:], ["scripts/promote_testflight.py", "--repo", ".", "--select-only"])
             self.assertGreater(kwargs["timeout"], 0)
             self.assertLess(kwargs["timeout"], JOB["timeout-minutes"] * 60)
             self.assertTrue(Path(kwargs["env"]["ASC_PRIVATE_KEY_PATH"]).is_file())
@@ -239,7 +244,8 @@ class WorkflowExecutionTests(unittest.TestCase):
             with patch.dict(os.environ, dict(self.env, **self.credentials()), clear=True), \
                     patch.object(subprocess, "run", side_effect=timeout), redirect_stdout(output), \
                     self.assertRaises(SystemExit) as stopped:
-                exec(compile(source, ".github/workflows/testflight-beta.yml", "exec"), {})
+                sys.path.insert(0, str(ROOT / "scripts"))
+                exec(compile(source, "scripts/testflight_workflow.py", "exec"), {"__name__": "__main__"})
         finally:
             for sig, handler in handlers.items():
                 signal.signal(sig, handler)
@@ -260,6 +266,16 @@ class WorkflowExecutionTests(unittest.TestCase):
                 self.assertIn(outcome, summary)
                 self.assertIn("inspect the selected build manually", summary)
                 self.assertIn("not proof of tester availability", summary)
+
+    def test_live_step_requires_successful_checkpoint_and_exact_activation(self):
+        for checkpoint, enabled, mode in (("", "true", "apply"), ("bad", "true", "apply"),
+                                          ("123", "false", "apply"), ("123", "true", "preview")):
+            with self.subTest(checkpoint=checkpoint, enabled=enabled, mode=mode):
+                result = self.run_step(APPLY, **self.credentials(), PROMOTION_PHASE="apply", PROMOTION_MODE=mode,
+                                       CHECKPOINT_ID=checkpoint, TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED=enabled)
+                self.assertEqual(result.returncode, 1)
+                self.assertFalse((self.root / "receipt.json").exists())
+                self.assert_clean()
 
 
 class WorkflowConfigurationTests(unittest.TestCase):
@@ -285,13 +301,16 @@ class WorkflowConfigurationTests(unittest.TestCase):
 
     def test_credentials_are_gated_env_only_and_runs_are_serialized_with_read_permissions(self):
         self.assertEqual(CONFIG["permissions"], {"contents": "read"})
-        self.assertNotIn("permissions", JOB)
+        self.assertEqual(JOB["permissions"], {"contents": "read", "actions": "read"})
         self.assertEqual(CONFIG["concurrency"]["cancel-in-progress"], False)
         self.assertTrue(CONFIG["concurrency"]["group"])
         self.assertNotIn("${{", CONFIG["concurrency"]["group"])
         self.assertLessEqual(JOB["timeout-minutes"], 10)
         self.assertEqual(JOB["runs-on"], "ubuntu-latest")
         self.assertFalse(CHECKOUT["with"]["persist-credentials"])
+        self.assertEqual(CHECKOUT["with"]["fetch-depth"], 0)
+        self.assertFalse(CHECKOUT["with"]["submodules"])
+        self.assertFalse(CHECKOUT["with"]["lfs"])
         allowed = "steps.gate.outputs.mode == 'preview' || steps.gate.outputs.mode == 'apply'"
         self.assertEqual(CHECKOUT["if"], allowed)
         self.assertEqual(PROMOTE["if"], allowed)
@@ -304,6 +323,22 @@ class WorkflowConfigurationTests(unittest.TestCase):
         for name in ("ASC_KEY_ID", "ASC_ISSUER_ID", "ASC_PRIVATE_KEY"):
             self.assertEqual(PROMOTE["env"][name], "${{ secrets." + name + " }}")
         self.assertNotIn("${{", PROMOTE["run"])
+
+    def test_checkpoint_and_recovery_are_separate_from_credentials_and_preview_has_no_uploads(self):
+        self.assertEqual(PREPARE["if"], PROMOTE["if"])
+        self.assertEqual(RECOVER["if"], PROMOTE["if"])
+        self.assertNotIn("ASC_", json.dumps(RECOVER))
+        self.assertEqual(RECOVER["env"]["GH_TOKEN"], "${{ github.token }}")
+        self.assertNotIn("GH_TOKEN", json.dumps([PROMOTE, PREPARE, APPLY]))
+        self.assertEqual(CHECKPOINT["if"], "steps.gate.outputs.mode == 'apply' && steps.prepare.outputs.fresh_plan == 'true'")
+        self.assertIn("steps.checkpoint.outputs.artifact-id != ''", APPLY["if"])
+        self.assertEqual(OUTCOME["if"], "always() && steps.gate.outputs.mode == 'apply'")
+        for step in (CHECKPOINT, OUTCOME):
+            self.assertEqual(step["uses"], "actions/upload-artifact@v7")
+            self.assertEqual(step["with"]["retention-days"], 90)
+            self.assertNotIn("overwrite", step["with"])
+            for path in step["with"]["path"].splitlines():
+                self.assertIn(path, ("${{ runner.temp }}/testflight/intent.json", "${{ runner.temp }}/testflight/journal.json"))
 
 
 if __name__ == "__main__":

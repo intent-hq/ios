@@ -28,6 +28,9 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # Original intent recovery only; no repository publisher.
     steps:
       - name: Check activation before accessing credentials
         id: gate
@@ -69,10 +72,17 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
+          submodules: false
+          lfs: false
 
-      - name: Preview or assign the newest eligible iOS build
+      # Source history is read by Git only; no app build, package install, Xcode
+      # Cloud hook or script from a candidate revision is ever executed.
+      - name: Select the newest eligible iOS build
+        id: select
         if: steps.gate.outputs.mode == 'preview' || steps.gate.outputs.mode == 'apply'
         env:
+          PROMOTION_PHASE: select
           PROMOTION_MODE: ${{ steps.gate.outputs.mode }}
           TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED: ${{ vars.TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -81,60 +91,62 @@ jobs:
           ASC_SOURCE_GROUP_ID: ${{ vars.ASC_SOURCE_GROUP_ID }}
           ASC_DESTINATION_GROUP_ID: ${{ vars.ASC_DESTINATION_GROUP_ID }}
         shell: bash
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          import signal
-          import subprocess
-          import sys
-          import tempfile
+        run: python3 scripts/testflight_workflow.py
 
-          def stopped(signum, _frame):
-              # Unwind TemporaryDirectory even when the runner cancels this step.
-              raise SystemExit(128 + signum)
+      - name: Recover original intent without Apple credentials
+        if: steps.gate.outputs.mode == 'preview' || steps.gate.outputs.mode == 'apply'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python3 scripts/testflight_artifacts.py
 
-          signal.signal(signal.SIGTERM, stopped)
-          signal.signal(signal.SIGINT, stopped)
-          outcome = {"result": "error", "action": "Workflow setup failed; check credential configuration without printing secret values."}
-          status = 1
-          try:
-              mode = os.environ.get("PROMOTION_MODE")
-              if mode not in ("preview", "apply") or (
-                  mode == "apply" and os.environ.get("TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED") != "true"
-              ):
-                  raise ValueError
-              key = os.environ.pop("ASC_PRIVATE_KEY", "")
-              if not all((key, os.environ.get("ASC_KEY_ID"), os.environ.get("ASC_ISSUER_ID"))):
-                  raise ValueError
-              # mkdtemp/mkstemp create owner-only 0700/0600 paths, not predictable
-              # shared files. The raw key never reaches argv, logs, or child env.
-              with tempfile.TemporaryDirectory(prefix="testflight-key-", dir=os.environ["RUNNER_TEMP"]) as directory:
-                  with tempfile.NamedTemporaryFile(mode="w", dir=directory, suffix=".p8", delete=False) as private_key:
-                      private_key.write(key)
-                      key_path = private_key.name
-                  del key
-                  child_env = dict(os.environ, ASC_PRIVATE_KEY_PATH=key_path)
-                  completed = subprocess.run(
-                      [sys.executable, "scripts/promote_testflight.py", "--apply" if mode == "apply" else "--dry-run"],
-                      env=child_env, capture_output=True, text=True, timeout=480, check=False,
-                  )
-                  # Only the promotion script's sanitized JSON is published, never
-                  # stderr or a traceback. Preserve its nonzero exit on failure.
-                  outcome = json.loads(completed.stdout)
-                  if not isinstance(outcome, dict) or not {"result", "action"} <= outcome.keys():
-                      raise ValueError
-                  status = completed.returncode
-          except subprocess.TimeoutExpired:
-              outcome = {"result": "error", "action": "Promotion timed out; assignment may be uncertain. Run a read-only preview before retrying."}
-          except Exception:
-              outcome = {"result": "error", "action": "Workflow setup or script output failed. Check credentials and run a read-only preview before retrying; no unsafe details were logged."}
-          print(json.dumps(outcome, sort_keys=True))
-          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
-              summary.write("\n## TestFlight internal Beta result\n\n```json\n" + json.dumps(outcome, indent=2) + "\n```\n\n")
-              summary.write("A successful job is not proof of tester availability. Verify Internal Testing > Beta, compliance, What to Test, and tester access. Confirm Beta automatic distribution is off before activation.\n")
-          if outcome["result"] in ("blocked", "assigned_pending_testing", "assigned_but_blocked"):
-              print("::warning::Internal testing needs attention; see the action in the job summary.")
-          sys.exit(status)
-          PY
+      - name: Preview exact notes or reconcile original intent
+        id: prepare
+        if: steps.gate.outputs.mode == 'preview' || steps.gate.outputs.mode == 'apply'
+        env:
+          PROMOTION_PHASE: prepare
+          PROMOTION_MODE: ${{ steps.gate.outputs.mode }}
+          TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED: ${{ vars.TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_SOURCE_GROUP_ID: ${{ vars.ASC_SOURCE_GROUP_ID }}
+          ASC_DESTINATION_GROUP_ID: ${{ vars.ASC_DESTINATION_GROUP_ID }}
+        run: python3 scripts/testflight_workflow.py
+
+      # A durable original payload must exist before the first Apple write.
+      # Preview has NO artifact uploads (and no GitHub repository writes).
+      - name: Checkpoint original intent before Apple writes
+        id: checkpoint
+        if: steps.gate.outputs.mode == 'apply' && steps.prepare.outputs.fresh_plan == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: testflight-beta-intent-${{ steps.select.outputs.build_id }}
+          path: ${{ runner.temp }}/testflight/intent.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Verify notes then append to Beta
+        if: steps.gate.outputs.mode == 'apply' && steps.prepare.outputs.fresh_plan == 'true' && steps.checkpoint.outputs.artifact-id != ''
+        env:
+          PROMOTION_PHASE: apply
+          PROMOTION_MODE: ${{ steps.gate.outputs.mode }}
+          CHECKPOINT_ID: ${{ steps.checkpoint.outputs.artifact-id }}
+          TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED: ${{ vars.TESTFLIGHT_INTERNAL_BETA_PROMOTION_ENABLED }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_SOURCE_GROUP_ID: ${{ vars.ASC_SOURCE_GROUP_ID }}
+          ASC_DESTINATION_GROUP_ID: ${{ vars.ASC_DESTINATION_GROUP_ID }}
+        run: python3 scripts/testflight_workflow.py
+
+      - name: Retain independent notes and assignment observations
+        if: always() && steps.gate.outputs.mode == 'apply'
+        uses: actions/upload-artifact@v7
+        with:
+          name: testflight-beta-outcome-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/testflight/intent.json
+            ${{ runner.temp }}/testflight/journal.json
+          retention-days: 90
+          if-no-files-found: ignore

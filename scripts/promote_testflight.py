@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Append the newest processed, unexpired iOS internal Alpha build to internal Beta.
 
-Default: read-only. --apply permits ONE additive group-build linkage request only.
+Default: read-only. --apply permits the frozen en-US notes operation, then ONE
+additive group-build linkage. An existing handoff is reconciled, never resent.
 Credentials (environment only): ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY_PATH.
 The key must be a private, regular .p8 file (0600), used by installed OpenSSL.
 Optional ASC_SOURCE_GROUP_ID / ASC_DESTINATION_GROUP_ID disambiguate groups but
@@ -22,6 +23,7 @@ import base64
 from datetime import datetime, timezone
 import json
 import os
+from pathlib import Path
 import re
 import stat
 import subprocess
@@ -30,6 +32,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+import release_notes
+import testflight_notes
 
 ORIGIN = "https://api.appstoreconnect.apple.com"
 BUNDLE_ID = "dev.intentapp.ios"
@@ -155,12 +160,21 @@ class Client:
         self.credentials = credentials
         self.apply = apply
         self.write_path = None
+        self.write_body = None
+        self.write_method = None
+        self.write_status = None
+        self.build_id = self.destination_id = self.note_plan = None
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirects())
 
-    def request(self, path, query=None, body=None):
-        method = "GET" if body is None else "POST"
-        if body is not None and (not self.apply or path != self.write_path):
-            raise PromotionError("Write refused: only the resolved internal Beta build linkage is permitted in apply mode.")
+    def request(self, path, query=None, body=None, method=None):
+        method = method or ("GET" if body is None else "POST")
+        if method != "GET" or body is not None:
+            if (not self.apply or path != self.write_path or body != self.write_body
+                    or method != self.write_method or query is not None or body is None):
+                raise PromotionError("Write refused: only the exact frozen notes or Beta append operation is permitted.")
+            expected_status = self.write_status
+            # Consume approval before transport: even a timeout cannot reuse it.
+            self.write_path = self.write_body = self.write_method = self.write_status = None
         url = ORIGIN + path if path.startswith("/v1/") else path
         if query:
             url += "?" + urllib.parse.urlencode(query)
@@ -176,10 +190,11 @@ class Client:
             try:
                 with self.opener.open(req, timeout=30) as response:
                     if body is not None:
-                        if response.status != 204:
-                            raise PromotionError("Unexpected assignment response; run a dry run to reconcile.")
-                        return None
-                    if response.status != 200:
+                        if response.status != expected_status:
+                            raise PromotionError("Unexpected write response; use the original handoff to reconcile without retrying.")
+                        if expected_status == 204:
+                            return None
+                    elif response.status != 200:
                         raise PromotionError("Unexpected read response; stopped safely.")
                     raw = response.read(8 * 1024 * 1024 + 1)
                     if len(raw) > 8 * 1024 * 1024:
@@ -222,6 +237,30 @@ class Client:
 
     def collection(self, path, query=None):
         return [item for page in self.pages(path, query) for item in page["data"]]
+
+    def approve_write(self, method, path, body, status):
+        resource_id(self.build_id)
+        resource_id(self.destination_id)
+        append = ("POST", f"/v1/betaGroups/{self.destination_id}/relationships/builds",
+                  {"data": [{"type": "builds", "id": self.build_id}]}, 204)
+        allowed = [append]
+        if self.note_plan:
+            text = self.note_plan["desired_text"]
+            identifier = self.note_plan["localization_id"]
+            if identifier:
+                resource_id(identifier)
+                allowed.append(("PATCH", f"/v1/betaBuildLocalizations/{identifier}",
+                                {"data": {"type": "betaBuildLocalizations", "id": identifier,
+                                          "attributes": {"whatsNew": text}}}, 200))
+            else:
+                allowed.append(("POST", "/v1/betaBuildLocalizations",
+                                {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": text},
+                                          "relationships": {"build": {"data": {"type": "builds", "id": self.build_id}}}}}, 201))
+        if (method, path, body, status) not in allowed:
+            raise PromotionError("Write operation is outside the selected build notes and Beta append allowlist.")
+        self.write_method, self.write_path = method, path
+        self.write_body = json.loads(json.dumps(body))
+        self.write_status = status
 
 
 def unique(items, message):
@@ -333,15 +372,22 @@ def assigned(client, destination_id, build_id):
     return build_id in {resource(b, "builds")["id"] for b in members}
 
 
-def promote(client):
+def promote(client, repo, handoff=None, sources=None, plan=None, select_only=False):
     app_id, source_id, destination_id = resolve(client)
     summary = {"mode": "apply" if client.apply else "dry-run", "app_id": app_id,
                "source_group_id": source_id, "destination_group_id": destination_id,
                "destination_has_access_to_all_builds": False}
+    stored = testflight_notes.load(handoff, repo) if handoff and Path(handoff).exists() else None
+    if stored is not None:
+        summary["build_id"] = stored["payload"]["candidate"]["build_id"]
+        testflight_notes.match(stored, summary)
+        summary["internal_state"], _ = inspect(client, summary["build_id"], app_id)
+        return testflight_notes.reconcile(client, stored, summary, handoff, assigned)
     build = latest(client, app_id, source_id)
     if build is None:
         return dict(summary, result="no_candidate", action="No fully processed, nonexpired iOS build in internal Alpha.")
     build_id = build["id"]
+    client.build_id, client.destination_id = build_id, destination_id
     summary.update(build_id=build_id, uploaded_date=date(attributes(build)["uploadedDate"]).isoformat())
     # Read membership before checking current eligibility, minimizing stale state before a write.
     is_assigned = assigned(client, destination_id, build_id)
@@ -349,19 +395,56 @@ def promote(client):
     summary.update(internal_state=state, assigned=is_assigned)
     if blocker:
         return dict(summary, result="blocked", action=blocker)
-    if not is_assigned and not client.apply:
-        return dict(summary, result="would_assign", action="Would append this build to internal Beta; confirm automatic distribution is off before activation. Tester availability is not yet confirmed.")
+    if select_only:
+        return dict(summary, result="selected", action="Selection only; no notes or assignment writes.")
+    if is_assigned:
+        summary.update(notes_status="not_managed", assignment_status="confirmed", publication_status="not_requested")
+    else:
+        if plan:
+            frozen = testflight_notes.load(plan, repo)
+            testflight_notes.match(frozen, summary)
+            if frozen["notes_status"] != "planned" or frozen["assignment_status"] != "not_attempted":
+                raise PromotionError("This handoff records attempted writes; pass it as --handoff for read-only reconciliation, not --plan.")
+        else:
+            frozen = testflight_notes.prepare(client, repo, build, summary, sources or {}, BUILD_QUERY)
+        client.note_plan = frozen["metadata"]
+        summary.update(payload=frozen["payload"], metadata_operation=frozen["metadata"]["operation"],
+                       notes_status="planned", assignment_status="not_attempted", publication_status="not_requested")
+        if handoff:
+            testflight_notes.save_new(handoff, frozen)
+        if not client.apply:
+            return dict(summary, result="would_assign", action="Would verify en-US notes, then append to internal Beta. No remote writes; tester availability is not confirmed.")
+        if not handoff:
+            raise PromotionError("Apply requires a new durable --handoff path; never discard it when retrying.")
+        # Membership and all original eligibility guards are checked again after
+        # generation, before any metadata write. Never reselect an older build.
+        testflight_notes.check_members(client, frozen)
+        state, blocker = inspect(client, build_id, app_id)
+        if blocker:
+            return dict(summary, result="blocked", action=blocker)
+        testflight_notes.write_notes(client, frozen, handoff)
+        summary["notes_status"] = "verified"
+        testflight_notes.check_members(client, frozen)
+        state, blocker = inspect(client, build_id, app_id)
+        if blocker:
+            return dict(summary, result="blocked", action=blocker)
     if not is_assigned:
         path = f"/v1/betaGroups/{destination_id}/relationships/builds"
-        client.write_path = path
+        body = {"data": [{"type": "builds", "id": build_id}]}
+        frozen["assignment_status"] = "uncertain"
+        testflight_notes.save(handoff, frozen)
+        client.approve_write("POST", path, body, 204)
         try:
-            client.request(path, body={"data": [{"type": "builds", "id": build_id}]})
+            client.request(path, body=body)
         except APIError as error:
             # A concurrent assignment can yield 409. Reconcile, never resend the write.
             if error.status != 409 or not assigned(client, destination_id, build_id):
                 raise
         if not assigned(client, destination_id, build_id):
             raise PromotionError("Assignment not yet visible. No write retry; run a dry run to reconcile.")
+        frozen["assignment_status"] = "confirmed"
+        testflight_notes.save(handoff, frozen)
+        summary["assignment_status"] = "confirmed"
         state, blocker = inspect(client, build_id, app_id)
         summary.update(internal_state=state, assigned=True)
         if blocker:
@@ -385,10 +468,18 @@ def main(argv=None):
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--apply", action="store_true", help="append one eligible build to internal Beta")
     modes.add_argument("--dry-run", action="store_true", help="read-only (the default)")
+    parser.add_argument("--repo", default=".", help="Complete source checkout; only Git data is read")
+    parser.add_argument("--handoff", help="New local journal, or original journal to reconcile without writes")
+    parser.add_argument("--plan", help="Frozen preview handoff; only a fresh journal may apply it")
+    parser.add_argument("--sources", help="Reviewed JSON object mapping exact build IDs to source attestations")
+    parser.add_argument("--select-only", action="store_true", help="Read-only candidate identity for workflow artifact lookup")
     args = parser.parse_args(argv)
     try:
-        result = promote(Client(Credentials(), apply=args.apply))
-    except PromotionError as error:
+        if args.select_only and (args.apply or args.plan or args.handoff):
+            raise PromotionError("Selection must be read-only and separate from a handoff.")
+        sources = release_notes.load_json(args.sources) if args.sources else None
+        result = promote(Client(Credentials(), apply=args.apply), args.repo, args.handoff, sources, args.plan, args.select_only)
+    except (PromotionError, release_notes.NotesError) as error:
         print(json.dumps({"result": "error", "action": str(error)}))
         return 1
     except Exception:
