@@ -21,6 +21,12 @@ extension ConversationTranscriptView {
                 }
             }
             .id(message.id)
+            .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
+                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId)
+            } action: { measurement in
+                preserveRowOffsetAfterDividerChange(messageId: message.id, measurement: measurement)
+            }
+            .onDisappear { scrollState.viewportAnchor.remove(id: message.id) }
         }
 
         #if !os(visionOS)
@@ -66,6 +72,22 @@ extension ConversationTranscriptView {
             Color.clear.frame(height: Layout.bottomAnchorHeight)
                 .padding(.bottom, Layout.bottomAnchorPadding)
         }
+    }
+
+    private func preserveRowOffsetAfterDividerChange(
+        messageId: String, measurement: ConversationTranscriptViewportAnchor.Measurement
+    ) {
+        guard measurement.divider == viewModel.newMessagesDividerAnchorId,
+              let geometry = scrollMomentumProxy.restingGeometry else { return }
+        // The geometry callback includes the divider identity, so even a row
+        // already held by bottom anchoring consumes this revision with no move.
+        let adjustment = scrollState.viewportAnchor.record(
+            id: messageId,
+            measurement: measurement,
+            viewportHeight: geometry.containerHeight,
+            preserve: hasInitiallyScrolled && !isUserInteracting && !isFollowing
+        )
+        if let adjustment { scrollMomentumProxy.pageTo(offsetY: geometry.contentOffsetY + adjustment) }
     }
 
     private func messageRow(for message: ConversationMessage) -> some View {

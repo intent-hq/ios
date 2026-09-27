@@ -317,6 +317,10 @@ extension ConversationTranscriptScrollUITests {
         let last = message(in: app, containing: "Startup row 49.")
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { isInside(last, opened.transcript) })
         opened.transcript.swipeDown()
+        XCTAssertTrue(
+            waitUntil(timeout: Fixture.settleTimeout) { followReport(in: opened).contains("phase=idle") },
+            "release metadata only after the real gesture/deceleration has ended"
+        )
         let row = try startupVisibleRow(opened)
         XCTAssertTrue(startupReport(app).contains("metadata=pending"))
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch.exists)
@@ -403,7 +407,7 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertTrue(ready, "entry never became ready: \(startupReport(app))")
         XCTAssertTrue(startupReport(app).contains("anchor=startup-row-25"))
         let movedLater = waitUntil(timeout: Fixture.quietWindow) { self.startupRowMoved(row, opened: opened, baseline: baseline) }
-        let attachment = XCTAttachment(string: "row=\(row.label) before=\(baseline) after=\((frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY) \(startupReport(app))")
+        let attachment = XCTAttachment(string: "row=\(row.label) before=\(baseline) after=\((frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY) \(startupReport(app)) \(followReport(in: opened))")
         attachment.lifetime = .keepAlways
         add(attachment)
         XCTAssertFalse(moved || movedLater, "metadata or deferred entry work moved the visible row")
@@ -450,5 +454,21 @@ extension ConversationTranscriptScrollUITests {
             XCTAssertLessThanOrEqual(rect.maxY, after.minY)
         } else { XCTFail("unread divider neighbors are not realized") }
         XCTAssertTrue(startupReport(app).contains("anchor=startup-row-25"))
+    }
+}
+
+extension ConversationTranscriptScrollUITests {
+    func testInitialSettlementDoesNotMistakeAnActiveFollowForPreservedEntry() {
+        let preserved = "lastForcedFollow=pending entry=preserved metadataReady=true forcedRequested=false followActive=false phase=idle"
+        XCTAssertTrue(viewportHasReportedSettlement(preserved))
+        for (ready, notReady) in [
+            ("metadataReady=true", "metadataReady=false"), ("entry=preserved", "entry=pending"),
+            ("forcedRequested=false", "forcedRequested=true"), ("followActive=false", "followActive=true"),
+            ("phase=idle", "phase=gesture")
+        ] {
+            XCTAssertFalse(viewportHasReportedSettlement(preserved.replacingOccurrences(of: ready, with: notReady)))
+        }
+        XCTAssertTrue(viewportHasReportedSettlement("lastForcedFollow=landed forcedRequested=true followActive=false phase=idle"))
+        XCTAssertFalse(viewportHasReportedSettlement("lastForcedFollow=landed forcedRequested=true followActive=true phase=idle"))
     }
 }

@@ -313,6 +313,7 @@ $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Landing.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Recovery.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollState.swift
+$(SRCROOT)/Intent/Presentation/ConversationTranscriptViewportAnchor.swift
 $(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
@@ -709,6 +710,7 @@ $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part3.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part4.swift
+$(SRCROOT)/IntentTests/ConversationTranscriptViewportTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelAttachmentTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelDividerLatchTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelLoadTests.swift

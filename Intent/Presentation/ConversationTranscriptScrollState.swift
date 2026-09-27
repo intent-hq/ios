@@ -163,7 +163,7 @@ final class ConversationTranscriptScrollState {
     /// explicit follow request (Go to End, the user's own message), which
     /// takes the viewport from the gesture: the phase ending that follows is
     /// then the request's, not the gesture's final sample.
-    @ObservationIgnored var isUserScrollPhase = false
+    var isUserScrollPhase = false
     /// Latched when a gesture takes over a pending forced follow; while set,
     /// content-raised forced follows are refused (see
     /// `ConversationTranscriptScrollPolicy.forcedFollowTakeoverLatch`).
@@ -174,9 +174,8 @@ final class ConversationTranscriptScrollState {
     var initialScrollAwaitingScrollView = false
     var initialScrollPerformed = false
     var presentedBeforeEntryMetadata = false
-    /// SwiftUI tracks the visible message across a late divider insertion.
-    /// This belongs to the retained viewport, not the live-store activation.
-    var visibleMessageID: String?
+    private(set) var entryViewportPreserved = false
+    @ObservationIgnored var viewportAnchor = ConversationTranscriptViewportAnchor()
     /// Invalidates delayed entry-scroll callbacks when an emptied transcript
     /// re-arms entry scrolling for the next snapshot.
     @ObservationIgnored private(set) var initialScrollGeneration = 0
@@ -196,6 +195,7 @@ final class ConversationTranscriptScrollState {
     /// can tell a landed follow from one that gave up with the pin kept
     /// (#304, #305).
     var lastForcedFollowOutcome: ConversationTranscriptScrollPolicy.FollowLandingTerminal?
+    var hasRequestedForcedFollow = false
     /// Corrections (scroll again / clamp) the last forced follow has spent.
     var lastForcedFollowCorrections = 0
     /// How the last unrealized-end recovery episode ended (#338): recorded
@@ -228,6 +228,7 @@ final class ConversationTranscriptScrollState {
         initialScrollAwaitingScrollView = false
         initialScrollPerformed = true
         hasInitiallyScrolled = true
+        entryViewportPreserved = true
         userIsScrolledAway = NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: distanceToBottom)
     }
 
@@ -239,7 +240,8 @@ final class ConversationTranscriptScrollState {
         initialScrollAwaitingScrollView = false
         initialScrollPerformed = false
         presentedBeforeEntryMetadata = false
-        visibleMessageID = nil
+        entryViewportPreserved = false
+        viewportAnchor = .init()
         forcedFollowTakenOverByGesture = false
         isScrollingToBottom = false
         goToEndRequested = false

@@ -1,6 +1,22 @@
 import SwiftUI
 
 extension ConversationTranscriptView {
+    /// A preserved entry has no forced follow to finish. Keep that distinct
+    /// from a requested follow, and expose the actual authority/owner state.
+    var transcriptDemoReport: String {
+        var follow = ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
+            outcome: scrollState.lastForcedFollowOutcome,
+            corrections: scrollState.lastForcedFollowCorrections,
+            endRecovery: unrealizedEndRecoveryDemoReport.summary
+        )
+        if scrollState.lastForcedFollowOutcome == nil { follow += " " + unrealizedEndRecoveryDemoReport.summary }
+        let entry = scrollState.entryViewportPreserved ? "preserved" : (hasInitiallyScrolled ? "positioned" : "pending")
+        return follow + " entry=\(entry) metadataReady=\(viewModel.isEntryScrollReady)"
+            + " forcedRequested=\(scrollState.hasRequestedForcedFollow) followActive=\(isFollowing)"
+            + " phase=\(isUserInteracting ? "gesture" : "idle")"
+            + " workspace=\(viewModel.store.workspaceId ?? "pending")"
+    }
+
     /// The last episode's report or, with one in flight (`recovering`) or
     /// none armed yet (`notAttempted`), the classifier's reading of the
     /// current state.

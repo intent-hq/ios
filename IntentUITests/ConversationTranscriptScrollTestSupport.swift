@@ -478,7 +478,8 @@ func assertRestsAtBottom(
 
 /// The one settlement wait. Polls until the transcript has come to rest
 /// with `lastRow` at its end: the last forced follow has reported an
-/// outcome (the accessibility value is no longer `pending`), the row's
+/// outcome, or entry deliberately preserved a visible viewport without ever
+/// requesting a forced follow. Both paths require an idle viewport; the row's
 /// frame lies inside the transcript's frame, and the row has held still
 /// across two consecutive polls. A row the lazy stack has not realized
 /// (viewport past the end) never satisfies this. Fails the test — with
@@ -497,7 +498,7 @@ func waitUntilSettled(
     let transcript = opened.transcript
     var previousMaxY: CGFloat = .nan
     let settled = waitUntil(timeout: Fixture.settleTimeout) {
-        guard followHasReported(in: opened), let rowFrame = frame(of: lastRow) else {
+        guard viewportHasReportedSettlement(followReport(in: opened)), let rowFrame = frame(of: lastRow) else {
             previousMaxY = .nan
             return false
         }
@@ -748,12 +749,14 @@ func followReport(in opened: OpenConversation) -> String {
     (opened.transcript.value as? String) ?? "<no transcript value>"
 }
 
-/// True once the last forced follow has reported an outcome — not while
-/// one is in flight or before the entry follow has started.
-@MainActor
-func followHasReported(in opened: OpenConversation) -> Bool {
-    let report = followReport(in: opened)
-    return report.hasPrefix(Fixture.followReportPrefix) && report != Fixture.pendingFollowReport
+/// No forced result is fabricated for late entry. Once a forced request has
+/// actually started, it must report a terminal outcome before any later settle.
+func viewportHasReportedSettlement(_ report: String) -> Bool {
+    guard report.hasPrefix(Fixture.followReportPrefix),
+          report.contains("followActive=false"), report.contains("phase=idle") else { return false }
+    if !report.hasPrefix(Fixture.pendingFollowReport) { return true }
+    return report.contains("entry=preserved") && report.contains("metadataReady=true")
+        && report.contains("forcedRequested=false")
 }
 
 /// The element's frame from a single snapshot; nil when the element is

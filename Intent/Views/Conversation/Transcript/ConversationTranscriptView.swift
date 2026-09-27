@@ -6,6 +6,8 @@ import SwiftUI
 struct ConversationTranscriptView: View {
     typealias Layout = Constants.Conversation.Transcript
 
+    static let viewportCoordinateSpace = "conversation-transcript-viewport"
+
     let viewModel: ConversationViewModel
     let scrollState: ConversationTranscriptScrollState
     let onNavigateToNote: (String, String, String) -> Void
@@ -136,7 +138,6 @@ private extension ConversationTranscriptView {
             LazyVStack(spacing: Layout.transcriptRowSpacing) {
                 transcriptRows(proxy: proxy, dividerAnchorId: dividerAnchorId)
             }
-            .scrollTargetLayout()
             .padding(.horizontal, Layout.transcriptHorizontalPadding)
             .padding(.top, Layout.transcriptTopPadding)
             .onGeometryChange(for: CGFloat.self) { proxy in
@@ -149,20 +150,11 @@ private extension ConversationTranscriptView {
             .background(ScrollViewFinder(proxy: scrollMomentumProxy))
         }
         .defaultScrollAnchor(.bottom)
-        .scrollPosition(id: Binding(
-            get: { scrollState.visibleMessageID },
-            set: { scrollState.visibleMessageID = $0 }
-        ))
+        .coordinateSpace(name: Self.viewportCoordinateSpace)
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.always)
         .accessibilityIdentifier("transcript.scrollView")
-        .demoAccessibilityValue(
-            ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
-                outcome: scrollState.lastForcedFollowOutcome,
-                corrections: scrollState.lastForcedFollowCorrections,
-                endRecovery: unrealizedEndRecoveryDemoReport.summary
-            )
-        )
+        .demoAccessibilityValue(transcriptDemoReport)
         .demoEndDerealization(
             triggerFile: DemoFixtures.configuredEndDerealizationTriggerFile,
             onTrigger: withdrawEndRowForDemo,
@@ -244,6 +236,7 @@ private extension ConversationTranscriptView {
             }
         }
         .onDisappear {
+            scrollState.viewportAnchor.cancelRestoration()
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
             cancelBottomBandRePin()

@@ -639,7 +639,6 @@ extension ConversationTranscriptScrollPolicyTests {
     func visibleTranscriptConsumesDeferredEntryWithoutChangingItsViewport(distance: CGFloat) {
         let state = ConversationTranscriptScrollState()
         state.presentedBeforeEntryMetadata = true
-        state.visibleMessageID = "retained-row"
         state.initialScrollAwaitingScrollView = true
         let generation = state.initialScrollGeneration
         state.preservePresentedViewport(distanceToBottom: distance)
@@ -650,10 +649,10 @@ extension ConversationTranscriptScrollPolicyTests {
         let consumed = state.initialScrollGeneration
         state.preservePresentedViewport(distanceToBottom: nil)
         #expect(state.initialScrollGeneration == consumed, "same-binding reappearance cannot position again")
-        #expect(state.visibleMessageID == "retained-row")
+        #expect(state.entryViewportPreserved)
         state.rearmAfterTranscriptEmptied()
         #expect(!state.presentedBeforeEntryMetadata && !state.initialScrollPerformed)
-        #expect(state.visibleMessageID == nil)
+        #expect(!state.entryViewportPreserved)
     }
 }
 

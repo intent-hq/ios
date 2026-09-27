@@ -57,6 +57,7 @@ extension ConversationTranscriptView {
     private func startFollowTask(_ token: Lifecycle.FollowToken, forced: Bool, animated: Bool, proxy: ScrollViewProxy) {
         if forced {
             scrollState.isScrollingToBottom = true
+            scrollState.hasRequestedForcedFollow = true
             scrollState.lastForcedFollowOutcome = nil
             scrollState.lastForcedFollowCorrections = 0
         }
@@ -88,7 +89,10 @@ extension ConversationTranscriptView {
     }
 
     func takeOverPendingFollowIfGesture(isInteracting: Bool, proxy: ScrollViewProxy) {
-        if isInteracting { scrollState.preservePresentedViewport(distanceToBottom: scrollMomentumProxy.distanceToBottom) }
+        if isInteracting {
+            scrollState.viewportAnchor.cancelRestoration()
+            scrollState.preservePresentedViewport(distanceToBottom: scrollMomentumProxy.distanceToBottom)
+        }
         guard ConversationTranscriptScrollPolicy.gestureTakesOverPendingFollow(
             isInteracting: isInteracting,
             isFollowing: isFollowing
@@ -123,6 +127,7 @@ extension ConversationTranscriptView {
     /// does not take the request's follow over. An unrealized-end recovery
     /// in flight is cancelled too: the request's follow owns the viewport.
     func claimViewportForExplicitFollow(proxy: ScrollViewProxy) {
+        scrollState.viewportAnchor.cancelRestoration()
         scrollState.forcedFollowTakenOverByGesture = false
         scrollState.isUserScrollPhase = false
         send(.explicitClaim, proxy: proxy)
