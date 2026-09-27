@@ -30,26 +30,32 @@ struct WorkspaceQuestionAnswerCards: View {
     private var cards: some View {
         // Options are immutable for this mounted question and have no wire ID;
         // their index is also the existing selection contract, including duplicate labels.
-        ForEach(options.indices, id: \.self) { index in
+        let answerCards = options.indices.map { index in
             WorkspaceQuestionAnswerCard(
+                index: index,
                 option: options[index],
                 selected: selectedIndices.contains(index),
-                isMulti: isMulti
+                isMulti: isMulti,
+                horizontal: horizontal
             ) {
                 onSelect(index)
             }
-            .containerRelativeFrame(horizontal ? .horizontal : []) { length, _ in
-                length * Constants.Conversation.QuestionWizard.Workspace.carouselWidthFraction
-            }
-            .accessibilityIdentifier("question.option.\(index)")
+        }
+        // SwiftUI can request a ForEach row off-main during fit/transition work.
+        // Transfer only prepared view values; actions and environment reads stay
+        // in the main-actor card, not in the framework's row-provider callback.
+        return ForEach(answerCards.indices, id: \.self) { @Sendable index in
+            answerCards[index]
         }
     }
 }
 
 private struct WorkspaceQuestionAnswerCard: View {
+    let index: Int
     let option: QuestionOption
     let selected: Bool
     let isMulti: Bool
+    let horizontal: Bool
     let onSelect: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -58,6 +64,7 @@ private struct WorkspaceQuestionAnswerCard: View {
     private typealias Design = Constants.Conversation.Design
 
     var body: some View {
+        let widthFraction = Constants.Conversation.QuestionWizard.Workspace.carouselWidthFraction
         Button(action: onSelect) {
             cardText
             .tracking(Design.Typography.smallTracking)
@@ -83,6 +90,10 @@ private struct WorkspaceQuestionAnswerCard: View {
         .accessibilityHint(option.description ?? "")
         .accessibilityValue(selected ? "Selected" : "Not selected")
         .accessibilityAddTraits(selected ? .isSelected : [])
+        .containerRelativeFrame(horizontal ? .horizontal : []) { @Sendable length, _ in
+            length * widthFraction
+        }
+        .accessibilityIdentifier("question.option.\(index)")
     }
 
     private var cardText: some View {

@@ -106,6 +106,10 @@ struct ConversationColumnView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { accessoriesHeight = $0 }
 
         questionRegion
+            // Offer the measured question budget before the flexible transcript
+            // takes its share; otherwise VStack halves the remaining height and
+            // ViewThatFits rejects stacks that fit within workspaceQuestionHeight.
+            .layoutPriority(usesWorkspaceDesign ? 1 : 0)
 
         if composerVisible || usesWorkspaceDesign {
             VStack(spacing: Design.Status.composerSpacing) {

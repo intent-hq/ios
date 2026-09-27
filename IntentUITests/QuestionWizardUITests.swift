@@ -5,6 +5,43 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
     @MainActor
+    func testWorkspaceQuestionsStackAtDefaultPhoneSize() throws {
+        let app = try openQuestions(scenario: "questions", collapsed: false)
+        let first = app.buttons["question.option.0"]
+        let second = app.buttons["question.option.1"]
+        XCTAssertTrue(second.waitForExistence(timeout: Self.timeout))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "questions-default-phone"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTAssertLessThan(first.frame.maxY, second.frame.minY, "Both answers must stack in the real phone host")
+        XCTAssertEqual(first.frame.minX, second.frame.minX)
+        XCTAssertTrue(first.isHittable)
+        XCTAssertTrue(second.isHittable)
+        tap(first)
+        XCTAssertEqual(first.value as? String, "Selected")
+        tap(app.buttons["question.actions"])
+        tap(app.buttons["Collapse questions"])
+        tap(app.buttons["question.answer"])
+        XCTAssertTrue(first.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(first.value as? String, "Selected")
+
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .landscapeLeft
+        waitForOrientation(landscape: true, in: app)
+        XCTAssertEqual(first.value as? String, "Selected")
+        XCUIDevice.shared.orientation = .portrait
+        waitForOrientation(landscape: false, in: app)
+        let stacked = XCTNSPredicateExpectation(
+            predicate: Self.stackedAnswersPredicate,
+            object: [first, second]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [stacked], timeout: Self.timeout), .completed)
+        XCTAssertLessThan(first.frame.maxY, second.frame.minY)
+        XCTAssertEqual(first.value as? String, "Selected")
+    }
+
+    @MainActor
     func testSelectionFreeTextAndMultiSelectSurviveBackThenSend() throws {
         let app = try openQuestions()
         tap(app.buttons["question.answer"])
@@ -20,6 +57,13 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         let editor = app.textViews["Type your own answer…"].firstMatch
         tap(editor)
         editor.typeText("Only after review")
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .landscapeLeft
+        waitForOrientation(landscape: true, in: app)
+        XCTAssertEqual(editor.value as? String, "Only after review")
+        XCUIDevice.shared.orientation = .portrait
+        waitForOrientation(landscape: false, in: app)
+        XCTAssertEqual(editor.value as? String, "Only after review")
         if !app.buttons["question.next"].isHittable {
             app.scrollViews.containing(.textView, identifier: "Type your own answer…").firstMatch.swipeUp()
         }
@@ -95,12 +139,27 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(send.isEnabled, "Explicit collapse keeps the existing ordinary-message escape hatch")
     }
 
+    private static var stackedAnswersPredicate: NSPredicate {
+        NSPredicate { object, _ in
+            guard let answers = object as? [XCUIElement], answers.count == 2 else { return false }
+            return answers[0].frame.maxY < answers[1].frame.minY
+                && answers[0].frame.minX == answers[1].frame.minX
+        }
+    }
+
+    private func waitForOrientation(landscape: Bool, in app: XCUIApplication) {
+        let oriented = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            (app.frame.width > app.frame.height) == landscape
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [oriented], timeout: Self.timeout), .completed)
+    }
+
     @MainActor
-    private func openQuestions() throws -> XCUIApplication {
+    private func openQuestions(scenario: String = "question-flow", collapsed: Bool = true) throws -> XCUIApplication {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "Workspace phone presentation")
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data", "--demo-design-scenario=question-flow"]
+        app.launchArguments += ["--demo-data", "--demo-design-scenario=\(scenario)"]
         app.launch()
         tap(app.staticTexts["Workspace agent design"].firstMatch)
         tap(app.staticTexts["Continue Spec Writer"].firstMatch)
@@ -108,6 +167,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
             NSPredicate(format: "identifier IN %@", ["question.answer", "question.actions"])
         ).firstMatch
         XCTAssertTrue(questionControl.waitForExistence(timeout: Self.timeout))
+        if !collapsed { return app }
         if !app.buttons["question.answer"].exists {
             tap(app.buttons["question.actions"])
             tap(app.buttons["Collapse questions"])
