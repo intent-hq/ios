@@ -163,7 +163,7 @@ struct WorkspaceActionsMenu: View {
                 Label { Text("Create New Agent").interFont(Constants.Typography.bodyS) } icon: { Image(.addCircle) }
             }
             Button(action: onCreateTerminal) {
-                Label { Text("New terminal").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "terminal") }
+                Label { Text("New terminal").interFont(Constants.Typography.bodyS) } icon: { Image(.terminal) }
             }
             .disabled(isTerminalDisabled)
             Divider()
