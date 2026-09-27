@@ -78,10 +78,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertFalse(app.buttons["intent.menu.close"].exists)
         openMenu(app)
         app.buttons["intent.menu.close"].tap()
-        let composerAvailable = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "isHittable == true"), object: composer
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [composerAvailable], timeout: Self.timeout), .completed)
+        XCTAssertTrue(waitUntilHittable(composer))
 
         app.navigationBars["Dashboard Implementor"].buttons.element(boundBy: 0).tap()
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
@@ -89,7 +86,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(launcher.isHittable)
         openMenu(app)
         app.buttons["intent.menu.close"].tap()
-        XCTAssertTrue(agent.isHittable)
+        XCTAssertTrue(waitUntilHittable(agent))
     }
 
     @MainActor
@@ -164,6 +161,14 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         return app
+    }
+
+    @MainActor
+    private func waitUntilHittable(_ element: XCUIElement) -> Bool {
+        let available = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"), object: element
+        )
+        return XCTWaiter.wait(for: [available], timeout: Self.timeout) == .completed
     }
 
     @MainActor
