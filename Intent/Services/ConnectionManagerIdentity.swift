@@ -1,14 +1,16 @@
 import Foundation
 
 extension ConnectionManager {
-    func finishIdentityAdmission(_ principal: ConnectionPrincipal) {
+    func finishIdentityAdmission(_ principal: ConnectionPrincipal, token: String, fingerprint: String?) {
         currentPrincipal = principal
+        admission = ConnectionAdmission(id: UUID(), token: token, fingerprint: fingerprint, principal: principal)
         bindSavedIdentity(principal)
         connectionState = .connected
     }
 
     func clearPrincipal() {
         currentPrincipal = nil
+        admission = nil
         authorityRefreshTask?.cancel()
         authorityRefreshTask = nil
         pendingAuthorityRevision = -1
@@ -18,7 +20,7 @@ extension ConnectionManager {
     /// A saved record can constrain identity, never supply current authority.
     func validateIdentity(_ principal: ConnectionPrincipal, token: String, fingerprint: String?) throws {
         guard persistence.invitedJournalAvailable else { throw PersistenceManager.InvitedPersistenceError.syncUnavailable }
-        let records = persistence.loadConnections().filter { $0.token == token && $0.server.certFingerprint == fingerprint }
+        let records = persistence.loadConnections().filter { $0.token == token && InvitedSyncKey.sameFingerprint($0.server.certFingerprint, fingerprint) }
         for record in records {
             if let saved = record.principal, !ConnectionPrincipal.samePerson(saved.id, principal.id) {
                 throw ConnectionPrincipal.AdmissionError.personChanged
@@ -34,10 +36,11 @@ extension ConnectionManager {
     }
 
     func bindSavedIdentity(_ principal: ConnectionPrincipal) {
-        guard let token, let port, var records = persistence.loadConnectionsWithOutcome().connections else { return }
+        guard let admission, let port, var records = persistence.loadConnectionsWithOutcome().connections else { return }
+        let token = admission.token
         var changed = false
         for index in records.indices where records[index].token == token && records[index].server.port == port
-            && records[index].server.certFingerprint == certFingerprint {
+            && InvitedSyncKey.sameFingerprint(records[index].server.certFingerprint, admission.fingerprint) {
             if let saved = records[index].principal, !ConnectionPrincipal.samePerson(saved.id, principal.id) { continue }
             records[index].principal = principal
             persistence.backfillInvited(&records[index])
@@ -83,6 +86,9 @@ extension ConnectionManager {
                 if let previous, !ConnectionPrincipal.samePerson(principal.id, previous.id) { throw ConnectionPrincipal.AdmissionError.personChanged }
                 guard (principal.revision ?? -1) >= revision else { throw ConnectionPrincipal.AdmissionError.incompatible }
                 currentPrincipal = principal
+                if let previous = admission {
+                    admission = ConnectionAdmission(id: previous.id, token: previous.token, fingerprint: previous.fingerprint, principal: principal)
+                }
                 pendingAuthorityRevision = -1
                 authorityBeforeRefresh = nil
                 bindSavedIdentity(principal)
@@ -102,7 +108,8 @@ extension ConnectionManager {
     }
 
     private func rememberCurrentPersonRevoked() {
-        for record in persistence.loadConnections() where record.token == token && record.server.certFingerprint == certFingerprint {
+        guard let admission else { return }
+        for record in persistence.loadConnections() where record.token == admission.token && InvitedSyncKey.sameFingerprint(record.server.certFingerprint, admission.fingerprint) {
             _ = persistence.rememberInvitedRemoval(record)
         }
         persistence.publishPendingInvitedSessions()
@@ -119,7 +126,7 @@ extension ConnectionManager {
     }
 
     func admit(_ winner: RacedConnection, token: String, fingerprint: String?) async throws -> ConnectionPrincipal {
-        let observed = persistence.loadConnections().filter { $0.token == token && $0.server.certFingerprint == fingerprint }
+        let observed = persistence.loadConnections().filter { $0.token == token && InvitedSyncKey.sameFingerprint($0.server.certFingerprint, fingerprint) }
         do {
             let principal = try await admit(winner)
             try validateIdentity(principal, token: token, fingerprint: fingerprint)

@@ -19,6 +19,12 @@ nonisolated enum InvitedSyncKey {
         return hex
     }
 
+    static func sameFingerprint(_ lhs: String?, _ rhs: String?) -> Bool {
+        guard let lhs, let rhs else { return lhs == nil && rhs == nil }
+        guard let first = try? fingerprint(lhs), let second = try? fingerprint(rhs) else { return false }
+        return first == second
+    }
+
     private static let asciiHex = Set("0123456789abcdef".utf8)
 
     static func sorted(_ values: [String]) -> [String] {

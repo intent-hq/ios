@@ -76,8 +76,14 @@ extension PersistenceManager {
     }
 
     static func invitedRecord(_ connection: StoredConnection) -> InvitedSyncRecord? {
-        guard let key = connection.invitedPersonKey, let data = connection.invitedSyncPayload else { return nil }
+        guard let key = connection.invitedPersonKey else { return nil }
+        guard let data = connection.invitedSyncPayload else { return legacyInvitedRecord(connection) }
         return InvitedSyncRecord.parse(account: key, data: data)
+    }
+
+    static func invitedTunnelAddress(_ connection: StoredConnection, fallback: String?) -> String? {
+        if let record = invitedRecord(connection), record.routeClock >= 0 { return record.object["tcAddress"] as? String }
+        return connection.server.tcAddress ?? fallback
     }
 
     /// Every attempt begins by folding removals, including observed future

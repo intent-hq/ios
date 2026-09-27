@@ -20,21 +20,33 @@ extension PersistenceManager {
     /// Its original pairing clock survives: reconnect is never a new intent.
     func backfillInvited(_ connection: inout StoredConnection) {
         guard invitedJournalAvailable, connection.invitedSyncPayload == nil,
-              let principal = connection.principal, !principal.isOwner,
-              let savedPin = connection.server.certFingerprint, let pin = try? InvitedSyncKey.fingerprint(savedPin), let key = connection.invitedPersonKey,
+              let key = connection.invitedPersonKey, var record = Self.legacyInvitedRecord(connection),
               let registry = invitedRegistry, let snapshot = registry.read(), !snapshot.removalStateUnknown,
               !snapshot.frozen(key), !snapshot.records.contains(where: { $0.personKey == key }) else { return }
-        let server = connection.server
-        let millisecondsPerSecond: Double = 1000
-        var clock = floor(server.pairedAt.timeIntervalSince1970 * millisecondsPerSecond)
-        guard ConnectionPrincipal.validClock(clock), let host = server.hosts.first ?? server.tcAddress else { return }
         var journal = invitedJournal
         journal.observe(snapshot.records)
-        if clock == 0, (journal.floors[key] ?? 0) == 0 {
+        if record.pairedAt == 0, (journal.floors[key] ?? 0) == 0 {
             guard let initial = try? journal.nextClock(now: Date()) else { return }
-            clock = initial
+            record.object["pairedAt"] = initial
+            record.object["updatedAt"] = initial
         }
         invitedJournal = journal
+        connection.invitedSyncPayload = record.data
+        connection.pendingSyncUpdatedAt = record.updatedAt
+        connection.localPairingSyncClock = record.pairedAt
+    }
+
+    /// Authenticated local provenance remains usable for removal and routing
+    /// even when cloud reads or the first v2 publication have not succeeded.
+    static func legacyInvitedRecord(_ connection: StoredConnection) -> InvitedSyncRecord? {
+        guard let principal = connection.principal, !principal.isOwner,
+              let savedPin = connection.server.certFingerprint, let pin = try? InvitedSyncKey.fingerprint(savedPin) else { return nil }
+        let server = connection.server
+        let millisecondsPerSecond: Double = 1000
+        let clock = floor(server.pairedAt.timeIntervalSince1970 * millisecondsPerSecond)
+        let updated = connection.pendingSyncUpdatedAt ?? connection.syncUpdatedAt ?? clock
+        guard ConnectionPrincipal.validClock(clock), ConnectionPrincipal.validClock(updated),
+              let host = server.hosts.first ?? server.tcAddress else { return nil }
         let legacy = SyncedBackendRecord(
             label: connection.displayName,
             host: host,
@@ -44,7 +56,7 @@ extension PersistenceManager {
             hostname: nil,
             detectHosts: true,
             token: connection.token,
-            updatedAt: clock,
+            updatedAt: updated,
             deleted: false,
             deletedAt: nil,
             tcAddress: server.tcAddress
@@ -52,9 +64,6 @@ extension PersistenceManager {
         let candidate = InvitedLegacyMigration.Candidate(
             account: legacy.accountKey, object: ["pairedAt": clock], legacy: legacy, principalId: principal.id, fingerprint: pin
         )
-        guard let record = InvitedLegacyMigration.session(candidate, principal: principal) else { return }
-        connection.invitedSyncPayload = record.data
-        connection.pendingSyncUpdatedAt = clock
-        connection.localPairingSyncClock = clock
+        return InvitedLegacyMigration.session(candidate, principal: principal)
     }
 }

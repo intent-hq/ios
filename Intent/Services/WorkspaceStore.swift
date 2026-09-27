@@ -212,6 +212,7 @@ extension WorkspaceStore {
 
     // MARK: - Event classification
 
+    /// A trailing colon denotes a channel prefix; other entries name exact events.
     nonisolated static let handledChannels = ["workspace:", "agent:", "host:members-changed"]
 
     nonisolated static let refetchEventTypes: Set<String> = [

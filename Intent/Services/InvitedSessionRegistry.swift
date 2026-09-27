@@ -31,6 +31,12 @@ struct InvitedSessionRegistry {
         func frozen(_ account: String) -> Bool {
             entries.contains { $0.account == account && $0.record == nil }
         }
+
+        func hasSameEntries(as other: Self) -> Bool {
+            entries.count == other.entries.count && entries.allSatisfy { entry in
+                other.entries.contains { $0.account == entry.account && $0.group == entry.group && $0.data == entry.data }
+            }
+        }
     }
 
     /// Both groups must be readable before any migration or live publication.

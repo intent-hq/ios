@@ -82,9 +82,12 @@ enum PairingFlow {
         // not be persisted after the connect happens to complete first —
         // and the just-established authenticated socket must not be left
         // dangling with no UI reflecting it.
+        let ownedAdmissionID = connectionManager.admission.flatMap { receipt in
+            receipt.token == payload.token && receipt.fingerprint == certFingerprint ? receipt.id : nil
+        }
         if Task.isCancelled {
             PairingDiagnostics.phase(.connect, .cancelled, store: diagnostics)
-            connectionManager.disconnect()
+            connectionManager.disconnectPairingAdmission(ownedAdmissionID)
             throw CancellationError()
         }
         let server = PairedServer(
@@ -110,7 +113,7 @@ enum PairingFlow {
             PairingDiagnostics.phase(.save, error is CancellationError ? .cancelled : .failed, store: diagnostics)
             // The authenticated socket belongs to this failed pairing attempt;
             // do not leave it live when no saved connection can own it.
-            connectionManager.disconnect()
+            connectionManager.disconnectPairingAdmission(ownedAdmissionID)
             throw error
         }
     }

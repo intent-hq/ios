@@ -5,12 +5,12 @@ extension PersistenceManager {
 
     /// All reads and removal folding precede authentication and writes. The
     /// caller supplies isolated connections; no owner-side socket is borrowed.
-    func refreshInvitedSessions(authenticate: InvitedAuthenticator) async -> [UUID] {
-        guard invitedJournalAvailable, !invitedRefreshInProgress else { return [] }
+    func refreshInvitedSessions(authenticate: InvitedAuthenticator) async -> InvitedImportOutcome {
+        guard invitedJournalAvailable, !invitedRefreshInProgress else { return InvitedImportOutcome() }
         invitedRefreshInProgress = true
         defer { invitedRefreshInProgress = false }
         guard let registry = invitedRegistry, let snapshot = registry.read(), !snapshot.removalStateUnknown,
-              let initial = loadConnectionsWithOutcome().connections else { return [] }
+              let initial = loadConnectionsWithOutcome().connections else { return InvitedImportOutcome() }
         var journal = invitedJournal
         journal.observe(snapshot.records + initial.compactMap(Self.invitedRecord))
         invitedJournal = journal
@@ -21,23 +21,39 @@ extension PersistenceManager {
         for key in groups.keys.sorted() {
             guard !Task.isCancelled, !snapshot.frozen(key),
                   let group = groups[key], let record = InvitedSyncMerge.person(group, rememberedFloor: invitedJournal.floors[key] ?? 0),
-                  record.live, var connection = Self.connection(fromInvited: record) else { continue }
+                  record.live, let connection = Self.connection(fromInvited: record) else { continue }
             do {
                 let principal = try await authenticate(connection)
                 guard !Task.isCancelled, !principal.isOwner, ConnectionPrincipal.samePerson(principal.id, record.principalId),
-                      record.pairedAt > (invitedJournal.floors[key] ?? 0) else { continue }
-                connection.principal = principal
-                // Re-read after the await: a deliberate local re-pair or
-                // forgetting while authentication ran always takes precedence.
-                let current = loadConnections().first { $0.invitedPersonKey == key }
-                if let local = current.flatMap(Self.invitedRecord), local.pairedAt > record.pairedAt { continue }
-                let outcome = upsertConnectionWithOutcome(connection)
+                      let current = refreshedInvitedRecord(record, migrated: migrated, original: snapshot),
+                      var imported = Self.connection(fromInvited: current) else { continue }
+                imported.principal = principal
+                let outcome = upsertConnectionWithOutcome(imported)
                 guard outcome.persisted else { continue }
             } catch { continue }
         }
         let removed = applyInvitedRemovalFloors()
         publishPendingInvitedSessions()
-        return removed
+        return InvitedImportOutcome(before: initial, after: loadConnections(), suppressed: removed)
+    }
+
+    /// Authentication is an async boundary. Only the credential just checked
+    /// may be installed, with freshly merged route/metadata and removal state.
+    private func refreshedInvitedRecord(
+        _ authenticated: InvitedSyncRecord, migrated: [InvitedSyncRecord], original: InvitedSessionRegistry.Snapshot
+    ) -> InvitedSyncRecord? {
+        guard invitedJournalAvailable, let key = authenticated.personKey,
+              let fresh = invitedRegistry?.read(), !fresh.removalStateUnknown, !fresh.frozen(key),
+              let locals = loadConnectionsWithOutcome().connections else { return nil }
+        guard !locals.contains(where: { $0.invitedPersonKey == key && $0.invitedSyncPayload != nil && Self.invitedRecord($0) == nil }) else { return nil }
+        var records = fresh.records + locals.compactMap(Self.invitedRecord)
+        if fresh.hasSameEntries(as: original) { records += migrated }
+        var journal = invitedJournal
+        journal.observe(records)
+        invitedJournal = journal
+        guard let merged = InvitedSyncMerge.person(records.filter { $0.personKey == key }, rememberedFloor: journal.floors[key] ?? 0),
+              merged.live, merged.token == authenticated.token, merged.pairedAt == authenticated.pairedAt else { return nil }
+        return merged
     }
 
     private func applyInvitedRemovalFloors() -> [UUID] {

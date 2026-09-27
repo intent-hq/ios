@@ -4,6 +4,23 @@ import Security
 import Testing
 
 @MainActor struct InvitedSessionRaceTests {
+    @Test func localFuturePayloadDuringAuthenticationIsPreserved() async throws {
+        let cloud = MemorySyncedKeychain()
+        let record = try InvitedSessionFixtures.session()
+        cloud.items[record.account] = record.data
+        let store = try InvitedSessionFixtures.Store(cloud)
+        defer { store.close() }
+        let future = Data(#"{"v":3,"future":"preserve"}"#.utf8)
+        _ = await store.persistence.refreshInvitedSessions { candidate in
+            var local = candidate
+            local.principal = InvitedSessionFixtures.principal()
+            local.invitedSyncPayload = future
+            #expect(store.persistence.saveConnectionsLocked([local]))
+            return InvitedSessionFixtures.principal()
+        }
+        #expect(store.persistence.loadConnections().first?.invitedSyncPayload == future)
+    }
+
     @Test(arguments: [false, true]) func lateImportPreservesNewerLocalMetadataAndRoute(clear: Bool) async throws {
         let cloud = MemorySyncedKeychain()
         let record = try InvitedSessionFixtures.session(changes: ["tcAddress": "tcOld", "tcUpdatedAt": 100])

@@ -130,8 +130,7 @@ extension PersistenceManager {
                     // A re-pair without a tunnel address (manual entry, QR
                     // from a daemon whose tunnel is down) must not drop the
                     // known one; the post-connect refresh keeps it current.
-                    tcAddress: Self.invitedRecord(connection).map { $0.object["tcAddress"] as? String }
-                        ?? (server.tcAddress ?? existing.server.tcAddress)
+                    tcAddress: Self.invitedTunnelAddress(connection, fallback: existing.server.tcAddress)
                 ),
                 token: connection.token,
                 displayName: connection.displayName,

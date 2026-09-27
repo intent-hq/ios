@@ -154,12 +154,16 @@ class FakeConnectionManager: SessionConnectionManaging {
     }
 
     var currentPrincipal: ConnectionPrincipal? = .demoOwner
+    var admission: ConnectionAdmission?
 
     func confirmedPrincipal() async throws -> ConnectionPrincipal {
         let hello = try await request("client.hello")
         let value = try await request("principal.me")
         let principal = try ConnectionPrincipal.parse(value, hello: hello)
         currentPrincipal = principal
+        if let previous = admission {
+            admission = ConnectionAdmission(id: previous.id, token: previous.token, fingerprint: previous.fingerprint, principal: principal)
+        }
         return principal
     }
 
@@ -214,6 +218,7 @@ class FakeConnectionManager: SessionConnectionManaging {
             )
         )
         if let connectError { throw connectError }
+        admission = ConnectionAdmission(id: UUID(), token: token, fingerprint: certFingerprint, principal: currentPrincipal ?? .demoOwner)
         connectionState = .connected
     }
 
@@ -441,6 +446,7 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     /// Simulate a disconnection event (transition to .disconnected).
     func simulateDisconnect() {
+        admission = nil
         connectionState = .disconnected
     }
 

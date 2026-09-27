@@ -23,7 +23,6 @@ extension ConnectionManager {
     }
 
     // MARK: - Host Racing
-
     /// A won race: the winner plus the background drain of the candidates
     /// still in flight (`HostRaceOutcome.drain`). The drain is handed to the
     /// caller because only it knows which connection generation the drain's
@@ -381,7 +380,7 @@ extension ConnectionManager {
         let winner = raced.winner
         recordLateCertMismatches(from: raced.drain, generation: generation)
         let principal = try await admit(winner, token: parameters.token, fingerprint: parameters.certFingerprint)
-        guard !Task.isCancelled, adoptReconnectWinner(winner, principal: principal, attempt: attempt, generation: generation) else {
+        guard !Task.isCancelled, adoptReconnectWinner(winner, principal: principal, parameters: parameters, attempt: attempt, generation: generation) else {
             await winner.disconnect()
             return true
         }
@@ -393,6 +392,7 @@ extension ConnectionManager {
     private func adoptReconnectWinner(
         _ winner: RacedConnection,
         principal: ConnectionPrincipal,
+        parameters: ReconnectParameters,
         attempt: Int,
         generation: Int
     ) -> Bool {
@@ -401,7 +401,7 @@ extension ConnectionManager {
         activeTunnel = winner.tunnel
         host = winner.host
         configureSocketMessagePump()
-        finishIdentityAdmission(principal)
+        finishIdentityAdmission(principal, token: parameters.token, fingerprint: parameters.certFingerprint)
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = attempt
         recordConnectionAttempt(.recovered, context: activeTunnel == nil ? .direct : .tunnel)

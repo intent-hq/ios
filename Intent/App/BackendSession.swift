@@ -25,6 +25,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
 
     var currentPrincipal: ConnectionPrincipal? { get }
+    var admission: ConnectionAdmission? { get }
 
     func confirmedPrincipal() async throws -> ConnectionPrincipal
 

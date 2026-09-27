@@ -27,7 +27,8 @@ extension ConnectionManager {
     /// Failures are non-fatal: older daemons without `localIps` and transport
     /// errors are skipped silently and the connection proceeds unchanged.
     func refreshHostRoutes() async {
-        guard connectionState == .connected, let token, let port else { return }
+        guard connectionState == .connected, let admission, let port else { return }
+        let token = admission.token
         let myGeneration = connectionGeneration
 
         // Refresh the stored display name first: it must run even when the
@@ -165,7 +166,7 @@ extension ConnectionManager {
 
     private func savedConnection(token: String, port: Int) -> StoredConnection? {
         persistence.loadConnections().first { saved in
-            saved.token == token && saved.server.port == port && saved.server.certFingerprint == certFingerprint
+            saved.token == token && saved.server.port == port && InvitedSyncKey.sameFingerprint(saved.server.certFingerprint, admission?.fingerprint)
         }
     }
 

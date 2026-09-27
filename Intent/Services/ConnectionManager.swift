@@ -38,6 +38,7 @@ import os
         didSet { connectionStateSubject.send(connectionState) }
     }
     private var admittedPrincipal: ConnectionPrincipal?
+    @ObservationIgnored var admission: ConnectionAdmission?
     var currentPrincipal: ConnectionPrincipal? {
         get { DemoMode.isEnabled ? .demoOwner : admittedPrincipal }
         set { admittedPrincipal = newValue }
@@ -315,6 +316,7 @@ extension ConnectionManager {
         host = winner.host
         configureSocketMessagePump()
         currentPrincipal = principal
+        admission = ConnectionAdmission(id: UUID(), token: target.token, fingerprint: target.certFingerprint, principal: principal)
         bindSavedIdentity(principal)
         connectionState = .connected
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()

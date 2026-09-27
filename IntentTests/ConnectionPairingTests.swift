@@ -84,6 +84,7 @@ struct ConnectionPairingTests {
         storage.setSaveFailure(true)
         let fake = FakeConnectionManager()
         fake.responseMap["host.status"] = ["prettyHostname": "Updated Name"]
+        try await fake.connect(hosts: ["10.0.0.1"], port: 4242, token: "new-token", certFingerprint: "aa:bb", tcAddress: nil)
         let repairedServer = PairedServer(
             hosts: ["10.0.0.1"],
             port: 4242,
@@ -121,6 +122,7 @@ struct ConnectionPairingTests {
         ))
         let fake = FakeConnectionManager()
         fake.responseMap["host.status"] = ["prettyHostname": "New Mac"]
+        try await fake.connect(hosts: ["10.0.0.1"], port: 4242, token: "new-token", certFingerprint: "aa:bb", tcAddress: nil)
         let server = PairedServer(
             hosts: ["10.0.0.1"],
             port: 4242,

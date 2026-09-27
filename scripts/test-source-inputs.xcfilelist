@@ -342,6 +342,7 @@ $(SRCROOT)/Intent/Services/AttachmentUploadService.swift
 $(SRCROOT)/Intent/Services/BackgroundHookStore.swift
 $(SRCROOT)/Intent/Services/CertFingerprintProbe.swift
 $(SRCROOT)/Intent/Services/CommentStore.swift
+$(SRCROOT)/Intent/Services/ConnectionAdmission.swift
 $(SRCROOT)/Intent/Services/ConnectionDiagnostics.swift
 $(SRCROOT)/Intent/Services/ConnectionHostRacing.swift
 $(SRCROOT)/Intent/Services/ConnectionManager.swift
@@ -379,6 +380,7 @@ $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/DemoSettings.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
+$(SRCROOT)/Intent/Services/InvitedImportOutcome.swift
 $(SRCROOT)/Intent/Services/InvitedLegacyMigration.swift
 $(SRCROOT)/Intent/Services/InvitedSessionRegistry.swift
 $(SRCROOT)/Intent/Services/InvitedSyncKey.swift
@@ -628,6 +630,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorBackgroundRecoveryTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorConnectionFailureTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorConnectionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorIPadReselectionTests.swift
+$(SRCROOT)/IntentTests/AppCoordinatorInvitedSyncTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorMissingEntityTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorRegistryCorruptionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorReturnHomeTests.swift
@@ -655,6 +658,7 @@ $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/ComposerSubmitPolicyTests.swift
+$(SRCROOT)/IntentTests/ConnectionAdmissionRaceTests.swift
 $(SRCROOT)/IntentTests/ConnectionFailureViewTests.swift
 $(SRCROOT)/IntentTests/ConnectionLossPresenterTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerEndpointPathTests.swift

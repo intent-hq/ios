@@ -6,6 +6,10 @@ import Security
 import Testing
 
 extension ConnectionManagerTests {
+    nonisolated private struct HeldReply: Sendable {
+        let connection: NWConnection
+        let data: Data
+    }
     /// Loopback plain-WS listener with a minimal JSON-RPC responder: any
     /// request carrying an `id` gets an empty-object result; notifications
     /// are ignored. Lets `connect()` tests establish real sockets and prove
@@ -24,6 +28,8 @@ extension ConnectionManagerTests {
         var principal = Data(#"{"id":"test-owner","isAdministrator":true}"#.utf8)
         var modern = false
         var helloIDs: [String] = []
+        var holdStatus = false
+        var heldReplies: [HeldReply] = []
     }
 
     nonisolated final class LoopbackWebSocketServer: @unchecked Sendable {
@@ -36,6 +42,28 @@ extension ConnectionManagerTests {
         var port: Int { Int(listener.port?.rawValue ?? 0) }
         var acceptedCount: Int { state.withLock { $0.acceptedTotal } }
         var helloIDs: [String] { state.withLock { $0.helloIDs } }
+        var heldStatusCount: Int { state.withLock { $0.heldReplies.count } }
+
+        func holdHostStatus() { state.withLock { $0.holdStatus = true } }
+
+        func releaseHostStatus() {
+            let replies = state.withLock { state in
+                state.holdStatus = false
+                let replies = state.heldReplies
+                state.heldReplies = []
+                return replies
+            }
+            for reply in replies { send(reply.data, on: reply.connection) }
+        }
+
+        func emitRemoval(of principal: String) throws {
+            let removalRevision = 10
+            let data = try JSONSerialization.data(withJSONObject: [
+                "jsonrpc": "2.0", "method": "events.event",
+                "params": ["event": ["type": "host:members-changed", "data": ["revision": removalRevision, "principalId": principal, "action": "removed"]]]
+            ])
+            for connection in state.withLock({ $0.accepted }) { send(data, on: connection) }
+        }
 
         func setPrincipal(_ principal: [String: Any], modern: Bool = true) {
             guard let data = try? JSONSerialization.data(withJSONObject: principal) else { return }
@@ -155,20 +183,23 @@ extension ConnectionManagerTests {
                         "result": response(to: json)
                     ]
                     if let payload = try? JSONSerialization.data(withJSONObject: response) {
-                        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
-                        let context = NWConnection.ContentContext(
-                            identifier: "response",
-                            metadata: [metadata]
-                        )
-                        connection.send(
-                            content: payload,
-                            contentContext: context,
-                            completion: .idempotent
-                        )
+                        let isStatus = json["method"] as? String == "host.status"
+                        let held = state.withLock { state in
+                            guard isStatus, state.holdStatus else { return false }
+                            state.heldReplies.append(HeldReply(connection: connection, data: payload))
+                            return true
+                        }
+                        if !held { send(payload, on: connection) }
                     }
                 }
                 receiveNext(on: connection)
             }
+        }
+
+        private func send(_ data: Data, on connection: NWConnection) {
+            let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
+            let context = NWConnection.ContentContext(identifier: "response", metadata: [metadata])
+            connection.send(content: data, contentContext: context, completion: .idempotent)
         }
     }
 }

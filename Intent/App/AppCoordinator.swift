@@ -122,6 +122,7 @@ class AppCoordinator {
     private var reconnectLoadingObservationGeneration = 0
     @ObservationIgnored private var reconnectOverlayTimeoutTask: Task<Void, Never>?
     @ObservationIgnored var invitedRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var savedConnectionsObserver: AnyCancellable?
 
     @ObservationIgnored let dependencies: AppCoordinatorDependencies
     @ObservationIgnored let lifecycleState = AppCoordinatorLifecycleState()
@@ -177,6 +178,9 @@ class AppCoordinator {
         self.backendID = backendID
         self.connectionLossPresentation = connectionLossPresentation
         lifecycleState.workspaceDataAtInitialFlowStart = workspaceStore.lastUpdated
+        savedConnectionsObserver = persistence.connectionsDidChange.sink { [weak self] _ in
+            self?.refreshSavedConnectionsPresentation()
+        }
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
