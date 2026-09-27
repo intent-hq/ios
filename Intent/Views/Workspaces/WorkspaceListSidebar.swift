@@ -49,7 +49,10 @@ struct WorkspaceListSidebar: View {
             await workspaceStore.fetchAll()
         }
         .navigationTitle("Workspaces")
-        .onDisappear { isSearching = false }
+        .onDisappear {
+            isSearching = false
+            viewModel.searchText = ""
+        }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
     }
 
