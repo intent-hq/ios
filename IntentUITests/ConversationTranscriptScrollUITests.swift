@@ -388,41 +388,37 @@ extension ConversationTranscriptScrollUITests {
     private func startupReport(_ app: XCUIApplication) -> String { startupControl(app).value as? String ?? "" }
 
     @MainActor
-    private func startupVisibleRow(_ opened: OpenConversation) throws -> XCUIElement {
-        var row: XCUIElement?
-        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
-            row = rows(intersecting: opened.transcript).first { $0.label.hasPrefix("Startup row") && isInside($0, opened.transcript) }
-            return row != nil
-        })
-        return try XCTUnwrap(row)
-    }
-
-    @MainActor
     private func assertStartupViewportStays(
         _ app: XCUIApplication, opened: OpenConversation, row: XCUIElement, release: () throws -> Void
     ) throws {
+        let expectedLabel = row.label
         let baseline = try XCTUnwrap(waitUntilSteady(timeout: Fixture.settleTimeout, tolerance: Fixture.rePinTolerance) {
             (frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY
         })
+        XCTAssertEqual(row.label, expectedLabel, "the baseline must measure the selected row")
         try release()
         var moved = false
         let ready = waitUntil(timeout: Fixture.settleTimeout) {
-            moved = moved || self.startupRowMoved(row, opened: opened, baseline: baseline)
+            moved = moved || self.startupRowMoved(row, label: expectedLabel, opened: opened, baseline: baseline)
             return self.startupReport(app).contains("positioned=true") && self.startupReport(app).contains("entry=ready")
         }
         XCTAssertTrue(ready, "entry never became ready: \(startupReport(app))")
         XCTAssertTrue(startupReport(app).contains("anchor=startup-row-25"))
-        let movedLater = waitUntil(timeout: Fixture.quietWindow) { self.startupRowMoved(row, opened: opened, baseline: baseline) }
-        let attachment = XCTAttachment(string: "row=\(row.label) before=\(baseline) after=\((frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY) \(startupReport(app)) \(followReport(in: opened))")
+        let movedLater = waitUntil(timeout: Fixture.quietWindow) { self.startupRowMoved(row, label: expectedLabel, opened: opened, baseline: baseline) }
+        let attachment = XCTAttachment(string: "rowBefore=\(expectedLabel) rowAfter=\(row.label)"
+            + " before=\(baseline) after=\((frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY)"
+            + " \(startupReport(app)) \(followReport(in: opened))")
         attachment.lifetime = .keepAlways
         add(attachment)
+        XCTAssertEqual(row.label, expectedLabel, "metadata must not retarget the measured row")
         XCTAssertFalse(moved || movedLater, "metadata or deferred entry work moved the visible row")
     }
 
     @MainActor
-    private func startupRowMoved(_ row: XCUIElement, opened: OpenConversation, baseline: CGFloat) -> Bool {
-        guard let rect = frame(of: row), isInside(rect, opened.transcript) else { return true }
-        return abs(rect.minY - opened.transcript.frame.minY - baseline) > Fixture.rePinTolerance
+    private func startupRowMoved(_ row: XCUIElement, label: String, opened: OpenConversation, baseline: CGFloat) -> Bool {
+        guard let snapshot = try? row.snapshot(), snapshot.label == label,
+              isInside(snapshot.frame, opened.transcript) else { return true }
+        return abs(snapshot.frame.minY - opened.transcript.frame.minY - baseline) > Fixture.rePinTolerance
     }
 
     @MainActor
@@ -473,6 +469,7 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertFalse(viewportHasReportedSettlement(completed.replacingOccurrences(of: "landed", with: "pending"), forcedFollowAfter: 1))
         let recovered = "lastForcedFollow=pending endRecovery=recovered corrections=1 episodes=2 endRealized=true followActive=false phase=idle"
         XCTAssertTrue(viewportHasReportedSettlement(recovered, recoveryAfter: 1))
+        XCTAssertFalse(viewportHasReportedSettlement(recovered.replacingOccurrences(of: "followActive=false", with: "followActive=true"), recoveryAfter: 1))
         XCTAssertFalse(viewportHasReportedSettlement(recovered, recoveryAfter: 2))
         XCTAssertFalse(viewportHasReportedSettlement(recovered.replacingOccurrences(of: "corrections=1", with: "corrections=0"), recoveryAfter: 1))
         XCTAssertFalse(viewportHasReportedSettlement(recovered.replacingOccurrences(of: "endRealized=true", with: "endRealized=false"), recoveryAfter: 1))

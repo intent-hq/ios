@@ -1,9 +1,100 @@
 import CoreGraphics
 import Foundation
 @testable import Intent
+import Observation
+import Synchronization
 import Testing
 
 extension ConversationTranscriptScrollPolicyTests {
+    @Test @MainActor func automaticFollowCompletionPublishesViewportSettlement() {
+        let state = ConversationTranscriptScrollState()
+        applyViewportEvent(.endRealized(userIsScrolledAway: false), to: state)
+        applyViewportEvent(.followRequested(forced: false), to: state)
+        guard case .follow(let token, forced: false) = state.lifecycle.owner else {
+            Issue.record("automatic follow did not take ownership")
+            return
+        }
+        let changes = observeFollowing(state)
+        applyViewportEvent(.followFinished(token, .executed(nil)), to: state)
+        #expect(!state.isFollowing)
+        #expect(changes() == 1, "the demo report must update even when no forced-follow flag changes")
+        #expect(!state.hasRequestedForcedFollow && state.lastForcedFollowOutcome == nil)
+    }
+
+    @Test @MainActor func recoveryTerminalKeepsTheActualFollowActiveUntilItsOwnCompletion() throws {
+        let state = ConversationTranscriptScrollState()
+        applyViewportEvent(.endDerealized, to: state)
+        let recovery = try #require(state.lifecycle.currentRecovery)
+        applyViewportEvent(.recoveryStep(recovery, .recover(pageOffsetY: 100)), to: state)
+        applyViewportEvent(.followRequested(forced: false), to: state)
+        guard case .follow(let token, _) = state.lifecycle.owner else {
+            Issue.record("follow did not take ownership from recovery")
+            return
+        }
+        let changes = observeFollowing(state)
+        applyViewportEvent(.endRealized(userIsScrolledAway: false), to: state)
+        applyViewportEvent(.recoveryFinished(recovery, .notNeeded, corrections: 1), to: state)
+        #expect(state.lifecycle.currentRecovery == nil)
+        #expect(state.isFollowing, "a recovered end row does not finish another viewport owner")
+        #expect(changes() == 0)
+        applyViewportEvent(.followFinished(token, .executed(nil)), to: state)
+        #expect(!state.isFollowing)
+        #expect(changes() == 1)
+    }
+
+    @Test @MainActor func staleFollowCompletionDoesNotPublishFalseSettlement() {
+        let state = ConversationTranscriptScrollState()
+        applyViewportEvent(.followRequested(forced: false), to: state)
+        guard case .follow(let old, _) = state.lifecycle.owner else {
+            Issue.record("missing first owner")
+            return
+        }
+        let changes = observeFollowing(state)
+        applyViewportEvent(.followRequested(forced: false), to: state)
+        applyViewportEvent(.followFinished(old, .dropped), to: state)
+        #expect(state.isFollowing)
+        #expect(changes() == 0, "replacement and stale completion cannot announce idle")
+        applyViewportEvent(.followCancelledByGesture, to: state)
+        #expect(!state.isFollowing)
+        #expect(changes() == 1)
+    }
+
+    @Test @MainActor func recoveryOwnershipAndExplicitTapRemainObservable() throws {
+        let state = ConversationTranscriptScrollState()
+        applyViewportEvent(.endDerealized, to: state)
+        let recovery = try #require(state.lifecycle.currentRecovery)
+        #expect(!state.isFollowing, "a polling recovery has not taken the viewport")
+        let acquired = observeFollowing(state)
+        applyViewportEvent(.recoveryStep(recovery, .followToEnd), to: state)
+        #expect(state.isFollowing)
+        #expect(acquired() == 1)
+        let released = observeFollowing(state)
+        applyViewportEvent(.viewDisappeared, to: state)
+        #expect(!state.isFollowing)
+        #expect(released() == 1)
+        state.isScrollingToBottom = true
+        #expect(state.isFollowing, "the explicit tap owns the gap before its request")
+        let tapReleased = observeFollowing(state)
+        state.isScrollingToBottom = false
+        #expect(!state.isFollowing)
+        #expect(tapReleased() == 1)
+    }
+
+    @MainActor private func observeFollowing(_ state: ConversationTranscriptScrollState) -> @Sendable () -> Int {
+        let changes = Mutex(0)
+        withObservationTracking { _ = state.isFollowing } onChange: {
+            changes.withLock { $0 += 1 }
+        }
+        return { changes.withLock { $0 } }
+    }
+
+    @MainActor private func applyViewportEvent(
+        _ event: ConversationTranscriptRecoveryLifecycle.Event, to state: ConversationTranscriptScrollState
+    ) {
+        // The view stores this exact reducer result before executing its effects.
+        state.lifecycle = ConversationTranscriptRecoveryLifecycle.transition(state.lifecycle, event).state
+    }
+
     @Test func queuedDividerMeasurementCannotReclaimViewportAfterCancellation() {
         var anchor = ConversationTranscriptViewportAnchor()
         let before = CGRect(x: 0, y: 61, width: 300, height: 50)

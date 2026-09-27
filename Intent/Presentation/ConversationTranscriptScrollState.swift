@@ -141,7 +141,17 @@ final class ConversationTranscriptScrollState {
     /// follow, and whether the end row (the `scroll-bottom` marker) is
     /// realized by the lazy stack. Written only through
     /// `Lifecycle.transition`; the view executes the effects.
-    @ObservationIgnored var lifecycle = Lifecycle.State()
+    @ObservationIgnored var lifecycle = Lifecycle.State() {
+        didSet {
+            if lifecycleOwnsViewport != lifecycle.isFollowing {
+                lifecycleOwnsViewport = lifecycle.isFollowing
+            }
+        }
+    }
+    /// Publish ownership changes, including an automatic follow draining after
+    /// recovery. The rest of the reducer's polling state need not redraw the view.
+    private var lifecycleOwnsViewport = false
+    var isFollowing: Bool { lifecycleOwnsViewport || isScrollingToBottom }
     /// The pending follow's debounce and landing loop, keyed by the token
     /// the lifecycle minted for it.
     @ObservationIgnored var followTasks: [Lifecycle.FollowToken: Task<Void, Never>] = [:]

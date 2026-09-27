@@ -396,6 +396,26 @@ func rows(intersecting transcript: XCUIElement) -> [XCUIElement] {
     return []
 }
 
+/// Row enumeration uses live indices which can retarget when lazy descendants
+/// change. Startup fixture labels are unique; retain that identity for every
+/// geometry sample across metadata release and same-view reappearance.
+@MainActor
+func startupVisibleRow(_ opened: OpenConversation) throws -> XCUIElement {
+    var selected: XCUIElement?
+    XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
+        guard let candidate = rows(intersecting: opened.transcript).first(where: { row in
+            row.label.hasPrefix("Startup row") && isInside(row, opened.transcript)
+        }), let snapshot = try? candidate.snapshot(), snapshot.label.hasPrefix("Startup row") else { return false }
+        let matches = opened.transcript.staticTexts.matching(NSPredicate(format: "label == %@", snapshot.label))
+        guard matches.count == 1 else { return false }
+        let row = matches.firstMatch
+        guard isInside(row, opened.transcript) else { return false }
+        selected = row
+        return true
+    })
+    return try XCTUnwrap(selected)
+}
+
 /// Navigates back out of the transcript to the workspace list so the
 /// next `openLongConversation` is a fresh entry; relaunches when no back
 /// path leads there (a split view keeps the transcript in its detail column).
