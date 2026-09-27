@@ -7,7 +7,7 @@ nonisolated struct WorkspaceBrowser: Codable, Equatable, Identifiable, Sendable 
     let url: String
     let command: String?
 
-    static func detected(script: [String: Any], workspaceId: String) -> WorkspaceBrowser? {
+    static func detected(script: [String: Any], workspaceId: String) -> Self? {
         guard let id = script["id"] as? String, !id.isEmpty,
               script["workspaceId"] as? String == workspaceId,
               let runtime = script["runtime"] as? [String: Any],
@@ -16,10 +16,12 @@ nonisolated struct WorkspaceBrowser: Codable, Equatable, Identifiable, Sendable 
               let url = try? WorkspaceBrowserURL.normalize(rawURL),
               let command = script["command"] as? String else { return nil }
         let name = (script["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return WorkspaceBrowser(
-            id: "script:\(id)", workspaceId: workspaceId,
+        return Self(
+            id: "script:\(id)",
+            workspaceId: workspaceId,
             title: name.flatMap { $0.isEmpty ? nil : $0 } ?? url,
-            url: url, command: command
+            url: url,
+            command: command
         )
     }
 }

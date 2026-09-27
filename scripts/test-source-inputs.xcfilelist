@@ -303,6 +303,7 @@ $(SRCROOT)/Intent/Models/PendingFile.swift
 $(SRCROOT)/Intent/Models/PrMonitorWakeAttribution.swift
 $(SRCROOT)/Intent/Models/Question.swift
 $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
+$(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
 $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
 $(SRCROOT)/Intent/Models/WorkspaceTask.swift
 $(SRCROOT)/Intent/PersistenceKeychainStorage.swift
@@ -341,11 +342,19 @@ $(SRCROOT)/Intent/Services/AssistantStore.swift
 $(SRCROOT)/Intent/Services/AttachmentImageLoader.swift
 $(SRCROOT)/Intent/Services/AttachmentUploadService.swift
 $(SRCROOT)/Intent/Services/BackgroundHookStore.swift
+$(SRCROOT)/Intent/Services/BrowserTunnelFlow.swift
+$(SRCROOT)/Intent/Services/BrowserTunnelFrame.swift
+$(SRCROOT)/Intent/Services/BrowserTunnelListener.swift
+$(SRCROOT)/Intent/Services/BrowserTunnelProxy.swift
+$(SRCROOT)/Intent/Services/BrowserTunnelRelay.swift
+$(SRCROOT)/Intent/Services/BrowserTunnelStream.swift
+$(SRCROOT)/Intent/Services/BrowserTunnelURL.swift
 $(SRCROOT)/Intent/Services/CertFingerprintProbe.swift
 $(SRCROOT)/Intent/Services/CommentStore.swift
 $(SRCROOT)/Intent/Services/ConnectionDiagnostics.swift
 $(SRCROOT)/Intent/Services/ConnectionHostRacing.swift
 $(SRCROOT)/Intent/Services/ConnectionManager.swift
+$(SRCROOT)/Intent/Services/ConnectionManagerBrowser.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerHeartbeat.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerHostRefresh.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerRecovery.swift
@@ -365,6 +374,7 @@ $(SRCROOT)/Intent/Services/ConversationStore.swift
 $(SRCROOT)/Intent/Services/ConversationWatchedAgents.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
+$(SRCROOT)/Intent/Services/DemoBrowserFixtures.swift
 $(SRCROOT)/Intent/Services/DemoConnectionLoss.swift
 $(SRCROOT)/Intent/Services/DemoFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixturesAssistant.swift
@@ -408,6 +418,7 @@ $(SRCROOT)/Intent/Services/WebSocketConnectionSecurity.swift
 $(SRCROOT)/Intent/Services/WebSocketMessageAssembler.swift
 $(SRCROOT)/Intent/Services/WebSocketPingSupport.swift
 $(SRCROOT)/Intent/Services/WebSocketTransportError.swift
+$(SRCROOT)/Intent/Services/WorkspaceBrowserStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
@@ -599,6 +610,7 @@ $(SRCROOT)/Intent/Views/Workspaces/HomeActionTiles.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalControls.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ModelPicker.swift
+$(SRCROOT)/Intent/Views/Workspaces/NewWorkspaceBrowserView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderModelStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderPicker.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistPickerView.swift
@@ -607,6 +619,9 @@ $(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalKeyBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceActionLauncher.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAttentionCue.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserPage.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowsersView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
@@ -653,6 +668,9 @@ $(SRCROOT)/IntentTests/BackendWindowSessionTests.swift
 $(SRCROOT)/IntentTests/BackendWindowTitleTests.swift
 $(SRCROOT)/IntentTests/BackgroundHookStoreTests.swift
 $(SRCROOT)/IntentTests/BackgroundTaskManagerTests.swift
+$(SRCROOT)/IntentTests/BrowserTunnelFrameTests.swift
+$(SRCROOT)/IntentTests/BrowserTunnelRelayTests.swift
+$(SRCROOT)/IntentTests/BrowserTunnelURLTests.swift
 $(SRCROOT)/IntentTests/CertMismatchListViewTests.swift
 $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
@@ -849,6 +867,11 @@ $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
+$(SRCROOT)/IntentTests/WorkspaceBrowserFixture.swift
+$(SRCROOT)/IntentTests/WorkspaceBrowserPageTests.swift
+$(SRCROOT)/IntentTests/WorkspaceBrowserRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceBrowserStoreTests.swift
+$(SRCROOT)/IntentTests/WorkspaceBrowserTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift
 $(SRCROOT)/IntentTests/WorkspaceLinksTests.swift

@@ -5,8 +5,11 @@ import Testing
 struct WorkspaceBrowserTests {
     @Test func browserRoundTripsThroughCodable() throws {
         let browser = WorkspaceBrowser(
-            id: "browser:one", workspaceId: "workspace", title: "Preview",
-            url: "http://127.0.0.1:3000", command: nil
+            id: "browser:one",
+            workspaceId: "workspace",
+            title: "Preview",
+            url: "http://127.0.0.1:3000",
+            command: nil
         )
         let encoded = try JSONEncoder().encode(browser)
         #expect(try JSONDecoder().decode(WorkspaceBrowser.self, from: encoded) == browser)

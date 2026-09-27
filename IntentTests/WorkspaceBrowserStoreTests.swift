@@ -8,11 +8,16 @@ struct WorkspaceBrowserStoreTests {
         let fixture = try WorkspaceBrowserFixture()
         let manual = try fixture.store.create(workspaceId: "workspace", url: "https://example.com/docs")
         let other = try fixture.store.create(workspaceId: "other", url: "localhost:4000")
-        fixture.fake.responseMap["script.list"] = ["scripts": [
-            fixture.script(), fixture.script(), fixture.script(id: "stopped", status: "exited"),
-            fixture.script(id: "other", workspaceId: "other"), fixture.script(id: "invalid", url: "file:///tmp"),
-            ["id": "malformed"]
-        ]]
+        fixture.fake.responseMap["script.list"] = [
+            "scripts": [
+                fixture.script(),
+                fixture.script(),
+                fixture.script(id: "stopped", status: "exited"),
+                fixture.script(id: "other", workspaceId: "other"),
+                fixture.script(id: "invalid", url: "file:///tmp"),
+                ["id": "malformed"]
+            ]
+        ]
         await fixture.store.refresh(workspaceId: "workspace")
         let browsers = fixture.store.browsers(workspaceId: "workspace")
         #expect(browsers.map(\.id) == ["script:preview", manual.id])
@@ -28,17 +33,23 @@ struct WorkspaceBrowserStoreTests {
         let fixture = try WorkspaceBrowserFixture()
         let browser = try fixture.store.create(workspaceId: "workspace", url: "localhost:3000")
         let restored = WorkspaceBrowserStore(
-            connection: fixture.fake, backendID: fixture.backendID, defaults: fixture.defaults
+            connection: fixture.fake,
+            backendID: fixture.backendID,
+            defaults: fixture.defaults
         )
         let otherBackend = WorkspaceBrowserStore(
-            connection: fixture.fake, backendID: BackendID(UUID()), defaults: fixture.defaults
+            connection: fixture.fake,
+            backendID: BackendID(UUID()),
+            defaults: fixture.defaults
         )
         #expect(restored.browsers(workspaceId: "workspace") == [browser])
         #expect(restored.browsers(workspaceId: "other").isEmpty)
         #expect(otherBackend.browsers(workspaceId: "workspace").isEmpty)
         restored.remove(browser)
         let reopened = WorkspaceBrowserStore(
-            connection: fixture.fake, backendID: fixture.backendID, defaults: fixture.defaults
+            connection: fixture.fake,
+            backendID: fixture.backendID,
+            defaults: fixture.defaults
         )
         #expect(reopened.browsers(workspaceId: "workspace").isEmpty)
         #expect(fixture.fake.requestLog.isEmpty)

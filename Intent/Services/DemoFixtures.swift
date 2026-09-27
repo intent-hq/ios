@@ -391,12 +391,8 @@ extension DemoFixtures {
         snapshotAnchor: Date = Date()
     ) -> Any {
         if let response = designScenario?.response(for: method, params: params) { return response }
-        if let terminalResponse = DemoTerminalFixtures.response(for: method, params: params) {
-            return terminalResponse
-        }
-        if let browserResponse = DemoBrowserFixtures.response(for: method, params: params) {
-            return browserResponse
-        }
+        if let response = DemoTerminalFixtures.response(for: method, params: params) { return response }
+        if let response = DemoBrowserFixtures.response(for: method, params: params) { return response }
         return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
             if let response = proposalResponse(for: method, params: params) { return response }
             switch method {

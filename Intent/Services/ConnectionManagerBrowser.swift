@@ -29,13 +29,14 @@ extension ConnectionManager {
             try Task.checkCancellation()
             throw BrowserTunnelError.closed
         }
+        let isCurrentConnection = { @MainActor [weak self] in
+            self?.connectionGeneration == generation && self?.socket === currentSocket
+                && self?.connectionState == .connected
+        }
         let proxy = BrowserTunnelProxy(
             socket: browserSocket,
             supportsCredit: BrowserTunnelFrame.supportsCredit(protocolVersion: version),
-            isCurrentConnection: { [weak self] in
-                self?.connectionGeneration == generation && self?.socket === currentSocket
-                    && self?.connectionState == .connected
-            }
+            isCurrentConnection: isCurrentConnection
         )
         proxy.connectionObserver = connectionStatePublisher.sink { @Sendable [weak proxy, weak self] state in
             Task { @MainActor in

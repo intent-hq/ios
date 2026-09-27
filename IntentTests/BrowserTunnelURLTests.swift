@@ -4,7 +4,6 @@ import Network
 import Testing
 
 // Explicit ports and encoded URL fixtures exercise the wire/security contract.
-// swiftlint:disable no_magic_numbers
 @MainActor
 struct BrowserTunnelURLTests {
     @Test func recognizesOnlyExplicitDaemonLoopbackHosts() throws {
@@ -20,9 +19,9 @@ struct BrowserTunnelURLTests {
 
     @Test func preservesSchemeAndExactEscapedURLComponents() throws {
         let url = try #require(URL(string: "https://daemon.localhost:8443/a%2Fb?q=a%26b&x=%2F#part%202"))
-        let result = try BrowserTunnelURL.rewrite(url, localPort: 49152)
+        let result = try BrowserTunnelURL.rewrite(url, localPort: 49_152)
         #expect(result.absoluteString == "https://127.0.0.1:49152/a%2Fb?q=a%26b&x=%2F#part%202")
-        #expect(try BrowserTunnelURL.remotePort(for: result, localPorts: [49152]) == nil)
+        #expect(try BrowserTunnelURL.remotePort(for: result, localPorts: [49_152]) == nil)
         #expect(try BrowserTunnelURL.remotePort(for: url, localPorts: [8443]) == 8443)
     }
 
@@ -69,4 +68,3 @@ struct BrowserTunnelURLTests {
         #expect(port == .any)
     }
 }
-// swiftlint:enable no_magic_numbers

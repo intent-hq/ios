@@ -19,8 +19,11 @@ struct WorkspaceBrowserFixture {
     }
 
     func script(
-        id: String = "preview", workspaceId: String = "workspace", status: String = "running",
-        url: String = "http://localhost:3000", command: String = "npm run dev"
+        id: String = "preview",
+        workspaceId: String = "workspace",
+        status: String = "running",
+        url: String = "http://localhost:3000",
+        command: String = "npm run dev"
     ) -> [String: Any] {
         [
             "id": id, "workspaceId": workspaceId, "name": "Web preview", "command": command,
@@ -29,8 +32,12 @@ struct WorkspaceBrowserFixture {
     }
 
     func event(
-        type: String = "script:state", workspaceId: String = "workspace", id: String = "preview",
-        status: String = "running", action: String = "updated", subscriptionId: String = "browser-sub"
+        type: String = "script:state",
+        workspaceId: String = "workspace",
+        id: String = "preview",
+        status: String = "running",
+        action: String = "updated",
+        subscriptionId: String = "browser-sub"
     ) {
         fake.deliverEvent(method: "events.event", params: [
             "subscriptionId": subscriptionId,

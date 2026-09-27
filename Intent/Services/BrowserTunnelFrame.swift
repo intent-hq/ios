@@ -30,15 +30,14 @@ nonisolated struct BrowserTunnelFrame: Equatable, Sendable {
     }
 
     // Exhaustive validation follows the protocol opcode table.
-    // swiftlint:disable:next cyclomatic_complexity
     init(decoding data: Data) throws {
         guard (Self.headerSize...Self.maximumMessageSize).contains(data.count),
               let first = data.first, let opcode = Opcode(rawValue: first) else {
             throw BrowserTunnelError.invalidFrame
         }
         self.opcode = opcode
-        streamID = data.dropFirst().prefix(Self.streamIDSize).reduce(UInt32(0)) {
-            ($0 << Self.bitsPerByte) | UInt32($1)
+        streamID = data.dropFirst().prefix(Self.streamIDSize).reduce(UInt32(0)) { accumulated, byte in
+            (accumulated << Self.bitsPerByte) | UInt32(byte)
         }
         payload = Data(data.dropFirst(Self.headerSize))
         switch opcode {
@@ -81,7 +80,7 @@ nonisolated struct BrowserTunnelFrame: Equatable, Sendable {
         guard let protocolVersion else { return false }
         let parts = protocolVersion.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 2,
-              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }),
+              parts.allSatisfy({ part in !part.isEmpty && part.allSatisfy { character in character.isASCII && character.isNumber } }),
               let major = Int(parts[0]), let minor = Int(parts[1]) else { return false }
         let creditMajor = 10
         let creditMinor = 4

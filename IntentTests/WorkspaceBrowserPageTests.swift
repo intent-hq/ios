@@ -5,8 +5,11 @@ import Testing
 @MainActor
 struct WorkspaceBrowserPageTests {
     private let browser = WorkspaceBrowser(
-        id: "browser", workspaceId: "workspace", title: "Preview",
-        url: "http://localhost:3000/preview", command: nil
+        id: "browser",
+        workspaceId: "workspace",
+        title: "Preview",
+        url: "http://localhost:3000/preview",
+        command: nil
     )
 
     @Test func aFailedConnectionShowsAnErrorAndNoWebView() async {

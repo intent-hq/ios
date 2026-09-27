@@ -103,24 +103,24 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
     }
 
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation?) {
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation?) {
         guard webView === self.webView else { return }
         errorMessage = nil
         isLoading = true
         updateNavigation(webView)
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
+    func webView(_ webView: WKWebView, didFinish _: WKNavigation?) {
         guard webView === self.webView else { return }
         isLoading = false
         updateNavigation(webView)
     }
 
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation?, withError error: Error) {
+    func webView(_ webView: WKWebView, didFail _: WKNavigation?, withError error: Error) {
         show(error, from: webView)
     }
 
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation?, withError error: Error) {
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation _: WKNavigation?, withError error: Error) {
         show(error, from: webView)
     }
 
@@ -132,9 +132,9 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func webView(
         _ webView: WKWebView,
-        createWebViewWith configuration: WKWebViewConfiguration,
+        createWebViewWith _: WKWebViewConfiguration,
         for navigationAction: WKNavigationAction,
-        windowFeatures: WKWindowFeatures
+        windowFeatures _: WKWindowFeatures
     ) -> WKWebView? {
         if webView === self.webView, navigationAction.targetFrame == nil {
             webView.load(navigationAction.request)

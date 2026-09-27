@@ -25,8 +25,10 @@ final class BrowserTunnelProxy: BrowserProxySession {
     static let maximumStreams = 32
     static let maximumBufferedBytes = 8_388_608
     static let maximumControls = 128
-    static let openTimeout: Duration = .seconds(15)
-    static let idleTimeout: Duration = .seconds(300)
+    private static let openTimeoutSeconds = 15
+    private static let idleTimeoutSeconds = 300
+    static let openTimeout: Duration = .seconds(openTimeoutSeconds)
+    static let idleTimeout: Duration = .seconds(idleTimeoutSeconds)
 
     let socket: any BrowserTunnelWebSocket
     let supportsCredit: Bool
@@ -93,7 +95,7 @@ final class BrowserTunnelProxy: BrowserProxySession {
             listener = try BrowserTunnelListener()
             listener.onAccept = { [weak self] connection in
                 guard let self else { connection.cancel(); return }
-                self.accept(connection, port: remotePort)
+                accept(connection, port: remotePort)
             }
             listener.onFailure = { [weak self] in self?.stop() }
             listeners[remotePort] = listener
@@ -143,9 +145,9 @@ final class BrowserTunnelProxy: BrowserProxySession {
         stream.watchdog = Task { [weak self, weak stream] in
             while !Task.isCancelled {
                 do { try await Task.sleep(for: Self.openTimeout) } catch { return }
-                guard let self, let stream, self.streams[stream.id] === stream else { return }
+                guard let self, let stream, streams[stream.id] === stream else { return }
                 if !stream.flow.opened || stream.lastActivity.duration(to: .now) >= Self.idleTimeout {
-                    self.removeStream(stream, notifyDaemon: true)
+                    removeStream(stream, notifyDaemon: true)
                     return
                 }
             }

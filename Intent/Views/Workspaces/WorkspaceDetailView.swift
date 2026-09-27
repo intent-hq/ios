@@ -177,15 +177,19 @@ struct WorkspaceDetailView: View {
             )
                 .environment(coordinator)
         }
-        .sheet(isPresented: $showNewBrowser, onDismiss: {
-            selectedBrowser = createdBrowser
-            createdBrowser = nil
-        }) {
-            NewWorkspaceBrowserView(workspaceId: workspaceId, store: browserStore) { browser in
-                selectedTab = .agents
-                createdBrowser = browser
+        .sheet(
+            isPresented: $showNewBrowser,
+            onDismiss: {
+                selectedBrowser = createdBrowser
+                createdBrowser = nil
+            },
+            content: {
+                NewWorkspaceBrowserView(workspaceId: workspaceId, store: browserStore) { browser in
+                    selectedTab = .agents
+                    createdBrowser = browser
+                }
             }
-        }
+        )
         .fullScreenCover(item: $selectedBrowser) { browser in
             WorkspaceBrowserView(browser: browser, connection: session.connection)
         }

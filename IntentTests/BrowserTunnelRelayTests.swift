@@ -4,7 +4,6 @@ import Network
 import Testing
 
 // Literal payloads/ports identify stream and protocol boundaries in these fixtures.
-// swiftlint:disable no_magic_numbers
 @MainActor
 struct BrowserTunnelRelayTests {
     private actor Wire: BrowserTunnelWebSocket {
@@ -71,9 +70,10 @@ struct BrowserTunnelRelayTests {
     @Test func creditsOnlyAfterDeliveryAndDrainsBeforeEOFAndClose() async throws {
         let wire = Wire()
         let gate = DeliveryGate()
-        let proxy = BrowserTunnelProxy(socket: wire, supportsCredit: true, writeDownstream: { data, _, eof in
+        let deliver: @Sendable (Data?, NWConnection, Bool) async -> Void = { data, _, eof in
             await gate.write(data, eof: eof)
-        })
+        }
+        let proxy = BrowserTunnelProxy(socket: wire, supportsCredit: true, writeDownstream: deliver)
         let stream = try stream(1, in: proxy)
         proxy.receive(BrowserTunnelFrame(opcode: .data, streamID: 1, payload: Data([1, 2, 3])))
         proxy.receive(BrowserTunnelFrame(opcode: .eof, streamID: 1))
@@ -90,14 +90,16 @@ struct BrowserTunnelRelayTests {
         #expect(await gate.writes == [Data([1, 2, 3]), nil])
         #expect(await gate.finishes == [false, true])
         #expect(proxy.bufferedBytes == 0)
-        #expect(await wire.sent.first(where: { $0.opcode == .credit })?.creditAmount == 3)
+        let credit = await wire.sent.first { $0.opcode == .credit }
+        #expect(credit?.creditAmount == 3)
         await proxy.close()
         #expect(await wire.disconnected)
     }
 
     @Test func legacyDaemonNeverReceivesCredit() async throws {
         let wire = Wire()
-        let proxy = BrowserTunnelProxy(socket: wire, supportsCredit: false, writeDownstream: { _, _, _ in })
+        let deliver: @Sendable (Data?, NWConnection, Bool) async -> Void = { _, _, _ in }
+        let proxy = BrowserTunnelProxy(socket: wire, supportsCredit: false, writeDownstream: deliver)
         let stream = try stream(1, in: proxy)
         proxy.receive(BrowserTunnelFrame(opcode: .data, streamID: 1, payload: Data([1])))
         try await eventually { stream.flow.pendingBytes == 0 }
@@ -108,9 +110,10 @@ struct BrowserTunnelRelayTests {
     @Test func overflowClosesOnlyTheOffendingStreamAndCloseCleansEverything() async throws {
         let wire = Wire()
         let gate = DeliveryGate()
-        let proxy = BrowserTunnelProxy(socket: wire, supportsCredit: true, writeDownstream: { data, _, eof in
+        let deliver: @Sendable (Data?, NWConnection, Bool) async -> Void = { data, _, eof in
             await gate.write(data, eof: eof)
-        })
+        }
+        let proxy = BrowserTunnelProxy(socket: wire, supportsCredit: true, writeDownstream: deliver)
         _ = try stream(1, in: proxy)
         let sibling = try stream(2, in: proxy)
         proxy.receive(BrowserTunnelFrame(opcode: .data, streamID: 1, payload: Data(repeating: 1, count: BrowserTunnelFlow.maximumQueuedBytes)))
@@ -207,4 +210,3 @@ struct BrowserTunnelRelayTests {
         await other.close()
     }
 }
-// swiftlint:enable no_magic_numbers

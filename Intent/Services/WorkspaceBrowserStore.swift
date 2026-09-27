@@ -43,8 +43,8 @@ final class WorkspaceBrowserStore {
     }
 
     func browsers(workspaceId: String) -> [WorkspaceBrowser] {
-        let servers = detected[workspaceId, default: []].filter {
-            !dismissed[workspaceId, default: []].contains($0.id)
+        let servers = detected[workspaceId, default: []].filter { browser in
+            !dismissed[workspaceId, default: []].contains(browser.id)
         }
         return servers + saved.filter { $0.workspaceId == workspaceId }
     }
@@ -60,8 +60,11 @@ final class WorkspaceBrowserStore {
     func create(workspaceId: String, url: String) throws -> WorkspaceBrowser {
         let normalized = try WorkspaceBrowserURL.normalize(url)
         let browser = WorkspaceBrowser(
-            id: "browser:\(UUID().uuidString)", workspaceId: workspaceId,
-            title: normalized, url: normalized, command: nil
+            id: "browser:\(UUID().uuidString)",
+            workspaceId: workspaceId,
+            title: normalized,
+            url: normalized,
+            command: nil
         )
         saved.append(browser)
         persistence.save(saved)

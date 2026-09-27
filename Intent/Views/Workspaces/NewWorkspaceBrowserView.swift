@@ -11,26 +11,7 @@ struct NewWorkspaceBrowserView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("localhost:3000", text: $address)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.go)
-                        .focused($addressFocused)
-                        .onSubmit(create)
-                        .accessibilityLabel("Browser address")
-                } header: {
-                    Text("Address").interFont(Constants.Typography.bodyXS)
-                } footer: {
-                    Text("Use localhost and the server port to open a server running on your connected machine.")
-                        .interFont(Constants.Typography.bodyXS)
-                }
-                if let errorMessage {
-                    Text(errorMessage).interFont(Constants.Typography.bodyS).foregroundStyle(.red)
-                }
-            }
+            browserForm
             .navigationTitle("New browser")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -43,6 +24,29 @@ struct NewWorkspaceBrowserView: View {
                 }
             }
             .onAppear { addressFocused = true }
+        }
+    }
+
+    private var browserForm: some View {
+        Form {
+            Section {
+                TextField("localhost:3000", text: $address)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.go)
+                    .focused($addressFocused)
+                    .onSubmit(create)
+                    .accessibilityLabel("Browser address")
+            } header: {
+                Text("Address").interFont(Constants.Typography.bodyXS)
+            } footer: {
+                Text("Use localhost and the server port to open a server running on your connected machine.")
+                    .interFont(Constants.Typography.bodyXS)
+            }
+            if let errorMessage {
+                Text(errorMessage).interFont(Constants.Typography.bodyS).foregroundStyle(.red)
+            }
         }
     }
 

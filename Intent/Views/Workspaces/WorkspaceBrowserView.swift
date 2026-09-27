@@ -15,27 +15,7 @@ struct WorkspaceBrowserView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                Text(page.address.isEmpty ? browser.url : page.address)
-                    .interFont(Constants.Typography.subtextXXS)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.bottom, BrowserAppearance.labelSpacing)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                if !isConnected {
-                    unavailable("Reconnect to your machine to open this browser.")
-                } else if let errorMessage = page.errorMessage {
-                    unavailable(errorMessage)
-                } else {
-                    if page.isLoading { ProgressView().padding() }
-                    if let webView = page.webView {
-                        BrowserWebView(webView: webView)
-                    } else {
-                        Spacer()
-                    }
-                }
-            }
+            browserContent
             .background(Theme.background(for: colorScheme))
             .navigationTitle(browser.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -48,6 +28,30 @@ struct WorkspaceBrowserView: View {
                 }
             }
             .onDisappear { page.stop() }
+        }
+    }
+
+    private var browserContent: some View {
+        VStack(spacing: 0) {
+            Text(page.address.isEmpty ? browser.url : page.address)
+                .interFont(Constants.Typography.subtextXXS)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+                .padding(.bottom, BrowserAppearance.labelSpacing)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            if !isConnected {
+                unavailable("Reconnect to your machine to open this browser.")
+            } else if let errorMessage = page.errorMessage {
+                unavailable(errorMessage)
+            } else {
+                if page.isLoading { ProgressView().padding() }
+                if let webView = page.webView {
+                    BrowserWebView(webView: webView)
+                } else {
+                    Spacer()
+                }
+            }
         }
     }
 
@@ -92,6 +96,6 @@ struct WorkspaceBrowserView: View {
 private struct BrowserWebView: UIViewRepresentable {
     let webView: WKWebView
 
-    func makeUIView(context: Context) -> WKWebView { webView }
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    func makeUIView(context _: Context) -> WKWebView { webView }
+    func updateUIView(_: WKWebView, context _: Context) {}
 }

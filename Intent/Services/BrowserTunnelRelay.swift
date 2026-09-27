@@ -19,11 +19,7 @@ extension BrowserTunnelProxy {
                 stream.downstream.append(frame)
                 startDownstream(stream)
             case .close:
-                // Drain DATA already received before closing the local socket.
-                guard !stream.flow.remoteClosed else { return }
-                stream.flow.receiveClose()
-                stream.downstream.append(frame)
-                startDownstream(stream)
+                receiveClose(frame, stream: stream)
             case .open, .credit:
                 throw BrowserTunnelError.invalidFrame
             }
@@ -32,6 +28,14 @@ extension BrowserTunnelProxy {
         } catch {
             stop()
         }
+    }
+
+    private func receiveClose(_ frame: BrowserTunnelFrame, stream: BrowserTunnelStream) {
+        // Drain DATA already received before closing the local socket.
+        guard !stream.flow.remoteClosed else { return }
+        stream.flow.receiveClose()
+        stream.downstream.append(frame)
+        startDownstream(stream)
     }
 
     private func receiveData(_ frame: BrowserTunnelFrame, stream: BrowserTunnelStream) throws {

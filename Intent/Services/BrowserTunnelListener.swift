@@ -4,7 +4,8 @@ import Network
 /// Explicitly binds IPv4 loopback, never an unspecified/all-interface address.
 @MainActor
 final class BrowserTunnelListener {
-    static let readyTimeout: Duration = .seconds(5)
+    private static let readyTimeoutSeconds = 5
+    static let readyTimeout: Duration = .seconds(readyTimeoutSeconds)
     static let loopbackHost: NWEndpoint.Host = "127.0.0.1"
 
     private let listener: NWListener
