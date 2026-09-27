@@ -3,9 +3,11 @@
 
 import copy
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -19,11 +21,26 @@ NEW = "22222222-2222-4222-8222-222222222222"
 SELECTORS = "IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsSendAndMenuAvailable IntentTests/PersonalPairingPermissionsTests"
 
 
+def result_document(cases):
+    bundles = {}
+    for identifier, result in cases:
+        bundle, test = identifier.split("/", 1)
+        bundles.setdefault(bundle, []).append({"nodeType": "Test Case", "nodeIdentifier": test, "result": result})
+    return {"testNodes": [{"nodeType": "Test Bundle", "name": name, "children": children}
+                          for name, children in bundles.items()]}
+
+
+CASES = [(SELECTORS.split()[0] + "()", "Passed")] + [
+    (f"IntentTests/PersonalPairingPermissionsTests/test{index}()", "Passed") for index in range(4)]
+
+
 class Host:
     def __init__(self):
         self.calls = []
         self.fail_create = False
         self.fail_delete = False
+        self.results = result_document(CASES)
+        self.retry_results = result_document([])
         self.document = {
             "runtimes": [{"identifier": RUNTIME, "version": "26.2", "name": "iOS 26.2", "isAvailable": True}],
             "devicetypes": [{"identifier": TYPE, "name": "iPad Pro (M4)", "productFamily": "iPad"}],
@@ -52,6 +69,8 @@ class Host:
             output = "c" * 40 + "\n"
         elif args == ["xcodebuild", "-version"]:
             output = "Xcode 26.3\nBuild version test\n"
+        elif args[:6] == ["xcrun", "xcresulttool", "get", "test-results", "tests", "--path"]:
+            output = json.dumps(self.retry_results if args[6].endswith("-retry") else self.results)
         else:
             raise AssertionError(f"Unexpected host command: {args}")
         return subprocess.CompletedProcess(args, status, output, "injected failure" if status else "")
@@ -63,7 +82,9 @@ class SimulatorTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.directory = Path(self.temp.name)
         self.env = {"SIMULATOR_FAMILY": "ipad", "GITHUB_EVENT_NAME": "workflow_dispatch", "ONLY_TESTING": SELECTORS,
-                    "GITHUB_ENV": str(self.directory / "environment"), "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1"}
+                    "GITHUB_ENV": str(self.directory / "environment"), "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1",
+                    "RESULT_BUNDLE": str(self.directory / "TestResults")}
+        Path(self.env["RESULT_BUNDLE"]).mkdir()
         self.host = Host()
         self.patcher = patch.object(route, "run", self.host)
         self.patcher.start()
@@ -190,6 +211,74 @@ class SimulatorTests(unittest.TestCase):
         (self.directory / "test.log").write_text(passing.splitlines()[1])
         with self.assertRaises(ValueError):
             route.verify_execution(self.env, self.directory)
+
+    def test_partly_missing_resolved_suite_is_not_platform_proof(self):
+        first, suite = SELECTORS.split()
+        (self.directory / "test.log").write_text(f"  {first} 1 1 0 0 0\n  {suite} 4 1 0 0 0\n")
+        self.host.results = result_document(CASES[:2])
+        with self.assertRaises(ValueError):
+            route.verify_execution(self.env, self.directory)
+
+    def test_repeated_attempts_cannot_replace_missing_resolved_cases(self):
+        first, suite = SELECTORS.split()
+        (self.directory / "test.log").write_text(f"  {first} 1 1 0 0 0\n  {suite} 4 4 0 0 0\n")
+        self.host.results = result_document(CASES[:2])
+        self.host.retry_results = result_document([CASES[1]] * 4)
+        Path(self.env["RESULT_BUNDLE"] + "-retry").mkdir()
+        with self.assertRaises(ValueError):
+            route.verify_execution(self.env, self.directory)
+
+    def test_complete_parameterized_declarations_and_recovered_retry_are_proof(self):
+        first, suite = SELECTORS.split()
+        (self.directory / "test.log").write_text(f"  {first} 1 1 0 0 0\n  {suite} 4 4 0 0 0\n")
+        cases = [CASES[0], (suite + "/test0(role:)", "Passed"), (CASES[2][0], "Failed")] + CASES[3:]
+        self.host.results = result_document(cases)
+        # Parameter invocations live below the declaration's Test Case. They
+        # are not extra resolved declarations or a substitute for another one.
+        self.host.results["testNodes"][1]["children"][0]["children"] = [
+            {"nodeType": "Test Case Run", "name": "member", "result": "Passed"},
+            {"nodeType": "Test Case Run", "name": "owner", "result": "Passed"}]
+        self.host.retry_results = result_document([CASES[2]])
+        Path(self.env["RESULT_BUNDLE"] + "-retry").mkdir()
+        route.verify_execution(self.env, self.directory)
+
+    def check_phase_transcript(self, step_name, phase):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        section = workflow.split("      - name: " + step_name + "\n", 1)[1].split("\n      - name:", 1)[0]
+        lines = section.splitlines()
+        index = next(i for i, line in enumerate(lines) if line.startswith("        run:"))
+        command = lines[index].split("run:", 1)[1].strip()
+        if command == "|":
+            command = textwrap.dedent("\n".join(lines[index + 1:]))
+        for family in ("iphone", "ipad"):
+            for exit_code in (0, 65, 80):
+                with self.subTest(phase=phase, family=family, exit_code=exit_code), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    for name in ("scripts", "Intent", "IntentTests", "runner", "evidence"):
+                        (root / name).mkdir()
+                    (root / "Info-visionOS.plist").write_text("fixture")
+                    (root / "Intent/owned-source").write_text("retained")
+                    stub = root / "scripts/xcodebuild.sh"
+                    stub.write_text('#!/usr/bin/env bash\nprintf "primary stdout\\n"\nprintf "crash/retry stderr\\n" >&2\nprintf "retry stdout\\n"\nexit "$STUB_TEST_EXIT"\n')
+                    stub.chmod(0o755)
+                    env = {"PATH": os.environ["PATH"], "SIMULATOR_FAMILY": family, "RUNNER_TEMP": str(root / "runner"),
+                           "IPAD_EVIDENCE_DIR": str(root / "evidence"), "STUB_TEST_EXIT": str(exit_code)}
+                    result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", command], cwd=root, env=env,
+                                            text=True, capture_output=True)
+                    self.assertEqual(result.returncode, exit_code, result.stderr)
+                    self.assertEqual((root / "Intent/owned-source").read_text(), "retained")
+                    transcript = root / "evidence" / (phase + ".log")
+                    if family == "ipad":
+                        self.assertTrue(transcript.exists(), f"{phase} transcript missing from the uploaded evidence directory")
+                        self.assertEqual(transcript.read_text(), "primary stdout\ncrash/retry stderr\nretry stdout\n")
+                    else:
+                        self.assertFalse(transcript.exists(), "Default iPhone path unexpectedly changed")
+
+    def test_keychain_phase_retains_failure_and_retry_transcripts(self):
+        self.check_phase_transcript("Run Keychain conformance and existing registry/publisher tests", "keychain")
+
+    def test_source_moved_phase_retains_failure_and_retry_transcripts(self):
+        self.check_phase_transcript("Source-independence check (ios#320)", "source-moved")
 
     def test_workflow_retains_required_default_paths_and_always_collects_owned_cleanup(self):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
