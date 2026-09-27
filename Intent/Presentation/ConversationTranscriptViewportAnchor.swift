@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// A late divider may resize an offscreen lazy row. Preserve the first fully
