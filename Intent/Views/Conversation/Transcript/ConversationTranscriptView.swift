@@ -13,6 +13,7 @@ struct ConversationTranscriptView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.workspaceTranscriptDesign) var usesWorkspaceDesign
 
     typealias Lifecycle = ConversationTranscriptRecoveryLifecycle
 
@@ -130,10 +131,10 @@ private extension ConversationTranscriptView {
     // swiftlint:disable:next function_body_length
     private func transcriptScrollBase(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         ScrollView {
-            LazyVStack(spacing: Layout.transcriptRowSpacing) {
+            LazyVStack(spacing: usesWorkspaceDesign ? Constants.Conversation.Design.sectionSpacing : Layout.transcriptRowSpacing) {
                 transcriptRows(proxy: proxy, dividerAnchorId: dividerAnchorId)
             }
-            .padding(.horizontal, Layout.transcriptHorizontalPadding)
+            .padding(.horizontal, usesWorkspaceDesign ? Constants.Conversation.Design.horizontalInset : Layout.transcriptHorizontalPadding)
             .padding(.top, Layout.transcriptTopPadding)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.width

@@ -252,29 +252,39 @@ extension ConversationTranscriptScrollUITests {
         )
     }
 
-    /// Exercises the late slim-block hydration path from #338. This remains
-    /// opt-in while #344 prevents reliably tapping the tool row in CI.
+    /// Exercises late hydration and physical header taps in both real message
+    /// shapes. The existing opt-in remains; integration runs must enable it.
     @MainActor
     func testLateBlockHydrationNearEndAfterEntryKeepsLastMessageOnScreen() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["INTENT_UITEST_BLOCK_HYDRATION"] == "1",
             "the slim tool row cannot be tapped reliably from the resting end position: intent-hq/ios#344"
         )
+        for standalone in [false, true] {
+            try assertLateHydration(standalone: standalone)
+        }
+    }
+
+    @MainActor
+    private func assertLateHydration(standalone: Bool) throws {
         let app = launchDemoApp(
             hooksRowTriggerFile: hooksRowTriggerFile,
             blockHydrationTriggerFile: blockHydrationTriggerFile,
-            standaloneSlimToolRows: true
+            standaloneSlimToolRows: standalone
         )
         let endRow = EndRow.lastSuggestedPrompt(in: app)
         for cycle in 1 ... Fixture.entryCycles {
             let entry = cycle == 1 ? "cold entry" : "warm re-entry"
-            let context = "\(entry) \(cycle)/\(Fixture.entryCycles) with a late hydration near the end"
+            let context = "\(entry) \(cycle)/\(Fixture.entryCycles), standalone=\(standalone), late hydration near end"
             try? FileManager.default.removeItem(at: blockHydrationTriggerFile)
             let opened = openLongConversation(in: app, context: context)
             let lastMessage = opened.lastMessage
             let transcript = opened.transcript
             let hydrationHint = app.descendants(matching: .any)
                 .containing(NSPredicate(format: "label CONTAINS %@", Fixture.hydrationHintFragment))
+                .firstMatch
+            let fullOutput = app.staticTexts
+                .matching(NSPredicate(format: "label CONTAINS %@", "def render_final_evidence(samples:"))
                 .firstMatch
 
             guard waitUntilSettled(
@@ -290,23 +300,31 @@ extension ConversationTranscriptScrollUITests {
             assertAtEnd(endRow, in: opened, context: context)
             XCTAssertFalse(hydrationHint.exists, "\(context): the slim tool row was already expanded")
 
-            let toolRow = app.buttons
+            let toolRows = app.buttons
                 .containing(NSPredicate(format: "label CONTAINS %@", Fixture.truncatedToolFileName))
-                .firstMatch
-            let navigationBarBottom = app.navigationBars.firstMatch.frame.maxY
-            XCTAssertTrue(
-                waitUntil(timeout: 5) {
-                    isVisible(toolRow, in: transcript)
-                        && (frame(of: toolRow)?.minY ?? -.infinity) >= navigationBarBottom
-                },
-                "\(context): slim tool row is not tappable — "
-                    + restingState(of: toolRow, named: "slim tool row", in: opened)
-            )
+            XCTAssertEqual(toolRows.count, 1, "\(context): the physical target must be unique")
+            let toolRow = toolRows.firstMatch
+            revealToolHeader(toolRow, in: transcript, app: app, context: context)
+            let headerFrame = toolRow.frame
+            XCTAssertGreaterThanOrEqual(headerFrame.maxY, headerFrame.minY + 44)
+            XCTAssertGreaterThanOrEqual(headerFrame.maxX, headerFrame.minX + 44)
+            XCTAssertEqual(toolRow.value as? String, "Collapsed", "\(context): before physical expansion")
+            let beforeTap = XCTAttachment(screenshot: app.screenshot())
+            beforeTap.name = "\(context): visible physical target \(headerFrame)"
+            beforeTap.lifetime = .keepAlways
+            add(beforeTap)
             toolRow.tap()
+            XCTAssertEqual(toolRow.value as? String, "Expanded", "\(context): physical expansion")
             XCTAssertTrue(
                 hydrationHint.waitForExistence(timeout: 5),
                 "\(context): the hydration hint did not appear"
             )
+            revealToolHeader(toolRow, in: transcript, app: app, context: context)
+            toolRow.tap()
+            XCTAssertEqual(toolRow.value as? String, "Collapsed", "\(context): physical collapse")
+            toolRow.tap()
+            XCTAssertEqual(toolRow.value as? String, "Expanded", "\(context): physical re-expansion")
+            if opened.goToEnd.waitForExistence(timeout: 2) { opened.goToEnd.tap() }
             guard waitUntilSettled(
                 on: lastMessage,
                 named: "last assistant paragraph",
@@ -323,11 +341,16 @@ extension ConversationTranscriptScrollUITests {
                 context: "\(context), after expanding the slim tool row"
             )
             XCTAssertTrue(hydrationHint.exists, "\(context): hydration gate did not hold the request")
+            XCTAssertFalse(fullOutput.exists, "The gated preview must not contain the full listing")
 
             try Data().write(to: blockHydrationTriggerFile)
             XCTAssertTrue(
                 waitUntil(timeout: Fixture.blockHydrationTimeout) { !hydrationHint.exists },
                 "\(context): full block did not hydrate after the trigger file was created"
+            )
+            XCTAssertTrue(
+                fullOutput.waitForExistence(timeout: Fixture.blockHydrationTimeout),
+                "\(context): the hydrated listing must contain content beyond the bounded preview"
             )
 
             let hydrated = "\(context), after hydration re-measured the row"
@@ -356,8 +379,43 @@ extension ConversationTranscriptScrollUITests {
                 in: opened,
                 context: hydrated
             )
+            if cycle == 1, !standalone {
+                lastMessage.press(forDuration: 1)
+                let copy = app.menuItems["Copy"].firstMatch
+                XCTAssertTrue(copy.waitForExistence(timeout: Fixture.elementTimeout), "Text copy must remain reachable")
+                copy.tap()
+            }
             leaveConversation(in: app)
         }
+    }
+
+    @MainActor
+    private func revealToolHeader(_ header: XCUIElement, in transcript: XCUIElement, app: XCUIApplication, context: String) {
+        // The inverted scroll view's AX frame extends behind the app header.
+        // Keep the whole target below its measured controls, with breathing
+        // room for the header's padding/fade rather than fixed screen offsets.
+        let back = app.buttons["conversation.back"]
+        let navigation = back.exists ? back.frame : app.navigationBars.firstMatch.frame
+        let top = max(transcript.frame.minY, navigation.maxY + navigation.height / 2)
+        let viewport = CGRect(
+            x: transcript.frame.minX,
+            y: top,
+            width: transcript.frame.width,
+            height: max(0, transcript.frame.maxY - top)
+        )
+        for _ in 0 ..< 12 {
+            let bounds = frame(of: header)
+            if let bounds, viewport.contains(bounds), header.isHittable { return }
+            // Lazy-row remeasurement can move the header past the viewport.
+            // Follow its current position instead of repeatedly overshooting it.
+            let direction: CGFloat = (bounds?.midY ?? -.infinity) < viewport.midY ? 1 : -1
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY))
+                .press(forDuration: 0, thenDragTo: origin.withOffset(CGVector(
+                    dx: viewport.midX, dy: viewport.midY + direction * viewport.height / 4
+                )))
+        }
+        XCTFail("\(context): tool header could not be revealed; header=\(String(describing: frame(of: header))), viewport=\(viewport)")
     }
 }
 

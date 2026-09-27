@@ -2,6 +2,7 @@ import SwiftUI
 
 struct UserMessageView: View {
     private typealias Layout = Constants.Conversation.UserMessage
+    private typealias Design = Constants.Conversation.Design
 
     let message: ConversationMessage
     let workspaceId: String
@@ -9,6 +10,9 @@ struct UserMessageView: View {
     @Binding var isAgentMessageExpanded: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(BackendSession.self) private var session
+    @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.layoutDirection) private var layoutDirection
 
     /// Derived once per message value in `init` rather than on every `body`
     /// evaluation (the body also re-runs on the expansion toggle): the wake /
@@ -46,16 +50,28 @@ struct UserMessageView: View {
     }
 
     var body: some View {
+        if workspaceDesign {
+            WorkspaceUserBubbleLayout(usesFullWidth: dynamicTypeSize.isAccessibilitySize, layoutDirection: layoutDirection) {
+                bubble
+            }
+        } else {
+            bubble
+        }
+    }
+
+    private var bubble: some View {
         VStack(alignment: .leading, spacing: Layout.contentSpacing) {
             attributionHeader
             if agentMessage == nil || isAgentMessageExpanded {
                 messageContents
             }
         }
-        .padding(Layout.containerPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.muted(for: colorScheme).opacity(Layout.backgroundOpacity))
-        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+        .padding(workspaceDesign ? Design.Transcript.bubblePadding : Layout.containerPadding)
+        .frame(maxWidth: workspaceDesign ? nil : .infinity, alignment: .leading)
+        .background(workspaceDesign
+            ? Design.Palette.surface(for: colorScheme)
+            : Theme.muted(for: colorScheme).opacity(Layout.backgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: workspaceDesign ? Design.cornerRadius : Layout.cornerRadius))
         .modifier(MessageCopyContextMenu(
             text: copyText,
             userStyled: true,
@@ -78,7 +94,7 @@ struct UserMessageView: View {
                     { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.rawName) }
                 }
             )
-        } else {
+        } else if !workspaceDesign {
             Text("You")
                 .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -177,8 +193,11 @@ struct UserMessageView: View {
 
     private func userText(_ text: String) -> some View {
         Text(text)
-            .interFont(Constants.Typography.bodyXS)
-            .foregroundStyle(Theme.foreground(for: colorScheme).opacity(Layout.textOpacity))
+            .interFont(workspaceDesign ? Constants.Typography.bodyS : Constants.Typography.bodyXS)
+            .tracking(workspaceDesign ? Design.Typography.bodyTracking : 0)
+            .foregroundStyle(workspaceDesign
+                ? Design.Palette.foreground(for: colorScheme)
+                : Theme.foreground(for: colorScheme).opacity(Layout.textOpacity))
             .textSelection(.enabled)
     }
 

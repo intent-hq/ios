@@ -176,12 +176,17 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
                 transcript.waitForExistence(timeout: Fixture.elementTimeout),
                 "Tapping \(target) must open the agent conversation"
             )
-            XCTAssertTrue(app.navigationBars["Dashboard Implementor"].exists)
-            let agentsBack = app.navigationBars.buttons["Agents"].firstMatch
-            if agentsBack.exists {
-                agentsBack.tap()
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                XCTAssertTrue(app.staticTexts["Dashboard Implementor, Agent"].exists)
+                app.buttons["conversation.back"].tap()
             } else {
-                app.navigationBars.buttons.element(boundBy: 0).tap()
+                XCTAssertTrue(app.navigationBars["Dashboard Implementor"].exists)
+                let agentsBack = app.navigationBars.buttons["Agents"].firstMatch
+                if agentsBack.exists {
+                    agentsBack.tap()
+                } else {
+                    app.navigationBars.buttons.element(boundBy: 0).tap()
+                }
             }
             XCTAssertTrue(transcript.waitForNonExistence(timeout: Fixture.elementTimeout))
         }
@@ -208,7 +213,11 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
             transcript.waitForExistence(timeout: Fixture.elementTimeout),
             "Tapping the empty indentation must open the delegated agent conversation"
         )
-        XCTAssertTrue(app.navigationBars["Capture Race Fixer"].exists)
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            XCTAssertTrue(app.staticTexts["Capture Race Fixer, Agent"].exists)
+        } else {
+            XCTAssertTrue(app.navigationBars["Capture Race Fixer"].exists)
+        }
     }
 
     private func agentRowTapPoint(_ target: String, row: CGRect, preview: CGRect) -> CGPoint {

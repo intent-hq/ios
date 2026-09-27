@@ -170,6 +170,9 @@ struct SubmittableTextView: UIViewRepresentable {
     /// VoiceOver label for the text view (UITextView has no placeholder to
     /// announce, so a SwiftUI placeholder overlay does not label it).
     var accessibilityLabel: String?
+    /// Opt-in foreground for a scoped composer design. Nil preserves UIKit's
+    /// existing color without rewriting attributed text or changing editing policy.
+    var textColor: UIColor?
 
     func makeUIView(context: Context) -> KeyCommandTextView {
         let textView = KeyCommandTextView()
@@ -194,6 +197,7 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.setContentHuggingPriority(.defaultHigh, for: .vertical)
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textView.text = text
+        if let textColor { textView.textColor = textColor }
 
         // Report height whenever layout changes (e.g. initial layout, rotation)
         textView.onLayoutChange = { [weak textView] in
@@ -213,6 +217,9 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.onSubmit = onSubmit
         textView.accessibilityLabel = accessibilityLabel
         textView.updateTypography()
+        if let textColor, textView.textColor != textColor {
+            textView.textColor = textColor
+        }
 
         // Sync text from SwiftUI → UIKit (avoid cursor jump during editing)
         if textView.text != text {
