@@ -3,6 +3,16 @@ import XCTest
 nonisolated final class MobileTerminalUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        continueAfterFailure = false
+    }
+
+    override func tearDownWithError() throws {
+        continueAfterFailure = true
+        try super.tearDownWithError()
+    }
+
     @MainActor
     func testSwipeDeleteCanBeCancelledAndConfirmedFromWorkspace() {
         let app = launchWorkspaceWithTerminal()

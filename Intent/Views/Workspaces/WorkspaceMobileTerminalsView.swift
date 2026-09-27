@@ -44,20 +44,22 @@ private struct WorkspaceTerminalRow: View {
     }
 
     var body: some View {
-        terminalButton
-            .offset(x: max(-actionWidth, min(0, (isRevealed ? -actionWidth : 0) + translation)))
-            .background(alignment: .trailing) { deleteButton }
-            .clipped()
-            .contentShape(Rectangle())
-            .simultaneousGesture(swipeGesture)
-            .animation(reduceMotion ? nil : .snappy, value: isRevealed)
-            .disabled(isDeleting)
-            .alert("Delete terminal?", isPresented: $confirmDelete) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete terminal", role: .destructive, action: deleteTerminal)
-            } message: {
-                Text("This stops the shell and any commands running in it.")
-            }
+        ZStack(alignment: .trailing) {
+            terminalButton
+                .offset(x: max(-actionWidth, min(0, (isRevealed ? -actionWidth : 0) + translation)))
+            if isRevealed || translation < 0 { deleteButton }
+        }
+        .clipped()
+        .contentShape(Rectangle())
+        .simultaneousGesture(swipeGesture)
+        .animation(reduceMotion ? nil : .snappy, value: isRevealed)
+        .disabled(isDeleting)
+        .alert("Delete terminal?", isPresented: $confirmDelete) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete terminal", role: .destructive, action: deleteTerminal)
+        } message: {
+            Text("This stops the shell and any commands running in it.")
+        }
     }
 
     private var terminalButton: some View {
@@ -72,7 +74,7 @@ private struct WorkspaceTerminalRow: View {
             terminalRow
                 .background(WorkspaceDetailStyle.background(for: colorScheme))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TerminalRowButtonStyle())
         .visionListRowHitTarget()
         .contextMenu {
             Button("Delete terminal", role: .destructive) { confirmDelete = true }
@@ -96,7 +98,6 @@ private struct WorkspaceTerminalRow: View {
         .accessibilityLabel("Delete terminal")
         .accessibilityIdentifier("terminal.delete.\(terminal.id)")
         .disabled(!store.isConnected)
-        .opacity(isRevealed || translation < 0 ? 1 : 0)
         .allowsHitTesting(isRevealed)
         .accessibilityHidden(!isRevealed)
     }
@@ -124,6 +125,15 @@ private struct WorkspaceTerminalRow: View {
             _ = await store.close(terminal)
             isDeleting = false
             isRevealed = false
+        }
+    }
+
+    private struct TerminalRowButtonStyle: PrimitiveButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .onTapGesture { configuration.trigger() }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { configuration.trigger() }
         }
     }
 
