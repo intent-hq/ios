@@ -139,4 +139,91 @@ import Testing
         store.persistence.recordAuthoritativeRevocation(revoked, observed: store.persistence.loadConnections())
         #expect(store.persistence.invitedJournal.removals.count == 1)
     }
+
+    @Test(arguments: ["read", "unknown-removal", "frozen-session", "write"])
+    func removalPublicationRetriesAfterPostInsertFailure(failure: String) throws {
+        let cloud = MemorySyncedKeychain()
+        let stale = try InvitedSessionFixtures.session()
+        let other = try InvitedSessionFixtures.session("C")
+        let removal = try InvitedSessionFixtures.removal()
+        let staleData = try #require(stale.data)
+        cloud.items = [stale.account: staleData, other.account: try #require(other.data)]
+        let store = try InvitedSessionFixtures.Store(cloud)
+        defer { cloud.beforeList = nil; store.close() }
+        var journal = store.persistence.invitedJournal
+        journal.observe([removal])
+        store.persistence.invitedJournal = journal
+        var injected = false
+        let frozen = Data(#"{"v":99}"#.utf8)
+        cloud.beforeList = { _ in
+            guard !injected, cloud.items[removal.account] != nil else { return }
+            injected = true
+            switch failure {
+            case "read": cloud.readFailure = errSecInteractionNotAllowed
+            case "unknown-removal": cloud.items["invited-v2-r:unknown"] = frozen
+            case "frozen-session": cloud.items[stale.account] = frozen
+            default: cloud.writeFailure = errSecInteractionNotAllowed
+            }
+        }
+        store.persistence.publishPendingInvitedSessions()
+        #expect(injected)
+        #expect(cloud.items[removal.account] == removal.data)
+        #expect(cloud.items[stale.account] == (failure == "frozen-session" ? frozen : staleData))
+        #expect(cloud.items[other.account] == other.data)
+        #expect(store.persistence.invitedJournal.floors[stale.account] == removal.floor)
+        #expect(store.persistence.loadConnections().isEmpty)
+
+        cloud.beforeList = nil
+        cloud.readFailure = nil
+        cloud.writeFailure = nil
+        cloud.items["invited-v2-r:unknown"] = nil
+        cloud.items[stale.account] = staleData
+        let recovered = store.relaunch()
+        recovered.publishPendingInvitedSessions()
+        let repairedData = try #require(cloud.items[stale.account])
+        let repaired = try #require(InvitedSyncRecord.parse(account: stale.account, data: repairedData))
+        #expect(!repaired.live)
+        #expect(repaired.floor == removal.floor)
+        #expect(cloud.items[removal.account] == removal.data)
+        #expect(cloud.items[other.account] == other.data)
+        #expect(recovered.loadConnections().isEmpty)
+    }
+
+    @Test(arguments: [200.0, 400.0])
+    func removalPublicationRefoldsNewerPairingAndConcurrentRemoval(floor: Double) throws {
+        let cloud = MemorySyncedKeychain()
+        let stale = try InvitedSessionFixtures.session()
+        let newer = try InvitedSessionFixtures.session(changes: ["pairedAt": 300, "updatedAt": 300, "token": "B-new"])
+        let other = try InvitedSessionFixtures.session("C")
+        let removal = try InvitedSessionFixtures.removal()
+        let concurrent = try InvitedSessionFixtures.removal(floor: floor)
+        cloud.items = [stale.account: try #require(stale.data), other.account: try #require(other.data)]
+        let store = try InvitedSessionFixtures.Store(cloud)
+        defer { cloud.beforeList = nil; store.close() }
+        var journal = store.persistence.invitedJournal
+        journal.observe([removal])
+        store.persistence.invitedJournal = journal
+        var injected = false
+        cloud.beforeList = { _ in
+            guard !injected, cloud.items[removal.account] != nil else { return }
+            injected = true
+            cloud.items[newer.account] = newer.data
+            cloud.items[concurrent.account] = concurrent.data
+        }
+        store.persistence.publishPendingInvitedSessions()
+        #expect(injected)
+        let publishedData = try #require(cloud.items[stale.account])
+        let published = try #require(InvitedSyncRecord.parse(account: stale.account, data: publishedData))
+        #expect(published.live == (floor < newer.pairedAt))
+        if published.live {
+            #expect(cloud.items[newer.account] == newer.data)
+        } else {
+            #expect(published.floor == floor)
+            #expect(published.token.isEmpty)
+        }
+        #expect(store.relaunch().invitedJournal.floors[stale.account] == floor)
+        #expect(cloud.items[removal.account] == removal.data)
+        #expect(cloud.items[concurrent.account] == concurrent.data)
+        #expect(cloud.items[other.account] == other.data)
+    }
 }

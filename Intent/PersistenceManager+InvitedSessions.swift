@@ -103,7 +103,7 @@ extension PersistenceManager {
         journal.observe(snapshot.records + connections.compactMap(Self.invitedRecord))
         journal.reconcileLegacySources(snapshot)
         guard persistInvitedMigrationJournal(journal) else { return }
-        guard publishInvitedRemovals(registry, snapshot: snapshot, journal: journal) else { return }
+        guard publishInvitedRemovals(registry, journal: journal) else { return }
         var changed = false
         for index in connections.indices {
             guard let local = Self.invitedRecord(connections[index]), !snapshot.frozen(local.account),
@@ -123,14 +123,21 @@ extension PersistenceManager {
         restoreInvitedAliases(registry, journal: journal)
     }
 
-    private func publishInvitedRemovals(_ registry: InvitedSessionRegistry, snapshot: InvitedSessionRegistry.Snapshot, journal: InvitedSyncJournal) -> Bool {
+    private func publishInvitedRemovals(_ registry: InvitedSessionRegistry, journal: InvitedSyncJournal) -> Bool {
         for (account, data) in journal.removals {
             guard let removal = InvitedSyncRecord.parse(account: account, data: data), registry.insertRemoval(removal) else { return false }
+            // Inserting the immutable removal changes the registry signature.
+            // Re-read both groups before repair, including any concurrent re-pair
+            // or removal, while retaining writeMutable's final snapshot guard.
+            guard let snapshot = registry.read(), !snapshot.removalStateUnknown else { return false }
+            var observed = invitedJournal
+            observed.observe(snapshot.records)
+            guard persistInvitedMigrationJournal(observed) else { return false }
             guard let key = removal.personKey, !snapshot.frozen(key) else { continue }
             let existing = snapshot.records.filter { $0.personKey == removal.personKey }
             // A later authenticated re-pair is kept; the independent removal stays.
-            if let merged = InvitedSyncMerge.person(existing + [removal]), !merged.live {
-                _ = registry.writeMutable(merged, snapshot: snapshot)
+            if let merged = InvitedSyncMerge.person(existing + [removal], rememberedFloor: observed.floors[key] ?? 0), !merged.live {
+                guard registry.writeMutable(merged, snapshot: snapshot) else { return false }
             }
         }
         return true
