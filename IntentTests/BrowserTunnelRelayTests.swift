@@ -160,7 +160,8 @@ struct BrowserTunnelRelayTests {
         let wire = Wire()
         let proxy = BrowserTunnelProxy(socket: wire, supportsCredit: true)
         let url = try await proxy.forward(#require(URL(string: "http://daemon.localhost:8080/")))
-        let port = try #require(NWEndpoint.Port(rawValue: UInt16(#require(url.port))))
+        let portNumber = try #require(url.port)
+        let port = try #require(NWEndpoint.Port(rawValue: UInt16(portNumber)))
         let local = NWConnection(host: "127.0.0.1", port: port, using: .tcp)
         local.start(queue: DispatchQueue(label: "BrowserTunnelRelayTests.client"))
         let timeout = Task {
