@@ -581,6 +581,7 @@ $(SRCROOT)/IntentTests/SyncedBackendPublisherTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendRegistryTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendRouteTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendTunnelTests.swift
+$(SRCROOT)/IntentTests/SyntheticBadgeHostSceneTests.swift
 $(SRCROOT)/IntentTests/TailcatKitSmokeTests.swift
 $(SRCROOT)/IntentTests/TailcatTunnelSessionTests.swift
 $(SRCROOT)/IntentTests/TaskMetadataHeaderTests.swift

@@ -163,17 +163,20 @@ private final class SyntheticBadgeHostSession<Content: View> {
         afterShowingWindow: (() -> Void)?,
         observeLifecycle: ((SyntheticBadgeHostLifecycleWaiter.Event) -> Void)?
     ) throws {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let scene = try #require(
-            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-                .first { $0.activationState == .foregroundActive },
-            "SyntheticBadgeHost requires the test application's active window scene"
+            SyntheticBadgeHostScene.resolve(in: scenes),
+            "SyntheticBadgeHost requires a connected foreground window scene: \(SyntheticBadgeHostScene.description(of: scenes))"
         )
+        print("SYNTHETIC host scene: \(SyntheticBadgeHostScene.description(of: scenes))")
         controller = SyntheticBadgeHostingController(
             rootView: rootView,
             observeLifecycle: observeLifecycle
         )
         // A detached window can lay out and deliver appearance callbacks while
-        // SwiftUI exposes no accessibility tree to the application.
+        // SwiftUI exposes no accessibility tree to the application. Foreground
+        // inactivity (for example during a system alert) stops event delivery,
+        // not the connected scene's ability to host this view's hierarchy.
         window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: width, height: height)
         self.callbackTimeout = callbackTimeout
@@ -368,7 +371,8 @@ struct SyntheticBadgeHostTests {
             renderedWindow = window
             let controller = try #require(window.rootViewController)
             let scene = try #require(window.windowScene, "A detached window cannot publish the hosted accessibility tree")
-            #expect(scene.activationState == .foregroundActive)
+            #expect(UIApplication.shared.connectedScenes.contains(scene))
+            #expect(scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive)
             #expect(scene.windows.contains { $0 === window })
             #expect(controller.view === hostView)
             #expect(hostView.window === window)
