@@ -28,30 +28,42 @@ struct ConversationStreamingFixtureTests {
         }))
     }
 
-    @Test func incrementalFixturePreservesFragmentsBeforeTheFutureReducerFix() async throws {
-        let fixture = ConversationStreamingFixture()
+    @Test(arguments: [false, true], [false, true])
+    func incrementalTraceAppendsEveryGrowthFrame(startsWithPartial: Bool, raw: Bool) async throws {
+        let fixture = ConversationStreamingFixture(startsWithPartial: startsWithPartial)
         let connection = RPCRecordingConnection()
         let store = await subscribedStore(connection)
         defer { store.reset() }
         try connection.deliverNotification(params: fixture.snapshot(encoding: .incremental))
-        for frame in fixture.growth(encoding: .incremental) {
+        var text = fixture.textPrefix
+        var thinking = fixture.thinkingPrefix
+        for (index, frame) in fixture.growth(encoding: .incremental).enumerated() {
             let push = try #require(SubscriptionPush.parse(method: "subscription.push", params: frame))
-            let raw = try #require(push.delta?.updated.first?["block"] as? [String: Any])
-            #expect(raw["textDelta"] != nil && raw["text"] == nil)
-            try connection.deliverNotification(params: frame)
+            let delta = try #require(push.delta)
+            let wire = try #require((delta.added + delta.updated).first?["block"] as? [String: Any])
+            #expect(wire["textDelta"] != nil && wire["text"] == nil)
+            if raw {
+                connection.deliverSubscriptionPush(SubscriptionPush(
+                    subscriptionId: push.subscriptionId,
+                    seq: push.seq,
+                    delta: .init(added: delta.added, updated: delta.updated, removedIds: delta.removedIds)
+                ))
+            } else {
+                try connection.deliverNotification(params: frame)
+            }
+            text += fixture.fragments[index]
+            thinking += fixture.fragments[index]
+            #expect(store.messages.first?.contentBlocks.first?.resolvedText == text)
+            #expect(store.messages.first?.contentBlocks.first { $0.type == .thinking }?.resolvedText == thinking)
+            #expect(store.isStreaming)
         }
-        // Explicit current defect: the full-block decoder/reducer cannot
-        // append textDelta. Change these to equality in the delta fix, and
-        // extend to duplicates/gaps/raw vs predecoded/old-daemon fallback.
-        let streamed = try #require(store.messages.first)
-        #expect(streamed.contentBlocks.first?.resolvedText != fixture.finalText)
-        let thinking = streamed.contentBlocks.first { $0.type == .thinking }
-        #expect(thinking?.resolvedText != fixture.finalThinking)
         try connection.deliverNotification(params: fixture.toolFrame)
         try connection.deliverNotification(params: fixture.terminal)
         let expected = try #require(ConversationMessage.parseMessage(fixture.authoritativeMessage))
         #expect(store.messages.first?.contentBlocks == expected.contentBlocks)
         #expect(!store.isStreaming)
+        #expect(connection.traffic().methodCounts == ["chat.subscribe": 1])
+        #expect(try connection.traffic().notificationBytes == notificationBytes(fixture.frames(encoding: .incremental)))
     }
 
     @Test func matchedIncrementalTraceHasLinearFragmentBytesAndFullTerminal() throws {

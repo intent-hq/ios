@@ -86,7 +86,7 @@ struct ConversationStreamingFixture {
         ]
     }
 
-    private func entity(block: [String: Any], streamingComplete: Bool = false) -> [String: Any] {
+    func entity(block: [String: Any], streamingComplete: Bool = false) -> [String: Any] {
         [
             "agentId": Self.agentId, "messageId": Self.messageId, "role": "assistant",
             "timestamp": Self.timestamp, "streamingComplete": streamingComplete, "block": block
