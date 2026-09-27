@@ -46,7 +46,7 @@ struct WorkspaceFileDiffView: View {
             }
         } else {
             ScrollView([.horizontal, .vertical]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(hunks.indices, id: \.self) { index in
                         let hunk = hunks[index]
                         Text(hunk.heading)
@@ -58,6 +58,7 @@ struct WorkspaceFileDiffView: View {
                         }
                     }
                 }
+                .fixedSize(horizontal: true, vertical: true)
                 .font(.system(.caption, design: .monospaced))
                 .textSelection(.enabled)
                 .padding(.bottom)
