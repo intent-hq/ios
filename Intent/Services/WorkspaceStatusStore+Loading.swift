@@ -71,9 +71,9 @@ extension WorkspaceStatusStore {
             if !retry { return false }
         }
         installHandler()
-        let feed = Feed()
-        feeds[key] = feed
         let epoch = connectionEpoch
+        let feed = Feed(epoch: epoch)
+        feeds[key] = feed
         let task = Task { [weak self] in
             guard let self, feeds[key] === feed, epoch == connectionEpoch else { return false }
             return await subscribe(feed, key: key, workspaceId: workspaceId, epoch: epoch)
@@ -92,7 +92,9 @@ extension WorkspaceStatusStore {
             let result = try await connection.request("events.subscribe", params: params)
             let id = (result as? [String: Any])?["subscriptionId"] as? String
             guard feeds[key] === feed, epoch == connectionEpoch else {
-                if let id, epoch == connectionEpoch { Self.releaseRemote(id, connection: connection) }
+                if let id {
+                    Self.releaseRemote(id, connection: connection, lifetime: connectionLifetime, epoch: feed.epoch)
+                }
                 return false
             }
             guard let id, !id.isEmpty else { throw StatusReadError.malformed }
@@ -152,8 +154,19 @@ extension WorkspaceStatusStore {
     }
 
     @discardableResult
-    static func releaseRemote(_ id: String, connection: any ConnectionManagerRouting) -> Task<Void, Never> {
+    func releaseRemote(_ feed: Feed) -> Task<Void, Never>? {
+        feed.id.map { Self.releaseRemote($0, connection: connection, lifetime: connectionLifetime, epoch: feed.epoch) }
+    }
+
+    @discardableResult
+    static func releaseRemote(
+        _ id: String,
+        connection: any ConnectionManagerRouting,
+        lifetime: ConnectionLifetime,
+        epoch: Int
+    ) -> Task<Void, Never> {
         Task { @MainActor in
+            guard lifetime.epoch == epoch else { return }
             _ = try? await connection.request("events.unsubscribe", params: ["subscriptionId": id])
         }
     }

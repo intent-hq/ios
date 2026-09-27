@@ -22,17 +22,27 @@ import Observation
     }
 
     final class Feed {
+        let epoch: Int
         var id: String?
         var task: Task<Bool, Never>?
         var error: String?
+
+        init(epoch: Int) { self.epoch = epoch }
+    }
+
+    /// Queued cleanup retains this observer, even after the store dies, so a
+    /// reconnect between scheduling and issuing cleanup invalidates the ID.
+    final class ConnectionLifetime {
+        var epoch = 0
+        var observation: AnyCancellable?
     }
 
     private(set) var buckets: [String: Bucket] = [:]
     @ObservationIgnored var feeds: [String: Feed] = [:]
     @ObservationIgnored var eventHandlerId: UUID?
     @ObservationIgnored var handlerGeneration = 0
-    @ObservationIgnored var connectionEpoch = 0
-    @ObservationIgnored private var cancellables = Set<AnyCancellable>()
+    @ObservationIgnored let connectionLifetime = ConnectionLifetime()
+    var connectionEpoch: Int { connectionLifetime.epoch }
     let connection: any ConnectionManagerRouting
     let family: String
     let listKey: String
@@ -64,25 +74,26 @@ import Observation
         self.parse = parse
         self.fold = fold
         var previousState = connection.connectionState
-        connection.connectionStatePublisher
-            .sink { [weak self] state in
-                guard let self, previousState != state else { return }
+        connectionLifetime.observation = connection.connectionStatePublisher
+            .sink { [weak self, weak lifetime = connectionLifetime] state in
+                guard let lifetime, previousState != state else { return }
                 let wasConnected = previousState == .connected
                 previousState = state
-                if wasConnected || state == .connected { invalidateConnection() }
-                if state == .connected {
-                    for (workspaceId, bucket) in buckets where !bucket.consumers.isEmpty {
-                        Task { await self.load(workspaceId: workspaceId) }
-                    }
+                if wasConnected || state == .connected {
+                    lifetime.epoch &+= 1
+                    self?.invalidateConnection()
+                }
+                guard let self, state == .connected else { return }
+                for (workspaceId, bucket) in buckets where !bucket.consumers.isEmpty {
+                    Task { await self.load(workspaceId: workspaceId) }
                 }
             }
-            .store(in: &cancellables)
     }
 
     isolated deinit {
         if let eventHandlerId { connection.removeEventHandler(id: eventHandlerId) }
         for feed in feeds.values {
-            if let id = feed.id { Self.releaseRemote(id, connection: connection) }
+            releaseRemote(feed)
         }
     }
 
@@ -105,21 +116,20 @@ import Observation
         guard !buckets.contains(where: { feedKey($0.key) == key && !$0.value.consumers.isEmpty }) else { return nil }
         let feed = feeds.removeValue(forKey: key)
         if feeds.isEmpty { removeHandler() }
-        return feed?.id.map { Self.releaseRemote($0, connection: connection) }
+        return feed.flatMap { releaseRemote($0) }
     }
 
     func reset() {
         for bucket in buckets.values { invalidate(bucket) }
         buckets = [:]
         for feed in feeds.values {
-            if let id = feed.id { Self.releaseRemote(id, connection: connection) }
+            releaseRemote(feed)
         }
         feeds = [:]
         removeHandler()
     }
 
     private func invalidateConnection() {
-        connectionEpoch &+= 1
         for bucket in buckets.values { invalidate(bucket) }
         // The old socket owns these IDs. Never unsubscribe them on a new socket.
         feeds = [:]

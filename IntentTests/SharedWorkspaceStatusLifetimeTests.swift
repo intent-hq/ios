@@ -6,6 +6,30 @@ import Testing
 struct SharedWorkspaceStatusLifetimeTests {
     private typealias Support = WorkspaceStatusTestSupport
 
+    @Test func queuedCleanupMustNotSendOldFeedIDsOnNewSocket() async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let connection = fixture.connection
+        connection.releaseConnectionStateDelivery()
+        let model = fixture.makeViewModel()
+        await model.load()
+        let oldIDs = try Support.acknowledgedIDs(connection)
+        #expect(oldIDs.count == 2)
+        let checkpoint = connection.checkpoint
+        // No suspension: cleanup cannot start until the socket has changed.
+        model.hookStore.deactivate()
+        model.monitoredPrStore.deactivate()
+        connection.simulateDisconnect()
+        connection.simulateConnect()
+        await model.hookStore.subscribe(workspaceId: Support.workspace, agentId: ConversationStartupFixture.parentId)
+        await model.monitoredPrStore.subscribe(workspaceId: Support.workspace, agentId: ConversationStartupFixture.parentId)
+        #expect(connection.traffic(since: checkpoint).calls("events.unsubscribe").isEmpty)
+        let currentIDs = try Support.acknowledgedIDs(connection).subtracting(oldIDs)
+        #expect(currentIDs.count == 2)
+        model.teardownLiveStores()
+        try await Support.waitForCleanup(connection, events: currentIDs, chats: 1)
+    }
+
     @Test func reconnectDuringFeedRegistrationNeverUnsubscribesOldSocketIDsOnTheNewSocket() async throws {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
@@ -200,5 +224,123 @@ struct SharedWorkspaceStatusLifetimeTests {
         #expect(second.connection.paramsForMethod("events.subscribe").count == 2)
         #expect(second.connection.paramsForMethod("events.unsubscribe").isEmpty)
         #expect(modelB.hookStore.hooks.count == 1 && modelB.monitoredPrStore.monitors.count == 1)
+    }
+}
+
+extension SharedWorkspaceStatusLifetimeTests {
+    @Test func queuedWorkspaceCleanupPreservesOtherWorkspaceAndGlobalMonitor() async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let connection = fixture.connection
+        connection.releaseConnectionStateDelivery()
+        let owner = UUID()
+        let otherWorkspace = "other-workspace"
+        for workspace in [Support.workspace, otherWorkspace] {
+            fixture.session.retainWorkspaceStatus(workspaceId: workspace, consumer: owner)
+            await fixture.session.hooksStore.load(workspaceId: workspace)
+            await fixture.session.prMonitorsStore.seed(workspaceId: workspace)
+        }
+        let ids = try Support.acknowledgedIDs(connection)
+        #expect(ids.count == 3)
+        let releasedHook = try #require(fixture.session.hooksStore.feeds[Support.workspace]?.id)
+        let otherHook = fixture.session.hooksStore.feeds[otherWorkspace]?.id
+        let globalMonitor = fixture.session.prMonitorsStore.cache.feeds[""]?.id
+        let checkpoint = connection.checkpoint
+        fixture.session.releaseWorkspaceStatus(workspaceId: Support.workspace, consumer: owner)
+        await fixture.session.hooksStore.load(workspaceId: otherWorkspace)
+        await fixture.session.prMonitorsStore.seed(workspaceId: otherWorkspace)
+        try await Support.waitForCleanup(connection, events: [releasedHook], chats: 0)
+        #expect(connection.traffic(since: checkpoint).methodCounts == ["events.unsubscribe": 1])
+        #expect(fixture.session.hooksStore.feeds[otherWorkspace]?.id == otherHook)
+        #expect(fixture.session.prMonitorsStore.cache.feeds[""]?.id == globalMonitor)
+        fixture.session.releaseWorkspaceStatus(workspaceId: otherWorkspace, consumer: owner)
+        try await Support.waitForCleanup(connection, events: ids, chats: 0)
+    }
+
+    @Test(arguments: [false, true])
+    func queuedResetCleanupUsesOnlyTheRegistrationSocket(reconnect: Bool) async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let connection = fixture.connection
+        connection.releaseConnectionStateDelivery()
+        let model = fixture.makeViewModel()
+        await model.load()
+        let oldIDs = try Support.acknowledgedIDs(connection)
+        #expect(oldIDs.count == 2)
+        fixture.session.hooksStore.reset()
+        fixture.session.prMonitorsStore.reset()
+        if reconnect {
+            connection.simulateDisconnect()
+            connection.simulateConnect()
+        }
+        if reconnect {
+            try await expectNever("reset releases an old socket's registration") {
+                !connection.paramsForMethod("events.unsubscribe").isEmpty
+            }
+        } else {
+            try await Support.waitForCleanup(connection, events: oldIDs, chats: 0)
+        }
+        #expect(fixture.session.hooksStore.buckets.isEmpty)
+        #expect(fixture.session.prMonitorsStore.cache.buckets.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
+    func queuedDeinitCleanupKeepsConnectionProvenanceAfterStoreDies(reconnect: Bool) async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let connection = fixture.connection
+        connection.releaseConnectionStateDelivery()
+        var hooks: WorkspaceStatusStore<BackgroundHook>? = BackgroundHookStore.makeWorkspaceStore(connection: connection)
+        var monitors: WorkspacePrMonitorsStore? = WorkspacePrMonitorsStore(connectionManager: connection)
+        weak var weakHooks = hooks
+        weak var weakMonitors = monitors?.cache
+        weak var hookLifetime = hooks?.connectionLifetime
+        weak var monitorLifetime = monitors?.cache.connectionLifetime
+        hooks?.retain(workspaceId: Support.workspace)
+        monitors?.retain(workspaceId: Support.workspace)
+        await hooks?.load(workspaceId: Support.workspace)
+        await monitors?.seed(workspaceId: Support.workspace)
+        let ids = try Support.acknowledgedIDs(connection)
+        #expect(ids.count == 2)
+        hooks = nil
+        monitors = nil
+        #expect(weakHooks == nil && weakMonitors == nil)
+        if reconnect {
+            connection.simulateDisconnect()
+            connection.simulateConnect()
+            try await expectNever("deinit releases an old socket's registration") {
+                !connection.paramsForMethod("events.unsubscribe").isEmpty
+            }
+        } else {
+            try await Support.waitForCleanup(connection, events: ids, chats: 0)
+        }
+        try await waitUntil("connection observers released with cleanup") {
+            hookLifetime == nil && monitorLifetime == nil
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func queuedOrphanCleanupChecksConnectionWhenItStarts(reconnect: Bool) async {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let connection = fixture.connection
+        connection.releaseConnectionStateDelivery()
+        // Exercise the deferred helper used after a late ACK independently of
+        // whether the ACK continuation or the caller resumes first.
+        let source = fixture.session.hooksStore
+        let cleanup = WorkspaceStatusStore<BackgroundHook>.releaseRemote(
+            "orphan", connection: connection, lifetime: source.connectionLifetime, epoch: source.connectionEpoch
+        )
+        if reconnect {
+            connection.simulateDisconnect()
+            connection.simulateConnect()
+        }
+        await cleanup.value
+        let releases = connection.traffic().calls("events.unsubscribe")
+        #expect(releases.count == (reconnect ? 0 : 1))
+        if let release = releases.first {
+            #expect(release.params["subscriptionId"] as? String == "orphan")
+            #expect(release.started.connectionGeneration == 1)
+        }
     }
 }
