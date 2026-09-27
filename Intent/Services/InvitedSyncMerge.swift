@@ -104,6 +104,18 @@ struct InvitedSyncJournal: Codable {
         pendingLegacy.first { $0.matches(source) }
     }
 
+    func permitsLegacySource(_ source: InvitedSessionRegistry.Entry) -> Bool {
+        if let receipt = pendingMigration(for: source) { return !receipt.invalidated }
+        return retired[source.account] == nil
+    }
+
+    mutating func reconcileLegacySources(_ snapshot: InvitedSessionRegistry.Snapshot) {
+        for index in pendingLegacy.indices {
+            let receipt = pendingLegacy[index]
+            if !snapshot.entries.contains(where: receipt.matches) { pendingLegacy[index].invalidated = true }
+        }
+    }
+
     mutating func reserveLegacySources(_ candidates: [InvitedLegacyMigration.Candidate]) {
         for candidate in candidates where !candidate.legacy.deleted {
             guard let source = candidate.source, pendingMigration(for: source) == nil,
@@ -114,7 +126,11 @@ struct InvitedSyncJournal: Codable {
 
     mutating func bindLegacySource(_ candidate: InvitedLegacyMigration.Candidate, personKey: String) -> Bool {
         guard let source = candidate.source, let index = pendingLegacy.firstIndex(where: { $0.matches(source) }),
-              pendingLegacy[index].personKey == nil || pendingLegacy[index].personKey == personKey else { return false }
+              !pendingLegacy[index].invalidated else { return false }
+        guard pendingLegacy[index].personKey == nil || pendingLegacy[index].personKey == personKey else {
+            pendingLegacy[index].invalidated = true
+            return false
+        }
         pendingLegacy[index].personKey = personKey
         observe([]) // An already observed removal also covers this newly bound row.
         return true

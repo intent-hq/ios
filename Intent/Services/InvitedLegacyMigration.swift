@@ -1,37 +1,65 @@
 import CryptoKit
 import Foundation
 
-enum InvitedLegacyMigration {
-    /// Local, token-free provenance for a row seen before its alias retired.
-    /// The digest permits only these exact bytes in this exact access group;
-    /// a bound person must still be authenticated on every retry.
-    struct Receipt: Codable, Equatable {
-        let account: String
-        let group: String?
-        let rowDigest: Data
-        let pairedAt: Double
-        var personKey: String?
+/// Local, token-free provenance for a row seen before its alias retired.
+/// The digest permits only these exact bytes in this exact access group;
+/// a bound person must still be authenticated on every retry.
+struct InvitedLegacyMigrationReceipt: Codable, Equatable {
+    private static let formatVersion = 1
+    private static let digestBytes = 32
+    let version: Int
+    let account: String
+    let group: String?
+    let rowDigest: Data
+    let pairedAt: Double
+    var personKey: String?
+    var invalidated = false
 
-        init(_ candidate: Candidate, source: InvitedSessionRegistry.Entry) {
-            account = source.account
-            group = source.group
-            rowDigest = Data(SHA256.hash(data: source.data))
-            pairedAt = ConnectionPrincipal.number(candidate.object["pairedAt"]) ?? candidate.legacy.updatedAt
-        }
+    private enum CodingKeys: String, CodingKey { case version, account, group, rowDigest, pairedAt, personKey, invalidated }
 
-        func matches(_ source: InvitedSessionRegistry.Entry) -> Bool {
-            account.utf8.elementsEqual(source.account.utf8)
-                && group.map { Data($0.utf8) } == source.group.map { Data($0.utf8) }
-                && rowDigest == Data(SHA256.hash(data: source.data))
-        }
+    init(_ candidate: InvitedLegacyMigration.Candidate, source: InvitedSessionRegistry.Entry) {
+        version = Self.formatVersion
+        account = source.account
+        group = source.group
+        rowDigest = Data(SHA256.hash(data: source.data))
+        pairedAt = ConnectionPrincipal.number(candidate.object["pairedAt"]) ?? candidate.legacy.updatedAt
+    }
 
-        func covered(by records: [InvitedSyncRecord], floors: [String: Double]) -> Bool {
-            guard let personKey else { return false }
-            let floor = floors[personKey] ?? 0
-            return floor > 0 && floor >= pairedAt
-                || records.contains { $0.personKey == personKey && $0.live && $0.pairedAt >= pairedAt }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decode(Int.self, forKey: .version)
+        account = try values.decode(String.self, forKey: .account)
+        group = try values.decodeIfPresent(String.self, forKey: .group)
+        rowDigest = try values.decode(Data.self, forKey: .rowDigest)
+        pairedAt = try values.decode(Double.self, forKey: .pairedAt)
+        personKey = try values.decodeIfPresent(String.self, forKey: .personKey)
+        invalidated = try values.decode(Bool.self, forKey: .invalidated)
+        let validPerson = personKey.map { key in
+            let digest = String(key.dropFirst(InvitedSyncKey.sessionPrefix.count))
+            return key.hasPrefix(InvitedSyncKey.sessionPrefix) && (try? InvitedSyncKey.fingerprint(digest)) == digest
+        } ?? true
+        guard version == Self.formatVersion, !account.isEmpty, group?.isEmpty != true,
+              rowDigest.count == Self.digestBytes, ConnectionPrincipal.validClock(pairedAt), validPerson else {
+            throw DecodingError.dataCorruptedError(forKey: .version, in: values, debugDescription: "Unsupported or malformed local migration receipt")
         }
     }
+
+    func matches(_ source: InvitedSessionRegistry.Entry) -> Bool {
+        account.utf8.elementsEqual(source.account.utf8)
+            && group.map { Data($0.utf8) } == source.group.map { Data($0.utf8) }
+            && rowDigest == Data(SHA256.hash(data: source.data))
+    }
+
+    func covered(by records: [InvitedSyncRecord], floors: [String: Double]) -> Bool {
+        guard let personKey else { return false }
+        let floor = floors[personKey] ?? 0
+        return floor > 0 && floor >= pairedAt
+            || records.contains { $0.personKey == personKey && $0.live && $0.pairedAt >= pairedAt }
+    }
+}
+
+enum InvitedLegacyMigration {
+    typealias Receipt = InvitedLegacyMigrationReceipt
 
     struct Candidate {
         let account: String
@@ -46,7 +74,7 @@ enum InvitedLegacyMigration {
 
     static func candidates(_ snapshot: InvitedSessionRegistry.Snapshot, journal: InvitedSyncJournal) -> [Candidate] {
         snapshot.entries.compactMap { entry in
-            guard journal.retired[entry.account] == nil || journal.pendingMigration(for: entry) != nil,
+            guard journal.permitsLegacySource(entry),
                   InvitedSessionRegistry.knownLegacy(entry.data),
                   let object = try? JSONSerialization.jsonObject(with: entry.data) as? [String: Any],
                   let text = String(data: entry.data, encoding: .utf8),

@@ -61,6 +61,17 @@ nonisolated private final class GroupedInvitedKeychain: SyncedKeychainWriting {
     }
 }
 
+nonisolated private final class MigrationJournalDefaults: UserDefaults, @unchecked Sendable {
+    var rejectPendingReceipts = false
+
+    override func set(_ value: Any?, forKey defaultName: String) {
+        if rejectPendingReceipts, defaultName == "invitedSessionSyncJournal", let data = value as? Data,
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let pending = object["pendingLegacy"] as? [Any], !pending.isEmpty { return }
+        super.set(value, forKey: defaultName)
+    }
+}
+
 @MainActor struct InvitedGroupedMigrationTests {
     private func cloud() throws -> GroupedInvitedKeychain {
         let cloud = GroupedInvitedKeychain()
@@ -143,8 +154,17 @@ nonisolated private final class GroupedInvitedKeychain: SyncedKeychainWriting {
         #expect(recovered.loadConnections().compactMap { $0.principal?.id } == ["C"])
         cloud.items[moved] = nil
         cloud.items[source] = original
+        _ = await store.relaunch().refreshInvitedSessions { candidate in
+            #expect(candidate.token == "C-still-valid")
+            return principal(candidate)
+        }
+        #expect(recovered.loadConnections().compactMap { $0.principal?.id } == ["C"])
+        #expect(recovered.invitedJournal.pendingLegacy.contains { $0.invalidated })
+        let repaired = try InvitedSessionFixtures.session(changes: ["pairedAt": 400, "updatedAt": 400])
+        cloud.items[GroupedInvitedKeychain.ItemKey(group: source.group, account: repaired.account)] = repaired.data
         _ = await recovered.refreshInvitedSessions { candidate in principal(candidate) }
         #expect(recovered.loadConnections().map(\.token).sorted() == ["B-still-valid", "C-still-valid"])
+        #expect(recovered.invitedJournal.pendingLegacy.isEmpty)
     }
 
     @Test func offlinePeerKeepsItsOriginalGroupRowUntilAuthenticated() async throws {
@@ -178,8 +198,12 @@ nonisolated private final class GroupedInvitedKeychain: SyncedKeychainWriting {
             InvitedSessionFixtures.principal(candidate.token == "B-still-valid" ? "D" : "C")
         }
         #expect(recovered.loadConnections().compactMap { $0.principal?.id } == ["C"])
-        _ = await recovered.refreshInvitedSessions { candidate in principal(candidate) }
-        #expect(recovered.loadConnections().map(\.token).sorted() == ["B-still-valid", "C-still-valid"])
+        _ = await store.relaunch().refreshInvitedSessions { candidate in
+            #expect(candidate.token == "C-still-valid")
+            return principal(candidate)
+        }
+        #expect(recovered.loadConnections().compactMap { $0.principal?.id } == ["C"])
+        #expect(recovered.invitedJournal.pendingLegacy.contains { $0.invalidated })
     }
 
     @Test func removalEndsOnlyItsPendingMigrationAndCannotBeUndoneByStaleRows() async throws {
@@ -228,5 +252,59 @@ nonisolated private final class GroupedInvitedKeychain: SyncedKeychainWriting {
         #expect(journal.retired[GroupedInvitedKeychain.alias] == [key])
         let registry = InvitedSessionRegistry(keychain: try cloud(), accessGroup: BackendSyncFixtures.accessGroup)
         #expect(InvitedLegacyMigration.candidates(try #require(registry.read()), journal: journal).isEmpty)
+    }
+
+    @Test func rejectedReceiptWriteCannotSaveOrReplaceEitherSource() async throws {
+        let cloud = try cloud()
+        let original = cloud.items
+        let suite = "InvitedReceiptFailure-\(UUID().uuidString)"
+        let defaults = try #require(MigrationJournalDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = InvitedSessionRegistry(keychain: cloud, accessGroup: BackendSyncFixtures.accessGroup)
+        let storage = InMemoryKeychainStorage()
+        let persistence = PersistenceManager(defaults: defaults, keychainStorage: storage, invitedRegistry: registry)
+        defaults.rejectPendingReceipts = true
+        _ = await persistence.refreshInvitedSessions { candidate in
+            Issue.record("Authentication started without accepted local retry provenance")
+            return principal(candidate)
+        }
+        #expect(persistence.loadConnections().isEmpty)
+        #expect(cloud.items == original)
+        #expect(persistence.invitedJournal.retired.isEmpty)
+        defaults.rejectPendingReceipts = false
+        let recovered = PersistenceManager(defaults: defaults, keychainStorage: storage, invitedRegistry: registry)
+        _ = await recovered.refreshInvitedSessions { candidate in principal(candidate) }
+        #expect(recovered.loadConnections().map(\.token).sorted() == ["B-still-valid", "C-still-valid"])
+    }
+
+    @Test func malformedOrFutureReceiptKeepsTheEntireJournalUnavailable() async throws {
+        let cloud = try cloud()
+        let store = try InvitedSessionFixtures.Store(cloud)
+        defer { store.close() }
+        _ = await store.persistence.refreshInvitedSessions { candidate in
+            store.storage.setSaveFailure(candidate.token == "B-still-valid")
+            return principal(candidate)
+        }
+        let bytes = try JSONEncoder().encode(store.persistence.invitedJournal)
+        let original = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let mutations: [[String: Any]] = [["version": 2], ["rowDigest": ""], ["pairedAt": -1], ["personKey": "invalid"], ["invalidated": "false"]]
+        for mutation in mutations {
+            var object = original
+            var pending = try #require(object["pendingLegacy"] as? [[String: Any]])
+            try #require(!pending.isEmpty)
+            pending[0].merge(mutation) { _, new in new }
+            object["pendingLegacy"] = pending
+            let damaged = try JSONSerialization.data(withJSONObject: object)
+            store.defaults.set(damaged, forKey: "invitedSessionSyncJournal")
+            let recovered = store.relaunch()
+            let before = cloud.items
+            #expect(!recovered.invitedJournalAvailable)
+            _ = await recovered.refreshInvitedSessions { candidate in
+                Issue.record("Malformed retry metadata must not restore migration authority")
+                return principal(candidate)
+            }
+            #expect(store.defaults.data(forKey: "invitedSessionSyncJournal") == damaged)
+            #expect(cloud.items == before)
+        }
     }
 }

@@ -19,6 +19,14 @@ extension PersistenceManager {
         }
     }
 
+    /// Refuse migration/alias changes if the local provenance write was rejected.
+    /// Readback confirms acceptance by the injected/defaults store, not an fsync.
+    func persistInvitedMigrationJournal(_ journal: InvitedSyncJournal) -> Bool {
+        guard invitedJournalAvailable, let data = try? JSONEncoder().encode(journal) else { return false }
+        defaults.set(data, forKey: Self.invitedJournalKey)
+        return defaults.data(forKey: Self.invitedJournalKey) == data
+    }
+
     enum InvitedPersistenceError: LocalizedError {
         case syncUnavailable
 
@@ -93,7 +101,8 @@ extension PersistenceManager {
               var connections = loadConnectionsWithOutcome().connections else { return }
         var journal = invitedJournal
         journal.observe(snapshot.records + connections.compactMap(Self.invitedRecord))
-        invitedJournal = journal
+        journal.reconcileLegacySources(snapshot)
+        guard persistInvitedMigrationJournal(journal) else { return }
         guard publishInvitedRemovals(registry, snapshot: snapshot, journal: journal) else { return }
         var changed = false
         for index in connections.indices {

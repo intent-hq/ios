@@ -13,7 +13,8 @@ extension PersistenceManager {
               let initial = loadConnectionsWithOutcome().connections else { return InvitedImportOutcome() }
         var journal = invitedJournal
         journal.observe(snapshot.records + initial.compactMap(Self.invitedRecord))
-        invitedJournal = journal
+        journal.reconcileLegacySources(snapshot)
+        guard persistInvitedMigrationJournal(journal) else { return InvitedImportOutcome() }
         let migrated = await migrateInvited(snapshot: snapshot, authenticate: authenticate)
         var records = snapshot.records + migrated + loadConnections().compactMap(Self.invitedRecord)
         records += invitedJournal.removals.compactMap { InvitedSyncRecord.parse(account: $0.key, data: $0.value) }
@@ -49,10 +50,15 @@ extension PersistenceManager {
         var records = fresh.records + locals.compactMap(Self.invitedRecord)
         var journal = invitedJournal
         journal.observe(records)
-        invitedJournal = journal
+        journal.reconcileLegacySources(fresh)
+        guard persistInvitedMigrationJournal(journal) else { return nil }
         // Prepared migrations are not durable yet. Observe fresh removals now,
         // but let publication retire aliases only after the local save succeeds.
-        if fresh.hasSameEntries(as: original) { records += migrated }
+        if fresh.hasSameEntries(as: original) {
+            records += migrated.filter { record in
+                !journal.pendingLegacy.contains { $0.personKey == record.personKey && $0.invalidated }
+            }
+        }
         guard let merged = InvitedSyncMerge.person(records.filter { $0.personKey == key }, rememberedFloor: journal.floors[key] ?? 0),
               merged.live, merged.token == authenticated.token, merged.pairedAt == authenticated.pairedAt else { return nil }
         return merged
@@ -104,7 +110,7 @@ extension PersistenceManager {
         // their shared alias. This grants retry of the row, never socket authority.
         var journal = invitedJournal
         journal.reserveLegacySources(candidates)
-        invitedJournal = journal
+        guard persistInvitedMigrationJournal(journal) else { return [] }
         let ambiguous = Set(candidates.filter { $0.legacy.deleted && $0.principalId == nil }.map(\.account))
         var prepared: [InvitedSyncRecord] = []
         // Authenticate all attributable live candidates before selecting v1 LWW
@@ -123,14 +129,14 @@ extension PersistenceManager {
                 ),
                 token: legacy.token
             )
-            guard let principal = try? await authenticate(connection),
-                  let record = InvitedLegacyMigration.session(candidate, principal: principal),
-                  !snapshot.frozen(record.account),
-                  !snapshot.records.contains(where: { $0.personKey == record.personKey }), invitedJournalAvailable else { continue }
+            guard let principal = try? await authenticate(connection), !principal.isOwner, invitedJournalAvailable,
+                  let key = try? InvitedSyncKey.session(fingerprint: candidate.fingerprint, principalId: principal.id) else { continue }
             journal = invitedJournal
-            guard journal.bindLegacySource(candidate, personKey: record.account) else { continue }
-            invitedJournal = journal
-            guard journal.floors[record.account] == nil else { continue }
+            let bound = journal.bindLegacySource(candidate, personKey: key)
+            guard persistInvitedMigrationJournal(journal), bound,
+                  let record = InvitedLegacyMigration.session(candidate, principal: principal),
+                  !snapshot.frozen(key), !snapshot.records.contains(where: { $0.personKey == key }),
+                  journal.floors[key] == nil else { continue }
             prepared.append(record)
         }
         return selectLegacyWinners(prepared, candidates: candidates, ambiguous: ambiguous)
