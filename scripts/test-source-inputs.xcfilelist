@@ -753,6 +753,7 @@ $(SRCROOT)/IntentTests/IntentFileLinkTests.swift
 $(SRCROOT)/IntentTests/IntentFileVideoTests.swift
 $(SRCROOT)/IntentTests/IntentNoteLinkParsingTests.swift
 $(SRCROOT)/IntentTests/InterFontTests.swift
+$(SRCROOT)/IntentTests/InvitedGroupedMigrationTests.swift
 $(SRCROOT)/IntentTests/InvitedImportReadFailureTests.swift
 $(SRCROOT)/IntentTests/InvitedRouteRefreshRaceTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionFixtures.swift
