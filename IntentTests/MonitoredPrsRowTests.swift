@@ -71,7 +71,8 @@ extension MonitoredPrsRowTests {
             optionsStore: CreationOptionsStore(connectionManager: connection)
         )
         let monitoredPrStore = MonitoredPrStore(connectionManager: connection)
-        monitoredPrStore.monitors = monitors
+        monitoredPrStore.activate(workspaceId: "ws-abc")
+        monitoredPrStore.source.cache.buckets["ws-abc"]?.rows = monitors
         let session = makeSession(connection: connection, workspaceStore: workspaceStore)
         return MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: monitoredPrStore)
             .environment(session)

@@ -119,7 +119,9 @@ import SwiftUI
         uploadService: AttachmentUploadService,
         optionsStore: CreationOptionsStore,
         agentDetails: AgentDetailStore? = nil,
-        conversations: ConversationStorePool? = nil
+        conversations: ConversationStorePool? = nil,
+        hooks: WorkspaceStatusStore<BackgroundHook>? = nil,
+        monitors: WorkspacePrMonitorsStore? = nil
     ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
@@ -130,8 +132,8 @@ import SwiftUI
         let details = sharedStore?.commands.agentDetails ?? agentDetails ?? AgentDetailStore(connection: connection)
         self.agentDetails = details
         self.store = sharedStore ?? ConversationStore(connectionManager: connection, agentDetails: details)
-        self.hookStore = BackgroundHookStore(connectionManager: connection)
-        self.monitoredPrStore = MonitoredPrStore(connectionManager: connection)
+        self.hookStore = BackgroundHookStore(connectionManager: connection, source: hooks)
+        self.monitoredPrStore = MonitoredPrStore(connectionManager: connection, source: monitors)
         self.attachmentPipeline = ConversationAttachmentPipeline(uploadService: uploadService)
         self.messageText = PersistenceManager.shared.loadDraft(
             workspaceId: workspaceId,

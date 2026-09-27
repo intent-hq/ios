@@ -36,6 +36,16 @@ struct MonitoredPrsRow: View {
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
 
+                if monitoredPrStore.error != nil {
+                    Button {
+                        Task { await monitoredPrStore.refetch() }
+                    } label: {
+                        Label("Status unavailable · Retry", systemImage: "exclamationmark.triangle")
+                    }
+                    .font(.caption2)
+                    .accessibilityLabel("PR monitors may be out of date. Retry refresh")
+                }
+
                 ForEach(monitoredPrStore.activeMonitors.filter { $0.agentId == viewModel.agentId }) { monitor in
                     monitorChip(monitor)
                 }

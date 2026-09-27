@@ -65,8 +65,9 @@ struct ConversationStartupOwnershipTests {
         #expect(connection.eventHandlerIDs.contains(handler))
         #expect(connection.subscriptionHandlerCount == 1)
         #expect(!connection.didCallMethod("chat.unsubscribe"))
-        try await waitUntil("only the first window's status registrations released") {
-            Set(connection.paramsForMethod("events.unsubscribe").compactMap { $0["subscriptionId"] as? String }) == firstRegistrations
+        #expect(allRegistrations == firstRegistrations, "windows share the workspace status feeds")
+        try await expectNever("shared status release while the second window remains") {
+            connection.didCallMethod("events.unsubscribe")
         }
         second.store.isStreaming = false
         #expect(!second.previousIsStreaming)

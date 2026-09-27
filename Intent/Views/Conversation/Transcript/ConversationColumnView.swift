@@ -105,7 +105,7 @@ struct ConversationColumnView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
 
-        if !viewModel.activeAgentMonitors.isEmpty {
+        if !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
             VStack(spacing: 0) {
                 MonitoredPrsRow(
                     viewModel: viewModel,
@@ -116,7 +116,7 @@ struct ConversationColumnView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
 
-        if !viewModel.activeAgentHooks.isEmpty {
+        if !viewModel.activeAgentHooks.isEmpty || viewModel.hookStore.error != nil {
             VStack(spacing: 0) {
                 BackgroundHooksRow(
                     viewModel: viewModel,

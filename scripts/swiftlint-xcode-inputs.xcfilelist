@@ -169,6 +169,8 @@ $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceProviderOptions.swift
+$(SRCROOT)/Intent/Services/WorkspaceStatusStore+Loading.swift
+$(SRCROOT)/Intent/Services/WorkspaceStatusStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceVideo.swift
 $(SRCROOT)/Intent/Utils/AppLog.swift
@@ -560,6 +562,10 @@ $(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
 $(SRCROOT)/IntentTests/SessionCacheBoundsMeasurementTests.swift
 $(SRCROOT)/IntentTests/SettingsViewTests.swift
 $(SRCROOT)/IntentTests/ShapeIsolationTests.swift
+$(SRCROOT)/IntentTests/SharedWorkspaceStatusFailureTests.swift
+$(SRCROOT)/IntentTests/SharedWorkspaceStatusLifetimeTests.swift
+$(SRCROOT)/IntentTests/SharedWorkspaceStatusRaceTests.swift
+$(SRCROOT)/IntentTests/SharedWorkspaceStatusTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
@@ -613,6 +619,7 @@ $(SRCROOT)/IntentTests/WorkspaceRowPrIndicatorTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPrPresentationTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPresentationTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusImageViewTests.swift
+$(SRCROOT)/IntentTests/WorkspaceStatusTestSupport.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreAgentLifecycleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreEventAllowlistTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreStateTests.swift

@@ -3,8 +3,8 @@ import Foundation
 import Testing
 
 /// Uses the real backend session composition across actual view models. A second
-/// panel shares the conversation and detail owners; per-view status stores still
-/// read again. The recorder measures every request made by those owners.
+/// panel shares conversation, detail and workspace status owners. The recorder
+/// measures every request made by those owners, including window/row leases.
 @MainActor
 final class ConversationStartupFixture {
     static let workspaceId = "startup-workspace"
@@ -68,7 +68,9 @@ final class ConversationStartupFixture {
             uploadService: AttachmentUploadService(connection: connection),
             optionsStore: options,
             agentDetails: details,
-            conversations: session.conversations
+            conversations: session.conversations,
+            hooks: session.hooksStore,
+            monitors: session.prMonitorsStore
         )
         viewModels.append(viewModel)
         return viewModel
@@ -89,6 +91,8 @@ final class ConversationStartupFixture {
     }
 
     func stop() {
+        session.hooksStore.reset()
+        session.prMonitorsStore.reset()
         for viewModel in viewModels {
             viewModel.teardownLiveStores()
         }

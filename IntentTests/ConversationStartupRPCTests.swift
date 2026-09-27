@@ -2,8 +2,7 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Metadata reuse regressions plus the remaining lifecycle/status baselines.
-/// Later tasks replace those excess-call assertions with the four/eight-call budgets.
+/// Real session request budgets, including remaining watched-detail/catalog costs.
 @MainActor
 struct ConversationStartupRPCTests {
     private let currentQuietCounts = [
@@ -43,7 +42,7 @@ struct ConversationStartupRPCTests {
         try expectListAfterAck(traffic, family: "prMonitor:*", method: "prMonitor.list")
     }
 
-    @Test func warmWorkspaceStillRepeatsPerViewStatusReads() async {
+    @Test func warmWorkspaceReusesStatusAcrossConversationsAndWindows() async {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
         // Suppress connected replay to isolate load() cost. The replay cases
@@ -57,6 +56,7 @@ struct ConversationStartupRPCTests {
             let traffic = fixture.connection.traffic(since: checkpoint)
             print("Warm workspace startup baseline: \(traffic.summary)")
             var expected = currentQuietCounts
+            for method in ["events.subscribe", "hook.list", "prMonitor.list"] { expected[method] = nil }
             if agentId == ConversationStartupFixture.parentId {
                 for method in ["agent.get", "chat.subscribe", "agent.getQueue", "agent.getSubscriptions"] { expected[method] = nil }
             }
@@ -171,7 +171,7 @@ struct ConversationStartupRPCTests {
             #expect(traffic.calls("specialist.list").count == 1)
             var expected = currentQuietCounts
             if expectedModelReads == 0 {
-                for method in ["agent.get", "chat.subscribe", "agent.getQueue", "agent.getSubscriptions"] { expected[method] = nil }
+                for method in currentQuietCounts.keys { expected[method] = nil }
             }
             expected["models.list"] = expectedModelReads == 1 ? 1 : nil
             expected["specialist.list"] = 1

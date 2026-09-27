@@ -14,6 +14,8 @@ struct RootView: View {
     /// Token of this window's selection-handler registration, so disappear
     /// removes only this window's registration — never a successor's.
     @State private var selectionHandlerToken: UUID?
+    @State private var statusConsumer = UUID()
+    @State private var statusWorkspaceId: String?
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
@@ -275,6 +277,9 @@ struct RootView: View {
                     .padding()
             }
         }
+        .onChange(of: isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil, initial: true) { _, workspaceId in
+            updateWorkspaceStatusLease(workspaceId)
+        }
         .task { await DemoConnectionLoss.run(connection: session.connection, coordinator: coordinator) }
         // intent://pair deep-link confirmation — presented over whichever
         // screen is current (first-run pairing or an existing connection).
@@ -282,6 +287,7 @@ struct RootView: View {
             DeepLinkPairingView(payload: request.payload)
         }
         .onAppear {
+            updateWorkspaceStatusLease(isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil)
             let supportsMultipleWindows = supportsMultipleWindows
             let openWindow = openWindow
             notificationManager.supportsMultipleWindows = supportsMultipleWindows
@@ -307,10 +313,22 @@ struct RootView: View {
             }
         }
         .onDisappear {
+            updateWorkspaceStatusLease(nil)
             guard let backendID = session.backendID,
                   let token = selectionHandlerToken else { return }
             notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
         }
+    }
+
+    private func updateWorkspaceStatusLease(_ workspaceId: String?) {
+        guard statusWorkspaceId != workspaceId else { return }
+        if let workspaceId {
+            session.retainWorkspaceStatus(workspaceId: workspaceId, consumer: statusConsumer)
+        }
+        if let previous = statusWorkspaceId {
+            session.releaseWorkspaceStatus(workspaceId: previous, consumer: statusConsumer)
+        }
+        statusWorkspaceId = workspaceId
     }
 }
 

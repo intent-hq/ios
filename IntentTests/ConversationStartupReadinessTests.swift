@@ -82,6 +82,8 @@ struct ConversationStartupReadinessTests {
         defer { load.cancel(); fixture.stop() }
         try await connection.waitForPendingRequests("agent.get")
         try await waitUntil("early transcript") { !model.isLoading && !model.messages.isEmpty }
+        try await connection.waitForPendingRequests("hook.list")
+        try await connection.waitForPendingRequests("prMonitor.list")
         #expect(!model.isEntryScrollReady)
         #expect(model.newMessagesDividerAnchorId == nil)
         connection.deliverEvent(method: "event", params: [

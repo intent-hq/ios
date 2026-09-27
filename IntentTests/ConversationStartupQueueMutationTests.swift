@@ -250,6 +250,8 @@ extension ConversationStartupQueueMutationTests {
         try await waitUntil("queue seed applied while metadata is held") {
             model.store.queueReadTask == nil && model.store.queuedMessages.map(\.id) == ["existing"]
                 && fixture.connection.traffic().calls("agent.getQueue").first?.completed != nil
+                && fixture.connection.traffic().calls("hook.list").first?.completed != nil
+                && fixture.connection.traffic().calls("prMonitor.list").first?.completed != nil
         }
         #expect(model.store.workspaceId == nil)
     }
@@ -323,14 +325,14 @@ extension ConversationStartupQueueMutationTests {
     }
 
     private func assertReleasedTraffic(_ connection: RPCRecordingConnection, action: String, openings: Int) async throws {
-        let statusRegistrationCount = 4
+        let statusRegistrationCount = 2 * openings
         try await waitUntil("both window status registrations finish cleanup") {
             let calls = connection.traffic().calls("events.unsubscribe")
             return calls.count == statusRegistrationCount && calls.allSatisfy { $0.completed != nil }
         }
         #expect(connection.traffic().methodCounts == [
             "chat.subscribe": openings, "agent.get": openings, "agent.getQueue": openings,
-            "agent.getSubscriptions": openings, "events.subscribe": statusRegistrationCount, "hook.list": 2, "prMonitor.list": 2,
+            "agent.getSubscriptions": openings, "events.subscribe": statusRegistrationCount, "hook.list": openings, "prMonitor.list": openings,
             method(action): 1, "chat.unsubscribe": openings, "events.unsubscribe": statusRegistrationCount
         ])
         #expect(connection.traffic().pendingCount == 0)

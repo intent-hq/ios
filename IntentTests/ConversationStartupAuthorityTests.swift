@@ -86,6 +86,12 @@ struct ConversationStartupAuthorityTests {
         let validLoad = Task { await valid.load() }
         defer { validLoad.cancel() }
         try await waitUntil("second window shares the owner") { valid.store.consumers.contains(valid.conversationConsumer) }
+        try await waitUntil("both workspace status seeds complete before authority changes") {
+            let traffic = connection.traffic()
+            let count = staleHint ? 2 : 1
+            return traffic.calls("hook.list").filter { $0.completed != nil }.count == count
+                && traffic.calls("prMonitor.list").filter { $0.completed != nil }.count == count
+        }
         if seedFirst {
             connection.resolvePending("agent.getSubscriptions", with: fixture.subscriptions())
             try await expectNever("subscription effects before workspace authority") {
@@ -227,15 +233,17 @@ struct ConversationStartupAuthorityTests {
     }
 
     private func assertSharedReleaseTraffic(_ connection: RPCRecordingConnection, seedFirst: Bool, staleHint: Bool) async throws {
+        let registrations = staleHint ? 3 : 2
+        let lists = staleHint ? 2 : 1
         try await waitUntil("all window status cleanup completes") {
             let releases = connection.traffic().calls("events.unsubscribe")
-            return releases.count == 4 && releases.allSatisfy { $0.completed != nil }
+            return releases.count == registrations && releases.allSatisfy { $0.completed != nil }
         }
         let traffic = connection.traffic()
         #expect(traffic.methodCounts == [
             "chat.subscribe": 1, "chat.unsubscribe": 1, "agent.get": 1, "agent.getQueue": 1,
             "agent.getSubscriptions": staleHint ? 2 : 1, "agent.list": 1,
-            "events.subscribe": 4, "events.unsubscribe": 4, "hook.list": 2, "prMonitor.list": 2
+            "events.subscribe": registrations, "events.unsubscribe": registrations, "hook.list": lists, "prMonitor.list": lists
         ])
         #expect(traffic.pendingCount == 0 && traffic.failures.isEmpty)
         print("Authority scope seedFirst=\(seedFirst) staleHint=\(staleHint), including both-window cleanup: \(traffic.summary)")

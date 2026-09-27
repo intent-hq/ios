@@ -78,6 +78,7 @@ final class BackendSession {
     /// Session-lifetime specialist / provider / model cache for the New
     /// Workspace final step; same reopen-instantly contract as the repo cache.
     let creationOptionsStore: CreationOptionsStore
+    let hooksStore: WorkspaceStatusStore<BackgroundHook>
     let prMonitorsStore: WorkspacePrMonitorsStore
     let mobileTerminalStore: MobileTerminalStore
     let attachmentUploadService: AttachmentUploadService
@@ -111,6 +112,7 @@ final class BackendSession {
         self.coordinatorFactory = coordinatorFactory
         self.githubRepoStore = githubRepoStore
         self.creationOptionsStore = creationOptionsStore
+        self.hooksStore = BackgroundHookStore.makeWorkspaceStore(connection: connection)
         self.prMonitorsStore = prMonitorsStore
         mobileTerminalStore = MobileTerminalStore(
             connection: connection,
@@ -150,9 +152,29 @@ final class BackendSession {
         return true
     }
 
+    /// The window keeps these leases across conversation switches in its
+    /// selected workspace. Conversation/row leases share the exact same caches.
+    func retainWorkspaceStatus(workspaceId: String, consumer: UUID) {
+        hooksStore.retain(workspaceId: workspaceId, consumer: consumer)
+        prMonitorsStore.retain(workspaceId: workspaceId, consumer: consumer)
+        Task {
+            guard hooksStore.buckets[workspaceId]?.consumers.contains(consumer) == true else { return }
+            async let hooks: () = hooksStore.load(workspaceId: workspaceId)
+            async let monitors: () = prMonitorsStore.seed(workspaceId: workspaceId)
+            _ = await (hooks, monitors)
+        }
+    }
+
+    func releaseWorkspaceStatus(workspaceId: String, consumer: UUID) {
+        hooksStore.release(workspaceId: workspaceId, consumer: consumer)
+        prMonitorsStore.release(workspaceId: workspaceId, consumer: consumer)
+    }
+
     /// Disconnects the backend connection. Called by the registry when the
     /// last window detaches from the session.
     func teardown() {
+        hooksStore.reset()
+        prMonitorsStore.reset()
         conversations.reset()
         agentDetails.reset()
         connection.disconnect()

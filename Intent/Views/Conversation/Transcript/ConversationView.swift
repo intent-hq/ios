@@ -26,7 +26,9 @@ struct ConversationView: View {
             uploadService: session.attachmentUploadService,
             optionsStore: session.creationOptionsStore,
             agentDetails: session.agentDetails,
-            conversations: session.conversations
+            conversations: session.conversations,
+            hooks: session.hooksStore,
+            monitors: session.prMonitorsStore
         ))
     }
 
