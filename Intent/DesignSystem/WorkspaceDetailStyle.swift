@@ -6,7 +6,7 @@ enum WorkspaceDetailStyle {
     static let headingSpacing: CGFloat = 12
     static let headingBottomSpacing: CGFloat = 24
     static let sectionSpacing: CGFloat = 48
-    static let sectionHeadingSpacing: CGFloat = 16
+    static let sectionHeadingSpacing: CGFloat = 24
     static let titleTracking: CGFloat = -0.56
     static let rowTitleTracking: CGFloat = -0.36
     static let bodyTracking: CGFloat = -0.16
