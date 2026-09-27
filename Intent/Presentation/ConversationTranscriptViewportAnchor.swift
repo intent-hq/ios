@@ -6,7 +6,7 @@ import Foundation
 /// not merely the identity of a visible target.
 /// Each divider revision permits one correction; scrolling remains user-owned.
 struct ConversationTranscriptViewportAnchor {
-    struct Measurement: Equatable {
+    nonisolated struct Measurement: Equatable, Sendable {
         let frame: CGRect
         let divider: String?
         let generation: Int

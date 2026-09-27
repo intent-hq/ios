@@ -6,7 +6,7 @@ import SwiftUI
 struct ConversationTranscriptView: View {
     typealias Layout = Constants.Conversation.Transcript
 
-    static let viewportCoordinateSpace = "conversation-transcript-viewport"
+    nonisolated static let viewportCoordinateSpace = "conversation-transcript-viewport"
 
     let viewModel: ConversationViewModel
     let scrollState: ConversationTranscriptScrollState
