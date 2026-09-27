@@ -130,7 +130,8 @@ extension PersistenceManager {
     func restoreInvitedAliases(_ registry: InvitedSessionRegistry, journal: InvitedSyncJournal) {
         guard let durable = registry.read(), !durable.removalStateUnknown else { return }
         for (alias, people) in journal.retired {
-            guard people.allSatisfy({ key in durable.records.contains(where: { $0.personKey == key }) }) else { continue }
+            guard !journal.hasPendingLegacy(alias: alias),
+                  people.allSatisfy({ key in durable.records.contains(where: { $0.personKey == key }) }) else { continue }
             let marker = InvitedSyncRecord(object: ["v": 2, "kind": "legacy-alias", "personKeys": people], account: alias)
             _ = registry.writeMutable(marker, snapshot: durable)
         }

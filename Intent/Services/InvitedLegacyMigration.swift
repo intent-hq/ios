@@ -1,19 +1,52 @@
+import CryptoKit
 import Foundation
 
 enum InvitedLegacyMigration {
+    /// Local, token-free provenance for a row seen before its alias retired.
+    /// The digest permits only these exact bytes in this exact access group;
+    /// a bound person must still be authenticated on every retry.
+    struct Receipt: Codable, Equatable {
+        let account: String
+        let group: String?
+        let rowDigest: Data
+        let pairedAt: Double
+        var personKey: String?
+
+        init(_ candidate: Candidate, source: InvitedSessionRegistry.Entry) {
+            account = source.account
+            group = source.group
+            rowDigest = Data(SHA256.hash(data: source.data))
+            pairedAt = ConnectionPrincipal.number(candidate.object["pairedAt"]) ?? candidate.legacy.updatedAt
+        }
+
+        func matches(_ source: InvitedSessionRegistry.Entry) -> Bool {
+            account.utf8.elementsEqual(source.account.utf8)
+                && group.map { Data($0.utf8) } == source.group.map { Data($0.utf8) }
+                && rowDigest == Data(SHA256.hash(data: source.data))
+        }
+
+        func covered(by records: [InvitedSyncRecord], floors: [String: Double]) -> Bool {
+            guard let personKey else { return false }
+            let floor = floors[personKey] ?? 0
+            return floor > 0 && floor >= pairedAt
+                || records.contains { $0.personKey == personKey && $0.live && $0.pairedAt >= pairedAt }
+        }
+    }
+
     struct Candidate {
         let account: String
         let object: [String: Any]
         let legacy: SyncedBackendRecord
         let principalId: String?
         let fingerprint: String
+        var source: InvitedSessionRegistry.Entry?
 
         var personKey: String? { principalId.flatMap { try? InvitedSyncKey.session(fingerprint: fingerprint, principalId: $0) } }
     }
 
     static func candidates(_ snapshot: InvitedSessionRegistry.Snapshot, journal: InvitedSyncJournal) -> [Candidate] {
         snapshot.entries.compactMap { entry in
-            guard journal.retired[entry.account] == nil,
+            guard journal.retired[entry.account] == nil || journal.pendingMigration(for: entry) != nil,
                   InvitedSessionRegistry.knownLegacy(entry.data),
                   let object = try? JSONSerialization.jsonObject(with: entry.data) as? [String: Any],
                   let text = String(data: entry.data, encoding: .utf8),
@@ -24,7 +57,7 @@ enum InvitedLegacyMigration {
                   let pin = try? InvitedSyncKey.fingerprint(record.fingerprint),
                   !record.isExpiredTombstone(now: Date()) else { return nil }
             let principal = (object["principalId"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-            let candidate = Candidate(account: entry.account, object: object, legacy: record, principalId: principal, fingerprint: pin)
+            let candidate = Candidate(account: entry.account, object: object, legacy: record, principalId: principal, fingerprint: pin, source: entry)
             if let key = candidate.personKey,
                snapshot.records.contains(where: { $0.personKey == key }) || snapshot.frozen(key) { return nil }
             return candidate

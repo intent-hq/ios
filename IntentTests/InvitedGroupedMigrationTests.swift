@@ -15,10 +15,10 @@ nonisolated private final class GroupedInvitedKeychain: SyncedKeychainWriting {
     static let alias = "mac.local:8843"
     var items: [ItemKey: Data] = [:]
 
-    @MainActor func put(_ person: String, group: String, clock: Double = 100) throws {
+    @MainActor func put(_ person: String, group: String, clock: Double = 100, classified: Bool = true) throws {
         var object = BackendSyncFixtures.remote(clock: clock)
         object["fingerprint"] = InvitedSessionFixtures.pin
-        object["principalId"] = person
+        object["principalId"] = classified ? person : nil
         object["token"] = "\(person)-still-valid"
         object["detectedDeviceKind"] = "laptop"
         items[ItemKey(group: group, account: Self.alias)] = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
@@ -90,6 +90,9 @@ nonisolated private final class GroupedInvitedKeychain: SyncedKeychainWriting {
         #expect(first.principal?.id != failedPerson)
         #expect(store.persistence.loadConnections().count == 1)
         for (key, bytes) in original { #expect(cloud.items[key] == bytes) }
+        let journalBytes = try JSONEncoder().encode(store.persistence.invitedJournal)
+        let journalText = try #require(String(data: journalBytes, encoding: .utf8))
+        #expect(!journalText.contains("B-still-valid") && !journalText.contains("C-still-valid"))
 
         store.storage.setSaveFailure(false)
         let recovered = relaunch ? store.relaunch() : store.persistence
@@ -101,6 +104,7 @@ nonisolated private final class GroupedInvitedKeychain: SyncedKeychainWriting {
         #expect(restoredFirst?.id == first.id)
         #expect(saved.map(\.token).sorted() == ["B-still-valid", "C-still-valid"])
         #expect(Set(store.relaunch().loadConnections().map(\.id)) == Set(saved.map(\.id)))
+        recovered.publishPendingInvitedSessions()
         let aliasKey = GroupedInvitedKeychain.ItemKey(group: BackendSyncFixtures.accessGroup, account: GroupedInvitedKeychain.alias)
         let marker = try #require(InvitedSyncRecord.parse(account: aliasKey.account, data: try #require(cloud.items[aliasKey])))
         #expect(marker.kind == "legacy-alias")
@@ -157,5 +161,72 @@ nonisolated private final class GroupedInvitedKeychain: SyncedKeychainWriting {
         let recovered = store.relaunch()
         _ = await recovered.refreshInvitedSessions { candidate in principal(candidate) }
         #expect(recovered.loadConnections().map(\.token).sorted() == ["B-still-valid", "C-still-valid"])
+    }
+
+    @Test func authenticatedPendingRowCannotChangePersonOnRetry() async throws {
+        let cloud = try cloud()
+        try cloud.put("B", group: BackendSyncFixtures.accessGroup, classified: false)
+        let store = try InvitedSessionFixtures.Store(cloud)
+        defer { store.close() }
+        _ = await store.persistence.refreshInvitedSessions { candidate in
+            store.storage.setSaveFailure(candidate.token == "B-still-valid")
+            return principal(candidate)
+        }
+        store.storage.setSaveFailure(false)
+        let recovered = store.relaunch()
+        _ = await recovered.refreshInvitedSessions { candidate in
+            InvitedSessionFixtures.principal(candidate.token == "B-still-valid" ? "D" : "C")
+        }
+        #expect(recovered.loadConnections().compactMap { $0.principal?.id } == ["C"])
+        _ = await recovered.refreshInvitedSessions { candidate in principal(candidate) }
+        #expect(recovered.loadConnections().map(\.token).sorted() == ["B-still-valid", "C-still-valid"])
+    }
+
+    @Test func removalEndsOnlyItsPendingMigrationAndCannotBeUndoneByStaleRows() async throws {
+        let cloud = try cloud()
+        let original = cloud.items
+        let store = try InvitedSessionFixtures.Store(cloud)
+        defer { store.close() }
+        _ = await store.persistence.refreshInvitedSessions { candidate in
+            store.storage.setSaveFailure(candidate.token == "B-still-valid")
+            return principal(candidate)
+        }
+        let other = try #require(store.persistence.loadConnections().first)
+        let removal = try InvitedSessionFixtures.removal()
+        let removalKey = GroupedInvitedKeychain.ItemKey(group: BackendSyncFixtures.accessGroup, account: removal.account)
+        cloud.items[removalKey] = removal.data
+        store.storage.setSaveFailure(true)
+        _ = await store.persistence.refreshInvitedSessions { candidate in
+            #expect(candidate.token == "C-still-valid")
+            return principal(candidate)
+        }
+        let key = try InvitedSyncKey.session(fingerprint: InvitedSessionFixtures.pin, principalId: "B")
+        #expect(store.persistence.invitedJournal.floors[key] == removal.floor)
+        #expect(store.persistence.invitedJournal.pendingLegacy.isEmpty)
+
+        cloud.items[removalKey] = nil
+        for (source, bytes) in original { cloud.items[source] = bytes }
+        let stale = try InvitedSessionFixtures.session()
+        cloud.items[GroupedInvitedKeychain.ItemKey(group: BackendSyncFixtures.accessGroup, account: key)] = stale.data
+        store.storage.setSaveFailure(false)
+        let recovered = store.relaunch()
+        _ = await recovered.refreshInvitedSessions { candidate in
+            #expect(candidate.token == "C-still-valid")
+            return principal(candidate)
+        }
+        #expect(recovered.loadConnections().map(\.id) == [other.id])
+        #expect(recovered.loadConnections().map(\.token) == ["C-still-valid"])
+        #expect(cloud.items[removalKey] == removal.data)
+        #expect(recovered.invitedJournal.floors[key] == removal.floor)
+    }
+
+    @Test func oldJournalDecodesWithoutReopeningRetiredAliases() throws {
+        let key = try InvitedSyncKey.session(fingerprint: InvitedSessionFixtures.pin, principalId: "C")
+        let old: [String: Any] = ["floors": [key: 0], "removals": [:], "retired": [GroupedInvitedKeychain.alias: [key]], "clock": 100]
+        let journal = try JSONDecoder().decode(InvitedSyncJournal.self, from: JSONSerialization.data(withJSONObject: old))
+        #expect(journal.pendingLegacy.isEmpty)
+        #expect(journal.retired[GroupedInvitedKeychain.alias] == [key])
+        let registry = InvitedSessionRegistry(keychain: try cloud(), accessGroup: BackendSyncFixtures.accessGroup)
+        #expect(InvitedLegacyMigration.candidates(try #require(registry.read()), journal: journal).isEmpty)
     }
 }

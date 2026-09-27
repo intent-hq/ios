@@ -100,6 +100,11 @@ extension PersistenceManager {
 
     private func migrateInvited(snapshot: InvitedSessionRegistry.Snapshot, authenticate: InvitedAuthenticator) async -> [InvitedSyncRecord] {
         let candidates = InvitedLegacyMigration.candidates(snapshot, journal: invitedJournal)
+        // Reserve every eligible source before any await or peer save can retire
+        // their shared alias. This grants retry of the row, never socket authority.
+        var journal = invitedJournal
+        journal.reserveLegacySources(candidates)
+        invitedJournal = journal
         let ambiguous = Set(candidates.filter { $0.legacy.deleted && $0.principalId == nil }.map(\.account))
         var prepared: [InvitedSyncRecord] = []
         // Authenticate all attributable live candidates before selecting v1 LWW
@@ -121,8 +126,11 @@ extension PersistenceManager {
             guard let principal = try? await authenticate(connection),
                   let record = InvitedLegacyMigration.session(candidate, principal: principal),
                   !snapshot.frozen(record.account),
-                  !snapshot.records.contains(where: { $0.personKey == record.personKey }),
-                  invitedJournal.floors[record.account] == nil else { continue }
+                  !snapshot.records.contains(where: { $0.personKey == record.personKey }), invitedJournalAvailable else { continue }
+            journal = invitedJournal
+            guard journal.bindLegacySource(candidate, personKey: record.account) else { continue }
+            invitedJournal = journal
+            guard journal.floors[record.account] == nil else { continue }
             prepared.append(record)
         }
         return selectLegacyWinners(prepared, candidates: candidates, ambiguous: ambiguous)

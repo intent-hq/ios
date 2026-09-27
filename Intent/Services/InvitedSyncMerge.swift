@@ -68,6 +68,22 @@ struct InvitedSyncJournal: Codable {
     var removals: [String: Data] = [:]
     var retired: [String: [String]] = [:]
     var clock: Double = 0
+    // Absent in existing journals means no retry exception. This local-only
+    // field contains hashes/provenance, never bearer payloads.
+    var pendingLegacy: [InvitedLegacyMigration.Receipt] = []
+
+    private enum CodingKeys: String, CodingKey { case floors, removals, retired, clock, pendingLegacy }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        floors = try values.decode([String: Double].self, forKey: .floors)
+        removals = try values.decode([String: Data].self, forKey: .removals)
+        retired = try values.decode([String: [String]].self, forKey: .retired)
+        clock = try values.decode(Double.self, forKey: .clock)
+        pendingLegacy = try values.decodeIfPresent([InvitedLegacyMigration.Receipt].self, forKey: .pendingLegacy) ?? []
+    }
 
     mutating func observe(_ records: [InvitedSyncRecord]) {
         for record in records {
@@ -80,6 +96,32 @@ struct InvitedSyncJournal: Codable {
                 for alias in record.legacyAccounts { retire(alias, people: [key]) }
             }
         }
+        let observedFloors = floors
+        pendingLegacy.removeAll { $0.covered(by: records, floors: observedFloors) }
+    }
+
+    func pendingMigration(for source: InvitedSessionRegistry.Entry) -> InvitedLegacyMigration.Receipt? {
+        pendingLegacy.first { $0.matches(source) }
+    }
+
+    mutating func reserveLegacySources(_ candidates: [InvitedLegacyMigration.Candidate]) {
+        for candidate in candidates where !candidate.legacy.deleted {
+            guard let source = candidate.source, pendingMigration(for: source) == nil,
+                  retired[source.account] == nil else { continue }
+            pendingLegacy.append(InvitedLegacyMigration.Receipt(candidate, source: source))
+        }
+    }
+
+    mutating func bindLegacySource(_ candidate: InvitedLegacyMigration.Candidate, personKey: String) -> Bool {
+        guard let source = candidate.source, let index = pendingLegacy.firstIndex(where: { $0.matches(source) }),
+              pendingLegacy[index].personKey == nil || pendingLegacy[index].personKey == personKey else { return false }
+        pendingLegacy[index].personKey = personKey
+        observe([]) // An already observed removal also covers this newly bound row.
+        return true
+    }
+
+    func hasPendingLegacy(alias: String) -> Bool {
+        pendingLegacy.contains { $0.account.utf8.elementsEqual(alias.utf8) }
     }
 
     mutating func retire(_ account: String, people: [String]) {
