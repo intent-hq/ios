@@ -50,14 +50,8 @@ extension ConversationTranscriptView {
     /// fires first, after LazyVStack has had time to finish layout.
     func runInitialScrollIfNeeded(proxy: ScrollViewProxy) {
         guard !scrollState.initialScrollScheduled else { return }
-        guard viewModel.isEntryScrollReady else {
-            scrollState.presentedBeforeEntryMetadata = true
-            return
-        }
-        if scrollState.presentedBeforeEntryMetadata {
-            scrollState.preservePresentedViewport(distanceToBottom: scrollMomentumProxy.distanceToBottom)
-            return
-        }
+        // Snapshot appearance can precede an already-running detail read by a
+        // layout pass. Decide at initial layout, not at this scheduling edge.
         scrollState.initialScrollScheduled = true
         let generation = scrollState.initialScrollGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
@@ -106,10 +100,14 @@ extension ConversationTranscriptView {
         switch ConversationTranscriptScrollPolicy.initialScrollStep(
             alreadyPerformed: scrollState.initialScrollPerformed,
             scrollViewResolved: scrollMomentumProxy.hasResolvedScrollView,
-            scrollViewWaitElapsed: scrollViewWaitElapsed
+            scrollViewWaitElapsed: scrollViewWaitElapsed,
+            entryMetadataReady: viewModel.isEntryScrollReady
         ) {
         case .skip:
             return
+        case .preserveViewport:
+            scrollState.presentedBeforeEntryMetadata = true
+            scrollState.preservePresentedViewport(distanceToBottom: scrollMomentumProxy.distanceToBottom)
         case .waitForScrollView:
             scrollState.initialScrollAwaitingScrollView = true
             DispatchQueue.main.asyncAfter(

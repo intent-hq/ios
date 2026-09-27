@@ -11,12 +11,16 @@ extension ConversationTranscriptView {
         }
 
         ForEach(viewModel.filteredMessages) { message in
-            messageRow(for: message)
-                .id(message.id)
-            if message.id == dividerAnchorId {
-                NewMessagesDividerView()
-                    .id("new-messages-divider")
+            // One stable lazy-stack target per message. A late divider changes
+            // its height without shifting the identity of all following rows.
+            VStack(spacing: Layout.transcriptRowSpacing) {
+                messageRow(for: message)
+                if message.id == dividerAnchorId {
+                    NewMessagesDividerView()
+                        .id("new-messages-divider")
+                }
             }
+            .id(message.id)
         }
 
         #if !os(visionOS)

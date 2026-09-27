@@ -8,8 +8,8 @@ extension ConversationViewModel {
         if activeLiveStoreActivation == nil {
             liveStoreActivationGeneration &+= 1
             activeLiveStoreActivation = liveStoreActivationGeneration
-            hasLatchedNewMessagesDividerAnchor = false
-            latchedNewMessagesDividerAnchorId = nil
+            // The same retained view keeps its authoritative divider while its
+            // live subscriptions revalidate. A changed store clears the latch.
             detailConsumer = agentDetails.retain(agentId: agentId)
             if streamingObserverId == nil { observeStreaming() }
             store.retainConversation(conversationConsumer, agentId: agentId, workspaceId: workspaceId)

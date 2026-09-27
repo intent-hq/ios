@@ -6,6 +6,10 @@ import SwiftUI
 @Observable class ConversationViewModel {
     var store: ConversationStore {
         didSet {
+            if store !== oldValue {
+                hasLatchedNewMessagesDividerAnchor = false
+                latchedNewMessagesDividerAnchorId = nil
+            }
             if let streamingObserverId { oldValue.streamingObservers[streamingObserverId] = nil }
             oldValue.entryObservers[conversationConsumer] = nil
             if activeLiveStoreActivation != nil { oldValue.releaseConversation(conversationConsumer) }

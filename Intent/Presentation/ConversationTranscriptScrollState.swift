@@ -174,6 +174,9 @@ final class ConversationTranscriptScrollState {
     var initialScrollAwaitingScrollView = false
     var initialScrollPerformed = false
     var presentedBeforeEntryMetadata = false
+    /// SwiftUI tracks the visible message across a late divider insertion.
+    /// This belongs to the retained viewport, not the live-store activation.
+    var visibleMessageID: String?
     /// Invalidates delayed entry-scroll callbacks when an emptied transcript
     /// re-arms entry scrolling for the next snapshot.
     @ObservationIgnored private(set) var initialScrollGeneration = 0
@@ -236,6 +239,7 @@ final class ConversationTranscriptScrollState {
         initialScrollAwaitingScrollView = false
         initialScrollPerformed = false
         presentedBeforeEntryMetadata = false
+        visibleMessageID = nil
         forcedFollowTakenOverByGesture = false
         isScrollingToBottom = false
         goToEndRequested = false

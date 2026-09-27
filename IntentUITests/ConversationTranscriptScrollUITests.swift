@@ -418,9 +418,23 @@ extension ConversationTranscriptScrollUITests {
     @MainActor
     private func revealStartupDivider(_ app: XCUIApplication, opened: OpenConversation) {
         let divider = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch
-        for _ in 0..<Fixture.maxSwipesToTop {
+        let maximumViewportSteps = 30
+        for _ in 0..<maximumViewportSteps {
             if isInside(divider, opened.transcript) { return }
-            opened.transcript.swipeDown()
+            // A full-speed swipe can jump over the divider and then keep
+            // moving toward the first row. Walk overlapping viewport bands,
+            // reversing if the authoritative marker is already below them.
+            let visible = rows(intersecting: opened.transcript).compactMap { row -> Int? in
+                guard row.label.hasPrefix("Startup row ") else { return nil }
+                return Int(row.label.dropFirst("Startup row ".count).prefix { $0.isNumber })
+            }
+            let markerRow = 25
+            let towardEarlier = (visible.min() ?? markerRow) > markerRow
+            let startY = towardEarlier ? 0.35 : 0.65
+            let endY = towardEarlier ? 0.65 : 0.35
+            let start = opened.transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))
+            let end = opened.transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY))
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
         XCTFail("the authoritative unread divider was never visible")
     }

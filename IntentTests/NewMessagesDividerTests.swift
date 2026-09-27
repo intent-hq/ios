@@ -639,6 +639,7 @@ extension ConversationTranscriptScrollPolicyTests {
     func visibleTranscriptConsumesDeferredEntryWithoutChangingItsViewport(distance: CGFloat) {
         let state = ConversationTranscriptScrollState()
         state.presentedBeforeEntryMetadata = true
+        state.visibleMessageID = "retained-row"
         state.initialScrollAwaitingScrollView = true
         let generation = state.initialScrollGeneration
         state.preservePresentedViewport(distanceToBottom: distance)
@@ -649,7 +650,49 @@ extension ConversationTranscriptScrollPolicyTests {
         let consumed = state.initialScrollGeneration
         state.preservePresentedViewport(distanceToBottom: nil)
         #expect(state.initialScrollGeneration == consumed, "same-binding reappearance cannot position again")
+        #expect(state.visibleMessageID == "retained-row")
         state.rearmAfterTranscriptEmptied()
         #expect(!state.presentedBeforeEntryMetadata && !state.initialScrollPerformed)
+        #expect(state.visibleMessageID == nil)
+    }
+}
+
+extension ConversationTranscriptScrollPolicyTests {
+    @Test func metadataReadinessIsDecidedAtInitialLayoutRatherThanFirstAppearance() {
+        #expect(ConversationTranscriptScrollPolicy.initialScrollStep(
+            alreadyPerformed: false,
+            scrollViewResolved: false,
+            scrollViewWaitElapsed: false,
+            entryMetadataReady: false
+        ) == .waitForScrollView)
+        #expect(ConversationTranscriptScrollPolicy.initialScrollStep(
+            alreadyPerformed: false,
+            scrollViewResolved: true,
+            scrollViewWaitElapsed: false,
+            entryMetadataReady: true
+        ) == .perform, "metadata arriving before initial layout retains normal unread/bottom entry")
+        #expect(ConversationTranscriptScrollPolicy.initialScrollStep(
+            alreadyPerformed: false,
+            scrollViewResolved: true,
+            scrollViewWaitElapsed: false,
+            entryMetadataReady: false
+        ) == .preserveViewport, "already presented rows take precedence over later authority")
+    }
+
+    @Test func gestureOrCompletedEntryCannotBeReopenedByLaterMetadata() {
+        for ready in [false, true] {
+            #expect(ConversationTranscriptScrollPolicy.initialScrollStep(
+                alreadyPerformed: true,
+                scrollViewResolved: true,
+                scrollViewWaitElapsed: true,
+                entryMetadataReady: ready
+            ) == .skip)
+        }
+        #expect(ConversationTranscriptScrollPolicy.initialScrollStep(
+            alreadyPerformed: false,
+            scrollViewResolved: false,
+            scrollViewWaitElapsed: true,
+            entryMetadataReady: false
+        ) == .preserveViewport)
     }
 }

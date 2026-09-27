@@ -136,6 +136,7 @@ private extension ConversationTranscriptView {
             LazyVStack(spacing: Layout.transcriptRowSpacing) {
                 transcriptRows(proxy: proxy, dividerAnchorId: dividerAnchorId)
             }
+            .scrollTargetLayout()
             .padding(.horizontal, Layout.transcriptHorizontalPadding)
             .padding(.top, Layout.transcriptTopPadding)
             .onGeometryChange(for: CGFloat.self) { proxy in
@@ -148,6 +149,10 @@ private extension ConversationTranscriptView {
             .background(ScrollViewFinder(proxy: scrollMomentumProxy))
         }
         .defaultScrollAnchor(.bottom)
+        .scrollPosition(id: Binding(
+            get: { scrollState.visibleMessageID },
+            set: { scrollState.visibleMessageID = $0 }
+        ))
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.always)
         .accessibilityIdentifier("transcript.scrollView")
