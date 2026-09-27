@@ -66,8 +66,16 @@ struct ConversationTranscriptViewportAnchor {
             visiblePosition = Position(id: first.key, minY: first.value.minY)
         }
         guard let pending, pending.id == id else { return nil }
-        if pending.isReappearance,
-           measurement.frame.maxY <= 0 || measurement.frame.minY >= viewportHeight { return nil }
+        if pending.isReappearance {
+            // Rehosting can report unavailable geometry before realizing the row.
+            let frame = measurement.frame
+            guard viewportHeight.isFinite, viewportHeight > 0, !frame.isInfinite,
+                  frame.origin.x.isFinite, frame.origin.y.isFinite,
+                  frame.size.width.isFinite, frame.size.height.isFinite,
+                  frame.size.width > 0, frame.size.height > 0,
+                  frame.maxX.isFinite, frame.maxY.isFinite,
+                  frame.maxY > 0, frame.minY < viewportHeight else { return nil }
+        }
         self.pending = nil
         guard preserve else { return nil }
         let adjustment = measurement.frame.minY - pending.minY

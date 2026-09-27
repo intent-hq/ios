@@ -52,6 +52,71 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(state.viewportAnchor.record(id: "row-31", measurement: rehosted, viewportHeight: 600, preserve: true, entryGeneration: generation) == nil)
     }
 
+    @Test(arguments: [
+        (CGRect(x: 0, y: 48, width: 300, height: 0), CGFloat(600)),
+        (CGRect(x: 0, y: 48, width: 0, height: 64), CGFloat(600)),
+        (CGRect(x: 0, y: 48, width: -300, height: 64), CGFloat(600)),
+        (CGRect(x: 0, y: 48, width: 300, height: -64), CGFloat(600)),
+        (CGRect(x: CGFloat.nan, y: 48, width: 300, height: 64), CGFloat(600)),
+        (CGRect(x: 0, y: CGFloat.nan, width: 300, height: 64), CGFloat(600)),
+        (CGRect(x: 0, y: 48, width: CGFloat.nan, height: 64), CGFloat(600)),
+        (CGRect(x: 0, y: 48, width: 300, height: CGFloat.nan), CGFloat(600)),
+        (CGRect(x: CGFloat.infinity, y: 48, width: 300, height: 64), CGFloat(600)),
+        (CGRect(x: 0, y: CGFloat.infinity, width: 300, height: 64), CGFloat(600)),
+        (CGRect(x: 0, y: 48, width: CGFloat.infinity, height: 64), CGFloat(600)),
+        (CGRect(x: 0, y: 48, width: 300, height: CGFloat.infinity), CGFloat(600)),
+        (CGRect.null, CGFloat(600)), (CGRect.infinite, CGFloat(600)),
+        (CGRect(x: 0, y: 48, width: 300, height: 64), CGFloat(0)),
+        (CGRect(x: 0, y: 48, width: 300, height: 64), CGFloat(-1)),
+        (CGRect(x: 0, y: 48, width: 300, height: 64), CGFloat.nan),
+        (CGRect(x: 0, y: 48, width: 300, height: 64), CGFloat.infinity)
+    ]) @MainActor
+    func retainedViewportWaitsForValidGeometry(frame: CGRect, viewportHeight: CGFloat) {
+        let state = ConversationTranscriptScrollState()
+        state.preservePresentedViewport(distanceToBottom: 900)
+        let generation = state.initialScrollGeneration
+        _ = state.viewportAnchor.record(
+            id: "row-31",
+            measurement: .init(frame: CGRect(x: 0, y: 48, width: 300, height: 64), divider: "seen", generation: generation),
+            viewportHeight: 600,
+            preserve: true,
+            entryGeneration: generation
+        )
+        state.suspendViewport()
+        #expect(state.resumeViewportTarget() == "row-31")
+        let revision = state.viewportOwnershipRevision
+        let unrealized = ConversationTranscriptViewportAnchor.Measurement(frame: frame, divider: "seen", generation: generation, ownershipRevision: revision)
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: unrealized, viewportHeight: viewportHeight, preserve: true, entryGeneration: generation) == nil)
+        let realized = ConversationTranscriptViewportAnchor.Measurement(
+            frame: CGRect(x: 0, y: 0, width: 300, height: 64), divider: "seen", generation: generation, ownershipRevision: revision
+        )
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: realized, viewportHeight: 600, preserve: true, entryGeneration: generation) == -48)
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: realized, viewportHeight: 600, preserve: true, entryGeneration: generation) == nil)
+    }
+
+    @Test(arguments: [
+        CGRect(x: 0, y: -170, width: 300, height: 900),
+        CGRect(x: 0, y: 560, width: 300, height: 64)
+    ]) @MainActor
+    func retainedViewportRestoresIntersectingRows(frame: CGRect) {
+        let state = ConversationTranscriptScrollState()
+        state.preservePresentedViewport(distanceToBottom: 900)
+        let generation = state.initialScrollGeneration
+        _ = state.viewportAnchor.record(
+            id: "row-31",
+            measurement: .init(frame: CGRect(x: 0, y: 48, width: 300, height: frame.height), divider: "seen", generation: generation),
+            viewportHeight: 600,
+            preserve: true,
+            entryGeneration: generation
+        )
+        state.suspendViewport()
+        #expect(state.resumeViewportTarget() == "row-31")
+        let realized = ConversationTranscriptViewportAnchor.Measurement(
+            frame: frame, divider: "new-seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision
+        )
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: realized, viewportHeight: 600, preserve: true, entryGeneration: generation) == frame.minY - 48)
+    }
+
     @Test(arguments: [false, true]) @MainActor
     func retainedViewportCannotOverrideALaterGestureOrFollow(gesture: Bool) {
         let state = ConversationTranscriptScrollState()
