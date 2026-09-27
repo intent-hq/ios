@@ -1,0 +1,92 @@
+name: Public release-note drafts
+
+'on':
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Preview is read-only. Publish requires separate repository approval.
+        type: choice
+        options: [preview, publish]
+        default: preview
+        required: true
+      candidate:
+        description: Exact App Store Connect candidate build ID (required for new generation)
+        type: string
+      source_mappings:
+        description: Optional reviewed nonsecret JSON mapping exact build IDs to human-verified sources
+        type: string
+        default: '{}'
+      recovery_run:
+        description: Original producer run ID; recovery NEVER calls Apple or regenerates notes
+        type: string
+      recovery_channel:
+        description: Channel of original producer (only used for recovery)
+        type: choice
+        options: [app-store, beta]
+        default: app-store
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.gate.outputs.mode }}
+      source_run: ${{ steps.gate.outputs.source_run }}
+      channel: ${{ steps.gate.outputs.channel }}
+      delivery: ${{ steps.gate.outputs.generate == 'false' || steps.checkpoint.outputs.artifact-id != '' }}
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      PUBLICATION_MODE: ${{ inputs.mode }}
+      RELEASE_NOTES_PUBLICATION_ENABLED: ${{ vars.RELEASE_NOTES_PUBLICATION_ENABLED }}
+      CANDIDATE_BUILD: ${{ inputs.candidate }}
+      RECOVERY_RUN: ${{ inputs.recovery_run }}
+      RECOVERY_CHANNEL: ${{ inputs.recovery_channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          submodules: false
+          lfs: false
+      - name: Validate mode before accessing Apple credentials
+        id: gate
+        env:
+          RELEASE_PHASE: gate
+        run: python3 scripts/release_workflow.py
+      - name: Generate from explicit candidate and actual public baseline
+        if: steps.gate.outputs.generate == 'true'
+        env:
+          RELEASE_PHASE: generate
+          SOURCE_MAPPINGS: ${{ inputs.source_mappings }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: python3 scripts/release_workflow.py
+      - name: Retain immutable original for publication and recovery
+        id: checkpoint
+        if: steps.gate.outputs.generate == 'true' && steps.gate.outputs.mode == 'publish'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes-app-store-intent
+          path: ${{ runner.temp }}/app-store-notes/intent.json
+          retention-days: 90
+          if-no-files-found: error
+
+  deliver:
+    needs: generate
+    if: needs.generate.outputs.delivery == 'true'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    uses: ./.github/workflows/release-notes-publish.yml
+    with:
+      mode: ${{ needs.generate.outputs.mode }}
+      source_run: ${{ needs.generate.outputs.source_run }}
+      channel: ${{ needs.generate.outputs.channel }}

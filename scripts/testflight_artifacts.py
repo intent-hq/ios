@@ -89,6 +89,8 @@ def main():
         notes.require(artifact["name"] == expected_name and (rerun or frozen["payload"]["candidate"]["build_id"] == build_id),
                       "Artifact candidate mismatch.")
         testflight_notes.save_new(root / "intent.json", frozen)
+        with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+            output.write(f"source_run={run_id}\n")
         print("Original Beta intent restored; this run will reconcile without Apple writes.")
         return 0
     except Exception:

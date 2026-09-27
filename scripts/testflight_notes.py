@@ -130,12 +130,13 @@ def immutable(frozen):
             ("plan_sha256", "notes_status", "assignment_status", "publication_status")}
 
 
-def validate_payload(repo, payload):
+def validate_payload(repo, payload, channel="beta"):
     keys(payload, "schema_version status review_required target_path channel locale repository entry_key version_heading channel_heading baseline_reference baseline candidate comparison comparison_url changes excluded_commits markdown_entry plain_text content_sha256")
     notes.require(payload["schema_version"] == 1 and payload["status"] == "draft" and payload["review_required"] is True
-                  and payload["target_path"] == "CHANGELOG.md" and payload["channel"] == "beta"
+                  and payload["target_path"] == "CHANGELOG.md" and payload["channel"] == channel
+                  and channel in ("beta", "app-store")
                   and payload["locale"] == "en-US" and payload["repository"] == REPOSITORY,
-                  "Handoff is not an en-US iOS Beta draft for this repository.")
+                  "Handoff is not an en-US iOS draft for the declared channel and repository.")
     notes.require(payload["content_sha256"] == digest({k: v for k, v in payload.items() if k != "content_sha256"}),
                   "Frozen release-note payload changed; recover the original artifact.")
     notes.text(payload["baseline_reference"])
@@ -167,8 +168,9 @@ def validate_payload(repo, payload):
     changes, excluded = notes.Git(repo, REPOSITORY).changes(start, end)
     notes.require(payload["changes"] == changes and payload["excluded_commits"] == excluded,
                   "Frozen changes do not match the exact source range.")
-    notes.require(payload["entry_key"] == f"{candidate['app_id']}:IOS:{candidate['version']}:beta:{candidate['build_id']}:en-US"
-                  and payload["version_heading"] == "## " + candidate["version"] and payload["channel_heading"] == "### Beta"
+    label = "### Beta" if channel == "beta" else "### App Store"
+    notes.require(payload["entry_key"] == f"{candidate['app_id']}:IOS:{candidate['version']}:{channel}:{candidate['build_id']}:en-US"
+                  and payload["version_heading"] == "## " + candidate["version"] and payload["channel_heading"] == label
                   and payload["comparison"] == f"{start}..{end}"
                   and payload["comparison_url"] == f"{REPOSITORY}/compare/{start}...{end}", "Invalid frozen entry references.")
     markdown, plain = notes.render(payload)

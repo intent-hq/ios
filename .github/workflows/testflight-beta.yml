@@ -15,6 +15,12 @@ name: TestFlight internal Beta
         options: [preview, apply]
         default: preview
         required: true
+      publish_mode:
+        description: Publish frozen notes only with separate repository approval; schedule retains intent for later delivery.
+        type: choice
+        options: [preview, publish]
+        default: preview
+        required: true
 
 permissions:
   contents: read
@@ -31,6 +37,9 @@ jobs:
     permissions:
       contents: read
       actions: read # Original intent recovery only; no repository publisher.
+    outputs:
+      source_run: ${{ steps.recover.outputs.source_run || github.run_id }}
+      mode: ${{ steps.gate.outputs.mode }}
     steps:
       - name: Check activation before accessing credentials
         id: gate
@@ -94,6 +103,7 @@ jobs:
         run: python3 scripts/testflight_workflow.py
 
       - name: Recover original intent without Apple credentials
+        id: recover
         if: steps.gate.outputs.mode == 'preview' || steps.gate.outputs.mode == 'apply'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -150,3 +160,16 @@ jobs:
             ${{ runner.temp }}/testflight/journal.json
           retention-days: 90
           if-no-files-found: ignore
+
+  deliver:
+    needs: promote
+    if: needs.promote.outputs.mode == 'apply' && inputs.publish_mode == 'publish' && vars.RELEASE_NOTES_PUBLICATION_ENABLED == 'true' && github.run_attempt == 1 && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    uses: ./.github/workflows/release-notes-publish.yml
+    with:
+      mode: publish
+      source_run: ${{ needs.promote.outputs.source_run }}
+      channel: beta

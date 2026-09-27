@@ -93,6 +93,12 @@ jobs:
       - name: Internal Beta TestFlight promotion offline tests
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test*testflight*.py' -v
 
+      - name: Release notes generator and public baseline offline tests
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test_release_notes*.py' -v
+
+      - name: Changelog publisher and workflow boundary offline tests
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -p 'test_release_delivery*.py' -v
+
   swiftlint:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and

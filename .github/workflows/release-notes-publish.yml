@@ -1,0 +1,80 @@
+name: Frozen release-note delivery
+
+'on':
+  workflow_call:
+    inputs:
+      mode:
+        required: true
+        type: string
+      source_run:
+        required: true
+        type: string
+      channel:
+        required: true
+        type: string
+
+permissions: {}
+
+# Shared by both channels and recovery dispatches. GitHub concurrency is not a
+# durable queue: cancelled pending jobs must recover from their original intent.
+concurrency:
+  group: release-notes-changelog
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    if: inputs.mode == 'preview' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          submodules: false
+          lfs: false
+      - name: Reconcile frozen original without Apple credentials or writes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PUBLICATION_MODE: preview
+          SOURCE_RUN_ID: ${{ inputs.source_run }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: python3 scripts/release_publish.py
+
+  publish:
+    if: inputs.mode == 'publish' && vars.RELEASE_NOTES_PUBLICATION_ENABLED == 'true' && github.run_attempt == 1 && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          submodules: false
+          lfs: false
+      - name: Publish only the frozen changelog entry to a notes draft PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PUBLICATION_MODE: publish
+          RELEASE_NOTES_PUBLICATION_ENABLED: ${{ vars.RELEASE_NOTES_PUBLICATION_ENABLED }}
+          SOURCE_RUN_ID: ${{ inputs.source_run }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: python3 scripts/release_publish.py
+      - name: Retain publication receipt separately from immutable intent
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-publication-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-publication/receipt.json
+          retention-days: 90
+          if-no-files-found: ignore

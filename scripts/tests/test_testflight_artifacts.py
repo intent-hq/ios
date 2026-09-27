@@ -72,10 +72,11 @@ else: sys.exit(19)
                               env=dict(self.env, **env), capture_output=True, text=True, timeout=20)
 
     def test_exact_candidate_artifact_is_validated_and_restored_without_writes(self):
-        result = self.run_script("testflight_artifacts.py")
+        result = self.run_script("testflight_artifacts.py", GITHUB_RUN_ID="99")
         self.assertEqual(result.returncode, 0, result.stderr)
         restored = json.loads((self.runner / "testflight/intent.json").read_text())
         self.assertEqual(restored, self.frozen)
+        self.assertEqual((self.root / "output").read_text(), "source_run=77\n")
         calls = [json.loads(line) for line in (self.root / "gh-calls.jsonl").read_text().splitlines()]
         self.assertEqual(len(calls), 3)
         self.assertTrue(all(c[:5] == ["api", "--hostname", "github.com", "--method", "GET"] for c in calls))
