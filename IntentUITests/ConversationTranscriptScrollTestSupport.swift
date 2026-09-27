@@ -955,10 +955,12 @@ func waitUntilSteady(
 }
 extension ConversationTranscriptScrollUITests {
     @MainActor
-    func attachStartupViewport(opened: OpenConversation, report: String, row: XCUIElement, context: String) {
+    func attachStartupViewport(_ app: XCUIApplication, opened: OpenConversation, report: String, row: XCUIElement, context: String) {
         let snapshot = try? row.snapshot()
+        let probe = app.descendants(matching: .any).matching(identifier: "transcript.gestureState").firstMatch
+        let live = probe.exists ? probe.value : nil
         let attachment = XCTAttachment(string: "\(context): row=\(snapshot?.label ?? "missing") frame=\(String(describing: snapshot?.frame))"
-            + " transcript=\(opened.transcript.frame) \(report) \(followReport(in: opened))")
+            + " transcript=\(opened.transcript.frame) \(report) \(followReport(in: opened)) live=\(String(describing: live))")
         attachment.lifetime = .keepAlways
         add(attachment)
     }

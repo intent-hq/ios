@@ -117,8 +117,8 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(state.viewportAnchor.record(id: "row-31", measurement: realized, viewportHeight: 600, preserve: true, entryGeneration: generation) == frame.minY - 48)
     }
 
-    @Test(arguments: [false, true]) @MainActor
-    func retainedViewportCannotOverrideALaterGestureOrFollow(gesture: Bool) {
+    @Test(arguments: [false, true], [false, true]) @MainActor
+    func retainedViewportCannotOverrideALaterGestureOrFollow(gesture: Bool, prepared: Bool) {
         let state = ConversationTranscriptScrollState()
         state.preservePresentedViewport(distanceToBottom: 900)
         _ = state.viewportAnchor.record(
@@ -129,8 +129,48 @@ extension ConversationTranscriptScrollPolicyTests {
             entryGeneration: state.initialScrollGeneration
         )
         state.suspendViewport()
+        if prepared { #expect(state.resumeViewportTarget() == "row-31") }
+        let revision = state.viewportOwnershipRevision
         if gesture { state.observeViewportGesture(isInteracting: true) } else { state.retireViewportRestoration() }
         #expect(state.resumeViewportTarget() == nil)
+        let queued = ConversationTranscriptViewportAnchor.Measurement(
+            frame: CGRect(x: 0, y: 0, width: 300, height: 64), divider: "seen", generation: state.initialScrollGeneration, ownershipRevision: revision
+        )
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: queued, viewportHeight: 600, preserve: true, entryGeneration: state.initialScrollGeneration) == nil)
+    }
+
+    @Test(arguments: [false, true]) @MainActor
+    func retainedViewportSurvivesRealizationBeforeTheCoarseScroll(derealizes: Bool) {
+        let state = ConversationTranscriptScrollState()
+        state.preservePresentedViewport(distanceToBottom: 900)
+        let generation = state.initialScrollGeneration
+        let savedY = CGFloat(34.33333333333309)
+        _ = state.viewportAnchor.record(
+            id: "row-31",
+            measurement: .init(frame: CGRect(x: 0, y: savedY, width: 300, height: 64), divider: "seen", generation: generation),
+            viewportHeight: 624,
+            preserve: true,
+            entryGeneration: generation
+        )
+        state.suspendViewport()
+        #expect(state.resumeViewportTarget() == "row-31")
+        let revision = state.viewportOwnershipRevision
+        if derealizes {
+            // A lazy row leaving the host is not removal from the transcript.
+            state.viewportAnchor.remove(id: "row-31", generation: generation, entryGeneration: generation, ownershipRevision: revision)
+        } else {
+            // Rehosting can measure the retained offset before scrollTo moves
+            // the target to the top; this is not confirmation of that move.
+            let beforeScroll = ConversationTranscriptViewportAnchor.Measurement(
+                frame: CGRect(x: 0, y: savedY, width: 300, height: 64), divider: "seen", generation: generation, ownershipRevision: revision
+            )
+            #expect(state.viewportAnchor.record(id: "row-31", measurement: beforeScroll, viewportHeight: 624, preserve: true, entryGeneration: generation) == nil)
+        }
+        let afterScroll = ConversationTranscriptViewportAnchor.Measurement(
+            frame: CGRect(x: 0, y: 0, width: 300, height: 64), divider: "seen", generation: generation, ownershipRevision: revision
+        )
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: afterScroll, viewportHeight: 624, preserve: true, entryGeneration: generation) == -savedY)
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: afterScroll, viewportHeight: 624, preserve: true, entryGeneration: generation) == nil)
     }
 
     @Test @MainActor func retainedViewportKeepsThePartiallyVisibleRowAboveItsAnchor() {

@@ -18,6 +18,10 @@ final class TranscriptGestureAccessibilityView: UIView {
             let interacting = tracking || dragging || decelerating || swiftUI
             return "phase=\(interacting ? "gesture" : "idle") tracking=\(tracking) dragging=\(dragging)"
                 + " decelerating=\(decelerating) swiftUI=\(swiftUI)"
+                + " host=\(ObjectIdentifier(scrollView)) hosting=\(scrollState.momentumProxy.hostingRevision)"
+                + " offset=\(scrollView.contentOffset.y) content=\(scrollView.contentSize.height) viewport=\(scrollView.bounds.height)"
+                + " insets=\(scrollView.adjustedContentInset)"
+                + " restoration=[\(scrollState.viewportAnchor.restorationSummary)]"
         }
         set { super.accessibilityValue = newValue }
     }
