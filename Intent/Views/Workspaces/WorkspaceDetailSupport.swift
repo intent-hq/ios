@@ -147,7 +147,6 @@ struct WorkspaceActionsMenu: View {
     let onCreateTerminal: () -> Void
     let onArchive: () -> Void
     let onDelete: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Menu {
@@ -166,12 +165,7 @@ struct WorkspaceActionsMenu: View {
                 Label { Text("Delete").interFont(Constants.Typography.bodyS) } icon: { Image(.delete) }
             }
         } label: {
-            Image(.more)
-                .resizable()
-                .scaledToFit()
-                .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
-                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
+            ToolbarOverflowLabel()
         }
         .accessibilityLabel("Workspace actions")
     }

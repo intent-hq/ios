@@ -272,8 +272,7 @@ private struct ConversationViewContent: View {
                 Label("Delete Agent", systemImage: "trash")
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundStyle(Theme.foreground(for: colorScheme))
+            ToolbarOverflowLabel()
         }
         .accessibilityLabel(assistantStore == nil ? "Agent actions" : "Assistant actions")
         .accessibilityIdentifier(assistantStore == nil ? "agent.actions" : "assistant.actions")

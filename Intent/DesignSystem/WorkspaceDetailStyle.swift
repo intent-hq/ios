@@ -59,6 +59,20 @@ enum WorkspaceDetailStyle {
     }
 }
 
+struct ToolbarOverflowLabel: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Image(.more)
+            .resizable()
+            .scaledToFit()
+            .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
+            .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+            .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
+            .accessibilityHidden(true)
+    }
+}
+
 struct WorkspaceContentTabs: View {
     @Binding var selection: WorkspaceTab
     @Environment(\.colorScheme) private var colorScheme
