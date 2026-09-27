@@ -54,6 +54,7 @@ nonisolated final class MobileTerminalUITests: XCTestCase {
         actions.tap()
         app.buttons["New terminal"].tap()
         XCTAssertTrue(app.staticTexts["mobile-terminal-title"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
         app.buttons["Back to workspace"].tap()
         return app
     }
