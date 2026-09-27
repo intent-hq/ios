@@ -9,6 +9,7 @@ extension ConnectionManagerTests {
     nonisolated private struct HeldReply: Sendable {
         let connection: NWConnection
         let data: Data
+        let method: String
     }
     /// Loopback plain-WS listener with a minimal JSON-RPC responder: any
     /// request carrying an `id` gets an empty-object result; notifications
@@ -28,8 +29,9 @@ extension ConnectionManagerTests {
         var principal = Data(#"{"id":"test-owner","isAdministrator":true}"#.utf8)
         var modern = false
         var helloIDs: [String] = []
-        var holdStatus = false
+        var heldMethods: Set<String> = []
         var heldReplies: [HeldReply] = []
+        var systemStatus = Data("{}".utf8)
     }
 
     nonisolated final class LoopbackWebSocketServer: @unchecked Sendable {
@@ -42,15 +44,21 @@ extension ConnectionManagerTests {
         var port: Int { Int(listener.port?.rawValue ?? 0) }
         var acceptedCount: Int { state.withLock { $0.acceptedTotal } }
         var helloIDs: [String] { state.withLock { $0.helloIDs } }
-        var heldStatusCount: Int { state.withLock { $0.heldReplies.count } }
+        var heldStatusCount: Int { state.withLock { $0.heldReplies.filter { $0.method == "host.status" }.count } }
+        var heldSystemStatusCount: Int { state.withLock { $0.heldReplies.filter { $0.method == "system.status" }.count } }
 
-        func holdHostStatus() { state.withLock { $0.holdStatus = true } }
+        func holdHostStatus() { hold("host.status") }
+        func holdSystemStatus() { hold("system.status") }
+        func holdNewConnections() { state.withLock { $0.isOpen = false } }
+        private func hold(_ method: String) { state.withLock { _ = $0.heldMethods.insert(method) } }
 
-        func releaseHostStatus() {
+        func releaseHostStatus() { release("host.status") }
+        func releaseSystemStatus() { release("system.status") }
+        private func release(_ method: String) {
             let replies = state.withLock { state in
-                state.holdStatus = false
-                let replies = state.heldReplies
-                state.heldReplies = []
+                state.heldMethods.remove(method)
+                let replies = state.heldReplies.filter { $0.method == method }
+                state.heldReplies.removeAll { $0.method == method }
                 return replies
             }
             for reply in replies { send(reply.data, on: reply.connection) }
@@ -68,6 +76,11 @@ extension ConnectionManagerTests {
         func setPrincipal(_ principal: [String: Any], modern: Bool = true) {
             guard let data = try? JSONSerialization.data(withJSONObject: principal) else { return }
             state.withLock { $0.principal = data; $0.modern = modern }
+        }
+
+        func setSystemStatus(_ status: [String: Any]) throws {
+            let data = try JSONSerialization.data(withJSONObject: status)
+            state.withLock { $0.systemStatus = data }
         }
 
         func dropConnections() {
@@ -165,9 +178,10 @@ extension ConnectionManagerTests {
                 if method == "client.hello", let clientID {
                     state.helloIDs.append(clientID)
                 }
-                return (state.principal, state.modern)
+                return (state.principal, state.modern, state.systemStatus)
             }
             if method == "principal.me" { return (try? JSONSerialization.jsonObject(with: snapshot.0)) as? [String: Any] ?? [:] }
+            if method == "system.status" { return (try? JSONSerialization.jsonObject(with: snapshot.2)) as? [String: Any] ?? [:] }
             return ["server": ["capabilities": snapshot.1 ? ["hostMembership": 1] : [String: Int]()]]
         }
 
@@ -183,10 +197,10 @@ extension ConnectionManagerTests {
                         "result": response(to: json)
                     ]
                     if let payload = try? JSONSerialization.data(withJSONObject: response) {
-                        let isStatus = json["method"] as? String == "host.status"
+                        let method = json["method"] as? String ?? ""
                         let held = state.withLock { state in
-                            guard isStatus, state.holdStatus else { return false }
-                            state.heldReplies.append(HeldReply(connection: connection, data: payload))
+                            guard state.heldMethods.contains(method) else { return false }
+                            state.heldReplies.append(HeldReply(connection: connection, data: payload, method: method))
                             return true
                         }
                         if !held { send(payload, on: connection) }

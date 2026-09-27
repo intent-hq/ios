@@ -28,7 +28,8 @@ import Testing
         #expect(fake.connectionState == .disconnected)
     }
 
-    @Test(arguments: [false, true]) func staleStatusCompletionCannotSaveOrCloseNewerConnection(superseded: Bool) async throws {
+    @Test(arguments: [false, true], [false, true])
+    func staleStatusCompletionCannotSaveOrCloseNewerConnection(superseded: Bool, manual: Bool) async throws {
         let store = try InvitedSessionFixtures.Store(MemorySyncedKeychain())
         defer { store.close() }
         let fake = FakeConnectionManager()
@@ -37,7 +38,17 @@ import Testing
         fake.pendingMethods = ["host.status"]
         let payload = PairingPayload(hosts: ["old.example"], port: 443, token: "B-token", certFingerprint: InvitedSessionFixtures.pin, tcAddress: nil)
         let pairing = Task {
-            try await PairingFlow.connect(payload: payload, certFingerprint: InvitedSessionFixtures.pin, connectionManager: fake, persistence: store.persistence)
+            if manual {
+                return try await ManualTokenEntryView.connectAndSave(
+                    input: .direct(host: "old.example"),
+                    port: 443,
+                    fingerprint: InvitedSessionFixtures.pin,
+                    token: payload.token,
+                    connection: fake,
+                    persistence: store.persistence
+                )
+            }
+            return try await PairingFlow.connect(payload: payload, certFingerprint: InvitedSessionFixtures.pin, connectionManager: fake, persistence: store.persistence)
         }
         try await fake.waitForPendingRequests("host.status")
         if superseded {

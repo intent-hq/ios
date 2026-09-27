@@ -78,7 +78,7 @@ import Testing
         #expect(unbound.updateCachedCredentialsLog.isEmpty)
     }
 
-    private static func session(id: BackendID?, connection: FakeConnectionManager, persistence: PersistenceManager) -> BackendSession {
+    static func session(id: BackendID?, connection: FakeConnectionManager, persistence: PersistenceManager) -> BackendSession {
         let workspace = WorkspaceStore(connectionManager: connection)
         let loader = WorkspaceFileImageLoader(connection: connection)
         return BackendSession(

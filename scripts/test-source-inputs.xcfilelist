@@ -753,6 +753,8 @@ $(SRCROOT)/IntentTests/IntentFileLinkTests.swift
 $(SRCROOT)/IntentTests/IntentFileVideoTests.swift
 $(SRCROOT)/IntentTests/IntentNoteLinkParsingTests.swift
 $(SRCROOT)/IntentTests/InterFontTests.swift
+$(SRCROOT)/IntentTests/InvitedImportReadFailureTests.swift
+$(SRCROOT)/IntentTests/InvitedRouteRefreshRaceTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionFixtures.swift
 $(SRCROOT)/IntentTests/InvitedSessionKeyTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionMergeTests.swift
@@ -798,6 +800,7 @@ $(SRCROOT)/IntentTests/PairingFlowTests.swift
 $(SRCROOT)/IntentTests/PairingLifecycleDiagnosticTests.swift
 $(SRCROOT)/IntentTests/PairingOptionTests.swift
 $(SRCROOT)/IntentTests/PairingPayloadTests.swift
+$(SRCROOT)/IntentTests/PairingReconnectOwnershipTests.swift
 $(SRCROOT)/IntentTests/PendingQuestionDerivationTests.swift
 $(SRCROOT)/IntentTests/PersistenceBackendSyncTests.swift
 $(SRCROOT)/IntentTests/PersistenceEphemeralTests.swift
