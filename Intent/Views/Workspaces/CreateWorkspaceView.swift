@@ -225,6 +225,7 @@ struct CreateWorkspaceView: View {
                 selectedReasoningEffort: $selectedReasoningEffort,
                 messageText: $messageText,
                 isCreating: isCreating,
+                allowsCreation: coordinator.canCreateWorkspace,
                 errorMessage: errorMessage,
                 showError: $showError,
                 colorScheme: colorScheme,
@@ -476,7 +477,8 @@ extension CreateWorkspaceView {
             isCreating: false,
             isLoadingProviders: isLoadingOptions || providerOptions.isLoading || isLoadingSelectedModelCatalog,
             providers: providers,
-            selectedProvider: selectedProvider
+            selectedProvider: selectedProvider,
+            allowsCreation: coordinator.canCreateWorkspace
         )
     }
 }

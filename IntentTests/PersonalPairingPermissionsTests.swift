@@ -3,6 +3,48 @@ import Foundation
 import Testing
 
 @MainActor struct PersonalPairingPermissionsTests {
+    @Test(arguments: [ConnectionPrincipal.HostRole.member, .owner])
+    func workspaceDraftSurvivesRecoveryButCannotSubmitUntilAuthorityReturns(role: ConnectionPrincipal.HostRole) {
+        let connection = FakeConnectionManager()
+        let coordinator = AppCoordinator(workspaceStore: WorkspaceStore(connectionManager: connection), connection: connection, persistence: .ephemeral())
+        connection.currentPrincipal = InvitedSessionFixtures.principal(role: role)
+        connection.connectionState = .connected
+        #expect(coordinator.canCreateWorkspace)
+        #expect(!coordinator.shouldDismissWorkspaceCreation)
+        connection.connectionState = .reconnecting(attempt: 1)
+        #expect(!coordinator.canCreateWorkspace)
+        #expect(!coordinator.shouldDismissWorkspaceCreation)
+        connection.currentPrincipal = nil
+        #expect(!coordinator.shouldDismissWorkspaceCreation)
+        let provider = ProviderInfo(id: "test-provider", authenticated: true)
+        #expect(CreateWorkspaceView.isCreateDisabled(
+            isCreating: false,
+            isLoadingProviders: false,
+            providers: [provider],
+            selectedProvider: provider,
+            allowsCreation: coordinator.canCreateWorkspace
+        ))
+        connection.currentPrincipal = InvitedSessionFixtures.principal(role: role)
+        connection.connectionState = .connected
+        #expect(coordinator.canCreateWorkspace)
+        #expect(!coordinator.shouldDismissWorkspaceCreation)
+        connection.currentPrincipal = InvitedSessionFixtures.principal(role: .guest)
+        #expect(!coordinator.canCreateWorkspace)
+        #expect(coordinator.shouldDismissWorkspaceCreation)
+    }
+
+    @Test func revokedOrInvalidatedAuthorityStillDismissesWorkspaceDraft() {
+        let connection = FakeConnectionManager()
+        let coordinator = AppCoordinator(workspaceStore: WorkspaceStore(connectionManager: connection), connection: connection, persistence: .ephemeral())
+        connection.connectionState = .connected
+        connection.currentPrincipal = nil
+        #expect(coordinator.shouldDismissWorkspaceCreation)
+        #expect(!coordinator.canCreateWorkspace)
+        connection.connectionState = .disconnected
+        #expect(coordinator.shouldDismissWorkspaceCreation)
+        #expect(!coordinator.canCreateWorkspace)
+    }
+
     @Test func controlsRequireLiveAuthorityAndFollowRoleChanges() {
         let connection = FakeConnectionManager()
         let coordinator = AppCoordinator(

@@ -56,8 +56,8 @@ struct WorkspaceListSidebar: View {
             onConnections: { showingConnections = true }
         ))
         .navigationTitle("Workspaces")
-        .onChange(of: coordinator.canCreateWorkspace) { _, allowed in
-            if !allowed { showingCreateWorkspace = false }
+        .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
+            if shouldDismiss { showingCreateWorkspace = false }
         }
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView(session: session)

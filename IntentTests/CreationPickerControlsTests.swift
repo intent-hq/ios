@@ -743,6 +743,7 @@ private struct PickerLayoutHost: View {
                 selectedReasoningEffort: .constant(nil),
                 messageText: $message,
                 isCreating: isCreating,
+                allowsCreation: true,
                 errorMessage: nil,
                 showError: $showError,
                 colorScheme: .light,

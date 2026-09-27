@@ -133,6 +133,13 @@ class AppCoordinator {
         dependencies.connection.connectionState == .connected && dependencies.connection.currentPrincipal?.canManageWorkspaces == true
     }
 
+    /// Temporary transport recovery keeps the draft while submission remains
+    /// gated. An authority invalidation, demotion, or final disconnect closes it.
+    var shouldDismissWorkspaceCreation: Bool {
+        if case .reconnecting = dependencies.connection.connectionState { return false }
+        return dependencies.connection.currentPrincipal?.canManageWorkspaces != true
+    }
+
     var canUseAssistant: Bool {
         dependencies.connection.connectionState == .connected && dependencies.connection.currentPrincipal?.isOwner == true
     }

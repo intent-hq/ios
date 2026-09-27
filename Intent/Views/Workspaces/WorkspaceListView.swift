@@ -60,8 +60,8 @@ struct WorkspaceListView: View {
         ))
         .navigationTitle("Workspaces")
         .toolbar(.hidden, for: .navigationBar)
-        .onChange(of: coordinator.canCreateWorkspace) { _, allowed in
-            if !allowed { showingCreateWorkspace = false }
+        .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
+            if shouldDismiss { showingCreateWorkspace = false }
         }
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView(session: session)

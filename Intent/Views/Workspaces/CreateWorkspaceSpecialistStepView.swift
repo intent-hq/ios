@@ -16,6 +16,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     @Binding var selectedReasoningEffort: String?
     @Binding var messageText: String
     let isCreating: Bool
+    let allowsCreation: Bool
     let errorMessage: String?
     @Binding var showError: Bool
     let colorScheme: ColorScheme
@@ -37,7 +38,8 @@ struct CreateWorkspaceSpecialistStepView: View {
                         isCreating: isCreating,
                         isLoadingProviders: isLoadingProviders,
                         providers: providers,
-                        selectedProvider: selectedProvider
+                        selectedProvider: selectedProvider,
+                        allowsCreation: allowsCreation
                     ),
                     isCreating: isCreating,
                     onBack: onBack,
@@ -275,9 +277,10 @@ extension CreateWorkspaceView {
         isCreating: Bool,
         isLoadingProviders: Bool,
         providers: [ProviderInfo],
-        selectedProvider: ProviderInfo?
+        selectedProvider: ProviderInfo?,
+        allowsCreation: Bool = true
     ) -> Bool {
-        guard !isCreating, !isLoadingProviders, let selectedProvider else { return true }
+        guard allowsCreation, !isCreating, !isLoadingProviders, let selectedProvider else { return true }
         return !providers.contains { $0.id == selectedProvider.id && $0.isSelectable }
     }
 
