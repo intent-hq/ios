@@ -190,6 +190,7 @@ struct WorkspaceDetailView: View {
         .toolbarTitleDisplayMode(.inline)
         #if !os(visionOS)
         .navigationBarBackButtonHidden()
+        .nativeNavigationBackGesture()
         .toolbarBackground(WorkspaceDetailStyle.background(for: colorScheme), for: .navigationBar)
         #endif
         .toolbar {

@@ -200,6 +200,7 @@ private struct ConversationViewContent: View {
         if usesWorkspaceDesign {
             conversationColumn
                 .toolbar(.hidden, for: .navigationBar, .tabBar)
+                .nativeNavigationBackGesture()
                 .safeAreaInset(edge: .top, spacing: 0) {
                     WorkspaceConversationHeader(title: viewModel.agentName, onBack: { dismiss() }, actions: { agentMenu })
                 }

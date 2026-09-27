@@ -212,6 +212,7 @@ $(SRCROOT)/Intent/ViewModels/WorkspaceListViewModel.swift
 $(SRCROOT)/Intent/Views/Agents/AgentAvatarView.swift
 $(SRCROOT)/Intent/Views/Agents/AgentRowView.swift
 $(SRCROOT)/Intent/Views/Components/AssistantLaunchButton.swift
+$(SRCROOT)/Intent/Views/Components/NavigationBackGesture.swift
 $(SRCROOT)/Intent/Views/Components/NavigationTitleSubtitleView.swift
 $(SRCROOT)/Intent/Views/Components/RepoOwnerAvatarView.swift
 $(SRCROOT)/Intent/Views/Components/TaskProgressRingView.swift
