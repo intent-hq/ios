@@ -3,6 +3,88 @@ import Foundation
 import Testing
 
 extension ConversationTranscriptScrollPolicyTests {
+    @Test func queuedDividerMeasurementCannotReclaimViewportAfterCancellation() {
+        var anchor = ConversationTranscriptViewportAnchor()
+        let before = CGRect(x: 0, y: 61, width: 300, height: 50)
+        _ = anchor.record(id: "visible", measurement: .init(frame: before, divider: nil), viewportHeight: 600, preserve: false)
+        let queued = ConversationTranscriptViewportAnchor.Measurement(frame: before.offsetBy(dx: 0, dy: 39), divider: "seen")
+        anchor.cancelRestoration()
+        #expect(anchor.record(id: "visible", measurement: queued, viewportHeight: 600, preserve: true) == nil)
+    }
+
+    @Test(arguments: [false, true]) @MainActor
+    func viewportClaimAfterEntryRejectsOldMeasurementsAndAllowsLaterMetadata(gesture: Bool) {
+        let state = ConversationTranscriptScrollState()
+        state.preservePresentedViewport(distanceToBottom: 500)
+        let generation = state.initialScrollGeneration
+        let oldRevision = state.viewportOwnershipRevision
+        let before = CGRect(x: 0, y: 61, width: 300, height: 50)
+        _ = state.viewportAnchor.record(
+            id: "visible",
+            measurement: .init(frame: before, divider: nil, generation: generation),
+            viewportHeight: 600,
+            preserve: true,
+            entryGeneration: generation
+        )
+        let queued = ConversationTranscriptViewportAnchor.Measurement(
+            frame: before.offsetBy(dx: 0, dy: 39), divider: "seen", generation: generation, ownershipRevision: oldRevision
+        )
+        if gesture {
+            // The view uses these calls even after initial entry has completed.
+            state.observeViewportGesture(isInteracting: true)
+            state.preservePresentedViewport(distanceToBottom: 900)
+            state.observeViewportGesture(isInteracting: false)
+        } else {
+            // Both an explicit follow claim and disappearance retire ownership.
+            state.retireViewportRestoration()
+        }
+        #expect(state.initialScrollGeneration == generation)
+        #expect(state.viewportOwnershipRevision == oldRevision + 1)
+        #expect(state.viewportAnchor.record(id: "visible", measurement: queued, viewportHeight: 600, preserve: true, entryGeneration: generation) == nil)
+
+        let currentRevision = state.viewportOwnershipRevision
+        let currentFrame = before.offsetBy(dx: 0, dy: 100)
+        _ = state.viewportAnchor.record(
+            id: "visible",
+            measurement: .init(frame: currentFrame, divider: nil, generation: generation, ownershipRevision: currentRevision),
+            viewportHeight: 600,
+            preserve: true,
+            entryGeneration: generation
+        )
+        #expect(state.viewportAnchor.record(id: "visible", measurement: queued, viewportHeight: 600, preserve: true, entryGeneration: generation) == nil)
+        state.viewportAnchor.remove(id: "visible", generation: generation, entryGeneration: generation, ownershipRevision: oldRevision)
+        let laterMetadata = ConversationTranscriptViewportAnchor.Measurement(
+            frame: currentFrame.offsetBy(dx: 0, dy: 39), divider: "seen", generation: generation, ownershipRevision: currentRevision
+        )
+        #expect(state.viewportAnchor.record(id: "visible", measurement: laterMetadata, viewportHeight: 600, preserve: true, entryGeneration: generation) == 39)
+        #expect(state.viewportAnchor.record(id: "visible", measurement: laterMetadata, viewportHeight: 600, preserve: true, entryGeneration: generation) == nil)
+    }
+
+    @Test @MainActor func viewportOwnershipChangesOncePerGestureAndRetiresOnReset() {
+        let state = ConversationTranscriptScrollState()
+        state.preservePresentedViewport(distanceToBottom: 500)
+        let generation = state.initialScrollGeneration
+        state.observeViewportGesture(isInteracting: true)
+        let firstGesture = state.viewportOwnershipRevision
+        state.observeViewportGesture(isInteracting: true)
+        state.observeViewportGesture(isInteracting: false)
+        #expect(state.viewportOwnershipRevision == firstGesture)
+        state.observeViewportGesture(isInteracting: true)
+        #expect(state.viewportOwnershipRevision == firstGesture + 1)
+        let beforeReset = ConversationTranscriptViewportAnchor.Measurement(
+            frame: CGRect(x: 0, y: 61, width: 300, height: 50),
+            divider: nil,
+            generation: generation,
+            ownershipRevision: state.viewportOwnershipRevision
+        )
+        state.rearmAfterTranscriptEmptied()
+        #expect(state.initialScrollGeneration == generation + 1)
+        #expect(state.viewportOwnershipRevision == firstGesture + 2)
+        #expect(state.viewportAnchor.record(id: "visible", measurement: beforeReset, viewportHeight: 600, preserve: true, entryGeneration: state.initialScrollGeneration) == nil)
+        state.observeViewportGesture(isInteracting: true)
+        #expect(state.viewportOwnershipRevision == firstGesture + 3, "reset also retires the previous gesture latch")
+    }
+
     @Test func previousEntryCannotMeasureOrRemoveTheCurrentAnchor() {
         var anchor = ConversationTranscriptViewportAnchor()
         let before = CGRect(x: 0, y: 40, width: 300, height: 50)

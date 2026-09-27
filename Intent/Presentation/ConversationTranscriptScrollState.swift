@@ -176,6 +176,9 @@ final class ConversationTranscriptScrollState {
     var presentedBeforeEntryMetadata = false
     private(set) var entryViewportPreserved = false
     @ObservationIgnored var viewportAnchor = ConversationTranscriptViewportAnchor()
+    /// Publishes ownership changes without observing every row measurement.
+    private(set) var viewportOwnershipRevision = 0
+    @ObservationIgnored private var viewportGestureActive = false
     /// Invalidates delayed entry-scroll callbacks when an emptied transcript
     /// re-arms entry scrolling for the next snapshot.
     @ObservationIgnored private(set) var initialScrollGeneration = 0
@@ -233,6 +236,23 @@ final class ConversationTranscriptScrollState {
         userIsScrolledAway = NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: distanceToBottom)
     }
 
+    func observeViewportGesture(isInteracting: Bool) {
+        guard viewportGestureActive != isInteracting else { return }
+        viewportGestureActive = isInteracting
+        if isInteracting {
+            viewportAnchor.cancelRestoration()
+            viewportOwnershipRevision = viewportAnchor.ownershipRevision
+        }
+    }
+
+    /// An explicit follow or disappearance retires even callbacks that have
+    /// been captured but have not yet created a pending adjustment.
+    func retireViewportRestoration() {
+        viewportGestureActive = false
+        viewportAnchor.cancelRestoration()
+        viewportOwnershipRevision = viewportAnchor.ownershipRevision
+    }
+
     func rearmAfterTranscriptEmptied() {
         initialScrollGeneration += 1
         userIsScrolledAway = false
@@ -242,7 +262,9 @@ final class ConversationTranscriptScrollState {
         initialScrollPerformed = false
         presentedBeforeEntryMetadata = false
         entryViewportPreserved = false
-        viewportAnchor = .init()
+        viewportGestureActive = false
+        viewportAnchor.reset()
+        viewportOwnershipRevision = viewportAnchor.ownershipRevision
         forcedFollowTakenOverByGesture = false
         isScrollingToBottom = false
         goToEndRequested = false

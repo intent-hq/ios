@@ -201,6 +201,8 @@ private extension ConversationTranscriptView {
             scrollState.isUserScrollPhase = newPhase.isUserDriven
             if newPhase.isUserDriven {
                 takeOverPendingFollowIfGesture(isInteracting: true, proxy: proxy)
+            } else {
+                scrollState.observeViewportGesture(isInteracting: false)
             }
             guard oldPhase.isUserDriven, !newPhase.isUserDriven, !isScrollingToBottom else { return }
             let distance = ConversationTranscriptScrollPolicy.distanceToBottom(
@@ -236,7 +238,7 @@ private extension ConversationTranscriptView {
             }
         }
         .onDisappear {
-            scrollState.viewportAnchor.cancelRestoration()
+            scrollState.retireViewportRestoration()
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
             cancelBottomBandRePin()

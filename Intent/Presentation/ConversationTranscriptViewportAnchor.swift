@@ -9,11 +9,13 @@ struct ConversationTranscriptViewportAnchor {
         let frame: CGRect
         let divider: String?
         let generation: Int
+        let ownershipRevision: Int
 
-        init(frame: CGRect, divider: String?, generation: Int = 0) {
+        init(frame: CGRect, divider: String?, generation: Int = 0, ownershipRevision: Int = 0) {
             self.frame = frame
             self.divider = divider
             self.generation = generation
+            self.ownershipRevision = ownershipRevision
         }
     }
 
@@ -27,11 +29,13 @@ struct ConversationTranscriptViewportAnchor {
     private var divider: String?
     private var initialized = false
     private var pending: Pending?
+    private(set) var ownershipRevision = 0
 
     mutating func record(
         id: String, measurement: Measurement, viewportHeight: CGFloat, preserve: Bool, entryGeneration: Int = 0
     ) -> CGFloat? {
-        guard measurement.generation == entryGeneration else { return nil }
+        guard measurement.generation == entryGeneration,
+              measurement.ownershipRevision == ownershipRevision else { return nil }
         if pending?.generation != entryGeneration { pending = nil }
         if !initialized || measurement.divider != divider {
             pending = nil
@@ -53,11 +57,21 @@ struct ConversationTranscriptViewportAnchor {
         return adjustment.isFinite && abs(adjustment) > .ulpOfOne ? adjustment : nil
     }
 
-    mutating func remove(id: String, generation: Int = 0, entryGeneration: Int = 0) {
-        guard generation == entryGeneration else { return }
+    mutating func remove(id: String, generation: Int = 0, entryGeneration: Int = 0, ownershipRevision: Int = 0) {
+        guard generation == entryGeneration, ownershipRevision == self.ownershipRevision else { return }
         frames[id] = nil
         if pending?.id == id { pending = nil }
     }
 
-    mutating func cancelRestoration() { pending = nil }
+    mutating func cancelRestoration() {
+        ownershipRevision += 1
+        pending = nil
+        frames.removeAll()
+    }
+
+    mutating func reset() {
+        cancelRestoration()
+        divider = nil
+        initialized = false
+    }
 }

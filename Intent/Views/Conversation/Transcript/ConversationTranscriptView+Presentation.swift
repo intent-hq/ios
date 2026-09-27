@@ -6,6 +6,7 @@ extension ConversationTranscriptView {
     @ViewBuilder
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         let generation = scrollState.initialScrollGeneration
+        let ownershipRevision = scrollState.viewportOwnershipRevision
         if viewModel.isTruncated {
             truncationBanner
                 .id("truncation-banner")
@@ -23,12 +24,12 @@ extension ConversationTranscriptView {
             }
             .id(message.id)
             .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
-                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation)
+                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
             } action: { measurement in
                 preserveRowOffsetAfterDividerChange(messageId: message.id, measurement: measurement)
             }
             .onDisappear {
-                scrollState.viewportAnchor.remove(id: message.id, generation: generation, entryGeneration: scrollState.initialScrollGeneration)
+                scrollState.viewportAnchor.remove(id: message.id, generation: generation, entryGeneration: scrollState.initialScrollGeneration, ownershipRevision: ownershipRevision)
             }
         }
 
