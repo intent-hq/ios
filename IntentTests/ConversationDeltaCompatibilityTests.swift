@@ -87,6 +87,62 @@ struct ConversationDeltaCompatibilityTests {
         }
     }
 
+    @Test(arguments: [
+        "unknown field `projection`, expected one of `agentId`, `deltaEncoding`, `replaceGroup` (-32602)",
+        "unsupported parameter 'projection'; deltaEncoding is a supported parameter",
+        "projection is not supported; use deltaEncoding instead",
+        "projection for deltaEncoding is not supported",
+        "deltaEncoding: unknown field `projection`",
+        "unknown field `deltaEncodingExtra`, expected `deltaEncoding`",
+        "unsupported parameter deltaEncodingExtra; expected deltaEncoding"
+    ])
+    func incidentalEncodingMentionDoesNotTriggerCompatibilityRetry(message: String) async {
+        let connection = FakeConnectionManager()
+        let error = NSError(domain: "WebSocket", code: -32_602, userInfo: [NSLocalizedDescriptionKey: message])
+        connection.errorQueueMap["chat.subscribe"] = [error]
+        connection.responseMap["chat.subscribe"] = ["subscriptionId": "would-hide-original-error"]
+        connection.responseMap["chat.unsubscribe"] = [:] as [String: Any]
+        let live = ConversationLiveTranscript(connectionManager: connection)
+        live.initialRetryDelay = .seconds(60)
+        var surfaced: NSError?
+        live.onSubscribeError = { surfaced = $0 as NSError }
+        defer { live.reset() }
+        await live.subscribe(agentId: "agent")
+        #expect(connection.paramsForMethod("chat.subscribe").count == 1)
+        #expect(!live.useFullDeltaEncoding)
+        #expect(surfaced == error)
+        #expect(live.chatSubscriptionId == nil)
+    }
+
+    @Test(arguments: [
+        "unknown field `deltaEncoding`, expected `agentId` (-32602)",
+        "Unknown parameter deltaEncoding",
+        "unrecognized field \"deltaEncoding\"",
+        "unsupported parameter 'deltaEncoding'",
+        "unsupported parameter: deltaEncoding",
+        "Invalid params: parameter `deltaEncoding` is not supported",
+        "unexpected field deltaEncoding",
+        "deltaEncoding not supported",
+        "`deltaEncoding` is not supported"
+    ])
+    func rejectedEncodingParameterStillTriggersOneCompatibilityRetry(message: String) async {
+        let connection = FakeConnectionManager()
+        connection.errorQueueMap["chat.subscribe"] = [
+            NSError(domain: "WebSocket", code: -32_602, userInfo: [NSLocalizedDescriptionKey: message])
+        ]
+        connection.responseMap["chat.subscribe"] = ["subscriptionId": "legacy"]
+        connection.responseMap["chat.unsubscribe"] = [:] as [String: Any]
+        let live = ConversationLiveTranscript(connectionManager: connection)
+        var surfaced: NSError?
+        live.onSubscribeError = { surfaced = $0 as NSError }
+        defer { live.reset() }
+        await live.subscribe(agentId: "agent")
+        #expect(connection.paramsForMethod("chat.subscribe").count == 2)
+        #expect(connection.paramsForMethod("chat.subscribe").last?["deltaEncoding"] == nil)
+        #expect(live.useFullDeltaEncoding)
+        #expect(surfaced == nil && live.chatSubscriptionId == "legacy")
+    }
+
     @Test func unsupportedErrorAfterResetCannotStartCompatibilityRetry() async throws {
         let connection = FakeConnectionManager()
         connection.pendingMethods = ["chat.subscribe"]

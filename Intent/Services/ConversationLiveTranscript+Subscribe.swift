@@ -61,11 +61,13 @@ extension ConversationLiveTranscript {
         let error = error as NSError
         guard error.domain == "WebSocket", error.code == invalidParametersCode else { return false }
         let message = error.localizedDescription.lowercased()
-        guard message.contains("deltaencoding") else { return false }
+        // Bind the rejection to this exact parameter. Its name in an
+        // expected-field list or another clause is not a compatibility signal.
+        let field = #"(?:`deltaencoding`|"deltaencoding"|'deltaencoding'|deltaencoding(?=$|[\s,;:()]|\.(?:\s|$)))"#
         return [
-            "unknown field", "unknown parameter", "unrecognized field", "unrecognized parameter",
-            "unsupported field", "unsupported parameter", "unexpected field", "unexpected parameter", "not supported"
-        ].contains { message.contains($0) }
+            #"\b(?:unknown|unrecognized|unsupported|unexpected)\s+(?:field|parameter)(?:\s*:\s*|\s+)\#(field)"#,
+            #"(?:^|:\s*)(?:(?:field|parameter)\s+)?\#(field)\s+(?:is\s+)?not\s+supported\b"#
+        ].contains { message.range(of: $0, options: .regularExpression) != nil }
     }
 
     /// Opens a registration: the current channel is released (its handler
