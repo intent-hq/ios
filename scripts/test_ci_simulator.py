@@ -284,6 +284,69 @@ class SimulatorTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         route.verify_execution(self.env, self.directory)
 
+    def wrapper_python(self, *names):
+        wrapper = (Path(__file__).resolve().parent / "xcodebuild.sh").read_text()
+        return "".join(wrapper.split(name + "='", 1)[1].split("\n'\n", 1)[0] for name in names)
+
+    def resolve_catalog(self, identifiers, selectors=None, extra_env=None):
+        catalog = self.directory / "catalog.json"
+        catalog.write_text(json.dumps({"values": [{"enabledTests": [{"identifier": item} for item in identifiers]}]}))
+        code = self.wrapper_python("ONLY_TESTING_MATCH_PY", "ONLY_TESTING_RESOLVER_PY")
+        return subprocess.run([sys.executable, "-S", "-c", code, str(catalog), *(selectors or SELECTORS.split())],
+                              env=extra_env or {}, text=True, capture_output=True)
+
+    def actual_summary(self, primary, retried=None, interrupted=None):
+        first, suite = SELECTORS.split()
+        resolved = self.resolve_catalog([item[0] for item in CASES])
+        self.assertEqual(resolved.returncode, 0, resolved.stderr)
+        self.assertEqual(resolved.stdout, f"1\t{first}\n4\t{suite}\n")
+        # The baseline helper has no identity input yet. Supply the intended
+        # proof from this known catalog while its existing resolver verifies
+        # every identity; the correction will consume the resolver's export.
+        (self.directory / "resolved-tests.json").write_text(json.dumps({"version": 1, "selectors": {
+            first: [CASES[0][0]], suite: [item[0] for item in CASES[1:]]}}))
+        self.host.results = result_document(primary)
+        result_path = self.directory / "wrapper-primary.json"
+        result_path.write_text(json.dumps(self.host.results))
+        env = {"ONLY_TESTING_RESOLVED": resolved.stdout}
+        prefix = ""
+        if retried is not None:
+            self.host.retry_results = result_document(retried)
+            retry_path = self.directory / "wrapper-retry.json"
+            retry_path.write_text(json.dumps(self.host.retry_results))
+            Path(self.env["RESULT_BUNDLE"] + "-retry").mkdir(exist_ok=True)
+            env.update(ONLY_TESTING_RETRY_RESULTS=str(retry_path), ONLY_TESTING_RETRY_SELECTORS=interrupted)
+            prefix = f"notice: re-running the interrupted suite(s) once, alone: {interrupted}\n"
+        code = self.wrapper_python("ONLY_TESTING_MATCH_PY", "ONLY_TESTING_SUMMARY_PY")
+        summary = subprocess.run([sys.executable, "-S", "-c", code, str(result_path), "", self.env["RESULT_BUNDLE"],
+                                  *SELECTORS.split()], env=env, text=True, capture_output=True)
+        self.assertEqual(summary.returncode, 0, summary.stderr)
+        (self.directory / "test.log").write_text(prefix + summary.stdout)
+
+    def test_retry_cannot_replace_uninterrupted_primary_outcomes(self):
+        suite = SELECTORS.split()[1]
+        for result in ("Skipped", "Failed", None):
+            with self.subTest(primary=result):
+                primary = [(CASES[0][0], result)] if result else []
+                self.actual_summary(primary, CASES, suite)
+                with self.assertRaises(ValueError):
+                    route.verify_execution(self.env, self.directory)
+
+    def test_same_count_wrong_identity_cannot_replace_enumerated_test(self):
+        wrong = SELECTORS.split()[1] + "/test99()"
+        rejected = self.resolve_catalog([item[0] for item in CASES], [wrong])
+        self.assertEqual(rejected.returncode, 1, rejected.stderr)
+        self.assertIn("matched no test", rejected.stderr)
+        self.actual_summary(CASES[:-1] + [(wrong, "Passed")])
+        with self.assertRaises(ValueError):
+            route.verify_execution(self.env, self.directory)
+
+    def test_complete_catalog_and_interrupted_only_retry_are_proof(self):
+        self.actual_summary(CASES)
+        route.verify_execution(self.env, self.directory)
+        self.actual_summary(CASES[:1], CASES[1:], SELECTORS.split()[1])
+        route.verify_execution(self.env, self.directory)
+
     def check_phase_transcript(self, step_name, phase):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
         section = workflow.split("      - name: " + step_name + "\n", 1)[1].split("\n      - name:", 1)[0]
