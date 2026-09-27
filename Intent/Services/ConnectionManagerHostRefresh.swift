@@ -1,6 +1,12 @@
 import Foundation
 
 extension ConnectionManager {
+    private struct HostRefreshContext {
+        let admission: ConnectionAdmission
+        let generation: Int
+        let credentialsRevision: Int
+    }
+
     enum HostRouteRefreshDecision: Equatable {
         case failed
         case stale
@@ -29,11 +35,13 @@ extension ConnectionManager {
     func refreshHostRoutes() async {
         guard connectionState == .connected, let admission, let port else { return }
         let token = admission.token
-        let myGeneration = connectionGeneration
+        let context = HostRefreshContext(admission: admission, generation: connectionGeneration, credentialsRevision: reconnectCredentialsRevision)
+        guard hostRefreshIsCurrent(context) else { return }
 
         // Refresh the stored display name first: it must run even when the
         // localIps flow below bails out (older daemon, transport hiccup).
-        await refreshStoredDisplayName(token: token, port: port)
+        await refreshStoredDisplayName(token: token, port: port, context: context)
+        guard hostRefreshIsCurrent(context) else { return }
 
         let response: Result<Any, Error>
         do {
@@ -41,9 +49,10 @@ extension ConnectionManager {
         } catch {
             response = .failure(error)
         }
+        guard hostRefreshIsCurrent(context) else { return }
         switch Self.hostRouteRefreshDecision(
             response: response,
-            requestedGeneration: myGeneration,
+            requestedGeneration: context.generation,
             currentGeneration: connectionGeneration
         ) {
         case .failed:
@@ -59,6 +68,12 @@ extension ConnectionManager {
             applyReportedTunnelAddress(reportedTc, token: token, port: port)
             applyReportedHosts(localIps, token: token, port: port)
         }
+    }
+
+    private func hostRefreshIsCurrent(_ context: HostRefreshContext) -> Bool {
+        connectionState == .connected && admission?.id == context.admission.id
+            && connectionGeneration == context.generation && reconnectCredentialsRevision == context.credentialsRevision
+            && token == context.admission.token && InvitedSyncKey.sameFingerprint(certFingerprint, context.admission.fingerprint)
     }
 
     private func applyReportedTunnelAddress(_ reportedTc: String?, token: String, port: Int) {
@@ -141,15 +156,15 @@ extension ConnectionManager {
     /// `refreshHostRoutes()`: the active connection, verified against the live
     /// token + port. Failures are non-fatal: older daemons and transport errors
     /// are skipped silently and the existing name is kept.
-    private func refreshStoredDisplayName(token: String, port: Int) async {
-        let myGeneration = connectionGeneration
+    private func refreshStoredDisplayName(token: String, port: Int, context: HostRefreshContext) async {
         guard let result = try? await request("host.status"),
               let name = ConnectionPairing.displayName(fromHostStatus: result) else {
             return
         }
 
-        // A newer connect() may have superseded us while the RPC was in flight.
-        guard connectionGeneration == myGeneration else { return }
+        // A reconnect, credential import, or local route edit can supersede
+        // this reply while the admitted socket remains otherwise usable.
+        guard hostRefreshIsCurrent(context) else { return }
 
         if let stored = savedConnection(token: token, port: port),
             stored.token == token, stored.server.port == port,

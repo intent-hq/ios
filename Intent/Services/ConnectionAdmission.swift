@@ -9,6 +9,13 @@ nonisolated struct ConnectionAdmission: Equatable, Sendable {
     let principal: ConnectionPrincipal
 }
 
+/// A pairing owns its connection across automatic transport recovery, until
+/// an explicit replacement connect or disconnect takes over. Socket admission
+/// remains separate because every replacement socket must recheck authority.
+nonisolated enum PairingConnectionContext {
+    @TaskLocal static var attemptID: UUID?
+}
+
 extension SessionConnectionManaging {
     func pairingAdmission(token: String, fingerprint: String?) throws -> ConnectionAdmission {
         guard let admission, admission.token == token,
@@ -25,8 +32,8 @@ extension SessionConnectionManaging {
         }
     }
 
-    func disconnectPairingAdmission(_ id: UUID?) {
-        guard let id, admission?.id == id else { return }
+    func disconnectPairingAttempt(_ id: UUID) {
+        guard pairingAttemptID == id else { return }
         disconnect()
     }
 }

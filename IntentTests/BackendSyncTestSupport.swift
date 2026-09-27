@@ -128,3 +128,16 @@ struct BackendSyncTestStore {
         #expect(manager.saveDataToKeychain(data: try JSONEncoder().encode(connections), account: manager.keychainAccountConnections))
     }
 }
+
+extension PersistenceManager {
+    /// These publication fixtures model an owner already confirmed by the
+    /// connection. The legacy savePairing shim intentionally has no authority.
+    func saveVerifiedOwnerForTesting(server: PairedServer, token: String) -> Bool {
+        var connection = StoredConnection(server: server, token: token)
+        connection.principal = .demoOwner
+        let outcome = upsertConnectionWithOutcome(connection)
+        guard outcome.persisted, setActiveConnection(id: outcome.connection.id) else { return false }
+        publishPendingBackends()
+        return true
+    }
+}

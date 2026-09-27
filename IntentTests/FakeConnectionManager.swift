@@ -155,6 +155,7 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     var currentPrincipal: ConnectionPrincipal? = .demoOwner
     var admission: ConnectionAdmission?
+    var pairingAttemptID: UUID?
 
     func confirmedPrincipal() async throws -> ConnectionPrincipal {
         let hello = try await request("client.hello")
@@ -218,6 +219,7 @@ class FakeConnectionManager: SessionConnectionManaging {
             )
         )
         if let connectError { throw connectError }
+        pairingAttemptID = PairingConnectionContext.attemptID
         admission = ConnectionAdmission(id: UUID(), token: token, fingerprint: certFingerprint, principal: currentPrincipal ?? .demoOwner)
         connectionState = .connected
     }
@@ -446,6 +448,7 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     /// Simulate a disconnection event (transition to .disconnected).
     func simulateDisconnect() {
+        pairingAttemptID = nil
         admission = nil
         connectionState = .disconnected
     }

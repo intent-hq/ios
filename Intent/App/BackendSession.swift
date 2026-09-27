@@ -26,6 +26,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
 
     var currentPrincipal: ConnectionPrincipal? { get }
     var admission: ConnectionAdmission? { get }
+    var pairingAttemptID: UUID? { get }
 
     func confirmedPrincipal() async throws -> ConnectionPrincipal
 

@@ -34,7 +34,7 @@ extension PersistenceManager {
         }
         let removed = applyInvitedRemovalFloors()
         publishPendingInvitedSessions()
-        return InvitedImportOutcome(before: initial, after: loadConnections(), suppressed: removed)
+        return InvitedImportOutcome(before: initial, after: loadConnectionsWithOutcome(), suppressed: removed)
     }
 
     /// Authentication is an async boundary. Only the credential just checked

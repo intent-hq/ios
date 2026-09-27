@@ -4,6 +4,15 @@ import Security
 import Testing
 
 extension AppCoordinatorInvitedSyncTests {
+    @Test func unreadableFinalSnapshotRetainsOnlyAuthoritativeSuppression() throws {
+        let invited = try #require(PersistenceManager.connection(fromInvited: InvitedSessionFixtures.session()))
+        let other = try #require(PersistenceManager.connection(fromInvited: InvitedSessionFixtures.session("C")))
+        let outcome = InvitedImportOutcome(before: [invited, other], after: .failed(.unavailable(errSecNotAvailable)), suppressed: [invited.id])
+        #expect(outcome.removedIds == [invited.id])
+        #expect(outcome.addedIds.isEmpty)
+        #expect(outcome.updatedIds.isEmpty)
+    }
+
     @Test func lateLocalReadFailurePreservesInvitedAndOwnerSessionsUntilRecovery() async throws {
         let cloud = MemorySyncedKeychain()
         let record = try InvitedSessionFixtures.session()

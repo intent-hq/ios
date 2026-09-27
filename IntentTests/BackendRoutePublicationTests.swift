@@ -10,6 +10,8 @@ struct BackendRoutePublicationTests {
         defer { store.cleanUp() }
         // The first refresh learns no route. Pairing still publishes successfully.
         let live = FakeConnectionManager()
+        let target = server(route: nil)
+        try await live.connect(hosts: target.hosts, port: target.port, token: "local-token", certFingerprint: target.certFingerprint, tcAddress: nil)
         let paired = try await ConnectionPairing.finalize(
             server: server(route: nil),
             token: "local-token",
@@ -36,7 +38,7 @@ struct BackendRoutePublicationTests {
     @Test func failedRoutePublicationRetriesAfterRelaunch() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "local-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "local-token"))
         let original = try #require(store.manager.activeConnection())
         store.cloud.writeFailure = errSecNotAvailable
         #expect(store.manager.updateConnectionTcAddress(id: original.id, tcAddress: "tcNew"))
@@ -57,7 +59,7 @@ struct BackendRoutePublicationTests {
     @Test func failedLocalRouteSaveCannotPublish() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "local-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "local-token"))
         let original = try #require(store.manager.activeConnection())
         store.local.setSaveFailure(true)
         #expect(!store.manager.updateConnectionTcAddress(id: original.id, tcAddress: "tcUnsaved"))
@@ -70,7 +72,7 @@ struct BackendRoutePublicationTests {
     @Test func routeAcknowledgementFailureDoesNotRepeatCloudWrite() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "local-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "local-token"))
         let original = try #require(store.manager.activeConnection())
         store.cloud.beforeWrite = { store.local.setSaveFailure(true) }
         #expect(store.manager.updateConnectionTcAddress(id: original.id, tcAddress: "tcNew"))
@@ -86,7 +88,7 @@ struct BackendRoutePublicationTests {
     @Test func routeCapturePreservesNewerSharedCredentialsAndMetadata() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "old-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "old-token"))
         let original = try #require(store.manager.activeConnection())
         var remote = BackendSyncFixtures.remote(clock: 3000)
         remote["tcAddress"] = "tcOld"
@@ -113,7 +115,7 @@ struct BackendRoutePublicationTests {
     func equalOrNewerSharedRouteWinsOverPendingAutomaticRotation(clock: Double) throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "old-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "old-token"))
         let original = try #require(store.manager.activeConnection())
         store.cloud.writeFailure = errSecNotAvailable
         #expect(store.manager.updateConnectionTcAddress(id: original.id, tcAddress: "tcLocalRotation"))
@@ -132,7 +134,7 @@ struct BackendRoutePublicationTests {
     @Test func newerLocalObservationReplacesOlderSharedRotationWithoutLosingMetadata() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "old-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "old-token"))
         let original = try #require(store.manager.activeConnection())
         var remote = BackendSyncFixtures.remote(clock: 2000)
         remote["tcAddress"] = "tcMiddle"
@@ -167,7 +169,7 @@ struct BackendRoutePublicationTests {
     @Test func pendingRouteSurvivesImportWhileCloudWriteFails() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "old-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "old-token"))
         let original = try #require(store.manager.activeConnection())
         store.cloud.writeFailure = errSecNotAvailable
         #expect(store.manager.updateConnectionTcAddress(id: original.id, tcAddress: "tcNew"))
@@ -188,7 +190,7 @@ struct BackendRoutePublicationTests {
     @Test func removedBackendCannotBeRepublishedByLateRouteCapture() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "local-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "local-token"))
         let original = try #require(store.manager.activeConnection())
         try store.cloud.put(BackendSyncFixtures.remote(clock: 3000, deleted: true))
         store.cloud.beforeList = { _ in store.local.setSaveFailure(true) }
@@ -205,7 +207,7 @@ struct BackendRoutePublicationTests {
         relaunched.publishPendingBackends()
         #expect(store.cloud.items.isEmpty)
         #expect(store.cloud.writeCount == 1)
-        #expect(relaunched.savePairing(server: server(route: "tcDeliberate"), token: "new-pairing"))
+        #expect(relaunched.saveVerifiedOwnerForTesting(server: server(route: "tcDeliberate"), token: "new-pairing"))
         #expect(try store.cloud.object()["tcAddress"] as? String == "tcDeliberate")
         #expect(try store.cloud.object()["updatedAt"] as? Double == 3001)
     }
@@ -213,7 +215,7 @@ struct BackendRoutePublicationTests {
     @Test func routeCaptureNeverCreatesMissingSharedRowOrExportsImportedRecord() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "local-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "local-token"))
         let original = try #require(store.manager.activeConnection())
         store.cloud.items.removeAll()
         #expect(store.manager.updateConnectionTcAddress(id: original.id, tcAddress: "tcNew"))
@@ -231,7 +233,7 @@ struct BackendRoutePublicationTests {
     @Test func hostOnlyCapturePreservesSharedTunnelAndToken() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "old-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "old-token"))
         let original = try #require(store.manager.activeConnection())
         try store.cloud.put(BackendSyncFixtures.remote(clock: 3000))
         #expect(store.manager.updateConnectionHosts(id: original.id, hosts: ["Mac.Local", "10.0.0.2"]))
@@ -244,9 +246,9 @@ struct BackendRoutePublicationTests {
     @Test func routeRetryCannotSupersedeStillPendingDeliberateTokenRotation() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "old-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "old-token"))
         store.cloud.writeFailure = errSecNotAvailable
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "new-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "new-token"))
         let pending = try #require(store.manager.activeConnection())
         #expect(store.manager.updateConnectionTcAddress(id: pending.id, tcAddress: "tcNew"))
         #expect(store.cloud.writeCount == 3)
@@ -288,7 +290,7 @@ extension BackendRoutePublicationTests {
     func hostUpdateDoesNotRestampFailedTunnelObservation(useLegacyIntent: Bool) throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        #expect(store.manager.savePairing(server: server(route: "tcOld"), token: "old-token"))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: server(route: "tcOld"), token: "old-token"))
         let original = try #require(store.manager.activeConnection())
         store.cloud.writeFailure = errSecNotAvailable
         #expect(store.manager.updateConnectionTcAddress(id: original.id, tcAddress: "tcA"))

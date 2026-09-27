@@ -233,7 +233,8 @@ extension AppCoordinator {
     }
 
     func refreshSavedConnectionsPresentation() {
-        savedConnections = dependencies.persistence.loadConnections().sorted { lhs, rhs in
+        guard let records = dependencies.persistence.loadConnectionsWithOutcome().connections else { return }
+        savedConnections = records.sorted { lhs, rhs in
             if lhs.id == windowConnectionID { return rhs.id != windowConnectionID }
             if rhs.id == windowConnectionID { return false }
             return (lhs.lastConnectedAt ?? .distantPast) > (rhs.lastConnectedAt ?? .distantPast)

@@ -63,16 +63,21 @@ enum PairingFlow {
         persistence: PersistenceManager = .shared,
         diagnostics: DiagnosticStore = .shared
     ) async throws -> StoredConnection {
+        let attemptID = UUID()
+        var persisted = false
+        defer { if !persisted { connectionManager.disconnectPairingAttempt(attemptID) } }
         PairingDiagnostics.phase(.connect, .started, store: diagnostics)
         do {
-            try await DiagnosticConnectContext.$origin.withValue(.pairing) {
-                try await connectionManager.connect(
-                    hosts: payload.hosts,
-                    port: payload.port,
-                    token: payload.token,
-                    certFingerprint: certFingerprint,
-                    tcAddress: payload.tcAddress
-                )
+            try await PairingConnectionContext.$attemptID.withValue(attemptID) {
+                try await DiagnosticConnectContext.$origin.withValue(.pairing) {
+                    try await connectionManager.connect(
+                        hosts: payload.hosts,
+                        port: payload.port,
+                        token: payload.token,
+                        certFingerprint: certFingerprint,
+                        tcAddress: payload.tcAddress
+                    )
+                }
             }
         } catch {
             PairingDiagnostics.phase(.connect, error is CancellationError || Task.isCancelled ? .cancelled : .failed, store: diagnostics)
@@ -82,12 +87,8 @@ enum PairingFlow {
         // not be persisted after the connect happens to complete first —
         // and the just-established authenticated socket must not be left
         // dangling with no UI reflecting it.
-        let ownedAdmissionID = connectionManager.admission.flatMap { receipt in
-            receipt.token == payload.token && receipt.fingerprint == certFingerprint ? receipt.id : nil
-        }
-        if Task.isCancelled {
+        if Task.isCancelled || connectionManager.pairingAttemptID != attemptID {
             PairingDiagnostics.phase(.connect, .cancelled, store: diagnostics)
-            connectionManager.disconnectPairingAdmission(ownedAdmissionID)
             throw CancellationError()
         }
         let server = PairedServer(
@@ -106,14 +107,12 @@ enum PairingFlow {
                 connection: connectionManager,
                 persistence: persistence
             )
+            persisted = true
             PairingDiagnostics.phase(.save, .succeeded, store: diagnostics)
             return stored
         } catch {
             // The persistence task owns the save failure; this is phase context.
             PairingDiagnostics.phase(.save, error is CancellationError ? .cancelled : .failed, store: diagnostics)
-            // The authenticated socket belongs to this failed pairing attempt;
-            // do not leave it live when no saved connection can own it.
-            connectionManager.disconnectPairingAdmission(ownedAdmissionID)
             throw error
         }
     }

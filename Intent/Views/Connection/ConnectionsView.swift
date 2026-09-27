@@ -259,8 +259,8 @@ struct ConnectionsView: View {
     }
 
     private func reload() {
-        connections = PersistenceManager.shared.loadConnections()
-            .sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
+        guard let records = coordinator.dependencies.persistence.loadConnectionsWithOutcome().connections else { return }
+        connections = records.sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
     }
 }
 

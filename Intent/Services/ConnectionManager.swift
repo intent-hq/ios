@@ -23,6 +23,7 @@ import os
         let token: String
         let certFingerprint: String?
         let tcAddress: String?
+        let pairingAttemptID = PairingConnectionContext.attemptID
     }
 
     private struct ConnectAttemptContext {
@@ -39,6 +40,7 @@ import os
     }
     private var admittedPrincipal: ConnectionPrincipal?
     @ObservationIgnored var admission: ConnectionAdmission?
+    @ObservationIgnored private(set) var pairingAttemptID: UUID?
     var currentPrincipal: ConnectionPrincipal? {
         get { DemoMode.isEnabled ? .demoOwner : admittedPrincipal }
         set { admittedPrincipal = newValue }
@@ -70,6 +72,7 @@ import os
     @ObservationIgnored var pendingRequests: [Int: CheckedContinuation<Any, Error>] = [:]
     @ObservationIgnored private var nextRequestId = 1
     @ObservationIgnored private(set) var connectionGeneration: Int = 0
+    @ObservationIgnored private(set) var reconnectCredentialsRevision = 0
     /// Supersession order among overlapping `connect()` calls. The preserving
     /// path (pairing over a live connection) does not tear down — and so does
     /// not advance `connectionGeneration` — up front, so overlapping attempts
@@ -329,11 +332,14 @@ extension ConnectionManager {
     }
 
     private func cacheConnectTarget(_ target: ConnectTarget) {
-        hosts = target.hosts
-        port = target.port
-        token = target.token
-        certFingerprint = target.certFingerprint
-        tcAddress = target.tcAddress
+        pairingAttemptID = target.pairingAttemptID
+        updateCachedCredentials(
+            hosts: target.hosts,
+            port: target.port,
+            token: target.token,
+            certFingerprint: target.certFingerprint,
+            tcAddress: target.tcAddress
+        )
     }
 
     /// Adopt registry-merged fields for the ACTIVE connection (called when a
@@ -349,6 +355,9 @@ extension ConnectionManager {
         certFingerprint: String?,
         tcAddress: String?
     ) {
+        if self.hosts != hosts || self.port != port || self.token != token || self.certFingerprint != certFingerprint || self.tcAddress != tcAddress {
+            reconnectCredentialsRevision += 1
+        }
         self.hosts = hosts
         self.port = port
         self.token = token
@@ -376,6 +385,7 @@ extension ConnectionManager {
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
         connectionGeneration += 1
+        pairingAttemptID = nil
         clearPrincipal()
         stopHeartbeat()
         stopPathMonitor()
@@ -423,10 +433,12 @@ extension ConnectionManager {
     }
 
     func applyRefreshedHosts(_ refreshedHosts: [String]) {
+        if hosts != refreshedHosts { reconnectCredentialsRevision += 1 }
         hosts = refreshedHosts
     }
 
     func applyRefreshedTunnelAddress(_ refreshedAddress: String?) {
+        if tcAddress != refreshedAddress { reconnectCredentialsRevision += 1 }
         tcAddress = refreshedAddress
     }
 }
