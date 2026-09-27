@@ -162,12 +162,20 @@ private final class SyntheticBadgeHostSession<Content: View> {
         callbackTimeout: TimeInterval,
         afterShowingWindow: (() -> Void)?,
         observeLifecycle: ((SyntheticBadgeHostLifecycleWaiter.Event) -> Void)?
-    ) {
+    ) throws {
+        let scene = try #require(
+            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+                .first { $0.activationState == .foregroundActive },
+            "SyntheticBadgeHost requires the test application's active window scene"
+        )
         controller = SyntheticBadgeHostingController(
             rootView: rootView,
             observeLifecycle: observeLifecycle
         )
-        window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
+        // A detached window can lay out and deliver appearance callbacks while
+        // SwiftUI exposes no accessibility tree to the application.
+        window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: width, height: height)
         self.callbackTimeout = callbackTimeout
         self.afterShowingWindow = afterShowingWindow
         window.rootViewController = controller
@@ -187,6 +195,7 @@ private final class SyntheticBadgeHostSession<Content: View> {
     }
 
     func disappear() async throws {
+        defer { window.windowScene = nil }
         try await controller.wait(
             for: .didDisappear,
             timeout: callbackTimeout,
@@ -232,9 +241,9 @@ enum SyntheticBadgeHost {
         observeLifecycle: ((LifecycleEvent) -> Void)? = nil,
         inspect: (_ hostView: UIView, _ window: UIWindow) throws -> Result
     ) async throws -> Result {
-        let session = autoreleasepool {
+        let session = try autoreleasepool {
             let rootView = SyntheticBadgeHostRoot(content: content, width: width, height: height)
-            return SyntheticBadgeHostSession(
+            return try SyntheticBadgeHostSession(
                 rootView: rootView,
                 width: width,
                 height: height,
@@ -314,10 +323,11 @@ enum SyntheticBadgeHost {
             // ScrollView/Menu can publish intermediate SwiftUI accessibility
             // containers which are NSObjects, not UIViews. Walk their children
             // too; stopping at the first container hides the actual menu chips.
+            var children = (object.accessibilityElements ?? []).compactMap { $0 as? NSObject }
             let count = object.accessibilityElementCount()
-            let children = count == NSNotFound || count < 0
-                ? (object.accessibilityElements ?? []).compactMap { $0 as? NSObject }
-                : (0..<count).compactMap { object.accessibilityElement(at: $0) as? NSObject }
+            if count != NSNotFound, count > 0 {
+                children += (0..<count).compactMap { object.accessibilityElement(at: $0) as? NSObject }
+            }
             children.forEach(visit)
             if let view = object as? UIView {
                 view.subviews.forEach(visit)
@@ -348,18 +358,26 @@ struct SyntheticBadgeHostTests {
 
     @Test func renderUsesRootViewControllerContainmentAcrossCompleteLifecycle() async throws {
         var stages: [String] = []
+        var renderedWindow: UIWindow?
         try await SyntheticBadgeHost.render(
             Text("content"),
             width: 200,
             height: 100
         ) { stages.append($0.rawValue) } inspect: { hostView, window in
             stages.append("inspection")
+            renderedWindow = window
             let controller = try #require(window.rootViewController)
+            let scene = try #require(window.windowScene, "A detached window cannot publish the hosted accessibility tree")
+            #expect(scene.activationState == .foregroundActive)
+            #expect(scene.windows.contains { $0 === window })
             #expect(controller.view === hostView)
             #expect(hostView.window === window)
             #expect(hostView.frame == window.bounds)
         }
         #expect(stages == ["didAppear", "inspection", "didDisappear"])
+        #expect(renderedWindow?.isHidden == true)
+        #expect(renderedWindow?.rootViewController == nil)
+        #expect(renderedWindow?.windowScene == nil)
     }
 
     @Test func inspectionFailureStillCompletesDisappearance() async {

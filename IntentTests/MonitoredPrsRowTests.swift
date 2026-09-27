@@ -46,6 +46,40 @@ struct MonitoredPrsRowTests {
 }
 
 extension MonitoredPrsRowTests {
+    final class MixedAccessibilityContainer: NSObject {
+        var indexedCount = 0
+        var indexedElements: [NSObject] = []
+
+        override func accessibilityElementCount() -> Int { indexedCount }
+
+        override func accessibilityElement(at index: Int) -> Any? {
+            indexedElements.indices.contains(index) ? indexedElements[index] : nil
+        }
+    }
+
+    @Test(arguments: [0, 1, NSNotFound, -1])
+    func accessibilityTraversalCombinesExplicitAndIndexedChildren(indexedCount: Int) {
+        let host = UIView()
+        let container = MixedAccessibilityContainer()
+        container.indexedCount = indexedCount
+        let explicitChip = UIAccessibilityElement(accessibilityContainer: container)
+        explicitChip.accessibilityLabel = "#12"
+        explicitChip.accessibilityValue = "Pending changes"
+        explicitChip.accessibilityTraits = .button
+        let indexedChip = UIAccessibilityElement(accessibilityContainer: container)
+        container.indexedElements = [indexedChip]
+        container.accessibilityElements = [explicitChip, host]
+        host.accessibilityElements = [container, explicitChip]
+        defer { container.accessibilityElements = nil; host.accessibilityElements = nil }
+
+        let elements = SyntheticBadgeHost.accessibilityElements(in: host)
+        #expect(elements.filter { $0 === explicitChip }.count == 1)
+        #expect(elements.contains { $0 === indexedChip } == (indexedCount == 1))
+        #expect(elements.first { $0 === explicitChip }?.accessibilityLabel == "#12")
+        #expect(elements.first { $0 === explicitChip }?.accessibilityValue == "Pending changes")
+        #expect(elements.first { $0 === explicitChip }?.accessibilityTraits.contains(.button) == true)
+    }
+
     @Test func accessibilityTraversalReachesChipsInsideNonViewScrollContainers() {
         let host = UIView()
         let scrollContainer = NSObject()
