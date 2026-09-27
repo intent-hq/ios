@@ -134,6 +134,8 @@ extension ConversationTranscriptScrollUITests {
                 + restingState(of: prompt, named: "prompt button", in: opened)
         )
 
+        XCTAssertEqual(prompt.label, Fixture.firstSuggestedPromptLabel)
+
         // 2. Tap it: the prompt rows collapse, the sent row and the thinking
         //    indicator appear as the new tail.
         prompt.tap()

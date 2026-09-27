@@ -40,6 +40,31 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     }
 
     @MainActor
+    func testHidingSidebarDuringSearchRestoresUnfilteredWorkspaces() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar behavior")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = launchWorkspaces()
+        let otherWorkspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(otherWorkspace.exists)
+        app.buttons["workspaces.search.open"].tap()
+        let field = app.textFields["workspaces.search.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        field.typeText("payment")
+        XCTAssertTrue(otherWorkspace.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertFalse(app.buttons["intent.menu.open"].exists)
+
+        app.buttons["Hide Sidebar"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Fixture.timeout))
+        app.buttons["Show Sidebar"].tap()
+        XCTAssertTrue(otherWorkspace.waitForExistence(timeout: Fixture.timeout))
+        app.buttons["workspaces.search.open"].tap()
+        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertEqual(field.value as? String, "Search workspaces")
+    }
+
+    @MainActor
     func testSearchAboveKeyboardHidesAssistantUntilClosed() {
         let app = launchWorkspaces()
         XCTAssertTrue(app.buttons["intent.menu.open"].exists)

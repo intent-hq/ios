@@ -22,7 +22,9 @@ enum Fixture {
     // DemoFixtures.longConversationSuggestedPrompts[0] — the text of the
     // optimistic user row the tap appends.
     static let firstSuggestedPromptIdentifier = "transcript.suggestedPrompt.0"
-    static let firstSuggestedPrompt = "Open a PR for the deflake changes"
+    static let firstSuggestedPrompt =
+        "Open a [**PR**](https://github.com/intent-hq/ios) for the `deflake` changes"
+    static let firstSuggestedPromptLabel = "Open a PR for the deflake changes"
     // The last of DemoFixtures.longConversationSuggestedPrompts (three
     // prompts): the transcript's final content row while no send is in
     // flight. A transcript resting with it inside its frame, `endRowGap`
@@ -38,7 +40,14 @@ enum Fixture {
     // frame's bottom edge is that much above the row's.
     static let thinkingIndicatorLabel = "Thinking..."
     static let thinkingIndicatorLabelInset: CGFloat = 4
-    static let endRowGap: CGFloat = 36
+    // Workspace iPhone: 32pt section gap plus the 8pt anchor and 12pt footer.
+    // The shared non-phone presentation retains the original 16pt section gap.
+    private static let workspaceEndRowGap: CGFloat = 52
+    private static let legacyEndRowGap: CGFloat = 36
+
+    @MainActor static var endRowGap: CGFloat {
+        UIDevice.current.userInterfaceIdiom == .phone ? workspaceEndRowGap : legacyEndRowGap
+    }
     // Slack on `endRowGap`: the follow lands within 1 pt
     // (Constants.Conversation.Transcript.followLandingTolerance) and
     // accessibility frames round to the pixel grid.
@@ -402,7 +411,8 @@ func leaveConversation(in app: XCUIApplication) {
     let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
     var backTapsLeft = Fixture.backNavigationAttempts
     while backTapsLeft > 0, !workspaceList.waitForExistence(timeout: Fixture.backNavigationTimeout) {
-        let back = app.navigationBars.buttons.element(boundBy: 0)
+        let workspaceBack = app.buttons["conversation.back"]
+        let back = workspaceBack.exists ? workspaceBack : app.navigationBars.buttons.element(boundBy: 0)
         guard back.exists else { break }
         back.tap()
         backTapsLeft -= 1

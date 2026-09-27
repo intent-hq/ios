@@ -244,7 +244,7 @@ extension DemoFixtures {
                 "updatedAt": iso(minutesAgo: 12),
                 "lastActivity": iso(minutesAgo: 12),
                 "lastMessageRole": "assistant",
-                "digest": "CSV export endpoint is streaming; adding the 90-day cap test next.",
+                "digest": "[Review **CSV export**](https://github.com/intent-hq/ios)",
                 "metadata": ["specialist": "implementor"]
             ],
             [

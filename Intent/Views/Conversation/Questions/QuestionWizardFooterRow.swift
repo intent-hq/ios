@@ -12,12 +12,51 @@ struct QuestionWizardFooterRow: View {
     let onBack: () -> Void
     let onSkip: () -> Void
     let onNext: () -> Void
+    var usesWorkspaceDesign = false
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private typealias Layout = Constants.Conversation.QuestionWizard.Footer
+    private typealias Design = Constants.Conversation.Design
 
     var body: some View {
+        if usesWorkspaceDesign {
+            workspaceFooter
+        } else {
+            legacyFooter
+        }
+    }
+
+    private var workspaceFooter: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .trailing, spacing: Design.Question.buttonSpacing))
+            : AnyLayout(HStackLayout(spacing: Design.Question.buttonSpacing))
+        return layout {
+            if multiStep {
+                Button("Back", action: onBack)
+                    .buttonStyle(WorkspaceQuestionButtonStyle())
+                    .disabled(index == 0)
+                    .accessibilityIdentifier("question.back")
+            }
+            if !dynamicTypeSize.isAccessibilitySize {
+                Spacer(minLength: 0)
+            }
+            Button("Skip", action: onSkip)
+                .buttonStyle(WorkspaceQuestionButtonStyle())
+                .accessibilityIdentifier("question.skip")
+            if showNext {
+                Button(isLast ? "Send" : "Next", action: onNext)
+                    .buttonStyle(WorkspaceQuestionButtonStyle(primary: true))
+                    .disabled(nextDisabled)
+                    .accessibilityIdentifier("question.next")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .disabled(submitted || dismissed)
+    }
+
+    private var legacyFooter: some View {
         HStack(spacing: Layout.contentSpacing) {
             if multiStep {
                 backButton

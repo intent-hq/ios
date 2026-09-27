@@ -16,7 +16,7 @@ extension DemoFixtures {
     /// block, so the transcript's prompt rows — and the scroll transition
     /// when one is tapped — can be exercised against `--demo-data`.
     static let longConversationSuggestedPrompts = [
-        "Open a PR for the deflake changes",
+        "Open a [**PR**](https://github.com/intent-hq/ios) for the `deflake` changes",
         "Show me the final evidence table",
         "Schedule the worker scaling follow-up"
     ]

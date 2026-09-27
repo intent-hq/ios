@@ -4,8 +4,26 @@ import Foundation
 /// for the conversation tool rows. Extracted from ToolCallView so the
 /// classification path is unit-testable.
 enum ToolClassifier {
+    enum Icon: String {
+        case agent = "Agents"
+        case browser = "Browser"
+        case context = "Thinking"
+        case delete = "Delete"
+        case edit = "Edit"
+        case file = "File"
+        case git = "Git"
+        case github = "Github"
+        case note = "FileList"
+        case search = "Search"
+        case task = "List"
+        case terminal = "Terminal"
+        case tool = "Code"
+        case web = "Globe"
+        case workspace = "Folders"
+    }
+
     struct ToolDisplay {
-        let icon: String
+        let icon: Icon
         let verb: String
         let subject: String?
         let path: String?
@@ -65,14 +83,14 @@ extension ToolClassifier {
             } ?? summary.map { summary in
                 String(summary.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
             }
-            return ToolDisplay(icon: "🐙", verb: "GitHub", subject: subject, path: nil)
+            return ToolDisplay(icon: .github, verb: "GitHub", subject: subject, path: nil)
         }
 
         // Linear
         if clean.contains("linear") {
             let summary = input["summary"]?.value as? String
             return ToolDisplay(
-                icon: "🌐",
+                icon: .web,
                 verb: "Linear",
                 subject: summary.map { summary in
                     String(summary.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
@@ -86,12 +104,12 @@ extension ToolClassifier {
             let subject = url.map { url in
                 String(url.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
             }
-            return ToolDisplay(icon: "🌐", verb: "Fetch", subject: subject, path: nil)
+            return ToolDisplay(icon: .web, verb: "Fetch", subject: subject, path: nil)
         }
 
         // Browser
         if clean.contains("browser") || clean.contains("screenshot") || clean.contains("snapshot") {
-            return ToolDisplay(icon: "🖥️", verb: "Browser", subject: nil, path: nil)
+            return ToolDisplay(icon: .browser, verb: "Browser", subject: nil, path: nil)
         }
 
         return nil
@@ -107,7 +125,7 @@ extension ToolClassifier {
             if clean.contains("create") {
                 let agentName = input["name"]?.value as? String
                 return ToolDisplay(
-                    icon: "🤖",
+                    icon: .agent,
                     verb: "Create agent",
                     subject: agentName.map { agentName in
                         String(agentName.prefix(Constants.Conversation.ToolClassifier.agentNameMaximumLength))
@@ -118,21 +136,21 @@ extension ToolClassifier {
             if clean.contains("delegate") {
                 let taskText = input["taskText"]?.value as? String ?? input["taskDescription"]?.value as? String ?? "task"
                 return ToolDisplay(
-                    icon: "🤖",
+                    icon: .agent,
                     verb: "Delegate",
                     subject: String(taskText.prefix(Constants.Conversation.ToolClassifier.taskMaximumLength)),
                     path: nil
                 )
             }
             if clean.contains("message") || clean.contains("send") {
-                return ToolDisplay(icon: "🤖", verb: "Message agent", subject: nil, path: nil)
+                return ToolDisplay(icon: .agent, verb: "Message agent", subject: nil, path: nil)
             }
             if clean.contains("report"), clean.contains("parent") {
-                return ToolDisplay(icon: "🤖", verb: "Report to parent", subject: nil, path: nil)
+                return ToolDisplay(icon: .agent, verb: "Report to parent", subject: nil, path: nil)
             }
-            if clean.contains("list") { return ToolDisplay(icon: "🤖", verb: "List agents", subject: nil, path: nil) }
-            if clean.contains("summary") || clean.contains("status") { return ToolDisplay(icon: "🤖", verb: "Agent status", subject: nil, path: nil) }
-            return ToolDisplay(icon: "🤖", verb: "Agent", subject: nil, path: nil)
+            if clean.contains("list") { return ToolDisplay(icon: .agent, verb: "List agents", subject: nil, path: nil) }
+            if clean.contains("summary") || clean.contains("status") { return ToolDisplay(icon: .agent, verb: "Agent status", subject: nil, path: nil) }
+            return ToolDisplay(icon: .agent, verb: "Agent", subject: nil, path: nil)
         }
 
         return nil
@@ -159,14 +177,14 @@ extension ToolClassifier {
     }
 
     static func classifyPrimaryNoteOperation(clean: String, displayTitle: String?) -> ToolDisplay? {
-            if clean.contains("create"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Create note", subject: displayTitle, path: nil) }
-            if clean.contains("read"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Read note", subject: displayTitle, path: nil) }
-            if clean.contains("edit"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Edit note", subject: displayTitle, path: nil) }
-            if clean.contains("add"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Add to note", subject: displayTitle, path: nil) }
-            if clean.contains("set"), clean.contains("content") { return ToolDisplay(icon: "📝", verb: "Replace note", subject: displayTitle, path: nil) }
-            if clean.contains("delete"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Delete note", subject: displayTitle, path: nil) }
-            if clean.contains("list"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "List notes", subject: nil, path: nil) }
-            if clean.contains("comment") { return ToolDisplay(icon: "📝", verb: "Comment", subject: displayTitle, path: nil) }
+            if clean.contains("create"), clean.contains("note") { return ToolDisplay(icon: .note, verb: "Create note", subject: displayTitle, path: nil) }
+            if clean.contains("read"), clean.contains("note") { return ToolDisplay(icon: .note, verb: "Read note", subject: displayTitle, path: nil) }
+            if clean.contains("edit"), clean.contains("note") { return ToolDisplay(icon: .note, verb: "Edit note", subject: displayTitle, path: nil) }
+            if clean.contains("add"), clean.contains("note") { return ToolDisplay(icon: .note, verb: "Add to note", subject: displayTitle, path: nil) }
+            if clean.contains("set"), clean.contains("content") { return ToolDisplay(icon: .note, verb: "Replace note", subject: displayTitle, path: nil) }
+            if clean.contains("delete"), clean.contains("note") { return ToolDisplay(icon: .note, verb: "Delete note", subject: displayTitle, path: nil) }
+            if clean.contains("list"), clean.contains("note") { return ToolDisplay(icon: .note, verb: "List notes", subject: nil, path: nil) }
+            if clean.contains("comment") { return ToolDisplay(icon: .note, verb: "Comment", subject: displayTitle, path: nil) }
         return nil
     }
 
@@ -180,14 +198,14 @@ extension ToolClassifier {
                 let subject = displayTitle.flatMap { title in
                     status.map { "\(title) → \($0)" }
                 } ?? displayTitle
-                return ToolDisplay(icon: "📋", verb: "Update task", subject: subject, path: nil)
+                return ToolDisplay(icon: .task, verb: "Update task", subject: subject, path: nil)
             }
-            if clean.contains("title") || clean.contains("rename") { return ToolDisplay(icon: "📁", verb: "Rename", subject: displayTitle, path: nil) }
-            if clean.contains("timeline") { return ToolDisplay(icon: "📁", verb: "Timeline", subject: nil, path: nil) }
+            if clean.contains("title") || clean.contains("rename") { return ToolDisplay(icon: .workspace, verb: "Rename", subject: displayTitle, path: nil) }
+            if clean.contains("timeline") { return ToolDisplay(icon: .workspace, verb: "Timeline", subject: nil, path: nil) }
             if clean.contains("name"), clean.contains("agent") {
                 let agentName = input["name"]?.value as? String
                 return ToolDisplay(
-                    icon: "📁",
+                    icon: .workspace,
                     verb: "Rename agent",
                     subject: agentName.map { agentName in
                         String(agentName.prefix(Constants.Conversation.ToolClassifier.agentNameMaximumLength))
@@ -195,7 +213,7 @@ extension ToolClassifier {
                     path: nil
                 )
             }
-            return ToolDisplay(icon: "📁", verb: "Workspace", subject: displayTitle, path: nil)
+            return ToolDisplay(icon: .workspace, verb: "Workspace", subject: displayTitle, path: nil)
     }
 }
 
@@ -205,19 +223,19 @@ extension ToolClassifier {
         let clean = context.clean
         // Task operations
         if clean.contains("task") {
-            if clean.contains("view") || clean.contains("list") { return ToolDisplay(icon: "📋", verb: "View", subject: "task list", path: nil) }
-            if clean.contains("add") { return ToolDisplay(icon: "📋", verb: "Add", subject: "task", path: nil) }
-            if clean.contains("update") { return ToolDisplay(icon: "📋", verb: "Update", subject: "task", path: nil) }
-            if clean.contains("get"), clean.contains("my") { return ToolDisplay(icon: "📋", verb: "Get task", subject: nil, path: nil) }
-            return ToolDisplay(icon: "📋", verb: "Task", subject: nil, path: nil)
+            if clean.contains("view") || clean.contains("list") { return ToolDisplay(icon: .task, verb: "View", subject: "task list", path: nil) }
+            if clean.contains("add") { return ToolDisplay(icon: .task, verb: "Add", subject: "task", path: nil) }
+            if clean.contains("update") { return ToolDisplay(icon: .task, verb: "Update", subject: "task", path: nil) }
+            if clean.contains("get"), clean.contains("my") { return ToolDisplay(icon: .task, verb: "Get task", subject: nil, path: nil) }
+            return ToolDisplay(icon: .task, verb: "Task", subject: nil, path: nil)
         }
 
         // Git operations
         if clean.contains("git") || clean.contains("commit") || clean.contains("stage") || clean.contains("merge") {
-            if clean.contains("status") { return ToolDisplay(icon: "📦", verb: "Git status", subject: nil, path: nil) }
+            if clean.contains("status") { return ToolDisplay(icon: .git, verb: "Git status", subject: nil, path: nil) }
             if clean.contains("commit") {
                 return ToolDisplay(
-                    icon: "📦",
+                    icon: .git,
                     verb: "Commit",
                     subject: (input["message"]?.value as? String).map { message in
                         String(message.prefix(Constants.Conversation.ToolClassifier.commitMessageMaximumLength))
@@ -225,8 +243,8 @@ extension ToolClassifier {
                     path: nil
                 )
             }
-            if clean.contains("stage") { return ToolDisplay(icon: "📦", verb: "Stage", subject: nil, path: nil) }
-            return ToolDisplay(icon: "📦", verb: "Git", subject: nil, path: nil)
+            if clean.contains("stage") { return ToolDisplay(icon: .git, verb: "Stage", subject: nil, path: nil) }
+            return ToolDisplay(icon: .git, verb: "Git", subject: nil, path: nil)
         }
 
         return nil
@@ -250,10 +268,10 @@ extension ToolClassifier {
         // check so raw tool-name-shaped titles keep the cleaned-name fallback.
         if let title = acpTitle, isProseTitle(title) {
             let lower = title.lowercased()
-            let icon = lower.contains("agent") ? "🤖"
-                : lower.contains("note") ? "📝"
-                : lower.contains("workspace") ? "📁"
-                : "🔧"
+            let icon: Icon = lower.contains("agent") ? .agent
+                : lower.contains("note") ? .note
+                : lower.contains("workspace") ? .workspace
+                : .tool
             return ToolDisplay(
                 icon: icon,
                 verb: String(title.prefix(Constants.Conversation.ToolClassifier.fallbackTitleMaximumLength)),
@@ -272,6 +290,6 @@ extension ToolClassifier {
             .split(separator: " ")
             .map { component in component.prefix(1).uppercased() + component.dropFirst().lowercased() }
             .joined(separator: " ")
-        return ToolDisplay(icon: "🔧", verb: cleanedName, subject: fallbackSubject, path: nil)
+        return ToolDisplay(icon: .tool, verb: cleanedName, subject: fallbackSubject, path: nil)
     }
 }

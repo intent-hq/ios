@@ -18,7 +18,7 @@ extension DemoFixtures {
     }
 
     static func toolUseBlock(id: String, name: String, input: [String: Any]) -> [String: Any] {
-        ["type": "tool_use", "id": id, "name": name, "input": input]
+        ["type": "tool_use", "id": id, "toolCallId": id, "name": name, "input": input]
     }
 
     static func toolResultBlock(toolUseId: String, output: String) -> [String: Any] {

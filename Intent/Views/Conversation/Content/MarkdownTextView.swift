@@ -14,6 +14,7 @@ struct MarkdownTextView: View {
     /// also re-runs on lightbox state changes).
     private let markdownSource: String
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     /// The window's session, when present: workspace images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
@@ -95,7 +96,10 @@ struct MarkdownTextView: View {
             // state on explicit retry; successful media still uses the cache.
             .id(attachmentAttempt)
             .interFont(Constants.Typography.bodyS)
-            .foregroundStyle(Theme.foreground(for: colorScheme))
+            .tracking(workspaceDesign ? Constants.Conversation.Design.Typography.bodyTracking : 0)
+            .foregroundStyle(workspaceDesign
+                ? Constants.Conversation.Design.Palette.assistantForeground(for: colorScheme)
+                : Theme.foreground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
                 ImageLightboxView(image: item.image)

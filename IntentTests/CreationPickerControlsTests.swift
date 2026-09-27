@@ -289,15 +289,18 @@ struct CreationPickerControlsTests {
         let deadline = Date(timeIntervalSinceNow: pickerSettleTimeout)
         var previous: [CGRect] = []
         var stableSamples = 0
-        while Date() < deadline {
+        var samples: [String] = []
+        // Slow image capture must still allow enough observations to establish stability.
+        while Date() < deadline || samples.count < requiredStableFrameSamples {
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
             window.layoutIfNeeded()
             let rendered = try CreationPickerRenderedGeometry(window: window)
+            samples.append("Sample \(samples.count + 1): regions=\(rendered.regions)")
             stableSamples = previous == rendered.regions ? stableSamples + 1 : 1
             if stableSamples >= requiredStableFrameSamples { return rendered }
             previous = rendered.regions
         }
-        throw PickerInspectionError.framesDidNotSettle
+        throw PickerInspectionError.framesDidNotSettle(samples: Array(samples.suffix(requiredStableFrameSamples)))
     }
 
     private static func paintedControl(frame: CGRect, in host: UIView) -> UIButton {
@@ -480,8 +483,10 @@ struct CreationPickerControlsTests {
         let deadline = Date(timeIntervalSinceNow: pickerSettleTimeout)
         var previousFrames: (provider: CGRect, model: CGRect)?
         var stableFrameSamples = 0
+        var samples: [String] = []
 
-        while Date() < deadline {
+        // Slow image capture must still allow enough observations to establish stability.
+        while Date() < deadline || samples.count < requiredStableFrameSamples {
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
             window.layoutIfNeeded()
             hostView.layoutIfNeeded()
@@ -504,6 +509,7 @@ struct CreationPickerControlsTests {
             }
             let providerFrame = frames[0]
             let modelFrame = frames[1]
+            samples.append("Sample \(samples.count + 1): provider=\(providerFrame), model=\(modelFrame)")
             let framesMatch = previousFrames?.provider == providerFrame
                 && previousFrames?.model == modelFrame
             stableFrameSamples = framesMatch ? stableFrameSamples + 1 : 1
@@ -518,7 +524,7 @@ struct CreationPickerControlsTests {
             previousFrames = (providerFrame, modelFrame)
         }
 
-        throw PickerInspectionError.framesDidNotSettle
+        throw PickerInspectionError.framesDidNotSettle(samples: Array(samples.suffix(requiredStableFrameSamples)))
     }
 
     private static func visibleControlFrame(of element: NSObject, in window: UIWindow) throws -> CGRect {
@@ -569,7 +575,7 @@ private struct PickerOracleView: UIViewRepresentable {
 }
 
 private enum PickerInspectionError: Error {
-    case framesDidNotSettle
+    case framesDidNotSettle(samples: [String])
 }
 
 private struct SettledPickerElements {

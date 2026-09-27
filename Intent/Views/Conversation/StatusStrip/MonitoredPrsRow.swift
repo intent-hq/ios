@@ -14,18 +14,43 @@ import SwiftUI
 struct MonitoredPrsRow: View {
     let viewModel: ConversationViewModel
     private let monitoredPrStore: MonitoredPrStore
+    private let usesWorkspaceDesign: Bool
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 
     private typealias Layout = Constants.Conversation.StatusStrip.MonitoredPrs
 
-    init(viewModel: ConversationViewModel, monitoredPrStore: MonitoredPrStore) {
+    init(viewModel: ConversationViewModel, monitoredPrStore: MonitoredPrStore, usesWorkspaceDesign: Bool = false) {
         self.viewModel = viewModel
         self.monitoredPrStore = monitoredPrStore
+        self.usesWorkspaceDesign = usesWorkspaceDesign
+    }
+
+    private var activeMonitors: [MonitoredPr] {
+        monitoredPrStore.activeMonitors.filter { $0.agentId == viewModel.agentId }
     }
 
     var body: some View {
+        if usesWorkspaceDesign {
+            if activeMonitors.count == 1, let monitor = activeMonitors.first {
+                monitorChip(monitor)
+            } else {
+                ScrollView(.horizontal) {
+                    HStack(spacing: Constants.Conversation.Design.Status.composerSpacing) {
+                        ForEach(activeMonitors) { monitor in
+                            monitorChip(monitor)
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+        } else {
+            legacyRow
+        }
+    }
+
+    private var legacyRow: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Constants.Conversation.StatusStrip.contentSpacing) {
                 Image(systemName: "arrow.triangle.pull")
@@ -83,11 +108,22 @@ struct MonitoredPrsRow: View {
                 Label("Cancel monitor", systemImage: "xmark")
             }
         } label: {
-            chipLabel(monitor)
+            if usesWorkspaceDesign {
+                WorkspaceMonitoringLabel(
+                    pullRequest: Self.chipLabel(monitor, workspaceRepo: workspaceRepo),
+                    hasPendingChanges: monitor.hasPendingChanges
+                )
+            } else {
+                chipLabel(monitor)
+            }
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("monitoredPr.\(monitor.monitorId)")
-        .accessibilityLabel(Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo)))
+        .accessibilityLabel(
+            usesWorkspaceDesign
+                ? Text("Monitoring PR \(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))")
+                : Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))
+        )
         .accessibilityValue(Text(Self.pendingSummary(monitor)))
     }
 
@@ -228,5 +264,43 @@ struct MonitoredPrsRow: View {
         return monitor.pendingChanges.count == 1
             ? "1 pending change"
             : "\(monitor.pendingChanges.count) pending changes"
+    }
+}
+
+private struct WorkspaceMonitoringLabel: View {
+    let pullRequest: String
+    let hasPendingChanges: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    private typealias Design = Constants.Conversation.Design
+
+    var body: some View {
+        HStack(spacing: Design.Status.iconSpacing) {
+            Image(.infoCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Design.smallIconSize, height: Design.smallIconSize)
+                .accessibilityHidden(true)
+            Text("Monitoring PR \(pullRequest)")
+                .interFont(Design.Typography.status)
+                .fixedSize(horizontal: false, vertical: true)
+            if hasPendingChanges {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(
+                        width: Constants.Conversation.StatusStrip.MonitoredPrs.pendingIndicatorSide,
+                        height: Constants.Conversation.StatusStrip.MonitoredPrs.pendingIndicatorSide
+                    )
+                    .accessibilityHidden(true)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Design.Palette.foreground(for: colorScheme))
+        .padding(.leading, Design.Status.leadingPadding)
+        .padding(.trailing, Design.Status.trailingPadding)
+        .frame(minHeight: Design.Status.minimumHeight)
+        .background(Design.Palette.surface(for: colorScheme), in: Capsule())
+        .frame(minHeight: Design.minimumTapTarget)
+        .contentShape(Rectangle())
     }
 }

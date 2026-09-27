@@ -38,7 +38,7 @@ extension ConversationStoreLiveStateTests {
         #expect(block.metadata["toolKind"]?.value as? String == "read")
 
         var display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
-        #expect(display.icon == "📄")
+        #expect(display.icon == .file)
         #expect(display.verb == "Read")
         #expect(display.subject == "main.rs")
 
