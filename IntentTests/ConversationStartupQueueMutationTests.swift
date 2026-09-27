@@ -235,7 +235,9 @@ struct ConversationStartupQueueMutationTests {
         #expect(fixture.connection.paramsForMethod("agent.getQueue").count == 2)
         #expect(model.store.queuedMessages.map(\.id) == ["existing"])
     }
+}
 
+extension ConversationStartupQueueMutationTests {
     private func configure(_ fixture: ConversationStartupFixture, action: String, fails: Bool = false) {
         fixture.connection.pendingMethods = ["agent.get"]
         fixture.connection.responseMap["agent.getQueue"] = ["queue": [row("existing")]]
@@ -321,14 +323,15 @@ struct ConversationStartupQueueMutationTests {
     }
 
     private func assertReleasedTraffic(_ connection: RPCRecordingConnection, action: String, openings: Int) async throws {
+        let statusRegistrationCount = 4
         try await waitUntil("both window status registrations finish cleanup") {
             let calls = connection.traffic().calls("events.unsubscribe")
-            return calls.count == 4 && calls.allSatisfy { $0.completed != nil }
+            return calls.count == statusRegistrationCount && calls.allSatisfy { $0.completed != nil }
         }
         #expect(connection.traffic().methodCounts == [
             "chat.subscribe": openings, "agent.get": openings, "agent.getQueue": openings,
-            "agent.getSubscriptions": openings, "events.subscribe": 4, "hook.list": 2, "prMonitor.list": 2,
-            method(action): 1, "chat.unsubscribe": openings, "events.unsubscribe": 4
+            "agent.getSubscriptions": openings, "events.subscribe": statusRegistrationCount, "hook.list": 2, "prMonitor.list": 2,
+            method(action): 1, "chat.unsubscribe": openings, "events.unsubscribe": statusRegistrationCount
         ])
         #expect(connection.traffic().pendingCount == 0)
         print("Queue ownership action=\(action) openings=\(openings), including all cleanup: \(connection.traffic().summary)")
