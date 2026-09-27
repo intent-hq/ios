@@ -423,6 +423,7 @@ jobs:
         run: |
           if [ "$SIMULATOR_FAMILY" = ipad ]; then
             set -o pipefail
+            export ONLY_TESTING_IDENTITIES_PATH="$IPAD_EVIDENCE_DIR/resolved-tests.json"
             scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/test.log"
           elif [ -n "$ONLY_TESTING" ]; then
             scripts/xcodebuild.sh test-without-building

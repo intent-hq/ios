@@ -90,6 +90,7 @@ class SimulatorTests(unittest.TestCase):
         self.patcher = patch.object(route, "run", self.host)
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
+        self.export_resolution(CASES)
 
     def test_default_iphone_requests_keep_existing_wrapper_validation(self):
         for event in ("pull_request", "merge_group", "workflow_dispatch"):
@@ -236,6 +237,7 @@ class SimulatorTests(unittest.TestCase):
         (self.directory / "test.log").write_text(f"notice: re-running the interrupted suite(s) once, alone: {suite}\n"
                                                f"  {first} 1 1 0 0 0\n  {suite} 4 4 0 0 0\n")
         cases = [CASES[0], (suite + "/test0(role:)", "Passed"), (CASES[2][0], "Failed")] + CASES[3:]
+        self.export_resolution(cases)
         self.host.results = result_document(cases)
         # Parameter invocations live below the declaration's Test Case. They
         # are not extra resolved declarations or a substitute for another one.
@@ -264,7 +266,8 @@ class SimulatorTests(unittest.TestCase):
                 self.host.results = result_document(primary)
                 results = self.directory / "wrapper-primary.json"
                 results.write_text(json.dumps(self.host.results))
-                env = {"ONLY_TESTING_RESOLVED": f"1\t{first}\n4\t{suite}"}
+                resolved = self.export_resolution(parameterized if label in ("complete", "recovered") else CASES)
+                env = {"ONLY_TESTING_RESOLVED": resolved.stdout}
                 retry_bundle = Path(self.env["RESULT_BUNDLE"] + "-retry")
                 prefix = ""
                 if retried is not None:
@@ -295,16 +298,16 @@ class SimulatorTests(unittest.TestCase):
         return subprocess.run([sys.executable, "-S", "-c", code, str(catalog), *(selectors or SELECTORS.split())],
                               env=extra_env or {}, text=True, capture_output=True)
 
-    def actual_summary(self, primary, retried=None, interrupted=None):
-        first, suite = SELECTORS.split()
-        resolved = self.resolve_catalog([item[0] for item in CASES])
+    def export_resolution(self, cases):
+        evidence = self.directory / "resolved-tests.json"
+        resolved = self.resolve_catalog([item[0] for item in cases], self.env["ONLY_TESTING"].split(),
+                                        {"ONLY_TESTING_IDENTITIES_PATH": str(evidence)})
         self.assertEqual(resolved.returncode, 0, resolved.stderr)
-        self.assertEqual(resolved.stdout, f"1\t{first}\n4\t{suite}\n")
-        # The baseline helper has no identity input yet. Supply the intended
-        # proof from this known catalog while its existing resolver verifies
-        # every identity; the correction will consume the resolver's export.
-        (self.directory / "resolved-tests.json").write_text(json.dumps({"version": 1, "selectors": {
-            first: [CASES[0][0]], suite: [item[0] for item in CASES[1:]]}}))
+        self.assertTrue(evidence.exists(), "Actual resolver did not export matched identities")
+        return resolved
+
+    def actual_summary(self, primary, retried=None, interrupted=None, catalog=CASES):
+        resolved = self.export_resolution(catalog)
         self.host.results = result_document(primary)
         result_path = self.directory / "wrapper-primary.json"
         result_path.write_text(json.dumps(self.host.results))
@@ -319,7 +322,7 @@ class SimulatorTests(unittest.TestCase):
             prefix = f"notice: re-running the interrupted suite(s) once, alone: {interrupted}\n"
         code = self.wrapper_python("ONLY_TESTING_MATCH_PY", "ONLY_TESTING_SUMMARY_PY")
         summary = subprocess.run([sys.executable, "-S", "-c", code, str(result_path), "", self.env["RESULT_BUNDLE"],
-                                  *SELECTORS.split()], env=env, text=True, capture_output=True)
+                                  *self.env["ONLY_TESTING"].split()], env=env, text=True, capture_output=True)
         self.assertEqual(summary.returncode, 0, summary.stderr)
         (self.directory / "test.log").write_text(prefix + summary.stdout)
 
@@ -346,6 +349,59 @@ class SimulatorTests(unittest.TestCase):
         route.verify_execution(self.env, self.directory)
         self.actual_summary(CASES[:1], CASES[1:], SELECTORS.split()[1])
         route.verify_execution(self.env, self.directory)
+
+    def test_retry_cannot_import_unrequested_cases_from_an_interrupted_suite(self):
+        first, suite = SELECTORS.split()
+        self.env["ONLY_TESTING"] = first + " " + suite + "/test0"
+        self.actual_summary(CASES[:1], CASES[1:2], suite)
+        route.verify_execution(self.env, self.directory)
+        self.actual_summary(CASES[:1], CASES[1:], suite)
+        with self.assertRaisesRegex(ValueError, "outside the interrupted and requested scope"):
+            route.verify_execution(self.env, self.directory)
+
+    def test_valid_retry_preserves_uninterrupted_skips_and_failures(self):
+        suite = SELECTORS.split()[1]
+        for result in ("Skipped", "Failed"):
+            with self.subTest(primary=result):
+                self.actual_summary([(CASES[0][0], result)], CASES[1:], suite)
+                with self.assertRaises(ValueError):
+                    route.verify_execution(self.env, self.directory)
+
+    def test_resolved_parameter_identity_uses_existing_optional_parameter_semantics(self):
+        suite = SELECTORS.split()[1]
+        catalog = CASES[:1] + [(suite + "/test0(role:)", "Passed")] + CASES[2:]
+        for method, accepted in (("test0(role:)", True), ("test0", True),
+                                 ("test0(other:)", False), ("test0()", False)):
+            with self.subTest(method=method):
+                results = CASES[:1] + [(suite + "/" + method, "Passed")] + CASES[2:]
+                self.actual_summary(results, catalog=catalog)
+                if accepted:
+                    route.verify_execution(self.env, self.directory)
+                else:
+                    with self.assertRaisesRegex(ValueError, "absent or ambiguous"):
+                        route.verify_execution(self.env, self.directory)
+        ambiguous = catalog[:2] + [(suite + "/test0(other:)", "Passed")] + CASES[3:]
+        self.actual_summary(CASES[:1] + [(suite + "/test0", "Passed")] + CASES[2:], catalog=ambiguous)
+        with self.assertRaisesRegex(ValueError, "absent or ambiguous"):
+            route.verify_execution(self.env, self.directory)
+
+    def test_missing_or_mismatched_identity_evidence_cannot_prove_execution(self):
+        self.actual_summary(CASES)
+        path = self.directory / "resolved-tests.json"
+        correct = json.loads(path.read_text())
+        wrong_membership = copy.deepcopy(correct)
+        wrong_membership["selectors"][SELECTORS.split()[1]][-1] = "IntentTests/AnotherSuite/test3()"
+        duplicate = copy.deepcopy(correct)
+        duplicate["selectors"][SELECTORS.split()[1]][-1] = CASES[1][0]
+        for value in ({}, {"version": 2, "selectors": correct["selectors"]},
+                      {"version": 1, "selectors": {}}, wrong_membership, duplicate):
+            with self.subTest(evidence=value):
+                path.write_text(json.dumps(value))
+                with self.assertRaises(ValueError):
+                    route.verify_execution(self.env, self.directory)
+        path.unlink()
+        with self.assertRaises(OSError):
+            route.verify_execution(self.env, self.directory)
 
     def test_optional_identity_export_preserves_resolver_output_and_exits(self):
         first, suite = SELECTORS.split()

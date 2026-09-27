@@ -163,7 +163,6 @@ def result_cases(bundle, directory, label):
                 # Count declarations, as the wrapper's flat catalog does. Keep
                 # parameter labels distinct; invocations/attempts below a Test
                 # Case never create another resolved declaration.
-                identifier = identifier.removesuffix("()")
                 cases.setdefault(identifier, set()).add(node.get("result", ""))
             else:
                 walk(node.get("children", []), target)
@@ -172,33 +171,70 @@ def result_cases(bundle, directory, label):
     return cases
 
 
+def resolved_identities(directory, selectors):
+    document = json.loads((directory / "resolved-tests.json").read_text())
+    if not isinstance(document, dict) or document.get("version") != 1:
+        raise ValueError("Missing supported resolved identity evidence")
+    resolved = document.get("selectors")
+    if not isinstance(resolved, dict) or set(resolved) != set(selectors):
+        raise ValueError("Resolved identity evidence does not match the requested selection")
+    for selector, identities in resolved.items():
+        if not isinstance(identities, list) or not identities or any(
+                not isinstance(identity, str) or len(identity.split("/")) != 3
+                or not matches_selector(selector, identity) for identity in identities):
+            raise ValueError("Invalid resolved declaration identity")
+        if len({identity.removesuffix("()") for identity in identities}) != len(identities):
+            raise ValueError("Ambiguous duplicate resolved declaration identity")
+    return resolved
+
+
 def verify_execution(env, directory):
     _, selectors = validate(env)
     # Keep the wrapper's enumeration, xcresult accounting, retry and error
     # semantics unchanged. This extra platform-proof check requires the whole
     # resolved selection, counting each declaration once across attempts.
     log = (directory / "test.log").read_text()
+    resolved = resolved_identities(directory, selectors)
+    expected = set(identity for identities in resolved.values() for identity in identities)
     bundle = Path(env.get("RESULT_BUNDLE", "TestResults"))
     cases = result_cases(bundle, directory, "primary")
     retry = bundle.with_name(bundle.stem + "-retry.xcresult") if bundle.suffix == ".xcresult" else Path(str(bundle) + "-retry")
+    notices = re.findall(r"^notice: re-running the interrupted suite\(s\) once, alone: (.+)$", log, re.MULTILINE)
     if retry.exists():
-        notices = re.findall(r"^notice: re-running the interrupted suite\(s\) once, alone: (.+)$", log, re.MULTILINE)
         if len(notices) != 1:
             raise ValueError("Retry bundle has no unambiguous interrupted-suite transcript")
         interrupted = notices[0].split()
+        if not interrupted or any(len(suite.split("/")) != 2 or not any(
+                matches_selector(suite, identity) for identity in expected) for suite in interrupted):
+            raise ValueError("Interrupted-suite transcript lies outside the resolved selection")
+        retried = result_cases(retry, directory, "retry")
+        if any(not any(matches_selector(suite, identity) for suite in interrupted)
+               or not any(matches_selector(selector, identity) for selector in selectors) for identity in retried):
+            raise ValueError("Retry identities lie outside the interrupted and requested scope")
         # Primary results from an interrupted suite are not proof. Only its
         # retry can restore coverage; never sum passes from repeated attempts.
         cases = {key: value for key, value in cases.items() if not any(matches_selector(suite, key) for suite in interrupted)}
-        cases.update(result_cases(retry, directory, "retry"))
+        cases.update(retried)
+    elif notices:
+        raise ValueError("Interrupted-suite transcript has no retry result bundle")
+    canonical = {}
+    for identity, results in cases.items():
+        if not any(matches_selector(selector, identity) for selector in selectors):
+            continue
+        matches = [item for item in expected if matches_selector(item, identity)]
+        if len(matches) != 1:
+            raise ValueError("Returned test identity is absent or ambiguous in the actual resolved set: " + identity)
+        canonical.setdefault(matches[0], set()).update(results)
     rows = []
     for selector in selectors:
         matches = re.findall(r"^\s*" + re.escape(selector) + r"\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$", log, re.MULTILINE)
         values = list(map(int, matches[-1])) if matches else None
-        selected = {key: sorted(value) for key, value in cases.items() if matches_selector(selector, key)}
-        rows.append({"selector": selector, "counts": values, "uniqueCases": selected})
+        selected = {key: sorted(value) for key, value in canonical.items() if key in resolved[selector]}
+        rows.append({"selector": selector, "counts": values, "resolvedIdentities": resolved[selector], "uniqueCases": selected})
     write_json(directory / "execution.json", {"columns": ["resolved", "executed", "skipped", "failed", "unknown"], "rows": rows})
     if any(row["counts"] is None or row["counts"][0] < 1 or row["counts"][1] < row["counts"][0]
-           or any(row["counts"][2:]) or len(row["uniqueCases"]) != row["counts"][0]
+           or any(row["counts"][2:]) or len(row["resolvedIdentities"]) != row["counts"][0]
+           or set(row["uniqueCases"]) != set(row["resolvedIdentities"])
            or any(not set(results) <= {"Passed", "Expected Failure"} for results in row["uniqueCases"].values()) for row in rows):
         raise ValueError("iPad proof requires every resolved declaration to execute without skips, failures or unknown results")
 
