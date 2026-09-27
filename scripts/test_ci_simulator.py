@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -221,16 +222,19 @@ class SimulatorTests(unittest.TestCase):
 
     def test_repeated_attempts_cannot_replace_missing_resolved_cases(self):
         first, suite = SELECTORS.split()
-        (self.directory / "test.log").write_text(f"  {first} 1 1 0 0 0\n  {suite} 4 4 0 0 0\n")
-        self.host.results = result_document(CASES[:2])
+        (self.directory / "test.log").write_text(f"notice: re-running the interrupted suite(s) once, alone: {suite}\n"
+                                               f"  {first} 1 1 0 0 0\n  {suite} 4 4 0 0 0\n")
         self.host.retry_results = result_document([CASES[1]] * 4)
         Path(self.env["RESULT_BUNDLE"] + "-retry").mkdir()
-        with self.assertRaises(ValueError):
-            route.verify_execution(self.env, self.directory)
+        for initial in (CASES[:2], CASES):
+            self.host.results = result_document(initial)
+            with self.subTest(initial=len(initial)), self.assertRaises(ValueError):
+                route.verify_execution(self.env, self.directory)
 
     def test_complete_parameterized_declarations_and_recovered_retry_are_proof(self):
         first, suite = SELECTORS.split()
-        (self.directory / "test.log").write_text(f"  {first} 1 1 0 0 0\n  {suite} 4 4 0 0 0\n")
+        (self.directory / "test.log").write_text(f"notice: re-running the interrupted suite(s) once, alone: {suite}\n"
+                                               f"  {first} 1 1 0 0 0\n  {suite} 4 4 0 0 0\n")
         cases = [CASES[0], (suite + "/test0(role:)", "Passed"), (CASES[2][0], "Failed")] + CASES[3:]
         self.host.results = result_document(cases)
         # Parameter invocations live below the declaration's Test Case. They
@@ -238,9 +242,47 @@ class SimulatorTests(unittest.TestCase):
         self.host.results["testNodes"][1]["children"][0]["children"] = [
             {"nodeType": "Test Case Run", "name": "member", "result": "Passed"},
             {"nodeType": "Test Case Run", "name": "owner", "result": "Passed"}]
-        self.host.retry_results = result_document([CASES[2]])
+        self.host.retry_results = copy.deepcopy(self.host.results)
+        self.host.retry_results["testNodes"] = self.host.retry_results["testNodes"][1:]
+        self.host.retry_results["testNodes"][0]["children"][1]["result"] = "Passed"
         Path(self.env["RESULT_BUNDLE"] + "-retry").mkdir()
         route.verify_execution(self.env, self.directory)
+
+    def test_actual_wrapper_summary_uses_compatible_case_and_retry_accounting(self):
+        wrapper = (Path(__file__).resolve().parent / "xcodebuild.sh").read_text()
+        code = "".join(wrapper.split(name + "='", 1)[1].split("\n'\n", 1)[0]
+                       for name in ("ONLY_TESTING_MATCH_PY", "ONLY_TESTING_SUMMARY_PY"))
+        first, suite = SELECTORS.split()
+        parameterized = [CASES[0], (suite + "/test0(role:)", "Passed")] + CASES[2:]
+        for label, primary, retried, accepted in (
+            ("complete", parameterized, None, True),
+            ("missing", CASES[:2], None, False),
+            ("recovered", parameterized, parameterized[1:], True),
+            ("duplicates", CASES, [CASES[1]] * 4, False),
+        ):
+            with self.subTest(label=label):
+                self.host.results = result_document(primary)
+                results = self.directory / "wrapper-primary.json"
+                results.write_text(json.dumps(self.host.results))
+                env = {"ONLY_TESTING_RESOLVED": f"1\t{first}\n4\t{suite}"}
+                retry_bundle = Path(self.env["RESULT_BUNDLE"] + "-retry")
+                prefix = ""
+                if retried is not None:
+                    self.host.retry_results = result_document(retried)
+                    retry_results = self.directory / "wrapper-retry.json"
+                    retry_results.write_text(json.dumps(self.host.retry_results))
+                    env.update(ONLY_TESTING_RETRY_RESULTS=str(retry_results), ONLY_TESTING_RETRY_SELECTORS=suite)
+                    retry_bundle.mkdir(exist_ok=True)
+                    prefix = f"notice: re-running the interrupted suite(s) once, alone: {suite}\n"
+                result = subprocess.run([sys.executable, "-S", "-c", code, str(results), "", self.env["RESULT_BUNDLE"],
+                                         first, suite], env=env, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                (self.directory / "test.log").write_text(prefix + result.stdout)
+                if accepted:
+                    route.verify_execution(self.env, self.directory)
+                else:
+                    with self.assertRaises(ValueError):
+                        route.verify_execution(self.env, self.directory)
 
     def check_phase_transcript(self, step_name, phase):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()

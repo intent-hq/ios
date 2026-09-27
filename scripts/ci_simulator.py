@@ -131,21 +131,76 @@ def cleanup(directory):
         raise RuntimeError("Could not delete the owned simulator; cleanup evidence retained")
 
 
+def matches_selector(selector, identifier):
+    wanted, actual = selector.split("/"), identifier.split("/")
+    if len(wanted) > len(actual):
+        return False
+    return all(want == have or index == len(actual) - 1
+               and want.split("(", 1)[0] == have.split("(", 1)[0] and ("(" not in want or "(" not in have)
+               for index, (want, have) in enumerate(zip(wanted, actual)))
+
+
+def result_cases(bundle, directory, label):
+    result = run(["xcrun", "xcresulttool", "get", "test-results", "tests", "--path", str(bundle)])
+    (directory / (label + "-results.json")).write_text(result.stdout)
+    (directory / (label + "-results.stderr")).write_text(result.stderr)
+    if result.returncode:
+        raise RuntimeError(f"Cannot read {label} result bundle (exit {result.returncode})")
+    document = json.loads(result.stdout)
+    if not isinstance(document, dict) or not isinstance(document.get("testNodes"), list):
+        raise ValueError("Result bundle has no testNodes; iPad coverage cannot be verified")
+    cases = {}
+
+    def walk(nodes, target=""):
+        for node in nodes:
+            kind = node.get("nodeType", "")
+            if kind.lower().endswith("test bundle"):
+                target = node.get("name", "")
+            if kind == "Test Case":
+                identifier = node.get("nodeIdentifier") or node.get("name", "")
+                if target and not identifier.startswith(target + "/"):
+                    identifier = target + "/" + identifier
+                # Count declarations, as the wrapper's flat catalog does. Keep
+                # parameter labels distinct; invocations/attempts below a Test
+                # Case never create another resolved declaration.
+                identifier = identifier.removesuffix("()")
+                cases.setdefault(identifier, set()).add(node.get("result", ""))
+            else:
+                walk(node.get("children", []), target)
+
+    walk(document["testNodes"])
+    return cases
+
+
 def verify_execution(env, directory):
     _, selectors = validate(env)
     # Keep the wrapper's enumeration, xcresult accounting, retry and error
-    # semantics unchanged. This extra platform-proof check refuses skipped
-    # selections, which the ordinary wrapper correctly reports as a notice.
+    # semantics unchanged. This extra platform-proof check requires the whole
+    # resolved selection, counting each declaration once across attempts.
     log = (directory / "test.log").read_text()
+    bundle = Path(env.get("RESULT_BUNDLE", "TestResults"))
+    cases = result_cases(bundle, directory, "primary")
+    retry = bundle.with_name(bundle.stem + "-retry.xcresult") if bundle.suffix == ".xcresult" else Path(str(bundle) + "-retry")
+    if retry.exists():
+        notices = re.findall(r"^notice: re-running the interrupted suite\(s\) once, alone: (.+)$", log, re.MULTILINE)
+        if len(notices) != 1:
+            raise ValueError("Retry bundle has no unambiguous interrupted-suite transcript")
+        interrupted = notices[0].split()
+        # Primary results from an interrupted suite are not proof. Only its
+        # retry can restore coverage; never sum passes from repeated attempts.
+        cases = {key: value for key, value in cases.items() if not any(matches_selector(suite, key) for suite in interrupted)}
+        cases.update(result_cases(retry, directory, "retry"))
     rows = []
     for selector in selectors:
         matches = re.findall(r"^\s*" + re.escape(selector) + r"\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$", log, re.MULTILINE)
         values = list(map(int, matches[-1])) if matches else None
-        rows.append({"selector": selector, "counts": values})
+        selected = {key: sorted(value) for key, value in cases.items() if matches_selector(selector, key)}
+        rows.append({"selector": selector, "counts": values, "uniqueCases": selected})
     write_json(directory / "execution.json", {"columns": ["resolved", "executed", "skipped", "failed", "unknown"], "rows": rows})
-    if any(row["counts"] is None or row["counts"][0] < 1 or row["counts"][1] < 1
-           or any(row["counts"][2:]) for row in rows):
-        raise ValueError("iPad proof requires every requested selector to execute without skips, failures or unknown results")
+    if any(row["counts"] is None or row["counts"][0] < 1 or row["counts"][1] < row["counts"][0]
+           or any(row["counts"][2:]) or len(row["uniqueCases"]) != row["counts"][0]
+           or any(not set(results) <= {"Passed", "Expected Failure"} for results in row["uniqueCases"].values()) for row in rows):
+        raise ValueError("iPad proof requires every resolved declaration to execute without skips, failures or unknown results")
 
 
 def main():

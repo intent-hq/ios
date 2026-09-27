@@ -397,7 +397,13 @@ jobs:
         env:
           RESULT_BUNDLE: TestResults-keychain
           ONLY_TESTING: IntentTests/BackendKeychainConformanceTests IntentTests/BackendKeychainFixtureTests IntentTests/SyncedBackendRegistryTests IntentTests/SyncedBackendPublisherTests
-        run: scripts/xcodebuild.sh test-ios-unit
+        run: |
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            set -o pipefail
+            scripts/xcodebuild.sh test-ios-unit 2>&1 | tee "$IPAD_EVIDENCE_DIR/keychain.log"
+          else
+            scripts/xcodebuild.sh test-ios-unit
+          fi
 
       # The script removes any existing result bundle at RESULT_BUNDLE
       # (xcodebuild refuses an existing path). xcodebuild forwards its
@@ -460,7 +466,12 @@ jobs:
           trap restore EXIT
           mv Intent IntentTests Info-visionOS.plist "$moved/"
           mkdir Intent IntentTests
-          scripts/xcodebuild.sh test-without-building
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            set -o pipefail
+            scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/source-moved.log"
+          else
+            scripts/xcodebuild.sh test-without-building
+          fi
 
       - name: Export terminal screenshots
         if: ${{ !cancelled() && contains(inputs.only_testing, 'MobileTerminalUITests') }}
