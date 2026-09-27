@@ -26,6 +26,15 @@ on:
         type: string
         required: false
         default: ''
+      simulator_family:
+        description: >-
+          iPhone keeps the existing default. iPad creates one disposable
+          simulator for a non-gating run and requires 1–20 Target/Suite[/test]
+          selectors in only_testing; full bundles and skipped selections fail.
+        type: choice
+        options: [iphone, ipad]
+        required: false
+        default: iphone
 
 permissions:
   contents: read
@@ -66,6 +75,9 @@ jobs:
       # scripts/xcodebuild.sh against stubbed xcrun/xcodebuild; needs bash + python3.
       - name: xcodebuild.sh self-tests
         run: scripts/test_xcodebuild.sh
+
+      - name: Disposable iPad route tests
+        run: python3 scripts/test_ci_simulator.py
 
       # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
       # override on both Darwin and Linux paths against a stubbed swiftlint.
@@ -124,7 +136,7 @@ jobs:
         run: scripts/swiftlint.sh
 
   build-and-test:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
+    name: ${{ github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad') && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
     # The repo ruleset requires only this job. A job skipped because a
     # `needs` dependency failed counts as passing for required checks, so
     # `needs: [go-test, swiftlint]` would not keep a Go or lint failure
@@ -142,9 +154,16 @@ jobs:
       # and write the test result bundle where the artifact upload expects it.
       SPM_CLONE_DIR: build/SourcePackages
       RESULT_BUNDLE: TestResults
+      SIMULATOR_FAMILY: ${{ github.event_name == 'workflow_dispatch' && inputs.simulator_family || 'iphone' }}
+      IPAD_EVIDENCE_DIR: ${{ runner.temp }}/ipad-evidence
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Validate simulator request
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
+        run: python3 scripts/ci_simulator.py validate
 
       - name: SwiftLint wrapper tests on the native shell
         run: scripts/test-swiftlint.sh
@@ -208,11 +227,18 @@ jobs:
             xcodebuild -version
           fi
 
-      # Device selection lives in scripts/xcodebuild.sh (pick-simulator).
-      # Export the UDID so the pre-boot step and every later script
-      # invocation share one concrete device.
+      # Default selection stays in xcodebuild.sh. The optional iPad lane
+      # creates a fresh device and records its ownership before exporting the
+      # UDID used by the same pre-boot and test wrapper paths.
       - name: Pick simulator device
-        run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
+        run: |
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            python3 scripts/ci_simulator.py prepare
+          else
+            echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
+          fi
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
@@ -384,15 +410,25 @@ jobs:
       # unverifiable selection with 83, and the per-selector table is appended
       # to the job summary (see the script header).
       - name: Run unit tests
+        id: selected-tests
         env:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
-          if [ -n "$ONLY_TESTING" ]; then
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            set -o pipefail
+            scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/test.log"
+          elif [ -n "$ONLY_TESTING" ]; then
             scripts/xcodebuild.sh test-without-building
           else
             scripts/xcodebuild.sh test-without-building-unit
           fi
+
+      - name: Require actual iPad execution
+        if: always() && env.SIMULATOR_FAMILY == 'ipad' && steps.selected-tests.outcome != 'skipped'
+        env:
+          ONLY_TESTING: ${{ inputs.only_testing }}
+        run: python3 scripts/ci_simulator.py verify
 
       # InfoPlistSyncTests, PlatformGuardAllowlistTests,
       # ObjCCallbackIsolationTests, ExternalLinkTests and
@@ -489,13 +525,32 @@ jobs:
           echo "timed out waiting for the Go unit tests / SwiftLint jobs" >&2
           exit 1
 
+      - name: Clean up owned iPad simulator
+        if: always() && env.SIMULATOR_FAMILY == 'ipad'
+        run: python3 scripts/ci_simulator.py cleanup
+
+      - name: Upload iPad execution evidence
+        if: always() && env.SIMULATOR_FAMILY == 'ipad'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ipad-execution-evidence
+          path: |
+            ${{ env.IPAD_EVIDENCE_DIR }}
+            TestResults
+            TestResults-retry
+            TestResults-keychain
+            TestResults-keychain-retry
+            TestResults-source-moved
+            TestResults-source-moved-retry
+          if-no-files-found: warn
+
   ios-ui-tests:
     name: iOS UI Tests
     # Pull requests and unfiltered manual runs exercise the complete UI bundle.
     # Filtered dispatches already run their requested selector in build-and-test.
     # A human adds this check to the ruleset after merge; build-and-test does not
     # wait for it, so both macOS jobs release their runners independently.
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad')) }}
     runs-on: macos-15
     # Setup/build plus the complete UI suite can take 45 minutes; allow result export too (ios#429).
     timeout-minutes: 60
