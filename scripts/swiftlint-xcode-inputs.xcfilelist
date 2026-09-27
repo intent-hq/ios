@@ -405,6 +405,9 @@ $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupFixture.swift
+$(SRCROOT)/IntentTests/ConversationStartupRPCTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupReplayTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreBindingGenerationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreHydrationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreIntegrationTests.swift
@@ -419,6 +422,8 @@ $(SRCROOT)/IntentTests/ConversationStoreRegistrationGenerationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreSeenTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreTurnBoundaryTests.swift
+$(SRCROOT)/IntentTests/ConversationStreamingFixture.swift
+$(SRCROOT)/IntentTests/ConversationStreamingFixtureTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part3.swift
@@ -520,6 +525,9 @@ $(SRCROOT)/IntentTests/ProposalActionStoreTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift
 $(SRCROOT)/IntentTests/QuestionTests.swift
 $(SRCROOT)/IntentTests/QueuedMessageImageDecodingTests.swift
+$(SRCROOT)/IntentTests/RPCRecordingConnection.swift
+$(SRCROOT)/IntentTests/RPCRecordingConnectionTests.swift
+$(SRCROOT)/IntentTests/RPCTraffic.swift
 $(SRCROOT)/IntentTests/ReleaseConfigurationTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
