@@ -32,7 +32,7 @@ struct WorkspaceChangesView: View {
                     Button("Retry") { Task { await store.refresh(workspaceId: workspaceId) } }
                 }
             }
-            if store.isLoading && !store.hasLoaded {
+            if store.isLoading, !store.hasLoaded {
                 ProgressView("Loading changes…")
             } else if store.hasLoaded {
                 fileSection("Unstaged", files: store.unstagedChanges)
@@ -60,7 +60,9 @@ struct WorkspaceChangesView: View {
         .sheet(item: $selectedFile) { file in
             NavigationStack {
                 WorkspaceFileDiffView(
-                    loader: loader, path: file.path, staged: file.stage == "staged",
+                    loader: loader,
+                    path: file.path,
+                    staged: file.stage == "staged",
                     isBinary: file.isBinary
                 )
                 .navigationTitle(file.stage == "staged" ? "Staged Changes" : "Unstaged Changes")
@@ -119,27 +121,7 @@ struct WorkspaceChangesView: View {
                 Text("No workspace commits yet").foregroundStyle(.secondary)
             }
             ForEach(store.commits) { commit in
-                Button { selectedCommit = commit } label: {
-                    VStack(alignment: .leading, spacing: WorkspaceChangesLayout.rowSpacing) {
-                        Text(commit.message.components(separatedBy: "\n").first ?? commit.message)
-                            .interFont(Constants.Typography.bodyXS).foregroundStyle(.primary)
-                        HStack {
-                            Text(String(commit.hash.prefix(WorkspaceChangesLayout.shortHashLength))).monospaced()
-                            Text(commit.author)
-                            if commit.agentId != nil {
-                                Image(systemName: "person.crop.circle.badge.checkmark")
-                                    .accessibilityLabel("Agent commit")
-                            }
-                            Spacer()
-                            Text(commit.isPushed ? "Pushed" : "Local")
-                        }
-                        .font(Constants.Typography.subtextXXS.font).foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, WorkspaceChangesLayout.rowSpacing)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Opens the commit diff")
+                commitRow(commit)
             }
             if store.hasMoreCommits {
                 Button {
@@ -150,6 +132,30 @@ struct WorkspaceChangesView: View {
                 .disabled(store.isLoadingMore)
             }
         }
+    }
+
+    private func commitRow(_ commit: WorkspaceCommit) -> some View {
+        Button { selectedCommit = commit } label: {
+            VStack(alignment: .leading, spacing: WorkspaceChangesLayout.rowSpacing) {
+                Text(commit.message.components(separatedBy: "\n").first ?? commit.message)
+                    .interFont(Constants.Typography.bodyXS).foregroundStyle(.primary)
+                HStack {
+                    Text(String(commit.hash.prefix(WorkspaceChangesLayout.shortHashLength))).monospaced()
+                    Text(commit.author)
+                    if commit.agentId != nil {
+                        Image(systemName: "person.crop.circle.badge.checkmark")
+                            .accessibilityLabel("Agent commit")
+                    }
+                    Spacer()
+                    Text(commit.isPushed ? "Pushed" : "Local")
+                }
+                .font(Constants.Typography.subtextXXS.font).foregroundStyle(.secondary)
+            }
+            .padding(.vertical, WorkspaceChangesLayout.rowSpacing)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the commit diff")
     }
 }
 

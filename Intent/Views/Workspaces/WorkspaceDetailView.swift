@@ -37,9 +37,7 @@ struct WorkspaceDetailView: View {
     private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
     private var browserStore: WorkspaceBrowserStore { session.browserStore }
 
-    private var workspace: Workspace? {
-        workspaceStore.workspaces.first { $0.id == workspaceId }
-    }
+    private var workspace: Workspace? { workspaceStore.workspaces.first { $0.id == workspaceId } }
 
     private var workspaceTitle: String {
         guard let title = workspace?.title,
@@ -61,8 +59,7 @@ struct WorkspaceDetailView: View {
                     connectionId: connectionId
                 )
             }
-            // Don't clear viewModel.agents here — AgentStore handles that when workspaceId changes.
-            // Clearing here causes an empty list flash when swiping back from conversation.
+            // AgentStore retains rows while returning from a conversation.
             agentStore.startObservingEvents()
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: workspaceId) }
@@ -73,8 +70,7 @@ struct WorkspaceDetailView: View {
         }
         .onDisappear {
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
-            // Keyed by (workspace, connection): removing this pair never
-            // clobbers another window's visibility.
+            // Remove only this workspace/connection pair, preserving other windows.
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: workspaceId,
@@ -225,9 +221,7 @@ struct WorkspaceDetailView: View {
         #endif
         .toolbar {
             #if os(visionOS)
-            // The workspace switcher lives in the detail's top toolbar
-            // on visionOS instead of the in-window segmented control, so it
-            // visibly belongs to the workspace rather than the sidebar.
+            // The workspace picker lives in the top toolbar on visionOS.
             ToolbarItem(placement: .topBarTrailing) {
                 Picker("Workspace Content", selection: $selectedTab) {
                     Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "person.2") }

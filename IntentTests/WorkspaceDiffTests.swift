@@ -3,6 +3,13 @@ import Foundation
 import Testing
 
 struct WorkspaceDiffTests {
+    private enum Fixture {
+        static let contextCount = 20
+        static let oversizedLineCount = 3000
+        static let replacementLineCount = 3
+        static let finalLineNumber = 22
+    }
+
     @Test func replacementPreservesContextAndLineNumbers() throws {
         let hunks = try WorkspaceDiffBuilder.hunks(old: "first\nold\nlast\n", new: "first\nnew\nlast\n")
         let hunk = try #require(hunks.first)
@@ -10,8 +17,8 @@ struct WorkspaceDiffTests {
         #expect(hunk.lines.map(\.type) == [.context, .deletion, .addition, .context])
         #expect(hunk.lines.map(\.oldNumber) == [1, 2, nil, 3])
         #expect(hunk.lines.map(\.newNumber) == [1, nil, 2, 3])
-        #expect(hunk.oldLines == 3)
-        #expect(hunk.newLines == 3)
+        #expect(hunk.oldLines == Fixture.replacementLineCount)
+        #expect(hunk.newLines == Fixture.replacementLineCount)
     }
 
     @Test func addedAndDeletedFilesHaveOnlyOneSide() throws {
@@ -31,11 +38,11 @@ struct WorkspaceDiffTests {
     }
 
     @Test func separatesDistantEditsAndOmitsUnchangedMiddle() throws {
-        let middle = (1...20).map { "context \($0)" }.joined(separator: "\n")
+        let middle = (1...Fixture.contextCount).map { "context \($0)" }.joined(separator: "\n")
         let hunks = try WorkspaceDiffBuilder.hunks(old: "old\n\(middle)\nend\n", new: "new\n\(middle)\nfinish\n")
         #expect(hunks.count == 2)
         #expect(!hunks.flatMap(\.lines).contains { $0.content == "context 10" })
-        #expect(hunks.last?.lines.last?.newNumber == 22)
+        #expect(hunks.last?.lines.last?.newNumber == Fixture.finalLineNumber)
     }
 
     @Test func newlineOnlyChangeIsVisible() throws {
@@ -48,7 +55,7 @@ struct WorkspaceDiffTests {
         #expect(throws: WorkspaceDiffBuilder.Unavailable.self) {
             try WorkspaceDiffBuilder.hunks(old: "", new: "binary\0data")
         }
-        let large = String(repeating: "line\n", count: 3000)
+        let large = String(repeating: "line\n", count: Fixture.oversizedLineCount)
         #expect(throws: WorkspaceDiffBuilder.Unavailable.self) {
             try WorkspaceDiffBuilder.hunks(old: large, new: large + "extra\n")
         }
@@ -66,10 +73,17 @@ struct WorkspaceDiffTests {
 struct WorkspaceDiffLoaderTests {
     @Test func workingDiffUsesSelectedPathAndStage() async throws {
         let connection = FakeConnectionManager()
-        connection.responseMap["git.diffs"] = [["path": "src/a.swift", "hunks": [[
-            "oldStart": 1, "oldLines": 0, "newStart": 1, "newLines": 1,
-            "lines": [["type": "Addition", "content": "added\n", "newNumber": 1]]
-        ]]]]
+        connection.responseMap["git.diffs"] = [
+            [
+                "path": "src/a.swift",
+                "hunks": [
+                    [
+                        "oldStart": 1, "oldLines": 0, "newStart": 1, "newLines": 1,
+                        "lines": [["type": "Addition", "content": "added\n", "newNumber": 1]]
+                    ]
+                ]
+            ]
+        ]
         let loader = WorkspaceDiffLoader(connectionManager: connection, workspaceId: "workspace")
         let hunks = try await loader.workingFile(path: "src/a.swift", staged: true)
         #expect(hunks.first?.lines.first?.content == "added\n")
@@ -84,9 +98,9 @@ struct WorkspaceDiffLoaderTests {
 
     @Test func commitDiffUsesFirstParentAndScopesThePath() async throws {
         let connection = FakeConnectionManager()
-        connection.responseMap["git.branchDiff"] = [[
-            "file": "file.swift", "oldContent": "before\n", "newContent": "after\n"
-        ]]
+        connection.responseMap["git.branchDiff"] = [
+            ["file": "file.swift", "oldContent": "before\n", "newContent": "after\n"]
+        ]
         let loader = WorkspaceDiffLoader(connectionManager: connection, workspaceId: "workspace")
         let hunks = try await loader.commitFile(path: "file.swift", hash: "commit")
         #expect(hunks.first?.lines.map(\.content) == ["before", "after"])
@@ -110,9 +124,9 @@ struct WorkspaceDiffLoaderTests {
 
     @Test func commitMetadataLoadsFilesAndStatsOnDemand() async throws {
         let connection = FakeConnectionManager()
-        connection.responseMap["git.commitDetails"] = ["fileDetails": [
-            ["path": "file.swift", "additions": 2, "deletions": 1]
-        ]]
+        connection.responseMap["git.commitDetails"] = [
+            "fileDetails": [["path": "file.swift", "additions": 2, "deletions": 1]]
+        ]
         let loader = WorkspaceDiffLoader(connectionManager: connection, workspaceId: "workspace")
         let files = try await loader.commitFiles(hash: "commit")
         #expect(files.first?.path == "file.swift")

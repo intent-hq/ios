@@ -388,9 +388,7 @@ extension DemoFixtures {
         if let response = designScenario?.response(for: method, params: params)
             ?? DemoTerminalFixtures.response(for: method, params: params)
             ?? DemoBrowserFixtures.response(for: method, params: params) { return response }
-        if let changesResponse = DemoChangesFixtures.response(for: method, params: params) {
-            return changesResponse
-        }
+        if let changesResponse = DemoChangesFixtures.response(for: method, params: params) { return changesResponse }
         return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
             if let response = proposalResponse(for: method, params: params) { return response }
             switch method {

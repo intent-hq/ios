@@ -1,7 +1,7 @@
 enum WorkspaceTab: Hashable {
     case agents
-    case context
     case changes
+    case context
     case unsupportedPersistedValue(Int)
 
     init(persistedValue: Int) {
