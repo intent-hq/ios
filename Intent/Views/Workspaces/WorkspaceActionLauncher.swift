@@ -2,8 +2,9 @@ import SwiftUI
 
 /// Actions float above the navigation content without resetting its scroll position.
 struct WorkspaceActionLauncher: ViewModifier {
-    let isHidden: Bool
+    let isSearching: Bool
     var alignment: HorizontalAlignment = .trailing
+    var conversationBottomClearance: CGFloat = 0
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
@@ -27,6 +28,7 @@ struct WorkspaceActionLauncher: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .environment(\.workspaceActionMenuBottomClearance, isSearching ? 0 : conversationBottomClearance)
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
@@ -48,8 +50,8 @@ struct WorkspaceActionLauncher: ViewModifier {
             } message: {
                 Text("Are you sure? You'll need to pair again to reconnect.")
             }
-            .onChange(of: isHidden) { _, hidden in
-                if hidden { isOpen = false }
+            .onChange(of: isSearching) { _, searching in
+                if searching { isOpen = false }
             }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
             .onDisappear { isOpen = false }
@@ -66,7 +68,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
-            if !isHidden { actionControls }
+            if !isSearching { actionControls }
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOpen ? .isModal : [])
@@ -113,4 +115,8 @@ struct WorkspaceActionLauncher: ViewModifier {
         case .logOff: break
         }
     }
+}
+
+extension EnvironmentValues {
+    @Entry var workspaceActionMenuBottomClearance: CGFloat = 0
 }

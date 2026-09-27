@@ -6,6 +6,7 @@ struct ConversationColumnView: View {
     let onNavigateToAgent: (String, String, String) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.workspaceActionMenuBottomClearance) private var menuBottomClearance
     @State private var questionWizardCollapsed = false
     @State private var conversationHeight: CGFloat = 0
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
@@ -29,6 +30,7 @@ struct ConversationColumnView: View {
         } action: { height in
             conversationHeight = height
         }
+        .padding(.bottom, menuBottomClearance)
         .onChange(of: viewModel.pendingQuestions?.messageId) { _, newId in
             questionWizardCollapsed = false
             #if os(visionOS)
