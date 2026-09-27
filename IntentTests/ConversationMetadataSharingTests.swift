@@ -161,4 +161,32 @@ struct ConversationMetadataSharingTests {
         #expect(card.loadError == nil)
         print("Opening failure and late proposal retry: \(settled.summary)")
     }
+
+    @Test func failedTitleLookupRetriesAndExplicitRefreshStillReads() async {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let workspaces = WorkspaceStore(connectionManager: fixture.connection)
+        fixture.connection.errorMap["workspace.list"] = NSError(domain: "Test", code: 1)
+        await workspaces.fetchIfNeeded()
+        #expect(workspaces.lastUpdated == nil)
+        #expect(!workspaces.isLoading)
+        #expect(fixture.connection.traffic().calls("workspace.list").count == 1)
+        #expect(fixture.connection.traffic().failures.count == 1)
+
+        fixture.connection.errorMap.removeValue(forKey: "workspace.list")
+        fixture.connection.responseMap["workspace.list"] = ["workspaces": []]
+        await workspaces.fetchIfNeeded()
+        #expect(workspaces.lastUpdated != nil)
+        #expect(!workspaces.isLoading)
+        #expect(fixture.connection.traffic().calls("workspace.list").count == 2)
+        await workspaces.fetchIfNeeded()
+        #expect(fixture.connection.traffic().calls("workspace.list").count == 2)
+
+        await workspaces.fetchAll()
+        let traffic = fixture.connection.traffic()
+        #expect(traffic.calls("workspace.list").count == 3)
+        #expect(traffic.requests.count == 3)
+        #expect(traffic.failures.count == 1)
+        #expect(traffic.pendingCount == 0)
+    }
 }
