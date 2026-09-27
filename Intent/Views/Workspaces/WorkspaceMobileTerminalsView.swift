@@ -5,50 +5,67 @@ struct WorkspaceMobileTerminalsView: View {
     let store: MobileTerminalStore
     let onSelect: (MobileTerminal) -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let terminals = store.activeTerminals(workspaceId: workspaceId)
         if !terminals.isEmpty {
-            Text("Terminals")
-                .interFont(Constants.Typography.bodyM.withFace(.semibold))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical)
-            ForEach(terminals) { terminal in
-                Button {
-                    store.clearError(workspaceId: workspaceId)
-                    onSelect(terminal)
-                } label: {
-                    terminalRow(terminal)
+            VStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionHeadingSpacing) {
+                Text("Terminals")
+                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
+                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    .accessibilityAddTraits(.isHeader)
+                LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
+                    ForEach(terminals) { terminal in
+                        Button {
+                            store.clearError(workspaceId: workspaceId)
+                            onSelect(terminal)
+                        } label: {
+                            terminalRow(terminal)
+                        }
+                        .buttonStyle(.plain)
+                        .visionListRowHitTarget()
+                    }
                 }
-                .buttonStyle(.plain)
-                .visionListRowHitTarget()
             }
         }
     }
 
     private func terminalRow(_ terminal: MobileTerminal) -> some View {
-        HStack(spacing: TerminalAppearance.headerSpacing) {
-            Image(systemName: "terminal")
-                .font(.headline)
-                .foregroundStyle(TerminalAppearance.green)
-                .frame(width: TerminalAppearance.controlSize, height: TerminalAppearance.controlSize)
-                .background(TerminalAppearance.background, in: Circle())
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: TerminalAppearance.groupInset) {
-                Text(terminal.name).interFont(Constants.Typography.bodyXS.withFace(.semibold))
+        HStack(alignment: .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
+            terminalIcon
+            VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
+                Text(terminal.name)
+                    .interFont(Constants.Typography.bodyM)
+                    .tracking(WorkspaceDetailStyle.rowTitleTracking)
+                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
                 Text(store.isConnected ? "Mobile terminal" : "Disconnected")
-                    .interFont(Constants.Typography.subtextXXS)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .interFont(Constants.Typography.bodyS)
+                    .tracking(WorkspaceDetailStyle.bodyTracking)
+                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
             }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .accessibilityHidden(true)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(TerminalAppearance.terminalInset)
-        .background(Theme.card(for: colorScheme), in: RoundedRectangle(cornerRadius: TerminalAppearance.rowCornerRadius))
-        .contentShape(RoundedRectangle(cornerRadius: TerminalAppearance.rowCornerRadius))
+        .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: .top)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    private var terminalIcon: some View {
+        Image(.terminal)
+            .resizable()
+            .scaledToFit()
+            .frame(
+                width: WorkspaceDetailStyle.avatarSize * WorkspaceDetailStyle.avatarArtRatio,
+                height: WorkspaceDetailStyle.avatarSize * WorkspaceDetailStyle.avatarArtRatio
+            )
+            .foregroundStyle(.white)
+            .frame(width: WorkspaceDetailStyle.avatarSize, height: WorkspaceDetailStyle.avatarSize)
+            .background(WorkspaceDetailStyle.neutral, in: .rect(
+                cornerRadius: WorkspaceDetailStyle.avatarSize * WorkspaceDetailStyle.avatarCornerRatio
+            ))
+            .accessibilityHidden(true)
     }
 }
