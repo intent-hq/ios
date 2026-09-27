@@ -46,6 +46,32 @@ struct MonitoredPrsRowTests {
 }
 
 extension MonitoredPrsRowTests {
+    @Test func accessibilityTraversalReachesChipsInsideNonViewScrollContainers() {
+        let host = UIView()
+        let scrollContainer = NSObject()
+        let chip = UIAccessibilityElement(accessibilityContainer: scrollContainer)
+        chip.accessibilityIdentifier = "monitoredPr.nested"
+        chip.accessibilityLabel = "#12"
+        chip.accessibilityValue = "Pending changes"
+        chip.accessibilityTraits = .button
+        scrollContainer.accessibilityElements = [chip]
+        host.accessibilityElements = [scrollContainer]
+        let elements = SyntheticBadgeHost.accessibilityElements(in: host)
+        #expect(elements.contains { $0 === chip })
+        #expect(elements.first { $0 === chip }?.accessibilityTraits.contains(.button) == true)
+    }
+
+    @Test func accessibilityTraversalDeduplicatesContainersAndStopsCycles() {
+        let host = UIView()
+        let container = NSObject()
+        let chip = UIAccessibilityElement(accessibilityContainer: container)
+        chip.accessibilityIdentifier = "monitoredPr.once"
+        host.accessibilityElements = [container, chip]
+        container.accessibilityElements = [host, chip]
+        defer { container.accessibilityElements = nil; host.accessibilityElements = nil }
+        #expect(SyntheticBadgeHost.accessibilityElements(in: host).filter { $0 === chip }.count == 1)
+    }
+
     private func makeRow(monitors: [MonitoredPr]) -> some View {
         let connection = FakeConnectionManager()
         let workspaceStore = WorkspaceStore(forTesting: true)

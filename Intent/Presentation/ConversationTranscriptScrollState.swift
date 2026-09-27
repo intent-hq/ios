@@ -186,6 +186,8 @@ final class ConversationTranscriptScrollState {
     var presentedBeforeEntryMetadata = false
     private(set) var entryViewportPreserved = false
     @ObservationIgnored var viewportAnchor = ConversationTranscriptViewportAnchor()
+    @ObservationIgnored private var retainedViewport: ConversationTranscriptViewportAnchor.Position?
+    @ObservationIgnored var pendingEntryDivider: String?
     /// Publishes ownership changes without observing every row measurement.
     private(set) var viewportOwnershipRevision = 0
     @ObservationIgnored private var viewportGestureActive = false
@@ -250,6 +252,8 @@ final class ConversationTranscriptScrollState {
         guard viewportGestureActive != isInteracting else { return }
         viewportGestureActive = isInteracting
         if isInteracting {
+            retainedViewport = nil
+            pendingEntryDivider = nil
             viewportAnchor.cancelRestoration()
             viewportOwnershipRevision = viewportAnchor.ownershipRevision
         }
@@ -258,13 +262,44 @@ final class ConversationTranscriptScrollState {
     /// An explicit follow or disappearance retires even callbacks that have
     /// been captured but have not yet created a pending adjustment.
     func retireViewportRestoration() {
+        retainedViewport = nil
+        pendingEntryDivider = nil
         viewportGestureActive = false
         viewportAnchor.cancelRestoration()
         viewportOwnershipRevision = viewportAnchor.ownershipRevision
     }
 
+    func suspendViewport() {
+        let position = hasInitiallyScrolled ? viewportAnchor.visiblePosition : nil
+        retireViewportRestoration()
+        retainedViewport = position
+    }
+
+    func entryDividerAdjustment(_ measurement: ConversationTranscriptViewportAnchor.Measurement, viewportHeight: CGFloat) -> CGFloat? {
+        guard pendingEntryDivider != nil, pendingEntryDivider == measurement.divider,
+              measurement.generation == initialScrollGeneration,
+              measurement.ownershipRevision == viewportOwnershipRevision,
+              measurement.frame.height > 0, measurement.frame.minY >= 0,
+              measurement.frame.maxY <= viewportHeight else { return nil }
+        pendingEntryDivider = nil
+        return measurement.frame.minY
+    }
+
+    func resumeViewportTarget() -> String? {
+        guard let position = retainedViewport else { return nil }
+        retainedViewport = nil
+        // The rehosted view must measure afresh; a callback captured while
+        // covered cannot consume this new restoration.
+        viewportAnchor.cancelRestoration()
+        viewportOwnershipRevision = viewportAnchor.ownershipRevision
+        viewportAnchor.restore(position, generation: initialScrollGeneration)
+        return position.id
+    }
+
     func rearmAfterTranscriptEmptied() {
+        retainedViewport = nil
         initialScrollGeneration += 1
+        pendingEntryDivider = nil
         userIsScrolledAway = false
         hasInitiallyScrolled = false
         initialScrollScheduled = false

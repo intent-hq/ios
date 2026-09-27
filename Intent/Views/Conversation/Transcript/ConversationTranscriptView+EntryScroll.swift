@@ -1,6 +1,23 @@
 import SwiftUI
 
 extension ConversationTranscriptView {
+    func restoreRetainedViewport(proxy: ScrollViewProxy) {
+        let revision = scrollState.viewportOwnershipRevision
+        DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
+            guard revision == scrollState.viewportOwnershipRevision,
+                  !isUserInteracting, !isFollowing,
+                  scrollMomentumProxy.scrollView?.window != nil,
+                  let target = scrollState.resumeViewportTarget() else { return }
+            guard viewModel.filteredMessages.contains(where: { $0.id == target }) else {
+                scrollState.retireViewportRestoration()
+                return
+            }
+            // Re-realize the same row in a rehosted lazy stack. Its geometry
+            // callback restores the measured offset, including partial rows.
+            proxy.scrollTo(target, anchor: .top)
+        }
+    }
+
     func handleMessageCountChange(from oldCount: Int, to newCount: Int, proxy: ScrollViewProxy) {
         switch ConversationTranscriptScrollPolicy.messageCountChangeDecision(
             from: oldCount,
@@ -127,6 +144,7 @@ extension ConversationTranscriptView {
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollSettleDelay
             ) {
                 guard generation == scrollState.initialScrollGeneration else { return }
+                scrollState.pendingEntryDivider = nil
                 scrollState.hasInitiallyScrolled = true
             }
         }
@@ -135,11 +153,15 @@ extension ConversationTranscriptView {
     /// Without an unread divider the entry scroll is a forced follow, so its
     /// landing is verified from the live geometry like any other.
     private func performInitialScroll(proxy: ScrollViewProxy, generation: Int) {
-        guard viewModel.newMessagesDividerAnchorId != nil else {
+        guard let dividerAnchor = viewModel.newMessagesDividerAnchorId else {
             scrollToBottom(proxy: proxy, forced: true, animated: false)
             return
         }
-        proxy.scrollTo("new-messages-divider", anchor: .top)
+        // The divider is nested inside this stable lazy row. Realize its
+        // bottom first, including when the seen message exceeds the viewport.
+        // The divider's measured frame then aligns the boundary at the top.
+        scrollState.pendingEntryDivider = dividerAnchor
+        proxy.scrollTo(dividerAnchor, anchor: .bottom)
         // Runs before `hasInitiallyScrolled` flips (probe < settle delay), so
         // no automatic follow can be queued ahead of this decision.
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.dividerProbeDelay) {

@@ -267,6 +267,8 @@ extension AppCoordinatorTests {
             manager.connectionState == .connected && server.requestCount(method: "workspace.list") == 2 && !store.isLoading
         }
         await store.fetchAll()
+        #expect(server.requestCount(method: "workspace.list") == 3, "Retry must issue a fresh request")
+        #expect(store.lastUpdated != nil, "The successful retry must publish usable data")
         try await waitUntil("late usable data enables established-session loss") {
             coordinator.lifecycleState.hasEnteredRemoteUI
         }

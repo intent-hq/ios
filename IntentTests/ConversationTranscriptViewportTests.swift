@@ -6,6 +6,87 @@ import Synchronization
 import Testing
 
 extension ConversationTranscriptScrollPolicyTests {
+    @Test @MainActor func readyEntryAlignsOnlyItsRealizedDividerAndRejectsLateOwnership() {
+        let state = ConversationTranscriptScrollState()
+        state.pendingEntryDivider = "seen"
+        let offscreen = ConversationTranscriptViewportAnchor.Measurement(frame: CGRect(x: 0, y: 900, width: 300, height: 30), divider: "seen")
+        #expect(state.entryDividerAdjustment(offscreen, viewportHeight: 600) == nil)
+        let realized = ConversationTranscriptViewportAnchor.Measurement(frame: CGRect(x: 0, y: 550, width: 300, height: 30), divider: "seen")
+        #expect(state.entryDividerAdjustment(realized, viewportHeight: 600) == 550)
+        #expect(state.entryDividerAdjustment(realized, viewportHeight: 600) == nil)
+        state.pendingEntryDivider = "seen"
+        state.retireViewportRestoration()
+        #expect(state.entryDividerAdjustment(realized, viewportHeight: 600) == nil)
+        state.pendingEntryDivider = "seen"
+        state.observeViewportGesture(isInteracting: true)
+        let afterGesture = ConversationTranscriptViewportAnchor.Measurement(frame: realized.frame, divider: "seen", ownershipRevision: state.viewportOwnershipRevision)
+        #expect(state.entryDividerAdjustment(afterGesture, viewportHeight: 600) == nil)
+    }
+
+    @Test @MainActor func retainedViewportRestoresTheSameRowOffsetOnlyOnce() {
+        let state = ConversationTranscriptScrollState()
+        state.preservePresentedViewport(distanceToBottom: 900)
+        let generation = state.initialScrollGeneration
+        let revision = state.viewportOwnershipRevision
+        _ = state.viewportAnchor.record(
+            id: "row-31",
+            measurement: .init(frame: CGRect(x: 0, y: 48, width: 300, height: 64), divider: "seen", generation: generation, ownershipRevision: revision),
+            viewportHeight: 600,
+            preserve: true,
+            entryGeneration: generation
+        )
+        state.suspendViewport()
+        #expect(state.hasInitiallyScrolled && state.entryViewportPreserved)
+        let covered = ConversationTranscriptViewportAnchor.Measurement(
+            frame: CGRect(x: 0, y: 900, width: 300, height: 64), divider: "seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision
+        )
+        #expect(state.resumeViewportTarget() == "row-31")
+        #expect(state.resumeViewportTarget() == nil)
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: covered, viewportHeight: 600, preserve: true, entryGeneration: generation) == nil)
+        let offscreen = ConversationTranscriptViewportAnchor.Measurement(frame: covered.frame, divider: "new-seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision)
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: offscreen, viewportHeight: 600, preserve: true, entryGeneration: generation) == nil)
+        let rehosted = ConversationTranscriptViewportAnchor.Measurement(
+            frame: CGRect(x: 0, y: 0, width: 300, height: 64), divider: "new-seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision
+        )
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: rehosted, viewportHeight: 600, preserve: true, entryGeneration: generation) == -48)
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: rehosted, viewportHeight: 600, preserve: true, entryGeneration: generation) == nil)
+    }
+
+    @Test(arguments: [false, true]) @MainActor
+    func retainedViewportCannotOverrideALaterGestureOrFollow(gesture: Bool) {
+        let state = ConversationTranscriptScrollState()
+        state.preservePresentedViewport(distanceToBottom: 900)
+        _ = state.viewportAnchor.record(
+            id: "row-31",
+            measurement: .init(frame: CGRect(x: 0, y: 48, width: 300, height: 64), divider: "seen", generation: state.initialScrollGeneration),
+            viewportHeight: 600,
+            preserve: true,
+            entryGeneration: state.initialScrollGeneration
+        )
+        state.suspendViewport()
+        if gesture { state.observeViewportGesture(isInteracting: true) } else { state.retireViewportRestoration() }
+        #expect(state.resumeViewportTarget() == nil)
+    }
+
+    @Test @MainActor func retainedViewportKeepsThePartiallyVisibleRowAboveItsAnchor() {
+        let state = ConversationTranscriptScrollState()
+        state.preservePresentedViewport(distanceToBottom: 900)
+        let generation = state.initialScrollGeneration
+        for (id, minY) in [("partial", CGFloat(-3)), ("full", CGFloat(69))] {
+            let measurement = ConversationTranscriptViewportAnchor.Measurement(frame: CGRect(x: 0, y: minY, width: 300, height: 60), divider: "seen", generation: generation)
+            _ = state.viewportAnchor.record(id: id, measurement: measurement, viewportHeight: 600, preserve: true, entryGeneration: generation)
+        }
+        state.suspendViewport()
+        #expect(state.resumeViewportTarget() == "full")
+        let realized = ConversationTranscriptViewportAnchor.Measurement(
+            frame: CGRect(x: 0, y: 0, width: 300, height: 60), divider: "seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision
+        )
+        let adjustment = state.viewportAnchor.record(id: "full", measurement: realized, viewportHeight: 600, preserve: true, entryGeneration: generation)
+        #expect(adjustment == -69, "Restoring the full row's offset also keeps the preceding partial row at -3")
+        state.rearmAfterTranscriptEmptied()
+        #expect(state.resumeViewportTarget() == nil)
+    }
+
     @Test @MainActor func automaticFollowCompletionPublishesViewportSettlement() {
         let state = ConversationTranscriptScrollState()
         applyViewportEvent(.endRealized(userIsScrolledAway: false), to: state)

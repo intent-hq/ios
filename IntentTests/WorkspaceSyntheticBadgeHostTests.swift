@@ -306,15 +306,26 @@ enum SyntheticBadgeHost {
     }
 
     static func accessibilityElements(in view: UIView) -> [NSObject] {
-        let elementCount = view.accessibilityElementCount()
-        let direct =
-            elementCount == NSNotFound
-            ? (view.accessibilityElements ?? []).compactMap { $0 as? NSObject }
-            : (0..<elementCount).compactMap { index in
-                view.accessibilityElement(at: index) as? NSObject
+        var visited: Set<ObjectIdentifier> = []
+        var elements: [NSObject] = []
+        func visit(_ object: NSObject) {
+            guard visited.insert(ObjectIdentifier(object)).inserted else { return }
+            if object !== view { elements.append(object) }
+            // ScrollView/Menu can publish intermediate SwiftUI accessibility
+            // containers which are NSObjects, not UIViews. Walk their children
+            // too; stopping at the first container hides the actual menu chips.
+            let count = object.accessibilityElementCount()
+            let children = count == NSNotFound || count < 0
+                ? (object.accessibilityElements ?? []).compactMap { $0 as? NSObject }
+                : (0..<count).compactMap { object.accessibilityElement(at: $0) as? NSObject }
+            children.forEach(visit)
+            if let view = object as? UIView {
+                view.subviews.forEach(visit)
             }
-        return (view.isAccessibilityElement ? [view] : direct)
-            + view.subviews.flatMap(accessibilityElements(in:))
+        }
+        if view.isAccessibilityElement { elements.append(view) }
+        visit(view)
+        return elements
     }
 
     /// SwiftUI's accessibility nodes are not `UIView`s, so read the identifier

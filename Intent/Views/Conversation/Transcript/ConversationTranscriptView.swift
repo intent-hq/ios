@@ -95,14 +95,16 @@ private extension ConversationTranscriptView {
                 if ready { runInitialScrollIfNeeded(proxy: proxy) }
             }
             .onAppear {
+                restoreRetainedViewport(proxy: proxy)
                 // On first open the transcript mounts only after loading settles,
                 // so onAppear is also an entry-scroll trigger for cached data.
                 if !viewModel.isLoading {
                     runInitialScrollIfNeeded(proxy: proxy)
                 }
             }
-            .onChange(of: scrollMomentumProxy.hasResolvedScrollView) { _, resolved in
-                if resolved {
+            .onChange(of: scrollMomentumProxy.hostingRevision) { _, _ in
+                restoreRetainedViewport(proxy: proxy)
+                if scrollMomentumProxy.hasResolvedScrollView {
                     handleScrollViewResolved(proxy: proxy)
                 }
             }
@@ -239,7 +241,7 @@ private extension ConversationTranscriptView {
             }
         }
         .onDisappear {
-            scrollState.retireViewportRestoration()
+            scrollState.suspendViewport()
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
             cancelBottomBandRePin()

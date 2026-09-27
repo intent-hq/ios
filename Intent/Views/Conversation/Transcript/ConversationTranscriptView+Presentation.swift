@@ -18,8 +18,7 @@ extension ConversationTranscriptView {
             VStack(spacing: Layout.transcriptRowSpacing) {
                 messageRow(for: message)
                 if message.id == dividerAnchorId {
-                    NewMessagesDividerView()
-                        .id("new-messages-divider")
+                    entryDivider(generation: generation, ownershipRevision: ownershipRevision)
                 }
             }
             .id(message.id)
@@ -76,6 +75,19 @@ extension ConversationTranscriptView {
             Color.clear.frame(height: Layout.bottomAnchorHeight)
                 .padding(.bottom, Layout.bottomAnchorPadding)
         }
+    }
+
+    private func entryDivider(generation: Int, ownershipRevision: Int) -> some View {
+        NewMessagesDividerView()
+            .id("new-messages-divider")
+            .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
+                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: viewModel.newMessagesDividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
+            } action: { measurement in
+                guard !isUserInteracting, !isFollowing,
+                      let geometry = scrollMomentumProxy.restingGeometry,
+                      let adjustment = scrollState.entryDividerAdjustment(measurement, viewportHeight: geometry.containerHeight) else { return }
+                scrollMomentumProxy.pageTo(offsetY: geometry.contentOffsetY + adjustment)
+            }
     }
 
     private func preserveRowOffsetAfterDividerChange(

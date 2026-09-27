@@ -29,8 +29,7 @@ enum DemoMode {
 /// `WorkspaceStore.parseWorkspaces`, `note.list` → `Note.parseNote`,
 /// `agent.list` → `AgentSession.parseAgent`, ...).
 ///
-/// Chat subscriptions deliver a fixture snapshot; other stores use the
-/// legacy fetch fallback when no subscription ID is returned.
+/// Chat subscriptions deliver a snapshot; event feeds acknowledge registrations.
 enum DemoFixtures {
     // Numeric values below are intentional status-image fixture geometry and color data.
     // swiftlint:disable no_magic_numbers number_separator
@@ -392,6 +391,8 @@ extension DemoFixtures {
         return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
             if let response = proposalResponse(for: method, params: params) { return response }
             switch method {
+            case "events.subscribe": return ["subscriptionId": "demo-events-\(params["replaceGroup"] as? String ?? "default")"]
+            case "prMonitor.list": return ["monitors": [[String: Any]]()]
             case "workspace.list":
                 return ["workspaces": workspaces]
             case "note.list":

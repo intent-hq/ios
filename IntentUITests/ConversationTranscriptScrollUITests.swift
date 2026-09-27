@@ -295,6 +295,7 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertFalse(opened.transcript.exists, "the chat snapshot is still held")
         try Data().write(to: startupSnapshotGate)
         let divider = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch
+        defer { attachStartupViewport(opened: opened, report: startupReport(app), row: divider, context: "ready entry divider") }
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
             guard self.startupReport(app).contains("positioned=true"), let rect = frame(of: divider) else { return false }
             return isInside(rect, opened.transcript)
@@ -349,6 +350,8 @@ extension ConversationTranscriptScrollUITests {
             (frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY
         })
         try FileManager.default.removeItem(at: startupMetadataGate)
+        attachStartupViewport(opened: opened, report: startupReport(app), row: row, context: "before retained cover")
+        defer { attachStartupViewport(opened: opened, report: startupReport(app), row: row, context: "after retained return") }
         startupControl(app).tap()
         let back = app.buttons["demo.conversation.return"].firstMatch
         XCTAssertTrue(back.waitForExistence(timeout: Fixture.settleTimeout))

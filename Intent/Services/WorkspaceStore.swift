@@ -83,18 +83,22 @@ import Observation
         let task = Task { await self._fetchAll() }
         fetchTask = task
         await task.value
-        fetchTask = nil
     }
 
     private func _fetchAll() async {
         isLoading = true
+        defer {
+            // A completion observer may retry immediately. Retire the shared
+            // operation before announcing idle, rather than in its caller.
+            fetchTask = nil
+            isLoading = false
+        }
         do {
             let result = try await connectionManager.request("workspace.list")
             publishFetchedWorkspaces(Self.parseWorkspaces(from: result))
         } catch {
             AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
         }
-        isLoading = false
     }
 
     /// Publishes a fetched workspace list. `lastUpdated` is set **before** `workspaces`

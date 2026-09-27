@@ -953,4 +953,15 @@ func waitUntilSteady(
     } while Date() < deadline
     return nil
 }
+extension ConversationTranscriptScrollUITests {
+    @MainActor
+    func attachStartupViewport(opened: OpenConversation, report: String, row: XCUIElement, context: String) {
+        let snapshot = try? row.snapshot()
+        let attachment = XCTAttachment(string: "\(context): row=\(snapshot?.label ?? "missing") frame=\(String(describing: snapshot?.frame))"
+            + " transcript=\(opened.transcript.frame) \(report) \(followReport(in: opened))")
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
 // swiftlint:enable file_length

@@ -6,6 +6,11 @@ import Foundation
 /// not merely the identity of a visible target.
 /// Each divider revision permits one correction; scrolling remains user-owned.
 struct ConversationTranscriptViewportAnchor {
+    struct Position {
+        let id: String
+        let minY: CGFloat
+    }
+
     nonisolated struct Measurement: Equatable, Sendable {
         let frame: CGRect
         let divider: String?
@@ -24,12 +29,14 @@ struct ConversationTranscriptViewportAnchor {
         let id: String
         let minY: CGFloat
         let generation: Int
+        var isReappearance = false
     }
 
     private var frames: [String: CGRect] = [:]
     private var divider: String?
     private var initialized = false
     private var pending: Pending?
+    private(set) var visiblePosition: Position?
     private(set) var ownershipRevision = 0
 
     mutating func record(
@@ -39,8 +46,10 @@ struct ConversationTranscriptViewportAnchor {
               measurement.ownershipRevision == ownershipRevision else { return nil }
         if pending?.generation != entryGeneration { pending = nil }
         if !initialized || measurement.divider != divider {
-            pending = nil
-            if initialized, preserve {
+            if pending?.isReappearance != true {
+                pending = nil
+            }
+            if pending == nil, initialized, preserve {
                 let visible = frames.filter { $0.value.minY < viewportHeight && $0.value.maxY > 0 && $0.value.height > 0 }
                 let full = visible.filter { $0.value.minY >= 0 && $0.value.maxY <= viewportHeight }
                 pending = (full.isEmpty ? visible : full)
@@ -51,7 +60,14 @@ struct ConversationTranscriptViewportAnchor {
             divider = measurement.divider
         }
         frames[id] = measurement.frame
+        let visible = frames.filter { $0.value.minY < viewportHeight && $0.value.maxY > 0 && $0.value.height > 0 }
+        let full = visible.filter { $0.value.minY >= 0 && $0.value.maxY <= viewportHeight }
+        if let first = (full.isEmpty ? visible : full).min(by: { $0.value.minY < $1.value.minY }) {
+            visiblePosition = Position(id: first.key, minY: first.value.minY)
+        }
         guard let pending, pending.id == id else { return nil }
+        if pending.isReappearance,
+           measurement.frame.maxY <= 0 || measurement.frame.minY >= viewportHeight { return nil }
         self.pending = nil
         guard preserve else { return nil }
         let adjustment = measurement.frame.minY - pending.minY
@@ -68,6 +84,11 @@ struct ConversationTranscriptViewportAnchor {
         ownershipRevision += 1
         pending = nil
         frames.removeAll()
+        visiblePosition = nil
+    }
+
+    mutating func restore(_ position: Position, generation: Int) {
+        pending = Pending(id: position.id, minY: position.minY, generation: generation, isReappearance: true)
     }
 
     mutating func reset() {
