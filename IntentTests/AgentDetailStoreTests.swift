@@ -264,3 +264,136 @@ struct AgentDetailStoreTests {
         #expect(connection.paramsForMethod("agent.get").count == 2)
     }
 }
+
+extension AgentDetailStoreTests {
+    @Test func releasedCancelledActivationDoesNotStartTrailingRead() async throws {
+        let connection = FakeConnectionManager()
+        connection.pendingMethods = ["agent.get"]
+        let details = AgentDetailStore(connection: connection)
+        let lease = details.retain(agentId: "parent")
+        let read = Task { try await details.load(agentId: "parent") }
+        defer { read.cancel() }
+        try await connection.waitForPendingRequests("agent.get")
+        details.invalidate(agentId: "parent")
+        details.release(agentId: "parent", consumer: lease)
+        read.cancel()
+        connection.pendingMethods = []
+        connection.responseMap["agent.get"] = agent()
+        connection.resolvePending("agent.get", with: agent())
+        await #expect(throws: CancellationError.self) { try await read.value }
+        #expect(connection.paramsForMethod("agent.get").count == 1)
+        #expect(details.cached(agentId: "parent") == nil)
+
+        let nextLease = details.retain(agentId: "parent")
+        defer { details.release(agentId: "parent", consumer: nextLease) }
+        _ = try await details.load(agentId: "parent")
+        _ = try await details.load(agentId: "parent")
+        #expect(connection.paramsForMethod("agent.get").count == 2)
+    }
+
+    @Test func queuedEventRefreshDoesNotStartAfterLastRelease() async throws {
+        let connection = FakeConnectionManager()
+        connection.responseMap["agent.get"] = agent()
+        let details = AgentDetailStore(connection: connection)
+        let lease = details.retain(agentId: "parent")
+        _ = try await details.load(agentId: "parent")
+        connection.deliverEvent(method: "events.event", params: [
+            "event": ["type": "agent:updated", "data": ["agentId": "parent"]]
+        ])
+        details.release(agentId: "parent", consumer: lease)
+        try await expectNever("a refresh after the final activation ended") {
+            connection.paramsForMethod("agent.get").count > 1
+        }
+    }
+
+    @Test func remainingWindowKeepsInvalidatedReadAlive() async throws {
+        let connection = FakeConnectionManager()
+        connection.pendingMethods = ["agent.get"]
+        let details = AgentDetailStore(connection: connection)
+        let firstLease = details.retain(agentId: "parent")
+        let secondLease = details.retain(agentId: "parent")
+        defer { details.release(agentId: "parent", consumer: secondLease) }
+        let first = Task { try await details.load(agentId: "parent") }
+        defer { first.cancel() }
+        try await connection.waitForPendingRequests("agent.get")
+        details.invalidate(agentId: "parent")
+        details.release(agentId: "parent", consumer: firstLease)
+        first.cancel()
+        connection.resolvePending("agent.get", with: agent(["lastSeenMessageId": "old"]))
+        try await connection.waitForPendingRequests("agent.get")
+        connection.resolvePending("agent.get", with: agent(["lastSeenMessageId": "new"]))
+        await #expect(throws: CancellationError.self) { try await first.value }
+        let second = try await details.load(agentId: "parent")
+        #expect(second.metadata["lastSeenMessageId"] as? String == "new")
+        #expect(connection.paramsForMethod("agent.get").count == 2)
+    }
+
+    @Test func releasedEventRefreshDoesNotStartTrailingRead() async throws {
+        let connection = FakeConnectionManager()
+        connection.responseMap["agent.get"] = agent()
+        let details = AgentDetailStore(connection: connection)
+        let lease = details.retain(agentId: "parent")
+        _ = try await details.load(agentId: "parent")
+        connection.pendingMethods = ["agent.get"]
+        connection.deliverEvent(method: "events.event", params: [
+            "event": ["type": "agent:updated", "data": ["agentId": "parent"]]
+        ])
+        try await connection.waitForPendingRequests("agent.get")
+        details.invalidate(agentId: "parent")
+        details.release(agentId: "parent", consumer: lease)
+        connection.pendingMethods = []
+        connection.resolvePending("agent.get", with: agent())
+        try await expectNever("a trailing event refresh after the activation ended") {
+            connection.paramsForMethod("agent.get").count > 2
+        }
+        _ = try await details.load(agentId: "parent") // A new route load remains valid without a lease.
+        #expect(connection.paramsForMethod("agent.get").count == 3)
+    }
+
+    @Test func queuedEventRefreshKeepsRemainingWindowCurrent() async throws {
+        let connection = FakeConnectionManager()
+        connection.responseMap["agent.get"] = agent()
+        let details = AgentDetailStore(connection: connection)
+        let firstLease = details.retain(agentId: "parent")
+        let secondLease = details.retain(agentId: "parent")
+        defer { details.release(agentId: "parent", consumer: secondLease) }
+        _ = try await details.load(agentId: "parent")
+        connection.pendingMethods = ["agent.get"]
+        connection.deliverEvent(method: "events.event", params: [
+            "event": ["type": "agent:updated", "data": ["agentId": "parent"]]
+        ])
+        details.release(agentId: "parent", consumer: firstLease)
+        try await connection.waitForPendingRequests("agent.get")
+        connection.resolvePending("agent.get", with: agent(["lastSeenMessageId": "new"]))
+        try await waitUntil("the remaining window receives refreshed detail") {
+            details.cached(agentId: "parent")?.metadata["lastSeenMessageId"] as? String == "new"
+        }
+        #expect(connection.paramsForMethod("agent.get").count == 2)
+    }
+
+    @Test func unleasedRefreshSurvivesFinalActivationRelease() async throws {
+        let connection = FakeConnectionManager()
+        connection.pendingMethods = ["agent.get"]
+        let details = AgentDetailStore(connection: connection)
+        let lease = details.retain(agentId: "parent")
+        let initial = Task { try await details.load(agentId: "parent") }
+        defer { initial.cancel() }
+        try await connection.waitForPendingRequests("agent.get")
+        var refreshStarted = false
+        let refresh = Task {
+            refreshStarted = true
+            return try await details.load(agentId: "parent", refresh: true)
+        }
+        defer { refresh.cancel() }
+        try await waitUntil("unleased refresh joined the read") { refreshStarted }
+        details.release(agentId: "parent", consumer: lease)
+        initial.cancel()
+        connection.resolvePending("agent.get", with: agent(["lastSeenMessageId": "old"]))
+        try await connection.waitForPendingRequests("agent.get")
+        connection.resolvePending("agent.get", with: agent(["lastSeenMessageId": "new"]))
+        let result = try await refresh.value
+        await #expect(throws: CancellationError.self) { try await initial.value }
+        #expect(result.metadata["lastSeenMessageId"] as? String == "new")
+        #expect(connection.paramsForMethod("agent.get").count == 2)
+    }
+}

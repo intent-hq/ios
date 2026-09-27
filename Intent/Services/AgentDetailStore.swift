@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import Observation
+import Synchronization
 
 /// Only an agent.get response creates detail knowledge. Summary/list rows must
 /// not seed this store: they omit fields such as pending proposal receipts.
@@ -34,6 +35,19 @@ enum AgentDetailError: LocalizedError {
 /// through its coalesced trailing read (proposal mutations use this path).
 @MainActor @Observable
 final class AgentDetailStore {
+    /// Cancellation can arrive off-actor while the shared request is suspended.
+    /// Record it synchronously so a late reply cannot start work for a dead caller.
+    nonisolated private final class LoadInterest: Sendable {
+        let activation: Int?
+        private let cancelled = Mutex(false)
+
+        init(activation: Int?) { self.activation = activation }
+
+        var isCancelled: Bool { cancelled.withLock { $0 } }
+
+        func cancel() { cancelled.withLock { $0 = true } }
+    }
+
     private struct Patch {
         let revision: Int
         let value: Any
@@ -49,6 +63,7 @@ final class AgentDetailStore {
         var fields: [String: Patch] = [:]
         var metadata: [String: Patch] = [:]
         var consumers: Set<UUID> = []
+        var interests: [UUID: LoadInterest] = [:]
         var workspaceId: String?
     }
 
@@ -93,13 +108,24 @@ final class AgentDetailStore {
     }
 
     func load(agentId: String, workspaceId: String? = nil, refresh: Bool = false) async throws -> AgentDetail {
+        try await load(agentId: agentId, workspaceId: workspaceId, refresh: refresh, activation: nil)
+    }
+
+    private func load(agentId: String, workspaceId: String?, refresh: Bool, activation: Int?) async throws -> AgentDetail {
         try Task.checkCancellation()
         let entry = entry(for: agentId)
+        if let activation {
+            guard activation == entry.activationGeneration, !entry.consumers.isEmpty else { throw CancellationError() }
+        }
         if refresh, entry.task != nil { invalidate(agentId: agentId) }
         if entry.task == nil, entry.fresh, !refresh, let detail = snapshots[agentId] {
             try detail.validate(agentId: agentId, workspaceId: workspaceId)
             return detail
         }
+        let interestID = UUID()
+        let interest = LoadInterest(activation: activation)
+        entry.interests[interestID] = interest
+        defer { entry.interests[interestID] = nil }
         if entry.task == nil {
             let requestID = UUID()
             entry.requestID = requestID
@@ -109,7 +135,11 @@ final class AgentDetailStore {
         }
         guard let task = entry.task else { throw CancellationError() }
         let epoch = connectionEpoch
-        let received = try await task.value
+        let received = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            interest.cancel()
+        }
         try Task.checkCancellation()
         guard epoch == self.connectionEpoch else { throw CancellationError() }
         let detail = snapshots[agentId] ?? received
@@ -135,6 +165,7 @@ final class AgentDetailStore {
         for entry in entries.values {
             entry.task?.cancel()
             entry.task = nil
+            entry.interests = [:]
             entry.requestID = UUID()
             entry.fresh = false
             entry.fields = [:]
@@ -151,10 +182,12 @@ final class AgentDetailStore {
     }
 
     private func read(agentId: String, entry: Entry, requestID: UUID, epoch: Int) async throws -> AgentDetail {
-        let activationGeneration = entry.activationGeneration
         defer { if entry.requestID == requestID { entry.task = nil } }
         do {
             for round in 0..<2 {
+                try Task.checkCancellation()
+                guard hasInterest(in: entry) else { throw CancellationError() }
+                let activationGeneration = entry.activationGeneration
                 let invalidation = entry.invalidation
                 let revision = entry.revision
                 // Agent ids are backend-wide. Do not accidentally scope a
@@ -184,6 +217,13 @@ final class AgentDetailStore {
             entry.fresh = false
             throw error
         }
+    }
+
+    private func hasInterest(in entry: Entry) -> Bool {
+        if !entry.consumers.isEmpty { return true }
+        // Public loads (route validation, explicit refresh) do not need a lease.
+        // Event reconciliation belongs only to the activation that requested it.
+        return entry.interests.values.contains { !$0.isCancelled && $0.activation == nil }
     }
 
     private func applyingPatches(to detail: AgentDetail, entry: Entry, after revision: Int) -> AgentDetail {
@@ -222,6 +262,7 @@ final class AgentDetailStore {
         if type == "agent:deleted" {
             entry.task?.cancel()
             entry.task = nil
+            entry.interests = [:]
             entry.requestID = UUID()
             entry.fresh = false
             snapshots[agentId] = nil
@@ -234,7 +275,8 @@ final class AgentDetailStore {
         if Self.requiresReconciliation(data) {
             invalidate(agentId: agentId)
             if !entry.consumers.isEmpty, entry.task == nil {
-                Task { _ = try? await self.load(agentId: agentId) }
+                let activation = entry.activationGeneration
+                Task { _ = try? await self.load(agentId: agentId, workspaceId: nil, refresh: false, activation: activation) }
             }
         }
     }

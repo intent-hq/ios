@@ -107,9 +107,14 @@ extension ConversationViewModelTests {
 
     @Test func cancelledLoadDoesNotStartLaterLiveStores() async throws {
         let (viewModel, fake) = makeLoadableVM()
+        let detailHandlerCount = fake.eventHandlerCount
+        #expect(detailHandlerCount == 1, "the model and commands share one detail listener before loading")
+        #expect(viewModel.store.commands.agentDetails === viewModel.agentDetails)
+        #expect(viewModel.store.eventHandlerId == nil)
         fake.pendingMethods = ["events.subscribe"]
         let load = Task { await viewModel.load() }
         try await fake.waitForPendingRequests("events.subscribe")
+        #expect(fake.eventHandlerCount == detailHandlerCount + 1)
 
         load.cancel()
         viewModel.conversationDisappeared()
@@ -119,7 +124,8 @@ extension ConversationViewModelTests {
         #expect(!fake.didCallMethod("chat.subscribe"))
         #expect(!fake.didCallMethod("hook.list"))
         #expect(!fake.didCallMethod("prMonitor.list"))
-        #expect(fake.eventHandlerCount == 0)
+        #expect(viewModel.store.eventHandlerId == nil && viewModel.detailConsumer == nil)
+        #expect(fake.eventHandlerCount == detailHandlerCount, "the session detail listener outlives the view activation")
     }
 
     @Test func loadSettlesBeforeTranscriptCanMount() async {

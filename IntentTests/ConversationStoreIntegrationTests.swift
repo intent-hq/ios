@@ -626,7 +626,12 @@ extension ConversationStoreIntegrationTests {
 
     @Test func deinitRemovesEventHandler() async throws {
         let fake = FakeConnectionManager()
+        #expect(fake.eventHandlerCount == 0)
         var store: ConversationStore? = ConversationStore(connectionManager: fake)
+        weak var detailOwner = store?.commands.agentDetails
+        let detailHandlerCount = fake.eventHandlerCount
+        #expect(detailHandlerCount == 1, "the standalone store owns its fallback detail listener")
+        #expect(store?.eventHandlerId == nil, "streaming has not registered yet")
 
         fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-streaming"]
         fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
@@ -634,7 +639,8 @@ extension ConversationStoreIntegrationTests {
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
         await store?.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
         await store?.subscribeLiveChat(agentId: "agent-1")
-        #expect(fake.eventHandlerCount == 1)
+        #expect(fake.eventHandlerCount == detailHandlerCount + 1)
+        #expect(store?.eventHandlerId != nil)
         #expect(fake.subscriptionHandlerCount == 1)
 
         store = nil
@@ -644,6 +650,7 @@ extension ConversationStoreIntegrationTests {
                 && fake.paramsForMethod("events.unsubscribe").count == 1
         }
         #expect(fake.eventHandlerCount == 0)
+        #expect(detailOwner == nil, "deinit releases the fallback detail listener too")
         #expect(fake.subscriptionHandlerCount == 0)
         #expect(fake.paramsForMethod("events.unsubscribe").first?["subscriptionId"] as? String == "sub-streaming")
     }
@@ -655,8 +662,14 @@ extension ConversationStoreIntegrationTests {
         fakeA.responseMap["events.unsubscribe"] = [:] as [String: Any]
         fakeB.responseMap["events.subscribe"] = ["subscriptionId": "sub-b"]
         fakeB.responseMap["events.unsubscribe"] = [:] as [String: Any]
-        let storeA = ConversationStore(connectionManager: fakeA)
-        let storeB = ConversationStore(connectionManager: fakeB)
+        let detailsA = AgentDetailStore(connection: fakeA)
+        let detailsB = AgentDetailStore(connection: fakeB)
+        let detailHandlersA = fakeA.eventHandlerCount
+        let detailHandlersB = fakeB.eventHandlerCount
+        #expect(detailHandlersA == 1 && detailHandlersB == 1, "each backend owns one detail listener")
+        let storeA = ConversationStore(connectionManager: fakeA, agentDetails: detailsA)
+        let storeB = ConversationStore(connectionManager: fakeB, agentDetails: detailsB)
+        #expect(fakeA.eventHandlerCount == detailHandlersA && fakeB.eventHandlerCount == detailHandlersB)
         await storeA.subscribeToStreaming(agentId: "agent-a", workspaceId: "ws-a")
         await storeB.subscribeToStreaming(agentId: "agent-b", workspaceId: "ws-b")
 
@@ -666,8 +679,10 @@ extension ConversationStoreIntegrationTests {
         try await fakeA.waitForRequests("events.unsubscribe")
         #expect(fakeA.paramsForMethod("events.unsubscribe").count == 1)
         #expect(fakeA.paramsForMethod("events.unsubscribe").first?["subscriptionId"] as? String == "sub-a")
-        #expect(fakeA.eventHandlerCount == 0)
-        #expect(fakeB.eventHandlerCount == 1)
+        #expect(storeA.eventHandlerId == nil && !storeA.streamingEventsActive)
+        #expect(storeB.eventHandlerId != nil && storeB.streamingEventsActive)
+        #expect(fakeA.eventHandlerCount == detailHandlersA, "only backend A's session detail listener remains")
+        #expect(fakeB.eventHandlerCount == detailHandlersB + 1, "backend B keeps its streaming listener")
         #expect(fakeB.paramsForMethod("events.unsubscribe").isEmpty)
     }
 
@@ -676,19 +691,24 @@ extension ConversationStoreIntegrationTests {
         fake.pendingMethods = ["events.subscribe"]
         fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
         let store = ConversationStore(connectionManager: fake)
+        let detailHandlerCount = fake.eventHandlerCount
+        #expect(detailHandlerCount == 1 && store.eventHandlerId == nil)
         let first = Task { await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1") }
         try await fake.waitForPendingRequests("events.subscribe")
 
         store.deactivateStreaming()
+        #expect(store.eventHandlerId == nil && fake.eventHandlerCount == detailHandlerCount)
         fake.pendingMethods = []
         fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-new"]
         await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
+        let newHandler = try #require(store.eventHandlerId)
         fake.resolvePending("events.subscribe", with: ["subscriptionId": "sub-old"])
         await first.value
 
         try await fake.waitForRequests("events.unsubscribe")
         #expect(store.subscriptionId == "sub-new")
-        #expect(fake.eventHandlerCount == 1)
+        #expect(store.eventHandlerId == newHandler)
+        #expect(fake.eventHandlerCount == detailHandlerCount + 1)
         #expect(
             fake.paramsForMethod("events.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-old"]
         )
@@ -725,6 +745,8 @@ extension ConversationStoreIntegrationTests {
     @Test func staleReconnectBeforeEventResubscribeCannotReplaceReappearance() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
+        let detailHandlerCount = fake.eventHandlerCount
+        #expect(detailHandlerCount == 1 && store.eventHandlerId == nil)
         fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-initial"]
         fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "chat-reconnect", "seq": 0, "snapshot": []]
@@ -743,11 +765,13 @@ extension ConversationStoreIntegrationTests {
         fake.pendingMethods = []
         fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-new"]
         await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
+        let newHandler = try #require(store.eventHandlerId)
         fake.resolvePending("agent.getQueue", with: ["queue": []])
         await reconnect.value
 
         #expect(store.subscriptionId == "sub-new")
-        #expect(fake.eventHandlerCount == 1)
+        #expect(store.eventHandlerId == newHandler)
+        #expect(fake.eventHandlerCount == detailHandlerCount + 1)
         #expect(fake.paramsForMethod("events.subscribe").count == 1)
         #expect(!fake.didCallMethod("agent.getSubscriptions"))
         #expect(
