@@ -8,14 +8,31 @@ struct ConversationTranscriptViewportAnchor {
     struct Measurement: Equatable {
         let frame: CGRect
         let divider: String?
+        let generation: Int
+
+        init(frame: CGRect, divider: String?, generation: Int = 0) {
+            self.frame = frame
+            self.divider = divider
+            self.generation = generation
+        }
+    }
+
+    private struct Pending {
+        let id: String
+        let minY: CGFloat
+        let generation: Int
     }
 
     private var frames: [String: CGRect] = [:]
     private var divider: String?
     private var initialized = false
-    private var pending: (id: String, minY: CGFloat)?
+    private var pending: Pending?
 
-    mutating func record(id: String, measurement: Measurement, viewportHeight: CGFloat, preserve: Bool) -> CGFloat? {
+    mutating func record(
+        id: String, measurement: Measurement, viewportHeight: CGFloat, preserve: Bool, entryGeneration: Int = 0
+    ) -> CGFloat? {
+        guard measurement.generation == entryGeneration else { return nil }
+        if pending?.generation != entryGeneration { pending = nil }
         if !initialized || measurement.divider != divider {
             pending = nil
             if initialized, preserve {
@@ -23,7 +40,7 @@ struct ConversationTranscriptViewportAnchor {
                 let full = visible.filter { $0.value.minY >= 0 && $0.value.maxY <= viewportHeight }
                 pending = (full.isEmpty ? visible : full)
                     .min { $0.value.minY < $1.value.minY }
-                    .map { (id: $0.key, minY: $0.value.minY) }
+                    .map { Pending(id: $0.key, minY: $0.value.minY, generation: entryGeneration) }
             }
             initialized = true
             divider = measurement.divider
@@ -36,7 +53,8 @@ struct ConversationTranscriptViewportAnchor {
         return adjustment.isFinite && abs(adjustment) > .ulpOfOne ? adjustment : nil
     }
 
-    mutating func remove(id: String) {
+    mutating func remove(id: String, generation: Int = 0, entryGeneration: Int = 0) {
+        guard generation == entryGeneration else { return }
         frames[id] = nil
         if pending?.id == id { pending = nil }
     }

@@ -195,7 +195,8 @@ final class ConversationTranscriptScrollState {
     /// can tell a landed follow from one that gave up with the pin kept
     /// (#304, #305).
     var lastForcedFollowOutcome: ConversationTranscriptScrollPolicy.FollowLandingTerminal?
-    var hasRequestedForcedFollow = false
+    var forcedFollowRequestCount = 0
+    var hasRequestedForcedFollow: Bool { forcedFollowRequestCount > 0 }
     /// Corrections (scroll again / clamp) the last forced follow has spent.
     var lastForcedFollowCorrections = 0
     /// How the last unrealized-end recovery episode ended (#338): recorded

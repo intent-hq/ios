@@ -57,7 +57,7 @@ extension ConversationTranscriptView {
     private func startFollowTask(_ token: Lifecycle.FollowToken, forced: Bool, animated: Bool, proxy: ScrollViewProxy) {
         if forced {
             scrollState.isScrollingToBottom = true
-            scrollState.hasRequestedForcedFollow = true
+            scrollState.forcedFollowRequestCount += 1
             scrollState.lastForcedFollowOutcome = nil
             scrollState.lastForcedFollowCorrections = 0
         }

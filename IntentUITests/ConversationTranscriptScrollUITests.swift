@@ -114,6 +114,7 @@ extension ConversationTranscriptScrollUITests {
     /// transcript that has settled without it is reported with the sent
     /// row's resting state.
     @MainActor
+    // swiftlint:disable:next function_body_length
     func testTappingSuggestedPromptKeepsTranscriptAtBottomAndGoToEndHidden() {
         let app = launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile)
         let opened = openLongConversation(in: app)
@@ -125,7 +126,8 @@ extension ConversationTranscriptScrollUITests {
             named: "last assistant paragraph",
             endRow: EndRow.lastSuggestedPrompt(in: app),
             in: opened,
-            context: "before tapping the suggested prompt"
+            context: "before tapping the suggested prompt",
+            allowPreservedEntry: true
         )
         let prompt = app.buttons[Fixture.firstSuggestedPromptIdentifier].firstMatch
         XCTAssertTrue(
@@ -138,6 +140,7 @@ extension ConversationTranscriptScrollUITests {
 
         // 2. Tap it: the prompt rows collapse, the sent row and the thinking
         //    indicator appear as the new tail.
+        let beforeSend = forcedFollowRequestCount(in: opened)
         prompt.tap()
         XCTAssertTrue(
             prompt.waitForNonExistence(timeout: 5),
@@ -155,6 +158,7 @@ extension ConversationTranscriptScrollUITests {
             named: thinkingIndicator.name,
             in: opened,
             context: "after tapping the suggested prompt",
+            forcedFollowAfter: beforeSend,
             alsoReporting: (sentRow, "sent prompt row")
         ) else { return }
         assertAtEnd(thinkingIndicator, in: opened, context: "after tapping the suggested prompt")
@@ -199,7 +203,8 @@ extension ConversationTranscriptScrollUITests {
                 named: "last assistant paragraph",
                 endRow: endRow,
                 in: opened,
-                context: "entry cycle \(cycle)"
+                context: "entry cycle \(cycle)",
+                allowPreservedEntry: true
             )
             leaveConversation(in: app)
         }
@@ -213,6 +218,7 @@ extension ConversationTranscriptScrollUITests {
     /// bottom edge, the button disappears and stays gone over the quiet
     /// window — no second tap (intent-hq/ios#305).
     @MainActor
+    // swiftlint:disable:next function_body_length
     func testGoToEndFromTopOfLongTranscriptLandsAtEndInOneTap() {
         let app = launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile)
         let opened = openLongConversation(in: app)
@@ -225,7 +231,8 @@ extension ConversationTranscriptScrollUITests {
             named: "last assistant paragraph",
             endRow: endRow,
             in: opened,
-            context: "before scrolling to the top"
+            context: "before scrolling to the top",
+            allowPreservedEntry: true
         )
 
         // 1. Scroll to the very top: swipe down (content moves down) until
@@ -250,6 +257,7 @@ extension ConversationTranscriptScrollUITests {
         //    reports with the last message resting inside the transcript
         //    and the end row at the end, the button goes, and both hold
         //    over the quiet window.
+        let beforeGoToEnd = forcedFollowRequestCount(in: opened)
         goToEnd.tap()
         let context = "after one tap on Go to End from the top (after \(swipes) swipes)"
         guard waitUntilSettled(
@@ -257,6 +265,7 @@ extension ConversationTranscriptScrollUITests {
             named: "last assistant paragraph",
             in: opened,
             context: context,
+            forcedFollowAfter: beforeGoToEnd,
             alsoReporting: (endRow.element, endRow.name)
         ) else { return }
         XCTAssertTrue(
@@ -458,15 +467,31 @@ extension ConversationTranscriptScrollUITests {
 }
 
 extension ConversationTranscriptScrollUITests {
+    func testPostActionSettlementRequiresAFollowThatActuallyStarted() {
+        let preserved = "lastForcedFollow=pending entry=preserved metadataReady=true forcedRequested=false followActive=false phase=idle"
+        XCTAssertFalse(viewportHasReportedSettlement(preserved), "post-action checks must require a terminal forced follow")
+        let completed = "lastForcedFollow=landed forcedRequested=true forcedRequests=2 followActive=false phase=idle"
+        XCTAssertFalse(viewportHasReportedSettlement(completed, forcedFollowAfter: 2), "an old terminal report is insufficient")
+        XCTAssertTrue(viewportHasReportedSettlement(completed, forcedFollowAfter: 1))
+        XCTAssertFalse(viewportHasReportedSettlement(completed.replacingOccurrences(of: "landed", with: "pending"), forcedFollowAfter: 1))
+        let recovered = "lastForcedFollow=pending endRecovery=recovered corrections=1 episodes=2 endRealized=true followActive=false phase=idle"
+        XCTAssertTrue(viewportHasReportedSettlement(recovered, recoveryAfter: 1))
+        XCTAssertFalse(viewportHasReportedSettlement(recovered, recoveryAfter: 2))
+        XCTAssertFalse(viewportHasReportedSettlement(recovered.replacingOccurrences(of: "corrections=1", with: "corrections=0"), recoveryAfter: 1))
+        XCTAssertFalse(viewportHasReportedSettlement(recovered.replacingOccurrences(of: "endRealized=true", with: "endRealized=false"), recoveryAfter: 1))
+        XCTAssertFalse(viewportHasReportedSettlement(recovered.replacingOccurrences(of: "endRecovery=recovered", with: "endRecovery=recovering"), recoveryAfter: 1))
+    }
+
     func testInitialSettlementDoesNotMistakeAnActiveFollowForPreservedEntry() {
         let preserved = "lastForcedFollow=pending entry=preserved metadataReady=true forcedRequested=false followActive=false phase=idle"
-        XCTAssertTrue(viewportHasReportedSettlement(preserved))
+        XCTAssertTrue(viewportHasReportedSettlement(preserved, allowPreservedEntry: true))
+        XCTAssertFalse(viewportHasReportedSettlement(preserved + " endRecovery=recovering corrections=0 episodes=1 endRealized=false", allowPreservedEntry: true))
         for (ready, notReady) in [
             ("metadataReady=true", "metadataReady=false"), ("entry=preserved", "entry=pending"),
             ("forcedRequested=false", "forcedRequested=true"), ("followActive=false", "followActive=true"),
             ("phase=idle", "phase=gesture")
         ] {
-            XCTAssertFalse(viewportHasReportedSettlement(preserved.replacingOccurrences(of: ready, with: notReady)))
+            XCTAssertFalse(viewportHasReportedSettlement(preserved.replacingOccurrences(of: ready, with: notReady), allowPreservedEntry: true))
         }
         XCTAssertTrue(viewportHasReportedSettlement("lastForcedFollow=landed forcedRequested=true followActive=false phase=idle"))
         XCTAssertFalse(viewportHasReportedSettlement("lastForcedFollow=landed forcedRequested=true followActive=true phase=idle"))

@@ -41,7 +41,8 @@ extension ConversationTranscriptScrollUITests {
             named: "last assistant paragraph",
             endRow: endRow,
             in: opened,
-            context: "before focusing the composer"
+            context: "before focusing the composer",
+            allowPreservedEntry: true
         )
         XCTAssertTrue(
             composer.waitForExistence(timeout: Fixture.elementTimeout),

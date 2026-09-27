@@ -436,6 +436,7 @@ func footerBaseline(
         named: "last assistant paragraph",
         in: opened,
         context: "before the hooks row",
+        allowPreservedEntry: true,
         alsoReporting: (endRow.element, endRow.name)
     ) else { return nil }
     assertAtEnd(endRow, in: opened, context: "before the hooks row")
@@ -463,13 +464,15 @@ func assertRestsAtBottom(
     named rowName: String,
     endRow: EndRow,
     in opened: OpenConversation,
-    context: String
+    context: String,
+    allowPreservedEntry: Bool = false
 ) {
     guard waitUntilSettled(
         on: lastRow,
         named: rowName,
         in: opened,
         context: context,
+        allowPreservedEntry: allowPreservedEntry,
         alsoReporting: (endRow.element, endRow.name)
     ) else { return }
     assertAtEnd(endRow, in: opened, context: context)
@@ -493,12 +496,21 @@ func waitUntilSettled(
     named rowName: String,
     in opened: OpenConversation,
     context: String,
+    allowPreservedEntry: Bool = false,
+    forcedFollowAfter: Int? = nil,
+    recoveryAfter: Int? = nil,
     alsoReporting extra: (row: XCUIElement, name: String)? = nil
 ) -> Bool {
     let transcript = opened.transcript
     var previousMaxY: CGFloat = .nan
     let settled = waitUntil(timeout: Fixture.settleTimeout) {
-        guard viewportHasReportedSettlement(followReport(in: opened)), let rowFrame = frame(of: lastRow) else {
+        guard viewportHasReportedSettlement(
+            followReport(in: opened),
+            allowPreservedEntry: allowPreservedEntry,
+            forcedFollowAfter: forcedFollowAfter,
+            recoveryAfter: recoveryAfter
+        ),
+              let rowFrame = frame(of: lastRow) else {
             previousMaxY = .nan
             return false
         }
@@ -594,6 +606,7 @@ func settledRecoveryBaseline(
         named: "last assistant paragraph",
         in: opened,
         context: context,
+        allowPreservedEntry: true,
         alsoReporting: (endRow.element, endRow.name)
     ) else { return nil }
     assertAtEnd(endRow, in: opened, context: context)
@@ -751,12 +764,38 @@ func followReport(in opened: OpenConversation) -> String {
 
 /// No forced result is fabricated for late entry. Once a forced request has
 /// actually started, it must report a terminal outcome before any later settle.
-func viewportHasReportedSettlement(_ report: String) -> Bool {
+func viewportHasReportedSettlement(
+    _ report: String, allowPreservedEntry: Bool = false, forcedFollowAfter: Int? = nil, recoveryAfter: Int? = nil
+) -> Bool {
     guard report.hasPrefix(Fixture.followReportPrefix),
           report.contains("followActive=false"), report.contains("phase=idle") else { return false }
+    if let recovery = EndRecoveryReport(followReport: report), !recovery.isTerminal { return false }
+    if let forcedFollowAfter {
+        guard let count = forcedFollowRequestCount(report), count > forcedFollowAfter else { return false }
+    }
+    if let recoveryAfter {
+        guard let recovery = EndRecoveryReport(followReport: report) else { return false }
+        return recovery.isTerminal && recovery.reason == Fixture.recoveredReason
+            && recovery.episodes > recoveryAfter && recovery.corrections > 0 && recovery.endRealized
+    }
     if !report.hasPrefix(Fixture.pendingFollowReport) { return true }
-    return report.contains("entry=preserved") && report.contains("metadataReady=true")
+    return allowPreservedEntry && report.contains("entry=preserved") && report.contains("metadataReady=true")
         && report.contains("forcedRequested=false")
+}
+
+func forcedFollowRequestCount(_ report: String) -> Int? {
+    report.split(separator: " ")
+        .first { $0.hasPrefix("forcedRequests=") }
+        .flatMap { Int($0.dropFirst("forcedRequests=".count)) }
+}
+
+@MainActor
+func forcedFollowRequestCount(in opened: OpenConversation) -> Int {
+    guard let count = forcedFollowRequestCount(followReport(in: opened)) else {
+        XCTFail("The transcript did not report its forced-follow request count")
+        return .max
+    }
+    return count
 }
 
 /// The element's frame from a single snapshot; nil when the element is

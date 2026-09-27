@@ -13,6 +13,7 @@ extension ConversationTranscriptView {
         let entry = scrollState.entryViewportPreserved ? "preserved" : (hasInitiallyScrolled ? "positioned" : "pending")
         return follow + " entry=\(entry) metadataReady=\(viewModel.isEntryScrollReady)"
             + " forcedRequested=\(scrollState.hasRequestedForcedFollow) followActive=\(isFollowing)"
+            + " forcedRequests=\(scrollState.forcedFollowRequestCount)"
             + " phase=\(isUserInteracting ? "gesture" : "idle")"
             + " workspace=\(viewModel.store.workspaceId ?? "pending")"
     }

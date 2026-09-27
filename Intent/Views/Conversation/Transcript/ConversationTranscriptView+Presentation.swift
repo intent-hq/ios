@@ -5,6 +5,7 @@ import SwiftUI
 extension ConversationTranscriptView {
     @ViewBuilder
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
+        let generation = scrollState.initialScrollGeneration
         if viewModel.isTruncated {
             truncationBanner
                 .id("truncation-banner")
@@ -22,11 +23,13 @@ extension ConversationTranscriptView {
             }
             .id(message.id)
             .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
-                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId)
+                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation)
             } action: { measurement in
                 preserveRowOffsetAfterDividerChange(messageId: message.id, measurement: measurement)
             }
-            .onDisappear { scrollState.viewportAnchor.remove(id: message.id) }
+            .onDisappear {
+                scrollState.viewportAnchor.remove(id: message.id, generation: generation, entryGeneration: scrollState.initialScrollGeneration)
+            }
         }
 
         #if !os(visionOS)
@@ -85,7 +88,8 @@ extension ConversationTranscriptView {
             id: messageId,
             measurement: measurement,
             viewportHeight: geometry.containerHeight,
-            preserve: hasInitiallyScrolled && !isUserInteracting && !isFollowing
+            preserve: hasInitiallyScrolled && !isUserInteracting && !isFollowing,
+            entryGeneration: scrollState.initialScrollGeneration
         )
         if let adjustment { scrollMomentumProxy.pageTo(offsetY: geometry.contentOffsetY + adjustment) }
     }
