@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// Home-screen actions float above the list without resetting its scroll position.
+/// Actions float above the navigation content without resetting its scroll position.
 struct WorkspaceActionLauncher: ViewModifier {
     let isSearching: Bool
+    var alignment: HorizontalAlignment = .trailing
+    var conversationBottomClearance: CGFloat = 0
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
@@ -26,6 +28,7 @@ struct WorkspaceActionLauncher: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .environment(\.workspaceActionMenuBottomClearance, isSearching ? 0 : conversationBottomClearance)
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
@@ -55,7 +58,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 
     private var actionOverlay: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: Alignment(horizontal: alignment, vertical: .bottom)) {
             if isOpen {
                 Theme.background(for: colorScheme)
                     .opacity(reduceTransparency ? 1 : Layout.shadeOpacity)
@@ -73,7 +76,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 
     private var actionControls: some View {
-        VStack(alignment: .trailing, spacing: Layout.footerSpacing) {
+        VStack(alignment: alignment, spacing: Layout.footerSpacing) {
             Spacer(minLength: 0)
             if isOpen {
                 HomeActionTiles(connectionCount: connectionCount, appearance: appearanceTitle, onSelect: select)
@@ -84,7 +87,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                 isOpen.toggle()
             }
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .bottom))
     }
 
     private var appearanceTitle: String {
@@ -112,4 +115,8 @@ struct WorkspaceActionLauncher: ViewModifier {
         case .logOff: break
         }
     }
+}
+
+extension EnvironmentValues {
+    @Entry var workspaceActionMenuBottomClearance: CGFloat = 0
 }

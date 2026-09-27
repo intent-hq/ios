@@ -10,7 +10,7 @@ struct AssistantLaunchButton: View {
         static let iconSize: CGFloat = 22
         static let iconRotation = 90.0
         static let hiddenIconScale = 0.6
-        static let trailingInset: CGFloat = 24
+        static let horizontalInset: CGFloat = 24
         static let bottomInset: CGFloat = 12
         static let shadowRadius: CGFloat = 16
         static let shadowOffset: CGFloat = 4
@@ -35,7 +35,7 @@ struct AssistantLaunchButton: View {
         .shadow(color: .black.opacity(isOpen ? 0 : Layout.shadowOpacity), radius: Layout.shadowRadius, y: Layout.shadowOffset)
         .accessibilityLabel(isOpen ? "Close Intent menu" : "Intent menu")
         .accessibilityIdentifier(isOpen ? "intent.menu.close" : "intent.menu.open")
-        .padding(.trailing, Layout.trailingInset)
+        .padding(.horizontal, Layout.horizontalInset)
         .padding(.bottom, Layout.bottomInset)
     }
 

@@ -146,20 +146,41 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
 
     @MainActor
     private func assertReference(in app: XCUIApplication) {
+        let appFrame = app.frame
+        let scroll = app.scrollViews.containing(.button, identifier: "manual.connect").firstMatch
+        XCTAssertTrue(scroll.waitForExistence(timeout: Self.timeout))
+        let scrollFrame = scroll.frame
+        let scale = scrollFrame.width / appFrame.width
+        XCTAssertGreaterThanOrEqual(scale, 0.9)
+        XCTAssertLessThanOrEqual(scale, 1)
+        XCTAssertTrue(appFrame.contains(scrollFrame))
+        // Undo the native floating-sheet transform using its scroll container.
+        // The reference sheet is unscaled and anchored to the screen bottom.
+        func referenceFrame(_ element: XCUIElement) -> CGRect {
+            let frame = element.frame
+            return CGRect(
+                x: (frame.minX - scrollFrame.minX) / scale,
+                y: appFrame.maxY - (scrollFrame.maxY - frame.minY) / scale,
+                width: frame.width / scale,
+                height: frame.height / scale
+            )
+        }
         // Independent Figma coordinates, not production layout constants. Native
         // line boxes extend past cap edges, so compare centers for text/editors.
-        XCTAssertEqual(app.buttons["connection-sheet.close"].frame.minY, 231, accuracy: 1.5)
-        XCTAssertEqual(app.buttons["connection-sheet.close"].frame.minX, 24, accuracy: 0.5)
-        XCTAssertEqual(app.staticTexts["manual.title"].frame.midY, 325, accuracy: 1.5)
-        XCTAssertEqual(app.staticTexts["manual.subtitle"].frame.midY, 361, accuracy: 1.5)
+        let close = referenceFrame(app.buttons["connection-sheet.close"])
+        XCTAssertEqual(close.minY, 231, accuracy: 1.5)
+        XCTAssertEqual(close.minX, 24, accuracy: 0.5)
+        XCTAssertEqual(referenceFrame(app.staticTexts["manual.title"]).midY, 325, accuracy: 1.5)
+        XCTAssertEqual(referenceFrame(app.staticTexts["manual.subtitle"]).midY, 361, accuracy: 1.5)
         for (field, center) in [("manual.host", 472.0), ("manual.port", 585.0), ("manual.token", 698.0)] {
-            XCTAssertEqual(app.textFields[field].frame.midY, center, accuracy: 1.5)
-            XCTAssertEqual(app.textFields[field].frame.minX, 48, accuracy: 0.5)
+            let frame = referenceFrame(app.textFields[field])
+            XCTAssertEqual(frame.midY, center, accuracy: 1.5)
+            XCTAssertEqual(frame.minX, 48, accuracy: 0.5)
         }
-        let button = app.buttons["manual.connect"]
-        XCTAssertEqual(button.frame.minY, 762, accuracy: 1.5)
-        XCTAssertEqual(button.frame.height, 64, accuracy: 0.5)
-        XCTAssertEqual(button.frame.width, 354, accuracy: 0.5)
+        let button = referenceFrame(app.buttons["manual.connect"])
+        XCTAssertEqual(button.minY, 762, accuracy: 1.5)
+        XCTAssertEqual(button.height, 64, accuracy: 0.5)
+        XCTAssertEqual(button.width, 354, accuracy: 0.5)
     }
 
     @MainActor

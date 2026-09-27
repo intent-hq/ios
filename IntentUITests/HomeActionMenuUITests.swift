@@ -45,6 +45,51 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
+    func testIPadConversationKeepsSendAndMenuAvailable() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad window-level menu")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = launchHome()
+        app.staticTexts["Add usage analytics dashboard"].firstMatch.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        agent.tap()
+        let composer = app.textViews["composer.textView"]
+        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        let launcher = app.buttons["intent.menu.open"]
+        let send = app.buttons["Send message"]
+        XCTAssertTrue(launcher.isHittable)
+        XCTAssertFalse(launcher.frame.intersects(send.frame))
+
+        composer.tap()
+        let draft = "iPad composer regression"
+        composer.typeText(draft)
+        XCTAssertTrue(send.isEnabled)
+        XCTAssertTrue(send.isHittable)
+        XCTAssertFalse(launcher.frame.intersects(send.frame))
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "iPad conversation composer and menu with reserved space"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        send.tap()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", draft))
+            .firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, "")
+        XCTAssertFalse(app.buttons["intent.menu.close"].exists)
+        openMenu(app)
+        app.buttons["intent.menu.close"].tap()
+        XCTAssertTrue(waitUntilHittable(composer))
+
+        app.navigationBars["Dashboard Implementor"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(composer.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(launcher.isHittable)
+        openMenu(app)
+        app.buttons["intent.menu.close"].tap()
+        XCTAssertTrue(waitUntilHittable(agent))
+    }
+
+    @MainActor
     func testConnectionsAndAppearanceTilesOpenTheirScreens() {
         let app = launchHome()
         openMenu(app)
@@ -116,6 +161,14 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         return app
+    }
+
+    @MainActor
+    private func waitUntilHittable(_ element: XCUIElement) -> Bool {
+        let available = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"), object: element
+        )
+        return XCTWaiter.wait(for: [available], timeout: Self.timeout) == .completed
     }
 
     @MainActor
