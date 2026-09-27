@@ -303,7 +303,7 @@ extension ConversationTranscriptScrollUITests {
         let last = message(in: app, containing: "Startup row 49.")
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { isInside(last, opened.transcript) })
         XCTAssertTrue(startupReport(app).contains("metadata=pending"))
-        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).exists)
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch.exists)
         try assertStartupViewportStays(app, opened: opened, row: last) { try Data().write(to: startupMetadataGate) }
         revealStartupDivider(app, opened: opened)
         assertStartupDividerGeometry(app, opened: opened)
@@ -319,7 +319,7 @@ extension ConversationTranscriptScrollUITests {
         opened.transcript.swipeDown()
         let row = try startupVisibleRow(opened)
         XCTAssertTrue(startupReport(app).contains("metadata=pending"))
-        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).exists)
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch.exists)
         try assertStartupViewportStays(app, opened: opened, row: row) { try Data().write(to: startupMetadataGate) }
         XCTAssertFalse(isInside(last, opened.transcript), "late entry work must not take the gesture back to the bottom")
     }

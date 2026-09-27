@@ -266,6 +266,34 @@ struct AgentDetailStoreTests {
 }
 
 extension AgentDetailStoreTests {
+    @Test(arguments: [false, true])
+    func omittedAndNullMarkersRetainPriorAuthorityWhileEmptyStringsClear(useNull: Bool) async throws {
+        let connection = FakeConnectionManager()
+        let details = AgentDetailStore(connection: connection)
+        let fields = ["pendingQuestionsMessageId", "dismissedQuestionsMessageId", "lastSeenMessageId"]
+        connection.responseMap["agent.get"] = agent(Dictionary(uniqueKeysWithValues: fields.map { ($0, "known") }))
+        _ = try await details.load(agentId: "parent")
+        connection.pendingMethods = ["agent.get"]
+        let refresh = Task { try await details.load(agentId: "parent", refresh: true) }
+        defer { refresh.cancel() }
+        try await connection.waitForPendingRequests("agent.get")
+        connection.deliverEvent(method: "event", params: [
+            "type": "agent:updated", "data": [
+                "agentId": "parent", "pendingQuestionsMessageId": NSNull(),
+                "dismissedQuestionsMessageId": NSNull(), "lastSeenMessageId": NSNull()
+            ]
+        ])
+        let metadata: [String: Any] = useNull ? Dictionary(uniqueKeysWithValues: fields.map { ($0, NSNull()) }) : [:]
+        connection.resolvePending("agent.get", with: agent(metadata))
+        let retained = try await refresh.value
+        for field in fields { #expect(retained.metadata[field] as? String == "known") }
+        connection.pendingMethods = []
+        connection.responseMap["agent.get"] = agent(Dictionary(uniqueKeysWithValues: fields.map { ($0, "") }))
+        let cleared = try await details.load(agentId: "parent", refresh: true)
+        for field in fields { #expect((cleared.metadata[field] as? String)?.isEmpty == true) }
+        #expect(connection.paramsForMethod("agent.get").count == 3)
+    }
+
     @Test func releasedCancelledActivationDoesNotStartTrailingRead() async throws {
         let connection = FakeConnectionManager()
         connection.pendingMethods = ["agent.get"]

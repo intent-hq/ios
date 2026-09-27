@@ -67,17 +67,11 @@ final class ConversationCommands {
     var queuedMessages: [QueuedMessage] = [] {
         didSet { queueRevision &+= 1 }
     }
-    private var queueRevision = 0
+    var queueRevision = 0
     private var queueReadGeneration = 0
+    private var queueSeedSequence = 0
 
-    private final class QueueRead {
-        var revision: Int
-        var removed: Set<String> = []
-
-        init(revision: Int) { self.revision = revision }
-    }
-
-    private var queueReads: [UUID: QueueRead] = [:]
+    var queueReads: [UUID: QueueRead] = [:]
     @ObservationIgnored var onQueueSnapshot: (([QueuedMessage]) -> Void)?
     var pendingQuestionsMessageId: String? {
         didSet {
@@ -267,22 +261,14 @@ extension ConversationCommands {
 
     func invalidateQueueReads() { queueReadGeneration &+= 1 }
 
-    /// Processing carries a removal, not a full snapshot. Fold it into every
-    /// pending seed so untouched rows survive without extending the read loop.
-    func removeProcessingMessage(_ messageId: String) {
-        for read in queueReads.values {
-            if read.revision == queueRevision { read.revision &+= 1 }
-            read.removed.insert(messageId)
-        }
-        queuedMessages.removeAll { $0.id == messageId }
-    }
+    func queueSeedSupersedes(_ receivedAt: Int) -> Bool { receivedAt < queueSeedSequence }
 
     /// Replaces the queue from agent.getQueue. Malformed envelopes preserve
     /// existing rows; a valid empty array clears them. Processing removals fold in.
     func fetchQueue(agentId: String) async throws {
         let generation = resetGeneration
         let readGeneration = queueReadGeneration
-        let read = QueueRead(revision: queueRevision)
+        let read = QueueRead(revision: queueRevision, sequence: agentDetails.nextStateSequence())
         let readID = UUID()
         queueReads[readID] = read
         defer { queueReads[readID] = nil }
@@ -302,6 +288,9 @@ extension ConversationCommands {
             )
             return
         }
+        let isComplete = decoded.count == (response["queue"] as? [Any])?.count
+        guard isComplete || !read.replayedEarlierEvent else { return }
+        if isComplete { queueSeedSequence = read.sequence }
         queuedMessages = decoded.filter { !read.removed.contains($0.id) }
         onQueueSnapshot?(queuedMessages)
     }
@@ -491,6 +480,7 @@ extension ConversationCommands {
 
     func reset() {
         resetGeneration &+= 1
+        queueSeedSequence = 0
         queuedMessages = []
         pendingQuestionsMessageId = nil
         dismissedQuestionsMessageId = nil

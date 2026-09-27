@@ -32,7 +32,7 @@ struct ConversationStartupWorkspaceTests {
         try await connection.waitForPendingRequests("agent.get")
         connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
         try await waitUntil("entry readiness recovers") { model.isEntryScrollReady }
-        #expect(model.store.lastSeenMessageId == "recovered")
+        #expect(model.store.lastSeenMessageId == ConversationStartupFixture.messageId, "the later successful read supersedes the recovery-triggering event")
         #expect(model.store.queuedMessages.map(\.id) == ["queued"])
         #expect(connection.paramsForMethod("agent.get").count == 2)
     }

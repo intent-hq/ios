@@ -84,6 +84,7 @@ import SwiftUI
 
     struct PendingWorkspaceEvent {
         let event: [String: Any]
+        let receivedAt: Int
         let confirmedMarkerRevisions: [String: Int]
     }
 

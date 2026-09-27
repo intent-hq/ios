@@ -77,7 +77,7 @@ extension ConversationStore {
         streamingEventsActive && generation == eventRegistrationGeneration
     }
 
-    func handleStreamEvent(_ method: String, params: Any, ignoringMarkers: Set<String> = []) {
+    func handleStreamEvent(_ method: String, params: Any, ignoringMarkers: Set<String> = [], receivedAt: Int? = nil) {
         guard let dict = params as? [String: Any] else { return }
 
         if let push = SubscriptionPush.parse(method: method, params: params) {
@@ -98,9 +98,10 @@ extension ConversationStore {
               let data = event["data"] as? [String: Any] else { return }
 
         let eventAgentId = data["agentId"] as? String
+        let receivedAt = receivedAt ?? commands.agentDetails.nextStateSequence()
         if workspaceId == nil, bootstrapWorkspaceHint != nil, eventAgentId == agentId {
             pendingWorkspaceEvents.append(PendingWorkspaceEvent(
-                event: event, confirmedMarkerRevisions: commands.confirmedMarkerRevisions
+                event: event, receivedAt: receivedAt, confirmedMarkerRevisions: commands.confirmedMarkerRevisions
             ))
             // The shared detail store coalesces these callers. Keep the event
             // until authority succeeds, including after a failed initial read.
@@ -118,7 +119,7 @@ extension ConversationStore {
             return
         }
 
-        handleAgentStreamEvent(eventType, data: data)
+        handleAgentStreamEvent(eventType, data: data, receivedAt: receivedAt)
     }
 
     private func shouldContinueAfterWorkspaceEvent(
@@ -166,16 +167,16 @@ extension ConversationStore {
     /// channel is the transcript's only source and owns the streaming flag
     /// once its snapshot applied (`chatLive`). Until then the firehose is the
     /// only liveness signal, so it raises and lowers the flag alone.
-    private func handleAgentStreamEvent(_ eventType: String, data: [String: Any]) {
+    private func handleAgentStreamEvent(_ eventType: String, data: [String: Any], receivedAt: Int) {
         switch eventType {
         case "agent:stream:start", "agent:stream:activity":
             if !liveTranscript.chatLive { isStreaming = true }
         case "agent:stream:end":
             if !liveTranscript.chatLive { isStreaming = false }
         case "agent:queue:updated":
-            handleQueueUpdated(data)
+            handleQueueUpdated(data, receivedAt: receivedAt)
         case "agent:queue:processing":
-            handleQueueProcessing(data)
+            handleQueueProcessing(data, receivedAt: receivedAt)
         case "agent:user-message:sent":
             handleUserMessageSent(data)
         case "agent:status-changed":
@@ -253,21 +254,22 @@ extension ConversationStore {
         reconcilePendingQuestionRecovery()
     }
 
-    private func handleQueueUpdated(_ data: [String: Any]) {
+    private func handleQueueUpdated(_ data: [String: Any], receivedAt: Int) {
+        guard !commands.queueSeedSupersedes(receivedAt) else { return }
         if let decoded = ConversationCommands.decodeQueueSnapshot(
             data["queue"],
             source: "agent:queue:updated"
         ) {
-            queuedMessages = decoded
-            reconcileSendAttempts(queue: decoded)
+            commands.applyQueueEvent(decoded, receivedAt: receivedAt)
             return
         }
         refreshQueue()
     }
 
-    private func handleQueueProcessing(_ data: [String: Any]) {
+    private func handleQueueProcessing(_ data: [String: Any], receivedAt: Int) {
+        guard !commands.queueSeedSupersedes(receivedAt) else { return }
         if let messageId = data["messageId"] as? String {
-            commands.removeProcessingMessage(messageId)
+            commands.removeProcessingMessage(messageId, receivedAt: receivedAt)
         } else {
             refreshQueue()
         }

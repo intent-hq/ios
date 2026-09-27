@@ -350,6 +350,7 @@ $(SRCROOT)/Intent/Services/ConnectionManagerRequests.swift
 $(SRCROOT)/Intent/Services/ConnectionSubscriptionRouter.swift
 $(SRCROOT)/Intent/Services/ConnectionTypes.swift
 $(SRCROOT)/Intent/Services/ConversationAttachmentPipeline.swift
+$(SRCROOT)/Intent/Services/ConversationCommands+QueueEvents.swift
 $(SRCROOT)/Intent/Services/ConversationCommands.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Fetch.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Subscribe.swift
@@ -683,6 +684,7 @@ $(SRCROOT)/IntentTests/ConversationStartupFixture.swift
 $(SRCROOT)/IntentTests/ConversationStartupLifecycleTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupOwnershipTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupRPCTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupReadBoundaryTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupReadinessTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupReplayTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupWorkspaceTests.swift

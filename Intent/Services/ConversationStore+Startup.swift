@@ -42,7 +42,8 @@ extension ConversationStore {
     }
 
     func resolveWorkspaceFromDetail() {
-        guard let agentId, let workspace = commands.agentDetails.cached(agentId: agentId)?.values["workspaceId"] as? String else {
+        guard let agentId, let detail = commands.agentDetails.cached(agentId: agentId),
+              let workspace = detail.values["workspaceId"] as? String, !workspace.isEmpty else {
             if let agentId { commands.agentDetails.invalidate(agentId: agentId) }
             failWorkspaceAuthority()
             return
@@ -56,12 +57,13 @@ extension ConversationStore {
         let events = pendingWorkspaceEvents
         pendingWorkspaceEvents.removeAll()
         isFoldingWorkspaceEvents = true
-        // All notification forms retain arrival order. Only a later successful
-        // local mutation supersedes that field of an older buffered event.
+        // A successful shared read supersedes only fields it supplied, and only
+        // events preceding its actual RPC start. Local confirmations also win.
         let confirmed = commands.confirmedMarkerRevisions
         for pending in events {
             let changed = Set(confirmed.keys.filter { confirmed[$0] != pending.confirmedMarkerRevisions[$0] })
-            handleStreamEvent("event", params: pending.event, ignoringMarkers: changed)
+                .union(detail.markerReadSequences.keys.filter { pending.receivedAt < detail.markerReadSequences[$0, default: 0] })
+            handleStreamEvent("event", params: pending.event, ignoringMarkers: changed, receivedAt: pending.receivedAt)
         }
         isFoldingWorkspaceEvents = false
         finishWorkspaceAuthorityWaiters(ready: true)

@@ -8,9 +8,15 @@ import Synchronization
 @MainActor
 final class AgentDetail {
     let values: [String: Any]
+    /// Start order of the successful shared RPC that last supplied each marker.
+    /// Patches preserve this provenance; joining callers must not replace it.
+    let markerReadSequences: [String: Int]
     var metadata: [String: Any] { values["metadata"] as? [String: Any] ?? [:] }
 
-    init(_ values: [String: Any]) { self.values = values }
+    init(_ values: [String: Any], markerReadSequences: [String: Int] = [:]) {
+        self.values = values
+        self.markerReadSequences = markerReadSequences
+    }
 
     func validate(agentId: String, workspaceId: String?) throws {
         // Validate supplied identity before publishing or reusing a detail.
@@ -50,6 +56,7 @@ final class AgentDetailStore {
 
     private struct Patch {
         let revision: Int
+        let sequence: Int
         let value: Any
     }
 
@@ -79,6 +86,14 @@ final class AgentDetailStore {
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var connectionState: ConnectionState
     private(set) var connectionEpoch = 0
+    @ObservationIgnored private var stateSequence = 0
+
+    /// One backend-local order for actual read starts and notification receipt.
+    /// It survives resets so an old reply can never acquire a newer boundary.
+    func nextStateSequence() -> Int {
+        stateSequence &+= 1
+        return stateSequence
+    }
 
     init(connection: any ConnectionManagerRouting) {
         self.connection = connection
@@ -195,6 +210,7 @@ final class AgentDetailStore {
                 let activationGeneration = entry.activationGeneration
                 let invalidation = entry.invalidation
                 let revision = entry.revision
+                let sequence = nextStateSequence()
                 // Agent ids are backend-wide. Do not accidentally scope a
                 // watched child to its parent's workspace; validate per caller.
                 let response = try await connection.request("agent.get", params: ["agentId": agentId])
@@ -203,7 +219,7 @@ final class AgentDetailStore {
                       let values = envelope["agent"] as? [String: Any], !values.isEmpty else {
                     throw AgentDetailError.invalidResponse
                 }
-                let received = AgentDetail(values)
+                let received = receivedDetail(values, previous: snapshots[agentId], sequence: sequence)
                 try received.validate(agentId: agentId, workspaceId: nil)
                 let detail = applyingPatches(to: received, entry: entry, after: revision)
                 if invalidation != entry.invalidation {
@@ -230,6 +246,24 @@ final class AgentDetailStore {
         return entry.interests.values.contains { !$0.isCancelled && $0.activation == nil }
     }
 
+    private func receivedDetail(_ values: [String: Any], previous: AgentDetail?, sequence: Int) -> AgentDetail {
+        var values = values
+        var metadata = values["metadata"] as? [String: Any] ?? [:]
+        let workspace = values["workspaceId"] as? String
+        let previous = workspace == (previous?.values["workspaceId"] as? String) ? previous : nil
+        var boundaries = previous?.markerReadSequences ?? [:]
+        for field in Self.markerKeys {
+            if metadata[field] is String {
+                if workspace?.isEmpty == false { boundaries[field] = sequence }
+            } else {
+                // Omission/null cannot erase a known marker. Explicit "" can.
+                metadata[field] = previous?.metadata[field] as? String
+            }
+        }
+        values["metadata"] = metadata
+        return AgentDetail(values, markerReadSequences: boundaries)
+    }
+
     private func applyingPatches(to detail: AgentDetail, entry: Entry, after revision: Int) -> AgentDetail {
         var values = detail.values
         var metadata = detail.metadata
@@ -239,21 +273,27 @@ final class AgentDetailStore {
             values[field.name] = patch.value
         }
         for (field, patch) in entry.metadata.sorted(by: { $0.value.revision < $1.value.revision })
-            where patch.revision > revision && (field.workspaceId == nil || field.workspaceId == workspaceId) {
+            where field.workspaceId == nil || field.workspaceId == workspaceId {
+            let isNewer = Self.markerKeys.contains(field.name)
+                ? patch.sequence > (detail.markerReadSequences[field.name] ?? 0)
+                : patch.revision > revision
+            guard isNewer else { continue }
             metadata[field.name] = patch.value
         }
         values["metadata"] = metadata
-        return AgentDetail(values)
+        return AgentDetail(values, markerReadSequences: detail.markerReadSequences)
     }
 
     private func patch(agentId: String, fields: [String: Any], metadata: [String: Any], workspaceId: String? = nil) {
         let entry = entry(for: agentId)
         entry.revision &+= 1
+        let sequence = nextStateSequence()
         for (key, value) in fields {
-            entry.fields[PatchField(name: key, workspaceId: workspaceId)] = Patch(revision: entry.revision, value: value)
+            entry.fields[PatchField(name: key, workspaceId: workspaceId)] = Patch(revision: entry.revision, sequence: sequence, value: value)
         }
         for (key, value) in metadata {
-            entry.metadata[PatchField(name: key, workspaceId: workspaceId)] = Patch(revision: entry.revision, value: value)
+            guard !Self.markerKeys.contains(key) || value is String else { continue }
+            entry.metadata[PatchField(name: key, workspaceId: workspaceId)] = Patch(revision: entry.revision, sequence: sequence, value: value)
         }
         if let detail = snapshots[agentId] {
             snapshots[agentId] = applyingPatches(to: detail, entry: entry, after: entry.revision - 1)
@@ -308,5 +348,6 @@ final class AgentDetailStore {
         "pendingQuestionsMessageId", "dismissedQuestionsMessageId", "lastSeenMessageId",
         "pendingProposals", "proposalResolutions", "specialist"
     ]
+    private static let markerKeys: Set<String> = ["pendingQuestionsMessageId", "dismissedQuestionsMessageId", "lastSeenMessageId"]
     private static let fieldKeys: Set<String> = ["name", "model", "provider", "status", "isStreaming", "isResponding", "turnInFlight"]
 }
