@@ -138,7 +138,7 @@ private struct WorkspaceTerminalRow: View {
     }
 
     private var terminalRow: some View {
-        HStack(alignment: .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
+        HStack(alignment: store.isConnected ? .center : .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
             terminalIcon
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
                 Text(terminal.name)
@@ -155,7 +155,7 @@ private struct WorkspaceTerminalRow: View {
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: .top)
+        .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: store.isConnected ? .center : .top)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
