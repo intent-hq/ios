@@ -173,6 +173,7 @@ final class ConversationTranscriptScrollState {
     /// True while the scheduled entry scroll waits for the finder to resolve.
     var initialScrollAwaitingScrollView = false
     var initialScrollPerformed = false
+    var presentedBeforeEntryMetadata = false
     /// Invalidates delayed entry-scroll callbacks when an emptied transcript
     /// re-arms entry scrolling for the next snapshot.
     @ObservationIgnored private(set) var initialScrollGeneration = 0
@@ -215,6 +216,18 @@ final class ConversationTranscriptScrollState {
     /// withdraw the row again.
     @ObservationIgnored var demoEndDerealizationTriggered = false
 
+    /// Visible content and user gestures take priority over late entry metadata.
+    /// Invalidate scheduled entry callbacks, but retain the authoritative divider.
+    func preservePresentedViewport(distanceToBottom: CGFloat?) {
+        guard !hasInitiallyScrolled else { return }
+        initialScrollGeneration += 1
+        initialScrollScheduled = true
+        initialScrollAwaitingScrollView = false
+        initialScrollPerformed = true
+        hasInitiallyScrolled = true
+        userIsScrolledAway = NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: distanceToBottom)
+    }
+
     func rearmAfterTranscriptEmptied() {
         initialScrollGeneration += 1
         userIsScrolledAway = false
@@ -222,6 +235,7 @@ final class ConversationTranscriptScrollState {
         initialScrollScheduled = false
         initialScrollAwaitingScrollView = false
         initialScrollPerformed = false
+        presentedBeforeEntryMetadata = false
         forcedFollowTakenOverByGesture = false
         isScrollingToBottom = false
         goToEndRequested = false

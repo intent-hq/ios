@@ -49,7 +49,15 @@ extension ConversationTranscriptView {
     /// Runs exactly once per transcript lifetime from whichever loading trigger
     /// fires first, after LazyVStack has had time to finish layout.
     func runInitialScrollIfNeeded(proxy: ScrollViewProxy) {
-        guard viewModel.isEntryScrollReady, !scrollState.initialScrollScheduled else { return }
+        guard !scrollState.initialScrollScheduled else { return }
+        guard viewModel.isEntryScrollReady else {
+            scrollState.presentedBeforeEntryMetadata = true
+            return
+        }
+        if scrollState.presentedBeforeEntryMetadata {
+            scrollState.preservePresentedViewport(distanceToBottom: scrollMomentumProxy.distanceToBottom)
+            return
+        }
         scrollState.initialScrollScheduled = true
         let generation = scrollState.initialScrollGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {

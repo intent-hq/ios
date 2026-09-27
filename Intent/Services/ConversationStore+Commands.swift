@@ -172,9 +172,12 @@ extension ConversationStore {
                 guard !Task.isCancelled, generation == bootstrapGeneration else { return }
                 let revision = subscriptionRevision
                 let workspace = self.workspaceId ?? workspaceId
-                await watchedAgentCoordinator.fetchSubscriptions(agentId: agentId, workspaceId: workspace) {
-                    generation == self.bootstrapGeneration && revision == self.subscriptionRevision
-                }
+                await watchedAgentCoordinator.fetchSubscriptions(
+                    agentId: agentId,
+                    workspaceId: workspace,
+                    awaitAuthority: { await self.awaitWorkspaceAuthority() },
+                    isCurrent: { generation == self.bootstrapGeneration && revision == self.subscriptionRevision }
+                )
                 if revision == subscriptionRevision { return }
             }
         }

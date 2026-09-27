@@ -77,7 +77,7 @@ extension ConversationStore {
         streamingEventsActive && generation == eventRegistrationGeneration
     }
 
-    func handleStreamEvent(_ method: String, params: Any) {
+    func handleStreamEvent(_ method: String, params: Any, ignoringMarkers: Set<String> = []) {
         guard let dict = params as? [String: Any] else { return }
 
         if let push = SubscriptionPush.parse(method: method, params: params) {
@@ -98,9 +98,10 @@ extension ConversationStore {
               let data = event["data"] as? [String: Any] else { return }
 
         let eventAgentId = data["agentId"] as? String
-        if workspaceId == nil, bootstrapWorkspaceHint != nil, eventAgentId == agentId,
-           (data["workspaceId"] ?? event["workspaceId"]) is String {
-            pendingWorkspaceEvents.append((method, params))
+        if workspaceId == nil, bootstrapWorkspaceHint != nil, eventAgentId == agentId {
+            pendingWorkspaceEvents.append(PendingWorkspaceEvent(
+                event: event, confirmedMarkerRevisions: commands.confirmedMarkerRevisions
+            ))
             // The shared detail store coalesces these callers. Keep the event
             // until authority succeeds, including after a failed initial read.
             scheduleMetadataRefresh()
@@ -113,7 +114,7 @@ extension ConversationStore {
         ) else { return }
 
         if eventType == "agent:updated" {
-            handleAgentUpdated(data)
+            handleAgentUpdated(data, ignoringMarkers: ignoringMarkers)
             return
         }
 
@@ -235,16 +236,16 @@ extension ConversationStore {
         return false
     }
 
-    private func handleAgentUpdated(_ data: [String: Any]) {
+    private func handleAgentUpdated(_ data: [String: Any], ignoringMarkers: Set<String>) {
         sessionMetadataGeneration += 1
         if AgentDetailStore.requiresReconciliation(data) { scheduleMetadataRefresh() }
-        if let pendingId = data["pendingQuestionsMessageId"] as? String {
+        if !ignoringMarkers.contains("pendingQuestionsMessageId"), let pendingId = data["pendingQuestionsMessageId"] as? String {
             pendingQuestionsMessageId = pendingId
         }
-        if let dismissedId = data["dismissedQuestionsMessageId"] as? String {
+        if !ignoringMarkers.contains("dismissedQuestionsMessageId"), let dismissedId = data["dismissedQuestionsMessageId"] as? String {
             dismissedQuestionsMessageId = dismissedId
         }
-        if let seenId = data["lastSeenMessageId"] as? String {
+        if !ignoringMarkers.contains("lastSeenMessageId"), let seenId = data["lastSeenMessageId"] as? String {
             lastSeenMessageId = seenId
             metadataReadyForEntry = connectionManager.globalSubscriptionState == .subscribed
         }

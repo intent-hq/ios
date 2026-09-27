@@ -100,6 +100,7 @@ final class ConversationCommands {
         }
     }
     private(set) var seenMarkerRevision = 0
+    private(set) var confirmedMarkerRevisions: [String: Int] = [:]
     private(set) var markerRevision = 0
     let agentDetails: AgentDetailStore
 
@@ -128,8 +129,7 @@ extension ConversationCommands {
         )
     }
 
-    /// Seeks one message using `aroundMessageId` + `limit: 1` (PROTOCOL §5.5).
-    /// Returns nil if absent; the caller classifies an unknown id's `-32602`.
+    /// Seeks one message; nil if absent, with unknown-id errors classified by the caller.
     func fetchMessage(
         agentId: String,
         messageId: String,
@@ -202,6 +202,7 @@ extension ConversationCommands {
             if let confirmedId = (result as? [String: Any])?["dismissedQuestionsMessageId"]
                 as? String {
                 dismissedQuestionsMessageId = confirmedId
+                confirmedMarkerRevisions["dismissedQuestionsMessageId", default: 0] &+= 1
                 agentDetails.updateMetadata(agentId: agentId, fields: ["dismissedQuestionsMessageId": confirmedId])
             }
         } catch {
@@ -233,6 +234,7 @@ extension ConversationCommands {
             )
             if let confirmedId = (result as? [String: Any])?["lastSeenMessageId"] as? String {
                 lastSeenMessageId = confirmedId
+                confirmedMarkerRevisions["lastSeenMessageId", default: 0] &+= 1
                 agentDetails.updateMetadata(agentId: agentId, fields: ["lastSeenMessageId": confirmedId])
             }
         } catch {

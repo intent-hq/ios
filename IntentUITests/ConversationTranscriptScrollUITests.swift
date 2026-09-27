@@ -274,3 +274,167 @@ extension ConversationTranscriptScrollUITests {
         )
     }
 }
+
+extension ConversationTranscriptScrollUITests {
+    @MainActor
+    func testReadyMetadataPositionsLongUnreadEntryAtTheAuthoritativeDivider() throws {
+        let app = try launchStartupConversation(metadataReady: true, holdSnapshot: true)
+        defer { finishStartup(app) }
+        let opened = enterLongConversation(in: app, context: "ready metadata", waitForTranscript: false)
+        XCTAssertTrue(startupControl(app).waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { self.startupReport(app).contains("metadata=ready") })
+        XCTAssertFalse(opened.transcript.exists, "the chat snapshot is still held")
+        try Data().write(to: startupSnapshotGate)
+        let divider = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
+            guard self.startupReport(app).contains("positioned=true"), let rect = frame(of: divider) else { return false }
+            return isInside(rect, opened.transcript)
+        })
+        assertStartupDividerGeometry(app, opened: opened)
+        let row = message(in: app, containing: "Startup row 26.")
+        try assertStartupViewportStays(app, opened: opened, row: row) {}
+    }
+
+    @MainActor
+    func testLateMetadataAddsTheCorrectDividerWithoutMovingVisibleRows() throws {
+        let app = try launchStartupConversation()
+        defer { finishStartup(app) }
+        let opened = enterLongConversation(in: app, context: "delayed marker")
+        let last = message(in: app, containing: "Startup row 49.")
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { isInside(last, opened.transcript) })
+        XCTAssertTrue(startupReport(app).contains("metadata=pending"))
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).exists)
+        try assertStartupViewportStays(app, opened: opened, row: last) { try Data().write(to: startupMetadataGate) }
+        revealStartupDivider(app, opened: opened)
+        assertStartupDividerGeometry(app, opened: opened)
+    }
+
+    @MainActor
+    func testGestureBeforeMetadataKeepsItsViewportAfterTheMarkerArrives() throws {
+        let app = try launchStartupConversation()
+        defer { finishStartup(app) }
+        let opened = enterLongConversation(in: app, context: "gesture before marker")
+        let last = message(in: app, containing: "Startup row 49.")
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { isInside(last, opened.transcript) })
+        opened.transcript.swipeDown()
+        let row = try startupVisibleRow(opened)
+        XCTAssertTrue(startupReport(app).contains("metadata=pending"))
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).exists)
+        try assertStartupViewportStays(app, opened: opened, row: row) { try Data().write(to: startupMetadataGate) }
+        XCTAssertFalse(isInside(last, opened.transcript), "late entry work must not take the gesture back to the bottom")
+    }
+
+    @MainActor
+    func testRetainedConversationReappearsWithoutRepeatingEntryPositioning() throws {
+        let app = try launchStartupConversation()
+        defer { finishStartup(app) }
+        let opened = enterLongConversation(in: app, context: "retained binding")
+        let last = message(in: app, containing: "Startup row 49.")
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { isInside(last, opened.transcript) })
+        try assertStartupViewportStays(app, opened: opened, row: last) { try Data().write(to: startupMetadataGate) }
+        opened.transcript.swipeDown()
+        let row = try startupVisibleRow(opened)
+        let consumer = try XCTUnwrap(startupReport(app).components(separatedBy: "consumer=").last)
+        let oldY = try XCTUnwrap(waitUntilSteady(timeout: Fixture.settleTimeout, tolerance: Fixture.rePinTolerance) {
+            (frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY
+        })
+        try FileManager.default.removeItem(at: startupMetadataGate)
+        startupControl(app).tap()
+        let back = app.buttons["demo.conversation.return"].firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: Fixture.settleTimeout))
+        back.tap()
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
+            self.startupReport(app).contains("metadata=pending") && isInside(row, opened.transcript)
+        })
+        XCTAssertEqual(startupReport(app).components(separatedBy: "consumer=").last, consumer, "the same view model must reappear")
+        XCTAssertEqual((frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY, oldY, accuracy: Fixture.rePinTolerance)
+        try assertStartupViewportStays(app, opened: opened, row: row) { try Data().write(to: startupMetadataGate) }
+    }
+
+    private var startupMetadataGate: URL { hooksRowTriggerFile.appendingPathExtension("metadata") }
+    private var startupSnapshotGate: URL { hooksRowTriggerFile.appendingPathExtension("snapshot") }
+
+    @MainActor
+    private func launchStartupConversation(metadataReady: Bool = false, holdSnapshot: Bool = false) throws -> XCUIApplication {
+        try? FileManager.default.removeItem(at: startupMetadataGate)
+        try? FileManager.default.removeItem(at: startupSnapshotGate)
+        if metadataReady { try Data().write(to: startupMetadataGate) }
+        var arguments = ["--demo-startup-transcript", "--demo-agent-detail-trigger-file=" + startupMetadataGate.path]
+        if holdSnapshot { arguments.append("--demo-chat-snapshot-trigger-file=" + startupSnapshotGate.path) }
+        return launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile, extraArguments: arguments)
+    }
+
+    @MainActor
+    private func finishStartup(_ app: XCUIApplication) {
+        app.terminate()
+        try? FileManager.default.removeItem(at: startupMetadataGate)
+        try? FileManager.default.removeItem(at: startupSnapshotGate)
+    }
+
+    @MainActor
+    private func startupControl(_ app: XCUIApplication) -> XCUIElement { app.buttons["demo.conversation.cover"].firstMatch }
+
+    @MainActor
+    private func startupReport(_ app: XCUIApplication) -> String { startupControl(app).value as? String ?? "" }
+
+    @MainActor
+    private func startupVisibleRow(_ opened: OpenConversation) throws -> XCUIElement {
+        var row: XCUIElement?
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
+            row = rows(intersecting: opened.transcript).first { $0.label.hasPrefix("Startup row") && isInside($0, opened.transcript) }
+            return row != nil
+        })
+        return try XCTUnwrap(row)
+    }
+
+    @MainActor
+    private func assertStartupViewportStays(
+        _ app: XCUIApplication, opened: OpenConversation, row: XCUIElement, release: () throws -> Void
+    ) throws {
+        let baseline = try XCTUnwrap(waitUntilSteady(timeout: Fixture.settleTimeout, tolerance: Fixture.rePinTolerance) {
+            (frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY
+        })
+        try release()
+        var moved = false
+        let ready = waitUntil(timeout: Fixture.settleTimeout) {
+            moved = moved || self.startupRowMoved(row, opened: opened, baseline: baseline)
+            return self.startupReport(app).contains("positioned=true") && self.startupReport(app).contains("entry=ready")
+        }
+        XCTAssertTrue(ready, "entry never became ready: \(startupReport(app))")
+        XCTAssertTrue(startupReport(app).contains("anchor=startup-row-25"))
+        let movedLater = waitUntil(timeout: Fixture.quietWindow) { self.startupRowMoved(row, opened: opened, baseline: baseline) }
+        let attachment = XCTAttachment(string: "row=\(row.label) before=\(baseline) after=\((frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY) \(startupReport(app))")
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertFalse(moved || movedLater, "metadata or deferred entry work moved the visible row")
+    }
+
+    @MainActor
+    private func startupRowMoved(_ row: XCUIElement, opened: OpenConversation, baseline: CGFloat) -> Bool {
+        guard let rect = frame(of: row), isInside(rect, opened.transcript) else { return true }
+        return abs(rect.minY - opened.transcript.frame.minY - baseline) > Fixture.rePinTolerance
+    }
+
+    @MainActor
+    private func revealStartupDivider(_ app: XCUIApplication, opened: OpenConversation) {
+        let divider = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch
+        for _ in 0..<Fixture.maxSwipesToTop {
+            if isInside(divider, opened.transcript) { return }
+            opened.transcript.swipeDown()
+        }
+        XCTFail("the authoritative unread divider was never visible")
+    }
+
+    @MainActor
+    private func assertStartupDividerGeometry(_ app: XCUIApplication, opened: OpenConversation) {
+        let divider = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch
+        XCTAssertTrue(isInside(divider, opened.transcript))
+        if let before = frame(of: message(in: app, containing: "Startup row 25.")),
+           let after = frame(of: message(in: app, containing: "Startup row 26.")),
+           let rect = frame(of: divider) {
+            XCTAssertLessThanOrEqual(before.maxY, rect.minY)
+            XCTAssertLessThanOrEqual(rect.maxY, after.minY)
+        } else { XCTFail("unread divider neighbors are not realized") }
+        XCTAssertTrue(startupReport(app).contains("anchor=startup-row-25"))
+    }
+}

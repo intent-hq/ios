@@ -261,10 +261,11 @@ func launchDemoApp(
     hooksRowTriggerFile: URL,
     blockHydrationTriggerFile: URL? = nil,
     standaloneSlimToolRows: Bool = false,
-    endDerealization: EndDerealization? = nil
+    endDerealization: EndDerealization? = nil,
+    extraArguments: [String] = []
 ) -> XCUIApplication {
     let app = XCUIApplication()
-    app.launchArguments += ["--demo-data", Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path]
+    app.launchArguments += ["--demo-data", Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path] + extraArguments
     if let blockHydrationTriggerFile {
         app.launchArguments.append(
             Fixture.blockHydrationTriggerFileArgumentPrefix + blockHydrationTriggerFile.path
@@ -317,7 +318,8 @@ func openLongConversation(
 func enterLongConversation(
     in app: XCUIApplication,
     context: String,
-    evidence: RecoveryEvidenceArming? = nil
+    evidence: RecoveryEvidenceArming? = nil,
+    waitForTranscript: Bool = true
 ) -> OpenConversation {
     let opened = OpenConversation(
         lastMessage: message(in: app, containing: Fixture.lastMessageFragment),
@@ -359,10 +361,12 @@ func enterLongConversation(
     )
     agentRow.tap()
 
-    XCTAssertTrue(
-        opened.transcript.waitForExistence(timeout: Fixture.elementTimeout),
-        "\(context): transcript scroll view not found"
-    )
+    if waitForTranscript {
+        XCTAssertTrue(
+            opened.transcript.waitForExistence(timeout: Fixture.elementTimeout),
+            "\(context): transcript scroll view not found"
+        )
+    }
     return opened
 }
 

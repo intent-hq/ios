@@ -22,15 +22,21 @@ final class ConversationWatchedAgents {
 
     func invalidateReads() { readGeneration &+= 1 }
 
-    func fetchSubscriptions(agentId: String, workspaceId: String, isCurrent: () -> Bool = { true }) async {
+    func fetchSubscriptions(
+        agentId: String,
+        workspaceId: String,
+        awaitAuthority: () async -> Bool = { true },
+        isCurrent: () -> Bool = { true }
+    ) async {
         let generation = readGeneration
-        self.workspaceId = workspaceId
         do {
             guard let snapshot = try await commands.fetchSubscriptions(
                 agentId: agentId,
                 workspaceId: workspaceId
             ) else { return }
             guard !Task.isCancelled, generation == readGeneration, isCurrent() else { return }
+            guard await awaitAuthority(), !Task.isCancelled, generation == readGeneration, isCurrent() else { return }
+            self.workspaceId = workspaceId
             watchedAgentIds = snapshot.watchedAgentIds
             isWaitingForAgents = !watchedAgentIds.isEmpty
             delegationGroupStatus = snapshot.delegationGroupStatus

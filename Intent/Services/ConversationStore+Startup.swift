@@ -42,16 +42,57 @@ extension ConversationStore {
     }
 
     func resolveWorkspaceFromDetail() {
-        guard let agentId, let workspace = commands.agentDetails.cached(agentId: agentId)?.values["workspaceId"] as? String else { return }
+        guard let agentId, let workspace = commands.agentDetails.cached(agentId: agentId)?.values["workspaceId"] as? String else {
+            if let agentId { commands.agentDetails.invalidate(agentId: agentId) }
+            failWorkspaceAuthority()
+            return
+        }
         let requestedWorkspace = workspaceId ?? bootstrapWorkspaceHint
         workspaceId = workspace
         liveTranscript.workspaceId = workspace
-        if streamingEventsActive, requestedWorkspace != workspace { invalidateSubscriptions() }
+        if streamingEventsActive, requestedWorkspace != workspace || subscriptionsNeedAuthorityRecovery { invalidateSubscriptions() }
+        subscriptionsNeedAuthorityRecovery = false
+        workspaceAuthorityFailed = false
         let events = pendingWorkspaceEvents
         pendingWorkspaceEvents.removeAll()
         isFoldingWorkspaceEvents = true
-        for (method, params) in events { handleStreamEvent(method, params: params) }
+        // All notification forms retain arrival order. Only a later successful
+        // local mutation supersedes that field of an older buffered event.
+        let confirmed = commands.confirmedMarkerRevisions
+        for pending in events {
+            let changed = Set(confirmed.keys.filter { confirmed[$0] != pending.confirmedMarkerRevisions[$0] })
+            handleStreamEvent("event", params: pending.event, ignoringMarkers: changed)
+        }
         isFoldingWorkspaceEvents = false
+        finishWorkspaceAuthorityWaiters(ready: true)
+    }
+
+    func awaitWorkspaceAuthority() async -> Bool {
+        guard !Task.isCancelled else { return false }
+        guard workspaceId == nil, bootstrapWorkspaceHint != nil else { return true }
+        guard streamingEventsActive, connectionManager.connectionState == .connected else { return false }
+        guard !workspaceAuthorityFailed else { return false }
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { workspaceAuthorityWaiters[id] = $0 }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.workspaceAuthorityWaiters.removeValue(forKey: id)?.resume(returning: false)
+            }
+        }
+    }
+
+    func failWorkspaceAuthority() {
+        guard workspaceId == nil, bootstrapWorkspaceHint != nil else { return }
+        workspaceAuthorityFailed = true
+        subscriptionsNeedAuthorityRecovery = true
+        finishWorkspaceAuthorityWaiters(ready: false)
+    }
+
+    private func finishWorkspaceAuthorityWaiters(ready: Bool) {
+        let waiters = workspaceAuthorityWaiters.values
+        workspaceAuthorityWaiters.removeAll()
+        for waiter in waiters { waiter.resume(returning: ready) }
     }
 
     func releaseConversation(_ consumer: UUID) {
@@ -83,6 +124,9 @@ extension ConversationStore {
 
     func cancelBootstrap() {
         bootstrapGeneration &+= 1
+        finishWorkspaceAuthorityWaiters(ready: false)
+        workspaceAuthorityFailed = false
+        subscriptionsNeedAuthorityRecovery = false
         pendingWorkspaceEvents.removeAll()
         metadataReadyForEntry = false
         bootstrapTask?.cancel()

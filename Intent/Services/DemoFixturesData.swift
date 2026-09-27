@@ -238,6 +238,7 @@ extension DemoFixtures {
             [
                 "id": "demo-agent-implementor",
                 "name": "Dashboard Implementor",
+                "workspaceId": "demo-ws-dashboard",
                 "status": "idle",
                 "createdAt": iso(minutesAgo: 260),
                 "updatedAt": iso(minutesAgo: 12),
@@ -249,6 +250,7 @@ extension DemoFixtures {
             [
                 "id": "demo-agent-reviewer",
                 "name": "PR Reviewer",
+                "workspaceId": "demo-ws-dashboard",
                 "status": "running",
                 "isResponding": true,
                 "createdAt": iso(minutesAgo: 40),
@@ -276,6 +278,7 @@ extension DemoFixtures {
         let delegates: [[String: Any]] = longConversationDelegateIds.indices.map { index in
             [
                 "id": longConversationDelegateIds[index],
+                "workspaceId": longConversationWorkspaceId,
                 "name": longConversationDelegateNames[index],
                 "status": delegateStatuses[index],
                 "isStreaming": index == 2,
@@ -295,6 +298,7 @@ extension DemoFixtures {
             [
                 "id": longConversationAgentId,
                 "name": "Test Stabilizer",
+                "workspaceId": longConversationWorkspaceId,
                 "status": "idle",
                 "isWaitingForOtherAgents": true,
                 "waitingForAgentIds": Array(longConversationDelegateIds.dropFirst()),

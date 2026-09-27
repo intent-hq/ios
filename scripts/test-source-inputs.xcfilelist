@@ -367,6 +367,7 @@ $(SRCROOT)/Intent/Services/DeltaSubscription.swift
 $(SRCROOT)/Intent/Services/DemoConnectionLoss.swift
 $(SRCROOT)/Intent/Services/DemoFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixturesAssistant.swift
+$(SRCROOT)/Intent/Services/DemoFixturesConversationStartup.swift
 $(SRCROOT)/Intent/Services/DemoFixturesData.swift
 $(SRCROOT)/Intent/Services/DemoFixturesInlineImages.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
@@ -675,6 +676,7 @@ $(SRCROOT)/IntentTests/ConversationIncrementalDeltaTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupAuthorityTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupCancellationTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupEpochTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupFixture.swift
@@ -722,6 +724,7 @@ $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
 $(SRCROOT)/IntentTests/CreationPickerRenderedGeometry.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
+$(SRCROOT)/IntentTests/DemoConversationStartupTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesTests.swift
 $(SRCROOT)/IntentTests/DemoInlineImageFixtureTests.swift
 $(SRCROOT)/IntentTests/DiagnosticConcurrencyTests.swift

@@ -4,6 +4,7 @@ struct ConversationColumnView: View {
     let viewModel: ConversationViewModel
     let onNavigateToNote: (String, String, String) -> Void
     let onNavigateToAgent: (String, String, String) -> Void
+    var onDemoCover: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var questionWizardCollapsed = false
@@ -65,6 +66,16 @@ struct ConversationColumnView: View {
 
     @ViewBuilder
     private var columnContent: some View {
+        if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript {
+            Button("Open conversation cover", action: onDemoCover)
+                .accessibilityIdentifier("demo.conversation.cover")
+                .accessibilityValue(
+                    "metadata=\(viewModel.store.metadataReadyForEntry ? "ready" : "pending") "
+                        + "entry=\(viewModel.isEntryScrollReady ? "ready" : "pending") "
+                        + "positioned=\(transcriptScrollState.hasInitiallyScrolled) "
+                        + "anchor=\(viewModel.newMessagesDividerAnchorId ?? "none") consumer=\(viewModel.conversationConsumer)"
+                )
+        }
         if viewModel.isLoading, viewModel.filteredMessages.isEmpty {
             ConversationLoadingView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

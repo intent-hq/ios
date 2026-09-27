@@ -58,12 +58,13 @@ extension ConversationStore {
                 applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: issuedLiveVersion)
                 applyFetchedMarkers(state, revisions: revisions)
                 resolveWorkspaceFromDetail()
-                metadataReadyForEntry = connectionManager.globalSubscriptionState == .subscribed
+                metadataReadyForEntry = !workspaceAuthorityFailed && connectionManager.globalSubscriptionState == .subscribed
                 notifyEntryStateChanged()
                 reconcilePendingQuestionRecovery()
             }
         } catch {
             guard !Task.isCancelled, activation == eventRegistrationGeneration, binding == agentBindingGeneration else { return }
+            failWorkspaceAuthority()
             if isBound(to: agentId, boundAtIssue: boundAtIssue) { raiseAgentNotFoundIfDefinitive(error) }
             AppLog.conversation.error("[ConversationStore] Failed to fetch agent streaming state: \(error)")
         }

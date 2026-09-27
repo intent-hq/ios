@@ -60,6 +60,7 @@ private struct ConversationViewContent: View {
     @State private var renameText = ""
     @State private var presentedNote: NoteSheetInfo?
     @State private var childAgent: AgentDestination?
+    @State private var showDemoCover = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -76,6 +77,11 @@ private struct ConversationViewContent: View {
     /// Outermost layer: navigation destination + load/lifecycle handlers.
     private var conversationLifecycle: some View {
         conversationPresentation
+            .navigationDestination(isPresented: $showDemoCover) {
+                Button("Return to conversation") { showDemoCover = false }
+                    .accessibilityIdentifier("demo.conversation.return")
+                    .navigationTitle("Conversation cover")
+            }
             .navigationDestination(item: $childAgent) { dest in
                 ConversationView(
                     agentId: dest.agentId,
@@ -211,7 +217,7 @@ private struct ConversationViewContent: View {
             viewModel: viewModel,
             onNavigateToNote: navigateToNote,
             onNavigateToAgent: navigateToAgent
-        )
+        ) { showDemoCover = true }
     }
 
     /// Presented-or-not binding for the dismiss-failure alert, hoisted out of

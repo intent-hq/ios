@@ -633,3 +633,23 @@ struct TranscriptRowHeightCacheTests {
         )
     }
 }
+
+extension ConversationTranscriptScrollPolicyTests {
+    @Test(arguments: [CGFloat(0), CGFloat(100)])
+    func visibleTranscriptConsumesDeferredEntryWithoutChangingItsViewport(distance: CGFloat) {
+        let state = ConversationTranscriptScrollState()
+        state.presentedBeforeEntryMetadata = true
+        state.initialScrollAwaitingScrollView = true
+        let generation = state.initialScrollGeneration
+        state.preservePresentedViewport(distanceToBottom: distance)
+        #expect(state.initialScrollGeneration != generation, "old entry timers and divider probes are invalid")
+        #expect(state.hasInitiallyScrolled && state.initialScrollPerformed && state.initialScrollScheduled)
+        #expect(!state.initialScrollAwaitingScrollView)
+        #expect(state.userIsScrolledAway == (distance > 50))
+        let consumed = state.initialScrollGeneration
+        state.preservePresentedViewport(distanceToBottom: nil)
+        #expect(state.initialScrollGeneration == consumed, "same-binding reappearance cannot position again")
+        state.rearmAfterTranscriptEmptied()
+        #expect(!state.presentedBeforeEntryMetadata && !state.initialScrollPerformed)
+    }
+}

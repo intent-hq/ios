@@ -26,7 +26,7 @@ extension ConversationViewModelTests {
         fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
         fake.stubChatSnapshot()
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
-        fake.responseMap["agent.get"] = ["agent": ["id": "test-agent", "name": "Test"]] as [String: Any]
+        fake.responseMap["agent.get"] = ["agent": ["id": "test-agent", "workspaceId": "test-ws", "name": "Test"]] as [String: Any]
         fake.responseMap["agent.getQueue"] = ["queue": []]
         fake.responseMap["agent.getSubscriptions"] = ["subscriptions": [], "delegationGroups": []]
         fake.responseMap["hook.list"] = ["hooks": [] as [[String: Any]]]
@@ -142,6 +142,7 @@ extension ConversationViewModelTests {
         fake.responseMap["agent.get"] = [
             "agent": [
                 "id": "test-agent",
+                "workspaceId": "test-ws",
                 "name": "Test",
                 "metadata": ["lastSeenMessageId": "m1"]
             ]
@@ -171,6 +172,7 @@ extension ConversationViewModelTests {
         fake.responseMap["agent.get"] = [
             "agent": [
                 "id": "test-agent",
+                "workspaceId": "test-ws",
                 "name": "Test",
                 "metadata": ["lastSeenMessageId": "m1"]
             ]

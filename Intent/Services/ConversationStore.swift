@@ -81,8 +81,17 @@ import SwiftUI
     var agentId: String?
     var workspaceId: String?
     @ObservationIgnored var bootstrapWorkspaceHint: String?
-    @ObservationIgnored var pendingWorkspaceEvents: [(String, Any)] = []
+
+    struct PendingWorkspaceEvent {
+        let event: [String: Any]
+        let confirmedMarkerRevisions: [String: Int]
+    }
+
+    @ObservationIgnored var pendingWorkspaceEvents: [PendingWorkspaceEvent] = []
     @ObservationIgnored var isFoldingWorkspaceEvents = false
+    @ObservationIgnored var workspaceAuthorityWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
+    @ObservationIgnored var workspaceAuthorityFailed = false
+    @ObservationIgnored var subscriptionsNeedAuthorityRecovery = false
     var connectionObserver: AnyCancellable?
     @ObservationIgnored var feedObserver: AnyCancellable?
     @ObservationIgnored var observedConnectionState: ConnectionState

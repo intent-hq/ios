@@ -88,6 +88,7 @@ extension ConversationTranscriptView {
     }
 
     func takeOverPendingFollowIfGesture(isInteracting: Bool, proxy: ScrollViewProxy) {
+        if isInteracting { scrollState.preservePresentedViewport(distanceToBottom: scrollMomentumProxy.distanceToBottom) }
         guard ConversationTranscriptScrollPolicy.gestureTakesOverPendingFollow(
             isInteracting: isInteracting,
             isFollowing: isFollowing
