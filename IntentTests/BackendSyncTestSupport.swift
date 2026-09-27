@@ -76,7 +76,7 @@ enum BackendSyncFixtures {
             token: token,
             displayName: "My Mac"
         )
-        connection.principal = ConnectionPrincipal(id: "test-owner", hostRole: .owner, revision: nil, login: nil, displayName: nil)
+        connection.principal = .demoOwner
         connection.pendingSyncUpdatedAt = clock
         return connection
     }

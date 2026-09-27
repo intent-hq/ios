@@ -264,6 +264,10 @@ enum SyncedBackendConnectionMerge {
             lastConnectedAt: existing.lastConnectedAt,
             syncUpdatedAt: record.updatedAt
         )
+        // The shared owner row supplies no identity. Retain only the
+        // classification previously verified on this device; live authority
+        // still comes from admission of the current socket.
+        updated.principal = existing.principal
         updated.localPairingSyncClock = existing.localPairingSyncClock
         updated.pendingRoutePublication = existing.pendingRoutePublication
         return updated

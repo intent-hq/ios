@@ -265,6 +265,9 @@ extension PersistenceBackendSyncTests {
         relaunched.publishPendingBackends()
         #expect(store.cloud.writeCount == 0)
         #expect(relaunched.saveVerifiedOwnerForTesting(server: pending.server, token: "deliberate-repair"))
+        #expect(relaunched.loadConnections().count == 1)
+        #expect(relaunched.activeConnection()?.id == pending.id)
+        #expect(relaunched.activeConnection()?.principal == pending.principal)
         #expect(try store.cloud.object()["token"] as? String == "deliberate-repair")
         #expect(try store.cloud.object()["updatedAt"] as? Double == 201)
     }

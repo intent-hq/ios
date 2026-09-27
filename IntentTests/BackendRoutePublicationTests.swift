@@ -176,15 +176,20 @@ struct BackendRoutePublicationTests {
         var remote = BackendSyncFixtures.remote(clock: 3000)
         remote["tcAddress"] = "tcOld"
         try store.cloud.put(remote)
-        let coordinator = coordinator(store, live: FakeConnectionManager(), id: original.id)
+        let live = FakeConnectionManager()
+        let coordinator = coordinator(store, live: live, id: original.id)
         coordinator.refreshSyncedBackends()
         #expect(store.manager.activeConnection()?.token == "remote-token")
+        #expect(store.manager.activeConnection()?.principal == original.principal)
         #expect(store.manager.activeConnection()?.pendingRoutePublication != nil)
         store.cloud.writeFailure = nil
         coordinator.refreshSyncedBackends()
         #expect(try store.cloud.object()["token"] as? String == "remote-token")
         #expect(try store.cloud.object()["tcAddress"] as? String == "tcNew")
         #expect(store.manager.activeConnection()?.server.tcAddress == "tcNew")
+        #expect(store.manager.activeConnection()?.pendingRoutePublication == nil)
+        #expect(live.updateCachedCredentialsLog.last?.token == "remote-token")
+        #expect(live.updateCachedCredentialsLog.last?.tcAddress == "tcNew")
     }
 
     @Test func removedBackendCannotBeRepublishedByLateRouteCapture() throws {
