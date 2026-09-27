@@ -347,6 +347,36 @@ class SimulatorTests(unittest.TestCase):
         self.actual_summary(CASES[:1], CASES[1:], SELECTORS.split()[1])
         route.verify_execution(self.env, self.directory)
 
+    def test_optional_identity_export_preserves_resolver_output_and_exits(self):
+        first, suite = SELECTORS.split()
+        evidence = self.directory / "optional.json"
+        identifiers = [CASES[0][0], suite + "/test0(role:)"] + [item[0] for item in CASES[2:]]
+        requested = [first, suite, suite + "/test0"]
+        for selectors, expected_exit in ((requested, 0), ([suite + "/test99"], 1),
+                                         (["-skip-testing:IntentUITests", first], 1)):
+            with self.subTest(selectors=selectors):
+                evidence.unlink(missing_ok=True)
+                default = self.resolve_catalog(identifiers, selectors)
+                self.assertFalse(evidence.exists())
+                exported = self.resolve_catalog(identifiers, selectors, {"ONLY_TESTING_IDENTITIES_PATH": str(evidence)})
+                self.assertEqual(default.returncode, expected_exit, default.stderr)
+                self.assertEqual((exported.returncode, exported.stdout, exported.stderr),
+                                 (default.returncode, default.stdout, default.stderr))
+                if expected_exit == 0:
+                    self.assertEqual(json.loads(evidence.read_text()), {"version": 1, "selectors": {
+                        first: identifiers[:1], suite: identifiers[1:], suite + "/test0": identifiers[1:2]}})
+                else:
+                    self.assertFalse(evidence.exists())
+
+    def test_identity_export_failure_is_unverified_without_changing_default(self):
+        identities = [item[0] for item in CASES]
+        failed = self.resolve_catalog(identities, extra_env={"ONLY_TESTING_IDENTITIES_PATH": str(self.directory)})
+        self.assertEqual(failed.returncode, 2, failed.stderr)
+        self.assertIn("requested resolved identity export could not be written", failed.stderr)
+        default = self.resolve_catalog(identities)
+        self.assertEqual(default.returncode, 0, default.stderr)
+        self.assertEqual(failed.stdout, default.stdout)
+
     def check_phase_transcript(self, step_name, phase):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
         section = workflow.split("      - name: " + step_name + "\n", 1)[1].split("\n      - name:", 1)[0]
