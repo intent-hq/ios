@@ -150,7 +150,8 @@ import Testing
         #expect(recovered.invitedJournal.floors[stale.account] == removal.floor)
         #expect(recovered.invitedJournal.removals[removal.account] == remembered)
         #expect(cloud.items[removal.account] == remembered)
-        let tombstone = try #require(InvitedSyncRecord.parse(account: stale.account, data: try #require(cloud.items[stale.account])))
+        let tombstoneData = try #require(cloud.items[stale.account])
+        let tombstone = try #require(InvitedSyncRecord.parse(account: stale.account, data: tombstoneData))
         #expect(!tombstone.live)
         #expect(tombstone.floor == removal.floor)
     }

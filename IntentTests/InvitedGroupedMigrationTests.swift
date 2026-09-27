@@ -117,7 +117,8 @@ nonisolated private final class MigrationJournalDefaults: UserDefaults {
         #expect(Set(store.relaunch().loadConnections().map(\.id)) == Set(saved.map(\.id)))
         recovered.publishPendingInvitedSessions()
         let aliasKey = GroupedInvitedKeychain.ItemKey(group: BackendSyncFixtures.accessGroup, account: GroupedInvitedKeychain.alias)
-        let marker = try #require(InvitedSyncRecord.parse(account: aliasKey.account, data: try #require(cloud.items[aliasKey])))
+        let markerData = try #require(cloud.items[aliasKey])
+        let marker = try #require(InvitedSyncRecord.parse(account: aliasKey.account, data: markerData))
         #expect(marker.kind == "legacy-alias")
         #expect((marker.object["personKeys"] as? [String])?.sorted() == saved.compactMap(\.invitedPersonKey).sorted())
 
