@@ -62,6 +62,7 @@ struct WorkspaceFileDiffView: View {
                 .textSelection(.enabled)
                 .padding(.bottom)
             }
+            .defaultScrollAnchor(.topLeading)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
@@ -69,13 +70,12 @@ struct WorkspaceFileDiffView: View {
     private func diffLine(_ line: WorkspaceDiffLine) -> some View {
         HStack(alignment: .top, spacing: WorkspaceChangesLayout.sectionSpacing) {
             Text(line.oldNumber.map(String.init) ?? "")
-                .frame(minWidth: WorkspaceChangesLayout.lineNumberWidth, alignment: .trailing).foregroundStyle(.secondary)
+                .frame(width: WorkspaceChangesLayout.lineNumberWidth, alignment: .trailing).foregroundStyle(.secondary)
             Text(line.newNumber.map(String.init) ?? "")
-                .frame(minWidth: WorkspaceChangesLayout.lineNumberWidth, alignment: .trailing).foregroundStyle(.secondary)
-            Text(line.type.marker)
+                .frame(width: WorkspaceChangesLayout.lineNumberWidth, alignment: .trailing).foregroundStyle(.secondary)
+            Text(line.type.marker).fixedSize()
             Text(line.content.hasSuffix("\n") ? String(line.content.dropLast()) : line.content)
                 .fixedSize(horizontal: true, vertical: false)
-            Spacer(minLength: 0)
         }
         .padding(.horizontal)
         .padding(.vertical, 2)
