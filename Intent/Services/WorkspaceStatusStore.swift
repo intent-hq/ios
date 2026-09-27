@@ -17,6 +17,7 @@ import Observation
         @ObservationIgnored var generation = 0
         @ObservationIgnored var attempted = false
         @ObservationIgnored var loadTask: Task<Void, Never>?
+        @ObservationIgnored var loadCompletion: WorkspaceStatusWaiters<Void>?
         @ObservationIgnored var events: [(String, [String: Any])] = []
         @ObservationIgnored var recoveryIDs: Set<String> = []
     }
@@ -24,7 +25,8 @@ import Observation
     final class Feed {
         let epoch: Int
         var id: String?
-        var task: Task<Bool, Never>?
+        var task: Task<Void, Never>?
+        let completion = WorkspaceStatusWaiters<Bool>()
         var error: String?
 
         init(epoch: Int) { self.epoch = epoch }
@@ -142,6 +144,8 @@ import Observation
         // ACKs; list reads have no remote ownership and can be cancelled now.
         bucket.loadTask?.cancel()
         bucket.loadTask = nil
+        bucket.loadCompletion?.finish(())
+        bucket.loadCompletion = nil
         bucket.events = []
         bucket.recoveryIDs = []
         bucket.attempted = false

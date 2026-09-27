@@ -112,14 +112,25 @@ extension ConversationViewModelTests {
         #expect(viewModel.store.commands.agentDetails === viewModel.agentDetails)
         #expect(viewModel.store.eventHandlerId == nil)
         fake.pendingMethods = ["events.subscribe"]
-        let load = Task { await viewModel.load() }
-        try await fake.waitForPendingRequests("events.subscribe")
+        var returned = false
+        let load = Task { await viewModel.load(); returned = true }
+        defer {
+            load.cancel()
+            viewModel.conversationDisappeared()
+            // Drain the fake only after the bounded assertion, including a
+            // failing run, so a regression cannot leave orphan test tasks.
+            fake.failPending("events.subscribe", with: CancellationError())
+            fake.failPending("events.subscribe", with: CancellationError())
+        }
+        try await fake.waitForPendingRequests("events.subscribe", count: 2)
         #expect(viewModel.store.eventHandlerId.map { fake.eventHandlerIDs.contains($0) } == true)
 
         load.cancel()
         viewModel.conversationDisappeared()
+        try await waitUntil("cancelled load returns while both status ACKs remain held") { returned }
         await load.value
 
+        #expect(fake.pendingRequestCount("events.subscribe") == 2, "returning does not cancel orphan-ACK cleanup")
         #expect(fake.paramsForMethod("events.subscribe").count == 2)
         #expect(fake.paramsForMethod("chat.subscribe").count == 1)
         #expect(!fake.didCallMethod("hook.list"))

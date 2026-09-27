@@ -4,16 +4,19 @@ extension WorkspaceStatusStore {
     /// Duplicate callers await the same ACK and read. Empty success and errors
     /// are both cached for this activation; errors retry explicitly or on reconnect.
     func load(workspaceId: String, refresh: Bool = false) async {
-        guard let bucket = buckets[workspaceId], !bucket.consumers.isEmpty else { return }
-        if let task = bucket.loadTask { await task.value; return }
+        guard !Task.isCancelled, let bucket = buckets[workspaceId], !bucket.consumers.isEmpty else { return }
+        if let completion = bucket.loadCompletion { await completion.wait(cancelledValue: ()); return }
         guard refresh || !bucket.attempted else { return }
         bucket.attempted = true
         bucket.isLoading = true
         let generation = bucket.generation
+        let completion = WorkspaceStatusWaiters<Void>()
+        bucket.loadCompletion = completion
         let task = Task { [weak self] in
+            defer { completion.finish(()) }
             guard let self, owns(bucket, workspaceId: workspaceId, generation: generation) else { return }
             let ready = await ensureFeed(workspaceId: workspaceId, retry: refresh)
-            guard owns(bucket, workspaceId: workspaceId, generation: generation) else { return }
+            guard !Task.isCancelled, owns(bucket, workspaceId: workspaceId, generation: generation) else { return }
             if ready {
                 await read(bucket, workspaceId: workspaceId, generation: generation)
             } else {
@@ -23,9 +26,10 @@ extension WorkspaceStatusStore {
             guard owns(bucket, workspaceId: workspaceId, generation: generation) else { return }
             bucket.isLoading = false
             bucket.loadTask = nil
+            bucket.loadCompletion = nil
         }
         bucket.loadTask = task
-        await task.value
+        await completion.wait(cancelledValue: ())
     }
 
     private func read(_ bucket: Bucket, workspaceId: String, generation: Int) async {
@@ -67,45 +71,47 @@ extension WorkspaceStatusStore {
         let key = feedKey(workspaceId)
         if let feed = feeds[key] {
             if feed.id != nil { return true }
-            if let task = feed.task { return await task.value }
+            if feed.task != nil { return await feed.completion.wait(cancelledValue: false) }
             if !retry { return false }
         }
         installHandler()
-        let epoch = connectionEpoch
-        let feed = Feed(epoch: epoch)
+        let feed = Feed(epoch: connectionEpoch)
         feeds[key] = feed
-        let task = Task { [weak self] in
-            guard let self, feeds[key] === feed, epoch == connectionEpoch else { return false }
-            return await subscribe(feed, key: key, workspaceId: workspaceId, epoch: epoch)
-        }
-        feed.task = task
-        return await task.value
+        startFeed(feed, key: key, workspaceId: workspaceId)
+        return await feed.completion.wait(cancelledValue: false)
     }
 
-    private func subscribe(_ feed: Feed, key: String, workspaceId: String, epoch: Int) async -> Bool {
+    private func startFeed(_ feed: Feed, key: String, workspaceId: String) {
+        let epoch = feed.epoch
         var params: [String: Any] = ["eventTypes": ["\(family):*"], "replaceGroup": replaceGroup]
         if !globalFeed {
             params["workspaceId"] = workspaceId
             params["replaceGroup"] = "\(replaceGroup)-\(workspaceId)"
         }
-        do {
-            let result = try await connection.request("events.subscribe", params: params)
-            let id = (result as? [String: Any])?["subscriptionId"] as? String
-            guard feeds[key] === feed, epoch == connectionEpoch else {
-                if let id {
-                    Self.releaseRemote(id, connection: connection, lifetime: connectionLifetime, epoch: feed.epoch)
-                }
-                return false
+        // Only the request and its connection provenance survive an orphaned
+        // ACK. Never hold the status store alive while waiting for that reply.
+        let connection = self.connection
+        let lifetime = connectionLifetime
+        feed.task = Task { [weak self] in
+            defer {
+                feed.task = nil
+                feed.completion.finish(false)
             }
-            guard let id, !id.isEmpty else { throw StatusReadError.malformed }
-            feed.id = id
-            feed.task = nil
-            return true
-        } catch {
-            guard feeds[key] === feed, epoch == connectionEpoch else { return false }
-            feed.error = error.localizedDescription
-            feed.task = nil
-            return false
+            guard self?.feeds[key] === feed, epoch == lifetime.epoch else { return }
+            do {
+                let result = try await connection.request("events.subscribe", params: params)
+                let id = (result as? [String: Any])?["subscriptionId"] as? String
+                guard self?.feeds[key] === feed, epoch == lifetime.epoch else {
+                    if let id { Self.releaseRemote(id, connection: connection, lifetime: lifetime, epoch: feed.epoch) }
+                    return
+                }
+                guard let id, !id.isEmpty else { throw StatusReadError.malformed }
+                feed.id = id
+                feed.completion.finish(true)
+            } catch {
+                guard self?.feeds[key] === feed, epoch == lifetime.epoch else { return }
+                feed.error = error.localizedDescription
+            }
         }
     }
 
