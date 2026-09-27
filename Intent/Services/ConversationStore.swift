@@ -88,6 +88,7 @@ import SwiftUI
     var sessionMetadataGeneration = 0
     @ObservationIgnored var eventRegistrationGeneration = 0
     @ObservationIgnored var streamingEventsActive = false
+    @ObservationIgnored var metadataRefreshTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored var pendingQuestionRecoveryTask: Task<Void, Never>?
     @ObservationIgnored var markedQuestionRetryDelays: [Duration] =
         ConversationStore.defaultMarkedQuestionRetryDelays
@@ -135,6 +136,7 @@ import SwiftUI
     }
 
     isolated deinit {
+        for task in metadataRefreshTasks.values { task.cancel() }
         if let handlerId = eventHandlerId {
             connectionManager.removeEventHandler(id: handlerId)
         }

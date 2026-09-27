@@ -7,6 +7,7 @@ extension ConversationStore {
     @discardableResult
     func subscribeToStreaming(agentId: String, workspaceId: String) async -> Int? {
         guard !Task.isCancelled, !isSubscribing else { return nil }
+        cancelMetadataRefreshes()
         eventRegistrationGeneration &+= 1
         let generation = eventRegistrationGeneration
         streamingEventsActive = true
@@ -65,6 +66,7 @@ extension ConversationStore {
     /// installed into a later activation.
     func deactivateStreaming() {
         eventRegistrationGeneration &+= 1
+        cancelMetadataRefreshes()
         streamingEventsActive = false
         isSubscribing = false
         if let subscriptionId = detachStreamingRegistration() {
@@ -267,9 +269,7 @@ extension ConversationStore {
         guard let agentId else { return }
         let liveStateVersion = liveTranscript.liveStateVersion
         commands.agentDetails.invalidate(agentId: agentId)
-        Task {
-            await fetchAgentStreamingState(agentId: agentId, raiseOnly: true, liveStateVersion: liveStateVersion, refresh: false)
-        }
+        scheduleMetadataRefresh(liveStateVersion: liveStateVersion)
     }
 
     private func shouldIgnoreStreamEvent(_ event: [String: Any]) -> Bool {
@@ -295,9 +295,7 @@ extension ConversationStore {
 
     private func handleAgentUpdated(_ data: [String: Any]) {
         sessionMetadataGeneration += 1
-        if AgentDetailStore.requiresReconciliation(data), let agentId {
-            Task { await fetchAgentStreamingState(agentId: agentId, raiseOnly: true, refresh: false) }
-        }
+        if AgentDetailStore.requiresReconciliation(data) { scheduleMetadataRefresh() }
         if let pendingId = data["pendingQuestionsMessageId"] as? String {
             pendingQuestionsMessageId = pendingId
         }

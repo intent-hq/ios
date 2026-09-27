@@ -33,8 +33,8 @@ extension ConversationStore {
         let liveStateVersion = liveTranscript.liveStateVersion
         async let chat: () = subscribeLiveChat(agentId: agentId)
         async let queue: () = fetchQueue(agentId: agentId)
-        async let streaming: () = fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion, refresh: false)
-        _ = await (chat, queue, streaming)
+        let streaming = scheduleMetadataRefresh(raiseOnly: false, liveStateVersion: liveStateVersion)
+        _ = await (chat, queue, streaming?.value)
         guard ownsStreamingRegistration(activeEventGeneration), let workspaceId else { return }
         guard let generation = await subscribeToStreaming(agentId: agentId, workspaceId: workspaceId),
               ownsStreamingRegistration(generation) else { return }
@@ -68,13 +68,14 @@ extension ConversationStore {
         liveStateVersion: Int? = nil,
         refresh: Bool = true
     ) async {
+        guard !Task.isCancelled else { return }
         let generation = sessionMetadataGeneration
         let markerRevision = commands.markerRevision
         let issuedLiveVersion = liveStateVersion ?? liveTranscript.liveStateVersion
         let boundAtIssue = self.agentId
         do {
             if let state = try await commands.fetchAgentState(agentId: agentId, workspaceId: workspaceId, refresh: refresh) {
-                guard isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
+                guard !Task.isCancelled, isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
                 applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: issuedLiveVersion)
                 guard generation == sessionMetadataGeneration, markerRevision == commands.markerRevision else { return }
                 if let pendingId = state.pendingQuestionsMessageId {
@@ -87,11 +88,34 @@ extension ConversationStore {
                 reconcilePendingQuestionRecovery()
             }
         } catch {
+            guard !Task.isCancelled else { return }
             if isBound(to: agentId, boundAtIssue: boundAtIssue) {
                 raiseAgentNotFoundIfDefinitive(error)
             }
             AppLog.conversation.error("[ConversationStore] Failed to fetch agent streaming state: \(error)")
         }
+    }
+
+    /// Event-triggered reads belong to this view activation, unlike independent
+    /// route validation. Canceling them removes only their shared-detail interest.
+    @discardableResult
+    func scheduleMetadataRefresh(raiseOnly: Bool = true, liveStateVersion: Int? = nil) -> Task<Void, Never>? {
+        guard let agentId else { return nil }
+        let activation = eventRegistrationGeneration
+        let taskID = UUID()
+        let task = Task { [weak self] in
+            guard let self else { return }
+            defer { metadataRefreshTasks[taskID] = nil }
+            guard !Task.isCancelled, eventRegistrationGeneration == activation, self.agentId == agentId else { return }
+            await fetchAgentStreamingState(agentId: agentId, raiseOnly: raiseOnly, liveStateVersion: liveStateVersion, refresh: false)
+        }
+        metadataRefreshTasks[taskID] = task
+        return task
+    }
+
+    func cancelMetadataRefreshes() {
+        for task in metadataRefreshTasks.values { task.cancel() }
+        metadataRefreshTasks.removeAll()
     }
 
     private func applyFetchedStreamingState(_ streaming: Bool, raiseOnly: Bool, issuedAt liveStateVersion: Int?) {
@@ -134,6 +158,7 @@ extension ConversationStore {
 
     func bindAgent(_ agentId: String?) {
         if let bound = self.agentId, bound != agentId {
+            cancelMetadataRefreshes()
             sessionMetadataGeneration += 1
         }
         self.agentId = agentId

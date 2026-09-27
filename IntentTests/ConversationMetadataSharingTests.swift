@@ -190,3 +190,118 @@ struct ConversationMetadataSharingTests {
         #expect(traffic.pendingCount == 0)
     }
 }
+
+extension ConversationMetadataSharingTests {
+    private func dispatchMetadataRefresh(_ eventType: String, store: ConversationStore, fixture: ConversationStartupFixture) {
+        // The session listener invalidates incomplete updates before the view
+        // handles them. Dispatch synchronously to hold the view's queued task.
+        if eventType == "agent:updated" { fixture.details.invalidate(agentId: ConversationStartupFixture.parentId) }
+        var data = ["agentId": ConversationStartupFixture.parentId]
+        if eventType == "agent:status-changed" { data["status"] = "idle" }
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": eventType, "data": data]
+        ])
+    }
+
+    @Test(arguments: ["agent:updated", "agent:idle", "agent:status-changed"])
+    func queuedViewMetadataRefreshEndsWithActivation(eventType: String) async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let viewModel = fixture.makeViewModel()
+        await viewModel.load()
+        #expect(fixture.connection.traffic().calls("agent.get").count == 1)
+
+        dispatchMetadataRefresh(eventType, store: viewModel.store, fixture: fixture)
+        viewModel.teardownLiveStores()
+        try await expectNever("a metadata read from the closed view") {
+            fixture.connection.traffic().calls("agent.get").count > 1
+        }
+
+        // A valid, unleased restored-route read still seeds the next activation.
+        _ = try await fixture.details.load(agentId: ConversationStartupFixture.parentId)
+        await viewModel.load()
+        #expect(fixture.connection.traffic().calls("agent.get").count == 2)
+    }
+
+    @Test(arguments: ["agent:updated", "agent:idle", "agent:status-changed"])
+    func pendingViewMetadataRefreshCannotStartTrailingReadAfterTeardown(eventType: String) async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let viewModel = fixture.makeViewModel()
+        await viewModel.load()
+        fixture.connection.pendingMethods = ["agent.get"]
+        dispatchMetadataRefresh(eventType, store: viewModel.store, fixture: fixture)
+        try await fixture.connection.waitForPendingRequests("agent.get")
+
+        dispatchMetadataRefresh(eventType, store: viewModel.store, fixture: fixture)
+        viewModel.teardownLiveStores()
+        fixture.connection.pendingMethods = []
+        fixture.connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
+        try await expectNever("a trailing metadata read owned by the closed view") {
+            fixture.connection.traffic().calls("agent.get").count > 2
+        }
+        #expect(fixture.connection.traffic().pendingCount == 0)
+    }
+
+    @Test func closingOneViewKeepsAnotherViewsMetadataRefreshAlive() async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let first = fixture.makeViewModel()
+        let second = fixture.makeViewModel()
+        await first.load()
+        await second.load()
+        fixture.connection.pendingMethods = ["agent.get"]
+        dispatchMetadataRefresh("agent:updated", store: first.store, fixture: fixture)
+        try await fixture.connection.waitForPendingRequests("agent.get")
+        dispatchMetadataRefresh("agent:updated", store: second.store, fixture: fixture)
+        first.teardownLiveStores()
+        fixture.connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
+        try await fixture.connection.waitForPendingRequests("agent.get")
+        fixture.parentMetadata["lastSeenMessageId"] = "new-seen"
+        fixture.connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
+        try await waitUntil("the remaining view receives current metadata") { second.store.lastSeenMessageId == "new-seen" }
+        #expect(first.store.lastSeenMessageId == ConversationStartupFixture.messageId)
+        #expect(fixture.connection.traffic().calls("agent.get").count == 3)
+    }
+
+    @Test func reconnectMetadataReadEndsWithItsViewActivation() async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let viewModel = fixture.makeViewModel()
+        await viewModel.load()
+        fixture.details.invalidate(agentId: ConversationStartupFixture.parentId)
+        fixture.connection.pendingMethods = ["agent.get"]
+        let reconnect = Task { await viewModel.store.onReconnected() }
+        defer { reconnect.cancel() }
+        try await fixture.connection.waitForPendingRequests("agent.get")
+        fixture.details.invalidate(agentId: ConversationStartupFixture.parentId)
+        viewModel.teardownLiveStores()
+        fixture.connection.pendingMethods = []
+        fixture.connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
+        await reconnect.value
+        #expect(fixture.connection.traffic().calls("agent.get").count == 2)
+        #expect(viewModel.store.subscriptionId == nil)
+        #expect(fixture.connection.traffic().pendingCount == 0)
+    }
+
+    @Test(arguments: [false, true])
+    func closedViewMetadataFailureCannotMarkReappearanceDeleted(rebind: Bool) async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let viewModel = fixture.makeViewModel()
+        await viewModel.load()
+        fixture.connection.pendingMethods = ["agent.get"]
+        dispatchMetadataRefresh("agent:updated", store: viewModel.store, fixture: fixture)
+        try await fixture.connection.waitForPendingRequests("agent.get")
+        viewModel.teardownLiveStores()
+        await viewModel.store.subscribeToStreaming(
+            agentId: rebind ? "new-agent" : ConversationStartupFixture.parentId,
+            workspaceId: ConversationStartupFixture.workspaceId
+        )
+        fixture.connection.failPending("agent.get", with: NSError(domain: "WebSocket", code: -32_602, userInfo: [
+            NSError.intentErrorDataCodeKey: "not-found"
+        ]))
+        try await expectNever("an old metadata failure marking the new binding deleted") { viewModel.store.agentNotFound }
+        #expect(fixture.connection.traffic().calls("agent.get").count == 2)
+    }
+}
