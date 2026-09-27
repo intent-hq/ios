@@ -1,0 +1,116 @@
+{
+  "source": "https://developer.apple.com/sample-code/app-store-connect/app-store-connect-openapi-specification.zip",
+  "version": "4.5",
+  "checked": "2026-09-27",
+  "schema_sha256": "1e8ef250d6a41bab0f5670b669abf3f06298ef129c8455ba258149fda86927b2",
+  "description": "Synthetic resources and transcribed GET query-contract subsets; not production data. SHA placeholders are replaced by disposable Git commits in tests.",
+  "query_contracts": {
+    "/v1/builds/{id}": {
+      "fields[builds]": ["version", "app", "preReleaseVersion"],
+      "include": ["app", "preReleaseVersion"],
+      "fields[apps]": ["bundleId"],
+      "fields[preReleaseVersions]": ["version", "platform"]
+    },
+    "/v1/apps/{id}/ciProduct": {"fields[ciProducts]": ["app", "productType"]},
+    "/v1/ciProducts/{id}/buildRuns": {
+      "filter[builds]": null,
+      "fields[ciBuildRuns]": ["sourceCommit", "destinationCommit", "isPullRequestBuild", "executionProgress", "completionStatus", "product", "sourceBranchOrTag"],
+      "limit": 200
+    },
+    "/v1/ciBuildRuns/{id}/relationships/builds": {"limit": 200},
+    "/v1/scmGitReferences/{id}": {
+      "fields[scmGitReferences]": ["repository"],
+      "include": ["repository"],
+      "fields[scmRepositories]": ["httpCloneUrl"]
+    }
+  },
+  "builds": {
+    "199": {
+      "data": {
+        "type": "builds", "id": "199", "attributes": {"version": "40", "expired": true},
+        "relationships": {
+          "app": {"data": {"type": "apps", "id": "100"}},
+          "preReleaseVersion": {"data": {"type": "preReleaseVersions", "id": "300"}}
+        }
+      },
+      "included": [
+        {"type": "apps", "id": "100", "attributes": {"bundleId": "dev.intentapp.ios"}},
+        {"type": "preReleaseVersions", "id": "300", "attributes": {"version": "1.2.0", "platform": "IOS"}}
+      ]
+    },
+    "200": {
+      "data": {
+        "type": "builds", "id": "200", "attributes": {"version": "41", "expired": false},
+        "relationships": {
+          "app": {"data": {"type": "apps", "id": "100"}},
+          "preReleaseVersion": {"data": {"type": "preReleaseVersions", "id": "301"}}
+        }
+      },
+      "included": [
+        {"type": "apps", "id": "100", "attributes": {"bundleId": "dev.intentapp.ios"}},
+        {"type": "preReleaseVersions", "id": "301", "attributes": {"version": "1.2.1", "platform": "IOS"}}
+      ]
+    }
+  },
+  "product": {
+    "data": {
+      "type": "ciProducts", "id": "400", "attributes": {"productType": "APP"},
+      "relationships": {"app": {"data": {"type": "apps", "id": "100"}}}
+    }
+  },
+  "runs": {
+    "199": {
+      "data": [{
+        "type": "ciBuildRuns", "id": "499",
+        "attributes": {
+          "sourceCommit": {"commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+          "destinationCommit": null, "isPullRequestBuild": false,
+          "executionProgress": "COMPLETE", "completionStatus": "SUCCEEDED"
+        },
+        "relationships": {
+          "product": {"data": {"type": "ciProducts", "id": "400"}},
+          "sourceBranchOrTag": {"data": {"type": "scmGitReferences", "id": "600"}}
+        }
+      }],
+      "links": {"self": "https://api.appstoreconnect.apple.com/v1/ciProducts/400/buildRuns?filter%5Bbuilds%5D=199"}
+    },
+    "200": {
+      "data": [{
+        "type": "ciBuildRuns", "id": "500",
+        "attributes": {
+          "sourceCommit": {"commitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+          "destinationCommit": null, "isPullRequestBuild": false,
+          "executionProgress": "COMPLETE", "completionStatus": "SUCCEEDED"
+        },
+        "relationships": {
+          "product": {"data": {"type": "ciProducts", "id": "400"}},
+          "sourceBranchOrTag": {"data": {"type": "scmGitReferences", "id": "600"}}
+        }
+      }],
+      "links": {"self": "https://api.appstoreconnect.apple.com/v1/ciProducts/400/buildRuns?filter%5Bbuilds%5D=200"}
+    }
+  },
+  "members": {
+    "499": {"data": [{"type": "builds", "id": "199"}], "links": {"self": "https://api.appstoreconnect.apple.com/v1/ciBuildRuns/499/relationships/builds"}},
+    "500": {"data": [{"type": "builds", "id": "200"}], "links": {"self": "https://api.appstoreconnect.apple.com/v1/ciBuildRuns/500/relationships/builds"}}
+  },
+  "reference": {
+    "data": {
+      "type": "scmGitReferences", "id": "600",
+      "relationships": {"repository": {"data": {"type": "scmRepositories", "id": "700"}}}
+    },
+    "included": [{"type": "scmRepositories", "id": "700", "attributes": {"httpCloneUrl": "https://github.com/intent-hq/ios.git"}}]
+  },
+  "request": {
+    "app_id": "100", "bundle_id": "dev.intentapp.ios", "repository": "https://github.com/intent-hq/ios",
+    "channel": "beta", "locale": "en-US", "baseline_reference": "Previously assigned Beta build 199 (synthetic selection)",
+    "baseline": {"build_id": "199", "source": {"kind": "xcode-cloud"}},
+    "candidate": {"build_id": "200", "source": {"kind": "xcode-cloud"}}
+  },
+  "human_mapping": {
+    "kind": "human-verified", "app_id": "100", "bundle_id": "dev.intentapp.ios", "platform": "IOS",
+    "build_id": "200", "version": "1.2.1", "build_number": "41", "repository": "https://github.com/intent-hq/ios",
+    "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "verified_by": "Fixture reviewer",
+    "verified_at": "2026-09-27T00:00:00Z", "evidence": "Synthetic archive upload receipt reviewed against exact build and checkout"
+  }
+}
