@@ -421,6 +421,7 @@ $(SRCROOT)/IntentTests/ConversationStartupEpochTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupFixture.swift
 $(SRCROOT)/IntentTests/ConversationStartupLifecycleTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupOwnershipTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupQueueMutationTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupRPCTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupReadBoundaryTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupReadinessTests.swift

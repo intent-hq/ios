@@ -65,6 +65,7 @@ extension ConversationStore {
                 .union(detail.markerReadSequences.keys.filter { pending.receivedAt < detail.markerReadSequences[$0, default: 0] })
             handleStreamEvent("event", params: pending.event, ignoringMarkers: changed, receivedAt: pending.receivedAt)
         }
+        commands.queueMutations.finish()
         isFoldingWorkspaceEvents = false
         finishWorkspaceAuthorityWaiters(ready: true)
     }
@@ -126,6 +127,7 @@ extension ConversationStore {
 
     func cancelBootstrap() {
         bootstrapGeneration &+= 1
+        commands.queueMutations.cancel()
         finishWorkspaceAuthorityWaiters(ready: false)
         workspaceAuthorityFailed = false
         subscriptionsNeedAuthorityRecovery = false

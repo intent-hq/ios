@@ -72,6 +72,7 @@ final class ConversationCommands {
     private var queueSeedSequence = 0
 
     var queueReads: [UUID: QueueRead] = [:]
+    @ObservationIgnored let queueMutations = QueueMutationHistory()
     @ObservationIgnored var onQueueSnapshot: (([QueuedMessage]) -> Void)?
     var pendingQuestionsMessageId: String? {
         didSet {
@@ -243,6 +244,7 @@ extension ConversationCommands {
         imagePayload: OutgoingImagePayload,
         filePayload: OutgoingFilePayload
     ) async throws {
+        let generation = queueMutations.generation
         var params: [String: Any] = ["agentId": agentId, "content": content]
         imagePayload.apply(to: &params)
         filePayload.apply(to: &params)
@@ -252,7 +254,7 @@ extension ConversationCommands {
               let data = try? JSONSerialization.data(withJSONObject: dictionary),
               let message = try? JSONDecoder().decode(QueuedMessage.self, from: data)
         else { return }
-        queuedMessages.append(message)
+        confirmQueueMutation(.append(message), generation: generation)
     }
 
     func stop(agentId: String) async throws {
@@ -264,7 +266,8 @@ extension ConversationCommands {
     func queueSeedSupersedes(_ receivedAt: Int) -> Bool { receivedAt < queueSeedSequence }
 
     /// Replaces the queue from agent.getQueue. Malformed envelopes preserve
-    /// existing rows; a valid empty array clears them. Processing removals fold in.
+    /// existing rows; a valid empty array clears them. Later acknowledged changes
+    /// and processing removals fold in without discarding unrelated seed rows.
     func fetchQueue(agentId: String) async throws {
         let generation = resetGeneration
         let readGeneration = queueReadGeneration
@@ -291,7 +294,7 @@ extension ConversationCommands {
         let isComplete = decoded.count == (response["queue"] as? [Any])?.count
         guard isComplete || !read.replayedEarlierEvent else { return }
         if isComplete { queueSeedSequence = read.sequence }
-        queuedMessages = decoded.filter { !read.removed.contains($0.id) }
+        queuedMessages = read.applying(to: decoded)
         onQueueSnapshot?(queuedMessages)
     }
 
@@ -352,13 +355,12 @@ extension ConversationCommands {
     }
 
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {
+        let generation = queueMutations.generation
         _ = try await connectionManager.request(
             "agent.editQueuedMessage",
             params: ["agentId": agentId, "messageId": messageId, "content": content]
         )
-        if let index = queuedMessages.firstIndex(where: { $0.id == messageId }) {
-            queuedMessages[index].content = content
-        }
+        confirmQueueMutation(.edit(messageId, content: content, fallback: queuedMessages.first { $0.id == messageId }), generation: generation)
     }
 
     func sendQueuedMessageNow(
@@ -366,6 +368,7 @@ extension ConversationCommands {
         messageId: String,
         workspaceId: String
     ) async throws {
+        let generation = queueMutations.generation
         let result: Any
         do {
             result = try await connectionManager.request(
@@ -377,6 +380,7 @@ extension ConversationCommands {
                 ]
             )
         } catch let error as NSError where error.isEntityNotFound {
+            guard generation == queueMutations.generation else { throw error }
             do {
                 try await fetchQueue(agentId: agentId)
             } catch {
@@ -393,15 +397,16 @@ extension ConversationCommands {
             throw error
         }
         if (result as? [String: Any])?["queued"] as? Bool == true { return }
-        queuedMessages.removeAll { $0.id == messageId }
+        confirmQueueMutation(.remove(messageId), generation: generation)
     }
 
     func removeQueuedMessage(agentId: String, messageId: String) async throws {
+        let generation = queueMutations.generation
         _ = try await connectionManager.request(
             "agent.removeQueuedMessage",
             params: ["agentId": agentId, "messageId": messageId]
         )
-        queuedMessages.removeAll { $0.id == messageId }
+        confirmQueueMutation(.remove(messageId), generation: generation)
     }
 
     func getModels(agentId: String) async throws -> [[String: Any]] {
@@ -480,6 +485,7 @@ extension ConversationCommands {
 
     func reset() {
         resetGeneration &+= 1
+        queueMutations.cancel()
         queueSeedSequence = 0
         queuedMessages = []
         pendingQuestionsMessageId = nil

@@ -100,6 +100,7 @@ extension ConversationStore {
         let eventAgentId = data["agentId"] as? String
         let receivedAt = receivedAt ?? commands.agentDetails.nextStateSequence()
         if workspaceId == nil, bootstrapWorkspaceHint != nil, eventAgentId == agentId {
+            if eventType == "agent:queue:updated" || eventType == "agent:queue:processing" { commands.queueMutations.beginDeferring() }
             pendingWorkspaceEvents.append(PendingWorkspaceEvent(
                 event: event, receivedAt: receivedAt, confirmedMarkerRevisions: commands.confirmedMarkerRevisions
             ))
