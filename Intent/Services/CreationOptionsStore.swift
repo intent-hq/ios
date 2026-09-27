@@ -56,10 +56,11 @@ import Observation
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
         workspaceProviderOptions = WorkspaceProviderOptions(connectionManager: connectionManager)
+        var previousState = connectionManager.connectionState
         connectionObserver = connectionManager.connectionStatePublisher
-            .dropFirst() // The initial state is already represented by the cold cache.
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
+                guard state != previousState else { return }
+                previousState = state
                 if state == .connected {
                     Task { await self?.onConnected() }
                 } else {

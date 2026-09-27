@@ -68,7 +68,7 @@ struct ConversationMetadataSharingTests {
         #expect(proposals.pending.isEmpty)
         #expect(proposals.resolutions["proposal-1"] == "applied")
         #expect(fixture.connection.traffic().calls("agent.get").count == 1)
-        #expect(fixture.connection.traffic().requests.count == 9)
+        #expect(fixture.connection.traffic().requests.count == 8)
         #expect(fixture.connection.traffic().pendingCount == 0)
     }
 
@@ -91,7 +91,7 @@ struct ConversationMetadataSharingTests {
         await fixture.makeViewModel().load()
         await fixture.makeProposalStore().loadIfNeeded()
         #expect(fixture.connection.traffic().calls("agent.get").count == 1)
-        #expect(fixture.connection.traffic().requests.count == 9)
+        #expect(fixture.connection.traffic().requests.count == 8)
     }
 
     @Test func lateReadCannotUndoLocalSeenOrDismissal() async throws {
@@ -136,7 +136,7 @@ struct ConversationMetadataSharingTests {
         await secondTitle.value
         await workspaces.fetchIfNeeded() // Successful empty lists are warm too.
         #expect(fixture.connection.traffic().calls("workspace.list").count == 1)
-        #expect(fixture.connection.traffic().requests.count == 10)
+        #expect(fixture.connection.traffic().requests.count == 9)
         #expect(fixture.connection.traffic().pendingCount == 0)
     }
 
@@ -260,7 +260,7 @@ extension ConversationMetadataSharingTests {
         fixture.parentMetadata["lastSeenMessageId"] = "new-seen"
         fixture.connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
         try await waitUntil("the remaining view receives current metadata") { second.store.lastSeenMessageId == "new-seen" }
-        #expect(first.store.lastSeenMessageId == ConversationStartupFixture.messageId)
+        #expect(first.store === second.store, "windows share metadata and transcript, not view-local divider state")
         #expect(fixture.connection.traffic().calls("agent.get").count == 3)
     }
 
@@ -280,7 +280,7 @@ extension ConversationMetadataSharingTests {
         fixture.connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
         await reconnect.value
         #expect(fixture.connection.traffic().calls("agent.get").count == 2)
-        #expect(viewModel.store.subscriptionId == nil)
+        #expect(viewModel.store.eventHandlerId == nil)
         #expect(fixture.connection.traffic().pendingCount == 0)
     }
 

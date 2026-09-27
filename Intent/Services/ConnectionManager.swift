@@ -112,7 +112,13 @@ import os
     #endif
 
     @ObservationIgnored var eventHandlers: [UUID: (String, Any) -> Void] = [:]
-    var globalSubscriptionState: GlobalSubscriptionState = .idle
+    @ObservationIgnored private let globalSubscriptionSubject = CurrentValueSubject<GlobalSubscriptionState, Never>(.idle)
+    var globalSubscriptionState: GlobalSubscriptionState = .idle {
+        didSet { globalSubscriptionSubject.send(globalSubscriptionState) }
+    }
+    var globalSubscriptionPublisher: AnyPublisher<GlobalSubscriptionState, Never> {
+        globalSubscriptionSubject.eraseToAnyPublisher()
+    }
 
     /// The candidate label the tunnel route races under (also the host shown
     /// in its transport errors). Not a dialable name: the tunnel connects via

@@ -74,12 +74,34 @@ extension ConversationStore {
         }
     }
 
-    func fetchQueue(agentId: String) async {
-        do {
-            try await commands.fetchQueue(agentId: agentId)
-        } catch {
-            AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
+    func refreshQueue() {
+        commands.invalidateQueueReads()
+        queueReadPending = true
+        guard let agentId else { return }
+        let activation = eventRegistrationGeneration
+        Task { [weak self] in
+            guard let self, ownsStreamingRegistration(activation) else { return }
+            await fetchQueue(agentId: agentId)
         }
+    }
+
+    func fetchQueue(agentId: String) async {
+        guard !Task.isCancelled else { return }
+        if let queueReadTask { await queueReadTask.value; return }
+        let generation = bootstrapGeneration
+        let task = Task { [weak self] in
+            guard let self else { return }
+            repeat {
+                guard !Task.isCancelled, generation == bootstrapGeneration else { return }
+                queueReadPending = false
+                do { try await commands.fetchQueue(agentId: agentId) } catch {
+                    AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
+                }
+            } while queueReadPending
+        }
+        queueReadTask = task
+        await task.value
+        if generation == bootstrapGeneration { queueReadTask = nil }
     }
 
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {
@@ -118,11 +140,34 @@ extension ConversationStore {
 
     // MARK: - Agent subscriptions
 
+    func invalidateSubscriptions() {
+        subscriptionRevision &+= 1
+        guard let agentId, let workspaceId else { return }
+        let activation = eventRegistrationGeneration
+        Task { [weak self] in
+            guard let self, ownsStreamingRegistration(activation) else { return }
+            await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
+        }
+    }
+
     func fetchSubscriptions(agentId: String, workspaceId: String) async {
-        await watchedAgentCoordinator.fetchSubscriptions(
-            agentId: agentId,
-            workspaceId: workspaceId
-        )
+        guard !Task.isCancelled else { return }
+        if let subscriptionReadTask { await subscriptionReadTask.value; return }
+        let generation = bootstrapGeneration
+        let task = Task { [weak self] in
+            guard let self else { return }
+            var revision: Int
+            repeat {
+                guard !Task.isCancelled, generation == bootstrapGeneration else { return }
+                revision = subscriptionRevision
+                await watchedAgentCoordinator.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) {
+                    generation == self.bootstrapGeneration && revision == self.subscriptionRevision
+                }
+            } while revision != subscriptionRevision
+        }
+        subscriptionReadTask = task
+        await task.value
+        if generation == bootstrapGeneration { subscriptionReadTask = nil }
     }
 
     func cancelSubscriptions(agentId: String, workspaceId: String) async {

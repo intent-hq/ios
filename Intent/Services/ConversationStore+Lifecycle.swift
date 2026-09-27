@@ -8,38 +8,13 @@ extension ConversationStore {
         liveTranscript.setTestChannel(subscriptionId: subscriptionId)
     }
 
-    // MARK: - Connection observation
-
-    func observeConnection() {
-        connectionObserver = connectionManager.connectionStatePublisher
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] state in
-                if state == .connected {
-                    Task { await self?.onReconnected() }
-                }
-            }
+    private struct MarkerRevisions {
+        let pending: Int
+        let dismissed: Int
+        let seen: Int
     }
 
-    /// The reconnect registration of `chat.subscribe` is the transcript
-    /// recovery: its seq-0 snapshot replaces whatever the outage left behind.
-    /// The `agent.get` streaming-state read runs alongside and yields to the
-    /// snapshot when the channel lands first.
-    func onReconnected() async {
-        guard let agentId else { return }
-        let activeEventGeneration = eventRegistrationGeneration
-        guard ownsStreamingRegistration(activeEventGeneration) else { return }
-        liveTranscript.prepareForReconnect()
-
-        let liveStateVersion = liveTranscript.liveStateVersion
-        async let chat: () = subscribeLiveChat(agentId: agentId)
-        async let queue: () = fetchQueue(agentId: agentId)
-        let streaming = scheduleMetadataRefresh(raiseOnly: false, liveStateVersion: liveStateVersion)
-        _ = await (chat, queue, streaming?.value)
-        guard ownsStreamingRegistration(activeEventGeneration), let workspaceId else { return }
-        guard let generation = await subscribeToStreaming(agentId: agentId, workspaceId: workspaceId),
-              ownsStreamingRegistration(generation) else { return }
-        await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
-    }
+    // MARK: - Metadata reconciliation
 
     /// Fetch the agent's current state via `agent.get` and restore `isStreaming`.
     /// Considers the STAB-125 `turnInFlight` turn-liveness flag alongside
@@ -54,11 +29,9 @@ extension ConversationStore {
     /// the new agent deleted on a not-found for the previous one. A request
     /// issued while still unbound (view load, before `subscribeLiveChat`
     /// binds the same agent) stays valid.
-    /// The session-metadata markers are additionally skipped when an
-    /// `agent:updated` push landed, or the bound agent changed (agent switch /
-    /// `reset`), while the request was in flight: the reply predates the
-    /// change, so applying it would revert the newer marker or leak the
-    /// previous agent's markers into the new conversation.
+    /// A marker changed by a push or local command during the read is kept.
+    /// Untouched markers still seed from the detail, so an unrelated update
+    /// cannot leave the entry seen marker or pending question unknown.
     /// With `liveStateVersion`, the streaming flag is also left alone when the
     /// live chat channel advanced past that version while the request was in
     /// flight: the channel is authoritative and the reply predates it.
@@ -69,31 +42,42 @@ extension ConversationStore {
         refresh: Bool = true
     ) async {
         guard !Task.isCancelled else { return }
-        let generation = sessionMetadataGeneration
-        let markerRevision = commands.markerRevision
+        let activation = eventRegistrationGeneration
+        let binding = agentBindingGeneration
+        let revisions = MarkerRevisions(
+            pending: commands.pendingMarkerRevision,
+            dismissed: commands.dismissedMarkerRevision,
+            seen: commands.seenMarkerRevision
+        )
         let issuedLiveVersion = liveStateVersion ?? liveTranscript.liveStateVersion
         let boundAtIssue = self.agentId
         do {
             if let state = try await commands.fetchAgentState(agentId: agentId, workspaceId: workspaceId, refresh: refresh) {
-                guard !Task.isCancelled, isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
+                guard !Task.isCancelled, activation == eventRegistrationGeneration,
+                      binding == agentBindingGeneration, isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
                 applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: issuedLiveVersion)
-                guard generation == sessionMetadataGeneration, markerRevision == commands.markerRevision else { return }
-                if let pendingId = state.pendingQuestionsMessageId {
-                    pendingQuestionsMessageId = pendingId
-                }
-                if let dismissedId = state.dismissedQuestionsMessageId {
-                    dismissedQuestionsMessageId = dismissedId
-                }
-                if let seenId = state.lastSeenMessageId { lastSeenMessageId = seenId }
+                applyFetchedMarkers(state, revisions: revisions)
+                metadataReadyForEntry = connectionManager.globalSubscriptionState == .subscribed
+                notifyEntryStateChanged()
                 reconcilePendingQuestionRecovery()
             }
         } catch {
-            guard !Task.isCancelled else { return }
-            if isBound(to: agentId, boundAtIssue: boundAtIssue) {
-                raiseAgentNotFoundIfDefinitive(error)
-            }
+            guard !Task.isCancelled, activation == eventRegistrationGeneration, binding == agentBindingGeneration else { return }
+            if isBound(to: agentId, boundAtIssue: boundAtIssue) { raiseAgentNotFoundIfDefinitive(error) }
             AppLog.conversation.error("[ConversationStore] Failed to fetch agent streaming state: \(error)")
         }
+    }
+
+    private func applyFetchedMarkers(_ state: ConversationCommands.AgentState, revisions: MarkerRevisions) {
+        // Each marker has its own revision: a pending-question push must not
+        // erase an otherwise authoritative entry seen marker (and vice versa).
+        if revisions.pending == commands.pendingMarkerRevision, let pendingId = state.pendingQuestionsMessageId {
+            pendingQuestionsMessageId = pendingId
+        }
+        if revisions.dismissed == commands.dismissedMarkerRevision, let dismissedId = state.dismissedQuestionsMessageId {
+            dismissedQuestionsMessageId = dismissedId
+        }
+        if revisions.seen == commands.seenMarkerRevision, let seenId = state.lastSeenMessageId { lastSeenMessageId = seenId }
     }
 
     /// Event-triggered reads belong to this view activation, unlike independent
@@ -158,8 +142,10 @@ extension ConversationStore {
 
     func bindAgent(_ agentId: String?) {
         if let bound = self.agentId, bound != agentId {
+            cancelBootstrap()
             cancelMetadataRefreshes()
             sessionMetadataGeneration += 1
+            agentBindingGeneration &+= 1
         }
         self.agentId = agentId
     }

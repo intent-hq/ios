@@ -4,74 +4,46 @@ import SwiftUI
 extension ConversationStore {
     // MARK: - Streaming subscription
 
+    /// Binding is entirely local. ConnectionManager owns the backend-wide
+    /// agent feed; a view must never wait for or open its own remote feed.
     @discardableResult
-    func subscribeToStreaming(agentId: String, workspaceId: String) async -> Int? {
-        guard !Task.isCancelled, !isSubscribing else { return nil }
-        cancelMetadataRefreshes()
-        eventRegistrationGeneration &+= 1
-        let generation = eventRegistrationGeneration
-        streamingEventsActive = true
-        isSubscribing = true
-        defer {
-            if generation == eventRegistrationGeneration {
-                isSubscribing = false
-            }
+    func bindStreaming(agentId: String, workspaceId: String) -> Int {
+        if streamingEventsActive, self.agentId == agentId, self.workspaceId == workspaceId {
+            return eventRegistrationGeneration
         }
-
+        deactivateStreaming()
         bindAgent(agentId)
         self.workspaceId = workspaceId
-
-        let previousSubscriptionId = detachStreamingRegistration()
-        if let previousSubscriptionId {
-            await releaseStreamingSubscription(previousSubscriptionId)
-        }
-        guard ownsStreamingRegistration(generation), !Task.isCancelled else { return nil }
-
+        streamingEventsActive = true
+        metadataReadyForEntry = false
+        needsFeedReconciliation = connectionManager.globalSubscriptionState != .subscribed
+        let generation = eventRegistrationGeneration
         eventHandlerId = connectionManager.onEvent { [weak self] method, params in
-            Task { @MainActor [weak self] in
-                guard let self, ownsStreamingRegistration(generation) else { return }
-                handleStreamEvent(method, params: params)
-            }
-        }
-
-        let outcome: Result<String?, Error>
-        do {
-            outcome = .success(try await commands.subscribeToEvents(
-                agentId: agentId,
-                workspaceId: workspaceId
-            ))
-        } catch {
-            outcome = .failure(error)
-        }
-
-        guard ownsStreamingRegistration(generation), !Task.isCancelled else {
-            if case .success(let orphanedId?) = outcome {
-                Self.releaseStreamingSubscription(orphanedId, via: connectionManager)
-            }
-            return nil
-        }
-
-        switch outcome {
-        case .success(let subscriptionId):
-            self.subscriptionId = subscriptionId
-            AppLog.conversation.info("[ConversationStore] Subscribed to streaming events")
-        case .failure(let error):
-            AppLog.conversation.error("[ConversationStore] Failed to subscribe: \(error)")
+            guard let self, ownsStreamingRegistration(generation) else { return }
+            handleStreamEvent(method, params: params)
         }
         return generation
     }
 
-    /// Invalidates this screen activation before remote cleanup begins. A late
-    /// acknowledgement is released by its generation check instead of being
-    /// installed into a later activation.
+    @discardableResult
+    func subscribeToStreaming(agentId: String, workspaceId: String) async -> Int? {
+        guard !Task.isCancelled else { return nil }
+        return bindStreaming(agentId: agentId, workspaceId: workspaceId)
+    }
+
     func deactivateStreaming() {
         eventRegistrationGeneration &+= 1
+        cancelBootstrap()
         cancelMetadataRefreshes()
         streamingEventsActive = false
-        isSubscribing = false
-        if let subscriptionId = detachStreamingRegistration() {
-            Self.releaseStreamingSubscription(subscriptionId, via: connectionManager)
-        }
+        if let eventHandlerId { connectionManager.removeEventHandler(id: eventHandlerId) }
+        eventHandlerId = nil
+        // Preserve visible rows and send recovery state while releasing ownership.
+        liveTranscript.releaseActiveRegistration()
+        liveTranscript.prepareForReconnect()
+        liveTranscript.snapshotPending = false
+        liveTranscript.resumeSnapshotWaiters()
+        clearPendingQuestionRecovery()
     }
 
     // MARK: - Live chat subscription
@@ -100,44 +72,8 @@ extension ConversationStore {
         liveTranscript.handlePush(push)
     }
 
-    private func detachStreamingRegistration() -> String? {
-        if let handlerId = eventHandlerId {
-            connectionManager.removeEventHandler(id: handlerId)
-            eventHandlerId = nil
-        }
-        let subId = subscriptionId
-        subscriptionId = nil
-        return subId
-    }
-
     func ownsStreamingRegistration(_ generation: Int) -> Bool {
         streamingEventsActive && generation == eventRegistrationGeneration
-    }
-
-    private func releaseStreamingSubscription(_ subscriptionId: String) async {
-        do {
-            try await commands.unsubscribeEvents(subscriptionId: subscriptionId)
-            AppLog.conversation.debug("[ConversationStore] Unsubscribed streaming subscription: \(subscriptionId)")
-        } catch {
-            AppLog.conversation.error("[ConversationStore] Failed to unsubscribe: \(error)")
-        }
-    }
-
-    static func releaseStreamingSubscription(
-        _ subscriptionId: String,
-        via connectionManager: ConnectionManagerRouting
-    ) {
-        Task { @MainActor in
-            do {
-                _ = try await connectionManager.request("events.unsubscribe", params: [
-                    "subscriptionId": subscriptionId
-                ])
-            } catch {
-                AppLog.conversation.error(
-                    "[ConversationStore] Failed to release streaming subscription \(subscriptionId): \(error)"
-                )
-            }
-        }
     }
 
     func handleStreamEvent(_ method: String, params: Any) {
@@ -213,9 +149,7 @@ extension ConversationStore {
     }
 
     private func refreshSubscriptions() {
-        if let agentId, let workspaceId {
-            Task { await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) }
-        }
+        invalidateSubscriptions()
     }
 
     /// `agent:stream:*` carries no transcript content: the `chat.subscribe`
@@ -285,12 +219,11 @@ extension ConversationStore {
             }
         }
 
-        let eventSubscriptionId = event["subscriptionId"] as? String
-        return if let subscriptionId, let eventSubscriptionId {
-            eventSubscriptionId != subscriptionId
-        } else {
-            false
-        }
+        let envelope = event["event"] as? [String: Any] ?? event
+        let data = envelope["data"] as? [String: Any] ?? [:]
+        if let workspace = (data["workspaceId"] ?? envelope["workspaceId"]) as? String,
+           let workspaceId, workspace != workspaceId, data["agentId"] as? String == agentId { return true }
+        return false
     }
 
     private func handleAgentUpdated(_ data: [String: Any]) {
@@ -304,7 +237,9 @@ extension ConversationStore {
         }
         if let seenId = data["lastSeenMessageId"] as? String {
             lastSeenMessageId = seenId
+            metadataReadyForEntry = connectionManager.globalSubscriptionState == .subscribed
         }
+        notifyEntryStateChanged()
         reconcilePendingQuestionRecovery()
     }
 
@@ -317,16 +252,17 @@ extension ConversationStore {
             reconcileSendAttempts(queue: decoded)
             return
         }
-        if let agentId {
-            Task { await fetchQueue(agentId: agentId) }
-        }
+        refreshQueue()
     }
 
     private func handleQueueProcessing(_ data: [String: Any]) {
         if let messageId = data["messageId"] as? String {
             queuedMessages.removeAll { $0.id == messageId }
-        } else if let agentId {
-            Task { await fetchQueue(agentId: agentId) }
+            // A removal alone cannot seed the remaining rows. If it raced the
+            // initial read, reconcile after it rather than losing that queue.
+            if queueReadTask != nil { refreshQueue() }
+        } else {
+            refreshQueue()
         }
     }
 

@@ -114,14 +114,14 @@ extension ConversationViewModelTests {
         fake.pendingMethods = ["events.subscribe"]
         let load = Task { await viewModel.load() }
         try await fake.waitForPendingRequests("events.subscribe")
-        #expect(fake.eventHandlerCount == detailHandlerCount + 1)
+        #expect(viewModel.store.eventHandlerId.map { fake.eventHandlerIDs.contains($0) } == true)
 
         load.cancel()
         viewModel.conversationDisappeared()
         await load.value
 
-        #expect(fake.paramsForMethod("events.subscribe").count == 1)
-        #expect(!fake.didCallMethod("chat.subscribe"))
+        #expect(fake.paramsForMethod("events.subscribe").count == 2)
+        #expect(fake.paramsForMethod("chat.subscribe").count == 1)
         #expect(!fake.didCallMethod("hook.list"))
         #expect(!fake.didCallMethod("prMonitor.list"))
         #expect(viewModel.store.eventHandlerId == nil && viewModel.detailConsumer == nil)

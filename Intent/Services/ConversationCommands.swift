@@ -68,10 +68,29 @@ final class ConversationCommands {
         didSet { queueRevision &+= 1 }
     }
     private var queueRevision = 0
+    private var queueReadGeneration = 0
     @ObservationIgnored var onQueueSnapshot: (([QueuedMessage]) -> Void)?
-    var pendingQuestionsMessageId: String? { didSet { markerRevision &+= 1 } }
-    var dismissedQuestionsMessageId: String? { didSet { markerRevision &+= 1 } }
-    var lastSeenMessageId: String? { didSet { markerRevision &+= 1 } }
+    var pendingQuestionsMessageId: String? {
+        didSet {
+            markerRevision &+= 1
+            pendingMarkerRevision &+= 1
+        }
+    }
+    var dismissedQuestionsMessageId: String? {
+        didSet {
+            markerRevision &+= 1
+            dismissedMarkerRevision &+= 1
+        }
+    }
+    private(set) var pendingMarkerRevision = 0
+    private(set) var dismissedMarkerRevision = 0
+    var lastSeenMessageId: String? {
+        didSet {
+            markerRevision &+= 1
+            seenMarkerRevision &+= 1
+        }
+    }
+    private(set) var seenMarkerRevision = 0
     private(set) var markerRevision = 0
     let agentDetails: AgentDetailStore
 
@@ -121,36 +140,6 @@ extension ConversationCommands {
         guard let response = result as? [String: Any],
               let items = response["messages"] as? [[String: Any]] else { return nil }
         return items.compactMap(ConversationMessage.parseMessage).first { $0.id == messageId }
-    }
-
-    func subscribeToEvents(agentId: String, workspaceId: String) async throws -> String? {
-        let result = try await connectionManager.request(
-            "events.subscribe",
-            params: [
-                "eventTypes": [
-                    "agent:stream:*",
-                    "agent:queue:*",
-                    "agent:user-message:*",
-                    "agent:subscribed",
-                    "agent:unsubscribed",
-                    "agent:status-changed",
-                    "agent:idle",
-                    "agent:woken-by-subscription",
-                    "agent:deleted",
-                    "agent:updated"
-                ],
-                "workspaceId": workspaceId,
-                "replaceGroup": "streaming-\(agentId)"
-            ]
-        )
-        return (result as? [String: Any])?["subscriptionId"] as? String
-    }
-
-    func unsubscribeEvents(subscriptionId: String) async throws {
-        _ = try await connectionManager.request(
-            "events.unsubscribe",
-            params: ["subscriptionId": subscriptionId]
-        )
     }
 
     func sendMessage(_ request: SendRequest) async throws -> SendAcceptance {
@@ -276,13 +265,19 @@ extension ConversationCommands {
     /// can still see and act on. A well-formed empty `queue` is authoritative
     /// and clears the queue. Elements are decoded one by one (see
     /// `decodeQueueSnapshot`) so one malformed entry never blanks its siblings.
+    func invalidateQueueReads() { queueReadGeneration &+= 1 }
+
     func fetchQueue(agentId: String) async throws {
         let generation = resetGeneration
+        let readGeneration = queueReadGeneration
+        let revision = queueRevision
         let result = try await connectionManager.request(
             "agent.getQueue",
             params: ["agentId": agentId]
         )
-        guard generation == resetGeneration else { throw CancellationError() }
+        guard !Task.isCancelled, generation == resetGeneration,
+              readGeneration == queueReadGeneration else { throw CancellationError() }
+        guard revision == queueRevision else { return }
         guard let response = result as? [String: Any],
               let decoded = Self.decodeQueueSnapshot(response["queue"], source: "agent.getQueue")
         else {

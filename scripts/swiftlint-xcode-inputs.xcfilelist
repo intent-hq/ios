@@ -114,8 +114,10 @@ $(SRCROOT)/Intent/Services/ConversationLiveTranscript.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Commands.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Lifecycle.swift
 $(SRCROOT)/Intent/Services/ConversationStore+SendRecovery.swift
+$(SRCROOT)/Intent/Services/ConversationStore+Startup.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Streaming.swift
 $(SRCROOT)/Intent/Services/ConversationStore.swift
+$(SRCROOT)/Intent/Services/ConversationStorePool.swift
 $(SRCROOT)/Intent/Services/ConversationWatchedAgents.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
@@ -410,8 +412,12 @@ $(SRCROOT)/IntentTests/ConversationIncrementalDeltaTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupCancellationTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupFixture.swift
+$(SRCROOT)/IntentTests/ConversationStartupLifecycleTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupOwnershipTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupRPCTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupReadinessTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupReplayTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreBindingGenerationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreHydrationTests.swift

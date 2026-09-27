@@ -25,7 +25,8 @@ struct ConversationView: View {
             connection: session.connection,
             uploadService: session.attachmentUploadService,
             optionsStore: session.creationOptionsStore,
-            agentDetails: session.agentDetails
+            agentDetails: session.agentDetails,
+            conversations: session.conversations
         ))
     }
 

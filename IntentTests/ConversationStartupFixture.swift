@@ -2,10 +2,9 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Reuses one backend connection/catalog across actual view models. A second
-/// panel is the warm-workspace case; today's per-view status stores still read
-/// again. Future shared-store implementations should change this composition
-/// seam, not fake the optimized method list in the recorder.
+/// Uses the real backend session composition across actual view models. A second
+/// panel shares the conversation and detail owners; per-view status stores still
+/// read again. The recorder measures every request made by those owners.
 @MainActor
 final class ConversationStartupFixture {
     static let workspaceId = "startup-workspace"
@@ -13,8 +12,10 @@ final class ConversationStartupFixture {
     static let childId = "watched-child"
     static let messageId = "startup-message"
     let connection = RPCRecordingConnection()
-    let options: CreationOptionsStore
-    let details: AgentDetailStore
+    let session: BackendSession
+    var options: CreationOptionsStore { session.creationOptionsStore }
+    var details: AgentDetailStore { session.agentDetails }
+    private var registrationNumber = 0
     private(set) var viewModels: [ConversationViewModel] = []
     var parentMetadata: [String: Any] = ["lastSeenMessageId": ConversationStartupFixture.messageId]
     var watchedIds: [String] = []
@@ -23,11 +24,27 @@ final class ConversationStartupFixture {
     var providerId: String?
 
     init() {
+        let connection = self.connection
         connection.holdsConnectionStateDelivery = true
         connection.simulateConnect()
         connection.globalSubscriptionState = .subscribed
-        options = CreationOptionsStore(connectionManager: connection)
-        details = AgentDetailStore(connection: connection)
+        let workspaces = WorkspaceStore(forTesting: true)
+        let fileLoader = WorkspaceFileImageLoader(connection: connection)
+        session = BackendSession(
+            backendID: nil,
+            connection: connection,
+            workspaceStore: workspaces,
+            coordinatorFactory: { claim in
+                AppCoordinator(workspaceStore: workspaces, connection: connection, claimScreenRestoration: claim)
+            },
+            githubRepoStore: GitHubRepoStore(connectionManager: connection),
+            creationOptionsStore: CreationOptionsStore(connectionManager: connection),
+            prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
+            attachmentUploadService: AttachmentUploadService(connection: connection),
+            workspaceFileImageLoader: fileLoader,
+            attachmentImageLoader: AttachmentImageLoader(connection: connection, fileLoader: fileLoader),
+            attentionCueCenter: WorkspaceAttentionCueCenter {}
+        )
         connection.responseMap = [
             "events.unsubscribe": [:], "chat.unsubscribe": [:],
             "agent.getQueue": ["queue": []],
@@ -47,7 +64,8 @@ final class ConversationStartupFixture {
             connection: connection,
             uploadService: AttachmentUploadService(connection: connection),
             optionsStore: options,
-            agentDetails: details
+            agentDetails: details,
+            conversations: session.conversations
         )
         viewModels.append(viewModel)
         return viewModel
@@ -70,7 +88,6 @@ final class ConversationStartupFixture {
     func stop() {
         for viewModel in viewModels {
             viewModel.teardownLiveStores()
-            viewModel.store.reset()
         }
     }
 
@@ -105,10 +122,12 @@ final class ConversationStartupFixture {
             let unrelated = (0..<unrelatedAgentCount).map { agent("unrelated-\($0)") }
             return ["agents": [agent(Self.parentId)] + watchedIds.map(agent) + unrelated]
         case "events.subscribe":
-            return ["subscriptionId": "events-\(params["replaceGroup"] as? String ?? "global")"]
+            registrationNumber += 1
+            return ["subscriptionId": "events-\(registrationNumber)"]
         case "chat.subscribe":
             let agentId = params["agentId"] as? String ?? Self.parentId
-            let subscriptionId = "chat-\(agentId)"
+            registrationNumber += 1
+            let subscriptionId = "chat-\(registrationNumber)"
             connection.stubChatSnapshot(
                 subscriptionId: subscriptionId,
                 messages: [

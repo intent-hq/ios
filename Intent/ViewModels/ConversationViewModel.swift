@@ -6,8 +6,13 @@ import SwiftUI
 @Observable class ConversationViewModel {
     var store: ConversationStore {
         didSet {
-            oldValue.onStreamingChanged = nil
+            if let streamingObserverId { oldValue.streamingObservers[streamingObserverId] = nil }
+            oldValue.entryObservers[conversationConsumer] = nil
+            if activeLiveStoreActivation != nil { oldValue.releaseConversation(conversationConsumer) }
             observeStreaming()
+            if activeLiveStoreActivation != nil {
+                store.retainConversation(conversationConsumer, agentId: agentId, workspaceId: workspaceId)
+            }
         }
     }
     var hookStore: BackgroundHookStore
@@ -97,6 +102,9 @@ import SwiftUI
     @ObservationIgnored var markSeenDebounceTask: Task<Void, Never>?
     @ObservationIgnored var liveStoreActivationGeneration = 0
     @ObservationIgnored var activeLiveStoreActivation: Int?
+    @ObservationIgnored var loadTask: Task<Void, Never>?
+    @ObservationIgnored let conversationConsumer = UUID()
+    @ObservationIgnored var streamingObserverId: UUID?
 
     init(
         agentId: String,
@@ -105,16 +113,18 @@ import SwiftUI
         connection: any ConnectionManagerRouting,
         uploadService: AttachmentUploadService,
         optionsStore: CreationOptionsStore,
-        agentDetails: AgentDetailStore? = nil
+        agentDetails: AgentDetailStore? = nil,
+        conversations: ConversationStorePool? = nil
     ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
         self.agentName = agentName
         self.connection = connection
         self.optionsStore = optionsStore
-        let details = agentDetails ?? AgentDetailStore(connection: connection)
+        let sharedStore = conversations?.store(agentId: agentId, workspaceId: workspaceId)
+        let details = sharedStore?.commands.agentDetails ?? agentDetails ?? AgentDetailStore(connection: connection)
         self.agentDetails = details
-        self.store = ConversationStore(connectionManager: connection, agentDetails: details)
+        self.store = sharedStore ?? ConversationStore(connectionManager: connection, agentDetails: details)
         self.hookStore = BackgroundHookStore(connectionManager: connection)
         self.monitoredPrStore = MonitoredPrStore(connectionManager: connection)
         self.attachmentPipeline = ConversationAttachmentPipeline(uploadService: uploadService)
@@ -141,6 +151,11 @@ import SwiftUI
     }
 
     isolated deinit {
+        loadTask?.cancel()
+        markSeenDebounceTask?.cancel()
+        if let streamingObserverId { store.streamingObservers[streamingObserverId] = nil }
+        store.entryObservers[conversationConsumer] = nil
+        store.releaseConversation(conversationConsumer)
         if let detailConsumer { agentDetails.release(agentId: agentId, consumer: detailConsumer) }
     }
 }

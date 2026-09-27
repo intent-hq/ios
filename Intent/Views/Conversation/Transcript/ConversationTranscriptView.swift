@@ -89,6 +89,9 @@ private extension ConversationTranscriptView {
                     runInitialScrollIfNeeded(proxy: proxy)
                 }
             }
+            .onChange(of: viewModel.isEntryScrollReady) { _, ready in
+                if ready { runInitialScrollIfNeeded(proxy: proxy) }
+            }
             .onAppear {
                 // On first open the transcript mounts only after loading settles,
                 // so onAppear is also an entry-scroll trigger for cached data.

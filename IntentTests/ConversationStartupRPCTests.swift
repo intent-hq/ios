@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct ConversationStartupRPCTests {
     private let currentQuietCounts = [
-        "events.subscribe": 3, "chat.subscribe": 1, "agent.get": 1,
+        "events.subscribe": 2, "chat.subscribe": 1, "agent.get": 1,
         "agent.getQueue": 1, "agent.getSubscriptions": 1, "hook.list": 1, "prMonitor.list": 1
     ]
 
@@ -57,7 +57,9 @@ struct ConversationStartupRPCTests {
             let traffic = fixture.connection.traffic(since: checkpoint)
             print("Warm workspace startup baseline: \(traffic.summary)")
             var expected = currentQuietCounts
-            if agentId == ConversationStartupFixture.parentId { expected["agent.get"] = nil }
+            if agentId == ConversationStartupFixture.parentId {
+                for method in ["agent.get", "chat.subscribe", "agent.getQueue", "agent.getSubscriptions"] { expected[method] = nil }
+            }
             #expect(traffic.methodCounts == expected)
             #expect(traffic.pendingCount == 0)
             #expect(traffic.failures.isEmpty)
@@ -66,32 +68,25 @@ struct ConversationStartupRPCTests {
         }
     }
 
-    @Test func eventAckBlocksTranscriptAndDelayedQueueRemainsInTotals() async throws {
+    @Test func eventAckDoesNotBlockTranscriptAndDelayedQueueRemainsInTotals() async throws {
         let fixture = ConversationStartupFixture()
         let viewModel = fixture.makeViewModel()
         let connection = fixture.connection
         connection.pendingMethods = ["events.subscribe", "agent.getQueue"]
         let load = Task { await viewModel.load() }
         defer { load.cancel(); fixture.stop() }
-        try await connection.waitForPendingRequests("events.subscribe")
-        try await expectNever("transcript starting before the event ACK (current baseline)") {
-            connection.didCallMethod("chat.subscribe")
-        }
-        #expect(connection.traffic().requests.count == 1)
-
-        connection.pendingMethods.remove("events.subscribe")
-        connection.resolvePending("events.subscribe", with: ["subscriptionId": "startup-events"])
+        try await connection.waitForPendingRequests("events.subscribe", count: 2)
         try await connection.waitForPendingRequests("agent.getQueue")
-        try await waitUntil("snapshot while queue is suspended") {
+        try await waitUntil("snapshot while event ACKs and queue are suspended") {
             !viewModel.isLoading && viewModel.filteredMessages.map(\.id) == [ConversationStartupFixture.messageId]
         }
         let beforeQueue = connection.traffic()
-        let event = try #require(beforeQueue.calls("events.subscribe").first)
-        let chat = try #require(beforeQueue.calls("chat.subscribe").first)
-        #expect(try #require(event.completed).order < chat.started.order)
-        #expect(beforeQueue.pendingCount >= 1)
-        #expect(viewModel.filteredMessages.count == 1)
-
+        #expect(beforeQueue.calls("events.subscribe").allSatisfy { $0.completed == nil })
+        #expect(beforeQueue.calls("chat.subscribe").count == 1)
+        #expect(beforeQueue.pendingCount == 3)
+        connection.pendingMethods.remove("events.subscribe")
+        connection.resolvePending("events.subscribe", with: ["subscriptionId": "side-1"])
+        connection.resolvePending("events.subscribe", with: ["subscriptionId": "side-2"])
         connection.resolvePending("agent.getQueue", with: ["queue": []])
         await load.value
         let settled = connection.traffic()
@@ -119,7 +114,7 @@ struct ConversationStartupRPCTests {
         print("Proposal mounts \(cardCount): \(fixture.connection.traffic().summary)")
         #expect(proposals.requests.isEmpty)
         #expect(fixture.connection.traffic().calls("agent.get").count == 1)
-        #expect(fixture.connection.traffic().requests.count == 9)
+        #expect(fixture.connection.traffic().requests.count == 8)
         #expect(proposals.pendingCount == 0)
     }
 
@@ -137,7 +132,7 @@ struct ConversationStartupRPCTests {
             measurements.append(traffic)
             #expect(viewModel.store.watchedAgents.map(\.id) == [ConversationStartupFixture.childId])
             #expect(traffic.calls("agent.list").count == 1)
-            #expect(traffic.requests.count == 10)
+            #expect(traffic.requests.count == 9)
             #expect(traffic.calls("chat.subscribe").count == 1)
             #expect(traffic.pendingCount == 0 && traffic.failures.isEmpty)
         }
@@ -175,7 +170,9 @@ struct ConversationStartupRPCTests {
             #expect(traffic.calls("models.list").allSatisfy { $0.params["providerId"] as? String == "auggie" })
             #expect(traffic.calls("specialist.list").count == 1)
             var expected = currentQuietCounts
-            expected["agent.get"] = expectedModelReads == 1 ? 1 : nil
+            if expectedModelReads == 0 {
+                for method in ["agent.get", "chat.subscribe", "agent.getQueue", "agent.getSubscriptions"] { expected[method] = nil }
+            }
             expected["models.list"] = expectedModelReads == 1 ? 1 : nil
             expected["specialist.list"] = 1
             #expect(traffic.methodCounts == expected)

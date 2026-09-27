@@ -169,7 +169,14 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     var tunnelDialer: any TunnelDialing = UnavailableTunnelDialer()
 
-    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState = .idle
+    private let globalSubscriptionSubject = CurrentValueSubject<ConnectionManager.GlobalSubscriptionState, Never>(.subscribed)
+    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState {
+        get { globalSubscriptionSubject.value }
+        set { globalSubscriptionSubject.send(newValue) }
+    }
+    var globalSubscriptionPublisher: AnyPublisher<ConnectionManager.GlobalSubscriptionState, Never> {
+        globalSubscriptionSubject.eraseToAnyPublisher()
+    }
     private(set) var retryGlobalSubscriptionCallCount = 0
 
     func retryGlobalSubscription() {
@@ -488,6 +495,8 @@ class FakeConnectionManager: SessionConnectionManaging {
     func hasSubscriptionHandler(id: String) -> Bool {
         subscriptionHandlers[id] != nil
     }
+
+    var eventHandlerIDs: Set<UUID> { Set(eventHandlers.keys) }
 
     /// Count of registered event handlers.
     var eventHandlerCount: Int {

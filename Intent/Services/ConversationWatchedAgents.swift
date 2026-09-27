@@ -12,6 +12,7 @@ final class ConversationWatchedAgents {
     @ObservationIgnored private let commands: ConversationCommands
     @ObservationIgnored private let now: () -> Date
     private var workspaceId: String?
+    private var readGeneration = 0
     private var lastRefresh: [String: Date] = [:]
 
     init(commands: ConversationCommands, now: @escaping () -> Date = Date.init) {
@@ -19,17 +20,21 @@ final class ConversationWatchedAgents {
         self.now = now
     }
 
-    func fetchSubscriptions(agentId: String, workspaceId: String) async {
+    func invalidateReads() { readGeneration &+= 1 }
+
+    func fetchSubscriptions(agentId: String, workspaceId: String, isCurrent: () -> Bool = { true }) async {
+        let generation = readGeneration
         self.workspaceId = workspaceId
         do {
             guard let snapshot = try await commands.fetchSubscriptions(
                 agentId: agentId,
                 workspaceId: workspaceId
             ) else { return }
+            guard !Task.isCancelled, generation == readGeneration, isCurrent() else { return }
             watchedAgentIds = snapshot.watchedAgentIds
             isWaitingForAgents = !watchedAgentIds.isEmpty
-            await fetchDetails()
             delegationGroupStatus = snapshot.delegationGroupStatus
+            await fetchDetails { generation == self.readGeneration && isCurrent() }
         } catch {
             AppLog.conversation.error(
                 "[ConversationStore] Failed to fetch subscriptions: \(error)"
@@ -40,6 +45,7 @@ final class ConversationWatchedAgents {
     func cancelSubscriptions(agentId: String, workspaceId: String) async {
         do {
             try await commands.cancelSubscriptions(agentId: agentId, workspaceId: workspaceId)
+            invalidateReads()
             watchedAgentIds = []
             isWaitingForAgents = false
             delegationGroupStatus = nil
@@ -110,6 +116,7 @@ final class ConversationWatchedAgents {
     }
 
     func reset() {
+        invalidateReads()
         watchedAgentIds = []
         delegationGroupStatus = nil
         isWaitingForAgents = false
@@ -119,10 +126,12 @@ final class ConversationWatchedAgents {
     }
 
     private func refresh(agentId: String) {
+        let generation = readGeneration
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, generation == readGeneration else { return }
             do {
                 guard let updated = try await commands.fetchAgent(agentId: agentId) else { return }
+                guard !Task.isCancelled, generation == readGeneration else { return }
                 if !updated.isActive {
                     watchedAgents.removeAll { $0.id == agentId }
                     watchedAgentIds.removeAll { $0 == agentId }
@@ -145,7 +154,7 @@ final class ConversationWatchedAgents {
         }
     }
 
-    private func fetchDetails() async {
+    private func fetchDetails(isCurrent: () -> Bool) async {
         guard let workspaceId else { return }
         guard !watchedAgentIds.isEmpty else {
             watchedAgents = []
@@ -156,7 +165,7 @@ final class ConversationWatchedAgents {
                 workspaceId: workspaceId,
                 watchedAgentIds: watchedAgentIds
             )
-            guard case let .sessions(agents) = result else { return }
+            guard !Task.isCancelled, isCurrent(), case let .sessions(agents) = result else { return }
             AppLog.conversation.debug(
                 "[ConversationStore] Fetched \(agents.count) watched agents: "
                     + "\(agents.map { "\($0.name): \($0.displayMessage ?? "nil")" })"

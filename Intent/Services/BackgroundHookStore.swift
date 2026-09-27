@@ -41,9 +41,11 @@ import Observation
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
 
+        var previousState = connectionManager.connectionState
         connectionManager.connectionStatePublisher
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
+                guard previousState != state else { return }
+                previousState = state
                 if state == .connected {
                     Task { await self?.onConnected() }
                 }

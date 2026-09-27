@@ -4,32 +4,26 @@ import Testing
 
 @MainActor
 struct ConversationStartupReplayTests {
-    @Test func connectedReplayAfterLoadRepeatsWorkWithoutANewGeneration() async throws {
+    @Test func connectedReplayIsQuietAndActualReconnectReconcilesOnce() async throws {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
         let viewModel = fixture.makeViewModel()
         await viewModel.load()
         let checkpoint = fixture.connection.checkpoint
-
         fixture.connection.releaseConnectionStateDelivery()
-        try await waitForReconciliation(fixture.connection, since: checkpoint)
-        let replay = fixture.connection.traffic(since: checkpoint)
-        #expect(replay.calls("chat.subscribe").count == 1)
-        #expect(replay.calls("agent.get").isEmpty)
-        #expect(replay.calls("events.subscribe").count == 3)
-        #expect(replay.calls("events.unsubscribe").count == 1)
-        #expect(replay.requests.count == 9)
-        #expect(replay.requests.allSatisfy { $0.started.connectionGeneration == 1 })
-        #expect(replay.failures.isEmpty)
-
-        let reconnectCheckpoint = fixture.connection.checkpoint
+        fixture.connection.simulateConnect()
+        try await expectNever("requests from initial or repeated connected replay") {
+            !fixture.connection.traffic(since: checkpoint).requests.isEmpty
+        }
         fixture.connection.simulateDisconnect()
         fixture.connection.simulateConnect()
-        try await waitForReconciliation(fixture.connection, since: reconnectCheckpoint)
-        let reconnect = fixture.connection.traffic(since: reconnectCheckpoint)
-        var expected = replay.methodCounts
-        expected["agent.get"] = 1
-        #expect(reconnect.methodCounts == expected)
+        fixture.connection.simulateConnect()
+        try await waitForReconciliation(fixture.connection, since: checkpoint)
+        let reconnect = fixture.connection.traffic(since: checkpoint)
+        #expect(reconnect.methodCounts == [
+            "chat.subscribe": 1, "agent.get": 1, "agent.getQueue": 1,
+            "agent.getSubscriptions": 1, "events.subscribe": 2, "hook.list": 1, "prMonitor.list": 1
+        ])
         #expect(reconnect.requests.allSatisfy { $0.started.connectionGeneration == 2 })
         #expect(reconnect.notifications.count == 1)
         #expect(reconnect.failures.isEmpty)
@@ -37,35 +31,24 @@ struct ConversationStartupReplayTests {
         #expect(viewModel.filteredMessages.map(\.id) == [ConversationStartupFixture.messageId])
     }
 
-    @Test func connectedReplayDuringEventAckStartsAnExtraTranscriptLoad() async throws {
+    @Test func repeatedConnectedValuesDoNotInvalidateTheSelectedCatalogOrRefetchMetadata() async throws {
         let fixture = ConversationStartupFixture()
-        let connection = fixture.connection
-        let viewModel = fixture.makeViewModel()
-        connection.pendingMethods = ["events.subscribe"]
-        let load = Task { await viewModel.load() }
-        defer { load.cancel(); fixture.stop() }
-        try await connection.waitForPendingRequests("events.subscribe")
-        #expect(!connection.didCallMethod("chat.subscribe"))
-
-        connection.releaseConnectionStateDelivery()
-        try await waitUntil("replay snapshot while initial event ACK is held") {
-            viewModel.filteredMessages.map(\.id) == [ConversationStartupFixture.messageId]
-                && connection.traffic().calls("agent.get").count == 1
+        fixture.providerId = "auggie"
+        fixture.modelId = "model"
+        let model = fixture.makeViewModel()
+        defer { fixture.stop() }
+        await model.load()
+        await model.loadModelCatalogIfNeeded()
+        let generation = fixture.options.loadGeneration
+        let checkpoint = fixture.connection.checkpoint
+        fixture.connection.releaseConnectionStateDelivery()
+        fixture.connection.simulateConnect()
+        fixture.connection.simulateConnect()
+        try await expectNever("catalog invalidation from a repeated connected value") {
+            fixture.options.loadGeneration != generation
         }
-        try await expectNever("another event registration while the first is suspended") {
-            connection.paramsForMethod("events.subscribe").count > 1
-        }
-
-        connection.pendingMethods.remove("events.subscribe")
-        connection.resolvePending("events.subscribe", with: ["subscriptionId": "startup-events"])
-        await load.value
-        let traffic = connection.traffic()
-        #expect(traffic.calls("chat.subscribe").count == 2)
-        #expect(traffic.calls("agent.getQueue").count == 2)
-        #expect(traffic.calls("agent.get").count == 1)
-        #expect(traffic.notifications.count == 2)
-        #expect(traffic.pendingCount == 0 && traffic.failures.isEmpty)
-        #expect(traffic.requests.allSatisfy { $0.started.connectionGeneration == 1 })
+        await model.loadModelCatalogIfNeeded()
+        #expect(fixture.connection.traffic(since: checkpoint).requests.isEmpty)
     }
 
     @Test func overlappingParentAndProposalReadsCoalesce() async throws {
