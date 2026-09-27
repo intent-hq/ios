@@ -416,7 +416,7 @@ extension ConversationTranscriptScrollUITests {
 
     @MainActor
     private func startupRowMoved(_ row: XCUIElement, label: String, opened: OpenConversation, baseline: CGFloat) -> Bool {
-        guard let snapshot = try? row.snapshot(), snapshot.label == label,
+        guard let snapshot = try? row.snapshot(), snapshot.label == label, !snapshot.frame.isEmpty,
               isInside(snapshot.frame, opened.transcript) else { return true }
         return abs(snapshot.frame.minY - opened.transcript.frame.minY - baseline) > Fixture.rePinTolerance
     }
