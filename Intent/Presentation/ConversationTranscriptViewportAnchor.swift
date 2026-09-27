@@ -32,6 +32,7 @@ struct ConversationTranscriptViewportAnchor {
         let minY: CGFloat
         let generation: Int
         var isReappearance = false
+        var coarseScrollIssued = false
     }
 
     private var frames: [String: CGRect] = [:]
@@ -39,6 +40,8 @@ struct ConversationTranscriptViewportAnchor {
     private var initialized = false
     private var pending: Pending?
     private var restorationEvents: [String] = []
+    private var currentMessageIDs: Set<String> = []
+    private var hasEstablishedCurrentMessages = false
     private(set) var visiblePosition: Position?
     private(set) var ownershipRevision = 0
 
@@ -48,7 +51,8 @@ struct ConversationTranscriptViewportAnchor {
         id: String, measurement: Measurement, viewportHeight: CGFloat, preserve: Bool, entryGeneration: Int = 0
     ) -> CGFloat? {
         guard measurement.generation == entryGeneration,
-              measurement.ownershipRevision == ownershipRevision else { return nil }
+              measurement.ownershipRevision == ownershipRevision,
+              !hasEstablishedCurrentMessages || currentMessageIDs.contains(id) else { return nil }
         if pending?.generation != entryGeneration { pending = nil }
         if !initialized || measurement.divider != divider {
             if pending?.isReappearance != true {
@@ -72,7 +76,7 @@ struct ConversationTranscriptViewportAnchor {
         }
         guard let pending, pending.id == id else { return nil }
         let adjustment = measurement.frame.minY - pending.minY
-        if pending.isReappearance, !canConsumeRestoration(measurement, viewportHeight: viewportHeight, preserve: preserve, adjustment: adjustment) {
+        if pending.isReappearance, !canConsumeRestoration(measurement, viewportHeight: viewportHeight, preserve: preserve, pending: pending) {
             return nil
         }
         self.pending = nil
@@ -97,9 +101,32 @@ struct ConversationTranscriptViewportAnchor {
         visiblePosition = nil
     }
 
+    mutating func retainMessages(withIDs messageIDs: Set<String>) {
+        guard !hasEstablishedCurrentMessages || currentMessageIDs != messageIDs else { return }
+        currentMessageIDs = messageIDs
+        hasEstablishedCurrentMessages = true
+        if let pending, !messageIDs.contains(pending.id) { cancelRestoration() }
+        frames = frames.filter { messageIDs.contains($0.key) }
+        if let visiblePosition, !messageIDs.contains(visiblePosition.id) { self.visiblePosition = nil }
+    }
+
     mutating func restore(_ position: Position, generation: Int) {
         restorationEvents = ["restore=\(position.id) y=\(position.minY) generation=\(generation) owner=\(ownershipRevision)"]
         pending = Pending(id: position.id, minY: position.minY, generation: generation, isReappearance: true)
+    }
+
+    mutating func retainedScrollIssued(target: String, generation: Int, ownershipRevision: Int) {
+        guard let pending, pending.isReappearance, !pending.coarseScrollIssued,
+              pending.id == target, pending.generation == generation,
+              ownershipRevision == self.ownershipRevision else { return }
+        // Measurements captured before scrollTo returned cannot settle its
+        // result. The published owner token requests fresh geometry even if
+        // the command leaves an already aligned row in the same position.
+        self.ownershipRevision += 1
+        self.pending?.coarseScrollIssued = true
+        frames.removeAll()
+        visiblePosition = nil
+        recordRestorationEvent("coarse-issued owner=\(self.ownershipRevision)")
     }
 
     private mutating func recordRestorationEvent(_ event: String) {
@@ -107,7 +134,7 @@ struct ConversationTranscriptViewportAnchor {
         if restorationEvents.count > Self.maximumRestorationEvents { restorationEvents.remove(at: 1) }
     }
 
-    private mutating func canConsumeRestoration(_ measurement: Measurement, viewportHeight: CGFloat, preserve: Bool, adjustment: CGFloat) -> Bool {
+    private mutating func canConsumeRestoration(_ measurement: Measurement, viewportHeight: CGFloat, preserve: Bool, pending: Pending) -> Bool {
         recordRestorationEvent("measure=\(measurement.frame) viewport=\(viewportHeight) preserve=\(preserve)")
         // Rehosting can report unavailable geometry before realizing the row.
         let frame = measurement.frame
@@ -117,13 +144,11 @@ struct ConversationTranscriptViewportAnchor {
               frame.size.width > 0, frame.size.height > 0,
               frame.maxX.isFinite, frame.maxY.isFinite,
               frame.maxY > 0, frame.minY < viewportHeight else { return false }
-        // A measurement at the saved offset can precede the coarse scrollTo.
-        // Keep its correction until that scroll has moved the row.
-        if preserve, abs(adjustment) <= .ulpOfOne {
-            recordRestorationEvent("awaiting-coarse-move")
+        if preserve, !pending.coarseScrollIssued {
+            recordRestorationEvent("awaiting-coarse-command")
             return false
         }
-        recordRestorationEvent(preserve ? "adjust=\(adjustment)" : "yielded")
+        recordRestorationEvent(preserve ? "adjust=\(measurement.frame.minY - pending.minY)" : "yielded")
         return true
     }
 

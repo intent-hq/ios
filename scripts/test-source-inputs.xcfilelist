@@ -711,6 +711,7 @@ $(SRCROOT)/IntentTests/ConversationStoreTurnBoundaryTests.swift
 $(SRCROOT)/IntentTests/ConversationStreamingFixture.swift
 $(SRCROOT)/IntentTests/ConversationStreamingFixtureTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptGestureTests.swift
+$(SRCROOT)/IntentTests/ConversationTranscriptRestorationTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part3.swift

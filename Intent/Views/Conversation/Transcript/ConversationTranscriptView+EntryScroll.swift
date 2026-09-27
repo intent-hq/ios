@@ -6,15 +6,19 @@ extension ConversationTranscriptView {
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
             guard revision == scrollState.viewportOwnershipRevision,
                   !isUserInteracting, !isFollowing,
-                  scrollMomentumProxy.scrollView?.window != nil,
-                  let target = scrollState.resumeViewportTarget() else { return }
+                  scrollMomentumProxy.scrollView?.window != nil else { return }
+            scrollState.retainViewportMessages(withIDs: Set(viewModel.filteredMessages.map(\.id)))
+            guard let target = scrollState.resumeViewportTarget() else { return }
             guard viewModel.filteredMessages.contains(where: { $0.id == target }) else {
                 scrollState.retireViewportRestoration()
                 return
             }
             // Re-realize the same row in a rehosted lazy stack. Its geometry
             // callback restores the measured offset, including partial rows.
+            let generation = scrollState.initialScrollGeneration
+            let ownershipRevision = scrollState.viewportOwnershipRevision
             proxy.scrollTo(target, anchor: .top)
+            scrollState.retainedViewportScrollIssued(target: target, generation: generation, ownershipRevision: ownershipRevision)
         }
     }
 

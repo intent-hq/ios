@@ -296,6 +296,18 @@ final class ConversationTranscriptScrollState {
         return position.id
     }
 
+    func retainedViewportScrollIssued(target: String, generation: Int, ownershipRevision: Int) {
+        guard generation == initialScrollGeneration else { return }
+        viewportAnchor.retainedScrollIssued(target: target, generation: generation, ownershipRevision: ownershipRevision)
+        viewportOwnershipRevision = viewportAnchor.ownershipRevision
+    }
+
+    func retainViewportMessages(withIDs messageIDs: Set<String>) {
+        if let retainedViewport, !messageIDs.contains(retainedViewport.id) { self.retainedViewport = nil }
+        viewportAnchor.retainMessages(withIDs: messageIDs)
+        viewportOwnershipRevision = viewportAnchor.ownershipRevision
+    }
+
     func rearmAfterTranscriptEmptied() {
         retainedViewport = nil
         initialScrollGeneration += 1

@@ -41,6 +41,7 @@ extension ConversationTranscriptScrollPolicyTests {
             frame: CGRect(x: 0, y: 900, width: 300, height: 64), divider: "seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision
         )
         #expect(state.resumeViewportTarget() == "row-31")
+        state.retainedViewportScrollIssued(target: "row-31", generation: state.initialScrollGeneration, ownershipRevision: state.viewportOwnershipRevision)
         #expect(state.resumeViewportTarget() == nil)
         #expect(state.viewportAnchor.record(id: "row-31", measurement: covered, viewportHeight: 600, preserve: true, entryGeneration: generation) == nil)
         let offscreen = ConversationTranscriptViewportAnchor.Measurement(frame: covered.frame, divider: "new-seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision)
@@ -84,6 +85,7 @@ extension ConversationTranscriptScrollPolicyTests {
         )
         state.suspendViewport()
         #expect(state.resumeViewportTarget() == "row-31")
+        state.retainedViewportScrollIssued(target: "row-31", generation: state.initialScrollGeneration, ownershipRevision: state.viewportOwnershipRevision)
         let revision = state.viewportOwnershipRevision
         let unrealized = ConversationTranscriptViewportAnchor.Measurement(frame: frame, divider: "seen", generation: generation, ownershipRevision: revision)
         #expect(state.viewportAnchor.record(id: "row-31", measurement: unrealized, viewportHeight: viewportHeight, preserve: true, entryGeneration: generation) == nil)
@@ -111,6 +113,7 @@ extension ConversationTranscriptScrollPolicyTests {
         )
         state.suspendViewport()
         #expect(state.resumeViewportTarget() == "row-31")
+        state.retainedViewportScrollIssued(target: "row-31", generation: state.initialScrollGeneration, ownershipRevision: state.viewportOwnershipRevision)
         let realized = ConversationTranscriptViewportAnchor.Measurement(
             frame: frame, divider: "new-seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision
         )
@@ -166,8 +169,9 @@ extension ConversationTranscriptScrollPolicyTests {
             )
             #expect(state.viewportAnchor.record(id: "row-31", measurement: beforeScroll, viewportHeight: 624, preserve: true, entryGeneration: generation) == nil)
         }
+        state.retainedViewportScrollIssued(target: "row-31", generation: generation, ownershipRevision: revision)
         let afterScroll = ConversationTranscriptViewportAnchor.Measurement(
-            frame: CGRect(x: 0, y: 0, width: 300, height: 64), divider: "seen", generation: generation, ownershipRevision: revision
+            frame: CGRect(x: 0, y: 0, width: 300, height: 64), divider: "seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision
         )
         #expect(state.viewportAnchor.record(id: "row-31", measurement: afterScroll, viewportHeight: 624, preserve: true, entryGeneration: generation) == -savedY)
         #expect(state.viewportAnchor.record(id: "row-31", measurement: afterScroll, viewportHeight: 624, preserve: true, entryGeneration: generation) == nil)
@@ -183,6 +187,7 @@ extension ConversationTranscriptScrollPolicyTests {
         }
         state.suspendViewport()
         #expect(state.resumeViewportTarget() == "full")
+        state.retainedViewportScrollIssued(target: "full", generation: generation, ownershipRevision: state.viewportOwnershipRevision)
         let realized = ConversationTranscriptViewportAnchor.Measurement(
             frame: CGRect(x: 0, y: 0, width: 300, height: 60), divider: "seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision
         )

@@ -93,6 +93,9 @@ extension ConversationTranscriptView {
     private func preserveRowOffsetAfterDividerChange(
         messageId: String, measurement: ConversationTranscriptViewportAnchor.Measurement
     ) {
+        // This live check also covers a queued callback that beats the
+        // column's message-ID observer after an authoritative deletion.
+        scrollState.retainViewportMessages(withIDs: Set(viewModel.filteredMessages.map(\.id)))
         guard measurement.divider == viewModel.newMessagesDividerAnchorId,
               let geometry = scrollMomentumProxy.restingGeometry else { return }
         // The geometry callback includes the divider identity, so even a row
