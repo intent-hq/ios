@@ -78,7 +78,10 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertFalse(app.buttons["intent.menu.close"].exists)
         openMenu(app)
         app.buttons["intent.menu.close"].tap()
-        XCTAssertTrue(composer.isHittable)
+        let composerAvailable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"), object: composer
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [composerAvailable], timeout: Self.timeout), .completed)
 
         app.navigationBars["Dashboard Implementor"].buttons.element(boundBy: 0).tap()
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
