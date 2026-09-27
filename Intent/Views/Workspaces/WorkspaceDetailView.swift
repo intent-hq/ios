@@ -225,7 +225,7 @@ struct WorkspaceDetailView: View {
         #endif
         .toolbar {
             #if os(visionOS)
-            // The Agents/Context switcher lives in the detail's top toolbar
+            // The workspace switcher lives in the detail's top toolbar
             // on visionOS instead of the in-window segmented control, so it
             // visibly belongs to the workspace rather than the sidebar.
             ToolbarItem(placement: .topBarTrailing) {
@@ -234,6 +234,8 @@ struct WorkspaceDetailView: View {
                     .tag(WorkspaceTab.agents)
                     Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "doc.text") }
                     .tag(WorkspaceTab.context)
+                    Label { Text("Changes").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "plus.forwardslash.minus") }
+                    .tag(WorkspaceTab.changes)
                 }
                 .pickerStyle(.segmented)
             }
@@ -355,6 +357,9 @@ private extension WorkspaceDetailView {
             } else {
                 agentListContent
             }
+        } else if selectedTab == .changes {
+            WorkspaceChangesView(workspaceId: workspaceId, connectionManager: session.connection)
+                .id(workspaceId)
         } else {
             NoteListView(workspaceId: workspaceId, noteStore: noteStore)
         }
