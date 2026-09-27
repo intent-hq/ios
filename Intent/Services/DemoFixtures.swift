@@ -394,6 +394,9 @@ extension DemoFixtures {
         if let terminalResponse = DemoTerminalFixtures.response(for: method, params: params) {
             return terminalResponse
         }
+        if let browserResponse = DemoBrowserFixtures.response(for: method, params: params) {
+            return browserResponse
+        }
         return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
             if let response = proposalResponse(for: method, params: params) { return response }
             switch method {

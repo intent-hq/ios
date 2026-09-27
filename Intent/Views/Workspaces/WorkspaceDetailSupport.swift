@@ -1,5 +1,44 @@
 import SwiftUI
 
+#if os(visionOS)
+struct WorkspaceActionConfirmationSheet: View {
+    let title: String
+    let message: String
+    let actionLabel: String
+    let isDestructive: Bool
+    let onConfirm: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(spacing: Constants.WorkspaceDetail.confirmationSheetSpacing) {
+            Text(title).interFont(Constants.Typography.heading2)
+            Text(message).interFont(Constants.Typography.bodyS)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            Button(role: isDestructive ? .destructive : nil) {
+                dismiss()
+                onConfirm()
+            } label: {
+                Text(actionLabel).interFont(Constants.Typography.bodyS)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            Button {
+                dismiss()
+            } label: {
+                Text("Cancel").interFont(Constants.Typography.bodyS)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(Constants.WorkspaceDetail.confirmationSheetPadding)
+        .frame(width: Constants.WorkspaceDetail.confirmationSheetWidth)
+    }
+}
+#endif
+
 struct WorkspaceTaskProgressLayout: Equatable {
     let total: Int
     let completed: Int

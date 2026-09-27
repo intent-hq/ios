@@ -168,6 +168,12 @@ class FakeConnectionManager: SessionConnectionManaging {
     var certMismatches: [HostCertMismatch] = []
 
     var tunnelDialer: any TunnelDialing = UnavailableTunnelDialer()
+    var browserProxyFactory: (@MainActor () async throws -> any BrowserProxySession)?
+
+    func makeBrowserProxy() async throws -> any BrowserProxySession {
+        guard let browserProxyFactory else { throw BrowserTunnelError.unavailable }
+        return try await browserProxyFactory()
+    }
 
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState = .idle
     private(set) var retryGlobalSubscriptionCallCount = 0

@@ -13,6 +13,9 @@ struct WorkspaceDetailView: View {
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
     @State private var selectedTerminal: MobileTerminal?
+    @State private var selectedBrowser: WorkspaceBrowser?
+    @State private var createdBrowser: WorkspaceBrowser?
+    @State private var showNewBrowser = false
     @State private var terminalCreationRequest: UUID?
     @State private var selectedTab = WorkspaceTab.agents
     @State private var noteStore: NoteStore
@@ -34,6 +37,7 @@ struct WorkspaceDetailView: View {
 
     private var workspaceStore: WorkspaceStore { session.workspaceStore }
     private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
+    private var browserStore: WorkspaceBrowserStore { session.browserStore }
 
     private var workspace: Workspace? {
         workspaceStore.workspaces.first { $0.id == workspaceId }
@@ -82,6 +86,9 @@ struct WorkspaceDetailView: View {
         .onChange(of: workspaceId) { oldId, newId in
             terminalCreationRequest = nil
             selectedTerminal = nil
+            selectedBrowser = nil
+            createdBrowser = nil
+            showNewBrowser = false
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: oldId,
@@ -122,6 +129,7 @@ struct WorkspaceDetailView: View {
             }
         }
         .task(id: workspaceId) { await terminalStore.refresh(workspaceId: workspaceId) }
+        .task(id: workspaceId) { await browserStore.refresh(workspaceId: workspaceId) }
     }
 
     var body: some View {
@@ -168,6 +176,18 @@ struct WorkspaceDetailView: View {
                 optionsStore: session.creationOptionsStore
             )
                 .environment(coordinator)
+        }
+        .sheet(isPresented: $showNewBrowser, onDismiss: {
+            selectedBrowser = createdBrowser
+            createdBrowser = nil
+        }) {
+            NewWorkspaceBrowserView(workspaceId: workspaceId, store: browserStore) { browser in
+                selectedTab = .agents
+                createdBrowser = browser
+            }
+        }
+        .fullScreenCover(item: $selectedBrowser) { browser in
+            WorkspaceBrowserView(browser: browser, connection: session.connection)
         }
         .fullScreenCover(
             item: $selectedTerminal,
@@ -221,6 +241,9 @@ private extension WorkspaceDetailView {
                 Label { Text("New terminal").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "terminal") }
             }
             .disabled(!terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId))
+            Button { showNewBrowser = true } label: {
+                Label { Text("New browser").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "globe") }
+            }
             Divider()
             Button { showArchiveConfirmation = true } label: {
                 Label { Text("Archive").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "archivebox") }
@@ -312,12 +335,16 @@ private extension WorkspaceDetailView {
     var tabContent: some View {
         if selectedTab == .agents {
             if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty,
-               terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty {
+               terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty,
+               browserStore.browsers(workspaceId: workspaceId).isEmpty,
+               browserStore.errorMessage(workspaceId: workspaceId) == nil {
                 Spacer()
                 ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 Spacer()
-            } else if viewModel.agents.isEmpty, terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty {
+            } else if viewModel.agents.isEmpty, terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty,
+                      browserStore.browsers(workspaceId: workspaceId).isEmpty,
+                      browserStore.errorMessage(workspaceId: workspaceId) == nil {
                 ContentUnavailableView {
                     Label { Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold)) } icon: { Image(systemName: "person.2") }
                 } description: {
@@ -340,12 +367,16 @@ private extension WorkspaceDetailView {
                 WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) { terminal in
                     selectedTerminal = terminal
                 }
+                WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore) { browser in
+                    selectedBrowser = browser
+                }
             }
             .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
         }
         .refreshable {
             await agentStore.fetchAgents(workspaceId: workspaceId)
             await terminalStore.refresh(workspaceId: workspaceId)
+            await browserStore.refresh(workspaceId: workspaceId)
         }
     }
 
@@ -455,45 +486,3 @@ private extension WorkspaceDetailView {
         }
     }
 }
-
-#if os(visionOS)
-/// Deliberate confirmation sheet for destructive/irreversible workspace
-/// actions: title, consequence copy, one primary action, and a plain
-/// cancel — replacing inline alerts per the visionOS HIG.
-struct WorkspaceActionConfirmationSheet: View {
-    let title: String
-    let message: String
-    let actionLabel: String
-    let isDestructive: Bool
-    let onConfirm: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        VStack(spacing: Constants.WorkspaceDetail.confirmationSheetSpacing) {
-            Text(title).interFont(Constants.Typography.heading2)
-            Text(message).interFont(Constants.Typography.bodyS)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            Button(role: isDestructive ? .destructive : nil) {
-                dismiss()
-                onConfirm()
-            } label: {
-                Text(actionLabel).interFont(Constants.Typography.bodyS)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            Button {
-                dismiss()
-            } label: {
-                Text("Cancel").interFont(Constants.Typography.bodyS)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-        }
-        .padding(Constants.WorkspaceDetail.confirmationSheetPadding)
-        .frame(width: Constants.WorkspaceDetail.confirmationSheetWidth)
-    }
-}
-#endif
