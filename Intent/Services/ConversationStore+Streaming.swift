@@ -266,8 +266,9 @@ extension ConversationStore {
     private func refreshStateAfterTurnBoundary() {
         guard let agentId else { return }
         let liveStateVersion = liveTranscript.liveStateVersion
+        commands.agentDetails.invalidate(agentId: agentId)
         Task {
-            await fetchAgentStreamingState(agentId: agentId, raiseOnly: true, liveStateVersion: liveStateVersion)
+            await fetchAgentStreamingState(agentId: agentId, raiseOnly: true, liveStateVersion: liveStateVersion, refresh: false)
         }
     }
 
@@ -294,6 +295,9 @@ extension ConversationStore {
 
     private func handleAgentUpdated(_ data: [String: Any]) {
         sessionMetadataGeneration += 1
+        if AgentDetailStore.requiresReconciliation(data), let agentId {
+            Task { await fetchAgentStreamingState(agentId: agentId, raiseOnly: true, refresh: false) }
+        }
         if let pendingId = data["pendingQuestionsMessageId"] as? String {
             pendingQuestionsMessageId = pendingId
         }

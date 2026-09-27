@@ -106,8 +106,8 @@ import SwiftUI
         set { liveTranscript.hydratingBlockKeys = newValue }
     }
 
-    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
-        let commands = ConversationCommands(connectionManager: connectionManager)
+    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared, agentDetails: AgentDetailStore? = nil) {
+        let commands = ConversationCommands(connectionManager: connectionManager, agentDetails: agentDetails)
         self.connectionManager = connectionManager
         self.commands = commands
         self.watchedAgentCoordinator = ConversationWatchedAgents(commands: commands)

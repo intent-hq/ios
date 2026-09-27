@@ -10,6 +10,7 @@ import Observation
     var lastUpdated: Date?
     var isLoading = false
 
+    @ObservationIgnored private var fetchTask: Task<Void, Never>?
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var eventHandlerId: UUID?
     @ObservationIgnored private let connectionManager: ConnectionManagerRouting
@@ -72,8 +73,17 @@ import Observation
 
     // MARK: - Fetch
 
+    func fetchIfNeeded() async {
+        guard lastUpdated == nil else { return }
+        await fetchAll()
+    }
+
     func fetchAll() async {
-        await _fetchAll()
+        if let fetchTask { await fetchTask.value; return }
+        let task = Task { await self._fetchAll() }
+        fetchTask = task
+        await task.value
+        fetchTask = nil
     }
 
     private func _fetchAll() async {

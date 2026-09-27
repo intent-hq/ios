@@ -69,35 +69,34 @@ final class ConversationCommands {
     }
     private var queueRevision = 0
     @ObservationIgnored var onQueueSnapshot: (([QueuedMessage]) -> Void)?
-    var pendingQuestionsMessageId: String?
-    var dismissedQuestionsMessageId: String?
-    var lastSeenMessageId: String?
+    var pendingQuestionsMessageId: String? { didSet { markerRevision &+= 1 } }
+    var dismissedQuestionsMessageId: String? { didSet { markerRevision &+= 1 } }
+    var lastSeenMessageId: String? { didSet { markerRevision &+= 1 } }
+    private(set) var markerRevision = 0
+    let agentDetails: AgentDetailStore
 
     @ObservationIgnored private let connectionManager: ConnectionManagerRouting
     private var lastMarkSeenSentId: String?
     private var resetGeneration = 0
 
-    init(connectionManager: ConnectionManagerRouting) {
+    init(connectionManager: ConnectionManagerRouting, agentDetails: AgentDetailStore? = nil) {
         self.connectionManager = connectionManager
+        self.agentDetails = agentDetails ?? AgentDetailStore(connection: connectionManager)
     }
 }
 
 extension ConversationCommands {
-    func fetchAgentState(agentId: String) async throws -> AgentState? {
-        let result = try await connectionManager.request(
-            "agent.get",
-            params: ["agentId": agentId]
-        )
-        guard let response = result as? [String: Any],
-              let agent = response["agent"] as? [String: Any] else { return nil }
-        let metadata = agent["metadata"] as? [String: Any]
+    func fetchAgentState(agentId: String, workspaceId: String? = nil, refresh: Bool = true) async throws -> AgentState? {
+        let detail = try await agentDetails.load(agentId: agentId, workspaceId: workspaceId, refresh: refresh)
+        let agent = detail.values
+        let metadata = detail.metadata
         return AgentState(
             isStreaming: (agent["isStreaming"] as? Bool ?? false)
                 || (agent["isResponding"] as? Bool ?? false)
                 || (agent["turnInFlight"] as? Bool ?? false),
-            pendingQuestionsMessageId: metadata?["pendingQuestionsMessageId"] as? String,
-            dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String,
-            lastSeenMessageId: metadata?["lastSeenMessageId"] as? String
+            pendingQuestionsMessageId: metadata["pendingQuestionsMessageId"] as? String,
+            dismissedQuestionsMessageId: metadata["dismissedQuestionsMessageId"] as? String,
+            lastSeenMessageId: metadata["lastSeenMessageId"] as? String
         )
     }
 
@@ -208,6 +207,7 @@ extension ConversationCommands {
             if let confirmedId = (result as? [String: Any])?["dismissedQuestionsMessageId"]
                 as? String {
                 dismissedQuestionsMessageId = confirmedId
+                agentDetails.updateMetadata(agentId: agentId, fields: ["dismissedQuestionsMessageId": confirmedId])
             }
         } catch {
             if dismissedQuestionsMessageId == messageId {
@@ -238,6 +238,7 @@ extension ConversationCommands {
             )
             if let confirmedId = (result as? [String: Any])?["lastSeenMessageId"] as? String {
                 lastSeenMessageId = confirmedId
+                agentDetails.updateMetadata(agentId: agentId, fields: ["lastSeenMessageId": confirmedId])
             }
         } catch {
             if lastMarkSeenSentId == messageId { lastMarkSeenSentId = nil }
@@ -467,13 +468,8 @@ extension ConversationCommands {
     }
 
     func fetchAgent(agentId: String) async throws -> AgentSession? {
-        let result = try await connectionManager.request(
-            "agent.get",
-            params: ["agentId": agentId]
-        )
-        guard let response = result as? [String: Any],
-              let dictionary = response["agent"] as? [String: Any] else { return nil }
-        return AgentSession.parseAgent(dictionary)
+        let detail = try await agentDetails.load(agentId: agentId, refresh: true)
+        return AgentSession.parseAgent(detail.values)
     }
 
     func listAgents(workspaceId: String, watchedAgentIds: [String]) async throws -> AgentListFetchResult {

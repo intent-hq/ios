@@ -68,6 +68,8 @@ final class BackendSession {
     let connection: any SessionConnectionManaging
     let workspaceStore: WorkspaceStore
     let assistantStore: AssistantStore
+    /// Authoritative detail state shared by routes, conversations and proposal cards.
+    let agentDetails: AgentDetailStore
     /// Session-lifetime GitHub repo cache for the New Workspace repo step;
     /// outlives the sheet so a reopen renders the cached list instantly.
     let githubRepoStore: GitHubRepoStore
@@ -101,6 +103,7 @@ final class BackendSession {
         self.connection = connection
         self.workspaceStore = workspaceStore
         self.assistantStore = AssistantStore(connection: connection)
+        self.agentDetails = AgentDetailStore(connection: connection)
         self.coordinatorFactory = coordinatorFactory
         self.githubRepoStore = githubRepoStore
         self.creationOptionsStore = creationOptionsStore
@@ -125,6 +128,7 @@ final class BackendSession {
         let coordinator = coordinatorFactory { [weak self] in
             self?.claimScreenRestoration() ?? false
         }
+        coordinator.agentDetails = agentDetails
         if startingAtSavedMachines {
             coordinator.routingState.hasLoadCompleted = true
             coordinator.onReconnect()
@@ -145,6 +149,7 @@ final class BackendSession {
     /// Disconnects the backend connection. Called by the registry when the
     /// last window detaches from the session.
     func teardown() {
+        agentDetails.reset()
         connection.disconnect()
     }
 }

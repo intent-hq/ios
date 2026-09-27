@@ -50,6 +50,8 @@ import SwiftUI
     @ObservationIgnored var modelMetadataGeneration: Int?
     var modelCatalogLoadFailed = false
     let optionsStore: CreationOptionsStore
+    let agentDetails: AgentDetailStore
+    @ObservationIgnored var detailConsumer: UUID?
     var specialistName: String?
     var specialistDescription: String?
     var dismissQuestionsError: String?
@@ -102,14 +104,17 @@ import SwiftUI
         agentName: String,
         connection: any ConnectionManagerRouting,
         uploadService: AttachmentUploadService,
-        optionsStore: CreationOptionsStore
+        optionsStore: CreationOptionsStore,
+        agentDetails: AgentDetailStore? = nil
     ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
         self.agentName = agentName
         self.connection = connection
         self.optionsStore = optionsStore
-        self.store = ConversationStore(connectionManager: connection)
+        let details = agentDetails ?? AgentDetailStore(connection: connection)
+        self.agentDetails = details
+        self.store = ConversationStore(connectionManager: connection, agentDetails: details)
         self.hookStore = BackgroundHookStore(connectionManager: connection)
         self.monitoredPrStore = MonitoredPrStore(connectionManager: connection)
         self.attachmentPipeline = ConversationAttachmentPipeline(uploadService: uploadService)
@@ -133,5 +138,9 @@ import SwiftUI
             }
 
         observeStreaming()
+    }
+
+    isolated deinit {
+        if let detailConsumer { agentDetails.release(agentId: agentId, consumer: detailConsumer) }
     }
 }

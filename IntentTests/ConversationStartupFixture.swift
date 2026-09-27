@@ -14,6 +14,7 @@ final class ConversationStartupFixture {
     static let messageId = "startup-message"
     let connection = RPCRecordingConnection()
     let options: CreationOptionsStore
+    let details: AgentDetailStore
     private(set) var viewModels: [ConversationViewModel] = []
     var parentMetadata: [String: Any] = ["lastSeenMessageId": ConversationStartupFixture.messageId]
     var watchedIds: [String] = []
@@ -26,6 +27,7 @@ final class ConversationStartupFixture {
         connection.simulateConnect()
         connection.globalSubscriptionState = .subscribed
         options = CreationOptionsStore(connectionManager: connection)
+        details = AgentDetailStore(connection: connection)
         connection.responseMap = [
             "events.unsubscribe": [:], "chat.unsubscribe": [:],
             "agent.getQueue": ["queue": []],
@@ -44,14 +46,15 @@ final class ConversationStartupFixture {
             agentName: "Startup fixture",
             connection: connection,
             uploadService: AttachmentUploadService(connection: connection),
-            optionsStore: options
+            optionsStore: options,
+            agentDetails: details
         )
         viewModels.append(viewModel)
         return viewModel
     }
 
     func makeProposalStore(agentId: String = ConversationStartupFixture.parentId) -> ProposalActionStore {
-        ProposalActionStore(connection: connection, agentId: agentId, workspaceId: Self.workspaceId)
+        ProposalActionStore(connection: connection, agentId: agentId, workspaceId: Self.workspaceId, details: details)
     }
 
     /// A bounded negative observation lets the real receive(on:) replay run

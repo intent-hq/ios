@@ -2,12 +2,12 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Baselines, not the future four/eight-call acceptance tests. Replace each
-/// excess-call assertion with its target regression in the owning fix task.
+/// Metadata reuse regressions plus the remaining lifecycle/status baselines.
+/// Later tasks replace those excess-call assertions with the four/eight-call budgets.
 @MainActor
 struct ConversationStartupRPCTests {
     private let currentQuietCounts = [
-        "events.subscribe": 3, "chat.subscribe": 1, "agent.get": 2,
+        "events.subscribe": 3, "chat.subscribe": 1, "agent.get": 1,
         "agent.getQueue": 1, "agent.getSubscriptions": 1, "hook.list": 1, "prMonitor.list": 1
     ]
 
@@ -34,7 +34,7 @@ struct ConversationStartupRPCTests {
         let chat = try #require(traffic.calls("chat.subscribe").first)
         #expect(chat.params["agentId"] as? String == ConversationStartupFixture.parentId)
         #expect(chat.params["projection"] as? String == "slim")
-        #expect(chat.params["deltaEncoding"] == nil)
+        #expect(chat.params["deltaEncoding"] as? String == "incremental")
         #expect(chat.params["limit"] == nil && chat.params["sinceMessageId"] == nil)
         let snapshot = try #require(traffic.notifications.first)
         #expect(try #require(chat.completed).order < snapshot.received.order)
@@ -56,7 +56,9 @@ struct ConversationStartupRPCTests {
             await next.load()
             let traffic = fixture.connection.traffic(since: checkpoint)
             print("Warm workspace startup baseline: \(traffic.summary)")
-            #expect(traffic.methodCounts == currentQuietCounts)
+            var expected = currentQuietCounts
+            if agentId == ConversationStartupFixture.parentId { expected["agent.get"] = nil }
+            #expect(traffic.methodCounts == expected)
             #expect(traffic.pendingCount == 0)
             #expect(traffic.failures.isEmpty)
             #expect(first.hookStore.hooks.isEmpty && next.hookStore.hooks.isEmpty)
@@ -100,7 +102,7 @@ struct ConversationStartupRPCTests {
     }
 
     @Test(arguments: [0, 1, 5])
-    func lateProposalConsumersAddParentReads(cardCount: Int) async {
+    func lateProposalConsumersReuseParentDetail(cardCount: Int) async {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
         fixture.parentMetadata["pendingProposals"] = [["proposalId": "proposal-1", "messageId": "proposal-message"]]
@@ -109,18 +111,15 @@ struct ConversationStartupRPCTests {
         // ConversationView supplies one ProposalActionStore to its cards.
         let proposal = fixture.makeProposalStore()
         for _ in 0..<cardCount {
-            await proposal.refresh()
+            await proposal.loadIfNeeded()
             #expect(proposal.pending["proposal-1"] == "proposal-message")
             #expect(proposal.loadError == nil)
         }
         let proposals = fixture.connection.traffic(since: checkpoint)
         print("Proposal mounts \(cardCount): \(fixture.connection.traffic().summary)")
-        #expect(proposals.requests.count == cardCount)
-        #expect(proposals.calls("agent.get").allSatisfy { request in
-            request.params["workspaceId"] as? String == ConversationStartupFixture.workspaceId
-        })
-        #expect(fixture.connection.traffic().calls("agent.get").count == 2 + cardCount)
-        #expect(fixture.connection.traffic().requests.count == 10 + cardCount)
+        #expect(proposals.requests.isEmpty)
+        #expect(fixture.connection.traffic().calls("agent.get").count == 1)
+        #expect(fixture.connection.traffic().requests.count == 9)
         #expect(proposals.pendingCount == 0)
     }
 
@@ -138,7 +137,7 @@ struct ConversationStartupRPCTests {
             measurements.append(traffic)
             #expect(viewModel.store.watchedAgents.map(\.id) == [ConversationStartupFixture.childId])
             #expect(traffic.calls("agent.list").count == 1)
-            #expect(traffic.requests.count == 11)
+            #expect(traffic.requests.count == 10)
             #expect(traffic.calls("chat.subscribe").count == 1)
             #expect(traffic.pendingCount == 0 && traffic.failures.isEmpty)
         }
@@ -175,7 +174,11 @@ struct ConversationStartupRPCTests {
             #expect(traffic.calls("models.list").count == expectedModelReads)
             #expect(traffic.calls("models.list").allSatisfy { $0.params["providerId"] as? String == "auggie" })
             #expect(traffic.calls("specialist.list").count == 1)
-            #expect(traffic.requests.count == 11 + expectedModelReads)
+            var expected = currentQuietCounts
+            expected["agent.get"] = expectedModelReads == 1 ? 1 : nil
+            expected["models.list"] = expectedModelReads == 1 ? 1 : nil
+            expected["specialist.list"] = 1
+            #expect(traffic.methodCounts == expected)
             #expect(traffic.calls("host.providerAuthStatus").isEmpty)
             #expect(traffic.pendingCount == 0 && traffic.failures.isEmpty)
             #expect(viewModel.currentModelDisplayName == "Fixture model")

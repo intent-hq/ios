@@ -89,6 +89,7 @@ $(SRCROOT)/Intent/Presentation/ToolClassifier+Classification.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceLinks.swift
 $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
+$(SRCROOT)/Intent/Services/AgentDetailStore.swift
 $(SRCROOT)/Intent/Services/AgentStore.swift
 $(SRCROOT)/Intent/Services/AssistantStore.swift
 $(SRCROOT)/Intent/Services/AttachmentImageLoader.swift
@@ -343,6 +344,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusIconView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusImageView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTab.swift
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
+$(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
 $(SRCROOT)/IntentTests/AgentListViewModelTests.swift
 $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
 $(SRCROOT)/IntentTests/AgentSessionDisplayTests.swift
@@ -403,7 +405,10 @@ $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
 $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
+$(SRCROOT)/IntentTests/ConversationDeltaCompatibilityTests.swift
+$(SRCROOT)/IntentTests/ConversationIncrementalDeltaTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
+$(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupFixture.swift
 $(SRCROOT)/IntentTests/ConversationStartupRPCTests.swift

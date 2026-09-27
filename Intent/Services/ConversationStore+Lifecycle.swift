@@ -33,7 +33,7 @@ extension ConversationStore {
         let liveStateVersion = liveTranscript.liveStateVersion
         async let chat: () = subscribeLiveChat(agentId: agentId)
         async let queue: () = fetchQueue(agentId: agentId)
-        async let streaming: () = fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
+        async let streaming: () = fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion, refresh: false)
         _ = await (chat, queue, streaming)
         guard ownsStreamingRegistration(activeEventGeneration), let workspaceId else { return }
         guard let generation = await subscribeToStreaming(agentId: agentId, workspaceId: workspaceId),
@@ -65,15 +65,18 @@ extension ConversationStore {
     func fetchAgentStreamingState(
         agentId: String,
         raiseOnly: Bool = false,
-        liveStateVersion: Int? = nil
+        liveStateVersion: Int? = nil,
+        refresh: Bool = true
     ) async {
         let generation = sessionMetadataGeneration
+        let markerRevision = commands.markerRevision
+        let issuedLiveVersion = liveStateVersion ?? liveTranscript.liveStateVersion
         let boundAtIssue = self.agentId
         do {
-            if let state = try await commands.fetchAgentState(agentId: agentId) {
+            if let state = try await commands.fetchAgentState(agentId: agentId, workspaceId: workspaceId, refresh: refresh) {
                 guard isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
-                applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: liveStateVersion)
-                guard generation == sessionMetadataGeneration else { return }
+                applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: issuedLiveVersion)
+                guard generation == sessionMetadataGeneration, markerRevision == commands.markerRevision else { return }
                 if let pendingId = state.pendingQuestionsMessageId {
                     pendingQuestionsMessageId = pendingId
                 }
@@ -92,6 +95,7 @@ extension ConversationStore {
     }
 
     private func applyFetchedStreamingState(_ streaming: Bool, raiseOnly: Bool, issuedAt liveStateVersion: Int?) {
+        guard !liveTranscript.chatLive else { return }
         if let liveStateVersion, liveStateVersion != liveTranscript.liveStateVersion {
             AppLog.conversation.debug(
                 "[ConversationStore] Live channel advanced during agent.get; keeping its streaming state"

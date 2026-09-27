@@ -6,15 +6,16 @@ extension ConversationViewModel {
     /// new-messages divider anchors against the served rows.
     func load() async {
         guard !Task.isCancelled else { return }
+        if detailConsumer == nil { detailConsumer = agentDetails.retain(agentId: agentId) }
         let activation = activateLiveStores()
         await store.subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
         guard ownsLiveStoreActivation(activation), !Task.isCancelled else { return }
 
         async let conversation: () = loadTranscript()
         async let queue: () = store.fetchQueue(agentId: agentId)
-        async let model: () = fetchCurrentModel()
+        async let model: () = fetchCurrentModel(refresh: false)
         async let subscriptions: () = store.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
-        async let streamingState: () = store.fetchAgentStreamingState(agentId: agentId, raiseOnly: true)
+        async let streamingState: () = store.fetchAgentStreamingState(agentId: agentId, raiseOnly: true, refresh: false)
         async let hooks: () = hookStore.subscribe(workspaceId: workspaceId, agentId: agentId)
         async let monitors: () = monitoredPrStore.subscribe(workspaceId: workspaceId, agentId: agentId)
 
@@ -123,36 +124,41 @@ extension ConversationViewModel {
         }
     }
 
-    func fetchCurrentModel() async {
+    func fetchCurrentModel(refresh: Bool = true) async {
+        let activation = liveStoreActivationGeneration
         do {
-            var generation = optionsStore.loadGeneration
-            var result = try await connection.request(
-                "agent.get",
-                params: ["agentId": agentId]
-            )
-            while generation != optionsStore.loadGeneration {
-                generation = optionsStore.loadGeneration
-                result = try await connection.request(
-                    "agent.get",
-                    params: ["agentId": agentId]
-                )
-            }
+            let (detail, generation) = try await loadCurrentDetail(refresh: refresh)
+            guard activation == liveStoreActivationGeneration, !Task.isCancelled else { return }
             modelMetadataGeneration = generation
-            if let dict = result as? [String: Any],
-               let agent = dict["agent"] as? [String: Any] {
-                if let model = agent["model"] as? String {
-                    currentModelId = model
-                }
-                if let provider = agent["provider"] as? String, !provider.isEmpty {
-                    currentProviderId = provider
-                }
-                if let metadata = agent["metadata"] as? [String: Any],
-                   let specialistId = metadata["specialist"] as? String {
-                    await fetchSpecialistInfo(specialistId: specialistId)
-                }
+            currentModelId = detail.values["model"] as? String
+            currentProviderId = (detail.values["provider"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            if let specialistId = detail.metadata["specialist"] as? String {
+                await fetchSpecialistInfo(specialistId: specialistId)
             }
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Fetch current model failed: \(error)")
+        }
+    }
+
+    private func loadCurrentDetail(refresh: Bool) async throws -> (AgentDetail, Int) {
+        var generation = optionsStore.loadGeneration
+        var epoch = agentDetails.connectionEpoch
+        var needsRefresh = refresh
+        while true {
+            do {
+                let detail = try await agentDetails.load(agentId: agentId, workspaceId: workspaceId, refresh: needsRefresh)
+                if generation == optionsStore.loadGeneration, epoch == agentDetails.connectionEpoch {
+                    return (detail, generation)
+                }
+            } catch {
+                guard !Task.isCancelled,
+                      generation != optionsStore.loadGeneration || epoch != agentDetails.connectionEpoch else { throw error }
+            }
+            // A connection change already invalidated shared detail. A catalog
+            // invalidation on the same connection requires explicit revalidation.
+            needsRefresh = epoch == agentDetails.connectionEpoch
+            generation = optionsStore.loadGeneration
+            epoch = agentDetails.connectionEpoch
         }
     }
 

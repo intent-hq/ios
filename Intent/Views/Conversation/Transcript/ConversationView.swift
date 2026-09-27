@@ -17,14 +17,15 @@ struct ConversationView: View {
     ) {
         self.onAgentUnavailable = onAgentUnavailable
         self.assistantStore = assistantStore
-        _proposals = State(initialValue: ProposalActionStore(connection: session.connection, agentId: agentId, workspaceId: workspaceId))
+        _proposals = State(initialValue: ProposalActionStore(connection: session.connection, agentId: agentId, workspaceId: workspaceId, details: session.agentDetails))
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
             workspaceId: workspaceId,
             agentName: agentName,
             connection: session.connection,
             uploadService: session.attachmentUploadService,
-            optionsStore: session.creationOptionsStore
+            optionsStore: session.creationOptionsStore,
+            agentDetails: session.agentDetails
         ))
     }
 
@@ -36,9 +37,7 @@ struct ConversationView: View {
         )
         .environment(proposals)
         .task(id: viewModel.store.sessionMetadataGeneration) {
-            if viewModel.store.messages.contains(where: { message in message.contentBlocks.contains { ActionProposal.parse($0) != nil } }) {
-                await proposals.refresh()
-            }
+            await proposals.loadIfPresent(in: viewModel.store.messages)
         }
     }
 }

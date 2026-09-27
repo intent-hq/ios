@@ -26,6 +26,8 @@ extension ConversationViewModel {
     func teardownLiveStores() {
         liveStoreActivationGeneration &+= 1
         activeLiveStoreActivation = nil
+        if let detailConsumer { agentDetails.release(agentId: agentId, consumer: detailConsumer) }
+        detailConsumer = nil
         store.deactivateStreaming()
         hookStore.deactivate()
         monitoredPrStore.deactivate()
