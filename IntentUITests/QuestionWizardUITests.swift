@@ -100,13 +100,23 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     func testDismissRequiresConfirmationAndCancelPreservesQuestions() throws {
         let app = try openQuestions()
         tap(app.buttons["question.dismiss"])
-        tap(app.buttons["Cancel"])
+        let confirmation = app.sheets["Dismiss questions?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.buttons["Dismiss questions"].isHittable)
+        let cancel = confirmation.buttons["Cancel"]
+        if cancel.exists {
+            tap(cancel)
+        } else {
+            cancelQuestionPopover(in: app)
+        }
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["question.answer"].waitForExistence(timeout: Self.timeout))
         tap(app.buttons["question.answer"])
         XCTAssertTrue(app.staticTexts["Question One"].waitForExistence(timeout: Self.timeout))
         tap(app.buttons["question.actions"])
         tap(app.buttons["Dismiss questions"])
-        tap(app.buttons["Dismiss questions"])
+        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        tap(confirmation.buttons["Dismiss questions"])
         XCTAssertTrue(app.buttons["question.actions"].waitForNonExistence(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["question.answer"].exists)
         XCTAssertTrue(app.textViews["composer.textView"].firstMatch.waitForExistence(timeout: Self.timeout))
@@ -137,6 +147,32 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(app.buttons["question.answer"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, draft)
         XCTAssertTrue(send.isEnabled, "Explicit collapse keeps the existing ordinary-message escape hatch")
+    }
+
+    @MainActor
+    private func cancelQuestionPopover(in app: XCUIApplication) {
+        let popover = app.popovers.containing(.sheet, identifier: "Dismiss questions?").element
+        let dismissRegion = app.otherElements["PopoverDismissRegion"]
+        XCTAssertTrue(popover.exists)
+        XCTAssertTrue(dismissRegion.exists)
+        XCTAssertTrue(dismissRegion.isHittable)
+
+        // The native modal dismissal region intercepts the tap, not the app beneath it.
+        // Its frame covers the popover too, so avoid its center and use the exposed left strip.
+        let regionFrame = dismissRegion.frame.intersection(app.frame)
+        let popoverFrame = popover.frame
+        XCTAssertGreaterThan(popoverFrame.minX, regionFrame.minX)
+        let point = CGPoint(x: (regionFrame.minX + popoverFrame.minX) / 2, y: popoverFrame.midY)
+        XCTAssertTrue(regionFrame.contains(point))
+        XCTAssertFalse(popoverFrame.contains(point), "Cancellation must not tap a confirmation action")
+        dismissRegion
+            .coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(
+                dx: point.x - dismissRegion.frame.minX,
+                dy: point.y - dismissRegion.frame.minY
+            ))
+            .tap()
+        XCTAssertTrue(dismissRegion.waitForNonExistence(timeout: Self.timeout))
     }
 
     private static var stackedAnswersPredicate: NSPredicate {
