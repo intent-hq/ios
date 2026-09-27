@@ -471,6 +471,34 @@ class SimulatorTests(unittest.TestCase):
     def test_source_moved_phase_retains_failure_and_retry_transcripts(self):
         self.check_phase_transcript("Source-independence check (ios#320)", "source-moved")
 
+    def test_validation_step_initializes_and_persists_runner_evidence_directory(self):
+        scripts = Path(__file__).resolve().parent
+        workflow = (scripts.parent / ".github/workflows/ci.yml").read_text()
+        section = workflow.split("      - name: Validate simulator request\n", 1)[1].split("\n      - name:", 1)[0]
+        lines = section.splitlines()
+        index = next(i for i, line in enumerate(lines) if line.startswith("        run:"))
+        command = lines[index].split("run:", 1)[1].strip()
+        if command == "|":
+            command = textwrap.dedent("\n".join(lines[index + 1:]))
+        for family in ("iphone", "ipad"):
+            with self.subTest(family=family), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "scripts").mkdir()
+                (root / "scripts/ci_simulator.py").write_text((scripts / "ci_simulator.py").read_text())
+                runner = root / "runner temp with spaces"
+                runner.mkdir()
+                environment = root / "github-environment"
+                env = {"PATH": os.environ["PATH"], "RUNNER_TEMP": str(runner), "GITHUB_ENV": str(environment),
+                       "SIMULATOR_FAMILY": family, "GITHUB_EVENT_NAME": "workflow_dispatch", "ONLY_TESTING": SELECTORS}
+                result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", command], cwd=root, env=env,
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                directory = runner / "ipad-evidence"
+                self.assertEqual(json.loads((directory / "request.json").read_text())["family"], family)
+                self.assertEqual(environment.read_text(), f"IPAD_EVIDENCE_DIR={directory}\n")
+        job_inputs = workflow.split("  build-and-test:\n", 1)[1].split("    steps:\n", 1)[0]
+        self.assertNotIn("${{ runner.", job_inputs, "Runner context is unavailable in job-level inputs")
+
     def test_workflow_retains_required_default_paths_and_always_collects_owned_cleanup(self):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
         build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
