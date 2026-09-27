@@ -27,11 +27,14 @@ struct WorkspaceChangesStoreTests {
 
     @Test func refreshKeepsStagedAndUnstagedVersionsOfTheSameFile() async throws {
         let fake = makeFake()
-        fake.responseMap["file-tracking.getChanges"] = WorkspaceChangesFixture.snapshot([
-            WorkspaceChangesFixture.change(id: "staged-row", stage: "staged"),
-            WorkspaceChangesFixture.change(id: "unstaged-row"),
-            WorkspaceChangesFixture.change(id: "historic-row", stage: "committed")
-        ], truncated: true)
+        fake.responseMap["file-tracking.getChanges"] = WorkspaceChangesFixture.snapshot(
+            [
+                WorkspaceChangesFixture.change(id: "staged-row", stage: "staged"),
+                WorkspaceChangesFixture.change(id: "unstaged-row"),
+                WorkspaceChangesFixture.change(id: "historic-row", stage: "committed")
+            ],
+            truncated: true
+        )
         fake.responseMap["file-tracking.loadCommits"] = WorkspaceChangesFixture.page(["first"], nextToken: "page-2")
         let store = WorkspaceChangesStore(connectionManager: fake)
         await store.refresh(workspaceId: "workspace-1")

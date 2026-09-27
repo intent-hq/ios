@@ -175,7 +175,7 @@ extension WorkspaceChangesStore {
         eventRefreshTask?.cancel()
         eventRefreshTask = nil
         refreshQueued = false
-        isLoading = false
+        isLoading = true
         isLoadingMore = false
         isObserving = true
         if let eventHandlerId { connectionManager.removeEventHandler(id: eventHandlerId) }
