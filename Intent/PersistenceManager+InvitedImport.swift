@@ -47,10 +47,12 @@ extension PersistenceManager {
               let locals = loadConnectionsWithOutcome().connections else { return nil }
         guard !locals.contains(where: { $0.invitedPersonKey == key && $0.invitedSyncPayload != nil && Self.invitedRecord($0) == nil }) else { return nil }
         var records = fresh.records + locals.compactMap(Self.invitedRecord)
-        if fresh.hasSameEntries(as: original) { records += migrated }
         var journal = invitedJournal
         journal.observe(records)
         invitedJournal = journal
+        // Prepared migrations are not durable yet. Observe fresh removals now,
+        // but let publication retire aliases only after the local save succeeds.
+        if fresh.hasSameEntries(as: original) { records += migrated }
         guard let merged = InvitedSyncMerge.person(records.filter { $0.personKey == key }, rememberedFloor: journal.floors[key] ?? 0),
               merged.live, merged.token == authenticated.token, merged.pairedAt == authenticated.pairedAt else { return nil }
         return merged
