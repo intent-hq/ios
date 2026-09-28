@@ -54,9 +54,9 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         let sheet = app.buttons["creation.back"]
         XCTAssertTrue(sheet.waitForExistence(timeout: Fixture.timeout))
         // The identifier remains stable after typing; this sheet has one editable field.
-        let message = app.textFields["creation.prompt"]
+        let message = app.textViews["creation.prompt"]
         XCTAssertTrue(message.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertEqual(app.textFields.count, 1)
+        XCTAssertEqual(app.textViews.count, 1)
         message.tap()
         message.typeText("Draft survives background return")
         XCTAssertEqual(message.value as? String, "Draft survives background return")

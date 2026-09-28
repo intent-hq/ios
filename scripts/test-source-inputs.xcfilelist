@@ -434,6 +434,7 @@ $(SRCROOT)/Intent/Services/WebSocketMessageAssembler.swift
 $(SRCROOT)/Intent/Services/WebSocketPingSupport.swift
 $(SRCROOT)/Intent/Services/WebSocketTransportError.swift
 $(SRCROOT)/Intent/Services/WorkspaceBrowserStore.swift
+$(SRCROOT)/Intent/Services/WorkspaceCreationImages.swift
 $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
@@ -625,6 +626,7 @@ $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormStyle.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspacePrompt.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSourceCard.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
@@ -652,6 +654,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspacePromptTextView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptSwipeGesture.swift
@@ -962,6 +965,7 @@ $(SRCROOT)/IntentTests/WorkspaceBrowserRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserTabTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserTests.swift
+$(SRCROOT)/IntentTests/WorkspaceCreationImagesTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFallbackRefreshTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift

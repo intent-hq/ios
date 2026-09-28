@@ -96,7 +96,7 @@ private struct WorkspaceComposerEditor: View {
     }
 }
 
-private struct WorkspaceAttachmentMenu: View {
+struct WorkspaceAttachmentMenu: View {
     let onPhotos: () -> Void
     let onFiles: () -> Void
     @Environment(\.colorScheme) private var colorScheme
