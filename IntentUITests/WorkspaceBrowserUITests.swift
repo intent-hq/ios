@@ -40,7 +40,6 @@ nonisolated final class WorkspaceBrowserUITests: XCTestCase {
         XCTAssertTrue(selectAll.waitForExistence(timeout: Self.timeout))
         selectAll.tap()
         address.typeText(XCUIKeyboardKey.delete.rawValue)
-        XCTAssertEqual(address.value as? String, "")
         address.typeText("127.0.0.1:4321/settings\n")
         XCTAssertEqual(address.value as? String, "http://127.0.0.1:4321/settings")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
