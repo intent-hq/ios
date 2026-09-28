@@ -5,6 +5,78 @@ import Synchronization
 import Testing
 
 extension ConversationTranscriptScrollPolicyTests {
+    @Test @MainActor func issuedRetainedScrollWaitsForTheObservedLanding() {
+        // Native afc4c21: a fresh owner-token measurement arrived before the
+        // asynchronous scrollTo moved the row, despite the command returning.
+        let savedY = CGFloat(52.66666666666629)
+        let state = retainedRestorationState(y: savedY)
+        #expect(state.resumeViewportTarget() == "row-31")
+        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: savedY)) == nil)
+        issueRetainedScroll(state)
+        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: savedY)) == nil)
+        let landed = retainedMeasurement(state, y: -2.2737367544323206e-13)
+        #expect(recordRetainedMeasurement(state, landed) == landed.frame.minY - savedY)
+        #expect(recordRetainedMeasurement(state, landed) == nil)
+    }
+
+    @Test @MainActor func retainedScrollRejectsIntermediateLayoutWithFreshOwnership() {
+        let state = retainedRestorationState(y: 48)
+        #expect(state.resumeViewportTarget() == "row-31")
+        issueRetainedScroll(state)
+        let geometry = ConversationTranscriptScrollPolicy.ViewportGeometry(
+            contentOffsetY: 1000, contentHeight: 2800, containerHeight: 624, topInset: 0, bottomInset: 0
+        )
+        for minY in [CGFloat(48), 20, 12] {
+            #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: minY), geometry: geometry) == nil)
+            #expect(state.viewportAnchor.hasPendingRetainedRestoration)
+        }
+        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 0), geometry: geometry) == -48)
+        #expect(!state.viewportAnchor.hasPendingRetainedRestoration)
+    }
+
+    @Test(arguments: [CGFloat(0), CGFloat(20)]) @MainActor
+    func retainedLandingHonorsAdjustedTopInset(inset: CGFloat) {
+        let state = retainedRestorationState(y: 48)
+        #expect(state.resumeViewportTarget() == "row-31")
+        issueRetainedScroll(state)
+        let geometry = ConversationTranscriptScrollPolicy.ViewportGeometry(
+            contentOffsetY: 1000, contentHeight: 2800, containerHeight: 624, topInset: inset, bottomInset: 12
+        )
+        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: inset + 12), geometry: geometry) == nil)
+        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: inset), geometry: geometry) == inset - 48)
+    }
+
+    @Test @MainActor func unavailableLandingGeometryKeepsRestorationForAValidCallback() {
+        let state = retainedRestorationState(y: 48)
+        #expect(state.resumeViewportTarget() == "row-31")
+        issueRetainedScroll(state)
+        let unavailable = ConversationTranscriptScrollPolicy.ViewportGeometry(
+            contentOffsetY: .nan, contentHeight: 2800, containerHeight: 624, topInset: 0, bottomInset: 0
+        )
+        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 0), geometry: unavailable) == nil)
+        #expect(state.viewportAnchor.hasPendingRetainedRestoration)
+        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 0)) == -48)
+    }
+
+    @Test @MainActor func retainedWriteDiagnosticsKeepActualWriteAndLaterGeometryBounded() {
+        let state = retainedRestorationState(y: 48)
+        #expect(state.resumeViewportTarget() == "row-31")
+        issueRetainedScroll(state)
+        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 0)) == -48)
+        state.viewportAnchor.recordRestorationWrite(before: 1000, requested: 952, actual: 1000, accepted: true)
+        let summary = state.viewportAnchor.restorationSummary
+        #expect(summary.contains("write before=1000.0 requested=952.0 actual=Optional(1000.0) accepted=true"))
+        #expect(state.viewportAnchor.restorationSummary == summary)
+        for _ in 0..<20 { #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 0)) == nil) }
+        #expect(state.viewportAnchor.restorationSummary.split(separator: ";").count == 8)
+        #expect(state.viewportAnchor.restorationSummary.hasPrefix("restore=row-31 y=48.0"))
+        #expect(state.viewportAnchor.restorationSummary.contains("write before=1000.0 requested=952.0 actual=Optional(1000.0) accepted=true"))
+        state.retireViewportRestoration()
+        let cancelled = state.viewportAnchor.restorationSummary
+        _ = recordRetainedMeasurement(state, retainedMeasurement(state, y: 0))
+        #expect(state.viewportAnchor.restorationSummary == cancelled)
+    }
+
     private enum RetainedGeometryFixture {
         static let distance: CGFloat = 900
         static let width: CGFloat = 300
@@ -49,7 +121,11 @@ extension ConversationTranscriptScrollPolicyTests {
         issueRetainedScroll(state)
         // A queued frame captured before the command is not its completion.
         #expect(recordRetainedMeasurement(state, before) == nil)
-        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: savedY)) == nil)
+        // Nonzero top alignment may legitimately stay put at the content end.
+        let geometry = ConversationTranscriptScrollPolicy.ViewportGeometry(
+            contentOffsetY: 1000, contentHeight: 1624, containerHeight: 624, topInset: 0, bottomInset: 0
+        )
+        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: savedY), geometry: geometry) == nil)
         #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: savedY)) == nil)
         #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: savedY + 20)) == nil)
     }
@@ -129,7 +205,11 @@ extension ConversationTranscriptScrollPolicyTests {
         )
     }
 
-    @MainActor private func recordRetainedMeasurement(_ state: ConversationTranscriptScrollState, _ measurement: ConversationTranscriptViewportAnchor.Measurement) -> CGFloat? {
-        state.viewportAnchor.record(id: "row-31", measurement: measurement, viewportHeight: RetainedGeometryFixture.viewportHeight, preserve: true, entryGeneration: state.initialScrollGeneration)
+    @MainActor private func recordRetainedMeasurement(
+        _ state: ConversationTranscriptScrollState,
+        _ measurement: ConversationTranscriptViewportAnchor.Measurement,
+        geometry: ConversationTranscriptScrollPolicy.ViewportGeometry? = nil
+    ) -> CGFloat? {
+        state.viewportAnchor.record(id: "row-31", measurement: measurement, viewportHeight: RetainedGeometryFixture.viewportHeight, preserve: true, entryGeneration: state.initialScrollGeneration, scrollGeometry: geometry)
     }
 }

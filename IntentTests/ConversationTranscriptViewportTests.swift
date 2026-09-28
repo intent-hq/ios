@@ -117,7 +117,12 @@ extension ConversationTranscriptScrollPolicyTests {
         let realized = ConversationTranscriptViewportAnchor.Measurement(
             frame: frame, divider: "new-seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision
         )
-        #expect(state.viewportAnchor.record(id: "row-31", measurement: realized, viewportHeight: 600, preserve: true, entryGeneration: generation) == frame.minY - 48)
+        // An intersecting row can remain away from zero when content bounds
+        // clamp the requested top alignment. Its measured offset still wins.
+        let geometry = ConversationTranscriptScrollPolicy.ViewportGeometry(
+            contentOffsetY: frame.minY < 0 ? 0 : 600, contentHeight: 1200, containerHeight: 600, topInset: 0, bottomInset: 0
+        )
+        #expect(state.viewportAnchor.record(id: "row-31", measurement: realized, viewportHeight: 600, preserve: true, entryGeneration: generation, scrollGeometry: geometry) == frame.minY - 48)
     }
 
     @Test(arguments: [false, true], [false, true]) @MainActor

@@ -100,14 +100,27 @@ extension ConversationTranscriptView {
               let geometry = scrollMomentumProxy.restingGeometry else { return }
         // The geometry callback includes the divider identity, so even a row
         // already held by bottom anchoring consumes this revision with no move.
+        let wasRetainedRestoration = scrollState.viewportAnchor.hasPendingRetainedRestoration
         let adjustment = scrollState.viewportAnchor.record(
             id: messageId,
             measurement: measurement,
             viewportHeight: geometry.containerHeight,
             preserve: hasInitiallyScrolled && !isUserInteracting && !isFollowing,
-            entryGeneration: scrollState.initialScrollGeneration
+            entryGeneration: scrollState.initialScrollGeneration,
+            scrollGeometry: geometry
         )
-        if let adjustment { scrollMomentumProxy.pageTo(offsetY: geometry.contentOffsetY + adjustment) }
+        if let adjustment {
+            let requested = geometry.contentOffsetY + adjustment
+            let accepted = scrollMomentumProxy.pageTo(offsetY: requested)
+            if wasRetainedRestoration {
+                scrollState.viewportAnchor.recordRestorationWrite(
+                    before: geometry.contentOffsetY,
+                    requested: requested,
+                    actual: scrollMomentumProxy.restingGeometry?.contentOffsetY,
+                    accepted: accepted
+                )
+            }
+        }
     }
 
     private func messageRow(for message: ConversationMessage) -> some View {

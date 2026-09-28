@@ -7,6 +7,7 @@ import Foundation
 /// Each divider revision permits one correction; scrolling remains user-owned.
 struct ConversationTranscriptViewportAnchor {
     private static let maximumRestorationEvents = 8
+    private static let landingTolerance: CGFloat = 0.5
 
     struct Position {
         let id: String
@@ -40,6 +41,7 @@ struct ConversationTranscriptViewportAnchor {
     private var initialized = false
     private var pending: Pending?
     private var restorationEvents: [String] = []
+    private var restorationTarget: String?
     private var currentMessageIDs: Set<String> = []
     private var hasEstablishedCurrentMessages = false
     private(set) var visiblePosition: Position?
@@ -48,7 +50,12 @@ struct ConversationTranscriptViewportAnchor {
     var restorationSummary: String { restorationEvents.joined(separator: "; ") }
 
     mutating func record(
-        id: String, measurement: Measurement, viewportHeight: CGFloat, preserve: Bool, entryGeneration: Int = 0
+        id: String,
+        measurement: Measurement,
+        viewportHeight: CGFloat,
+        preserve: Bool,
+        entryGeneration: Int = 0,
+        scrollGeometry: ConversationTranscriptScrollPolicy.ViewportGeometry? = nil
     ) -> CGFloat? {
         guard measurement.generation == entryGeneration,
               measurement.ownershipRevision == ownershipRevision,
@@ -74,9 +81,12 @@ struct ConversationTranscriptViewportAnchor {
         if let first = (full.isEmpty ? visible : full).min(by: { $0.value.minY < $1.value.minY }) {
             visiblePosition = Position(id: first.key, minY: first.value.minY)
         }
-        guard let pending, pending.id == id else { return nil }
+        guard let pending, pending.id == id else {
+            if restorationTarget == id { recordRestorationEvent("after=\(measurement.frame) offset=\(String(describing: scrollGeometry?.contentOffsetY))") }
+            return nil
+        }
         let adjustment = measurement.frame.minY - pending.minY
-        if pending.isReappearance, !canConsumeRestoration(measurement, viewportHeight: viewportHeight, preserve: preserve, pending: pending) {
+        if pending.isReappearance, !canConsumeRestoration(measurement, viewportHeight: viewportHeight, preserve: preserve, pending: pending, scrollGeometry: scrollGeometry) {
             return nil
         }
         self.pending = nil
@@ -95,6 +105,7 @@ struct ConversationTranscriptViewportAnchor {
 
     mutating func cancelRestoration() {
         if pending?.isReappearance == true { recordRestorationEvent("cancelled-by-owner") }
+        restorationTarget = nil
         ownershipRevision += 1
         pending = nil
         frames.removeAll()
@@ -112,6 +123,7 @@ struct ConversationTranscriptViewportAnchor {
 
     mutating func restore(_ position: Position, generation: Int) {
         restorationEvents = ["restore=\(position.id) y=\(position.minY) generation=\(generation) owner=\(ownershipRevision)"]
+        restorationTarget = position.id
         pending = Pending(id: position.id, minY: position.minY, generation: generation, isReappearance: true)
     }
 
@@ -119,9 +131,8 @@ struct ConversationTranscriptViewportAnchor {
         guard let pending, pending.isReappearance, !pending.coarseScrollIssued,
               pending.id == target, pending.generation == generation,
               ownershipRevision == self.ownershipRevision else { return }
-        // Measurements captured before scrollTo returned cannot settle its
-        // result. The published owner token requests fresh geometry even if
-        // the command leaves an already aligned row in the same position.
+        // The published token rejects pre-command callbacks. Command return
+        // does not mean the lazy stack has applied the requested alignment.
         self.ownershipRevision += 1
         self.pending?.coarseScrollIssued = true
         frames.removeAll()
@@ -131,10 +142,28 @@ struct ConversationTranscriptViewportAnchor {
 
     private mutating func recordRestorationEvent(_ event: String) {
         restorationEvents.append(event)
-        if restorationEvents.count > Self.maximumRestorationEvents { restorationEvents.remove(at: 1) }
+        if restorationEvents.count > Self.maximumRestorationEvents {
+            // Retain the saved position and native write receipt even when
+            // later layout produces more samples than the bounded history.
+            restorationEvents.remove(at: restorationEvents[1].hasPrefix("write ") ? 2 : 1)
+        }
     }
 
-    private mutating func canConsumeRestoration(_ measurement: Measurement, viewportHeight: CGFloat, preserve: Bool, pending: Pending) -> Bool {
+    mutating func recordRestorationWrite(before: CGFloat, requested: CGFloat, actual: CGFloat?, accepted: Bool) {
+        guard restorationTarget != nil else { return }
+        restorationEvents.removeAll { $0.hasPrefix("write ") }
+        recordRestorationEvent("write before=\(before) requested=\(requested) actual=\(String(describing: actual)) accepted=\(accepted)")
+    }
+
+    var hasPendingRetainedRestoration: Bool { pending?.isReappearance == true }
+
+    private mutating func canConsumeRestoration(
+        _ measurement: Measurement,
+        viewportHeight: CGFloat,
+        preserve: Bool,
+        pending: Pending,
+        scrollGeometry: ConversationTranscriptScrollPolicy.ViewportGeometry?
+    ) -> Bool {
         recordRestorationEvent("measure=\(measurement.frame) viewport=\(viewportHeight) preserve=\(preserve)")
         // Rehosting can report unavailable geometry before realizing the row.
         let frame = measurement.frame
@@ -148,8 +177,28 @@ struct ConversationTranscriptViewportAnchor {
             recordRestorationEvent("awaiting-coarse-command")
             return false
         }
+        if preserve, !hasReachedCoarseTarget(frame, geometry: scrollGeometry) {
+            recordRestorationEvent("awaiting-coarse-landing offset=\(String(describing: scrollGeometry?.contentOffsetY))")
+            return false
+        }
         recordRestorationEvent(preserve ? "adjust=\(measurement.frame.minY - pending.minY)" : "yielded")
         return true
+    }
+
+    private func hasReachedCoarseTarget(_ frame: CGRect, geometry: ConversationTranscriptScrollPolicy.ViewportGeometry?) -> Bool {
+        guard let geometry else { return abs(frame.minY) <= Self.landingTolerance }
+        guard geometry.contentOffsetY.isFinite, geometry.contentHeight.isFinite, geometry.contentHeight > 0,
+              geometry.containerHeight.isFinite, geometry.containerHeight > 0,
+              geometry.topInset.isFinite, geometry.bottomInset.isFinite else { return false }
+        let minimum = -geometry.topInset
+        let maximum = max(minimum, geometry.contentHeight - geometry.containerHeight + geometry.bottomInset)
+        let target = geometry.contentOffsetY + frame.minY - geometry.topInset
+        guard minimum.isFinite, maximum.isFinite, target.isFinite else { return false }
+        let reachable = min(maximum, max(minimum, target))
+        // A fresh callback can still describe the pre-scroll layout. Settle
+        // only at the requested top alignment or its actual content boundary;
+        // this also completes legitimate already-aligned/no-move commands.
+        return abs(reachable - geometry.contentOffsetY) <= Self.landingTolerance
     }
 
     mutating func reset() {
