@@ -420,6 +420,8 @@ $(SRCROOT)/IntentTests/ConnectionPairingTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceMigrationTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
+$(SRCROOT)/IntentTests/ConversationBudgetEvidence.swift
+$(SRCROOT)/IntentTests/ConversationBudgetFixture.swift
 $(SRCROOT)/IntentTests/ConversationCatalogFailureTests.swift
 $(SRCROOT)/IntentTests/ConversationCatalogLifecycleTests.swift
 $(SRCROOT)/IntentTests/ConversationCatalogReuseTests.swift
@@ -431,6 +433,11 @@ $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupAuthorityTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupBudgetConditionalTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupBudgetMediaTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupBudgetRecoveryTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupBudgetStreamingTests.swift
+$(SRCROOT)/IntentTests/ConversationStartupBudgetTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupCancellationTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupEpochTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupFixture.swift

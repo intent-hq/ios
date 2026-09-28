@@ -93,6 +93,9 @@ final class RPCRecordingConnection: FakeConnectionManager {
             recordedRequests[index].completed = milestone()
             return result
         } catch {
+            if let rejection = error as? RPCFixtureRejection {
+                recordedRequests[index].responseJSON = try RPCFixtureJSON.encode(rejection.json)
+            }
             recordedRequests[index].completed = milestone()
             recordedRequests[index].failure = String(describing: error)
             throw error
