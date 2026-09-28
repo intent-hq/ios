@@ -334,7 +334,7 @@ private extension WorkspaceDetailView {
         !terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty
             || !browserStore.browsers(workspaceId: workspaceId).isEmpty
             || browserStore.errorMessage(workspaceId: workspaceId) != nil
-            || !scriptStore.scripts(workspaceId: workspaceId).isEmpty
+            || !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty
             || scriptStore.errorMessage(workspaceId: workspaceId) != nil
     }
 

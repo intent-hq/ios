@@ -63,6 +63,10 @@ final class WorkspaceScriptStore {
 
     func scripts(workspaceId: String) -> [WorkspaceScript] { definitions[workspaceId, default: []] }
 
+    func scriptsWithRuns(workspaceId: String) -> [WorkspaceScript] {
+        scripts(workspaceId: workspaceId).filter(\.hasRun)
+    }
+
     func errorMessage(workspaceId: String) -> String? { errors[workspaceId] ?? loadErrors[workspaceId] }
 
     func isLaunching(_ script: WorkspaceScript) -> Bool {
@@ -162,9 +166,10 @@ final class WorkspaceScriptStore {
             return
         }
         revisions[script.workspaceId, default: 0] += 1
-        var starting = script
-        starting.apply(runtime: ["status": "starting"])
-        update(starting)
+        var preparing = script
+        preparing.detectedURL = nil
+        preparing.error = nil
+        update(preparing)
         let task = Task { [connection] in
             let response = try await connection.request("script.start", params: ["workspaceId": script.workspaceId, "scriptId": script.id])
             guard let result = response as? [String: Any], result["ok"] as? Bool == true else {

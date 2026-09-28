@@ -14,7 +14,43 @@ struct WorkspaceScriptStoreTests {
         await fixture.load(rows + [missingRuntime, rows[0], fixture.definition(workspaceId: "other"), ["id": "broken"]])
         #expect(fixture.store.scripts(workspaceId: "workspace").map(\.id) == statuses + ["new"])
         #expect(fixture.store.scripts(workspaceId: "workspace").last?.status == "idle")
+        #expect(fixture.store.scriptsWithRuns(workspaceId: "workspace").map(\.id) == Array(statuses.dropFirst()))
         #expect(fixture.store.browserToOpen(workspaceId: "workspace") == nil)
+    }
+
+    @Test func idleScriptsNeedRuntimeEvidenceToAppearOnThePage() async {
+        let fixture = WorkspaceScriptFixture()
+        let snapshots: [[String: Any]] = [
+            ["status": "idle"],
+            ["status": "idle", "previouslyRunning": false],
+            ["status": "idle", "startedAt": NSNull(), "stoppedAt": NSNull(), "exitCode": NSNull()],
+            ["status": "idle", "previouslyRunning": true],
+            ["status": "idle", "startedAt": "2026-09-28T02:00:00Z"],
+            ["status": "idle", "stoppedAt": "2026-09-28T02:01:00Z"],
+            ["status": "idle", "exitCode": 0]
+        ]
+        let definitions = snapshots.enumerated().map { index, runtime in
+            var definition = fixture.definition(id: "script-\(index)")
+            definition["runtime"] = runtime
+            return definition
+        }
+        await fixture.load(definitions)
+        #expect(fixture.store.scriptsWithRuns(workspaceId: "workspace").map(\.id) == ["script-3", "script-4", "script-5", "script-6"])
+        #expect(fixture.store.scripts(workspaceId: "workspace").count == snapshots.count)
+    }
+
+    @Test func pageRowsFollowFirstRunCompletionAndRefresh() async throws {
+        let fixture = WorkspaceScriptFixture()
+        let script = try await fixture.idleScript()
+        #expect(fixture.store.scriptsWithRuns(workspaceId: "workspace").isEmpty)
+        fixture.startReplies()
+        await fixture.store.launch(script)
+        #expect(fixture.store.scriptsWithRuns(workspaceId: "workspace").map(\.status) == ["starting"])
+        fixture.event(status: "exited")
+        #expect(fixture.store.scriptsWithRuns(workspaceId: "workspace").map(\.status) == ["exited"])
+        await fixture.load([fixture.definition(status: "exited"), fixture.definition(id: "unused")])
+        #expect(fixture.store.scriptsWithRuns(workspaceId: "workspace").map(\.id) == [script.id])
+        #expect(fixture.store.scriptsWithRuns(workspaceId: "other").isEmpty)
     }
 
     @Test func launchesWithStartAndOpensDetectedURLExactlyOnce() async throws {
@@ -118,6 +154,7 @@ struct WorkspaceScriptStoreTests {
         await fixture.store.launch(script)
         #expect(fixture.store.errorMessage(workspaceId: "workspace") == "Launch refused")
         #expect(!fixture.store.isLaunching(script))
+        #expect(fixture.store.scriptsWithRuns(workspaceId: "workspace").isEmpty)
         await fixture.store.refresh(workspaceId: "workspace")
         #expect(fixture.store.errorMessage(workspaceId: "workspace") == "Launch refused")
         fixture.fake.errorMap.removeAll()

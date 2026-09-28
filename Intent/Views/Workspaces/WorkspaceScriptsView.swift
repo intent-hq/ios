@@ -6,7 +6,7 @@ struct WorkspaceScriptsView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let scripts = store.scripts(workspaceId: workspaceId)
+        let scripts = store.scriptsWithRuns(workspaceId: workspaceId)
         if !scripts.isEmpty || store.errorMessage(workspaceId: workspaceId) != nil {
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionHeadingSpacing) {
                 Text("Scripts")

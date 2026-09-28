@@ -8,6 +8,7 @@ nonisolated struct WorkspaceScript: Equatable, Identifiable, Sendable {
     var status: String = "idle"
     var detectedURL: String?
     var error: String?
+    private(set) var hasRun: Bool
 
     var isActive: Bool { status != "idle" && status != "exited" }
 
@@ -19,6 +20,7 @@ nonisolated struct WorkspaceScript: Equatable, Identifiable, Sendable {
         self.status = status
         self.detectedURL = detectedURL
         self.error = error
+        self.hasRun = status != "idle"
     }
 
     init?(definition: [String: Any], workspaceId: String) {
@@ -32,6 +34,11 @@ nonisolated struct WorkspaceScript: Equatable, Identifiable, Sendable {
 
     mutating func apply(runtime: [String: Any]) {
         status = runtime["status"] as? String ?? "idle"
+        hasRun = status != "idle"
+            || runtime["previouslyRunning"] as? Bool == true
+            || runtime["startedAt"] is String
+            || runtime["stoppedAt"] is String
+            || runtime["exitCode"] is Int
         // Runtime snapshots omit cleared fields; absence must clear the old run.
         detectedURL = runtime["detectedUrl"] as? String
         error = runtime["error"] as? String

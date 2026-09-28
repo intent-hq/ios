@@ -4,11 +4,20 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
     @MainActor
-    func testLaunchingServerFromSectionOpensAndRetainsBrowser() {
+    func testFirstLaunchAddsServerToSectionAndRetainsBrowser() {
         let app = launchWorkspace()
         let script = app.buttons["workspace.script.demo-server"]
+        XCTAssertFalse(script.exists)
+        openScriptsMenu(in: app)
+        let server = app.buttons["workspace.script.menu.demo-server"]
+        XCTAssertTrue(server.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspace.script.menu.demo-check"].exists)
+        server.tap()
+        assertServerBrowser(in: app)
+        app.buttons["Done"].tap()
         for _ in 0..<5 where !script.isHittable { app.swipeUp() }
         XCTAssertTrue(script.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.buttons["workspace.script.demo-check"].exists)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "workspace-scripts-section"
         screenshot.lifetime = .keepAlways
@@ -37,6 +46,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         expectation(for: finished, evaluatedWith: commandRow)
         waitForExpectations(timeout: Self.timeout)
         XCTAssertFalse(app.textFields["Browser URL"].exists)
+        XCTAssertFalse(app.buttons["workspace.script.demo-server"].exists)
         openScriptsMenu(in: app)
         let server = app.buttons["workspace.script.menu.demo-server"]
         XCTAssertTrue(server.waitForExistence(timeout: Self.timeout))
