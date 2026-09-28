@@ -254,7 +254,7 @@ extension ConversationStoreLiveStateTests {
     /// Daemon-shaped live `tool_use` delta: auggie sends `raw_input: null`, so the
     /// daemon coerces input to `{}` carrying only `_acpTitle` (tool_block.rs). The
     /// classifier must derive a meaningful title from `_acpTitle` instead of
-    /// falling through to the generic "🔧" fallback.
+    /// falling through to the generic .tool fallback.
     @Test func midTurnFileReadToolWithAcpTitleOnlyClassifiesAsRead() async throws {
         let (store, _) = makeStore()
 
@@ -275,7 +275,7 @@ extension ConversationStoreLiveStateTests {
         #expect(block.input["_acpTitle"]?.value as? String == "Read `crates/intent-core/src/lib.rs`")
 
         let display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
-        #expect(display.icon == "📄")
+        #expect(display.icon == .file)
         #expect(display.verb == "Read")
         #expect(display.subject == "lib.rs")
         #expect(display.path == "crates/intent-core/src")
@@ -285,8 +285,86 @@ extension ConversationStoreLiveStateTests {
         let display = ToolClassifier.classify(name: "workspace_api", input: [
             "_acpTitle": AnyCodable("Read spec and task note")
         ])
-        #expect(display.icon != "🔧")
+        #expect(display.icon != .tool)
         #expect(display.verb == "Read spec and task note")
+    }
+
+    @Test func codexWorkspaceApiSnapshotUsesSummary() async throws {
+        let (store, _) = makeStore()
+        let summary = "Inspect the coordinates of the swipes recorded by hosted UI tests"
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
+            [
+                "id": "msg-1",
+                "role": "assistant",
+                "contentBlocks": [
+                    [
+                        "type": "tool_use",
+                        "id": "msg-1:0",
+                        "name": "mcp.workspace-mcp.workspace_api",
+                        "input": [
+                            "_acpTitle": "mcp.workspace-mcp.workspace_api",
+                            "code": "return await ws.workspace.details()",
+                            "summary": summary
+                        ],
+                        "toolCallId": "call-1",
+                        "metadata": ["toolKind": "other", "status": "completed"]
+                    ]
+                ],
+                "timestamp": "2026-09-26T00:00:00.000Z"
+            ]
+        ]))
+
+        let block = try #require(store.messages.first?.contentBlocks.first)
+        #expect(block.type == .toolUse)
+        #expect(block.input["summary"]?.value as? String == summary)
+        let display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
+        #expect(display.icon == .workspace)
+        #expect(display.verb == summary)
+        #expect(display.subject == nil)
+    }
+
+    @Test func codexWorkspaceApiLiveUpdateReplacesRawTitleWithSummary() async throws {
+        let (store, _) = makeStore()
+        let title = "mcp.workspace-mcp.workspace_api"
+        let summary = "Inspect the coordinates of the swipes recorded by hosted UI tests"
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-1", block: [
+                "type": "tool_use",
+                "id": "msg-1:0",
+                "name": "workspace_api",
+                "input": ["_acpTitle": title],
+                "toolCallId": "call-1",
+                "metadata": ["toolKind": "other", "status": "started"]
+            ])
+        ]))
+        let initialBlock = try #require(store.messages.first?.contentBlocks.first)
+        let initialDisplay = ToolClassifier.classify(name: initialBlock.resolvedName ?? "tool", input: initialBlock.input)
+        #expect(initialDisplay.verb == title)
+
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
+            blockEntity(messageId: "msg-1", block: [
+                "type": "tool_use",
+                "id": "msg-1:0",
+                "name": "workspace_api",
+                "input": [
+                    "_acpTitle": title,
+                    "code": "return await ws.workspace.details()",
+                    "summary": summary
+                ],
+                "toolCallId": "call-1",
+                "metadata": ["toolKind": "other", "status": "completed"]
+            ])
+        ]))
+
+        #expect(store.messages.count == 1)
+        #expect(store.messages.first?.contentBlocks.count == 1)
+        let updatedBlock = try #require(store.messages.first?.contentBlocks.first)
+        #expect(updatedBlock.id == initialBlock.id)
+        let updatedDisplay = ToolClassifier.classify(name: updatedBlock.resolvedName ?? "tool", input: updatedBlock.input)
+        #expect(updatedDisplay.icon == .workspace)
+        #expect(updatedDisplay.verb == summary)
+        #expect(updatedDisplay.subject == nil)
     }
 
     @Test func unrecognizedToolWithProseAcpTitleUsesTitleVerbatim() async {
@@ -303,7 +381,7 @@ extension ConversationStoreLiveStateTests {
         let display = ToolClassifier.classify(name: "zz_unrecognized_tool", input: [
             "_acpTitle": AnyCodable("zz_unrecognized_tool")
         ])
-        #expect(display.icon == "🔧")
+        #expect(display.icon == .tool)
         #expect(display.verb == "Zz Unrecognized Tool")
     }
 
@@ -311,7 +389,7 @@ extension ConversationStoreLiveStateTests {
         let display = ToolClassifier.classify(name: "view", input: [
             "_acpTitle": AnyCodable("Read `LICENSE`")
         ])
-        #expect(display.icon == "📄")
+        #expect(display.icon == .file)
         #expect(display.verb == "Read")
         #expect(display.subject == "LICENSE")
     }
@@ -320,7 +398,7 @@ extension ConversationStoreLiveStateTests {
         let display = ToolClassifier.classify(name: "str-replace-editor", input: [
             "_acpTitle": AnyCodable("Edit `src/foo/bar.ts`")
         ])
-        #expect(display.icon == "✏️")
+        #expect(display.icon == .edit)
         #expect(display.verb == "Edit")
         #expect(display.subject == "bar.ts")
         #expect(display.path == "src/foo")
@@ -360,7 +438,7 @@ extension ConversationStoreLiveStateTests {
         #expect(block.input["path"]?.value as? String == "src/main.rs")
 
         let display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
-        #expect(display.icon == "📄")
+        #expect(display.icon == .file)
         #expect(display.verb == "Read")
         #expect(display.subject == "main.rs")
     }

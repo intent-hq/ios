@@ -1,7 +1,8 @@
 import Foundation
 @testable import Intent
+import SwiftUI
 import Testing
-import Textual
+@testable import Textual
 import UIKit
 
 /// Covers markdown-image URL routing (which URLs the loader claims) and the
@@ -316,5 +317,28 @@ struct IntentFileAttachmentLoaderTests {
             IntentFileImageAttachment.thumbnailSize(proposedWidth: 100)
                 == CGSize(width: 100, height: 100)
         )
+    }
+
+    @Test(arguments: [nil, .regular, .bold] as [LegibilityWeight?])
+    nonisolated func failurePlaceholderSizeTracksDynamicType(_ weight: LegibilityWeight?) {
+        let attachment = IntentFileFailureAttachment(altText: "unavailable")
+        let standard = attachment.sizeThatFits(
+            .unspecified, in: TextEnvironmentValues(dynamicTypeSize: .large, legibilityWeight: weight)
+        )
+        let accessible = attachment.sizeThatFits(
+            .unspecified, in: TextEnvironmentValues(dynamicTypeSize: .accessibility5, legibilityWeight: weight)
+        )
+
+        #expect(standard.width > 0 && standard.height > 0)
+        #expect(accessible.width > standard.width)
+        #expect(accessible.height > standard.height)
+    }
+
+    @Test nonisolated func failurePlaceholderDefaultsToRegularLegibility() {
+        let attachment = IntentFileFailureAttachment(altText: "unavailable")
+        let regular = attachment.sizeThatFits(.unspecified, in: TextEnvironmentValues(legibilityWeight: .regular))
+        let unspecified = attachment.sizeThatFits(.unspecified, in: TextEnvironmentValues(legibilityWeight: nil))
+
+        #expect(unspecified == regular)
     }
 }

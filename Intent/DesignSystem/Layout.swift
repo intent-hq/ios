@@ -249,12 +249,6 @@ extension Constants.AgentRow {
 
 extension Constants.WorkspaceRow {
     static let rowSpacing: CGFloat = 12
-    static let statusDotSize: CGFloat = 5
-    static let statusDotOffset: CGFloat = 2
-    static let unreadDotStackOffset: CGFloat = 5
-    static let differentiatedStatusCueSize: CGFloat = 12
-    static let differentiatedStatusCueOffset: CGFloat = 4
-    static let differentiatedUnreadStackOffset: CGFloat = 10
     static let titleSpacing: CGFloat = 4
     static let metadataSpacing: CGFloat = 8
     static let pillFontSize: CGFloat = 11
@@ -263,10 +257,9 @@ extension Constants.WorkspaceRow {
     static let pillBackgroundOpacity: Double = 0.12
     static let verticalPadding: CGFloat = 6
     static let horizontalPadding: CGFloat = 4
-    static let statusIconSize: CGFloat = 12
+    static let statusIconSize: CGFloat = 16
     static let statusGlyphScale: CGFloat = 0.5
-    static let statusStrokeWidth: CGFloat = 1.5
-    static let inactiveStatusOpacity: Double = 0.4
+    static let statusRingWidth: CGFloat = 2
     // visionOS attention cue: single-step z-lift + scale on rows needing
     // input, plus a brighter status chip. No continuous animation (HIG).
     #if os(visionOS)
@@ -290,10 +283,14 @@ extension Constants.WorkspaceList {
 }
 
 extension Constants.WorkspaceSearch {
+    static let buttonSize: CGFloat = 52
+    static let segmentHeight: CGFloat = 44
+    static let segmentInset: CGFloat = 4
+    static let segmentCornerRadius: CGFloat = 16
     static let contentSpacing: CGFloat = 8
     static let horizontalPadding: CGFloat = 12
     static let verticalPadding: CGFloat = 10
-    static let cornerRadius: CGFloat = 12
+    static let cornerRadius: CGFloat = 20
     static let borderOpacity: Double = 0.2
     static let borderWidth: CGFloat = 0.5
     static let bottomPadding: CGFloat = 8
@@ -471,10 +468,18 @@ extension Constants.Toast {
 extension Constants.QRScanner {
     static let unavailableMessagePadding: CGFloat = 24
     static let statusSpacing: CGFloat = 8
-    static let statusPadding: CGFloat = 20
-    static let statusBackgroundOpacity: Double = 0.7
-    static let statusCornerRadius: CGFloat = 12
-    static let statusBottomPadding: CGFloat = 60
+    static let horizontalInset: CGFloat = 24
+    static let windowVerticalOffset: CGFloat = 12
+    static let windowCornerRadius: CGFloat = 28
+    static let dimmingOpacity: Double = 0.45
+    static let bracketWidth: CGFloat = 3
+    static let bracketArmLength: CGFloat = 70
+    static let instructionTopPadding: CGFloat = 24
+    static let hintIconSize: CGFloat = 16
+    static let cancelWidth: CGFloat = 92
+    static let cancelHeight: CGFloat = 48
+    static let cancelHorizontalPadding: CGFloat = 20
+    static let cancelTopPadding: CGFloat = 12
 }
 
 extension Constants.Loading {

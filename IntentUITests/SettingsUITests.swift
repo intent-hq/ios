@@ -16,6 +16,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-Light-Actions")
         scrollToTop(app)
+        captureWorkspaceSurfaces(app, appearance: "Light")
         let dark = app.buttons["settings.appearance.dark"]
         dark.tap()
         XCTAssertTrue(dark.isSelected)
@@ -23,6 +24,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-Dark-Actions")
         scrollToTop(app)
+        captureWorkspaceSurfaces(app, appearance: "Dark")
         app.buttons["settings.close"].tap()
         openSettings(app)
         XCTAssertTrue(dark.isSelected)
@@ -44,10 +46,10 @@ nonisolated final class SettingsUITests: XCTestCase {
         openSettings(app)
         assertConnections(app, current: "Studio Mac", other: "Travel Mac")
         card(app, named: "Studio Mac").tap()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         openSettings(app)
         card(app, named: "Travel Mac").tap()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         openSettings(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
 
@@ -64,7 +66,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         openSettings(app)
         assertConnections(app, current: "Studio Mac", other: "Travel Mac")
         card(app, named: "Travel Mac").tap()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         openSettings(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
     }
@@ -157,10 +159,7 @@ nonisolated final class SettingsUITests: XCTestCase {
 
     @MainActor
     private func openSettings(_ app: XCUIApplication) {
-        let options = app.buttons["Workspace options"]
-        XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
-        options.tap()
-        app.buttons["Settings"].tap()
+        app.openHomeAction("settings")
         XCTAssertTrue(app.buttons["settings.close"].waitForExistence(timeout: Self.timeout))
     }
 
@@ -199,6 +198,23 @@ nonisolated final class SettingsUITests: XCTestCase {
             if app.buttons["settings.close"].isHittable { break }
             app.swipeDown()
         }
+    }
+
+    @MainActor
+    private func captureWorkspaceSurfaces(_ app: XCUIApplication, appearance: String) {
+        app.buttons["settings.close"].tap()
+        let options = app.buttons["intent.menu.open"]
+        XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
+        options.tap()
+        XCTAssertTrue(app.buttons["intent.menu.assistant"].waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Workspace-Menu-" + appearance)
+        app.revealHomeAction("connections").tap()
+        let title = app.staticTexts["saved-connections.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Connections-" + appearance)
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
+        openSettings(app)
     }
 
     @MainActor

@@ -2,176 +2,134 @@ import Combine
 import Foundation
 import Observation
 
-/// Session-lifetime cache of the New Workspace creation options: the
-/// specialist catalog (`specialist.list`), provider auth verdicts
-/// (`host.providerAuthStatus`) and per-provider model catalogs
-/// (`models.list`). Owned by `BackendSession` so a reopened sheet renders
-/// the cached lists instantly instead of spinning on three round-trips.
-///
-/// Same contract as `GitHubRepoStore`: the first `loadIfNeeded()` blocks
-/// with `isLoading`; later calls return immediately with the cached lists
-/// and revalidate silently in the background (stale-while-revalidate). A
-/// reconnect hard-clears the cache and reloads cold, so stale lists never
-/// survive a connection flap.
+/// BackendSession owns the shared catalogs. Conversation label ensures are
+/// independent of the creation picker's explicit provider/auth refreshes.
 @MainActor
 @Observable class CreationOptionsStore {
-    /// Host enablement applies only to workspace creation, not the shared
-    /// agent picker or conversation model menus.
     let workspaceProviderOptions: WorkspaceProviderOptions
-    /// Unfiltered specialist catalog; pickers apply `modalPickable`.
-    var specialists: [SpecialistInfo] = []
+    var specialists: [SpecialistInfo] { specialistCatalog.value ?? [] }
     var providers: [ProviderInfo] = []
-    /// Model catalogs keyed by provider id; a provider is absent until
-    /// `loadModelsIfNeeded(providerId:)` has completed for it.
-    private(set) var modelsByProvider: [String: [ModelInfo]] = [:]
-    /// True only while a cold (uncached) load is in flight; background
-    /// revalidation and model loads never set it.
     var isLoading = false
-    /// True once a load completed without a transport error; a failed load
-    /// leaves it false so the next `loadIfNeeded()` retries as a cold load.
     private(set) var hasLoaded = false
     private(set) var lastLoadedAt: Date?
-
-    @ObservationIgnored private var loadTask: Task<Void, Never>?
-    @ObservationIgnored private var modelLoadTasks: [String: Task<Void, Never>] = [:]
-    /// Bumped by `invalidate()`: a load captures it on start and every
-    /// write after an await is dropped once it no longer matches, so a
-    /// completion from before an invalidation cannot repopulate the cache.
-    /// Observable so an open picker can reload — and re-warm its selected
-    /// provider's catalog — after the reconnect clear.
+    /// Connection/reset identity only. Catalog events must not force agent.get.
     private(set) var loadGeneration = 0
-    /// True from the first `loadIfNeeded()` until `invalidate()`, whether
-    /// that load is in flight, succeeded or failed — a reconnect re-warms
-    /// only a cache the picker has asked for.
-    @ObservationIgnored private var hasAttemptedLoad = false
-    /// True from the first `loadModelsIfNeeded(providerId:)` until
-    /// `invalidate()`: a models-only consumer (the conversation menu) still
-    /// needs a reconnect to clear its catalog, which it then reloads on
-    /// demand.
-    @ObservationIgnored private var hasAttemptedModelLoad = false
-    @ObservationIgnored private var connectionObserver: AnyCancellable?
 
-    private let connectionManager: ConnectionManagerRouting
+    let specialistCatalog: CreationCatalog<SpecialistInfo>
+    var modelCatalogs: [String: CreationCatalog<ModelInfo>] = [:]
+    @ObservationIgnored var creationConsumers: Set<UUID> = []
+    @ObservationIgnored var modelConsumers: [UUID: String] = [:]
+    @ObservationIgnored var eventHandlerID: UUID?
+    @ObservationIgnored var connectionObserver: AnyCancellable?
+    @ObservationIgnored var feedObserver: AnyCancellable?
+    @ObservationIgnored var observedFeedReady = false
+    @ObservationIgnored var previousConnectionState: ConnectionState
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
+    @ObservationIgnored private var loadIdentity = UUID()
+    @ObservationIgnored private var loadRequiresInterest = false
+    @ObservationIgnored private(set) var isActive = true
+    let connectionManager: ConnectionManagerRouting
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
+        previousConnectionState = connectionManager.connectionState
         workspaceProviderOptions = WorkspaceProviderOptions(connectionManager: connectionManager)
-        connectionObserver = connectionManager.connectionStatePublisher
-            .dropFirst() // The initial state is already represented by the cold cache.
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] state in
-                if state == .connected {
-                    Task { await self?.onConnected() }
-                } else {
-                    self?.workspaceProviderOptions.invalidate()
-                }
+        specialistCatalog = CreationCatalog {
+            let result = try await connectionManager.request("specialist.list")
+            guard let items = (result as? [String: Any])?["specialists"] as? [[String: Any]] else {
+                throw CocoaError(.coderReadCorrupt)
             }
-    }
-
-    // MARK: - Specialists + providers
-
-    /// Loads the specialist catalog and provider auth verdicts.
-    ///
-    /// - Cold (nothing cached): awaits the load with `isLoading` set; a
-    ///   concurrent call joins the in-flight load.
-    /// - Cached and `force == false`: returns immediately and revalidates in
-    ///   the background without touching `isLoading` or the cached lists
-    ///   (a failed refresh keeps the stale lists).
-    /// - `force == true`: refetches; awaited, silent when a cache exists.
-    func loadIfNeeded(force: Bool = false) async {
-        guard force || !hasLoaded else {
-            startLoad(silent: true)
-            return
+            return items.compactMap { item in
+                // Labels historically also accepted a missing description.
+                var label = item
+                if label["description"] == nil { label["description"] = "" }
+                return SpecialistInfo(wire: label)
+            }
         }
-        startLoad(silent: hasLoaded)
-        await loadTask?.value
     }
 
-    /// Drops every cached list and the loaded markers so the next
-    /// `loadIfNeeded()` runs as a cold load. Loads in flight are superseded:
-    /// their completions are dropped (see `loadGeneration`) and they are no
-    /// longer joined, so the next call starts a fresh flight.
-    func invalidate() {
+    isolated deinit {
+        if let eventHandlerID { connectionManager.removeEventHandler(id: eventHandlerID) }
+        specialistCatalog.reset(releaseConsumers: true)
+        for catalog in modelCatalogs.values { catalog.reset(releaseConsumers: true) }
+    }
+
+    /// Explicit creation-picker entry/refresh retains stale-while-revalidate.
+    /// Label consumers call ensureSpecialists/ensureModels instead.
+    func loadIfNeeded(force: Bool = false, consumer: UUID? = nil) async {
+        guard isActive, !Task.isCancelled else { return }
+        if let consumer, !creationConsumers.contains(consumer) { return }
+        observeSession()
+        let silent = hasLoaded
+        if consumer == nil { loadRequiresInterest = false }
+        if loadTask == nil {
+            let generation = loadGeneration
+            let identity = UUID()
+            loadIdentity = identity
+            loadRequiresInterest = consumer != nil
+            loadTask = Task { [weak self] in
+                guard let self, generation == loadGeneration, identity == loadIdentity else { return }
+                if !silent { isLoading = true }
+                async let specialistsSucceeded = specialistCatalog.ensure(force: true)
+                async let providersSucceeded = fetchProviders(generation: generation, identity: identity)
+                let succeeded = await (specialistsSucceeded, providersSucceeded)
+                guard generation == loadGeneration, identity == loadIdentity else { return }
+                if succeeded.0, succeeded.1 {
+                    hasLoaded = true
+                    lastLoadedAt = Date()
+                }
+                isLoading = false
+                loadTask = nil
+            }
+        }
+        if force || !silent { await loadTask?.value }
+    }
+
+    func invalidate() { invalidateCatalogs(clear: true) }
+
+    func cancelUninterestedCreationLoad() {
+        guard creationConsumers.isEmpty, loadRequiresInterest else { return }
+        loadIdentity = UUID()
+        loadTask?.cancel()
+        loadTask = nil
+        isLoading = false
+    }
+
+    func invalidateCatalogs(clear: Bool) {
         workspaceProviderOptions.invalidate()
         loadGeneration &+= 1
+        loadTask?.cancel()
         loadTask = nil
-        modelLoadTasks = [:]
-        hasAttemptedLoad = false
-        hasAttemptedModelLoad = false
         isLoading = false
-        specialists = []
         providers = []
-        modelsByProvider = [:]
         hasLoaded = false
         lastLoadedAt = nil
+        specialistCatalog.reset(clear: clear)
+        for catalog in modelCatalogs.values { catalog.reset(clear: clear) }
     }
 
-    /// Single-flight: a load already in flight is joined, not duplicated.
-    private func startLoad(silent: Bool) {
-        hasAttemptedLoad = true
-        guard loadTask == nil else { return }
-        let generation = loadGeneration
-        loadTask = Task { [weak self] in
-            await self?.runLoad(silent: silent, generation: generation)
-            guard let self, loadGeneration == generation else { return }
-            loadTask = nil
-        }
-    }
-
-    private func runLoad(silent: Bool, generation: Int) async {
-        // The task may first run after an invalidate() that superseded it:
-        // touch nothing (an `isLoading` set here would never be cleared).
-        guard generation == loadGeneration else { return }
-        if !silent { isLoading = true }
-        async let specialistsSucceeded = fetchSpecialists(generation: generation)
-        async let providersSucceeded = fetchProviders(generation: generation)
-        let succeeded = await (specialistsSucceeded, providersSucceeded)
-        guard generation == loadGeneration else { return }
-        if succeeded.0, succeeded.1 {
-            hasLoaded = true
-            lastLoadedAt = Date()
-        }
-        if !silent { isLoading = false }
-    }
-
-    /// A reconnect hard-clears the cache (the daemon's providers or
-    /// specialists may have changed underneath it) and reloads cold. With
-    /// no load ever requested there is nothing to re-warm until the picker
-    /// asks; a models-only cache is cleared but reloaded by its consumer.
-    private func onConnected() async {
-        guard hasAttemptedLoad || hasAttemptedModelLoad || workspaceProviderOptions.hasAttemptedLoad else { return }
-        let reloadOptions = hasAttemptedLoad
+    /// Release all session observers and interests before disconnecting.
+    func reset() {
+        isActive = false
         invalidate()
-        async let workspaceReload: Void = workspaceProviderOptions.reloadIfNeeded()
-        if reloadOptions {
-            await loadIfNeeded()
-        }
-        await workspaceReload
-    }
-
-    /// `specialist.list` (PROTOCOL §5.11). Returns false on transport
-    /// error, leaving `specialists` unchanged so a background refresh keeps
-    /// the cached catalog.
-    private func fetchSpecialists(generation: Int) async -> Bool {
-        do {
-            let result = try await connectionManager.request("specialist.list")
-            guard generation == loadGeneration else { return false }
-            let items = (result as? [String: Any])?["specialists"] as? [[String: Any]] ?? []
-            specialists = items.compactMap { SpecialistInfo(wire: $0) }
-            return true
-        } catch {
-            AppLog.agents.error("[CreationOptionsStore] specialist.list failed: \(error)")
-            return false
-        }
+        creationConsumers = []
+        modelConsumers = [:]
+        specialistCatalog.reset(releaseConsumers: true)
+        for catalog in modelCatalogs.values { catalog.reset(releaseConsumers: true) }
+        if let eventHandlerID { connectionManager.removeEventHandler(id: eventHandlerID) }
+        eventHandlerID = nil
+        connectionObserver = nil
+        feedObserver = nil
     }
 
     /// `host.providerAuthStatus` (PROTOCOL §5.14); `authenticated` is
     /// tri-state (true / false / nil unknown). Returns false on transport
     /// error, leaving `providers` unchanged.
-    private func fetchProviders(generation: Int) async -> Bool {
+    private func fetchProviders(generation: Int, identity: UUID) async -> Bool {
         do {
+            guard !Task.isCancelled, identity == loadIdentity else { return false }
             let result = try await connectionManager.request("host.providerAuthStatus")
-            guard generation == loadGeneration else { return false }
+            guard generation == loadGeneration, identity == loadIdentity, !Task.isCancelled else { return false }
             let items = (result as? [String: Any])?["providers"] as? [[String: Any]] ?? []
             providers = items.compactMap { item -> ProviderInfo? in
                 guard let id = item["id"] as? String else { return nil }
@@ -190,63 +148,58 @@ import Observation
         }
     }
 
-    // MARK: - Models
+    // swiftlint:disable:next discouraged_optional_collection
+    func models(for providerId: String) -> [ModelInfo]? { modelCatalogs[providerId]?.value }
 
-    // swiftlint:disable discouraged_optional_collection
-    /// The cached `models.list` catalog for `providerId`, or nil when it has
-    /// not been loaded yet. An empty array is a loaded empty catalog.
-    func models(for providerId: String) -> [ModelInfo]? {
-        modelsByProvider[providerId]
-    }
-    // swiftlint:enable discouraged_optional_collection
-
-    /// Loads `models.list` for `providerId` with the same cold / cached /
-    /// forced semantics as `loadIfNeeded(force:)`, single-flight per
-    /// provider. Never touches `isLoading`: the picker gates on the provider
-    /// load and shows the model row as soon as its catalog is cached.
-    func loadModelsIfNeeded(providerId: String, force: Bool = false) async {
-        guard force || modelsByProvider[providerId] == nil else {
-            startModelLoad(providerId: providerId)
-            return
-        }
-        startModelLoad(providerId: providerId)
-        await modelLoadTasks[providerId]?.value
+    func ensureSpecialists(consumer: UUID? = nil) async {
+        guard isActive, !Task.isCancelled else { return }
+        observeSession()
+        await specialistCatalog.ensure(consumer: consumer)
     }
 
-    private func startModelLoad(providerId: String) {
-        hasAttemptedModelLoad = true
-        guard modelLoadTasks[providerId] == nil else { return }
-        let generation = loadGeneration
-        modelLoadTasks[providerId] = Task { [weak self] in
-            await self?.fetchModels(providerId: providerId, generation: generation)
-            guard let self, loadGeneration == generation else { return }
-            modelLoadTasks[providerId] = nil
+    func ensureModels(providerId: String, consumer: UUID? = nil) async {
+        guard isActive, !Task.isCancelled else { return }
+        observeSession()
+        await modelCatalog(for: providerId).ensure(consumer: consumer)
+    }
+
+    /// User-opened pickers still revalidate warm catalogs. Concurrent callers
+    /// share that revalidation; the automatic label path never calls this API.
+    func loadModelsIfNeeded(providerId: String, force: Bool = false, consumer: UUID? = nil) async {
+        guard isActive, !Task.isCancelled else { return }
+        observeSession()
+        let catalog = modelCatalog(for: providerId)
+        if catalog.value != nil, !force {
+            let generation = loadGeneration
+            Task { [weak self] in
+                guard let self, generation == loadGeneration else { return }
+                await catalog.ensure(force: true, consumer: consumer)
+            }
+        } else {
+            await catalog.ensure(force: true, consumer: consumer)
         }
     }
 
-    /// Best-effort: a transport error leaves the provider's cached catalog
-    /// (if any) unchanged, so the next `loadModelsIfNeeded` retries cold.
-    private func fetchModels(providerId: String, generation: Int) async {
-        guard generation == loadGeneration else { return }
-        do {
-            let result = try await connectionManager.request(
-                "models.list",
-                params: ["providerId": providerId]
-            )
-            guard generation == loadGeneration else { return }
-            let items = (result as? [String: Any])?["models"] as? [[String: Any]] ?? []
-            modelsByProvider[providerId] = items.compactMap { item in
-                guard let id = item["id"] as? String,
-                      let name = item["name"] as? String else { return nil }
+    func modelCatalog(for providerId: String) -> CreationCatalog<ModelInfo> {
+        if let catalog = modelCatalogs[providerId] { return catalog }
+        let connection = connectionManager
+        let catalog = CreationCatalog<ModelInfo> {
+            let result = try await connection.request("models.list", params: ["providerId": providerId])
+            guard let items = (result as? [String: Any])?["models"] as? [[String: Any]] else {
+                throw CocoaError(.coderReadCorrupt)
+            }
+            return items.compactMap { item in
+                guard let id = item["id"] as? String, let name = item["name"] as? String else { return nil }
                 return ModelInfo(
                     id: id,
                     name: name,
                     provider: item["provider"] as? String ?? providerId,
-                    isDefault: item["isDefault"] as? Bool ?? false
+                    isDefault: item["isDefault"] as? Bool ?? false,
+                    effortLevels: item["effortLevels"] as? [String] ?? []
                 )
             }
-        } catch {
-            AppLog.agents.error("[CreationOptionsStore] models.list failed for \(providerId): \(error)")
         }
+        modelCatalogs[providerId] = catalog
+        return catalog
     }
 }

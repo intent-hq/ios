@@ -14,6 +14,11 @@ struct RootView: View {
     /// Token of this window's selection-handler registration, so disappear
     /// removes only this window's registration — never a successor's.
     @State private var selectionHandlerToken: UUID?
+    @State private var statusConsumer = UUID()
+    @State private var statusWorkspaceId: String?
+    @State private var isSearchingWorkspaces = false
+    @State private var showingCreateWorkspace = false
+    @State private var showingConnections = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
@@ -116,22 +121,56 @@ struct RootView: View {
     }
 
     @ViewBuilder private var workspaceFlowContent: some View {
+        workspaceNavigationContent
+            .sheet(isPresented: assistantPresented) {
+                AssistantView(session: session)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+    }
+
+    private var assistantPresented: Binding<Bool> {
+        Binding(
+            get: { coordinator.selectedSection == .assistant },
+            set: { if !$0 { coordinator.selectedSection = .workspaces } }
+        )
+    }
+
+    @ViewBuilder private var workspaceNavigationContent: some View {
         if sizeClass == .compact {
             // iPhone: standard NavigationStack with push/pop
             compactNavigationView
         } else {
             // iPad: NavigationSplitView with sidebar selection
             NavigationSplitView {
-                WorkspaceListSidebar(workspaceStore: session.workspaceStore)
-                    .navigationSplitViewColumnWidth(
-                        min: Constants.Root.sidebarMinimumWidth,
-                        ideal: Constants.Root.sidebarIdealWidth,
-                        max: Constants.Root.sidebarMaximumWidth
-                    )
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: $isSearchingWorkspaces
+                )
+                .navigationSplitViewColumnWidth(
+                    min: Constants.Root.sidebarMinimumWidth,
+                    ideal: Constants.Root.sidebarIdealWidth,
+                    max: Constants.Root.sidebarMaximumWidth
+                )
             } detail: {
                 detailContent
             }
             .navigationSplitViewStyle(.automatic)
+            .modifier(WorkspaceActionLauncher(
+                isSearching: isSearchingWorkspaces,
+                alignment: .trailing,
+                conversationBottomClearance: AssistantLaunchButton.scrollClearance,
+                onCreateWorkspace: { showingCreateWorkspace = true },
+                onConnections: { showingConnections = true }
+            ))
+            .sheet(isPresented: $showingCreateWorkspace) {
+                CreateWorkspaceView(session: session)
+                    .environment(coordinator)
+            }
+            .sheet(isPresented: $showingConnections) {
+                ConnectionsView()
+                    .environment(coordinator)
+            }
         }
     }
 
@@ -165,9 +204,6 @@ struct RootView: View {
                 EmptyView()
             }
         }
-        // The launch artwork is light even when the rest of the app is dark.
-        // Include the connecting overlays without changing other launch destinations.
-        .environment(\.colorScheme, isLaunchSplash ? .light : colorScheme)
     }
 
     var body: some View {
@@ -262,6 +298,9 @@ struct RootView: View {
                     .padding()
             }
         }
+        .onChange(of: isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil, initial: true) { _, workspaceId in
+            updateWorkspaceStatusLease(workspaceId)
+        }
         .task { await DemoConnectionLoss.run(connection: session.connection, coordinator: coordinator) }
         // intent://pair deep-link confirmation — presented over whichever
         // screen is current (first-run pairing or an existing connection).
@@ -269,6 +308,7 @@ struct RootView: View {
             DeepLinkPairingView(payload: request.payload)
         }
         .onAppear {
+            updateWorkspaceStatusLease(isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil)
             let supportsMultipleWindows = supportsMultipleWindows
             let openWindow = openWindow
             notificationManager.supportsMultipleWindows = supportsMultipleWindows
@@ -294,10 +334,22 @@ struct RootView: View {
             }
         }
         .onDisappear {
+            updateWorkspaceStatusLease(nil)
             guard let backendID = session.backendID,
                   let token = selectionHandlerToken else { return }
             notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
         }
+    }
+
+    private func updateWorkspaceStatusLease(_ workspaceId: String?) {
+        guard statusWorkspaceId != workspaceId else { return }
+        if let workspaceId {
+            session.retainWorkspaceStatus(workspaceId: workspaceId, consumer: statusConsumer)
+        }
+        if let previous = statusWorkspaceId {
+            session.releaseWorkspaceStatus(workspaceId: previous, consumer: statusConsumer)
+        }
+        statusWorkspaceId = workspaceId
     }
 }
 

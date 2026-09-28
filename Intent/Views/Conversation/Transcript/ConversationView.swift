@@ -3,30 +3,52 @@ import UIKit
 
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
+    @State private var proposals: ProposalActionStore
+    var onAgentUnavailable: (() -> Void)?
+    var assistantStore: AssistantStore?
 
     init(
         agentId: String,
         workspaceId: String,
         agentName: String,
-        session: BackendSession
+        session: BackendSession,
+        assistantStore: AssistantStore? = nil,
+        onAgentUnavailable: (() -> Void)? = nil
     ) {
+        self.onAgentUnavailable = onAgentUnavailable
+        self.assistantStore = assistantStore
+        _proposals = State(initialValue: ProposalActionStore(connection: session.connection, agentId: agentId, workspaceId: workspaceId, details: session.agentDetails))
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
             workspaceId: workspaceId,
             agentName: agentName,
             connection: session.connection,
             uploadService: session.attachmentUploadService,
-            optionsStore: session.creationOptionsStore
+            optionsStore: session.creationOptionsStore,
+            agentDetails: session.agentDetails,
+            conversations: session.conversations,
+            hooks: session.hooksStore,
+            monitors: session.prMonitorsStore
         ))
     }
 
     var body: some View {
-        ConversationViewContent(viewModel: viewModel)
+        ConversationViewContent(
+            viewModel: viewModel,
+            onAgentUnavailable: onAgentUnavailable,
+            assistantStore: assistantStore
+        )
+        .environment(proposals)
+        .task(id: viewModel.store.sessionMetadataGeneration) {
+            await proposals.loadIfPresent(in: viewModel.store.messages)
+        }
     }
 }
 
 private struct ConversationViewContent: View {
     let viewModel: ConversationViewModel
+    var onAgentUnavailable: (() -> Void)?
+    var assistantStore: AssistantStore?
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
@@ -40,6 +62,7 @@ private struct ConversationViewContent: View {
     @State private var renameText = ""
     @State private var presentedNote: NoteSheetInfo?
     @State private var childAgent: AgentDestination?
+    @State private var showDemoCover = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -56,6 +79,11 @@ private struct ConversationViewContent: View {
     /// Outermost layer: navigation destination + load/lifecycle handlers.
     private var conversationLifecycle: some View {
         conversationPresentation
+            .navigationDestination(isPresented: $showDemoCover) {
+                Button("Return to conversation") { showDemoCover = false }
+                    .accessibilityIdentifier("demo.conversation.return")
+                    .navigationTitle("Conversation cover")
+            }
             .navigationDestination(item: $childAgent) { dest in
                 ConversationView(
                     agentId: dest.agentId,
@@ -68,6 +96,7 @@ private struct ConversationViewContent: View {
             .task {
                 await viewModel.load()
                 handleAgentNotFoundIfNeeded()
+                await DemoFixtures.streamAssistantPromptsIfRequested(in: viewModel.store)
             }
             .task(id: viewModel.modelCatalogKey) {
                 await viewModel.loadModelCatalogIfNeeded()
@@ -168,8 +197,27 @@ private struct ConversationViewContent: View {
             }
     }
 
-    /// Navigation bar title and toolbar; the bar background is the system default.
+    private var usesWorkspaceDesign: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone
+            && assistantStore == nil && viewModel.workspaceId != Workspace.chiefWorkspaceId
+    }
+
+    /// Keep shared and non-phone navigation unchanged.
+    @ViewBuilder
     private var conversationChrome: some View {
+        if usesWorkspaceDesign {
+            conversationColumn
+                .toolbar(.hidden, for: .navigationBar, .tabBar)
+                .nativeNavigationBackGesture()
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    WorkspaceConversationHeader(title: viewModel.agentName, onBack: { dismiss() }, actions: { agentMenu })
+                }
+        } else {
+            legacyConversationChrome
+        }
+    }
+
+    private var legacyConversationChrome: some View {
         conversationColumn
             .navigationTitle(viewModel.agentName)
             .toolbarTitleDisplayMode(.inline)
@@ -189,8 +237,9 @@ private struct ConversationViewContent: View {
         ConversationColumnView(
             viewModel: viewModel,
             onNavigateToNote: navigateToNote,
-            onNavigateToAgent: navigateToAgent
-        )
+            onNavigateToAgent: navigateToAgent,
+            usesWorkspaceDesign: usesWorkspaceDesign
+        ) { showDemoCover = true }
     }
 
     /// Presented-or-not binding for the dismiss-failure alert, hoisted out of
@@ -224,6 +273,10 @@ private struct ConversationViewContent: View {
     /// Ellipsis toolbar menu (model info, rename, delete).
     private var agentMenu: some View {
         Menu {
+            if let assistantStore {
+                AssistantHistoryMenu(store: assistantStore)
+                Divider()
+            }
             if let displayName = viewModel.currentModelDisplayName {
                 Text("Model: \(displayName)")
             }
@@ -247,28 +300,16 @@ private struct ConversationViewContent: View {
                 Label("Delete Agent", systemImage: "trash")
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundStyle(Theme.foreground(for: colorScheme))
+            ToolbarOverflowLabel()
         }
-        .accessibilityLabel("Agent actions")
+        .accessibilityLabel(assistantStore == nil ? "Agent actions" : "Assistant actions")
+        .accessibilityIdentifier(assistantStore == nil ? "agent.actions" : "assistant.actions")
     }
 
     /// Note detail sheet content for a tapped note reference.
     private func noteSheet(for noteInfo: NoteSheetInfo) -> some View {
-        NavigationStack {
-            NoteDetailView(
-                noteId: noteInfo.noteId,
-                workspaceId: noteInfo.workspaceId,
-                noteTitle: noteInfo.noteTitle,
-                session: session
-            )
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        presentedNote = nil
-                    }
-                }
-            }
+        ConversationNoteSheet(noteInfo: noteInfo, session: session) {
+            presentedNote = nil
         }
     }
 
@@ -285,7 +326,11 @@ private struct ConversationViewContent: View {
                         "workspaceId": viewModel.workspaceId
                     ]
                 )
-                dismiss()
+                if let onAgentUnavailable {
+                    onAgentUnavailable()
+                } else {
+                    dismiss()
+                }
             } catch {
                 selfInitiatedDelete = false
                 AppLog.userInterface.error("[ConversationView] Failed to delete agent: \(error)")
@@ -311,6 +356,10 @@ private struct ConversationViewContent: View {
     /// Skipped for a self-initiated delete (the Delete button already dismisses).
     private func handleAgentNotFoundIfNeeded() {
         guard viewModel.agentNotFound, !selfInitiatedDelete else { return }
+        if let onAgentUnavailable {
+            onAgentUnavailable()
+            return
+        }
         coordinator.handleMissingAgent(agentId: viewModel.agentId, workspaceId: viewModel.workspaceId)
     }
 
@@ -334,5 +383,54 @@ private struct ConversationViewContent: View {
             workspaceId: workspaceId,
             agentName: name
         )
+    }
+}
+
+/// Note sheet opened from a transcript note reference. Note-to-note links that
+/// target the hidden global Assistant workspace push inside the sheet: that
+/// workspace has no place in the Workspaces tab, so the coordinator route would
+/// replace the user's open workspace screen with it. Other links keep the
+/// coordinator route.
+private struct ConversationNoteSheet: View {
+    let noteInfo: NoteSheetInfo
+    let session: BackendSession
+    let onDone: () -> Void
+    @Environment(AppCoordinator.self) private var coordinator
+    @State private var path = NavigationPath()
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            noteDetail(noteId: noteInfo.noteId, workspaceId: noteInfo.workspaceId, noteTitle: noteInfo.noteTitle)
+                .navigationDestination(for: NoteDestination.self) { destination in
+                    noteDetail(
+                        noteId: destination.noteId,
+                        workspaceId: destination.workspaceId,
+                        noteTitle: destination.noteTitle
+                    )
+                }
+        }
+    }
+
+    private func noteDetail(noteId: String, workspaceId: String, noteTitle: String) -> some View {
+        NoteDetailView(
+            noteId: noteId,
+            workspaceId: workspaceId,
+            noteTitle: noteTitle,
+            session: session,
+            onNavigateToNote: navigate
+        )
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Done", action: onDone)
+            }
+        }
+    }
+
+    private func navigate(noteId: String, workspaceId: String, noteTitle: String) {
+        if workspaceId == Workspace.chiefWorkspaceId {
+            path.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle))
+        } else {
+            coordinator.onSelectNote(noteId, workspaceId: workspaceId, noteTitle: noteTitle)
+        }
     }
 }

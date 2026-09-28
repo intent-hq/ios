@@ -10,16 +10,16 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data"]
         app.launch()
-        let options = app.buttons["Workspace options"]
-        XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
+        let search = app.buttons["workspaces.search.open"]
+        XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
         let backgroundPoint = app.coordinate(withNormalizedOffset: .zero)
-            .withOffset(CGVector(dx: options.frame.midX, dy: options.frame.midY))
+            .withOffset(CGVector(dx: search.frame.midX, dy: search.frame.midY))
         openSaved(in: app)
         backgroundPoint.tap()
-        XCTAssertFalse(app.buttons["Settings"].exists, "The native modal shield must block the toolbar")
+        XCTAssertFalse(app.textFields["workspaces.search.field"].exists, "The native modal shield must block search")
         capture(app, named: "saved-background-blocked")
         // The system may dismiss a short detent on a dimmer tap. It must not
-        // deliver that same tap to the menu underneath, whether it dismisses or not.
+        // deliver that same tap to search underneath, whether it dismisses or not.
         if !app.staticTexts["saved-connections.title"].exists { openSaved(in: app) }
 
         app.buttons["connection-sheet.close"].tap()
@@ -33,21 +33,20 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         let shortPull = origin.withOffset(CGVector(dx: app.frame.midX, dy: close.minY + 20))
         start.press(forDuration: 0.1, thenDragTo: shortPull, withVelocity: .slow, thenHoldForDuration: 0.5)
         XCTAssertTrue(app.staticTexts["saved-connections.title"].exists)
-        XCTAssertFalse(app.buttons["Settings"].exists)
+        XCTAssertFalse(app.textFields["workspaces.search.field"].exists)
         capture(app, named: "saved-cancelled-swipe")
         start.press(forDuration: 0.1, thenDragTo: origin.withOffset(
             CGVector(dx: app.frame.midX, dy: app.frame.maxY - 10)
         ))
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
         capture(app, named: "saved-swipe-cleanup")
-        options.tap()
-        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: Self.timeout))
+        search.tap()
+        XCTAssertTrue(app.textFields["workspaces.search.field"].waitForExistence(timeout: Self.timeout))
     }
 
     @MainActor
     private func openSaved(in app: XCUIApplication) {
-        app.buttons["Workspace options"].tap()
-        app.buttons["Connect to…"].tap()
+        app.openHomeAction("connections")
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
     }
 
@@ -148,20 +147,41 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
 
     @MainActor
     private func assertReference(in app: XCUIApplication) {
+        let appFrame = app.frame
+        let scroll = app.scrollViews.containing(.button, identifier: "manual.connect").firstMatch
+        XCTAssertTrue(scroll.waitForExistence(timeout: Self.timeout))
+        let scrollFrame = scroll.frame
+        let scale = scrollFrame.width / appFrame.width
+        XCTAssertGreaterThanOrEqual(scale, 0.9)
+        XCTAssertLessThanOrEqual(scale, 1)
+        XCTAssertTrue(appFrame.contains(scrollFrame))
+        // Undo the native floating-sheet transform using its scroll container.
+        // The reference sheet is unscaled and anchored to the screen bottom.
+        func referenceFrame(_ element: XCUIElement) -> CGRect {
+            let frame = element.frame
+            return CGRect(
+                x: (frame.minX - scrollFrame.minX) / scale,
+                y: appFrame.maxY - (scrollFrame.maxY - frame.minY) / scale,
+                width: frame.width / scale,
+                height: frame.height / scale
+            )
+        }
         // Independent Figma coordinates, not production layout constants. Native
         // line boxes extend past cap edges, so compare centers for text/editors.
-        XCTAssertEqual(app.buttons["connection-sheet.close"].frame.minY, 231, accuracy: 1.5)
-        XCTAssertEqual(app.buttons["connection-sheet.close"].frame.minX, 24, accuracy: 0.5)
-        XCTAssertEqual(app.staticTexts["manual.title"].frame.midY, 325, accuracy: 1.5)
-        XCTAssertEqual(app.staticTexts["manual.subtitle"].frame.midY, 361, accuracy: 1.5)
+        let close = referenceFrame(app.buttons["connection-sheet.close"])
+        XCTAssertEqual(close.minY, 231, accuracy: 1.5)
+        XCTAssertEqual(close.minX, 24, accuracy: 0.5)
+        XCTAssertEqual(referenceFrame(app.staticTexts["manual.title"]).midY, 325, accuracy: 1.5)
+        XCTAssertEqual(referenceFrame(app.staticTexts["manual.subtitle"]).midY, 361, accuracy: 1.5)
         for (field, center) in [("manual.host", 472.0), ("manual.port", 585.0), ("manual.token", 698.0)] {
-            XCTAssertEqual(app.textFields[field].frame.midY, center, accuracy: 1.5)
-            XCTAssertEqual(app.textFields[field].frame.minX, 48, accuracy: 0.5)
+            let frame = referenceFrame(app.textFields[field])
+            XCTAssertEqual(frame.midY, center, accuracy: 1.5)
+            XCTAssertEqual(frame.minX, 48, accuracy: 0.5)
         }
-        let button = app.buttons["manual.connect"]
-        XCTAssertEqual(button.frame.minY, 762, accuracy: 1.5)
-        XCTAssertEqual(button.frame.height, 64, accuracy: 0.5)
-        XCTAssertEqual(button.frame.width, 354, accuracy: 0.5)
+        let button = referenceFrame(app.buttons["manual.connect"])
+        XCTAssertEqual(button.minY, 762, accuracy: 1.5)
+        XCTAssertEqual(button.height, 64, accuracy: 0.5)
+        XCTAssertEqual(button.width, 354, accuracy: 0.5)
     }
 
     @MainActor
@@ -173,7 +193,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
         app.launch()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         try Data().write(to: directory.appendingPathComponent("loss"))
         XCTAssertTrue(app.buttons["connection-loss.home"].waitForExistence(timeout: Self.timeout))
         app.buttons["connection-loss.home"].tap()

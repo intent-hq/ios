@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 readonly WRAPPER="$SCRIPT_DIR/swiftlint.sh"
-readonly TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/intent-swiftlint-test.XXXXXX")"
+TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/intent-swiftlint-test.XXXXXX")"
+readonly SCRIPT_DIR REPO_ROOT TEMP_ROOT
 trap 'rm -rf -- "$TEMP_ROOT"' EXIT
 
 fail() {
@@ -17,7 +18,31 @@ assert_contains() {
   grep -Fq -- "$expected" <<< "$text" || fail "expected output to contain: $expected"
 }
 
+# Reproduce a host without ldd (such as macOS), even when running on Linux.
+# Keep both platform cases independent of any installed Linux tooling.
+mkdir -p "$TEMP_ROOT/host-bin"
+for tool in bash cat chmod cmp dirname grep ln mkdir rm; do
+  ln -s "$(command -v "$tool")" "$TEMP_ROOT/host-bin/$tool"
+done
+# Link the interpreter itself: a version-manager shim (pyenv on the local Mac
+# runner) is a script that needs tools this isolated PATH deliberately omits.
+ln -s "$(python3 -c 'import os, sys; print(os.path.realpath(sys.executable))')" \
+  "$TEMP_ROOT/host-bin/python3"
+export PATH="$TEMP_ROOT/host-bin"
+if command -v ldd >/dev/null; then
+  fail "isolated host PATH unexpectedly contains ldd"
+fi
+
 mkdir -p "$TEMP_ROOT/bin" "$TEMP_ROOT/log" "$TEMP_ROOT/outside"
+export INTENT_SWIFTLINT_HOME="$TEMP_ROOT/install"
+cat > "$TEMP_ROOT/bin/uname" <<'EOF'
+#!/bin/bash
+echo "${FAKE_UNAME:?}"
+EOF
+cat > "$TEMP_ROOT/bin/ldd" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
 cat > "$TEMP_ROOT/bin/swiftlint" <<'EOF'
 #!/usr/bin/env bash
 set -u
@@ -27,6 +52,10 @@ case "${1:-}" in
     exit "${FAKE_SWIFTLINT_VERSION_STATUS:-0}"
     ;;
   lint)
+    if [[ " $* " == *" --use-stdin "* ]]; then
+      cat >/dev/null
+      exit 0
+    fi
     printf '%s\n' "$PWD" > "${FAKE_SWIFTLINT_LOG:?}/cwd"
     printf '%s\n' "$@" > "${FAKE_SWIFTLINT_LOG:?}/args"
     exit "${FAKE_SWIFTLINT_LINT_STATUS:-0}"
@@ -35,6 +64,17 @@ case "${1:-}" in
 esac
 EOF
 chmod +x "$TEMP_ROOT/bin/swiftlint"
+chmod +x "$TEMP_ROOT/bin/uname"
+chmod +x "$TEMP_ROOT/bin/ldd"
+
+for FAKE_UNAME in Darwin Linux; do
+export FAKE_UNAME
+if [ "$FAKE_UNAME" = Darwin ]; then
+  # Darwin must not inspect Linux runtime overrides or invoke the probe.
+  export LINUX_SOURCEKIT_LIB_PATH="$TEMP_ROOT/absent"
+else
+  unset LINUX_SOURCEKIT_LIB_PATH
+fi
 
 (
   cd "$TEMP_ROOT/outside"
@@ -52,7 +92,7 @@ cmp -s "$TEMP_ROOT/expected-args" "$TEMP_ROOT/log/args" || fail "wrapper passed 
 
 (
   cd "$TEMP_ROOT/outside"
-  PATH="$TEMP_ROOT/bin:$PATH" FAKE_SWIFTLINT_LOG="$TEMP_ROOT/log" SWIFTLINT_REPORTER= "$WRAPPER"
+  PATH="$TEMP_ROOT/bin:$PATH" FAKE_SWIFTLINT_LOG="$TEMP_ROOT/log" SWIFTLINT_REPORTER='' "$WRAPPER"
 )
 cmp -s "$TEMP_ROOT/expected-args" "$TEMP_ROOT/log/args" || fail "empty SWIFTLINT_REPORTER changed the lint arguments"
 
@@ -96,7 +136,8 @@ set -e
 [ "$status" -eq 23 ] || fail "lint failure exited $status instead of 23"
 
 mkdir -p "$TEMP_ROOT/missing-bin"
-ln -s /usr/bin/dirname "$TEMP_ROOT/missing-bin/dirname"
+ln -sf /usr/bin/dirname "$TEMP_ROOT/missing-bin/dirname"
+ln -sf "$TEMP_ROOT/bin/uname" "$TEMP_ROOT/missing-bin/uname"
 set +e
 output=$(PATH="$TEMP_ROOT/missing-bin" /bin/bash "$WRAPPER" 2>&1)
 status=$?
@@ -104,4 +145,5 @@ set -e
 [ "$status" -eq 1 ] || fail "missing SwiftLint exited $status instead of 1"
 assert_contains "$output" "swiftlint was not found on PATH"
 
-echo "SwiftLint wrapper smoke tests passed"
+echo "SwiftLint wrapper smoke tests passed ($FAKE_UNAME)"
+done

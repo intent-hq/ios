@@ -16,7 +16,6 @@ import SwiftUI
         get { liveTranscript.messages }
         set { liveTranscript.messages = newValue }
     }
-    @ObservationIgnored var onStreamingChanged: ((Bool) -> Void)?
     var isStreaming: Bool {
         get { liveTranscript.isStreaming || !sendThinkingMessageIds.isEmpty }
         set {
@@ -81,13 +80,42 @@ import SwiftUI
     @ObservationIgnored let watchedAgentCoordinator: ConversationWatchedAgents
     var agentId: String?
     var workspaceId: String?
-    var subscriptionId: String?
+    @ObservationIgnored var bootstrapWorkspaceHint: String?
+
+    struct PendingWorkspaceEvent {
+        let event: [String: Any]
+        let receivedAt: Int
+        let confirmedMarkerRevisions: [String: Int]
+    }
+
+    @ObservationIgnored var pendingWorkspaceEvents: [PendingWorkspaceEvent] = []
+    @ObservationIgnored var isFoldingWorkspaceEvents = false
+    @ObservationIgnored var workspaceAuthorityWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
+    @ObservationIgnored var workspaceAuthorityFailed = false
+    @ObservationIgnored var subscriptionsNeedAuthorityRecovery = false
     var connectionObserver: AnyCancellable?
-    var isSubscribing = false
+    @ObservationIgnored var feedObserver: AnyCancellable?
+    @ObservationIgnored var observedConnectionState: ConnectionState
+    @ObservationIgnored var bootstrapTask: Task<Void, Never>?
+    @ObservationIgnored var bootstrapGeneration = 0
+    @ObservationIgnored var needsFeedReconciliation = false
+    var metadataReadyForEntry = false
+    @ObservationIgnored var consumers: Set<UUID> = []
+    @ObservationIgnored var streamingObservers: [UUID: (Bool) -> Void] = [:]
+    @ObservationIgnored var entryObservers: [UUID: () -> Void] = [:]
+    @ObservationIgnored var queueReadTask: Task<Void, Never>?
+    @ObservationIgnored var queueReadPending = false
+    @ObservationIgnored var queueRefreshQueued = false
+    @ObservationIgnored var subscriptionReadTask: Task<Void, Never>?
+    @ObservationIgnored var subscriptionRefreshQueued = false
+    @ObservationIgnored var subscriptionRevision = 0
+
     @ObservationIgnored var eventHandlerId: UUID?
+    var sessionMetadataGeneration = 0
+    @ObservationIgnored var agentBindingGeneration = 0
     @ObservationIgnored var eventRegistrationGeneration = 0
     @ObservationIgnored var streamingEventsActive = false
-    @ObservationIgnored var sessionMetadataGeneration = 0
+    @ObservationIgnored var metadataRefreshTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored var pendingQuestionRecoveryTask: Task<Void, Never>?
     @ObservationIgnored var markedQuestionRetryDelays: [Duration] =
         ConversationStore.defaultMarkedQuestionRetryDelays
@@ -98,7 +126,7 @@ import SwiftUI
     var sendThinkingMessageIds: Set<String> = [] {
         didSet {
             let wasStreaming = liveTranscript.isStreaming || !oldValue.isEmpty
-            if wasStreaming != isStreaming { onStreamingChanged?(isStreaming) }
+            if wasStreaming != isStreaming { notifyStreamingChanged() }
         }
     }
     var hydratingBlockKeys: Set<String> {
@@ -106,21 +134,23 @@ import SwiftUI
         set { liveTranscript.hydratingBlockKeys = newValue }
     }
 
-    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
-        let commands = ConversationCommands(connectionManager: connectionManager)
+    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared, agentDetails: AgentDetailStore? = nil) {
+        let commands = ConversationCommands(connectionManager: connectionManager, agentDetails: agentDetails)
         self.connectionManager = connectionManager
+        self.observedConnectionState = connectionManager.connectionState
         self.commands = commands
         self.watchedAgentCoordinator = ConversationWatchedAgents(commands: commands)
         self.liveTranscript = ConversationLiveTranscript(connectionManager: connectionManager)
         liveTranscript.onStreamingChanged = { [weak self] _ in
             guard let self else { return }
-            onStreamingChanged?(isStreaming)
+            notifyStreamingChanged()
         }
         liveTranscript.onSubscribeError = { [weak self] error in
             self?.raiseAgentNotFoundIfDefinitive(error)
         }
         liveTranscript.onTranscriptReplaced = { [weak self] in
             self?.reconcilePendingQuestionRecovery()
+            self?.notifyEntryStateChanged()
         }
         liveTranscript.onAuthoritativeMessages = { [weak self] messages, hasActivityState in
             // A user-row delta confirms delivery, not the end of a turn.
@@ -135,12 +165,13 @@ import SwiftUI
     }
 
     isolated deinit {
+        for task in metadataRefreshTasks.values { task.cancel() }
         if let handlerId = eventHandlerId {
             connectionManager.removeEventHandler(id: handlerId)
         }
-        if let subscriptionId {
-            Self.releaseStreamingSubscription(subscriptionId, via: connectionManager)
-        }
+        bootstrapTask?.cancel()
+        queueReadTask?.cancel()
+        subscriptionReadTask?.cancel()
     }
 }
 

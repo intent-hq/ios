@@ -117,7 +117,7 @@ struct MessageRowContent: View, Equatable {
         // Attention-request / turn-failure rows get a kind-flavored card;
         // every other system row falls back to a generic muted banner.
         if let notice = message.attentionNotice {
-            AttentionNoticeView(notice: notice)
+            AttentionNoticeView(notice: notice, onLayoutChange: onLayoutChange)
         } else {
             SystemNoticeBannerView(message: message.joinedTextContent)
         }

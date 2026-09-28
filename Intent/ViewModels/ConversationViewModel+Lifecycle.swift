@@ -1,42 +1,64 @@
 import Foundation
 
 extension ConversationViewModel {
-    /// The transcript comes only from the `chat.subscribe` seq-0 snapshot;
-    /// the load waits for it to apply (or its wait to time out), so the
-    /// new-messages divider anchors against the served rows.
+    /// Local ownership is installed before launching independent remote work.
+    /// Repeated SwiftUI tasks and connected publisher replay share the same load.
     func load() async {
-        guard !Task.isCancelled else { return }
-        let activation = activateLiveStores()
-        await store.subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
-        guard ownsLiveStoreActivation(activation), !Task.isCancelled else { return }
+        guard !Task.isCancelled, validateWorkspaceIfKnown() else { return }
+        if activeLiveStoreActivation == nil {
+            liveStoreActivationGeneration &+= 1
+            activeLiveStoreActivation = liveStoreActivationGeneration
+            // The same retained view keeps its authoritative divider while its
+            // live subscriptions revalidate. A changed store clears the latch.
+            detailConsumer = agentDetails.retain(agentId: agentId)
+            if streamingObserverId == nil { observeStreaming() }
+            store.retainConversation(conversationConsumer, agentId: agentId, workspaceId: workspaceId)
+            latchEntryWhenReady()
+        }
+        let activation = liveStoreActivationGeneration
+        if loadTask == nil {
+            loadTask = Task { [weak self] in
+                guard let self, activeLiveStoreActivation == activation, !Task.isCancelled else { return }
+                async let model: () = fetchCurrentModel(refresh: false)
+                async let hooks: () = hookStore.subscribe(workspaceId: workspaceId, agentId: agentId)
+                async let monitors: () = monitoredPrStore.subscribe(workspaceId: workspaceId, agentId: agentId)
+                await store.bootstrapTask?.value
+                _ = await (model, hooks, monitors)
+            }
+        }
+        await withTaskCancellationHandler {
+            await loadTask?.value
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                guard let self, activeLiveStoreActivation == activation else { return }
+                teardownLiveStores()
+            }
+        }
+    }
 
-        async let conversation: () = loadTranscript()
-        async let queue: () = store.fetchQueue(agentId: agentId)
-        async let model: () = fetchCurrentModel()
-        async let subscriptions: () = store.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
-        async let streamingState: () = store.fetchAgentStreamingState(agentId: agentId, raiseOnly: true)
-        async let hooks: () = hookStore.subscribe(workspaceId: workspaceId, agentId: agentId)
-        async let monitors: () = monitoredPrStore.subscribe(workspaceId: workspaceId, agentId: agentId)
+    /// Rendering can start at the snapshot. Entry positioning waits for the
+    /// authoritative marker, so a slow detail read cannot land at a wrong anchor.
+    var isEntryScrollReady: Bool { hasLatchedNewMessagesDividerAnchor }
 
-        _ = await (conversation, streamingState)
-        guard ownsLiveStoreActivation(activation), !Task.isCancelled else { return }
+    /// Route validation belongs to this window, never to the shared agent.
+    /// A stale route releases only its own lease after authority arrives.
+    @discardableResult
+    func validateWorkspaceIfKnown() -> Bool {
+        guard let detail = agentDetails.cached(agentId: agentId) else { return true }
+        do {
+            try detail.validate(agentId: agentId, workspaceId: workspaceId)
+            return true
+        } catch {
+            workspaceMismatch = true
+            teardownLiveStores()
+            return false
+        }
+    }
+
+    func latchEntryWhenReady() {
+        guard activeLiveStoreActivation != nil, validateWorkspaceIfKnown(),
+              store.metadataReadyForEntry, store.liveTranscript.chatSeeded else { return }
         latchNewMessagesDividerAnchorIfNeeded()
-        _ = await (queue, model, subscriptions, hooks, monitors)
-    }
-
-    private func activateLiveStores() -> Int {
-        liveStoreActivationGeneration &+= 1
-        activeLiveStoreActivation = liveStoreActivationGeneration
-        return liveStoreActivationGeneration
-    }
-
-    private func ownsLiveStoreActivation(_ activation: Int) -> Bool {
-        activeLiveStoreActivation == activation
-    }
-
-    private func loadTranscript() async {
-        await store.subscribeLiveChat(agentId: agentId, workspaceId: workspaceId)
-        await store.awaitLiveChatSnapshot()
     }
 
     func latchNewMessagesDividerAnchorIfNeeded() {
@@ -53,7 +75,16 @@ extension ConversationViewModel {
     func observeStreaming() {
         let observedStore = store
         previousIsStreaming = observedStore.isStreaming
-        observedStore.onStreamingChanged = { [weak self, weak observedStore] streaming in
+        if let streamingObserverId { observedStore.streamingObservers[streamingObserverId] = nil }
+        observedStore.entryObservers[conversationConsumer] = { [weak self] in
+            guard let self else { return }
+            latchEntryWhenReady()
+            if store.metadataReadyForEntry, let detail = agentDetails.cached(agentId: agentId) {
+                currentModelId = detail.values["model"] as? String
+                currentProviderId = (detail.values["provider"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            }
+        }
+        streamingObserverId = observedStore.observeStreaming { [weak self, weak observedStore] streaming in
             guard let self, let observedStore, store === observedStore else { return }
             let wasStreaming = previousIsStreaming
             previousIsStreaming = streaming
@@ -123,50 +154,47 @@ extension ConversationViewModel {
         }
     }
 
-    func fetchCurrentModel() async {
+    func fetchCurrentModel(refresh: Bool = true) async {
+        let activation = liveStoreActivationGeneration
         do {
-            var generation = optionsStore.loadGeneration
-            var result = try await connection.request(
-                "agent.get",
-                params: ["agentId": agentId]
-            )
-            while generation != optionsStore.loadGeneration {
-                generation = optionsStore.loadGeneration
-                result = try await connection.request(
-                    "agent.get",
-                    params: ["agentId": agentId]
-                )
-            }
+            let (detail, generation) = try await loadCurrentDetail(refresh: refresh)
+            guard activation == liveStoreActivationGeneration, !Task.isCancelled else { return }
             modelMetadataGeneration = generation
-            if let dict = result as? [String: Any],
-               let agent = dict["agent"] as? [String: Any] {
-                if let model = agent["model"] as? String {
-                    currentModelId = model
-                }
-                if let provider = agent["provider"] as? String, !provider.isEmpty {
-                    currentProviderId = provider
-                }
-                if let metadata = agent["metadata"] as? [String: Any],
-                   let specialistId = metadata["specialist"] as? String {
-                    await fetchSpecialistInfo(specialistId: specialistId)
-                }
+            modelMetadataEpoch = agentDetails.connectionEpoch
+            currentModelId = detail.values["model"] as? String
+            currentProviderId = (detail.values["provider"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            currentSpecialistId = detail.metadata["specialist"] as? String
+            if currentSpecialistId != nil {
+                optionsStore.retainSpecialists(consumer: conversationConsumer)
+                await optionsStore.ensureSpecialists(consumer: conversationConsumer)
+            } else {
+                optionsStore.releaseSpecialists(consumer: conversationConsumer)
             }
         } catch {
+            if activation == liveStoreActivationGeneration, !Task.isCancelled { validateWorkspaceIfKnown() }
             AppLog.conversation.error("[ConversationViewModel] Fetch current model failed: \(error)")
         }
     }
 
-    private func fetchSpecialistInfo(specialistId: String) async {
-        do {
-            let result = try await connection.request("specialist.list")
-            if let dict = result as? [String: Any],
-               let items = dict["specialists"] as? [[String: Any]],
-               let match = items.first(where: { ($0["id"] as? String) == specialistId }) {
-                specialistName = match["name"] as? String
-                specialistDescription = match["description"] as? String
+    private func loadCurrentDetail(refresh: Bool) async throws -> (AgentDetail, Int) {
+        var generation = optionsStore.loadGeneration
+        var epoch = agentDetails.connectionEpoch
+        var needsRefresh = refresh
+        while true {
+            do {
+                let detail = try await agentDetails.load(agentId: agentId, workspaceId: workspaceId, refresh: needsRefresh)
+                if generation == optionsStore.loadGeneration, epoch == agentDetails.connectionEpoch {
+                    return (detail, generation)
+                }
+            } catch {
+                guard !Task.isCancelled,
+                      generation != optionsStore.loadGeneration || epoch != agentDetails.connectionEpoch else { throw error }
             }
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Fetch specialist info failed: \(error)")
+            // A connection change already invalidated shared detail. A catalog
+            // invalidation on the same connection requires explicit revalidation.
+            needsRefresh = epoch == agentDetails.connectionEpoch
+            generation = optionsStore.loadGeneration
+            epoch = agentDetails.connectionEpoch
         }
     }
 }

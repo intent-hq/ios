@@ -4,12 +4,13 @@ import XCTest
 /// Never enters credentials, scans a code, or attempts a live connection.
 nonisolated final class PairingDesignUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
+    private static let scannerUnavailable = "Camera scanning isn't available — use manual token entry instead"
 
     @MainActor
     func testSavedConnectionActionsPreserveCurrentConnection() throws {
         let app = try launchConnected()
         try verifyBoundConnectionActions(in: app)
-        app.buttons["Connect to…"].tap()
+        app.buttons["intent.menu.connections"].tap()
         let scan = app.buttons["saved-connections.scan"]
         let manual = app.buttons["saved-connections.manual"]
         XCTAssertTrue(manual.waitForExistence(timeout: Self.timeout))
@@ -102,8 +103,10 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
 
         scan.tap()
-        XCTAssertTrue(app.staticTexts["Point at the QR code in Intent Settings"].waitForExistence(timeout: Self.timeout))
-        capture(app, named: "scanner-sheet")
+        XCTAssertTrue(app.staticTexts[Self.scannerUnavailable].waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.staticTexts["Point at the QR code in the Intent Settings"].exists)
+        XCTAssertTrue(app.buttons["Cancel"].isHittable)
+        capture(app, named: "scanner-full-screen")
         app.buttons["Cancel"].tap()
         XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
 
@@ -113,9 +116,9 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(app.staticTexts["Pair New"].exists)
         XCTAssertFalse(app.staticTexts["Connected"].exists, "Home is unbound; another window must not lend its badge")
-        XCTAssertEqual(machine.frame.height, 96, accuracy: 0.5)
-        XCTAssertEqual(machine.frame.minX, 24, accuracy: 0.5)
-        XCTAssertEqual(machine.frame.width, app.frame.width - 48, accuracy: 0.5)
+        XCTAssertTrue(machine.isHittable)
+        XCTAssertGreaterThanOrEqual(machine.frame.height, 44)
+        verifySavedCardGeometry(machine, in: app)
         capture(app, named: "saved-sheet")
         machine.press(forDuration: 1)
         app.buttons["Connection Details"].tap()
@@ -134,6 +137,25 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(scan.isHittable)
         XCTAssertFalse(saved.exists)
         capture(app, named: "saved-off")
+    }
+
+    @MainActor
+    private func verifySavedCardGeometry(_ machine: XCUIElement, in app: XCUIApplication) {
+        let appWidth = app.frame.width
+        XCTAssertGreaterThan(appWidth, 0)
+        XCTAssertFalse(machine.identifier.isEmpty)
+        let sheet = app.scrollViews.containing(.button, identifier: machine.identifier).firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: Self.timeout))
+        let sheetFrame = sheet.frame
+        // iOS 26 floating sheets stay scaled after presentation. Recover layout
+        // coordinates from the scroll container, never from the card under test.
+        let scale = sheetFrame.width / appWidth
+        XCTAssertGreaterThanOrEqual(scale, 0.9)
+        XCTAssertLessThanOrEqual(scale, 1)
+        let cardFrame = machine.frame
+        XCTAssertEqual(cardFrame.height / scale, 96, accuracy: 0.5)
+        XCTAssertEqual((cardFrame.minX - sheetFrame.minX) / scale, 24, accuracy: 0.5)
+        XCTAssertEqual(cardFrame.width / scale, appWidth - 48, accuracy: 0.5)
     }
 
     @MainActor
@@ -167,22 +189,20 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
         app.launch()
-        XCTAssertTrue(app.buttons["Workspace options"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         return app
     }
 
     @MainActor
     private func verifyBoundConnectionActions(in app: XCUIApplication) throws {
-        app.buttons["Workspace options"].tap()
-        app.buttons["Connect to…"].tap()
+        app.openHomeAction("connections")
         let machine = option("Demo Mac", in: app)
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
         // Select the fixture through the real row before asserting window ownership.
         // A restored demo scene may initially be unbound (ios#515).
         machine.tap()
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
-        app.buttons["Workspace options"].tap()
-        app.buttons["Connect to…"].tap()
+        app.openHomeAction("connections")
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
         let originalIdentifier = machine.identifier
         XCTAssertTrue(app.staticTexts["Connected"].exists)
@@ -192,8 +212,8 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         reveal(machine, in: app, scrollingUp: false)
         machine.tap()
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
-        app.buttons["Workspace options"].tap()
-        XCTAssertTrue(app.buttons["Connect to…"].waitForExistence(timeout: Self.timeout))
+        app.buttons["intent.menu.open"].tap()
+        XCTAssertTrue(app.revealHomeAction("connections").isHittable)
     }
 
     @MainActor
@@ -202,7 +222,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["Add Connection"].exists, "Add Connection must be a heading, not a chooser")
         for (identifier, destination, closeIdentifier) in [
-            ("saved-connections.scan", "Point at the QR code in Intent Settings", "Cancel"),
+            ("saved-connections.scan", Self.scannerUnavailable, "Cancel"),
             ("saved-connections.manual", "manual.title", "connection-sheet.close")
         ] {
             let action = app.buttons[identifier]

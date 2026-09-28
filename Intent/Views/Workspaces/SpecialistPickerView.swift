@@ -17,6 +17,8 @@ struct SpecialistPickerView: View {
     @Environment(\.colorScheme) var colorScheme
 
     @State private var navigationPath: [Route] = []
+    @State private var catalogConsumer = UUID()
+    @State private var catalogIsVisible = true
 
     @State private var selectedSpecialist: SpecialistInfo?
     @State private var agentName: String = ""
@@ -68,6 +70,11 @@ struct SpecialistPickerView: View {
                 .navigationDestination(for: Route.self) { destination(for: $0) }
         }
         .interactiveDismissDisabled(isCreating)
+        .onAppear { catalogIsVisible = true }
+        .onDisappear {
+            catalogIsVisible = false
+            optionsStore.releaseCatalogs(consumer: catalogConsumer)
+        }
         .onChange(of: agentName) { handleAgentNameChange() }
         // A background revalidation or reconnect reload swaps the cached
         // lists under the open sheet: keep the selections valid against
@@ -86,6 +93,8 @@ struct SpecialistPickerView: View {
         // a provider switch; the new provider's catalog is instant when
         // cached, loaded cold otherwise.
         .onChange(of: selectedProvider?.id) { _, _ in
+            guard catalogIsVisible else { return }
+            optionsStore.selectModelProvider(selectedProvider?.id, consumer: catalogConsumer)
             selectedModel = nil
             if let provider = selectedProvider {
                 Task { await loadModels(for: provider) }
@@ -172,8 +181,10 @@ struct SpecialistPickerView: View {
     /// A load superseded by a reconnect clear publishes nothing: the
     /// `loadGeneration` change starts a fresh load that settles and reconciles.
     private func loadOptions() async {
+        guard catalogIsVisible, !Task.isCancelled else { return }
+        optionsStore.retainCreationOptions(consumer: catalogConsumer)
         let generation = optionsStore.loadGeneration
-        await optionsStore.loadIfNeeded()
+        await optionsStore.loadIfNeeded(consumer: catalogConsumer)
         guard settledLoads.settleOptions(startedAt: generation, current: optionsStore.loadGeneration) else {
             return
         }
@@ -198,6 +209,7 @@ struct SpecialistPickerView: View {
     /// first) and loads its model catalog — instant when cached, awaited
     /// when cold. An explicit model never survives a provider switch.
     private func reconcileProviderSelection() async {
+        guard catalogIsVisible else { return }
         let previousProviderId = selectedProvider?.id
         selectedProvider = CreationSelectionPolicy.preselectedProvider(
             current: selectedProvider,
@@ -212,8 +224,10 @@ struct SpecialistPickerView: View {
     }
 
     private func loadModels(for provider: ProviderInfo) async {
+        guard catalogIsVisible, selectedProvider?.id == provider.id, !Task.isCancelled else { return }
+        optionsStore.selectModelProvider(provider.id, consumer: catalogConsumer)
         let generation = optionsStore.loadGeneration
-        await optionsStore.loadModelsIfNeeded(providerId: provider.id)
+        await optionsStore.loadModelsIfNeeded(providerId: provider.id, consumer: catalogConsumer)
         settledLoads.settleModels(
             for: provider.id,
             startedAt: generation,

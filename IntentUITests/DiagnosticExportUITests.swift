@@ -7,20 +7,9 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
     private static let maximumSwipes = 6
 
     @MainActor
-    func testWorkspaceMenuOrderPreviewClearCancelAndReopen() {
+    func testHomeMenuPreviewClearCancelAndReopen() {
         let app = launch()
-        openMenu(app)
-        let settings = app.buttons["Settings"]
-        let connect = app.buttons["Connect to…"]
-        let export = app.buttons["Export logs"]
-        XCTAssertTrue(settings.exists)
-        XCTAssertTrue(connect.exists)
-        XCTAssertTrue(export.waitForExistence(timeout: Self.timeout))
-        XCTAssertLessThan(settings.frame.midY, connect.frame.midY)
-        XCTAssertLessThan(connect.frame.midY, export.frame.midY)
-        let create = app.buttons["Create New Workspace"]
-        if create.exists { XCTAssertLessThan(create.frame.midY, settings.frame.midY) }
-        export.tap()
+        openLogs(app)
         assertPreview(app)
         let retainedRecords = app.staticTexts.matching(NSPredicate(format: "label ENDSWITH %@", " retained records")).firstMatch
         let originalCount = retainedRecords.label
@@ -39,8 +28,8 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         XCTAssertEqual(retainedRecords.label, originalCount, "Cancelling must preserve the reviewed history")
         XCTAssertFalse(app.staticTexts["diagnosticNotice"].exists)
         app.navigationBars["Export logs"].buttons["Done"].tap()
-        openMenu(app)
-        app.buttons["Export logs"].tap()
+        app.navigationBars["Acks & Logs"].buttons["Done"].tap()
+        openLogs(app)
         assertPreview(app)
         XCTAssertTrue(sessionStarted.exists, "Reopening must still read the retained session history")
         app.buttons["diagnosticClear"].tap()
@@ -54,8 +43,7 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
     @MainActor
     func testSettingsEntryAndLargeTextKeepExplicitActionsAccessible() {
         let app = launch(largeText: true)
-        openMenu(app)
-        app.buttons["Settings"].tap()
+        app.openHomeAction("settings")
         let export = app.buttons["Export logs"]
         for _ in 0..<Self.maximumSwipes {
             if export.isHittable { break }
@@ -80,10 +68,9 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
     }
 
     @MainActor
-    private func openMenu(_ app: XCUIApplication) {
-        let options = app.buttons["Workspace options"]
-        XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
-        options.tap()
+    private func openLogs(_ app: XCUIApplication) {
+        app.openHomeAction("acknowledgements")
+        app.buttons["Export logs"].tap()
     }
 
     @MainActor

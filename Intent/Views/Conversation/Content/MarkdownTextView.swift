@@ -14,11 +14,13 @@ struct MarkdownTextView: View {
     /// also re-runs on lightbox state changes).
     private let markdownSource: String
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     /// The window's session, when present: workspace images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
     @State private var videoItem: VideoItem?
+    @State private var browserItem: WorkspaceBrowser?
     @State private var attachmentAttempt = 0
 
     private static let maximumBlockIndent = 3
@@ -95,7 +97,10 @@ struct MarkdownTextView: View {
             // state on explicit retry; successful media still uses the cache.
             .id(attachmentAttempt)
             .interFont(Constants.Typography.bodyS)
-            .foregroundStyle(Theme.foreground(for: colorScheme))
+            .tracking(workspaceDesign ? Constants.Conversation.Design.Typography.bodyTracking : 0)
+            .foregroundStyle(workspaceDesign
+                ? Constants.Conversation.Design.Palette.assistantForeground(for: colorScheme)
+                : Theme.foreground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
                 ImageLightboxView(image: item.image)
@@ -104,12 +109,37 @@ struct MarkdownTextView: View {
                 VideoLightboxView(video: item.video)
             }
 
-        if let handler = onOpenURL {
-            markdownView
-                .environment(\.openURL, OpenURLAction(handler: handler))
-        } else {
-            markdownView
+        markdownView
+            .environment(\.openURL, OpenURLAction(handler: openLink))
+            .fullScreenCover(item: $browserItem) { browser in
+                if let session {
+                    WorkspaceBrowserView(browser: browser, connection: session.connection)
+                }
+            }
+    }
+
+    private func openLink(_ url: URL) -> OpenURLAction.Result {
+        do {
+            if let browser = try Self.workspaceBrowser(for: url, workspaceId: workspaceId, store: session?.browserStore) {
+                browserItem = browser
+                return .handled
+            }
+        } catch {
+            return .discarded
         }
+        return onOpenURL?(url) ?? .systemAction
+    }
+
+    static func workspaceBrowser(
+        for url: URL,
+        workspaceId: String?,
+        store: WorkspaceBrowserStore?
+    ) throws -> WorkspaceBrowser? {
+        guard let workspaceId, !workspaceId.isEmpty, let store,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = components.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = components.host, WorkspaceBrowserURL.isLocalHost(host) else { return nil }
+        return try store.open(workspaceId: workspaceId, url: url.absoluteString)
     }
 
     /// Routes attachment taps: only loaded markdown images (intent-file, saved assets and

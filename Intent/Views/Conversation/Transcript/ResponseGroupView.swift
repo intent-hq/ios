@@ -76,6 +76,9 @@ struct ResponseGroupBody: View, Equatable {
     var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isExpanded: Bool
 
     /// Manual `==`: closures are excluded on purpose — the message builds
@@ -89,6 +92,7 @@ struct ResponseGroupBody: View, Equatable {
     }
 
     private typealias Layout = Constants.Conversation.ResponseGroup
+    private typealias Design = Constants.Conversation.Design
 
     init(
         group: ResponseGroup,
@@ -112,7 +116,7 @@ struct ResponseGroupBody: View, Equatable {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.groupSpacing) {
+        VStack(alignment: .leading, spacing: workspaceDesign ? Design.Transcript.toolRowSpacing : Layout.groupSpacing) {
             headerButton
             groupContent
         }
@@ -122,10 +126,42 @@ struct ResponseGroupBody: View, Equatable {
     private var headerButton: some View {
         Button {
             onLayoutChange?()
-            withAnimation(.easeInOut(duration: Constants.Conversation.ResponseGroup.expansionAnimationDuration)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: Layout.expansionAnimationDuration)) {
                 isExpanded.toggle()
             }
         } label: {
+            headerLabel
+                .copyContextMenuPassthrough()
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+    }
+
+    @ViewBuilder
+    private var headerLabel: some View {
+        if workspaceDesign {
+            HStack(spacing: Design.Transcript.toolLabelSpacing) {
+                Image(.fileList)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Design.toolIconSize, height: Design.toolIconSize)
+                    .accessibilityHidden(true)
+                Text(group.name)
+                    .interFont(Constants.Typography.bodyS)
+                    .tracking(Design.Typography.bodyTracking)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if group.toolCallCount > 0 {
+                    Text("\(group.toolCallCount)")
+                        .interFont(Constants.Typography.bodyXS)
+                }
+                WorkspaceTranscriptDisclosure(isExpanded: isExpanded)
+            }
+            .foregroundStyle(isExpanded ? Design.Palette.foreground(for: colorScheme)
+                : Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+            .frame(minHeight: Design.minimumTapTarget)
+            .contentShape(Rectangle())
+        } else {
             HStack(spacing: Layout.headerSpacing) {
                 Image(systemName: "rectangle.stack")
                     .font(.caption)
@@ -151,15 +187,14 @@ struct ResponseGroupBody: View, Equatable {
             }
             .padding(.vertical, Layout.headerVerticalPadding)
         }
-        .buttonStyle(.plain)
     }
 
     @ViewBuilder
     private var groupContent: some View {
         if isExpanded {
             groupChildrenView
-                .padding(.leading, Constants.Conversation.ResponseGroup.contentIndent)
-                .overlay(alignment: .leading) { contentRail }
+                .padding(.leading, workspaceDesign ? Design.Transcript.expandedContentIndent : Layout.contentIndent)
+                .overlay(alignment: .leading) { if !workspaceDesign { contentRail } }
                 .transition(.opacity.combined(with: .move(edge: .top)))
         } else {
             collapsedGroupContent
@@ -185,8 +220,8 @@ struct ResponseGroupBody: View, Equatable {
                 proxy.scrollTo("group-content-bottom", anchor: .bottom)
             }
         }
-        .padding(.leading, Constants.Conversation.ResponseGroup.contentIndent)
-        .overlay(alignment: .leading) { contentRail }
+        .padding(.leading, workspaceDesign ? Design.Transcript.expandedContentIndent : Layout.contentIndent)
+        .overlay(alignment: .leading) { if !workspaceDesign { contentRail } }
         .transition(.opacity)
     }
 

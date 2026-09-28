@@ -105,7 +105,10 @@ extension WorkspaceRowPresentationTests {
         guard let view = object as? UIView else {
             return "attached=na hidden=na bounds=na"
         }
-        return "attached=\(view.window != nil) hidden=\(view.isHidden) bounds=\(view.bounds)"
+        let window = (view as? UIWindow) ?? view.window
+        let scene = window?.windowScene
+        return "attached=\(window != nil) hidden=\(view.isHidden) bounds=\(view.bounds) "
+            + "sceneAttached=\(scene != nil) sceneState=\(String(describing: scene?.activationState.rawValue))"
     }
 
     func accessibilityGraphSnapshot(

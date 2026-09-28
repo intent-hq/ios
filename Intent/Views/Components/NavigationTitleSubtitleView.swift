@@ -102,10 +102,7 @@ struct WorkspaceNavigationSubtitleModifier: ViewModifier {
 
     /// Cold start / deep link: the store may not have fetched yet.
     private func fetchWorkspacesIfNeeded() async {
-        let workspaceStore = session.workspaceStore
-        if workspaceStore.workspaces.isEmpty, !workspaceStore.isLoading {
-            await workspaceStore.fetchAll()
-        }
+        await session.workspaceStore.fetchIfNeeded()
     }
 }
 

@@ -8,9 +8,14 @@ extension DemoFixtures {
         case "github.authStatus":
             return ["isConfigured": true]
         case "github.repos.list":
-            return ["repos": [["owner": "nova-labs", "name": "console", "defaultBranch": "main"]]]
+            return [
+                "repos": [
+                    ["owner": "nova-labs", "name": "console", "defaultBranch": "main"],
+                    ["owner": "nova-labs", "name": "docs", "defaultBranch": "main"]
+                ]
+            ]
         case "github.branches.list", "github.branches.listCached":
-            return ["branches": ["main"], "defaultBranch": "main"]
+            return ["branches": ["main", "feature/docs"], "defaultBranch": "main"]
         case "providers.catalog":
             let providers = ["auggie", "codex"].map { id in
                 ["id": id, "visible": true, "canBeDisabled": true] as [String: Any]
@@ -28,7 +33,10 @@ extension DemoFixtures {
             return [
                 "models": [
                     ["id": "default-model", "name": "Default Model", "provider": provider, "isDefault": true],
-                    ["id": "named-model", "name": "Named Model", "provider": provider, "isDefault": false]
+                    [
+                        "id": "named-model", "name": "Named Model", "provider": provider, "isDefault": false,
+                        "effortLevels": ["low", "medium", "high"]
+                    ]
                 ]
             ]
         default:

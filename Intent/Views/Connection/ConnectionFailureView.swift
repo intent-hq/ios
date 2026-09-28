@@ -13,6 +13,8 @@ struct ConnectionFailureView: View {
     @State private var retryTask: Task<Void, Never>?
     @State private var savedConnections: [StoredConnection] = []
     @State private var showingDiagnosticLogs = false
+    @ScaledMetric private var iconSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .caption) private var chevronSize: CGFloat = 12
 
     var body: some View {
         ZStack {
@@ -74,7 +76,12 @@ struct ConnectionFailureView: View {
             Button {
                 showingDiagnosticLogs = true
             } label: {
-                Label { Text("Export logs").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "doc.zipper") }
+                Label { Text("Export logs").interFont(Constants.Typography.bodyS) } icon: {
+                    Image(.downloadFile)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: iconSize, height: iconSize)
+                }
             }
         }
         .padding(.horizontal, Constants.ConnectionFailure.controlsHorizontalPadding)
@@ -114,7 +121,12 @@ struct ConnectionFailureView: View {
                 stopAutoRetry()
                 coordinator.onLogOff()
             } label: {
-                Label { Text("Retry Log Off").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "rectangle.portrait.and.arrow.forward") }
+                Label { Text("Retry Log Off").interFont(Constants.Typography.bodyS) } icon: {
+                    Image(.logout)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: iconSize, height: iconSize)
+                }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -130,7 +142,14 @@ struct ConnectionFailureView: View {
             Label {
                 Text(isCertMismatch ? "Re-pair Device" : "Connect to Different Server").interFont(Constants.Typography.bodyS)
             } icon: {
-                Image(systemName: isCertMismatch ? "arrow.triangle.2.circlepath" : "link.badge.plus")
+                if isCertMismatch {
+                    Image(.clockwiseArrow)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: iconSize, height: iconSize)
+                } else {
+                    Image(systemName: "link.badge.plus")
+                }
             }
             .frame(maxWidth: .infinity)
         }
@@ -206,43 +225,6 @@ struct ConnectionFailureView: View {
         connections
             .filter { $0.id != activeId }
             .sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
-    }
-
-    private func savedConnectionRow(_ connection: StoredConnection) -> some View {
-        Button {
-            stopAutoRetry()
-            coordinator.onSwitchConnection(id: connection.id)
-        } label: {
-            HStack(spacing: Constants.ConnectionFailure.savedConnectionRowSpacing) {
-                Image(systemName: "desktopcomputer")
-                    .font(.body)
-                    .foregroundStyle(Theme.primary(for: colorScheme))
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: Constants.ConnectionFailure.savedConnectionTextSpacing) {
-                    Text(connection.displayName)
-                        .interFont(Constants.Typography.bodyXSEmphasized)
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                    Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
-                        .interFont(Constants.Typography.subtextXXS)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .accessibilityHidden(true)
-            }
-            .padding(.vertical, Constants.ConnectionFailure.savedConnectionVerticalPadding)
-            .padding(.horizontal, Constants.ConnectionFailure.savedConnectionHorizontalPadding)
-            .background(Theme.muted(for: colorScheme).opacity(
-                Constants.ConnectionFailure.controlBackgroundOpacity
-            ))
-            .clipShape(RoundedRectangle(cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
-        }
-        .buttonStyle(.plain)
     }
 
     /// Whether the failure screen may dial the saved record on its own. A
@@ -367,6 +349,47 @@ struct ConnectionFailureView: View {
 }
 
 extension ConnectionFailureView {
+    private func savedConnectionRow(_ connection: StoredConnection) -> some View {
+        Button {
+            stopAutoRetry()
+            coordinator.onSwitchConnection(id: connection.id)
+        } label: {
+            HStack(spacing: Constants.ConnectionFailure.savedConnectionRowSpacing) {
+                Image(.connectionLaptop)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+                    .foregroundStyle(Theme.primary(for: colorScheme))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: Constants.ConnectionFailure.savedConnectionTextSpacing) {
+                    Text(connection.displayName)
+                        .interFont(Constants.Typography.bodyXSEmphasized)
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                    Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
+                        .interFont(Constants.Typography.subtextXXS)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
+
+                Spacer()
+
+                Image(.chevronRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: chevronSize, height: chevronSize)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, Constants.ConnectionFailure.savedConnectionVerticalPadding)
+            .padding(.horizontal, Constants.ConnectionFailure.savedConnectionHorizontalPadding)
+            .background(Theme.muted(for: colorScheme).opacity(
+                Constants.ConnectionFailure.controlBackgroundOpacity
+            ))
+            .clipShape(RoundedRectangle(cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
+        }
+        .buttonStyle(.plain)
+    }
+
     private var failureTitle: some View {
         VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
             Text(retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can't Connect")

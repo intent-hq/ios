@@ -58,7 +58,11 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
 
             // Return to the overview without restarting the app: the second
             // entry must reconstruct the conversation with cached asset results.
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                app.buttons["conversation.back"].tap()
+            } else {
+                app.navigationBars.buttons.element(boundBy: 0).tap()
+            }
             XCTAssertTrue(app.buttons["Context"].waitForExistence(timeout: Fixture.timeout))
             XCTAssertTrue(transcript.waitForNonExistence(timeout: Fixture.timeout))
         }

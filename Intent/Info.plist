@@ -50,6 +50,11 @@
 	</dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>ThemeBackground</string>
+	</dict>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Intent saves images from your conversations to your photo library when you choose Save Image.</string>
 </dict>

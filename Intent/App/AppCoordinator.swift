@@ -24,6 +24,11 @@ enum AppScreen {
     }
 }
 
+enum AppSection: Hashable {
+    case assistant
+    case workspaces
+}
+
 enum ConnectionFailureRetryPolicy: Equatable {
     case automaticConnection
     case manualLogOff
@@ -65,6 +70,8 @@ class AppCoordinator {
             }
         }
     }
+    var selectedSection: AppSection = .workspaces
+    var assistantAgentId: String?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false {
         didSet {
@@ -136,6 +143,8 @@ class AppCoordinator {
     /// root, not the coordinator, owns the registry's attachment count.
     @ObservationIgnored var returnWindowToSavedMachines: (() -> Void)?
 
+    var agentDetails: AgentDetailStore
+
     init(
         workspaceStore: WorkspaceStore,
         connection: any SessionConnectionManaging,
@@ -148,6 +157,7 @@ class AppCoordinator {
         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
         claimScreenRestoration: @escaping @MainActor () -> Bool = { true }
     ) {
+        agentDetails = AgentDetailStore(connection: connection)
         dependencies = AppCoordinatorDependencies(
             workspaceStore: workspaceStore,
             connection: connection,

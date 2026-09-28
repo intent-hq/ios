@@ -11,17 +11,17 @@ struct SettingsPairingSection: View {
             VStack(spacing: 0) {
                 if PairingOption.available(showsSavedConnections: false).contains(.qrScan) {
                     Button { showQRScanner = true } label: {
-                        SettingsActionLabel(title: "QR Code", systemImage: "qrcode")
+                        SettingsActionLabel(title: "QR Code", image: .connectQR)
                     }
                     Divider()
                 }
                 Button { showManualEntry = true } label: {
-                    SettingsActionLabel(title: "Manual Connection", systemImage: "keyboard")
+                    SettingsActionLabel(title: "Manual Connection", image: .connectManual)
                 }
             }
             .background(SettingsStyle.card(for: colorScheme), in: .rect(cornerRadius: SettingsStyle.cardRadius))
         }
-        .sheet(isPresented: $showQRScanner, onDismiss: refreshConnections) { QRScannerView(onPaired: handlePaired) }
+        .fullScreenCover(isPresented: $showQRScanner, onDismiss: refreshConnections) { QRScannerView(onPaired: handlePaired) }
         .sheet(isPresented: $showManualEntry, onDismiss: refreshConnections) { ManualTokenEntryView(onPaired: handlePaired) }
     }
 

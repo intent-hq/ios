@@ -10,11 +10,11 @@ struct SettingsSupportSection: View {
                 AcknowledgementsView()
                     .toolbar(.visible, for: .navigationBar)
             } label: {
-                SettingsActionLabel(title: "Acknowledgements", systemImage: "doc.text")
+                SettingsActionLabel(title: "Acknowledgements", image: .file)
             }
             Divider()
             Button { showingDiagnosticLogs = true } label: {
-                SettingsActionLabel(title: "Export logs", systemImage: "doc.zipper")
+                SettingsActionLabel(title: "Export logs", image: .downloadFile)
             }
         }
         .background(SettingsStyle.card(for: colorScheme), in: .rect(cornerRadius: SettingsStyle.cardRadius))

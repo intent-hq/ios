@@ -2,30 +2,23 @@ import SwiftUI
 
 struct WorkspaceListSidebar: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
-    @State private var showingCreateWorkspace = false
-    @State private var showingConnections = false
-    @State private var showingDiagnosticLogs = false
+    @Binding private var isSearching: Bool
     @FocusState private var searchFocused: Bool
 
-    init(workspaceStore: WorkspaceStore) {
+    init(workspaceStore: WorkspaceStore, isSearching: Binding<Bool>) {
         self.workspaceStore = workspaceStore
         _viewModel = State(initialValue: WorkspaceListViewModel(workspaceStore: workspaceStore))
+        _isSearching = isSearching
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("View", selection: $viewModel.viewMode) {
-                ForEach(ViewMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).interFont(Constants.Typography.bodyXS).tag(mode)
-                }
+            if !isSearching {
+                WorkspaceSearchBar(viewMode: $viewModel.viewMode, isSearching: $isSearching)
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, Constants.WorkspaceList.pickerHorizontalPadding)
-            .padding(.vertical, Constants.WorkspaceList.pickerVerticalPadding)
 
             ZStack {
                 Theme.sidebar(for: colorScheme).ignoresSafeArea()
@@ -47,52 +40,18 @@ struct WorkspaceListSidebar: View {
             }
         }
         .background(Theme.sidebar(for: colorScheme))
-        .navigationTitle("Workspaces")
-        .workspaceSearch(text: $viewModel.searchText, isFocused: $searchFocused)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Menu {
-                    Button {
-                        showingCreateWorkspace = true
-                    } label: {
-                        Label { Text("Create New Workspace").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "plus.rectangle") }
-                    }
-                    Button {
-                        coordinator.onOpenSettings()
-                    } label: {
-                        Label { Text("Settings").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "gearshape") }
-                    }
-                    Divider()
-                    Button {
-                        showingConnections = true
-                    } label: {
-                        Label { Text("Connect to…").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "desktopcomputer") }
-                    }
-                    Button {
-                        showingDiagnosticLogs = true
-                    } label: {
-                        Label { Text("Export logs").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "doc.zipper") }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                }
-                .accessibilityLabel("Workspace options")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isSearching {
+                WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
             }
-        }
-        .sheet(isPresented: $showingCreateWorkspace) {
-            CreateWorkspaceView(session: session)
-                .environment(coordinator)
-        }
-        .sheet(isPresented: $showingConnections) {
-            ConnectionsView()
-                .environment(coordinator)
-        }
-        .sheet(isPresented: $showingDiagnosticLogs) {
-            DiagnosticExportView()
         }
         .refreshable {
             await workspaceStore.fetchAll()
+        }
+        .navigationTitle("Workspaces")
+        .onDisappear {
+            isSearching = false
+            viewModel.searchText = ""
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
     }
@@ -163,6 +122,7 @@ struct WorkspaceListSidebar: View {
         .focusEffectDisabled()
         #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
+        .contentMargins(.bottom, isSearching ? 0 : AssistantLaunchButton.scrollClearance, for: .scrollContent)
     }
 
     /// Shared row modifiers for every view mode. The explicit row background

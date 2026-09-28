@@ -88,6 +88,7 @@ struct ConnectionsView: View {
     @State private var connectionShowingDetails: StoredConnection?
     @State private var connectionPendingDelete: StoredConnection?
     @State private var showDeleteError = false
+    @ScaledMetric private var menuIconSize: CGFloat = 17
 
     var body: some View {
         ConnectionSheet(
@@ -183,7 +184,10 @@ struct ConnectionsView: View {
                 Label {
                     Text("Connection Details").interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "info.circle")
+                    Image(.infoCircle)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: menuIconSize, height: menuIconSize)
                 }
             }
             if supportsMultipleWindows {
@@ -193,7 +197,10 @@ struct ConnectionsView: View {
                 Label {
                     Text("Delete").interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "trash")
+                    Image(.delete)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: menuIconSize, height: menuIconSize)
                 }
             }
         }
@@ -276,7 +283,7 @@ private struct ConnectionPairingActions: View {
             .background(Constants.Connections.surface(for: colorScheme))
             .clipShape(.rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius))
         }
-        .sheet(isPresented: $showQRScanner) { QRScannerView(onPaired: onPaired) }
+        .fullScreenCover(isPresented: $showQRScanner) { QRScannerView(onPaired: onPaired) }
         .sheet(isPresented: $showManualEntry) { ManualTokenEntryView(onPaired: onPaired) }
     }
 

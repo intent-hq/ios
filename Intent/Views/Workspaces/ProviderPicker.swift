@@ -3,9 +3,28 @@ import SwiftUI
 struct ProviderPicker: View {
     let providers: [ProviderInfo]
     let selectedProvider: ProviderInfo?
+    var usesFormStyle = false
     let onSelect: (ProviderInfo) -> Void
 
     var body: some View {
+        Group {
+            if usesFormStyle {
+                Menu {
+                    picker.pickerStyle(.inline)
+                } label: {
+                    CreateWorkspaceChoiceLabel(title: selectedProvider?.displayName ?? String(localized: "None"))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Provider")
+                .accessibilityValue(selectedProvider?.displayName ?? String(localized: "None"))
+                .accessibilityIdentifier("creation.providerPicker")
+            } else {
+                picker.pickerStyle(.menu)
+            }
+        }
+    }
+
+    private var picker: some View {
         Picker(selection: selection) {
             ForEach(providers) { provider in
                 Text(Self.optionLabel(for: provider))
@@ -15,7 +34,6 @@ struct ProviderPicker: View {
         } label: {
             Text("Provider").interFont(Constants.Typography.bodyS)
         }
-        .pickerStyle(.menu)
         .accessibilityIdentifier("creation.providerPicker")
     }
 

@@ -122,6 +122,7 @@ extension Constants.Conversation.ResponseGroup {
 }
 
 extension Constants.Conversation.ToolCall {
+    static let iconSize: CGFloat = 16
     static let headerSpacing: CGFloat = 4
     static let pathOpacity: Double = 0.6
     static let disclosureFontSize: CGFloat = 8

@@ -3,9 +3,18 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct MessageInputView: View {
+    // Bind directly to the model so received edits and external replacements
+    // share one draft. Deferred bidirectional onChange copies can replay old text.
     @Bindable var viewModel: ConversationViewModel
     private let store: ConversationStore
+    private let usesWorkspaceDesign: Bool
+    private let allowsSending: Bool
+    private let onFocusChange: ((Bool) -> Void)?
     @Environment(\.colorScheme) var colorScheme
+
+    @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
+    @ScaledMetric(relativeTo: .caption) var attachmentIconSide: CGFloat = 12
+    private let sendArrowScale: CGFloat = 0.75
 
     @State private var isFocused: Bool = false
     @State private var textViewHeight: CGFloat = Constants.Conversation.Composer.minimumTextViewHeight
@@ -22,14 +31,18 @@ struct MessageInputView: View {
     @State private var caretOffset: Int?
     #endif
 
-    // Local text state to decouple TextField from viewModel updates.
-    // This prevents typing lag when the viewModel is rapidly updating
-    // during streaming (every legacy-store publication triggers a re-render).
-    @State private var localText: String = ""
-
-    init(viewModel: ConversationViewModel, store: ConversationStore) {
+    init(
+        viewModel: ConversationViewModel,
+        store: ConversationStore,
+        usesWorkspaceDesign: Bool = false,
+        allowsSending: Bool = true,
+        onFocusChange: ((Bool) -> Void)? = nil
+    ) {
         self.viewModel = viewModel
         self.store = store
+        self.usesWorkspaceDesign = usesWorkspaceDesign
+        self.allowsSending = allowsSending
+        self.onFocusChange = onFocusChange
     }
 
     /// Overlay visibility is presentation policy, not permission to consume a
@@ -39,9 +52,33 @@ struct MessageInputView: View {
     var body: some View {
         VStack(spacing: 0) {
             supplementalRows
-            inputRow
+            if usesWorkspaceDesign {
+                WorkspaceComposerRow(
+                    text: $viewModel.messageText,
+                    isFocused: $isFocused,
+                    isStreaming: store.isStreaming,
+                    hasAttachments: viewModel.hasPendingAttachments,
+                    canSend: hasSendableContent,
+                    onSend: sendCurrentMessage,
+                    onStop: {
+                        HapticManager.impact(.light)
+                        Task { await viewModel.stopStreaming() }
+                    },
+                    onPhotos: { isPhotoPickerPresented = true },
+                    onFiles: { isFilePickerPresented = true }
+                )
+            } else {
+                inputRow
+            }
         }
-        .background(Theme.card(for: colorScheme))
+        .background {
+            if usesWorkspaceDesign {
+                RoundedRectangle(cornerRadius: workspaceCornerRadius)
+                    .fill(Constants.Conversation.Design.Palette.surface(for: colorScheme))
+            } else {
+                Theme.card(for: colorScheme)
+            }
+        }
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
@@ -60,18 +97,8 @@ struct MessageInputView: View {
                 viewModel.addFiles(urls)
             }
         }
-        .onAppear {
-            localText = viewModel.messageText
-        }
-        .onChange(of: localText) { _, newValue in
-            // Push local edits to viewModel (for draft persistence)
-            viewModel.messageText = newValue
-        }
-        .onChange(of: viewModel.messageText) { _, newValue in
-            // Pull viewModel changes (e.g. cleared after send, draft restore)
-            if newValue != localText {
-                localText = newValue
-            }
+        .onChange(of: isFocused) { _, focused in
+            onFocusChange?(focused)
         }
         #if os(visionOS)
         .onDisappear {
@@ -87,6 +114,12 @@ struct MessageInputView: View {
 }
 
 private extension MessageInputView {
+    var workspaceCornerRadius: CGFloat {
+        let active = store.isStreaming || !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || viewModel.hasPendingAttachments
+        return active ? Constants.Conversation.Design.Composer.activeCornerRadius : Constants.Conversation.Design.cornerRadius
+    }
+
     @ViewBuilder
     var supplementalRows: some View {
         #if os(visionOS)
@@ -132,8 +165,10 @@ private extension MessageInputView {
             HapticManager.impact(.light)
             Task { await viewModel.stopStreaming() }
         } label: {
-            Image(systemName: "stop.circle.fill")
-                .font(.title2)
+            Image(.stopFill)
+                .resizable()
+                .scaledToFit()
+                .frame(width: controlIconSide, height: controlIconSide)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .frame(
                     minWidth: Constants.Conversation.Composer.controlTarget,
@@ -153,11 +188,17 @@ private extension MessageInputView {
             Button {
                 isFilePickerPresented = true
             } label: {
-                Label("Files", systemImage: "folder")
+                Label {
+                    Text("Files")
+                } icon: {
+                    Image(.folder)
+                }
             }
         } label: {
-            Image(systemName: "plus.circle.fill")
-                .font(.title2)
+            Image(.addCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: controlIconSide, height: controlIconSide)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(
                     minWidth: Constants.Conversation.Composer.controlTarget,
@@ -168,29 +209,18 @@ private extension MessageInputView {
     }
 
     var textEditor: some View {
-        ZStack(alignment: placeholderAlignment) {
+        ZStack(alignment: .leading) {
             SubmittableTextView(
-                text: $localText,
+                text: $viewModel.messageText,
                 isFocused: $isFocused,
                 onSubmit: { sendCurrentMessage() },
-                onHeightChange: { newHeight in
-                    textViewHeight = min(
-                        max(newHeight, Constants.Conversation.Composer.minimumTextViewHeight),
-                        Constants.Conversation.Composer.maximumTextViewHeight
-                    )
-                },
-                onCaretChange: { offset in
-                    #if os(visionOS)
-                    caretOffset = offset
-                    #else
-                    _ = offset
-                    #endif
-                }
+                onHeightChange: updateTextViewHeight,
+                onCaretChange: updateCaretOffset
             )
             .padding(.horizontal, Constants.Conversation.Composer.textEditorHorizontalPadding)
             .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)
             .frame(height: textViewHeight)
-            if localText.isEmpty {
+            if viewModel.messageText.isEmpty {
                 Text("Message...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .interFont(Constants.Typography.bodyS)
@@ -204,10 +234,29 @@ private extension MessageInputView {
     }
 
     var hasSendableContent: Bool {
-        (!localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        (!viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || viewModel.hasPendingAttachments)
             && !viewModel.isUploadingFiles
             && isConnectionReadyForSending
+            && allowsSending
+    }
+
+    private func updateTextViewHeight(_ naturalHeight: CGFloat) {
+        textViewHeight = min(
+            max(
+                naturalHeight + Constants.Conversation.Composer.fieldVerticalPadding * 2,
+                Constants.Conversation.Composer.minimumTextViewHeight
+            ),
+            Constants.Conversation.Composer.maximumTextViewHeight
+        )
+    }
+
+    private func updateCaretOffset(_ offset: Int) {
+        #if os(visionOS)
+        caretOffset = offset
+        #else
+        _ = offset
+        #endif
     }
 
     var sendButtonStack: some View {
@@ -216,13 +265,19 @@ private extension MessageInputView {
                 Button {
                     sendCurrentMessage()
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(
-                            hasSendableContent
-                                ? Theme.primary(for: colorScheme)
-                                : Theme.mutedForeground(for: colorScheme)
-                        )
+                    Image(.arrowUp)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: controlIconSide * sendArrowScale, height: controlIconSide * sendArrowScale)
+                        .foregroundStyle(Theme.card(for: colorScheme))
+                        .frame(width: controlIconSide, height: controlIconSide)
+                        .background {
+                            Circle().fill(
+                                hasSendableContent
+                                    ? Theme.primary(for: colorScheme)
+                                    : Theme.mutedForeground(for: colorScheme)
+                            )
+                        }
                         .frame(
                             minWidth: Constants.Conversation.Composer.controlTarget,
                             minHeight: Constants.Conversation.Composer.controlTarget
@@ -232,16 +287,6 @@ private extension MessageInputView {
                 .accessibilityLabel("Send message")
             }
         }
-    }
-
-    /// visionOS centers the placeholder vertically in the 60 pt field;
-    /// iOS keeps the original top-leading placement.
-    private var placeholderAlignment: Alignment {
-        #if os(visionOS)
-        return .leading
-        #else
-        return .topLeading
-        #endif
     }
 }
 
@@ -256,8 +301,17 @@ private extension MessageInputView {
         Button {
             toggleDictation()
         } label: {
-            Image(systemName: dictation.isActive ? "stop.circle.fill" : "mic.fill")
-                .font(.title2)
+            Group {
+                if dictation.isActive {
+                    Image(.stopFill)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: controlIconSide, height: controlIconSide)
+                } else {
+                    Image(systemName: "mic.fill")
+                        .font(.title2)
+                }
+            }
                 .foregroundStyle(
                     dictation.isActive
                         ? Theme.destructive(for: colorScheme)
@@ -280,12 +334,12 @@ private extension MessageInputView {
             return
         }
 
-        dictationSession = DictationSession(baseText: localText, insertionOffset: caretOffset)
+        dictationSession = DictationSession(baseText: viewModel.messageText, insertionOffset: caretOffset)
         dictation.onTranscriptChange = { transcription, endsSegment in
             guard var session = dictationSession else { return }
-            switch session.apply(transcription: transcription, endsSegment: endsSegment, to: localText) {
+            switch session.apply(transcription: transcription, endsSegment: endsSegment, to: viewModel.messageText) {
             case .merged(let text):
-                localText = text
+                viewModel.messageText = text
                 dictationSession = session
                 if endsSegment {
                     // Programmatic text sets don't reliably fire a selection
@@ -340,10 +394,11 @@ private extension MessageInputView {
                                 .font(.callout)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 .accessibilityHidden(true)
-                            Text(prompt)
+                            Text(LocalizedStringKey(prompt))
                                 .interFont(Constants.Typography.bodyS)
                                 .lineLimit(Constants.Conversation.Composer.suggestedPromptLineLimit)
                                 .foregroundStyle(Theme.foreground(for: colorScheme))
+                                .allowsHitTesting(false)
                         }
                         .padding(.horizontal, Constants.Conversation.Composer.suggestedPromptHorizontalPadding)
                         .frame(minHeight: Constants.Conversation.Composer.suggestedPromptChipMinimumHeight)
@@ -367,7 +422,7 @@ private extension MessageInputView {
     // MARK: - Actions
 
     private func sendCurrentMessage() {
-        guard isConnectionReadyForSending else { return }
+        guard isConnectionReadyForSending, allowsSending else { return }
         #if os(visionOS)
         // Stop app dictation before the text is consumed; a late final
         // result must not resurrect the sent text (.send cancels outright).
@@ -389,8 +444,8 @@ private extension MessageInputView {
             // files, but the text view's submit callback still lands here —
             // pendingFiles clears only after success, so a second send
             // would duplicate the uploads.
-            guard !viewModel.isUploadingFiles, isConnectionReadyForSending else { return }
-            let text = localText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !viewModel.isUploadingFiles, isConnectionReadyForSending, allowsSending else { return }
+            let text = viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty || viewModel.hasPendingAttachments else {
                 isFocused = true
                 return
@@ -398,7 +453,7 @@ private extension MessageInputView {
             HapticManager.impact(.medium)
             // Capture images before clearing so they're available for the async send
             let imagesToSend = viewModel.pendingImages
-            localText = ""
+            viewModel.messageText = ""
             viewModel.pendingImages.removeAll()
             // Re-focus after clearing
             DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Composer.refocusDelay) {

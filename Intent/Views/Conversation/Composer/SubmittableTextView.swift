@@ -62,16 +62,13 @@ class KeyCommandTextView: UITextView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        #if os(visionOS)
         centerShortContent()
-        #endif
         onLayoutChange?()
     }
 
     /// Content height measured with the base container inset, independent of
-    /// any live vertical-centering inset (visionOS), so the SwiftUI height
-    /// clamp sees a stable value. On iOS the insets always equal the base,
-    /// so this matches `sizeThatFits` exactly.
+    /// any live vertical-centering inset, so the SwiftUI height clamp sees
+    /// a stable value.
     var naturalHeight: CGFloat {
         let fitting = sizeThatFits(
             CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
@@ -80,9 +77,7 @@ class KeyCommandTextView: UITextView {
         return fitting - textContainerInset.top - textContainerInset.bottom + base * 2
     }
 
-    #if os(visionOS)
-    /// Vertically centers short content inside the fixed 60 pt minimum field
-    /// height by widening the vertical container insets symmetrically.
+    /// Centers short content within the minimum field height.
     private func centerShortContent() {
         let base = Constants.Conversation.Composer.textContainerInset
         let contentHeight = naturalHeight - base * 2
@@ -92,7 +87,6 @@ class KeyCommandTextView: UITextView {
         guard abs(textContainerInset.top - inset) > 0.5 else { return }
         textContainerInset = UIEdgeInsets(top: inset, left: base, bottom: inset, right: base)
     }
-    #endif
 
     #if os(visionOS)
     private static let isVisionOS = true
@@ -176,6 +170,9 @@ struct SubmittableTextView: UIViewRepresentable {
     /// VoiceOver label for the text view (UITextView has no placeholder to
     /// announce, so a SwiftUI placeholder overlay does not label it).
     var accessibilityLabel: String?
+    /// Opt-in foreground for a scoped composer design. Nil preserves UIKit's
+    /// existing color without rewriting attributed text or changing editing policy.
+    var textColor: UIColor?
 
     func makeUIView(context: Context) -> KeyCommandTextView {
         let textView = KeyCommandTextView()
@@ -200,6 +197,7 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.setContentHuggingPriority(.defaultHigh, for: .vertical)
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textView.text = text
+        if let textColor { textView.textColor = textColor }
 
         // Report height whenever layout changes (e.g. initial layout, rotation)
         textView.onLayoutChange = { [weak textView] in
@@ -219,16 +217,11 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.onSubmit = onSubmit
         textView.accessibilityLabel = accessibilityLabel
         textView.updateTypography()
-
-        // Sync text from SwiftUI → UIKit (avoid cursor jump during editing)
-        if textView.text != text {
-            textView.text = text
-
-            let idealHeight = textView.naturalHeight
-            DispatchQueue.main.async {
-                onHeightChange?(idealHeight)
-            }
+        if let textColor, textView.textColor != textColor {
+            textView.textColor = textColor
         }
+
+        context.coordinator.synchronizeText(in: textView)
 
         // Sync focus
         if isFocused, !textView.isFirstResponder {
@@ -247,6 +240,19 @@ struct SubmittableTextView: UIViewRepresentable {
 
         init(_ parent: SubmittableTextView) {
             self.parent = parent
+        }
+
+        func synchronizeText(in textView: KeyCommandTextView) {
+            // A Binding read during updateUIView can be an older render snapshot.
+            // Read it after that pass, through the current parent, so an edit
+            // received meanwhile cannot be replaced by that snapshot (ios#575).
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView else { return }
+                let latestText = parent.text
+                guard textView.text != latestText else { return }
+                textView.text = latestText
+                parent.onHeightChange?(textView.naturalHeight)
+            }
         }
 
         func textViewDidChange(_ textView: UITextView) {
