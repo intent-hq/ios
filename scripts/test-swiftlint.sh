@@ -21,9 +21,13 @@ assert_contains() {
 # Reproduce a host without ldd (such as macOS), even when running on Linux.
 # Keep both platform cases independent of any installed Linux tooling.
 mkdir -p "$TEMP_ROOT/host-bin"
-for tool in bash cat chmod cmp dirname grep ln mkdir python3 rm; do
+for tool in bash cat chmod cmp dirname grep ln mkdir rm; do
   ln -s "$(command -v "$tool")" "$TEMP_ROOT/host-bin/$tool"
 done
+# Link the interpreter itself: a version-manager shim (pyenv on the local Mac
+# runner) is a script that needs tools this isolated PATH deliberately omits.
+ln -s "$(python3 -c 'import os, sys; print(os.path.realpath(sys.executable))')" \
+  "$TEMP_ROOT/host-bin/python3"
 export PATH="$TEMP_ROOT/host-bin"
 if command -v ldd >/dev/null; then
   fail "isolated host PATH unexpectedly contains ldd"
