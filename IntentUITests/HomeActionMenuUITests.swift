@@ -5,6 +5,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     private static let scrollTolerance: CGFloat = 4
     private static let backdropStartY: CGFloat = 0.2
     private static let backdropEndY: CGFloat = 0.4
+    private static let composerBottomTolerance: CGFloat = 60
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -60,6 +61,8 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let send = app.buttons["Send message"]
         XCTAssertTrue(launcher.isHittable)
         XCTAssertFalse(launcher.frame.intersects(send.frame))
+        XCTAssertLessThan(launcher.frame.maxY, composer.frame.minY)
+        XCTAssertLessThan(app.frame.maxY - composer.frame.maxY, Self.composerBottomTolerance)
 
         composer.tap()
         let draft = "iPad composer regression"
@@ -67,8 +70,9 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(send.isEnabled)
         XCTAssertTrue(send.isHittable)
         XCTAssertFalse(launcher.frame.intersects(send.frame))
+        XCTAssertLessThan(launcher.frame.maxY, composer.frame.minY)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "iPad conversation composer and menu with reserved space"
+        screenshot.name = "iPad Intent menu floating above the composer"
         screenshot.lifetime = .keepAlways
         add(screenshot)
         send.tap()
@@ -84,9 +88,60 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(composer.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(launcher.isHittable)
+        XCTAssertGreaterThan(launcher.frame.maxY, app.frame.maxY - Self.composerBottomTolerance)
         openMenu(app)
         app.buttons["intent.menu.close"].tap()
         XCTAssertTrue(waitUntilHittable(agent))
+    }
+
+    @MainActor
+    func testIPadQuestionsKeepNextAndSendAvailable() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad window-level menu")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-design-scenario=question-cards"]
+        app.launch()
+        let workspace = app.staticTexts["Workspace agent design"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        workspace.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-design"]
+        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        agent.tap()
+        XCUIDevice.shared.orientation = .portrait
+        let firstAnswer = app.buttons["Keep working locally"]
+        XCTAssertTrue(firstAnswer.waitForExistence(timeout: Self.timeout))
+        firstAnswer.tap()
+        let multiAnswer = app.buttons["Local tests"]
+        XCTAssertTrue(multiAnswer.waitForExistence(timeout: Self.timeout))
+        multiAnswer.tap()
+
+        let launcher = app.buttons["intent.menu.open"]
+        let next = app.buttons["Next"]
+        XCTAssertTrue(waitUntilHittable(next))
+        XCTAssertTrue(launcher.isHittable)
+        XCTAssertFalse(app.textViews["composer.textView"].exists)
+        XCTAssertFalse(launcher.frame.intersects(next.frame))
+        XCTAssertLessThan(launcher.frame.maxY, next.frame.minY)
+        next.tap()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let lastAnswer = app.buttons["Summary"]
+        XCTAssertTrue(lastAnswer.waitForExistence(timeout: Self.timeout))
+        lastAnswer.tap()
+        let send = app.buttons["Send"]
+        XCTAssertTrue(waitUntilHittable(send))
+        XCTAssertTrue(send.isEnabled)
+        XCTAssertFalse(launcher.frame.intersects(send.frame))
+        XCTAssertLessThan(launcher.frame.maxY, send.frame.minY)
+        openMenu(app)
+        app.buttons["intent.menu.close"].tap()
+        XCTAssertTrue(waitUntilHittable(send))
+        send.tap()
+
+        let composer = app.textViews["composer.textView"]
+        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        XCTAssertLessThan(launcher.frame.maxY, composer.frame.minY)
+        XCTAssertLessThan(app.frame.maxY - composer.frame.maxY, Self.composerBottomTolerance)
     }
 
     @MainActor

@@ -4,7 +4,7 @@ import SwiftUI
 struct WorkspaceActionLauncher: ViewModifier {
     let isSearching: Bool
     var alignment: HorizontalAlignment = .trailing
-    var conversationBottomClearance: CGFloat = 0
+    var avoidsConversationInput = true
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
@@ -29,12 +29,19 @@ struct WorkspaceActionLauncher: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .environment(\.workspaceActionMenuBottomClearance, isSearching ? 0 : conversationBottomClearance)
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
             .accessibilityHidden(isOpen)
-            .overlay { actionOverlay }
+            .overlayPreferenceValue(WorkspaceActionMenuInputBounds.self) { inputAnchor in
+                // Resolve the active input anchor in the window overlay's coordinate space.
+                // swiftlint:disable:next geometry_reader_usage
+                GeometryReader { proxy in
+                    let activeAnchor = avoidsConversationInput ? inputAnchor : nil
+                    let bottomInset = activeAnchor.map { max(0, proxy.size.height - proxy[$0].minY) } ?? 0
+                    actionOverlay(bottomInset: bottomInset)
+                }
+            }
             .animation(
                 reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
                 value: isOpen
@@ -58,7 +65,7 @@ struct WorkspaceActionLauncher: ViewModifier {
             .onDisappear { isOpen = false }
     }
 
-    private var actionOverlay: some View {
+    private func actionOverlay(bottomInset: CGFloat) -> some View {
         ZStack(alignment: Alignment(horizontal: alignment, vertical: .bottom)) {
             if isOpen {
                 (colorScheme == .light ? Color.black : Theme.background(for: colorScheme))
@@ -69,7 +76,14 @@ struct WorkspaceActionLauncher: ViewModifier {
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
-            if !isSearching { actionControls }
+            if !isSearching {
+                actionControls
+                    .padding(.bottom, bottomInset)
+                    .animation(
+                        reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
+                        value: bottomInset
+                    )
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOpen ? .isModal : [])
@@ -123,6 +137,10 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 }
 
-extension EnvironmentValues {
-    @Entry var workspaceActionMenuBottomClearance: CGFloat = 0
+struct WorkspaceActionMenuInputBounds: PreferenceKey {
+    nonisolated static var defaultValue: Anchor<CGRect>? { nil }
+
+    nonisolated static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
 }

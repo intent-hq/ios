@@ -19,6 +19,7 @@ struct RootView: View {
     @State private var isSearchingWorkspaces = false
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
+    @State private var conversationIsPopping = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
@@ -59,6 +60,11 @@ struct RootView: View {
             ),
             session: session
         )
+        .background {
+            if sizeClass == .regular {
+                NavigationPopObserver(isPopping: $conversationIsPopping)
+            }
+        }
     }
 
     private var isWorkspaceFlow: Bool {
@@ -159,7 +165,7 @@ struct RootView: View {
             .modifier(WorkspaceActionLauncher(
                 isSearching: isSearchingWorkspaces,
                 alignment: .trailing,
-                conversationBottomClearance: AssistantLaunchButton.scrollClearance,
+                avoidsConversationInput: !conversationIsPopping,
                 onCreateWorkspace: { showingCreateWorkspace = true },
                 onConnections: { showingConnections = true }
             ))
