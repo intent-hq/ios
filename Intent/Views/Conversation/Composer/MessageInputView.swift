@@ -3,6 +3,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct MessageInputView: View {
+    // Bind directly to the model so received edits and external replacements
+    // share one draft. Deferred bidirectional onChange copies can replay old text.
     @Bindable var viewModel: ConversationViewModel
     private let store: ConversationStore
     private let usesWorkspaceDesign: Bool
@@ -29,11 +31,6 @@ struct MessageInputView: View {
     @State private var caretOffset: Int?
     #endif
 
-    // Local text state to decouple TextField from viewModel updates.
-    // This prevents typing lag when the viewModel is rapidly updating
-    // during streaming (every legacy-store publication triggers a re-render).
-    @State private var localText: String = ""
-
     init(
         viewModel: ConversationViewModel,
         store: ConversationStore,
@@ -57,7 +54,7 @@ struct MessageInputView: View {
             supplementalRows
             if usesWorkspaceDesign {
                 WorkspaceComposerRow(
-                    text: $localText,
+                    text: $viewModel.messageText,
                     isFocused: $isFocused,
                     isStreaming: store.isStreaming,
                     hasAttachments: viewModel.hasPendingAttachments,
@@ -100,23 +97,8 @@ struct MessageInputView: View {
                 viewModel.addFiles(urls)
             }
         }
-        .onAppear {
-            localText = viewModel.messageText
-        }
         .onChange(of: isFocused) { _, focused in
             onFocusChange?(focused)
-        }
-        .onChange(of: localText) { _, newValue in
-            ComposerInputTrace.record("push local: \(newValue.debugDescription); model=\(viewModel.messageText.debugDescription)")
-            // Push local edits to viewModel (for draft persistence)
-            viewModel.messageText = newValue
-        }
-        .onChange(of: viewModel.messageText) { _, newValue in
-            ComposerInputTrace.record("pull model: \(newValue.debugDescription); local=\(localText.debugDescription)")
-            // Pull viewModel changes (e.g. cleared after send, draft restore)
-            if newValue != localText {
-                localText = newValue
-            }
         }
         #if os(visionOS)
         .onDisappear {
@@ -133,7 +115,7 @@ struct MessageInputView: View {
 
 private extension MessageInputView {
     var workspaceCornerRadius: CGFloat {
-        let active = store.isStreaming || !localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let active = store.isStreaming || !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || viewModel.hasPendingAttachments
         return active ? Constants.Conversation.Design.Composer.activeCornerRadius : Constants.Conversation.Design.cornerRadius
     }
@@ -229,7 +211,7 @@ private extension MessageInputView {
     var textEditor: some View {
         ZStack(alignment: .leading) {
             SubmittableTextView(
-                text: $localText,
+                text: $viewModel.messageText,
                 isFocused: $isFocused,
                 onSubmit: { sendCurrentMessage() },
                 onHeightChange: updateTextViewHeight,
@@ -238,7 +220,7 @@ private extension MessageInputView {
             .padding(.horizontal, Constants.Conversation.Composer.textEditorHorizontalPadding)
             .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)
             .frame(height: textViewHeight)
-            if localText.isEmpty {
+            if viewModel.messageText.isEmpty {
                 Text("Message...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .interFont(Constants.Typography.bodyS)
@@ -252,7 +234,7 @@ private extension MessageInputView {
     }
 
     var hasSendableContent: Bool {
-        (!localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        (!viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || viewModel.hasPendingAttachments)
             && !viewModel.isUploadingFiles
             && isConnectionReadyForSending
@@ -352,12 +334,12 @@ private extension MessageInputView {
             return
         }
 
-        dictationSession = DictationSession(baseText: localText, insertionOffset: caretOffset)
+        dictationSession = DictationSession(baseText: viewModel.messageText, insertionOffset: caretOffset)
         dictation.onTranscriptChange = { transcription, endsSegment in
             guard var session = dictationSession else { return }
-            switch session.apply(transcription: transcription, endsSegment: endsSegment, to: localText) {
+            switch session.apply(transcription: transcription, endsSegment: endsSegment, to: viewModel.messageText) {
             case .merged(let text):
-                localText = text
+                viewModel.messageText = text
                 dictationSession = session
                 if endsSegment {
                     // Programmatic text sets don't reliably fire a selection
@@ -463,7 +445,7 @@ private extension MessageInputView {
             // pendingFiles clears only after success, so a second send
             // would duplicate the uploads.
             guard !viewModel.isUploadingFiles, isConnectionReadyForSending, allowsSending else { return }
-            let text = localText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty || viewModel.hasPendingAttachments else {
                 isFocused = true
                 return
@@ -471,7 +453,7 @@ private extension MessageInputView {
             HapticManager.impact(.medium)
             // Capture images before clearing so they're available for the async send
             let imagesToSend = viewModel.pendingImages
-            localText = ""
+            viewModel.messageText = ""
             viewModel.pendingImages.removeAll()
             // Re-focus after clearing
             DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Composer.refocusDelay) {
