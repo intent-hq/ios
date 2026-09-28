@@ -39,9 +39,8 @@ struct ComposerDraftBindingTests {
         model.messageText = "An accessible draf"
         let adapter = SubmittableTextView(
             text: Binding(get: { model.messageText }, set: { model.messageText = $0 }),
-            isFocused: .constant(false),
-            onSubmit: {}
-        )
+            isFocused: .constant(false)
+        ) {}
         let coordinator = adapter.makeCoordinator()
         let editor = KeyCommandTextView()
         editor.delegate = coordinator
@@ -110,5 +109,4 @@ struct ComposerDraftBindingTests {
         if let editor = view as? KeyCommandTextView { return editor }
         return view.subviews.lazy.compactMap { textView(in: $0) }.first
     }
-
 }
