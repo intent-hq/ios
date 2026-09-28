@@ -6,6 +6,7 @@ struct WorkspaceDetailView: View {
     @State private var agentStore: AgentStore
     @State private var viewModel = AgentListViewModel()
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showBackgroundAgents = false
     @State private var expandedDelegates: Set<String> = []
     @State private var showDeleteConfirmation = false
@@ -18,12 +19,14 @@ struct WorkspaceDetailView: View {
     @State private var terminalCreationRequest: UUID?
     @State private var selectedTab = WorkspaceTab.agents
     @State private var noteStore: NoteStore
+    @State private var scriptStore: WorkspaceScriptStore
     @Environment(BackendSession.self) private var session
 
     init(workspaceId: String, session: BackendSession) {
         self.workspaceId = workspaceId
         _agentStore = State(initialValue: AgentStore(connectionManager: session.connection))
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
+        _scriptStore = State(initialValue: WorkspaceScriptStore(connection: session.connection))
     }
 
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
@@ -69,6 +72,7 @@ struct WorkspaceDetailView: View {
             }
         }
         .onDisappear {
+            scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
             // Keyed by (workspace, connection): removing this pair never
             // clobbers another window's visibility.
             if let connectionId = session.backendID?.connectionID {
@@ -79,6 +83,7 @@ struct WorkspaceDetailView: View {
             }
         }
         .onChange(of: workspaceId) { oldId, newId in
+            scriptStore.cancelPendingLaunch(workspaceId: oldId)
             terminalCreationRequest = nil
             selectedTerminal = nil
             selectedBrowser = nil
@@ -125,6 +130,11 @@ struct WorkspaceDetailView: View {
         }
         .task(id: workspaceId) { await terminalStore.refresh(workspaceId: workspaceId) }
         .task(id: workspaceId) { await browserStore.refresh(workspaceId: workspaceId) }
+        .task(id: workspaceId) { await scriptStore.refresh(workspaceId: workspaceId) }
+        .onChange(of: scriptStore.browserToOpen(workspaceId: workspaceId)) { _, _ in presentScriptBrowser() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { scriptStore.cancelPendingLaunch(workspaceId: workspaceId) }
+        }
     }
 
     var body: some View {
@@ -265,6 +275,8 @@ private extension WorkspaceDetailView {
 
     var workspaceActions: some View {
         WorkspaceActionsMenu(
+            workspaceId: workspaceId,
+            scriptStore: scriptStore,
             isTerminalDisabled: !terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId),
             onCreateAgent: { showSpecialistPicker = true },
             onCreateTerminal: createTerminal,
@@ -284,18 +296,25 @@ private extension WorkspaceDetailView {
         }
     }
 
+    func presentScriptBrowser() {
+        guard scenePhase == .active, selectedBrowser == nil, selectedTerminal == nil, !showNewBrowser else {
+            scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
+            return
+        }
+        guard let browser = scriptStore.takeBrowserToOpen(workspaceId: workspaceId) else { return }
+        selectedTab = .agents
+        selectedBrowser = try? browserStore.open(workspaceId: workspaceId, url: browser.url)
+    }
+
     var detailContent: some View {
         ScrollView {
             VStack(spacing: 0) {
-                WorkspaceDetailHeading(
+                WorkspaceDetailHeader(
+                    workspaceId: workspaceId,
+                    workspace: workspace,
                     title: workspaceTitle,
-                    repositoryOwner: workspace?.repositoryOwner,
-                    repositoryName: workspace?.repositoryName,
-                    statusMessage: workspace?.statusMessage
+                    selection: $selectedTab
                 )
-                statusImage
-                taskProgress
-                workspacePicker
                 tabContent
             }
         }
@@ -304,61 +323,29 @@ private extension WorkspaceDetailView {
                 await agentStore.fetchAgents(workspaceId: workspaceId)
                 await terminalStore.refresh(workspaceId: workspaceId)
                 await browserStore.refresh(workspaceId: workspaceId)
+                await scriptStore.refresh(workspaceId: workspaceId)
             } else {
                 await noteStore.fetchNotes(workspaceId: workspaceId)
             }
         }
     }
 
-    @ViewBuilder
-    var statusImage: some View {
-        if let statusImageAssetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
-            WorkspaceStatusImageView(
-                workspaceId: workspaceId,
-                assetId: statusImageAssetId,
-                style: .detail
-            )
-            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-            .padding(.bottom, Constants.WorkspaceDetail.statusImageBottomPadding)
-        }
-    }
-
-    @ViewBuilder
-    var taskProgress: some View {
-        if let total = workspace?.taskStatsTotal,
-           let progress = WorkspaceTaskProgressLayout(
-               total: total,
-               completed: workspace?.taskStatsCompleted ?? 0,
-               inProgress: workspace?.taskStatsInProgress ?? 0
-           ) {
-            WorkspaceTaskProgressView(progress: progress)
-        }
-    }
-    @ViewBuilder
-    var workspacePicker: some View {
-        #if !os(visionOS)
-        WorkspaceContentTabs(selection: $selectedTab)
-        .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-        .padding(.top, WorkspaceDetailHeaderLayout.tabTopPadding(
-            hasTaskProgress: (workspace?.taskStatsTotal ?? 0) > 0
-        ))
-        .padding(.bottom, WorkspaceDetailStyle.sectionSpacing)
-        #endif
+    var hasWorkspaceResources: Bool {
+        !terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty
+            || !browserStore.browsers(workspaceId: workspaceId).isEmpty
+            || browserStore.errorMessage(workspaceId: workspaceId) != nil
+            || !scriptStore.scripts(workspaceId: workspaceId).isEmpty
+            || scriptStore.errorMessage(workspaceId: workspaceId) != nil
     }
 
     @ViewBuilder
     var tabContent: some View {
         if selectedTab == .agents {
-            if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty,
-               terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty,
-               browserStore.browsers(workspaceId: workspaceId).isEmpty,
-               browserStore.errorMessage(workspaceId: workspaceId) == nil {
+            if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty, !hasWorkspaceResources {
                 ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
-            } else if viewModel.agents.isEmpty, terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty,
-                      browserStore.browsers(workspaceId: workspaceId).isEmpty,
-                      browserStore.errorMessage(workspaceId: workspaceId) == nil {
+            } else if viewModel.agents.isEmpty, !hasWorkspaceResources {
                 ContentUnavailableView {
                     Label { Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold)) } icon: { Image(systemName: "person.2") }
                 } description: {
@@ -383,6 +370,7 @@ private extension WorkspaceDetailView {
             WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore) { browser in
                 selectedBrowser = browser
             }
+            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore)
         }
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.bottom, WorkspaceDetailStyle.pageInset)

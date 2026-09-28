@@ -9,24 +9,27 @@ struct WorkspaceBrowsersView: View {
     var body: some View {
         let browsers = store.browsers(workspaceId: workspaceId)
         if !browsers.isEmpty || store.errorMessage(workspaceId: workspaceId) != nil {
-            Text("Browsers")
-                .interFont(Constants.Typography.bodyM.withFace(.semibold))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical)
-            ForEach(browsers) { browser in
-                WorkspaceBrowserRow(browser: browser, store: store, onSelect: onSelect)
-            }
-            if let error = store.errorMessage(workspaceId: workspaceId) {
-                VStack(alignment: .leading) {
-                    Text(error).interFont(Constants.Typography.bodyXS)
-                    Button("Retry") {
-                        Task { await store.refresh(workspaceId: workspaceId) }
+            VStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionHeadingSpacing) {
+                Text("Browsers")
+                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
+                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    .accessibilityAddTraits(.isHeader)
+                LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
+                    ForEach(browsers) { browser in
+                        WorkspaceBrowserRow(browser: browser, store: store, onSelect: onSelect)
                     }
-                    .disabled(!store.isConnected)
                 }
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical)
+                if let error = store.errorMessage(workspaceId: workspaceId) {
+                    VStack(alignment: .leading) {
+                        Text(error).interFont(Constants.Typography.bodyXS)
+                        Button("Retry") {
+                            Task { await store.refresh(workspaceId: workspaceId) }
+                        }
+                        .disabled(!store.isConnected)
+                    }
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
     }

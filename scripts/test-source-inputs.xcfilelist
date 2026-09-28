@@ -306,6 +306,7 @@ $(SRCROOT)/Intent/Models/Question.swift
 $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
 $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
 $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
+$(SRCROOT)/Intent/Models/WorkspaceScript.swift
 $(SRCROOT)/Intent/Models/WorkspaceTask.swift
 $(SRCROOT)/Intent/PersistenceKeychainStorage.swift
 $(SRCROOT)/Intent/PersistenceManager+BackendSync.swift
@@ -424,6 +425,7 @@ $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceProviderOptions.swift
+$(SRCROOT)/Intent/Services/WorkspaceScriptStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceVideo.swift
 $(SRCROOT)/Intent/Utils
@@ -631,6 +633,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSearchBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusIconView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusImageView.swift
@@ -889,6 +892,10 @@ $(SRCROOT)/IntentTests/WorkspaceRowLayoutPolicyTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPrIndicatorTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPrPresentationTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPresentationTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptFixture.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptIsolationTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptLaunchRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusImageViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreAgentLifecycleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreEventAllowlistTests.swift
