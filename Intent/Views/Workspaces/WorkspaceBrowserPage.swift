@@ -100,7 +100,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
         titleObserver = webView.observe(\.title, options: [.initial, .new]) { @Sendable [weak self, weak webView] _, _ in
             Task { @MainActor in
                 guard let self, let webView, self.webView === webView else { return }
-                title = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                self.title = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             }
         }
     }
