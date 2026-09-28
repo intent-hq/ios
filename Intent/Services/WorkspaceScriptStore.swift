@@ -25,6 +25,7 @@ final class WorkspaceScriptStore {
     private var loadErrors: [String: String] = [:]
     private var pending: [String: Launch] = [:]
     private var presentations: [String: WorkspaceBrowser] = [:]
+    private var updates: [ScriptKey: UUID] = [:]
 
     @ObservationIgnored private let connection: ConnectionManagerRouting
     @ObservationIgnored private let replaceGroup = "ios-workspace-scripts-\(UUID().uuidString)"
@@ -77,6 +78,23 @@ final class WorkspaceScriptStore {
 
     func errorMessage(workspaceId: String) -> String? { errors[workspaceId] ?? loadErrors[workspaceId] }
 
+    func isUpdating(_ script: WorkspaceScript) -> Bool {
+        let registered = script.isRegistered ? script : definitions[script.workspaceId]?.first { definition in
+            definition.name == script.name || definition.command == script.command
+        } ?? script
+        return updates[ScriptKey(workspaceId: registered.workspaceId, scriptId: registered.id)] != nil
+    }
+
+    func stop(_ script: WorkspaceScript) async {
+        let key = ScriptKey(workspaceId: script.workspaceId, scriptId: script.id)
+        let current = definitions[script.workspaceId]?.first { $0.id == script.id } ?? script
+        cancelActionLaunch(script)
+        guard current.isActive || startTasks[key] != nil else { return }
+        await performAction(script, method: "script.stop")
+    }
+
+    func remove(_ script: WorkspaceScript) async { await performAction(script, method: "script.remove") }
+
     func isLaunching(_ script: WorkspaceScript) -> Bool {
         guard let launch = pending[script.workspaceId], launch.scriptId == script.id else { return false }
         if !launch.observing { return true }
@@ -103,7 +121,7 @@ final class WorkspaceScriptStore {
 
     func launch(_ script: WorkspaceScript) async {
         let workspaceId = script.workspaceId
-        guard isConnected, pending[workspaceId]?.scriptId != script.id else { return }
+        guard isConnected, !isUpdating(script), pending[workspaceId]?.scriptId != script.id else { return }
         let launch = Launch(scriptId: script.id)
         let currentGeneration = generation
         observedWorkspaces.insert(workspaceId)
@@ -149,6 +167,10 @@ final class WorkspaceScriptStore {
         let script = try await WorkspaceScriptRepository.register(candidate, connection: connection)
         let workspaceId = candidate.workspaceId
         guard owns(launch, workspaceId: workspaceId, generation: currentGeneration) else { return nil }
+        guard !isUpdating(script) else {
+            cancelPendingLaunch(workspaceId: workspaceId)
+            return nil
+        }
         pending[workspaceId]?.scriptId = script.id
         if let index = definitions[workspaceId]?.firstIndex(where: { $0.id == script.id }) {
             definitions[workspaceId]?[index] = script
@@ -322,6 +344,7 @@ private extension WorkspaceScriptStore {
         for task in startTasks.values { task.cancel() }
         refreshTasks.removeAll()
         startTasks.removeAll()
+        updates.removeAll()
         definitions.removeAll()
         discovered.removeAll()
         pending.removeAll()
@@ -372,5 +395,80 @@ private extension WorkspaceScriptStore {
     func clearLaunch(scriptId: String, workspaceId: String) {
         if pending[workspaceId]?.scriptId == scriptId { pending[workspaceId] = nil }
         if presentations[workspaceId]?.id == "script:\(scriptId)" { presentations[workspaceId] = nil }
+    }
+}
+
+private extension WorkspaceScriptStore {
+    func cancelActionLaunch(_ script: WorkspaceScript) {
+        let workspaceId = script.workspaceId
+        if let launch = pending[workspaceId],
+           let candidate = discovered[workspaceId]?.first(where: { $0.id == launch.scriptId }),
+           candidate.name == script.name || candidate.command == script.command { pending[workspaceId] = nil }
+        clearLaunch(scriptId: script.id, workspaceId: workspaceId)
+    }
+
+    func performAction(_ script: WorkspaceScript, method: String) async {
+        guard isConnected, script.isRegistered, !isUpdating(script) else { return }
+        let workspaceId = script.workspaceId
+        let key = ScriptKey(workspaceId: workspaceId, scriptId: script.id)
+        let token = UUID()
+        let currentGeneration = generation
+        updates[key] = token
+        errors[workspaceId] = nil
+        observedWorkspaces.insert(workspaceId)
+        cancelActionLaunch(script)
+        revisions[workspaceId, default: 0] += 1
+        defer { finishUpdate(key, token: token, generation: currentGeneration) }
+        do {
+            // A previously sent start must settle before stop/remove can win.
+            if let start = startTasks[key] { _ = try? await start.value }
+            guard isCurrent(currentGeneration) else { return }
+            try await ensureSubscribed(generation: currentGeneration)
+            guard isCurrent(currentGeneration) else { return }
+            let response = try await connection.request(method, params: ["workspaceId": workspaceId, "scriptId": script.id])
+            guard isCurrent(currentGeneration), updates[key] == token else { return }
+            guard let result = response as? [String: Any], result["ok"] as? Bool == true else {
+                throw WorkspaceScriptError.invalidResponse
+            }
+            revisions[workspaceId, default: 0] += 1
+            if method == "script.remove" {
+                definitions[workspaceId]?.removeAll { $0.id == script.id }
+            } else {
+                try await refreshStoppedScript(script, generation: currentGeneration)
+            }
+        } catch {
+            guard isCurrent(currentGeneration), updates[key] == token else { return }
+            errors[workspaceId] = error.localizedDescription
+        }
+    }
+
+    func finishUpdate(_ key: ScriptKey, token: UUID, generation currentGeneration: Int) {
+        guard generation == currentGeneration, updates[key] == token else { return }
+        updates[key] = nil
+        revisions[key.workspaceId, default: 0] += 1
+    }
+
+    func refreshStoppedScript(_ script: WorkspaceScript, generation currentGeneration: Int) async throws {
+        let workspaceId = script.workspaceId
+        while isCurrent(currentGeneration) {
+            let revision = revisions[workspaceId, default: 0]
+            do {
+                let response = try await connection.request("script.status", params: ["workspaceId": workspaceId, "scriptId": script.id])
+                guard isCurrent(currentGeneration) else { return }
+                guard revisions[workspaceId, default: 0] == revision else { continue }
+                guard let runtime = response as? [String: Any], runtime["status"] is String else {
+                    throw WorkspaceScriptError.invalidResponse
+                }
+                var current = definitions[workspaceId]?.first { $0.id == script.id } ?? script
+                current.apply(runtime: runtime)
+                update(current)
+                revisions[workspaceId, default: 0] += 1
+                return
+            } catch {
+                guard isCurrent(currentGeneration) else { return }
+                guard revisions[workspaceId, default: 0] == revision else { continue }
+                throw error
+            }
+        }
     }
 }

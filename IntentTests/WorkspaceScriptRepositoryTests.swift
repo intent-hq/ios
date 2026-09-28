@@ -26,7 +26,8 @@ struct WorkspaceScriptRepositoryTests {
         var renamed = registered(build)
         renamed["name"] = "Build website"
         await fixture.load([named, renamed])
-        #expect(fixture.store.scripts(workspaceId: "workspace").allSatisfy(\.isRegistered))
+        let allRegistered = fixture.store.scripts(workspaceId: "workspace").allSatisfy(\.isRegistered)
+        #expect(allRegistered)
         #expect(fixture.store.scripts(workspaceId: "workspace").count == 2)
         #expect(!fixture.fake.didCallMethod("script.create"))
     }

@@ -78,6 +78,60 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     }
 
     @MainActor
+    func testSwipeStopsServerAndDeletesFinishedScript() {
+        let app = launchWorkspace()
+        openScriptsMenu(in: app)
+        app.buttons["workspace.script.menu.demo-server"].tap()
+        assertServerBrowser(in: app)
+        app.buttons["Done"].tap()
+        let row = app.buttons["workspace.script.demo-server"]
+        for _ in 0..<5 where !row.isHittable { app.swipeUp() }
+        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        row.swipeLeft()
+        let stop = app.buttons["workspace.script.stop.demo-server"]
+        XCTAssertTrue(stop.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspace.script.delete.demo-server"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "workspace-script-stop-delete-actions"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        stop.tap()
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "Finished"), evaluatedWith: row)
+        waitForExpectations(timeout: Self.timeout)
+        XCTAssertFalse(app.textFields["Browser URL"].exists)
+        row.swipeLeft()
+        let delete = app.buttons["workspace.script.delete.demo-server"]
+        XCTAssertTrue(delete.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(stop.exists)
+        delete.tap()
+        XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+        openScriptsMenu(in: app)
+        XCTAssertFalse(app.buttons["workspace.script.menu.demo-server"].exists)
+        XCTAssertTrue(app.buttons["workspace.script.menu.demo-check"].exists)
+    }
+
+    @MainActor
+    func testDeleteRunningRepositoryScriptAllowsFreshLaunchFromMenu() {
+        let app = launchWorkspace(repositoryScripts: true)
+        openScriptsMenu(in: app)
+        app.buttons["workspace.script.menu.manifest:package.json:dev"].tap()
+        assertServerBrowser(in: app)
+        app.buttons["Done"].tap()
+        let row = app.buttons["workspace.script.demo-repo-dev"]
+        for _ in 0..<5 where !row.isHittable { app.swipeUp() }
+        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        row.swipeLeft()
+        XCTAssertTrue(app.buttons["workspace.script.stop.demo-repo-dev"].waitForExistence(timeout: Self.timeout))
+        app.buttons["workspace.script.delete.demo-repo-dev"].tap()
+        XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+        openScriptsMenu(in: app)
+        let dev = app.buttons["workspace.script.menu.manifest:package.json:dev"]
+        XCTAssertTrue(dev.waitForExistence(timeout: Self.timeout))
+        dev.tap()
+        assertServerBrowser(in: app)
+    }
+
+    @MainActor
     private func launchWorkspace(repositoryScripts: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()

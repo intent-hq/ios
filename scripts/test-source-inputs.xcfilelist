@@ -636,6 +636,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSearchBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusIconView.swift
@@ -895,6 +896,7 @@ $(SRCROOT)/IntentTests/WorkspaceRowLayoutPolicyTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPrIndicatorTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPrPresentationTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPresentationTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptActionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptDiscoveryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptFixture.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptIsolationTests.swift

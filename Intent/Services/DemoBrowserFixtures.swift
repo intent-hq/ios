@@ -2,6 +2,7 @@ import Foundation
 
 enum DemoBrowserFixtures {
     private static var scriptRuntimes: [String: [String: [String: Any]]] = [:]
+    private static var removedScripts: [String: Set<String>] = [:]
 
     /// Nil keeps the ordinary demo transcript when this scenario was not requested.
     static var conversationMessages: [[String: Any]]? { // swiftlint:disable:this discouraged_optional_collection
@@ -68,7 +69,7 @@ enum DemoBrowserFixtures {
                 ("demo-check", "Check project", "npm run check", "command")
             ]
             return [
-                "scripts": definitions.map { id, name, command, mode in
+                "scripts": definitions.filter { !removedScripts[workspaceId, default: []].contains($0.0) }.map { id, name, command, mode in
                     [
                         "id": id, "workspaceId": workspaceId, "name": name, "command": command, "mode": mode,
                         "runtime": scriptRuntimes[workspaceId]?[id] ?? ["status": "idle", "restartCount": 0]
@@ -84,6 +85,13 @@ enum DemoBrowserFixtures {
             return ["ok": true, "scriptId": scriptId]
         case "script.status":
             return scriptRuntimes[workspaceId]?[scriptId] ?? ["status": "idle", "restartCount": 0]
+        case "script.stop":
+            scriptRuntimes[workspaceId, default: [:]][scriptId] = ["status": "exited", "exitCode": 0, "restartCount": 0]
+            return ["ok": true, "scriptId": scriptId]
+        case "script.remove":
+            removedScripts[workspaceId, default: []].insert(scriptId)
+            scriptRuntimes[workspaceId]?[scriptId] = nil
+            return ["ok": true, "scriptId": scriptId]
         default:
             return nil
         }

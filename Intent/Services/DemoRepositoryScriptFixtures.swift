@@ -3,6 +3,7 @@ import Foundation
 enum DemoRepositoryScriptFixtures {
     private static var definitions: [String: [[String: Any]]] = [:]
     private static var runtimes: [String: [String: [String: Any]]] = [:]
+    private static var removedScripts: [String: Set<String>] = [:]
 
     static func response(for method: String, params: [String: Any]) -> Any? {
         guard let workspaceId = params["workspaceId"] as? String else { return nil }
@@ -29,36 +30,54 @@ enum DemoRepositoryScriptFixtures {
                 }
             ]
         case "script.create":
-            guard let name = params["name"] as? String,
-                  let command = params["command"] as? String,
-                  let mode = params["mode"] as? String else { return nil }
-            let definition: [String: Any] = [
-                "id": "demo-repo-\(name)", "workspaceId": workspaceId,
-                "name": name, "command": command, "mode": mode
-            ]
-            definitions[workspaceId, default: []].append(definition)
-            return definition
+            return create(params: params, workspaceId: workspaceId)
         case "script.start":
-            guard let script = scripts(workspaceId: workspaceId).first(where: { $0["id"] as? String == scriptId }) else {
-                return ["ok": false]
-            }
-            runtimes[workspaceId, default: [:]][scriptId] = script["mode"] as? String == "service"
-                ? ["status": "running", "detectedUrl": "http://localhost:4321", "restartCount": 0]
-                : ["status": "exited", "exitCode": 0, "restartCount": 0]
-            return ["ok": true, "scriptId": scriptId]
+            return start(scriptId: scriptId, workspaceId: workspaceId)
         case "script.status":
             return runtimes[workspaceId]?[scriptId] ?? ["status": "idle", "restartCount": 0]
+        case "script.stop":
+            runtimes[workspaceId, default: [:]][scriptId] = ["status": "exited", "exitCode": 0, "restartCount": 0]
+            return ["ok": true, "scriptId": scriptId]
+        case "script.remove":
+            removedScripts[workspaceId, default: []].insert(scriptId)
+            definitions[workspaceId]?.removeAll { $0["id"] as? String == scriptId }
+            runtimes[workspaceId]?[scriptId] = nil
+            return ["ok": true, "scriptId": scriptId]
         default:
             return nil
         }
     }
 
+    private static func create(params: [String: Any], workspaceId: String) -> Any? {
+        guard let name = params["name"] as? String,
+              let command = params["command"] as? String,
+              let mode = params["mode"] as? String else { return nil }
+        let definition: [String: Any] = [
+            "id": "demo-repo-\(name)", "workspaceId": workspaceId,
+            "name": name, "command": command, "mode": mode
+        ]
+        definitions[workspaceId, default: []].append(definition)
+        removedScripts[workspaceId]?.remove("demo-repo-\(name)")
+        return definition
+    }
+
+    private static func start(scriptId: String, workspaceId: String) -> [String: Any] {
+        guard let script = scripts(workspaceId: workspaceId).first(where: { $0["id"] as? String == scriptId }) else {
+            return ["ok": false]
+        }
+        runtimes[workspaceId, default: [:]][scriptId] = script["mode"] as? String == "service"
+            ? ["status": "running", "detectedUrl": "http://localhost:4321", "restartCount": 0]
+            : ["status": "exited", "exitCode": 0, "restartCount": 0]
+        return ["ok": true, "scriptId": scriptId]
+    }
+
     private static func scripts(workspaceId: String) -> [[String: Any]] {
-        [
+        let saved: [[String: Any]] = [
             [
                 "id": "demo-verification", "workspaceId": workspaceId,
                 "name": "Gradient browser verification", "command": "node tests/specwriter/browser.mjs", "mode": "command"
             ]
         ] + definitions[workspaceId, default: []]
+        return saved.filter { !removedScripts[workspaceId, default: []].contains($0["id"] as? String ?? "") }
     }
 }
