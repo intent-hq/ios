@@ -221,15 +221,7 @@ struct SubmittableTextView: UIViewRepresentable {
             textView.textColor = textColor
         }
 
-        // Sync text from SwiftUI → UIKit (avoid cursor jump during editing)
-        if textView.text != text {
-            textView.text = text
-
-            let idealHeight = textView.naturalHeight
-            DispatchQueue.main.async {
-                onHeightChange?(idealHeight)
-            }
-        }
+        context.coordinator.synchronizeText(in: textView)
 
         // Sync focus
         if isFocused, !textView.isFirstResponder {
@@ -248,6 +240,19 @@ struct SubmittableTextView: UIViewRepresentable {
 
         init(_ parent: SubmittableTextView) {
             self.parent = parent
+        }
+
+        func synchronizeText(in textView: KeyCommandTextView) {
+            // A Binding read during updateUIView can be an older render snapshot.
+            // Read it after that pass, through the current parent, so an edit
+            // received meanwhile cannot be replaced by that snapshot (ios#575).
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView else { return }
+                let latestText = parent.text
+                guard textView.text != latestText else { return }
+                textView.text = latestText
+                parent.onHeightChange?(textView.naturalHeight)
+            }
         }
 
         func textViewDidChange(_ textView: UITextView) {
