@@ -87,7 +87,9 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         let row = app.buttons["workspace.script.demo-server"]
         for _ in 0..<5 where !row.isHittable { app.swipeUp() }
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
-        row.swipeLeft()
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.3))
+        let end = row.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.35))
+        start.press(forDuration: 0.05, thenDragTo: end)
         let stop = app.buttons["workspace.script.stop.demo-server"]
         XCTAssertTrue(stop.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["workspace.script.delete.demo-server"].exists)
@@ -129,6 +131,22 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         XCTAssertTrue(dev.waitForExistence(timeout: Self.timeout))
         dev.tap()
         assertServerBrowser(in: app)
+    }
+
+    @MainActor
+    func testVerticalDragOnScriptRowStillScrollsWorkspace() {
+        let app = launchWorkspace()
+        openScriptsMenu(in: app)
+        app.buttons["workspace.script.menu.demo-check"].tap()
+        let row = app.buttons["workspace.script.demo-check"]
+        for _ in 0..<5 where !row.isHittable { app.swipeUp() }
+        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        let startingY = row.frame.minY
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 80)))
+        XCTAssertGreaterThan(row.frame.minY, startingY + 20)
+        XCTAssertFalse(app.buttons["workspace.script.delete.demo-check"].exists)
+        XCTAssertFalse(app.textFields["Browser URL"].exists)
     }
 
     @MainActor

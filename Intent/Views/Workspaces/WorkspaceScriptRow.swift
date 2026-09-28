@@ -7,7 +7,7 @@ struct WorkspaceScriptRow: View {
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var actionWidth: CGFloat = 88
-    @GestureState private var translation: CGFloat = 0
+    @State private var translation: CGFloat = 0
     @State private var isRevealed = false
 
     private var actionsWidth: CGFloat { script.isActive ? actionWidth * 2 : actionWidth }
@@ -34,7 +34,7 @@ struct WorkspaceScriptRow: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: BrowserAppearance.cornerRadius))
         .contentShape(Rectangle())
-        .simultaneousGesture(swipeGesture)
+        .modifier(WorkspaceScriptSwipeGesture(translation: $translation, isRevealed: $isRevealed))
         .animation(reduceMotion ? nil : .snappy, value: isRevealed)
     }
 
@@ -98,23 +98,6 @@ struct WorkspaceScriptRow: View {
     private func remove() {
         isRevealed = false
         Task { await store.remove(script) }
-    }
-
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: BrowserAppearance.minimumDrag)
-            .updating($translation) { value, translation, _ in
-                if abs(value.translation.width) > abs(value.translation.height) {
-                    translation = value.translation.width
-                }
-            }
-            .onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                if value.translation.width < -BrowserAppearance.revealThreshold {
-                    isRevealed = true
-                } else if value.translation.width > BrowserAppearance.revealThreshold {
-                    isRevealed = false
-                }
-            }
     }
 
     private struct ScriptRowButtonStyle: PrimitiveButtonStyle {

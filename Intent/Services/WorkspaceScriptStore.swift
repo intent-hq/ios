@@ -442,7 +442,7 @@ private extension WorkspaceScriptStore {
         }
     }
 
-    func finishUpdate(_ key: ScriptKey, token: UUID, generation currentGeneration: Int) {
+    private func finishUpdate(_ key: ScriptKey, token: UUID, generation currentGeneration: Int) {
         guard generation == currentGeneration, updates[key] == token else { return }
         updates[key] = nil
         revisions[key.workspaceId, default: 0] += 1

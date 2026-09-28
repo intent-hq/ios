@@ -374,6 +374,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptRow.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptSwipeGesture.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSearchBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusIconView.swift
