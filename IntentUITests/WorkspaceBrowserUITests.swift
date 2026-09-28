@@ -5,6 +5,7 @@ nonisolated final class WorkspaceBrowserUITests: XCTestCase {
 
     @MainActor
     func testAgentBrowserAppearsAndMessageLinkOpensInApp() {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-browsers"]
         app.launch()
@@ -34,8 +35,13 @@ nonisolated final class WorkspaceBrowserUITests: XCTestCase {
         let address = app.textFields["Browser URL"]
         XCTAssertEqual(address.value as? String, "http://127.0.0.1:5173/preview?view=phone")
         address.tap()
-        let delete = String(repeating: XCUIKeyboardKey.delete.rawValue, count: (address.value as? String ?? "").count)
-        address.typeText(delete + "127.0.0.1:4321/settings\n")
+        address.press(forDuration: 1)
+        let selectAll = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Select All")).firstMatch
+        XCTAssertTrue(selectAll.waitForExistence(timeout: Self.timeout))
+        selectAll.tap()
+        address.typeText(XCUIKeyboardKey.delete.rawValue)
+        XCTAssertEqual(address.value as? String, "")
+        address.typeText("127.0.0.1:4321/settings\n")
         XCTAssertEqual(address.value as? String, "http://127.0.0.1:4321/settings")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "workspace-browser-address-bar"

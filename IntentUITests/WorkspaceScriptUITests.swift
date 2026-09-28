@@ -141,6 +141,9 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         let row = app.buttons["workspace.script.demo-check"]
         for _ in 0..<5 where !row.isHittable { app.swipeUp() }
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        // Leave the top scroll boundary before testing a downward drag.
+        app.swipeUp()
+        XCTAssertTrue(app.frame.contains(row.frame))
         let startingY = row.frame.minY
         let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 80)))
