@@ -34,29 +34,64 @@ struct ComposerDraftBindingTests {
     }
 
     @Test
-    func externalDraftReplacementAndClearingReachTheEditor() async throws {
+    func queuedRenderCannotOverwriteAnEditReceivedBeforeItRuns() async {
+        let model = makeModel()
+        model.messageText = "An accessible draf"
+        let adapter = SubmittableTextView(
+            text: Binding(get: { model.messageText }, set: { model.messageText = $0 }),
+            isFocused: .constant(false),
+            onSubmit: {}
+        )
+        let coordinator = adapter.makeCoordinator()
+        let editor = KeyCommandTextView()
+        editor.delegate = coordinator
+        editor.text = model.messageText
+        editor.selectedRange = NSRange(location: model.messageText.utf16.count, length: 0)
+
+        coordinator.synchronizeText(in: editor)
+        editor.insertText("t")
+        let selection = editor.selectedRange
+        await drainMainQueue()
+        #expect(editor.text == "An accessible draft")
+        #expect(model.messageText == "An accessible draft")
+        #expect(editor.selectedRange == selection)
+        editor.insertText(" with enough text to wrap onto multiple lines")
+        #expect(editor.text == "An accessible draft with enough text to wrap onto multiple lines")
+        #expect(model.messageText == editor.text)
+    }
+
+    @Test
+    func externalDraftReplacementAndClearingReachTheEditor() async {
         let model = makeModel()
         model.messageText = "Restored draft"
-        let controller = UIHostingController(rootView: MessageInputView(
-            viewModel: model, store: model.store, usesWorkspaceDesign: true
-        ))
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        window.rootViewController = controller
-        window.isHidden = false
-        defer {
-            window.isHidden = true
-            window.rootViewController = nil
-        }
-        try await waitUntil { textView(in: controller.view)?.text == "Restored draft" }
-        let editor = try #require(textView(in: controller.view))
+        var heights: [CGFloat] = []
+        let adapter = SubmittableTextView(
+            text: Binding(get: { model.messageText }, set: { model.messageText = $0 }),
+            isFocused: .constant(false),
+            onSubmit: {},
+            onHeightChange: { heights.append($0) }
+        )
+        let coordinator = adapter.makeCoordinator()
+        let editor = KeyCommandTextView(frame: CGRect(x: 0, y: 0, width: 300, height: 100))
+        editor.delegate = coordinator
+        editor.text = model.messageText
+        coordinator.synchronizeText(in: editor)
         model.messageText = "Recovered after a failed send"
-        try await waitUntil { editor.text == model.messageText }
+        await drainMainQueue()
         #expect(editor.text == "Recovered after a failed send")
+        #expect(!heights.isEmpty)
         model.messageText = ""
-        try await waitUntil { editor.text.isEmpty }
+        coordinator.synchronizeText(in: editor)
+        await drainMainQueue()
         #expect(editor.text.isEmpty)
         editor.insertText("Next draft")
         #expect(model.messageText == "Next draft")
+    }
+
+    private func drainMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
     }
 
     private func makeModel() -> ConversationViewModel {
@@ -76,11 +111,4 @@ struct ComposerDraftBindingTests {
         return view.subviews.lazy.compactMap { textView(in: $0) }.first
     }
 
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while !condition(), ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        try #require(condition(), "The composer did not display the latest draft")
-    }
 }
