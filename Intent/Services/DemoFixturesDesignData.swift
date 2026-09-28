@@ -116,6 +116,9 @@ extension DemoDesignFixtures {
                         {"label":"Hosted benchmark","description":"Run the one authorized hosted job."}]}
             """)
         }
+        if scenario == .questionCards {
+            payloads = Self.questionCardPayloads
+        }
         return payloads.enumerated().map { index, payload in
             [
                 "id": "demo-design-question-\(index)", "type": "resource", "resource": [
@@ -124,5 +127,24 @@ extension DemoDesignFixtures {
             ]
         }
     }
+
+    private static let questionCardPayloads = [
+        """
+        {"attachmentId":"tar-design-mixed","header":"Publish verified changes","question":"What should happen next?",
+         "options":[{"label":"Push to the draft PR","description":"Publish the three verified commits and check CI. Keep the PR draft; do not merge, dispatch live workflows, or activate anything."},
+                    {"label":"Keep working locally","description":"Do not publish yet."},
+                    {"label":"Review the changes"}, {"label":"Wait for approval"}]}
+        """,
+        """
+        {"attachmentId":"tar-design-short","header":"Short answers","question":"Which checks should I keep?","multiSelect":true,
+         "options":[{"label":"Local tests"}, {"label":"Build"}, {"label":"Lint"},
+                    {"label":"Review"}, {"label":"Screenshots"}, {"label":"Documentation"}]}
+        """,
+        """
+        {"attachmentId":"tar-design-overflow","header":"Detailed answers","question":"Which details should I keep?",
+         "options":[{"label":"Summary"}, {"label":"Checklist"}, {"label":"Notes"},
+                    {"label":"Full review","description":"Review the changes, check local tests, inspect screenshots, and confirm accessibility. Keep live workflows disabled until the owner has approved the final result."}]}
+        """
+    ]
     // swiftlint:enable no_magic_numbers
 }

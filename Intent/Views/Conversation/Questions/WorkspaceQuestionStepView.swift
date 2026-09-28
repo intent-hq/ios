@@ -61,6 +61,7 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
                 selectedIndices: selectedIndices,
                 isMulti: question.multiSelect,
                 horizontal: horizontal,
+                availableHeight: availableHeight,
                 onSelect: onSelect
             )
             if writesAnswer || !freeText.isEmpty {
