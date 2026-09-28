@@ -5,6 +5,8 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         static let workspaceTitle = "Add usage analytics dashboard"
         static let timeout: TimeInterval = 30
         static let scrollAttempts = 4
+        static let maximumInitialLineOffset: CGFloat = 100
+        static let maximumLeadingInset: CGFloat = 40
     }
 
     override func setUpWithError() throws {
@@ -113,8 +115,17 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     @MainActor
     private func assertDiffLine(in app: XCUIApplication, containing text: String) {
         let line = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+            .matching(NSPredicate(
+                format: "label CONTAINS %@ AND (label BEGINSWITH 'Addition,' OR label BEGINSWITH 'Deletion,')",
+                text
+            )).firstMatch
         XCTAssertTrue(line.waitForExistence(timeout: Fixture.timeout))
+        let viewport = app.scrollViews["changes.diff.scroll"].firstMatch
+        XCTAssertTrue(viewport.exists)
+        XCTAssertTrue(line.isHittable)
+        XCTAssertGreaterThanOrEqual(line.frame.minY, viewport.frame.minY)
+        XCTAssertLessThan(line.frame.minY - viewport.frame.minY, Fixture.maximumInitialLineOffset)
+        XCTAssertLessThan(line.frame.minX - viewport.frame.minX, Fixture.maximumLeadingInset)
     }
 
     @MainActor

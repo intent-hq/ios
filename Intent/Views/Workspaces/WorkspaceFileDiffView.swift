@@ -9,6 +9,7 @@ struct WorkspaceFileDiffView: View {
     @State private var hunks: [WorkspaceDiffHunk] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var viewportSize = CGSize.zero
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -62,9 +63,12 @@ struct WorkspaceFileDiffView: View {
                 .font(.system(.caption, design: .monospaced))
                 .textSelection(.enabled)
                 .padding(.bottom)
+                .frame(minWidth: viewportSize.width, minHeight: viewportSize.height, alignment: .topLeading)
             }
             .defaultScrollAnchor(.topLeading)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { viewportSize = $0 }
+            .accessibilityIdentifier("changes.diff.scroll")
         }
     }
 
