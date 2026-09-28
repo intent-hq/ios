@@ -148,6 +148,7 @@ extension ConversationViewModel {
             guard modelMetadataGeneration == generation else {
                 currentModelId = nil
                 currentProviderId = nil
+                optionsStore.selectModelProvider(nil, consumer: conversationConsumer)
                 return
             }
         }

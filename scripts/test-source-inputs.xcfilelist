@@ -682,6 +682,7 @@ $(SRCROOT)/IntentTests/ConnectionPairingTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceMigrationTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
+$(SRCROOT)/IntentTests/ConversationCatalogFailureTests.swift
 $(SRCROOT)/IntentTests/ConversationCatalogLifecycleTests.swift
 $(SRCROOT)/IntentTests/ConversationCatalogReuseTests.swift
 $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
