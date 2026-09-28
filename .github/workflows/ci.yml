@@ -222,7 +222,14 @@ jobs:
       - name: Select Xcode
         run: |
           if [ '${{ runner.environment }}' = self-hosted ]; then
-            xcode=/Applications/Xcode.app
+            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
+            # local results agree with hosted ones; the Mac's default Xcode
+            # stays untouched (ios#588, ios#592).
+            xcode=/Applications/Xcode_26.3.app
+            if [ ! -d "$xcode" ]; then
+              echo "::error::$xcode is not installed on this runner" >&2
+              exit 1
+            fi
           else
             xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
           fi
@@ -239,7 +246,13 @@ jobs:
       # Export the UDID so the pre-boot step and every later script
       # invocation share one concrete device.
       - name: Pick simulator device
-        run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
+        run: |
+          if [ '${{ runner.environment }}' = self-hosted ]; then
+            udid=$(.github/scripts/select-local-simulator.sh)
+          else
+            udid=$(scripts/xcodebuild.sh pick-simulator)
+          fi
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
@@ -540,7 +553,14 @@ jobs:
       - name: Select Xcode
         run: |
           if [ '${{ runner.environment }}' = self-hosted ]; then
-            xcode=/Applications/Xcode.app
+            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
+            # local results agree with hosted ones; the Mac's default Xcode
+            # stays untouched (ios#588, ios#592).
+            xcode=/Applications/Xcode_26.3.app
+            if [ ! -d "$xcode" ]; then
+              echo "::error::$xcode is not installed on this runner" >&2
+              exit 1
+            fi
           else
             xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
           fi
@@ -554,7 +574,13 @@ jobs:
           xcrun metal -v
 
       - name: Pick simulator device
-        run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
+        run: |
+          if [ '${{ runner.environment }}' = self-hosted ]; then
+            udid=$(.github/scripts/select-local-simulator.sh)
+          else
+            udid=$(scripts/xcodebuild.sh pick-simulator)
+          fi
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
 
       - name: Pre-boot simulator
         run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
@@ -701,7 +727,14 @@ jobs:
       - name: Select Xcode
         run: |
           if [ '${{ runner.environment }}' = self-hosted ]; then
-            xcode=/Applications/Xcode.app
+            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
+            # local results agree with hosted ones; the Mac's default Xcode
+            # stays untouched (ios#588, ios#592).
+            xcode=/Applications/Xcode_26.3.app
+            if [ ! -d "$xcode" ]; then
+              echo "::error::$xcode is not installed on this runner" >&2
+              exit 1
+            fi
           else
             xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
           fi

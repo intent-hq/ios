@@ -76,7 +76,14 @@ jobs:
       - name: Select Xcode
         run: |
           if [ '${{ runner.environment }}' = self-hosted ]; then
-            xcode=/Applications/Xcode.app
+            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
+            # local results agree with hosted ones; the Mac's default Xcode
+            # stays untouched (ios#588, ios#592).
+            xcode=/Applications/Xcode_26.3.app
+            if [ ! -d "$xcode" ]; then
+              echo "::error::$xcode is not installed on this runner" >&2
+              exit 1
+            fi
           else
             xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
           fi
