@@ -380,7 +380,8 @@ extension WorkspaceStore {
             agentSummaryWasReported: workspace.agentSummaryWasReported,
             pullRequestsWereReported: workspace.pullRequestsWereReported,
             activePullRequest: workspace.activePullRequest,
-            statusImageAssetId: workspace.statusImageAssetId
+            statusImageAssetId: workspace.statusImageAssetId,
+            statusMessage: workspace.statusMessage
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -420,7 +421,8 @@ extension WorkspaceStore {
             agentSummaryWasReported: workspace.agentSummaryWasReported,
             pullRequestsWereReported: workspace.pullRequestsWereReported,
             activePullRequest: workspace.activePullRequest,
-            statusImageAssetId: workspace.statusImageAssetId
+            statusImageAssetId: workspace.statusImageAssetId,
+            statusMessage: workspace.statusMessage
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -461,7 +463,8 @@ extension WorkspaceStore {
             agentSummaryWasReported: workspace.agentSummaryWasReported,
             pullRequestsWereReported: workspace.pullRequestsWereReported,
             activePullRequest: workspace.activePullRequest,
-            statusImageAssetId: workspace.statusImageAssetId
+            statusImageAssetId: workspace.statusImageAssetId,
+            statusMessage: workspace.statusMessage
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)

@@ -112,7 +112,8 @@ extension DemoFixtures {
                 "diffSummary": ["totalFiles": 9],
                 "taskStats": ["total": 4, "completed": 4, "inProgress": 0],
                 "agentSummary": ["count": 0, "agents": [[String: Any]]()] as [String: Any],
-                "statusImageAssetId": statusImageAssetId
+                "statusImageAssetId": statusImageAssetId,
+                "statusMessage": "Dark mode is ready for review across settings screens."
             ],
             [
                 "id": "demo-ws-flaky-tests",

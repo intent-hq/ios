@@ -200,6 +200,7 @@ private struct ConversationViewContent: View {
         if usesWorkspaceDesign {
             conversationColumn
                 .toolbar(.hidden, for: .navigationBar, .tabBar)
+                .nativeNavigationBackGesture()
                 .safeAreaInset(edge: .top, spacing: 0) {
                     WorkspaceConversationHeader(title: viewModel.agentName, onBack: { dismiss() }, actions: { agentMenu })
                 }
@@ -291,20 +292,7 @@ private struct ConversationViewContent: View {
                 Label("Delete Agent", systemImage: "trash")
             }
         } label: {
-            if usesWorkspaceDesign {
-                Image(.more)
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: Constants.Conversation.Design.iconSize, height: Constants.Conversation.Design.iconSize)
-                    .accessibilityHidden(true)
-                    .frame(width: Constants.Conversation.Design.Header.controlSize, height: Constants.Conversation.Design.Header.controlSize)
-                    .contentShape(Rectangle())
-                    .foregroundStyle(Constants.Conversation.Design.Palette.foreground(for: colorScheme))
-            } else {
-                Image(systemName: "ellipsis.circle")
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-            }
+            ToolbarOverflowLabel()
         }
         .accessibilityLabel(assistantStore == nil ? "Agent actions" : "Assistant actions")
         .accessibilityIdentifier(assistantStore == nil ? "agent.actions" : "assistant.actions")
