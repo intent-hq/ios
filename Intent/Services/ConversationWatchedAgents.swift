@@ -20,6 +20,7 @@ final class ConversationWatchedAgents {
     private var localAgents: [String: AgentSession] = [:]
     @ObservationIgnored private var visible: [UUID: Set<String>] = [:]
     @ObservationIgnored private var loads: [String: (id: UUID, task: Task<Void, Never>)] = [:]
+    @ObservationIgnored private var selections: [UUID: (agentId: String, task: Task<Void, Error>)] = [:]
     @ObservationIgnored private var summaryObserver: UUID?
     private var summaries: AgentSummaryStore { commands.agentDetails.summaries }
 
@@ -33,6 +34,7 @@ final class ConversationWatchedAgents {
 
     isolated deinit {
         for load in loads.values { load.task.cancel() }
+        for selection in selections.values { selection.task.cancel() }
         if let summaryObserver { summaries.removeObserver(summaryObserver) }
     }
 
@@ -40,6 +42,8 @@ final class ConversationWatchedAgents {
         readGeneration &+= 1
         for load in loads.values { load.task.cancel() }
         loads = [:]
+        for selection in selections.values { selection.task.cancel() }
+        selections = [:]
     }
 
     func fetchSubscriptions(
@@ -103,13 +107,17 @@ final class ConversationWatchedAgents {
     func selectedAgent(_ agentId: String) async -> WatchedAgentRow? {
         let generation = readGeneration
         guard watchedAgentIds.contains(agentId), !row(agentId).isDeleted else { return nil }
+        let token = UUID()
+        let task = Task { if !self.row(agentId).hasSummary { try await self.loadMissing(agentId) } }
+        selections[token] = (agentId, task)
+        defer { selections[token] = nil }
         do {
-            if !row(agentId).hasSummary { try await loadMissing(agentId) }
-            guard !Task.isCancelled, generation == readGeneration, watchedAgentIds.contains(agentId) else { return nil }
+            try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            guard !Task.isCancelled, !task.isCancelled, generation == readGeneration, watchedAgentIds.contains(agentId) else { return nil }
             let selected = row(agentId)
             return selected.hasSummary && !selected.isDeleted ? selected : nil
         } catch {
-            if !Task.isCancelled, generation == readGeneration { errors[agentId] = error.localizedDescription }
+            if !Task.isCancelled, !task.isCancelled, generation == readGeneration { errors[agentId] = error.localizedDescription }
             return nil
         }
     }
@@ -121,6 +129,10 @@ final class ConversationWatchedAgents {
 
     private func reconcileVisibility() {
         let interested = Set(visible.values.flatMap { $0 }).intersection(watchedAgentIds)
+        for (token, selection) in selections where !watchedAgentIds.contains(selection.agentId) || row(selection.agentId).isDeleted {
+            selection.task.cancel()
+            selections[token] = nil
+        }
         for (id, load) in loads where !interested.contains(id) || row(id).isDeleted || row(id).hasSummary {
             load.task.cancel()
             loads[id] = nil

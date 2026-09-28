@@ -3,6 +3,46 @@ import Foundation
 import Testing
 
 extension ConversationWatchedAgentsTests {
+    @Test func finalConversationWindowCancelsSelectionAndCountsItsLateReply() async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        fixture.watchedIds = ["selected-child"]
+        let first = fixture.makeViewModel()
+        let second = fixture.makeViewModel()
+        await first.load()
+        await second.load()
+        let watched = first.store.watchedAgentCoordinator
+        fixture.connection.pendingMethods = ["agent.get"]
+        var finished = false
+        let selected = Task {
+            defer { finished = true }
+            return await watched.selectedAgent("selected-child")
+        }
+        defer { selected.cancel() }
+        try await fixture.connection.waitForPendingRequests("agent.get")
+        first.teardownLiveStores()
+        try await expectNever("selection cancelled while another window survives") { finished }
+        second.teardownLiveStores()
+        try await waitUntil("selection cancelled on final window close") { finished }
+        #expect(await selected.value == nil)
+        #expect(watched.errors.isEmpty)
+        #expect(fixture.connection.traffic().pendingCount == 1)
+        fixture.connection.resolvePending("agent.get", with: ["agent": fixture.agent("selected-child")])
+        fixture.stop()
+        try await waitUntil("closed windows and late reply accounted") {
+            let traffic = fixture.connection.traffic()
+            return traffic.pendingCount == 0 && traffic.calls("chat.unsubscribe").count == 1 && traffic.calls("events.unsubscribe").count == 2
+        }
+        let total = fixture.connection.traffic()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(fixture.details.cached(agentId: "selected-child") == nil)
+        #expect(total.methodCounts == [
+            "chat.subscribe": 1, "agent.get": 2, "agent.getQueue": 1, "agent.getSubscriptions": 1,
+            "events.subscribe": 2, "hook.list": 1, "prMonitor.list": 1, "chat.unsubscribe": 1, "events.unsubscribe": 2
+        ])
+        print("Final window selected read including late reply and cleanup: \(total.summary)")
+    }
+
     @Test func disappearingRowsCancelReadsAndReappearanceCanRetry() async throws {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
@@ -105,6 +145,47 @@ extension ConversationWatchedAgentsTests {
 }
 
 extension ConversationWatchedAgentsTests {
+    @Test(arguments: [false, true], [false, true])
+    func endingWatchCancelsSentSelectionButPreservesOtherConsumer(reset: Bool, survivingRoute: Bool) async throws {
+        let connection = RPCRecordingConnection()
+        let commands = ConversationCommands(connectionManager: connection)
+        let watched = ConversationWatchedAgents(commands: commands)
+        watched.watchedAgentIds = ["child"]
+        connection.pendingMethods = ["agent.get"]
+        var selectionFinished = false
+        let selected = Task {
+            defer { selectionFinished = true }
+            return await watched.selectedAgent("child")
+        }
+        defer { selected.cancel() }
+        try await connection.waitForPendingRequests("agent.get")
+        var routeStarted = false
+        let route = Task {
+            guard survivingRoute else { return nil as AgentDetail? }
+            routeStarted = true
+            return try await commands.agentDetails.load(agentId: "child")
+        }
+        defer { route.cancel() }
+        if survivingRoute { try await waitUntil("independent route joined") { routeStarted } }
+        if reset { watched.reset() } else { watched.invalidateReads() }
+        try await waitUntil("selection ends before its sent response") { selectionFinished }
+        #expect(await selected.value == nil)
+        #expect(watched.errors.isEmpty)
+        #expect(connection.traffic().pendingCount == 1)
+        connection.resolvePending("agent.get", with: ["agent": ["id": "child", "workspaceId": "canonical", "name": "Child"]])
+        let routed = try await route.value
+        try await waitUntil("sent response accounted") { connection.traffic().pendingCount == 0 }
+        // Allow the shared owner to publish or reject the response after recording it.
+        for _ in 0..<20 { await Task.yield() }
+        #expect((commands.agentDetails.cached(agentId: "child") != nil) == survivingRoute)
+        #expect((routed != nil) == survivingRoute)
+        #expect(watched.errors.isEmpty)
+        #expect(connection.traffic().methodCounts == ["agent.get": 1])
+        print("Selection ended reset=\(reset) route=\(survivingRoute): \(connection.traffic().summary)")
+    }
+}
+
+extension ConversationWatchedAgentsTests {
     @Test func cancelledTransportsKeepTheirSlotsUntilTheirRepliesActuallyFinish() async throws {
         let connection = RPCRecordingConnection()
         let details = AgentDetailStore(connection: connection)
@@ -172,5 +253,32 @@ extension ConversationWatchedAgentsTests {
         let traffic = fixture.connection.traffic()
         #expect(traffic.pendingCount == 0)
         return traffic
+    }
+}
+
+extension ConversationWatchedAgentsTests {
+    @Test func resettingWatchCancelsQueuedSelectedInterest() async throws {
+        let connection = RPCRecordingConnection()
+        let commands = ConversationCommands(connectionManager: connection)
+        let watched = ConversationWatchedAgents(commands: commands)
+        watched.watchedAgentIds = ["selected-child"]
+        let gate = TestGate()
+        defer { gate.open() }
+        connection.suspendedResponse = { method, params in
+            guard method == "agent.get", let id = params["agentId"] as? String else { return nil }
+            if id.hasPrefix("busy-") { await gate.wait() }
+            return ["agent": ["id": id, "workspaceId": "workspace", "name": id]]
+        }
+        let busy = (0..<4).map { index in Task { try? await commands.agentDetails.load(agentId: "busy-\(index)") } }
+        defer { busy.forEach { $0.cancel() } }
+        try await waitUntil("saturated selection fixture") { connection.traffic().pendingCount == 4 }
+        let selected = Task { await watched.selectedAgent("selected-child") }
+        defer { selected.cancel() }
+        for _ in 0..<20 { await Task.yield() }
+        watched.reset()
+        gate.open()
+        for task in busy { #expect(await task.value != nil) }
+        #expect(await selected.value == nil)
+        #expect(!connection.traffic().calls("agent.get").contains { $0.params["agentId"] as? String == "selected-child" })
     }
 }

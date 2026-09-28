@@ -7,23 +7,33 @@ import Observation
 final class AgentSummaryStore {
     struct ReadBoundary {
         let epoch: Int
-        let revision: Int
+        let sequence: Int
+    }
+
+    private enum Field: Hashable {
+        case value(String)
+        case metadata(String)
     }
 
     private struct Patch {
         let value: Any
-        let revision: Int
+        let sequence: Int
         let workspaceId: String?
     }
 
     private var values: [String: [String: Any]] = [:]
     private var identities: [String: String] = [:]
-    @ObservationIgnored private var patches: [String: [String: Patch]] = [:]
+    @ObservationIgnored private var patches: [String: [Field: Patch]] = [:]
     @ObservationIgnored private var observers: [UUID: (String) -> Void] = [:]
-    private var revision = 0
+    private var sequence = 0
     private var epoch = 0
 
-    func beginRead() -> ReadBoundary { ReadBoundary(epoch: epoch, revision: revision) }
+    /// A successful response owns only its supplied fields, in RPC start order.
+    /// A late list cannot replace a newer detail or event, but may fill omissions.
+    func beginRead() -> ReadBoundary {
+        sequence &+= 1
+        return ReadBoundary(epoch: epoch, sequence: sequence)
+    }
 
     func cached(agentId: String) -> [String: Any] { values[agentId] ?? [:] }
 
@@ -49,20 +59,15 @@ final class AgentSummaryStore {
         let workspace = row["workspaceId"] as? String ?? workspaceId
         if let workspaceId, workspace != workspaceId { return }
         if let known = identities[id], let workspace, known != workspace { return }
-        var merged = values[id] ?? ["id": id]
-        if let previous = merged["workspaceId"] as? String, let workspace, previous != workspace {
-            merged = ["id": id]
+        if let workspace {
+            // Before a read establishes identity, events can supply provisional
+            // display data. Discard fields from another workspace on resolution.
+            patches[id] = patches[id]?.filter { $0.value.workspaceId == nil || $0.value.workspaceId == workspace }
         }
-        for (key, value) in row where Self.keys.contains(key) { merged[key] = value }
-        if let workspace { merged["workspaceId"] = workspace }
-        for (key, patch) in patches[id] ?? [:]
-            where patch.revision > boundary.revision
-                && (patch.workspaceId == nil || workspace == nil || patch.workspaceId == workspace) {
-            merged[key] = patch.value
-        }
-        values[id] = merged
-        if let workspace, row["name"] is String { identities[id] = workspace }
-        for observer in observers.values { observer(id) }
+        var fields = displayFields(row)
+        if let workspace { fields[.value("workspaceId")] = workspace }
+        apply(fields, agentId: id, workspaceId: workspace, sequence: boundary.sequence)
+        if let workspace, !workspace.isEmpty, let name = row["name"] as? String, !name.isEmpty { identities[id] = workspace }
     }
 
     func seedStatuses(_ statuses: [String: String], since boundary: ReadBoundary) {
@@ -101,18 +106,19 @@ final class AgentSummaryStore {
         if let known = identities[id], let workspace, known != workspace { return }
         let fields = eventFields(type: type, data: data, workspace: workspace)
         guard !fields.isEmpty else { return }
-        revision &+= 1
-        var merged = values[id] ?? ["id": id]
-        for (key, value) in fields {
-            merged[key] = value
-            patches[id, default: [:]][key] = Patch(value: value, revision: revision, workspaceId: workspace)
+        if let workspace, !workspace.isEmpty, let name = fields["name"] as? String, !name.isEmpty {
+            identities[id] = workspace
+            patches[id] = patches[id]?.filter { $0.value.workspaceId == nil || $0.value.workspaceId == workspace }
         }
-        values[id] = merged
-        for observer in observers.values { observer(id) }
+        sequence &+= 1
+        apply(displayFields(fields), agentId: id, workspaceId: workspace, sequence: sequence)
     }
 
     private func eventFields(type: String, data: [String: Any], workspace: String?) -> [String: Any] {
         var fields = data.filter { Self.keys.contains($0.key) && $0.key != "id" }
+        // Mutations publish these display changes flat, unlike AgentLite metadata.
+        fields["specialist"] = data["specialist"]
+        fields["attentionRequestCleared"] = data["attentionRequestCleared"]
         fields["workspaceId"] = workspace
         if let name = data["agentName"] as? String { fields["name"] = name }
         switch type {
@@ -124,13 +130,55 @@ final class AgentSummaryStore {
             if fields["lastAgentResponse"] is String { fields["lastMessageRole"] = "assistant" }
         default: break
         }
-        if let status = fields["status"] as? String, ["idle", "completed", "deleted", "error", "failed"].contains(status) {
-            fields["isStreaming"] = false
-            fields["isProcessing"] = false
-            fields["isResponding"] = false
+        return fields
+    }
+
+    private func displayFields(_ row: [String: Any]) -> [Field: Any] {
+        var fields: [Field: Any] = [:]
+        for (key, value) in row where Self.keys.contains(key) && key != "metadata" && key != "id" {
+            fields[.value(key)] = value
+        }
+        let metadata = row["metadata"] as? [String: Any] ?? [:]
+        for (key, value) in metadata { fields[.metadata(key)] = value }
+        if let specialist = row["specialist"] { fields[.metadata("specialist")] = specialist }
+        // Both wire surfaces describe the same attention fields. Mirroring them
+        // avoids a stale top-level value masking a newer metadata value (or clear).
+        for key in Self.attentionKeys {
+            let value: Any? = row["attentionRequestCleared"] as? Bool == true ? NSNull() : row[key] ?? metadata[key]
+            if let value {
+                fields[.value(key)] = value
+                fields[.metadata(key)] = value
+            }
+        }
+        if let status = row["status"] as? String, Self.inactiveStatuses.contains(status.lowercased()) {
+            // Status-only subscriptions must retire older liveness. Explicit
+            // live overlays and newer events retain their own field provenance.
+            for key in ["isStreaming", "isProcessing", "isResponding"] where row[key] == nil {
+                fields[.value(key)] = false
+            }
         }
         return fields
     }
+
+    private func apply(_ fields: [Field: Any], agentId: String, workspaceId: String?, sequence: Int) {
+        for (field, value) in fields where (patches[agentId]?[field]?.sequence ?? 0) <= sequence {
+            patches[agentId, default: [:]][field] = Patch(value: value, sequence: sequence, workspaceId: workspaceId)
+        }
+        var merged: [String: Any] = ["id": agentId]
+        var metadata: [String: Any] = [:]
+        for (field, patch) in patches[agentId] ?? [:] {
+            switch field {
+            case .value(let key): merged[key] = patch.value
+            case .metadata(let key): metadata[key] = patch.value
+            }
+        }
+        if !metadata.isEmpty { merged["metadata"] = metadata }
+        values[agentId] = merged
+        for observer in observers.values { observer(agentId) }
+    }
+
+    private static let inactiveStatuses: Set<String> = ["idle", "completed", "deleted", "error", "failed"]
+    private static let attentionKeys = ["attentionRequestKind", "attentionRequestReason", "attentionRequestTimestamp"]
 
     private static let keys: Set<String> = [
         "id", "workspaceId", "name", "status", "metadata", "isStreaming", "isProcessing", "isResponding",

@@ -473,7 +473,9 @@ $(SRCROOT)/IntentTests/ConversationViewModelTests.swift
 $(SRCROOT)/IntentTests/ConversationWatchedAgentsConcurrencyTests.swift
 $(SRCROOT)/IntentTests/ConversationWatchedAgentsEventTests.swift
 $(SRCROOT)/IntentTests/ConversationWatchedAgentsLifetimeTests.swift
+$(SRCROOT)/IntentTests/ConversationWatchedAgentsSummaryTests.swift
 $(SRCROOT)/IntentTests/ConversationWatchedAgentsTests.swift
+$(SRCROOT)/IntentTests/ConversationWatchedAgentsTransportTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceBranchTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCatalogTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCreationGateTests.swift

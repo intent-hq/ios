@@ -48,12 +48,30 @@ final class AgentDetailStore {
     nonisolated private final class LoadInterest: Sendable {
         let activation: Int?
         private let cancelled = Mutex(false)
+        @MainActor private var continuation: CheckedContinuation<AgentDetail, Error>?
 
         init(activation: Int?) { self.activation = activation }
 
         var isCancelled: Bool { cancelled.withLock { $0 } }
 
         func cancel() { cancelled.withLock { $0 = true } }
+
+        @MainActor func wait(for task: Task<AgentDetail, Error>) async throws -> AgentDetail {
+            try await withCheckedThrowingContinuation { continuation in
+                guard !isCancelled else {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                self.continuation = continuation
+                Task { finish(await task.result) }
+            }
+        }
+
+        @MainActor func finish(_ result: Result<AgentDetail, Error>) {
+            let pending = continuation
+            continuation = nil
+            pending?.resume(with: result)
+        }
     }
 
     private struct Patch {
@@ -70,6 +88,7 @@ final class AgentDetailStore {
     private final class Entry {
         var task: Task<AgentDetail, Error>?
         var requestID = UUID()
+        var sentRequestID: UUID?
         var fresh = false
         var invalidation = 0
         var activationGeneration = 0
@@ -162,12 +181,13 @@ final class AgentDetailStore {
         guard let task = entry.task else { throw CancellationError() }
         let epoch = connectionEpoch
         let received = try await withTaskCancellationHandler {
-            try await task.value
+            try await interest.wait(for: task)
         } onCancel: {
             interest.cancel()
             Task { @MainActor [weak self] in
-                guard let self, !hasInterest(in: entry) else { return }
-                entry.task?.cancel()
+                interest.finish(.failure(CancellationError()))
+                guard let self, entry.task != nil, !hasInterest(in: entry) else { return }
+                retireRead(in: entry)
             }
         }
         try Task.checkCancellation()
@@ -194,11 +214,12 @@ final class AgentDetailStore {
         connectionEpoch &+= 1
         summaries.reset()
         for entry in entries.values {
-            entry.task?.cancel()
-            entry.task = nil
+            retireRead(in: entry)
+            for interest in entry.interests.values {
+                interest.cancel()
+                interest.finish(.failure(CancellationError()))
+            }
             entry.interests = [:]
-            entry.requestID = UUID()
-            entry.fresh = false
             entry.fields = [:]
             entry.metadata = [:]
             entry.workspaceId = nil
@@ -214,20 +235,25 @@ final class AgentDetailStore {
     }
 
     private func read(agentId: String, entry: Entry, requestID: UUID, epoch: Int) async throws -> AgentDetail {
-        defer { if entry.requestID == requestID { entry.task = nil } }
+        defer {
+            if entry.requestID == requestID { entry.task = nil; entry.sentRequestID = nil }
+        }
         do {
             try await requestLimiter.acquire()
             defer { requestLimiter.release() }
             for round in 0..<2 {
                 try Task.checkCancellation()
                 guard hasInterest(in: entry) else { throw CancellationError() }
+                guard epoch == connectionEpoch, entry.requestID == requestID else { throw CancellationError() }
                 let activationGeneration = entry.activationGeneration
                 let invalidation = entry.invalidation
                 let revision = entry.revision
                 let sequence = nextStateSequence()
                 let summaryBoundary = summaries.beginRead()
-                // Agent ids are backend-wide. Do not accidentally scope a
-                // watched child to its parent's workspace; validate per caller.
+                // Once sent, caller cancellation retires this generation without
+                // cancelling the transport callback. Its slot lasts until the
+                // reply, timeout or disconnect, even if no caller remains.
+                entry.sentRequestID = requestID
                 let response = try await connection.request("agent.get", params: ["agentId": agentId])
                 try Task.checkCancellation()
                 guard epoch == self.connectionEpoch, entry.requestID == requestID, hasInterest(in: entry) else { throw CancellationError() }
@@ -256,13 +282,25 @@ final class AgentDetailStore {
         }
     }
 
+    /// A queued read is cancellable; a sent one owns a real transport operation.
+    /// Retiring either detaches its generation so an obsolete reply cannot publish.
+    private func retireRead(in entry: Entry) {
+        if entry.sentRequestID != entry.requestID { entry.task?.cancel() }
+        entry.task = nil
+        entry.sentRequestID = nil
+        entry.requestID = UUID()
+        entry.fresh = false
+    }
+
     private func hasInterest(in entry: Entry) -> Bool {
         if !entry.consumers.isEmpty { return true }
         // Public loads (route validation, explicit refresh) do not need a lease.
         // Event reconciliation belongs only to the activation that requested it.
         return entry.interests.values.contains { !$0.isCancelled && $0.activation == nil }
     }
+}
 
+extension AgentDetailStore {
     private func receivedDetail(_ values: [String: Any], previous: AgentDetail?, sequence: Int) -> AgentDetail {
         var values = values
         var metadata = values["metadata"] as? [String: Any] ?? [:]
@@ -333,11 +371,12 @@ final class AgentDetailStore {
         if let workspace = (data["workspaceId"] ?? event["workspaceId"]) as? String,
            let known = snapshots[agentId]?.values["workspaceId"] as? String ?? entry.workspaceId, workspace != known { return }
         if type == "agent:deleted" {
-            entry.task?.cancel()
-            entry.task = nil
+            retireRead(in: entry)
+            for interest in entry.interests.values {
+                interest.cancel()
+                interest.finish(.failure(CancellationError()))
+            }
             entry.interests = [:]
-            entry.requestID = UUID()
-            entry.fresh = false
             snapshots[agentId] = nil
             return
         }

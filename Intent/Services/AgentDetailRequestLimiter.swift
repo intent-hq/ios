@@ -1,8 +1,8 @@
 import Foundation
 
 /// Shared by every detail consumer on a backend, including route validation.
-/// A cancelled transport keeps its slot until it really returns, so a late
-/// reply cannot temporarily push the number of wire requests above the limit.
+/// The owner keeps sent operations alive through reply, timeout or disconnect;
+/// cancelling a display interest only cancels its queued acquisition.
 @MainActor
 final class AgentDetailRequestLimiter {
     private struct Waiter {
