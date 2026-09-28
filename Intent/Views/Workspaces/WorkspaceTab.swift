@@ -1,5 +1,6 @@
 enum WorkspaceTab: Hashable {
     case agents
+    case changes
     case context
     case unsupportedPersistedValue(Int)
 
@@ -9,6 +10,8 @@ enum WorkspaceTab: Hashable {
             self = .agents
         case 1:
             self = .context
+        case 2:
+            self = .changes
         default:
             self = .unsupportedPersistedValue(persistedValue)
         }
@@ -20,6 +23,8 @@ enum WorkspaceTab: Hashable {
             0
         case .context:
             1
+        case .changes:
+            2
         case let .unsupportedPersistedValue(value):
             value
         }
