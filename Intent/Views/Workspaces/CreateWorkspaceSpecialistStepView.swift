@@ -15,6 +15,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     let reasoningLevels: [String]
     @Binding var selectedReasoningEffort: String?
     @Binding var messageText: String
+    let images: WorkspaceCreationImages
     let isCreating: Bool
     let allowsCreation: Bool
     let errorMessage: String?
@@ -39,7 +40,8 @@ struct CreateWorkspaceSpecialistStepView: View {
                         isLoadingProviders: isLoadingProviders,
                         providers: providers,
                         selectedProvider: selectedProvider,
-                        allowsCreation: allowsCreation
+                        allowsCreation: allowsCreation,
+                        isImportingImages: images.isImporting
                     ),
                     isCreating: isCreating,
                     onBack: onBack,
@@ -78,7 +80,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                     .interFont(Constants.Typography.heading2)
                     .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, CreateWorkspaceFormStyle.headingSpacing)
-                messageSection
+                CreateWorkspacePrompt(text: $messageText, attachments: images)
                 CreateWorkspaceSourceCard(repositoryFullName: repositoryFullName, branch: branch, onEdit: onBack)
                     .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
                 agentSection
@@ -128,19 +130,6 @@ struct CreateWorkspaceSpecialistStepView: View {
                     .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
             }
         }
-    }
-
-    private var messageSection: some View {
-        TextField("What should we work on?", text: $messageText, axis: .vertical)
-            .lineLimit(CreateWorkspaceView.initialMessageLineCountRange)
-            .interFont(Constants.Typography.bodyS)
-            .padding(CreateWorkspaceFormStyle.pagePadding)
-            .frame(minHeight: CreateWorkspaceFormStyle.promptHeight, alignment: .topLeading)
-            .background(CreateWorkspaceFormStyle.card(for: colorScheme), in: .rect(
-                cornerRadius: CreateWorkspaceFormStyle.cornerRadius
-            ))
-            .accessibilityIdentifier("creation.prompt")
-            .accessibilityHint("Optional. Add instructions for the first agent in this workspace.")
     }
 
     private var specialistPicker: some View {
@@ -263,6 +252,7 @@ extension CreateWorkspaceView {
         let model: ModelInfo?
         let message: String
         var reasoningEffort: String?
+        var imageBlocks: [[String: Any]] = []
     }
 
     static var initialMessageLineCountRange: ClosedRange<Int> {
@@ -278,9 +268,11 @@ extension CreateWorkspaceView {
         isLoadingProviders: Bool,
         providers: [ProviderInfo],
         selectedProvider: ProviderInfo?,
-        allowsCreation: Bool = true
+        allowsCreation: Bool = true,
+        isImportingImages: Bool = false
     ) -> Bool {
-        guard allowsCreation, !isCreating, !isLoadingProviders, let selectedProvider else { return true }
+        guard allowsCreation, !isCreating, !isLoadingProviders, !isImportingImages,
+              let selectedProvider else { return true }
         return !providers.contains { $0.id == selectedProvider.id && $0.isSelectable }
     }
 
@@ -297,7 +289,8 @@ extension CreateWorkspaceView {
         ]
         let trimmedMessage = initialAgent.message.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasMessage = !trimmedMessage.isEmpty
-        if initialAgent.specialist != nil || hasMessage || initialAgent.model != nil || initialAgent.provider != nil {
+        if initialAgent.specialist != nil || hasMessage || initialAgent.model != nil
+            || initialAgent.provider != nil || !initialAgent.imageBlocks.isEmpty {
             var initialAgentParams: [String: Any] = [:]
             if let specialist = initialAgent.specialist { initialAgentParams["specialist"] = specialist.id }
             // Always send the enabled selection, including Auggie. The host's
@@ -308,6 +301,7 @@ extension CreateWorkspaceView {
             if let model = initialAgent.model { initialAgentParams["model"] = model.id }
             if let effort = initialAgent.reasoningEffort { initialAgentParams["reasoningEffort"] = effort }
             if hasMessage { initialAgentParams["prompt"] = trimmedMessage }
+            if !initialAgent.imageBlocks.isEmpty { initialAgentParams["imageBlocks"] = initialAgent.imageBlocks }
             params["initialAgent"] = initialAgentParams
         }
         return params

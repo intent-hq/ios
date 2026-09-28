@@ -10,7 +10,6 @@ import os
 actor WebSocketConnection {
     nonisolated let host: String
     nonisolated let pathObservation: SocketPathObservation
-
     private let connection: NWConnection
     private let queue: DispatchQueue
     private let didOpen: OSAllocatedUnfairLock<Bool>
@@ -22,7 +21,7 @@ actor WebSocketConnection {
     private static let maximumMessageSizeMebibytes: Int = 40
     private static let kibibytesPerMebibyte: Int = 1024
     private static let bytesPerKibibyte: Int = 1024
-    private static let maximumMessageSize =
+    static let maximumMessageSize =
         maximumMessageSizeMebibytes * kibibytesPerMebibyte * bytesPerKibibyte
     private static let abnormalClosureCode = 1006
     private static let invalidFramePayloadCode = 1007
@@ -48,7 +47,6 @@ actor WebSocketConnection {
     }
 
     // MARK: - Connection setup
-
     // swiftlint:disable:next function_parameter_count
     nonisolated private static func makeParameters(
         host: String,
@@ -56,7 +54,8 @@ actor WebSocketConnection {
         certFingerprint: String?,
         mismatchFingerprint: OSAllocatedUnfairLock<String?>,
         missingCertificate: OSAllocatedUnfairLock<Bool>,
-        verifyQueue: DispatchQueue
+        verifyQueue: DispatchQueue,
+        endpoint: Endpoint
     ) -> NWParameters {
         let parameters: NWParameters
         if let pinned = trustedPin(certFingerprint) {
@@ -98,8 +97,8 @@ actor WebSocketConnection {
         // Reply to daemon pings automatically (URLSessionWebSocketTask did the
         // same); the app's own liveness pings stay explicit via sendPing().
         wsOptions.autoReplyPing = true
-        // Match the daemon's 40 MiB outbound JSON-RPC cap (docs/protocol §1.3).
-        wsOptions.maximumMessageSize = maximumMessageSize
+        // The binary tunnel has its own smaller message cap (docs/protocol §1.4).
+        wsOptions.maximumMessageSize = endpoint.maximumMessageSize
         wsOptions.setAdditionalHeaders(additionalHeaders(token: token))
         parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
         return parameters
@@ -203,9 +202,10 @@ actor WebSocketConnection {
         host: String,
         port: Int,
         token: String,
-        certFingerprint: String?
+        certFingerprint: String?,
+        endpoint: Endpoint = .rpc
     ) async throws -> WebSocketConnection {
-        let url = try makeURL(host: host, port: port, certFingerprint: certFingerprint)
+        let url = try makeURL(host: host, port: port, certFingerprint: certFingerprint, endpoint: endpoint)
         let mismatchFingerprint = OSAllocatedUnfairLock<String?>(initialState: nil)
         let missingCertificate = OSAllocatedUnfairLock(initialState: false)
         let didOpen = OSAllocatedUnfairLock(initialState: false)
@@ -218,7 +218,8 @@ actor WebSocketConnection {
             certFingerprint: certFingerprint,
             mismatchFingerprint: mismatchFingerprint,
             missingCertificate: missingCertificate,
-            verifyQueue: queue
+            verifyQueue: queue,
+            endpoint: endpoint
         )
         let nwConnection = NWConnection(to: .url(url), using: parameters)
         configureStateHandler(
@@ -397,13 +398,21 @@ extension WebSocketConnection {
     }
 
     func send(_ text: String) async throws {
+        try await sendPayload(Data(text.utf8), opcode: .text)
+    }
+
+    func send(_ data: Data) async throws {
+        try await sendPayload(data, opcode: .binary)
+    }
+
+    private func sendPayload(_ data: Data, opcode: NWProtocolWebSocket.Opcode) async throws {
         let connection = connection
         let host = host
-        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
-        let context = NWConnection.ContentContext(identifier: "text", metadata: [metadata])
+        let metadata = NWProtocolWebSocket.Metadata(opcode: opcode)
+        let context = NWConnection.ContentContext(identifier: "message", metadata: [metadata])
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             connection.send(
-                content: Data(text.utf8),
+                content: data,
                 contentContext: context,
                 isComplete: true,
                 completion: .contentProcessed { error in
