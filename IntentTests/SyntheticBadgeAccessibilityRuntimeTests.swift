@@ -24,19 +24,23 @@ extension SyntheticBadgeHostTests {
         }
     }
 
-    @Test(arguments: [Int32(0), Int32(1)]) @MainActor
-    func overlappingAccessibilityHostsRestoreTheOriginalModeOnlyOnFinalRelease(original: Int32) throws {
+    @Test(arguments: [Int32(0), Int32(1)], [false, true]) @MainActor
+    func overlappingAccessibilityHostsRestoreTheOriginalModeOnlyOnFinalRelease(original: Int32, nested: Bool) throws {
         let fixture = AutomationFixture()
         fixture.value = original
         let runtime = SyntheticBadgeAccessibilityRuntime(load: fixture.load)
         let first = try runtime.acquire()
         let second = try runtime.acquire()
         #expect(fixture.value == 1 && fixture.loads == 1)
-        runtime.release(first)
+        let earlierRelease = nested ? second : first
+        let finalRelease = nested ? first : second
+        runtime.release(earlierRelease)
+        runtime.release(earlierRelease)
         #expect(fixture.value == 1 && fixture.closes == 0)
-        runtime.release(second)
+        runtime.release(finalRelease)
         #expect(fixture.value == original && fixture.closes == 1)
-        runtime.release(second)
+        #expect(fixture.writes == [1, original])
+        runtime.release(finalRelease)
         #expect(fixture.closes == 1)
     }
 
@@ -65,15 +69,17 @@ extension SyntheticBadgeHostTests {
         #expect(fixture.value == 0 && fixture.closes == 2)
     }
 
-    @Test @MainActor func unavailableAccessibilityRuntimeFailsWithoutAllocatingOwnership() throws {
+    @Test(arguments: [false, true]) @MainActor
+    func unavailableAccessibilityRuntimeFailsWithoutAllocatingOwnership(missingSymbols: Bool) throws {
         let fixture = AutomationFixture()
         var available = false
+        let failure: SyntheticBadgeAccessibilityRuntime.RuntimeError = missingSymbols ? .symbolsUnavailable : .libraryUnavailable
         let runtime = SyntheticBadgeAccessibilityRuntime {
-            guard available else { throw SyntheticBadgeAccessibilityRuntime.RuntimeError.libraryUnavailable }
+            guard available else { throw failure }
             return fixture.load()
         }
-        #expect(throws: SyntheticBadgeAccessibilityRuntime.RuntimeError.libraryUnavailable) { try runtime.acquire() }
-        #expect(fixture.loads == 0 && fixture.writes.isEmpty)
+        #expect(throws: failure) { try runtime.acquire() }
+        #expect(fixture.loads == 0 && fixture.writes.isEmpty && fixture.closes == 0)
         available = true
         let token = try runtime.acquire()
         runtime.release(token)
