@@ -20,6 +20,7 @@ struct WorkspaceDetailView: View {
     @State private var selectedTab = WorkspaceTab.agents
     @State private var noteStore: NoteStore
     @State private var scriptStore: WorkspaceScriptStore
+    @State private var changesStore: WorkspaceChangesStore
     @Environment(BackendSession.self) private var session
 
     init(workspaceId: String, session: BackendSession) {
@@ -27,11 +28,16 @@ struct WorkspaceDetailView: View {
         _agentStore = State(initialValue: AgentStore(connectionManager: session.connection, summaries: session.agentSummaries))
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
         _scriptStore = State(initialValue: WorkspaceScriptStore(connection: session.connection))
+        _changesStore = State(initialValue: WorkspaceChangesStore(connectionManager: session.connection))
     }
 
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
 
     var noteStoreConnectionID: ObjectIdentifier { ObjectIdentifier(noteStore.connectionManager) }
+
+    var changesStoreConnectionID: ObjectIdentifier {
+        ObjectIdentifier(changesStore.connectionManager)
+    }
 
     private var workspaceStore: WorkspaceStore { session.workspaceStore }
     private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
@@ -320,6 +326,8 @@ private extension WorkspaceDetailView {
                 await terminalStore.refresh(workspaceId: workspaceId)
                 await browserStore.refresh(workspaceId: workspaceId)
                 await scriptStore.refresh(workspaceId: workspaceId)
+            } else if selectedTab == .changes {
+                await changesStore.refresh(workspaceId: workspaceId)
             } else {
                 await noteStore.fetchNotes(workspaceId: workspaceId)
             }
@@ -352,8 +360,7 @@ private extension WorkspaceDetailView {
                 agentListContent
             }
         } else if selectedTab == .changes {
-            WorkspaceChangesView(workspaceId: workspaceId, connectionManager: session.connection)
-                .id(workspaceId)
+            WorkspaceChangesView(workspaceId: workspaceId, store: changesStore)
         } else {
             NoteListView(workspaceId: workspaceId, noteStore: noteStore)
         }

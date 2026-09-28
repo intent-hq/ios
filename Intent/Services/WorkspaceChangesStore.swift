@@ -29,7 +29,7 @@ import Observation
     @ObservationIgnored private var refreshQueued = false
     @ObservationIgnored private var eventRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var cancellables = Set<AnyCancellable>()
-    private let connectionManager: ConnectionManagerRouting
+    let connectionManager: ConnectionManagerRouting
     private let replaceGroup = "ios-changes-\(UUID().uuidString)"
     private static let pageSize = 50
 

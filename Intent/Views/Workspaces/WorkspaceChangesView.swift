@@ -11,24 +11,17 @@ enum WorkspaceChangesLayout {
 
 struct WorkspaceChangesView: View {
     let workspaceId: String
-    let connectionManager: ConnectionManagerRouting
+    let store: WorkspaceChangesStore
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
-    @State private var store: WorkspaceChangesStore
     @State private var selectedFile: WorkspaceChange?
     @State private var selectedCommit: WorkspaceCommit?
 
-    init(workspaceId: String, connectionManager: ConnectionManagerRouting) {
-        self.workspaceId = workspaceId
-        self.connectionManager = connectionManager
-        _store = State(initialValue: WorkspaceChangesStore(connectionManager: connectionManager))
-    }
-
     var body: some View {
-        List {
+        LazyVStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionSpacing) {
             repositorySection
             if let error = store.errorMessage {
-                Section {
+                VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
                     Text(error).foregroundStyle(.secondary)
                     Button("Retry") { Task { await store.refresh(workspaceId: workspaceId) } }
                 }
@@ -45,11 +38,9 @@ struct WorkspaceChangesView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(Theme.background(for: colorScheme))
-        .refreshable { await store.refresh(workspaceId: workspaceId) }
-        .task {
+        .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+        .padding(.bottom, WorkspaceDetailStyle.pageInset)
+        .task(id: workspaceId) {
             await store.startObserving(workspaceId: workspaceId)
         }
         .onDisappear { store.stopObserving() }
@@ -84,13 +75,13 @@ struct WorkspaceChangesView: View {
     }
 
     private var loader: WorkspaceDiffLoader {
-        WorkspaceDiffLoader(connectionManager: connectionManager, workspaceId: workspaceId, gitRootId: store.selectedRootId)
+        WorkspaceDiffLoader(connectionManager: store.connectionManager, workspaceId: workspaceId, gitRootId: store.selectedRootId)
     }
 
     @ViewBuilder
     private var repositorySection: some View {
         if !store.roots.isEmpty || store.repositoryErrorMessage != nil {
-            Section {
+            VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
                 Picker("Repository", selection: repositorySelection) {
                     Text("Main repository").tag("")
                     ForEach(store.roots) { root in
@@ -115,45 +106,54 @@ struct WorkspaceChangesView: View {
     }
 
     private func fileSection(_ title: String, files: [WorkspaceChange]) -> some View {
-        Section {
+        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionHeadingSpacing) {
+            sectionHeading("\(title) (\(files.count))")
             if files.isEmpty {
                 Text("No \(title.lowercased()) files").foregroundStyle(.secondary)
             }
-            ForEach(files) { file in
-                Button { selectedFile = file } label: {
-                    VStack(alignment: .leading, spacing: WorkspaceChangesLayout.rowSpacing) {
-                        Text(file.path).interFont(Constants.Typography.bodyXS).foregroundStyle(.primary)
-                        HStack {
-                            Text(file.status.capitalized)
-                            if let agentName = file.agentName { Text("· \(agentName)") }
-                            Spacer()
-                            if file.isBinary {
-                                Text("Binary")
-                            } else if file.hasLineStats {
-                                WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
-                            }
-                        }
-                        .font(Constants.Typography.subtextXXS.font)
-                        .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, WorkspaceChangesLayout.rowSpacing)
-                    .contentShape(Rectangle())
+            LazyVStack(alignment: .leading, spacing: WorkspaceDetailStyle.rowSpacing) {
+                ForEach(files) { file in
+                    fileRow(file)
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint("Opens the file diff")
             }
-        } header: {
-            Text("\(title) (\(files.count))")
         }
     }
 
+    private func fileRow(_ file: WorkspaceChange) -> some View {
+        Button { selectedFile = file } label: {
+            VStack(alignment: .leading, spacing: WorkspaceChangesLayout.rowSpacing) {
+                Text(file.path).interFont(Constants.Typography.bodyS).foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Text(file.status.capitalized)
+                    if let agentName = file.agentName { Text("· \(agentName)") }
+                    Spacer()
+                    if file.isBinary {
+                        Text("Binary")
+                    } else if file.hasLineStats {
+                        WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
+                    }
+                }
+                .font(Constants.Typography.subtextXXS.font)
+                .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: WorkspaceDetailStyle.controlSize, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the file diff")
+    }
+
     private var commitsSection: some View {
-        Section("Commits") {
+        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionHeadingSpacing) {
+            sectionHeading("Commits")
             if store.commits.isEmpty {
                 Text("No workspace commits yet").foregroundStyle(.secondary)
             }
-            ForEach(store.commits) { commit in
-                commitRow(commit)
+            LazyVStack(alignment: .leading, spacing: WorkspaceDetailStyle.rowSpacing) {
+                ForEach(store.commits) { commit in
+                    commitRow(commit)
+                }
             }
             if store.hasMoreCommits {
                 Button {
@@ -170,7 +170,8 @@ struct WorkspaceChangesView: View {
         Button { selectedCommit = commit } label: {
             VStack(alignment: .leading, spacing: WorkspaceChangesLayout.rowSpacing) {
                 Text(commit.message.components(separatedBy: "\n").first ?? commit.message)
-                    .interFont(Constants.Typography.bodyXS).foregroundStyle(.primary)
+                    .interFont(Constants.Typography.bodyS).foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Text(String(commit.hash.prefix(WorkspaceChangesLayout.shortHashLength))).monospaced()
                     Text(commit.author)
@@ -185,11 +186,19 @@ struct WorkspaceChangesView: View {
                 }
                 .font(Constants.Typography.subtextXXS.font).foregroundStyle(.secondary)
             }
-            .padding(.vertical, WorkspaceChangesLayout.rowSpacing)
+            .frame(maxWidth: .infinity, minHeight: WorkspaceDetailStyle.controlSize, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens the commit diff")
+    }
+
+    private func sectionHeading(_ title: String) -> some View {
+        Text(title)
+            .interFont(Constants.Typography.bodyM)
+            .tracking(WorkspaceDetailStyle.rowTitleTracking)
+            .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+            .accessibilityAddTraits(.isHeader)
     }
 }
 

@@ -20,7 +20,7 @@ struct WorkspaceFileDiffView: View {
             Divider()
             content
         }
-        .background(Theme.background(for: colorScheme))
+        .background(WorkspaceDetailStyle.background(for: colorScheme))
         .task { await load() }
     }
 
