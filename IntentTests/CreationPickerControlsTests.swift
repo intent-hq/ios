@@ -425,7 +425,8 @@ struct CreationPickerControlsTests {
         return try await SyntheticBadgeHost.render(
             content,
             width: 430,
-            height: layout == .workspace ? Self.pickerHostHeight : 1200
+            height: layout == .workspace ? Self.pickerHostHeight : 1200,
+            diagnostics: SyntheticBadgeHostTrace(context: "picker layout=\(layout) dynamicType=\(dynamicTypeSize) isCreating=\(isCreating)")
         ) { hostView, window in
             let settled = try Self.settledPickerElements(in: hostView, window: window, layout: layout)
             if layout == .workspace {

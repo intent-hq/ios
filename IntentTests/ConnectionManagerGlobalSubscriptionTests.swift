@@ -1,8 +1,22 @@
+import Combine
 import Foundation
 @testable import Intent
 import Testing
 
 extension ConnectionManagerTests {
+    @Test func globalFeedIncludesCatalogInvalidationOnce() throws {
+        for event in ["specialists:changed", "settings:changed"] {
+            #expect(ConnectionManager.globalEventTypes.filter { $0 == event }.count == 1)
+        }
+        let request = try RPCFixtureJSON.request(
+            method: "events.subscribe",
+            params: ["eventTypes": ConnectionManager.globalEventTypes, "replaceGroup": "global"]
+        )
+        // Connection setup is outside conversation startup, but its added
+        // event names still cost bytes: 185 now versus 144 at the base.
+        #expect(request.count == 185)
+    }
+
     static let subscribeMethod = "events.subscribe"
 
     static func isSubscriptionFailed(_ state: ConnectionManager.GlobalSubscriptionState) -> Bool {
@@ -96,10 +110,15 @@ extension ConnectionManagerTests {
         }
 
         let sessionConnection: any SessionConnectionManaging = manager
-        #expect(Self.isSubscriptionFailed(sessionConnection.globalSubscriptionState))
+        var readiness: [ConnectionManager.GlobalSubscriptionState] = []
+        let observer = sessionConnection.globalSubscriptionPublisher.sink { readiness.append($0) }
+        defer { observer.cancel() }
+        #expect(readiness == [manager.globalSubscriptionState], "routing replays actual failed-feed readiness")
         sessionConnection.retryGlobalSubscription()
         try await Self.settle { manager.globalSubscriptionState == .subscribed }
         #expect(server.requestCount(method: Self.subscribeMethod) == maxAttempts + 1)
+        #expect(readiness.last == .subscribed)
+        #expect(readiness.contains(.subscribing(attempt: 1)))
         let records = try DiagnosticFixtures.records(await diagnostics.snapshot())
             .filter { $0.event.operation == .subscriptionGlobal }
         #expect(records.map(\.event.outcome) == [.retrying, .exhausted, .succeeded])

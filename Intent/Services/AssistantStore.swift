@@ -12,13 +12,15 @@ final class AssistantStore {
     private(set) var errorMessage: String?
 
     @ObservationIgnored private let connection: any ConnectionManagerRouting
+    private let summaries: AgentSummaryStore?
     @ObservationIgnored private var eventHandlerId: UUID?
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     private var refreshRequested = false
     private var creationKey: String?
 
-    init(connection: any ConnectionManagerRouting) {
+    init(connection: any ConnectionManagerRouting, summaries: AgentSummaryStore? = nil) {
         self.connection = connection
+        self.summaries = summaries
     }
 
     /// Observation starts on first use, not at init: every BackendSession
@@ -57,6 +59,7 @@ final class AssistantStore {
         repeat {
             refreshRequested = false
             do {
+                let summaryBoundary = summaries?.beginRead()
                 let result = try await connection.request(
                     "agent.list", params: ["workspaceId": Workspace.chiefWorkspaceId]
                 )
@@ -65,6 +68,7 @@ final class AssistantStore {
                       let rows = response["agents"] as? [[String: Any]] else {
                     throw AssistantError.invalidResponse
                 }
+                if let summaryBoundary { summaries?.seed(rows, workspaceId: Workspace.chiefWorkspaceId, since: summaryBoundary) }
                 threads = rows.compactMap(AgentSession.parseAgent)
                     .filter { $0.createdByAgentId == nil && $0.status.lowercased() != "deleted" }
                     .sorted { timestamp($0) > timestamp($1) }
@@ -88,6 +92,7 @@ final class AssistantStore {
         let key = creationKey ?? UUID().uuidString
         creationKey = key
         do {
+            let summaryBoundary = summaries?.beginRead()
             let result = try await connection.request("agent.create", params: [
                 "workspaceId": Workspace.chiefWorkspaceId,
                 "specialistId": "chief-of-staff",
@@ -100,6 +105,7 @@ final class AssistantStore {
                   let agent = AgentSession.parseAgent(row) else {
                 throw AssistantError.invalidResponse
             }
+            if let summaryBoundary { summaries?.seed([row], workspaceId: Workspace.chiefWorkspaceId, since: summaryBoundary) }
             creationKey = nil
             threads.removeAll { $0.id == agent.id }
             threads.insert(agent, at: 0)

@@ -85,13 +85,15 @@ extension SpecialistInfo {
     var hasLoaded = false
 
     let connectionManager: ConnectionManagerRouting
+    private let summaries: AgentSummaryStore?
     private var workspaceId: String?
     @ObservationIgnored private var eventHandlerId: UUID?
     private var fetchDebounceTask: Task<Void, Never>?
     private var connectionObserver: AnyCancellable?
 
-    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
+    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared, summaries: AgentSummaryStore? = nil) {
         self.connectionManager = connectionManager
+        self.summaries = summaries
         observeConnection()
     }
 
@@ -180,6 +182,7 @@ extension SpecialistInfo {
             isLoading = true
         }
         do {
+            let summaryBoundary = summaries?.beginRead()
             let result = try await connectionManager.request(
                 "agent.list",
                 params: ["workspaceId": workspaceId]
@@ -193,6 +196,7 @@ extension SpecialistInfo {
             try Task.checkCancellation()
             if let dict = result as? [String: Any],
                let items = dict["agents"] as? [[String: Any]] {
+                if let summaryBoundary { summaries?.seed(items, workspaceId: workspaceId, since: summaryBoundary) }
                 // Only publish a changed list: an identical refetch (e.g. the
                 // deferred refresh after swiping back to the workspace) must
                 // not invalidate observers and rebuild the agent list.

@@ -6,6 +6,7 @@ import Foundation
 enum ConversationTranscriptScrollPolicy {
     enum InitialScrollStep: Equatable {
         case perform
+        case preserveViewport
         case skip
         case waitForScrollView
     }
@@ -41,10 +42,11 @@ enum ConversationTranscriptScrollPolicy {
     static func initialScrollStep(
         alreadyPerformed: Bool,
         scrollViewResolved: Bool,
-        scrollViewWaitElapsed: Bool
+        scrollViewWaitElapsed: Bool,
+        entryMetadataReady: Bool = true
     ) -> InitialScrollStep {
         if alreadyPerformed { return .skip }
-        if scrollViewResolved || scrollViewWaitElapsed { return .perform }
+        if scrollViewResolved || scrollViewWaitElapsed { return entryMetadataReady ? .perform : .preserveViewport }
         return .waitForScrollView
     }
 

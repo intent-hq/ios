@@ -26,7 +26,7 @@ extension ConversationViewModelTests {
         fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
         fake.stubChatSnapshot()
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
-        fake.responseMap["agent.get"] = ["agent": ["id": "test-agent", "name": "Test"]] as [String: Any]
+        fake.responseMap["agent.get"] = ["agent": ["id": "test-agent", "workspaceId": "test-ws", "name": "Test"]] as [String: Any]
         fake.responseMap["agent.getQueue"] = ["queue": []]
         fake.responseMap["agent.getSubscriptions"] = ["subscriptions": [], "delegationGroups": []]
         fake.responseMap["hook.list"] = ["hooks": [] as [[String: Any]]]
@@ -107,19 +107,36 @@ extension ConversationViewModelTests {
 
     @Test func cancelledLoadDoesNotStartLaterLiveStores() async throws {
         let (viewModel, fake) = makeLoadableVM()
+        let detailHandlerCount = fake.eventHandlerCount
+        #expect(detailHandlerCount == 1, "the model and commands share one detail listener before loading")
+        #expect(viewModel.store.commands.agentDetails === viewModel.agentDetails)
+        #expect(viewModel.store.eventHandlerId == nil)
         fake.pendingMethods = ["events.subscribe"]
-        let load = Task { await viewModel.load() }
-        try await fake.waitForPendingRequests("events.subscribe")
+        var returned = false
+        let load = Task { await viewModel.load(); returned = true }
+        defer {
+            load.cancel()
+            viewModel.conversationDisappeared()
+            // Drain the fake only after the bounded assertion, including a
+            // failing run, so a regression cannot leave orphan test tasks.
+            fake.failPending("events.subscribe", with: CancellationError())
+            fake.failPending("events.subscribe", with: CancellationError())
+        }
+        try await fake.waitForPendingRequests("events.subscribe", count: 2)
+        #expect(viewModel.store.eventHandlerId.map { fake.eventHandlerIDs.contains($0) } == true)
 
         load.cancel()
         viewModel.conversationDisappeared()
+        try await waitUntil("cancelled load returns while both status ACKs remain held") { returned }
         await load.value
 
-        #expect(fake.paramsForMethod("events.subscribe").count == 1)
-        #expect(!fake.didCallMethod("chat.subscribe"))
+        #expect(fake.pendingRequestCount("events.subscribe") == 2, "returning does not cancel orphan-ACK cleanup")
+        #expect(fake.paramsForMethod("events.subscribe").count == 2)
+        #expect(fake.paramsForMethod("chat.subscribe").count == 1)
         #expect(!fake.didCallMethod("hook.list"))
         #expect(!fake.didCallMethod("prMonitor.list"))
-        #expect(fake.eventHandlerCount == 0)
+        #expect(viewModel.store.eventHandlerId == nil && viewModel.detailConsumer == nil)
+        #expect(fake.eventHandlerCount == detailHandlerCount, "the session detail listener outlives the view activation")
     }
 
     @Test func loadSettlesBeforeTranscriptCanMount() async {
@@ -136,6 +153,7 @@ extension ConversationViewModelTests {
         fake.responseMap["agent.get"] = [
             "agent": [
                 "id": "test-agent",
+                "workspaceId": "test-ws",
                 "name": "Test",
                 "metadata": ["lastSeenMessageId": "m1"]
             ]
@@ -165,6 +183,7 @@ extension ConversationViewModelTests {
         fake.responseMap["agent.get"] = [
             "agent": [
                 "id": "test-agent",
+                "workspaceId": "test-ws",
                 "name": "Test",
                 "metadata": ["lastSeenMessageId": "m1"]
             ]

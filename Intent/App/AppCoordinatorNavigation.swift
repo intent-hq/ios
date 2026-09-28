@@ -249,16 +249,11 @@ extension AppCoordinator {
 
     /// Validates that a restored agent still exists. Only a definitive not-found falls back —
     /// transient/transport errors leave the screen in place (the conversation load re-validates).
-    private func validateRestoredAgent(agentId: String, workspaceId: String) async {
+    func validateRestoredAgent(agentId: String, workspaceId: String) async {
         do {
-            let result = try await dependencies.connection.request(
-                "agent.get",
-                params: ["agentId": agentId, "workspaceId": workspaceId]
-            )
-            // A missing or malformed result is not a valid agent payload.
-            if (result as? [String: Any]) == nil {
-                handleMissingAgent(agentId: agentId, workspaceId: workspaceId)
-            }
+            _ = try await agentDetails.load(agentId: agentId, workspaceId: workspaceId)
+        } catch is AgentDetailError {
+            handleMissingAgent(agentId: agentId, workspaceId: workspaceId)
         } catch {
             AppLog.app.error("[AppCoordinator] Agent validation failed: \(error)")
             // Only a definitive not-found (-32602 with data.code == "not-found",
