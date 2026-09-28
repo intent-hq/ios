@@ -26,6 +26,7 @@ struct WorkspaceChangesView: View {
 
     var body: some View {
         List {
+            repositorySection
             if let error = store.errorMessage {
                 Section {
                     Text(error).foregroundStyle(.secondary)
@@ -52,6 +53,10 @@ struct WorkspaceChangesView: View {
             await store.startObserving(workspaceId: workspaceId)
         }
         .onDisappear { store.stopObserving() }
+        .onChange(of: store.selectedRootId) { _, _ in
+            selectedFile = nil
+            selectedCommit = nil
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await store.refresh(workspaceId: workspaceId) }
@@ -79,7 +84,34 @@ struct WorkspaceChangesView: View {
     }
 
     private var loader: WorkspaceDiffLoader {
-        WorkspaceDiffLoader(connectionManager: connectionManager, workspaceId: workspaceId)
+        WorkspaceDiffLoader(connectionManager: connectionManager, workspaceId: workspaceId, gitRootId: store.selectedRootId)
+    }
+
+    @ViewBuilder
+    private var repositorySection: some View {
+        if !store.roots.isEmpty || store.repositoryErrorMessage != nil {
+            Section {
+                Picker("Repository", selection: repositorySelection) {
+                    Text("Main repository").tag("")
+                    ForEach(store.roots) { root in
+                        Text(root.displayName).tag(root.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .accessibilityIdentifier("changes.repository")
+                if let error = store.repositoryErrorMessage {
+                    Text(error).foregroundStyle(.secondary)
+                    Button("Reload repositories") { Task { await store.refresh(workspaceId: workspaceId) } }
+                }
+            }
+        }
+    }
+
+    private var repositorySelection: Binding<String> {
+        Binding(
+            get: { store.selectedRootId ?? "" },
+            set: { id in Task { await store.selectRoot(id: id.isEmpty ? nil : id) } }
+        )
     }
 
     private func fileSection(_ title: String, files: [WorkspaceChange]) -> some View {
@@ -97,7 +129,7 @@ struct WorkspaceChangesView: View {
                             Spacer()
                             if file.isBinary {
                                 Text("Binary")
-                            } else {
+                            } else if file.hasLineStats {
                                 WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
                             }
                         }
@@ -147,7 +179,9 @@ struct WorkspaceChangesView: View {
                             .accessibilityLabel("Agent commit")
                     }
                     Spacer()
-                    Text(commit.isPushed ? "Pushed" : "Local")
+                    if commit.isPushedKnown {
+                        Text(commit.isPushed ? "Pushed" : "Local")
+                    }
                 }
                 .font(Constants.Typography.subtextXXS.font).foregroundStyle(.secondary)
             }

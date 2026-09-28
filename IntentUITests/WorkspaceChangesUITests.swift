@@ -18,15 +18,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 
     @MainActor
     func testChangesTabOpensStagedUnstagedAndCommitDiffs() {
-        let app = XCUIApplication()
-        app.launchArguments += ["--demo-data"]
-        app.launch()
-        let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
-        workspace.tap()
-        let changes = app.buttons["Changes"].firstMatch
-        XCTAssertTrue(changes.waitForExistence(timeout: Fixture.timeout))
-        changes.tap()
+        let app = openChanges()
         let unstaged = app.staticTexts["Sources/Analytics.swift"].firstMatch
         XCTAssertTrue(unstaged.waitForExistence(timeout: Fixture.timeout))
         capture(app, name: "workspace-changes")
@@ -48,6 +40,60 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Commit Changes"].waitForExistence(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: "let count = 1")
         capture(app, name: "commit-diff")
+    }
+
+    @MainActor
+    func testRepositorySelectionScopesFilesAndCommitDiffs() {
+        let app = openChanges()
+        selectRepository("ios", in: app)
+        let commit = app.staticTexts["feat: add mobile analytics"].firstMatch
+        XCTAssertTrue(commit.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertFalse(app.staticTexts["feat: add usage analytics"].exists)
+        capture(app, name: "submodule-changes")
+        app.staticTexts["Sources/Analytics.swift"].firstMatch.tap()
+        assertDiffLine(in: app, containing: "let mobile = true")
+        capture(app, name: "submodule-unstaged-diff")
+        app.buttons["Done"].tap()
+        app.staticTexts["Tests/MobileAnalyticsTests.swift"].firstMatch.tap()
+        assertDiffLine(in: app, containing: "let mobileStaged = true")
+        app.buttons["Done"].tap()
+        if !commit.isHittable { app.swipeUp() }
+        commit.tap()
+        assertDiffLine(in: app, containing: "let mobileCount = 0")
+        assertDiffLine(in: app, containing: "let mobileCount = 1")
+        capture(app, name: "submodule-commit-diff")
+        app.buttons["Done"].tap()
+        selectRepository("Main repository", in: app)
+        let mainCommit = app.staticTexts["feat: add usage analytics"].firstMatch
+        XCTAssertTrue(mainCommit.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertFalse(commit.exists)
+        app.staticTexts["Sources/Analytics.swift"].firstMatch.tap()
+        assertDiffLine(in: app, containing: "let enabled = true")
+    }
+
+    @MainActor
+    private func openChanges() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        workspace.tap()
+        let changes = app.buttons["Changes"].firstMatch
+        XCTAssertTrue(changes.waitForExistence(timeout: Fixture.timeout))
+        changes.tap()
+        return app
+    }
+
+    @MainActor
+    private func selectRepository(_ name: String, in app: XCUIApplication) {
+        let picker = app.buttons["changes.repository"].firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: Fixture.timeout))
+        if !picker.isHittable { app.swipeDown() }
+        picker.tap()
+        let option = app.buttons[name].firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: Fixture.timeout))
+        option.tap()
     }
 
     @MainActor

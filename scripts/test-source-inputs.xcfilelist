@@ -391,6 +391,7 @@ $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
 $(SRCROOT)/Intent/Services/DemoBrowserFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesFixtures.swift
+$(SRCROOT)/Intent/Services/DemoChangesRootFixtures.swift
 $(SRCROOT)/Intent/Services/DemoConnectionLoss.swift
 $(SRCROOT)/Intent/Services/DemoFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixturesAssistant.swift
@@ -975,9 +976,12 @@ $(SRCROOT)/IntentTests/WorkspaceBrowserTabTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceChangesRootRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceChangesRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationImagesTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
+$(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFallbackRefreshTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift

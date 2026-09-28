@@ -12,6 +12,10 @@ import Observation
     private(set) var errorMessage: String?
     private(set) var isTruncated = false
     private(set) var isLoadingMore = false
+    private(set) var roots: [WorkspaceGitRoot] = []
+    private(set) var selectedRootId: String?
+    private(set) var repositoryErrorMessage: String?
+    var selectedRoot: WorkspaceGitRoot? { roots.first { $0.id == selectedRootId } }
     var hasMoreCommits: Bool { nextToken != nil }
 
     private var nextToken: String?
@@ -64,13 +68,13 @@ import Observation
         defer {
             if revision == requestRevision { isLoading = false }
         }
+        await refreshRoots(workspaceId: workspaceId, requestRevision: requestRevision)
+        guard owns(requestRevision), !Task.isCancelled else { return }
+        let root = selectedRoot
         do {
-            let result = try await connectionManager.request("file-tracking.getChanges", params: [
-                "workspaceId": workspaceId
-            ])
+            let snapshot = try await fetchChanges(workspaceId: workspaceId, root: root)
             guard owns(requestRevision), !Task.isCancelled else { return }
-            let snapshot = try WorkspaceChangesSnapshot(result)
-            let page = try await fetchCommits(workspaceId: workspaceId)
+            let page = try await fetchCommits(workspaceId: workspaceId, root: root)
             guard owns(requestRevision), !Task.isCancelled else { return }
             stagedChanges = snapshot.changes.filter { $0.stage == "staged" }
             unstagedChanges = snapshot.changes.filter { $0.stage == "unstaged" }
@@ -86,6 +90,20 @@ import Observation
         }
     }
 
+    func selectRoot(id: String?) async {
+        guard !Task.isCancelled, let workspaceId else { return }
+        guard id == nil || roots.contains(where: { $0.id == id }) else {
+            repositoryErrorMessage = "This repository is no longer available. Refresh the repository list."
+            return
+        }
+        guard selectedRootId != id else { return }
+        revision &+= 1
+        selectedRootId = id
+        refreshQueued = false
+        clearRows()
+        await refresh(workspaceId: workspaceId)
+    }
+
     func loadMoreCommits() async {
         guard !Task.isCancelled, !isLoading, !isLoadingMore,
               let workspaceId, let token = nextToken else { return }
@@ -95,7 +113,7 @@ import Observation
             if revision == requestRevision { isLoadingMore = false }
         }
         do {
-            let page = try await fetchCommits(workspaceId: workspaceId, nextToken: token)
+            let page = try await fetchCommits(workspaceId: workspaceId, root: selectedRoot, nextToken: token)
             guard owns(requestRevision), !Task.isCancelled else { return }
             // A rebase may move the boundary while a page is loading. Restart the bounded walk.
             guard page.boundarySha == boundarySha else {
@@ -112,13 +130,33 @@ import Observation
         }
     }
 
-    private func fetchCommits(workspaceId: String, nextToken: String? = nil) async throws -> WorkspaceCommitPage {
+    private func fetchChanges(workspaceId: String, root: WorkspaceGitRoot?) async throws -> WorkspaceChangesSnapshot {
+        var params: [String: Any] = ["workspaceId": workspaceId]
+        if let root {
+            params["gitRootId"] = root.id
+            let result = try await connectionManager.request("git.status", params: params)
+            return try WorkspaceChangesSnapshot(result, rootId: root.id)
+        }
+        let result = try await connectionManager.request("file-tracking.getChanges", params: params)
+        return try WorkspaceChangesSnapshot(result)
+    }
+
+    private func fetchCommits(
+        workspaceId: String,
+        root: WorkspaceGitRoot?,
+        nextToken: String? = nil
+    ) async throws -> WorkspaceCommitPage {
         var params: [String: Any] = [
             "workspaceId": workspaceId,
-            "limit": Self.pageSize,
-            "includeOlder": false
+            "limit": Self.pageSize
         ]
         if let nextToken { params["nextToken"] = nextToken }
+        if let root {
+            params["gitRootId"] = root.id
+            let result = try await connectionManager.request("git.commits", params: params)
+            return try WorkspaceCommitPage(result, root: root)
+        }
+        params["includeOlder"] = false
         let result = try await connectionManager.request("file-tracking.loadCommits", params: params)
         return try WorkspaceCommitPage(result)
     }
@@ -151,6 +189,13 @@ import Observation
         if let subscriptionId { Self.release(subscriptionId, via: connectionManager) }
         subscriptionId = nil
         workspaceId = nil
+        roots = []
+        selectedRootId = nil
+        repositoryErrorMessage = nil
+        clearRows()
+    }
+
+    private func clearRows() {
         stagedChanges = []
         unstagedChanges = []
         commits = []
@@ -201,7 +246,7 @@ extension WorkspaceChangesStore {
         do {
             let result = try await connectionManager.request("events.subscribe", params: [
                 "workspaceId": workspaceId,
-                "eventTypes": ["changes:tracked", "changes:git-status", "git:*"],
+                "eventTypes": ["changes:tracked", "changes:git-status", "git:*", "gitRoot:*"],
                 "replaceGroup": replaceGroup
             ])
             guard let dictionary = result as? [String: Any],
@@ -227,12 +272,17 @@ extension WorkspaceChangesStore {
         let event = envelope["event"] as? [String: Any] ?? envelope
         let data = event["data"] as? [String: Any] ?? [:]
         guard let type = event["type"] as? String,
-              type == "changes:tracked" || type == "changes:git-status" || type.hasPrefix("git:"),
+              type == "changes:tracked" || type == "changes:git-status"
+              || type.hasPrefix("git:") || type.hasPrefix("gitRoot:"),
               (data["workspaceId"] as? String ?? event["workspaceId"] as? String) == workspaceId else { return }
         if let subscriptionId, let receivedId = envelope["subscriptionId"] as? String,
            receivedId != subscriptionId { return }
-        // Registered secondary git roots are not the primary-worktree list shown here.
-        guard data["gitRootId"] as? String == nil else { return }
+        // Inventory events may remove the selection or change its branch/boundary metadata.
+        guard type.hasPrefix("gitRoot:") || data["gitRootId"] as? String == selectedRootId else { return }
+        queueRefresh(workspaceId: workspaceId)
+    }
+
+    private func queueRefresh(workspaceId: String) {
         revision &+= 1
         isLoadingMore = false
         refreshQueued = true
@@ -255,6 +305,26 @@ extension WorkspaceChangesStore {
             } catch {
                 AppLog.workspace.error("[WorkspaceChangesStore] events.unsubscribe failed: \(error)")
             }
+        }
+    }
+}
+
+extension WorkspaceChangesStore {
+    private func refreshRoots(workspaceId: String, requestRevision: Int) async {
+        do {
+            let result = try await connectionManager.request("gitRoot.list", params: ["workspaceId": workspaceId])
+            guard owns(requestRevision), !Task.isCancelled else { return }
+            roots = try WorkspaceGitRoot.parseList(result)
+            repositoryErrorMessage = nil
+            if selectedRootId != nil, selectedRoot == nil {
+                selectedRootId = nil
+                clearRows()
+                isLoading = true
+            }
+        } catch {
+            guard owns(requestRevision), !Task.isCancelled, !(error is CancellationError) else { return }
+            // An inventory outage must not erase known roots or prevent the primary snapshot from loading.
+            repositoryErrorMessage = "Could not load repositories: \(error.localizedDescription)"
         }
     }
 }

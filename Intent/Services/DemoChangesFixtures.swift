@@ -4,6 +4,7 @@ enum DemoChangesFixtures {
     static let commitHash = "a12bc34de56f789012345678901234567890abcdef"
 
     static func response(for method: String, params: [String: Any]) -> Any? {
+        if let response = DemoChangesRootFixtures.response(for: method, params: params) { return response }
         switch method {
         case "file-tracking.getChanges":
             return [

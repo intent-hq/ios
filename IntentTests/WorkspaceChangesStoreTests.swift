@@ -8,6 +8,7 @@ struct WorkspaceChangesStoreTests {
         let fake = FakeConnectionManager()
         fake.responseMap["events.subscribe"] = ["subscriptionId": "changes-subscription"]
         fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["gitRoot.list"] = ["gitRoots": [] as [[String: Any]]]
         fake.responseMap["file-tracking.getChanges"] = WorkspaceChangesFixture.snapshot()
         fake.responseMap["file-tracking.loadCommits"] = WorkspaceChangesFixture.page()
         return fake
@@ -130,7 +131,7 @@ struct WorkspaceChangesStoreTests {
         #expect(fake.requestLog.first?.method == "events.subscribe")
         let params = try #require(fake.paramsForMethod("events.subscribe").first)
         #expect(params["workspaceId"] as? String == "workspace-1")
-        #expect(params["eventTypes"] as? [String] == ["changes:tracked", "changes:git-status", "git:*"])
+        #expect(params["eventTypes"] as? [String] == ["changes:tracked", "changes:git-status", "git:*", "gitRoot:*"])
         #expect(fake.eventHandlerCount == 1)
         fake.responseMap["file-tracking.loadCommits"] = WorkspaceChangesFixture.page(["after-reconnect"])
         fake.simulateDisconnect()
