@@ -143,9 +143,10 @@ struct ConversationTranscriptViewportAnchor {
     private mutating func recordRestorationEvent(_ event: String) {
         restorationEvents.append(event)
         if restorationEvents.count > Self.maximumRestorationEvents {
-            // Retain the saved position and native write receipt even when
+            // Retain the saved position and application receipt even when
             // later layout produces more samples than the bounded history.
-            restorationEvents.remove(at: restorationEvents[1].hasPrefix("write ") ? 2 : 1)
+            let isApplication = restorationEvents[1].hasPrefix("write ") || restorationEvents[1].hasPrefix("align ")
+            restorationEvents.remove(at: isApplication ? 2 : 1)
         }
     }
 
@@ -155,7 +156,18 @@ struct ConversationTranscriptViewportAnchor {
         recordRestorationEvent("write before=\(before) requested=\(requested) actual=\(String(describing: actual)) accepted=\(accepted)")
     }
 
+    mutating func recordRestorationAlignment(anchorY: CGFloat, rowY: CGFloat, before: CGFloat, immediate: CGFloat?) {
+        guard restorationTarget != nil else { return }
+        restorationEvents.removeAll { $0.hasPrefix("align ") }
+        recordRestorationEvent("align anchor=\(anchorY) targetY=\(rowY) before=\(before) immediate=\(String(describing: immediate))")
+    }
+
     var hasPendingRetainedRestoration: Bool { pending?.isReappearance == true }
+
+    func retainedRestorationPosition(generation: Int) -> Position? {
+        guard let pending, pending.isReappearance, pending.generation == generation else { return nil }
+        return Position(id: pending.id, minY: pending.minY)
+    }
 
     private mutating func canConsumeRestoration(
         _ measurement: Measurement,
