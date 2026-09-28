@@ -53,8 +53,8 @@ struct ComposerDraftBindingTests {
         try await waitUntil { editor.text == model.messageText }
         #expect(editor.text == "Recovered after a failed send")
         model.messageText = ""
-        try await waitUntil { editor.text == "" }
-        #expect(editor.text == "")
+        try await waitUntil { editor.text.isEmpty }
+        #expect(editor.text.isEmpty)
         editor.insertText("Next draft")
         #expect(model.messageText == "Next draft")
     }
