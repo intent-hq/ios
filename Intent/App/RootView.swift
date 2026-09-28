@@ -157,7 +157,6 @@ struct RootView: View {
             .modifier(WorkspaceActionLauncher(
                 isSearching: isSearchingWorkspaces,
                 alignment: .trailing,
-                conversationBottomClearance: AssistantLaunchButton.scrollClearance,
                 onCreateWorkspace: { showingCreateWorkspace = true },
                 onConnections: { showingConnections = true }
             ))

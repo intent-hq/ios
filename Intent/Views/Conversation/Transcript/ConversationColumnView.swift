@@ -7,7 +7,6 @@ struct ConversationColumnView: View {
     var usesWorkspaceDesign = false
 
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.workspaceActionMenuBottomClearance) private var menuBottomClearance
     @State private var questionWizardCollapsed = false
     @State private var conversationHeight: CGFloat = 0
     @State private var composerHeight: CGFloat = 0
@@ -35,7 +34,6 @@ struct ConversationColumnView: View {
         } action: { height in
             conversationHeight = height
         }
-        .padding(.bottom, menuBottomClearance)
         .onChange(of: viewModel.pendingQuestions?.messageId) { _, newId in
             questionWizardCollapsed = false
             #if os(visionOS)
@@ -130,6 +128,7 @@ struct ConversationColumnView: View {
             .padding(.horizontal, usesWorkspaceDesign ? composerHorizontalInset : 0)
             .padding(.vertical, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
+            .anchorPreference(key: WorkspaceActionMenuComposerBounds.self, value: .bounds) { $0 }
         }
     }
 
