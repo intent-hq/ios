@@ -38,12 +38,17 @@ struct SpecialistPickerView: View {
 
     /// Pickable specialists in daemon order (`modalPickable`).
     private var specialists: [SpecialistInfo] { optionsStore.specialists.modalPickable }
-    private var providers: [ProviderInfo] { optionsStore.providers }
+    private var providerOptions: WorkspaceProviderOptions { optionsStore.workspaceProviderOptions }
+    private var providers: [ProviderInfo] { providerOptions.providers }
     /// The selected provider's cached catalog; empty until loaded. An
     /// older provider's response can only land in its own cache slot, so
     /// it never presents as the current selection's list.
     private var models: [ModelInfo] {
-        selectedProvider.flatMap { optionsStore.models(for: $0.id) } ?? []
+        Self.selectableModels(
+            provider: selectedProvider,
+            providers: providers,
+            models: selectedProvider.flatMap { optionsStore.models(for: $0.id) } ?? []
+        )
     }
     /// Derived from the store, never a local snapshot: a cache that warms
     /// between construction and the step's load drops the loading state on
@@ -61,6 +66,16 @@ struct SpecialistPickerView: View {
         return Self.showsModelsLoading(
             catalog: optionsStore.models(for: provider.id),
             settled: settledLoads.modelProviders.contains(provider.id)
+        )
+    }
+
+    private var canSubmitSelection: Bool {
+        !Self.isCreateDisabled(
+            hasSpecialist: selectedSpecialist != nil,
+            isCreating: false,
+            isLoadingOptions: isLoadingOptions || providerOptions.isLoading || isLoadingModels,
+            providers: providers,
+            selectedProvider: selectedProvider
         )
     }
 
@@ -83,10 +98,11 @@ struct SpecialistPickerView: View {
         .onChange(of: optionsStore.specialists) { _, _ in
             reconcileSpecialistSelection()
         }
-        .onChange(of: optionsStore.providers) { _, _ in
+        .onChange(of: providerOptions.state) { _, _ in
             Task { await reconcileProviderSelection() }
         }
         .onChange(of: models) { _, models in
+            guard !providerOptions.isLoading else { return }
             selectedModel = CreationSelectionPolicy.reconciledModel(current: selectedModel, models: models)
         }
         // A user pick in the Provider menu: an explicit model never survives
@@ -96,7 +112,7 @@ struct SpecialistPickerView: View {
             guard catalogIsVisible else { return }
             optionsStore.selectModelProvider(selectedProvider?.id, consumer: catalogConsumer)
             selectedModel = nil
-            if let provider = selectedProvider {
+            if let provider = selectedProvider, providers.contains(provider), provider.isSelectable {
                 Task { await loadModels(for: provider) }
             }
         }
@@ -139,21 +155,17 @@ struct SpecialistPickerView: View {
     private var providerModelStep: some View {
         ProviderModelStepView(
             providers: providers,
-            isLoadingProviders: isLoadingOptions,
+            isLoadingProviders: isLoadingOptions || providerOptions.isLoading,
+            providerGuidance: providerOptions.guidance,
             selectedProvider: $selectedProvider,
             models: models,
             isLoadingModels: isLoadingModels,
             selectedModel: $selectedModel,
             selectedSpecialist: selectedSpecialist,
             isCreating: isCreating,
-            isCreateDisabled: Self.isCreateDisabled(
-                hasSpecialist: selectedSpecialist != nil,
-                isCreating: isCreating,
-                isLoadingProviders: isLoadingOptions,
-                isLoadingModels: isLoadingModels,
-                providers: providers
-            ),
+            isCreateDisabled: isCreating || !canSubmitSelection,
             colorScheme: colorScheme,
+            onRetryProviders: { Task { await loadProviderOptions() } },
             onCreate: createSelectedAgent
         )
         .alert("Error", isPresented: $showError) {
@@ -163,7 +175,7 @@ struct SpecialistPickerView: View {
         }
         .task {
             await loadOptions()
-            await reconcileProviderSelection()
+            await loadProviderOptions()
         }
     }
 
@@ -210,17 +222,20 @@ struct SpecialistPickerView: View {
     /// when cold. An explicit model never survives a provider switch.
     private func reconcileProviderSelection() async {
         guard catalogIsVisible else { return }
-        let previousProviderId = selectedProvider?.id
-        selectedProvider = CreationSelectionPolicy.preselectedProvider(
-            current: selectedProvider,
-            providers: providers
+        CreationSelectionPolicy.reconcileWorkspaceProvider(
+            provider: &selectedProvider,
+            model: &selectedModel,
+            state: providerOptions.state
         )
-        guard let provider = selectedProvider else {
-            selectedModel = nil
-            return
-        }
-        if provider.id != previousProviderId { selectedModel = nil }
+        optionsStore.selectModelProvider(selectedProvider?.id, consumer: catalogConsumer)
+        guard !providerOptions.isLoading, let provider = selectedProvider else { return }
         await loadModels(for: provider)
+    }
+
+    private func loadProviderOptions() async {
+        guard catalogIsVisible, !Task.isCancelled else { return }
+        await providerOptions.load()
+        await reconcileProviderSelection()
     }
 
     private func loadModels(for provider: ProviderInfo) async {
@@ -258,14 +273,18 @@ struct SpecialistPickerView: View {
     }
 
     private func createAgentWithSpecialist(_ specialist: SpecialistInfo) {
-        guard !isCreating else { return }
+        guard !isCreating, canSubmitSelection else { return }
         isCreating = true
 
         Task { @MainActor in
+            guard canSubmitSelection else {
+                isCreating = false
+                return
+            }
             do {
                 let selection = Self.buildCreateAgentSelection(
                     provider: selectedProvider,
-                    model: selectedModel
+                    model: CreationSelectionPolicy.reconciledModel(current: selectedModel, models: models)
                 )
                 let agent = try await agentStore.createAgent(
                     workspaceId: workspaceId,

@@ -6,6 +6,8 @@ import Observation
 /// independent of the creation picker's explicit provider/auth refreshes.
 @MainActor
 @Observable class CreationOptionsStore {
+    /// Host enablement for workspace and agent creation; conversation model
+    /// menus can still load catalogs for existing agents on disabled providers.
     let workspaceProviderOptions: WorkspaceProviderOptions
     var specialists: [SpecialistInfo] { specialistCatalog.value ?? [] }
     var providers: [ProviderInfo] = []

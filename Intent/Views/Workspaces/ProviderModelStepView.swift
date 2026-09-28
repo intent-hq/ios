@@ -3,6 +3,7 @@ import SwiftUI
 struct ProviderModelStepView: View {
     let providers: [ProviderInfo]
     let isLoadingProviders: Bool
+    let providerGuidance: String?
     @Binding var selectedProvider: ProviderInfo?
     let models: [ModelInfo]
     let isLoadingModels: Bool
@@ -11,6 +12,7 @@ struct ProviderModelStepView: View {
     let isCreating: Bool
     let isCreateDisabled: Bool
     let colorScheme: ColorScheme
+    let onRetryProviders: () -> Void
     let onCreate: () -> Void
 
     var body: some View {
@@ -38,6 +40,19 @@ struct ProviderModelStepView: View {
                 Text("Loading providers...").interFont(Constants.Typography.bodyS)
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        } else if let providerGuidance {
+            List {
+                Section {
+                    Text(providerGuidance)
+                        .interFont(Constants.Typography.bodyXS)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    Button("Retry", action: onRetryProviders)
+                        .interFont(Constants.Typography.bodyS)
+                }
+                .listRowBackground(Theme.card(for: colorScheme))
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
         } else if providers.noneSelectable {
             noSelectableProvidersList
         } else {
@@ -70,14 +85,7 @@ struct ProviderModelStepView: View {
     @ViewBuilder
     private var providerSection: some View {
         Section {
-            if providers.isEmpty {
-                Text("No providers found — the default provider will be used.")
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .listRowBackground(Theme.card(for: colorScheme))
-            } else {
-                providerPicker
-            }
+            providerPicker
         } header: {
             Text("Provider").interFont(Constants.Typography.eyebrow)
         }
@@ -94,7 +102,8 @@ struct ProviderModelStepView: View {
     }
 
     private func selectProvider(_ provider: ProviderInfo) {
-        guard provider.isSelectable else { return }
+        guard providers.contains(provider), provider.isSelectable, provider.id != selectedProvider?.id else { return }
+        selectedModel = nil
         selectedProvider = provider
     }
 

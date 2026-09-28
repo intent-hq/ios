@@ -67,9 +67,9 @@ extension SpecialistPickerSelectionTests {
             !SpecialistPickerView.isCreateDisabled(
                 hasSpecialist: true,
                 isCreating: false,
-                isLoadingProviders: false,
-                isLoadingModels: false,
-                providers: store.providers
+                isLoadingOptions: false,
+                providers: store.providers,
+                selectedProvider: provider
             )
         )
         // Nothing was fetched to render the cached lists.
@@ -97,9 +97,9 @@ extension SpecialistPickerSelectionTests {
             SpecialistPickerView.isCreateDisabled(
                 hasSpecialist: false,
                 isCreating: false,
-                isLoadingProviders: true,
-                isLoadingModels: true,
-                providers: store.providers
+                isLoadingOptions: true,
+                providers: store.providers,
+                selectedProvider: nil
             )
         )
 
@@ -141,9 +141,9 @@ extension SpecialistPickerSelectionTests {
             !SpecialistPickerView.isCreateDisabled(
                 hasSpecialist: true,
                 isCreating: false,
-                isLoadingProviders: false,
-                isLoadingModels: false,
-                providers: store.providers
+                isLoadingOptions: false,
+                providers: store.providers,
+                selectedProvider: store.providers.first
             )
         )
     }
@@ -229,13 +229,14 @@ extension SpecialistPickerSelectionTests {
             settled: settled.modelProviders.contains("auggie")
         )
         #expect(loadingAfterOld)
+        let provider = ProviderInfo(id: "auggie", authenticated: true)
         #expect(
             SpecialistPickerView.isCreateDisabled(
                 hasSpecialist: true,
                 isCreating: false,
-                isLoadingProviders: false,
-                isLoadingModels: loadingAfterOld,
-                providers: store.providers
+                isLoadingOptions: loadingAfterOld,
+                providers: [provider],
+                selectedProvider: provider
             )
         )
     }
