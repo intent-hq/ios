@@ -33,7 +33,12 @@ and `test-ios-unit`). Each selector must resolve to a runnable `Target[/Suite[/t
 executes nothing, and 83 when the selection cannot be verified. `gh workflow run
 ci.yml --repo intent-hq/ios --ref <branch> -f only_testing='IntentTests/SomeTests'`
 runs the same filter in CI as a non-gating `iOS Filtered Tests` job, with the
-per-selector table in the job summary. iOS builds link the gitignored prebuilt
+per-selector table in the job summary. In CI, pull requests and the merge queue
+run only the UI smoke selectors in `scripts/ui-smoke-tests.txt` (keep it to a few
+fast tests per core flow and update it when renaming a listed test); the full
+`IntentUITests` bundle runs on `main` at 09:00 and 21:00 UTC as `iOS UI Tests (full)`,
+and on any branch with `gh workflow run ci.yml --repo intent-hq/ios --ref <branch>
+-f ui_suite=full`. iOS builds link the gitignored prebuilt
 `TailcatKit/build/TailcatKit.xcframework`: `scripts/xcodebuild.sh` builds it via
 `TailcatKit/build_xcframework.sh` when Go is on PATH and otherwise exits naming that
 script; `TAILCATKIT_AUTOBUILD=0` disables the auto-build.

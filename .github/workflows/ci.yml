@@ -10,11 +10,29 @@ name: CI
 # "iOS Filtered Tests (non-gating)", so a filtered green can never satisfy
 # the ruleset-required "iOS Build & Test" check. pull_request runs never
 # receive a filter.
+# UI tests come in two tiers. Pull requests and the merge queue run only the
+# smoke selectors in scripts/ui-smoke-tests.txt (a few minutes); the full
+# IntentUITests bundle (about an hour) runs on the schedule below, which
+# GitHub fires only on the default branch, and on a manual dispatch with
+# ui_suite=full. The scheduled run is the only push-independent run on main.
 on:
   pull_request:
   merge_group:
+  schedule:
+    - cron: '0 9 * * *'
+    - cron: '0 21 * * *'
   workflow_dispatch:
     inputs:
+      ui_suite:
+        description: >-
+          UI tests to run in the iOS UI Tests job: smoke runs
+          scripts/ui-smoke-tests.txt, full runs the whole IntentUITests
+          bundle. Ignored when only_testing is set.
+        type: choice
+        options:
+          - smoke
+          - full
+        default: smoke
       only_testing:
         description: >-
           Whitespace-separated Target[/Suite[/test]] identifiers passed to
@@ -499,9 +517,11 @@ jobs:
           exit 1
 
   ios-ui-tests:
-    name: iOS UI Tests
-    # Pull requests and unfiltered manual runs exercise the complete UI bundle.
-    # Filtered dispatches already run their requested selector in build-and-test.
+    name: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && 'iOS UI Tests (full)' || 'iOS UI Tests' }}
+    # Pull requests, the merge queue and smoke dispatches run the selectors in
+    # scripts/ui-smoke-tests.txt; the schedule and ui_suite=full dispatches
+    # run the complete UI bundle. Filtered dispatches already run their
+    # requested selector in build-and-test.
     # A human adds this check to the ruleset after merge; build-and-test does not
     # wait for it; the macOS jobs queue on the dedicated Mac.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
@@ -589,8 +609,17 @@ jobs:
 
       - name: Run UI tests
         env:
-          ONLY_TESTING: IntentUITests
-        run: scripts/xcodebuild.sh test-without-building
+          FULL_UI_SUITE: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && '1' || '' }}
+        run: |
+          if [ -n "$FULL_UI_SUITE" ]; then
+            export ONLY_TESTING=IntentUITests
+            echo "UI tests: full IntentUITests bundle" >> "$GITHUB_STEP_SUMMARY"
+          else
+            ONLY_TESTING=$(sed -e 's/#.*//' scripts/ui-smoke-tests.txt | xargs)
+            export ONLY_TESTING
+            echo "UI tests: smoke list (scripts/ui-smoke-tests.txt)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          scripts/xcodebuild.sh test-without-building
 
       - name: Upload UI test results
         if: failure()
