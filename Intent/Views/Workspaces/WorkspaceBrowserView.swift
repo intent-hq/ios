@@ -20,6 +20,11 @@ struct WorkspaceBrowserView: View {
     var body: some View {
         NavigationStack {
             browserContent
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                addressBar
+                    .padding(.top, BrowserAppearance.rowSpacing)
+                    .background(Theme.background(for: colorScheme))
+            }
             .background(Theme.background(for: colorScheme))
             .navigationTitle(page.title.isEmpty ? "Browser" : page.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -41,7 +46,6 @@ struct WorkspaceBrowserView: View {
 
     private var browserContent: some View {
         VStack(spacing: 0) {
-            addressBar
             if !isConnected {
                 unavailable("Reconnect to your machine to open this browser.")
             } else if let errorMessage = page.errorMessage {

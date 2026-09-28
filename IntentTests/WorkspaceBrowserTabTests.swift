@@ -24,7 +24,9 @@ struct WorkspaceBrowserTabTests {
         let persistence = WorkspaceBrowserPersistence(backendID: fixture.backendID, defaults: fixture.defaults)
         #expect(persistence.load().isEmpty)
         fixture.store.remove(browser)
-        #expect(fixture.store.browsers(workspaceId: "workspace") == [browser])
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
         #expect(!fixture.fake.didCallMethod("browser.closeTab"))
         #expect(!fixture.fake.didCallMethod("browser.removeTab"))
     }
@@ -144,5 +146,65 @@ struct WorkspaceBrowserTabTests {
         fixture.fake.responseMap["script.list"] = ["scripts": []]
         await fixture.store.refresh(workspaceId: "workspace")
         #expect(fixture.store.browsers(workspaceId: "workspace") == [saved, otherPath])
+    }
+
+    @Test func deletingAMergedRowDismissesItsSourcesWithoutHidingOtherRoutes() async throws {
+        let fixture = try WorkspaceBrowserFixture()
+        let saved = try fixture.store.create(workspaceId: "workspace", url: "localhost:3000/docs?q=1")
+        _ = try fixture.store.create(workspaceId: "workspace", url: saved.url)
+        let otherQuery = try fixture.store.create(workspaceId: "workspace", url: "localhost:3000/docs?q=2")
+        let otherWorkspace = try fixture.store.create(workspaceId: "other", url: saved.url)
+        fixture.fake.responseMap["script.list"] = ["scripts": [fixture.script()]]
+        fixture.fake.responseMap["browser.listTabs"] = [
+            "tabs": [
+                fixture.tab(url: saved.url), fixture.tab(id: "duplicate", url: saved.url),
+                fixture.tab(id: "settings", url: "localhost:3000/settings")
+            ]
+        ]
+        await fixture.store.refresh(workspaceId: "workspace")
+        let merged = try #require(fixture.store.browsers(workspaceId: "workspace").first)
+        #expect(merged.id == "script:preview")
+        #expect(merged.url == saved.url)
+        fixture.store.remove(merged)
+        #expect(fixture.store.browsers(workspaceId: "workspace").map(\.id) == ["tab:settings", otherQuery.id])
+        let persistence = WorkspaceBrowserPersistence(backendID: fixture.backendID, defaults: fixture.defaults)
+        #expect(persistence.load() == [otherQuery, otherWorkspace])
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.browsers(workspaceId: "workspace").map(\.id) == ["tab:settings", otherQuery.id])
+        fixture.fake.responseMap["script.list"] = ["scripts": []]
+        fixture.event(status: "exited")
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.browsers(workspaceId: "workspace").map(\.id) == ["tab:settings", otherQuery.id])
+        let reopened = try fixture.store.open(workspaceId: "workspace", url: saved.url)
+        #expect(reopened.isSavedSession)
+        #expect(reopened.id != saved.id)
+        #expect(reopened.url == saved.url)
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.browsers(workspaceId: "workspace").last == reopened)
+        #expect(fixture.store.browsers(workspaceId: "other") == [otherWorkspace])
+        #expect(!fixture.fake.didCallMethod("script.stop"))
+        #expect(!fixture.fake.didCallMethod("browser.closeTab"))
+    }
+
+    @Test func deletingATabDuringRefreshPersistsThroughItsOldSnapshotAndLaterEvents() async throws {
+        let fixture = try WorkspaceBrowserFixture()
+        let tab = fixture.tab()
+        fixture.fake.responseMap["browser.listTabs"] = ["tabs": [tab]]
+        await fixture.store.refresh(workspaceId: "workspace")
+        let browser = try #require(fixture.store.browsers(workspaceId: "workspace").first)
+        fixture.fake.pendingMethods.insert("browser.listTabs")
+        let refresh = Task { await fixture.store.refresh(workspaceId: "workspace") }
+        try await fixture.fake.waitForPendingRequests("browser.listTabs")
+        fixture.store.remove(browser)
+        fixture.fake.resolvePending("browser.listTabs", with: ["tabs": [tab]])
+        await refresh.value
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
+        fixture.fake.pendingMethods.remove("browser.listTabs")
+        fixture.tabEvent(tab: tab, type: "browser:tab-updated")
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
+        let restored = WorkspaceBrowserStore(connection: fixture.fake, backendID: fixture.backendID, defaults: fixture.defaults)
+        await restored.refresh(workspaceId: "workspace")
+        #expect(restored.browsers(workspaceId: "workspace").isEmpty)
     }
 }

@@ -32,6 +32,7 @@ final class WorkspaceBrowserStore {
         self.connection = connection
         persistence = WorkspaceBrowserPersistence(backendID: backendID, defaults: defaults)
         saved = persistence.load()
+        dismissed = persistence.loadDismissed()
         isConnected = connection.connectionState == .connected
         eventHandlerId = connection.onEvent { [weak self] method, params in
             self?.handleEvent(method, params: params)
@@ -49,13 +50,13 @@ final class WorkspaceBrowserStore {
     }
 
     func browsers(workspaceId: String) -> [WorkspaceBrowser] {
-        let discovered = WorkspaceBrowser.merging(
-            scripts: detected[workspaceId, default: []],
-            tabs: tabs[workspaceId, default: []]
+        let hiddenIds = dismissed[workspaceId, default: []]
+        // Filter sources first so a dismissed script cannot consume an unrelated
+        // tab during merging, or reappear as a tab once the script stops.
+        let servers = WorkspaceBrowser.merging(
+            scripts: detected[workspaceId, default: []].filter { !hiddenIds.contains($0.id) },
+            tabs: tabs[workspaceId, default: []].filter { !hiddenIds.contains($0.id) }
         )
-        let servers = discovered.filter { browser in
-            !dismissed[workspaceId, default: []].contains(browser.id)
-        }
         let discoveredURLs = Set(servers.map(\.url))
         return servers + saved.filter { $0.workspaceId == workspaceId && !discoveredURLs.contains($0.url) }
     }
@@ -91,9 +92,13 @@ final class WorkspaceBrowserStore {
     }
 
     func remove(_ browser: WorkspaceBrowser) {
-        saved.removeAll { $0.id == browser.id && $0.workspaceId == browser.workspaceId }
-        if browser.command != nil, browser.id.hasPrefix("script:") {
-            dismissed[browser.workspaceId, default: []].insert(browser.id)
+        if browser.isSavedSession {
+            saved.removeAll { $0.id == browser.id && $0.workspaceId == browser.workspaceId }
+        } else {
+            let matchingTabs = tabs[browser.workspaceId, default: []].filter { $0.url == browser.url }
+            dismissed[browser.workspaceId, default: []].formUnion(matchingTabs.map(\.id) + [browser.id])
+            saved.removeAll { $0.workspaceId == browser.workspaceId && $0.url == browser.url }
+            persistence.saveDismissed(dismissed)
         }
         persistence.save(saved)
     }

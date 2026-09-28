@@ -75,5 +75,41 @@ nonisolated final class WorkspaceBrowserUITests: XCTestCase {
         add(screenshot)
         row.tap()
         XCTAssertTrue(done.waitForExistence(timeout: Self.timeout))
+        done.tap()
+        for _ in 0..<3 where !row.isHittable { app.swipeUp() }
+        row.swipeLeft()
+        let deleteButton = app.buttons["Delete browser"].firstMatch
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: Self.timeout))
+        deleteButton.tap()
+        XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    func testSwipingAnAgentBrowserRevealsDeleteWithoutOpeningThePage() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "--demo-browsers"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        workspace.tap()
+        let browser = app.buttons["browser.row.tab:demo-agent-browser"]
+        for _ in 0..<3 where !browser.isHittable { app.swipeUp() }
+        XCTAssertTrue(browser.waitForExistence(timeout: Self.timeout))
+        browser.swipeLeft()
+        let deleteButton = app.buttons["browser.delete.tab:demo-agent-browser"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(deleteButton.isHittable)
+        XCTAssertFalse(app.textFields["Browser URL"].exists)
+        browser.swipeRight()
+        XCTAssertFalse(deleteButton.isHittable)
+        XCTAssertTrue(browser.exists)
+        browser.swipeLeft()
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "workspace-browser-swipe-delete"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        deleteButton.tap()
+        XCTAssertTrue(browser.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["browser.row.script:preview"].exists)
     }
 }

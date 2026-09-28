@@ -160,4 +160,14 @@ final class WorkspaceBrowserPersistence {
         guard let key, let data = try? JSONEncoder().encode(browsers) else { return }
         defaults.set(data, forKey: key)
     }
+
+    func loadDismissed() -> [String: Set<String>] {
+        guard let key, let data = defaults.data(forKey: "\(key).dismissed") else { return [:] }
+        return (try? JSONDecoder().decode([String: Set<String>].self, from: data)) ?? [:]
+    }
+
+    func saveDismissed(_ dismissed: [String: Set<String>]) {
+        guard let key, let data = try? JSONEncoder().encode(dismissed) else { return }
+        defaults.set(data, forKey: "\(key).dismissed")
+    }
 }

@@ -189,4 +189,59 @@ struct WorkspaceBrowserStoreTests {
         #expect(first.id != explicit.id)
         #expect(explicit.url == first.url)
     }
+
+    @Test func discoveredDeletionSurvivesReconnectAndRelaunchWithinItsBackendAndWorkspace() async throws {
+        let fixture = try WorkspaceBrowserFixture()
+        fixture.fake.responseMap["script.list"] = ["scripts": [fixture.script(), fixture.script(workspaceId: "other")]]
+        fixture.fake.responseMap["browser.listTabs"] = ["tabs": [fixture.tab(), fixture.tab(workspaceId: "other")]]
+        await fixture.store.refresh(workspaceId: "workspace")
+        await fixture.store.refresh(workspaceId: "other")
+        let removed = try #require(fixture.store.browsers(workspaceId: "workspace").first)
+        fixture.store.remove(removed)
+        fixture.fake.connectionState = .disconnected
+        fixture.fake.connectionState = .connected
+        await fixture.store.refresh(workspaceId: "workspace")
+        await fixture.store.refresh(workspaceId: "other")
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
+        #expect(fixture.store.browsers(workspaceId: "other").count == 1)
+        let restored = WorkspaceBrowserStore(connection: fixture.fake, backendID: fixture.backendID, defaults: fixture.defaults)
+        await restored.refresh(workspaceId: "workspace")
+        await restored.refresh(workspaceId: "other")
+        #expect(restored.browsers(workspaceId: "workspace").isEmpty)
+        #expect(restored.browsers(workspaceId: "other").count == 1)
+        let otherBackend = WorkspaceBrowserStore(connection: fixture.fake, backendID: BackendID(UUID()), defaults: fixture.defaults)
+        await otherBackend.refresh(workspaceId: "workspace")
+        #expect(otherBackend.browsers(workspaceId: "workspace").first?.id == removed.id)
+        #expect(!fixture.fake.didCallMethod("script.stop"))
+        #expect(!fixture.fake.didCallMethod("browser.closeTab"))
+        #expect(!fixture.fake.didCallMethod("browser.removeTab"))
+    }
+
+    @Test func manualDeletionKeepsOtherExplicitSessionsWithTheSameURL() throws {
+        let fixture = try WorkspaceBrowserFixture()
+        let first = try fixture.store.create(workspaceId: "workspace", url: "localhost:3000/docs")
+        let second = try fixture.store.create(workspaceId: "workspace", url: first.url)
+        let other = try fixture.store.create(workspaceId: "other", url: first.url)
+        fixture.store.remove(first)
+        #expect(fixture.store.browsers(workspaceId: "workspace") == [second])
+        #expect(fixture.store.browsers(workspaceId: "other") == [other])
+        let restored = WorkspaceBrowserStore(connection: fixture.fake, backendID: fixture.backendID, defaults: fixture.defaults)
+        #expect(restored.browsers(workspaceId: "workspace") == [second])
+        #expect(restored.browsers(workspaceId: "other") == [other])
+        #expect(fixture.fake.requestLog.isEmpty)
+    }
+
+    @Test func temporaryBackendDismissalsStayInMemory() async throws {
+        let fixture = try WorkspaceBrowserFixture()
+        fixture.fake.responseMap["script.list"] = ["scripts": [fixture.script()]]
+        let temporary = WorkspaceBrowserStore(connection: fixture.fake, backendID: nil, defaults: fixture.defaults)
+        await temporary.refresh(workspaceId: "workspace")
+        let browser = try #require(temporary.browsers(workspaceId: "workspace").first)
+        temporary.remove(browser)
+        await temporary.refresh(workspaceId: "workspace")
+        #expect(temporary.browsers(workspaceId: "workspace").isEmpty)
+        let reopened = WorkspaceBrowserStore(connection: fixture.fake, backendID: nil, defaults: fixture.defaults)
+        await reopened.refresh(workspaceId: "workspace")
+        #expect(reopened.browsers(workspaceId: "workspace") == [browser])
+    }
 }
