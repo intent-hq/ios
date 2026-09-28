@@ -497,7 +497,7 @@ jobs:
     # wait for it, so both macOS jobs release their runners independently.
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     runs-on: macos-15
-    # Allow setup, the full UI suite, and result finalization (ios#429).
+    # The expanded UI suite can exceed an hour with setup/build; leave time for result export.
     timeout-minutes: 90
     env:
       GIT_TERMINAL_PROMPT: '0'
