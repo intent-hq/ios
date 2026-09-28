@@ -128,10 +128,6 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     }
 }
 
-/// The unread-dot blue (#3B82F6), shared by the row overlay and any other
-/// unread affordances.
-let kWorkspaceUnreadColor = Constants.Colors.WorkspaceStatus.unread
-
 /// True when the workspace carries the server-owned unread attention flag
 /// (the blue dot). `review_required` and `none` don't count — only `unread`
 /// is cleared by opening the workspace (workspace.markSeen).

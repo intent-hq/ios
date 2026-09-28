@@ -244,6 +244,7 @@ $(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusIdle.colorset
 $(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusInProgress.colorset
 $(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusNeedsAttention.colorset
 $(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusNotStarted.colorset
+$(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusNotStartedRing.colorset
 $(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusPrMerged.colorset
 $(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusPrOpen.colorset
 $(SRCROOT)/Intent/Assets.xcassets/WorkspaceStatusPrReady.colorset

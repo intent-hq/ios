@@ -249,12 +249,6 @@ extension Constants.AgentRow {
 
 extension Constants.WorkspaceRow {
     static let rowSpacing: CGFloat = 12
-    static let statusDotSize: CGFloat = 7
-    static let statusDotOffset: CGFloat = 3
-    static let unreadDotStackOffset: CGFloat = 7
-    static let differentiatedStatusCueSize: CGFloat = 12
-    static let differentiatedStatusCueOffset: CGFloat = 4
-    static let differentiatedUnreadStackOffset: CGFloat = 10
     static let titleSpacing: CGFloat = 4
     static let metadataSpacing: CGFloat = 8
     static let pillFontSize: CGFloat = 11
@@ -263,10 +257,9 @@ extension Constants.WorkspaceRow {
     static let pillBackgroundOpacity: Double = 0.12
     static let verticalPadding: CGFloat = 6
     static let horizontalPadding: CGFloat = 4
-    static let statusIconSize: CGFloat = 16
+    static let statusIconSize: CGFloat = 12
     static let statusGlyphScale: CGFloat = 0.5
-    static let statusStrokeWidth: CGFloat = 1.5
-    static let inactiveStatusOpacity: Double = 0.4
+    static let statusRingWidth: CGFloat = 2
     // visionOS attention cue: single-step z-lift + scale on rows needing
     // input, plus a brighter status chip. No continuous animation (HIG).
     #if os(visionOS)

@@ -18,8 +18,6 @@ extension Constants.Settings {
 
 extension Constants.WorkspaceRow {
     nonisolated static let titleLineLimit = 2
-    static let increasedStatusStrokeScale: CGFloat = 1.5
-    static let differentiatedIdleGlyphScale: CGFloat = 0.35
     static let pillBorderWidth: CGFloat = 0.5
     static let increasedContrastPillBorderWidth: CGFloat = 1
 }
