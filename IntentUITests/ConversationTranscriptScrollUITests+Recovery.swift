@@ -2,7 +2,7 @@ import XCTest
 
 // These end-to-end regressions retain staged narratives and observed timeout
 // values so failures identify the exact viewport phase.
-// swiftlint:disable function_body_length no_magic_numbers trailing_newline
+// swiftlint:disable function_body_length no_magic_numbers
 
 extension ConversationTranscriptScrollUITests {
     /// Reproduces #338 by releasing the hooks row immediately after each
@@ -39,6 +39,7 @@ extension ConversationTranscriptScrollUITests {
                 named: "last assistant paragraph",
                 in: opened,
                 context: context,
+                allowPreservedEntry: true,
                 alsoReporting: (endRow.element, endRow.name)
             ) else {
                 attachRecoveryEvidence()
@@ -167,6 +168,7 @@ extension ConversationTranscriptScrollUITests {
             named: "last assistant paragraph",
             in: opened,
             context: recovered,
+            recoveryAfter: baseline.episodes,
             alsoReporting: (endRow.element, endRow.name)
         ) else { return }
         XCTAssertTrue(
@@ -292,6 +294,7 @@ extension ConversationTranscriptScrollUITests {
                 named: "last assistant paragraph",
                 in: opened,
                 context: context,
+                allowPreservedEntry: true,
                 alsoReporting: (endRow.element, endRow.name)
             ) else {
                 leaveConversation(in: app)
@@ -476,4 +479,4 @@ extension ConversationTranscriptScrollUITests {
         return tail.trimmingCharacters(in: CharacterSet(charactersIn: "]"))
     }
 }
-// swiftlint:enable function_body_length no_magic_numbers trailing_newline
+// swiftlint:enable function_body_length no_magic_numbers

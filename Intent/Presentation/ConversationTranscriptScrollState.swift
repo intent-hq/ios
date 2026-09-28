@@ -141,7 +141,17 @@ final class ConversationTranscriptScrollState {
     /// follow, and whether the end row (the `scroll-bottom` marker) is
     /// realized by the lazy stack. Written only through
     /// `Lifecycle.transition`; the view executes the effects.
-    @ObservationIgnored var lifecycle = Lifecycle.State()
+    @ObservationIgnored var lifecycle = Lifecycle.State() {
+        didSet {
+            if lifecycleOwnsViewport != lifecycle.isFollowing {
+                lifecycleOwnsViewport = lifecycle.isFollowing
+            }
+        }
+    }
+    /// Publish ownership changes, including an automatic follow draining after
+    /// recovery. The rest of the reducer's polling state need not redraw the view.
+    private var lifecycleOwnsViewport = false
+    var isFollowing: Bool { lifecycleOwnsViewport || isScrollingToBottom }
     /// The pending follow's debounce and landing loop, keyed by the token
     /// the lifecycle minted for it.
     @ObservationIgnored var followTasks: [Lifecycle.FollowToken: Task<Void, Never>] = [:]
@@ -163,7 +173,7 @@ final class ConversationTranscriptScrollState {
     /// explicit follow request (Go to End, the user's own message), which
     /// takes the viewport from the gesture: the phase ending that follows is
     /// then the request's, not the gesture's final sample.
-    @ObservationIgnored var isUserScrollPhase = false
+    var isUserScrollPhase = false
     /// Latched when a gesture takes over a pending forced follow; while set,
     /// content-raised forced follows are refused (see
     /// `ConversationTranscriptScrollPolicy.forcedFollowTakeoverLatch`).
@@ -173,6 +183,14 @@ final class ConversationTranscriptScrollState {
     /// True while the scheduled entry scroll waits for the finder to resolve.
     var initialScrollAwaitingScrollView = false
     var initialScrollPerformed = false
+    var presentedBeforeEntryMetadata = false
+    private(set) var entryViewportPreserved = false
+    @ObservationIgnored var viewportAnchor = ConversationTranscriptViewportAnchor()
+    @ObservationIgnored private var retainedViewport: ConversationTranscriptViewportAnchor.Position?
+    @ObservationIgnored var pendingEntryDivider: String?
+    /// Publishes ownership changes without observing every row measurement.
+    private(set) var viewportOwnershipRevision = 0
+    @ObservationIgnored private var viewportGestureActive = false
     /// Invalidates delayed entry-scroll callbacks when an emptied transcript
     /// re-arms entry scrolling for the next snapshot.
     @ObservationIgnored private(set) var initialScrollGeneration = 0
@@ -192,6 +210,8 @@ final class ConversationTranscriptScrollState {
     /// can tell a landed follow from one that gave up with the pin kept
     /// (#304, #305).
     var lastForcedFollowOutcome: ConversationTranscriptScrollPolicy.FollowLandingTerminal?
+    var forcedFollowRequestCount = 0
+    var hasRequestedForcedFollow: Bool { forcedFollowRequestCount > 0 }
     /// Corrections (scroll again / clamp) the last forced follow has spent.
     var lastForcedFollowCorrections = 0
     /// How the last unrealized-end recovery episode ended (#338): recorded
@@ -215,13 +235,93 @@ final class ConversationTranscriptScrollState {
     /// withdraw the row again.
     @ObservationIgnored var demoEndDerealizationTriggered = false
 
-    func rearmAfterTranscriptEmptied() {
+    /// Visible content and user gestures take priority over late entry metadata.
+    /// Invalidate scheduled entry callbacks, but retain the authoritative divider.
+    func preservePresentedViewport(distanceToBottom: CGFloat?) {
+        guard !hasInitiallyScrolled else { return }
         initialScrollGeneration += 1
+        initialScrollScheduled = true
+        initialScrollAwaitingScrollView = false
+        initialScrollPerformed = true
+        hasInitiallyScrolled = true
+        entryViewportPreserved = true
+        userIsScrolledAway = NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: distanceToBottom)
+    }
+
+    func observeViewportGesture(isInteracting: Bool) {
+        guard viewportGestureActive != isInteracting else { return }
+        viewportGestureActive = isInteracting
+        if isInteracting {
+            retainedViewport = nil
+            pendingEntryDivider = nil
+            viewportAnchor.cancelRestoration()
+            viewportOwnershipRevision = viewportAnchor.ownershipRevision
+        }
+    }
+
+    /// An explicit follow or disappearance retires even callbacks that have
+    /// been captured but have not yet created a pending adjustment.
+    func retireViewportRestoration() {
+        retainedViewport = nil
+        pendingEntryDivider = nil
+        viewportGestureActive = false
+        viewportAnchor.cancelRestoration()
+        viewportOwnershipRevision = viewportAnchor.ownershipRevision
+    }
+
+    func suspendViewport() {
+        let position = hasInitiallyScrolled ? viewportAnchor.visiblePosition : nil
+        retireViewportRestoration()
+        retainedViewport = position
+    }
+
+    func entryDividerAdjustment(_ measurement: ConversationTranscriptViewportAnchor.Measurement, viewportHeight: CGFloat) -> CGFloat? {
+        guard pendingEntryDivider != nil, pendingEntryDivider == measurement.divider,
+              measurement.generation == initialScrollGeneration,
+              measurement.ownershipRevision == viewportOwnershipRevision,
+              measurement.frame.height > 0, measurement.frame.minY >= 0,
+              measurement.frame.maxY <= viewportHeight else { return nil }
+        pendingEntryDivider = nil
+        return measurement.frame.minY
+    }
+
+    func resumeViewportTarget() -> String? {
+        guard let position = retainedViewport else { return nil }
+        retainedViewport = nil
+        // The rehosted view must measure afresh; a callback captured while
+        // covered cannot consume this new restoration.
+        viewportAnchor.cancelRestoration()
+        viewportOwnershipRevision = viewportAnchor.ownershipRevision
+        viewportAnchor.restore(position, generation: initialScrollGeneration)
+        return position.id
+    }
+
+    func retainedViewportScrollIssued(target: String, generation: Int, ownershipRevision: Int) {
+        guard generation == initialScrollGeneration else { return }
+        viewportAnchor.retainedScrollIssued(target: target, generation: generation, ownershipRevision: ownershipRevision)
+        viewportOwnershipRevision = viewportAnchor.ownershipRevision
+    }
+
+    func retainViewportMessages(withIDs messageIDs: Set<String>) {
+        if let retainedViewport, !messageIDs.contains(retainedViewport.id) { self.retainedViewport = nil }
+        viewportAnchor.retainMessages(withIDs: messageIDs)
+        viewportOwnershipRevision = viewportAnchor.ownershipRevision
+    }
+
+    func rearmAfterTranscriptEmptied() {
+        retainedViewport = nil
+        initialScrollGeneration += 1
+        pendingEntryDivider = nil
         userIsScrolledAway = false
         hasInitiallyScrolled = false
         initialScrollScheduled = false
         initialScrollAwaitingScrollView = false
         initialScrollPerformed = false
+        presentedBeforeEntryMetadata = false
+        entryViewportPreserved = false
+        viewportGestureActive = false
+        viewportAnchor.reset()
+        viewportOwnershipRevision = viewportAnchor.ownershipRevision
         forcedFollowTakenOverByGesture = false
         isScrollingToBottom = false
         goToEndRequested = false

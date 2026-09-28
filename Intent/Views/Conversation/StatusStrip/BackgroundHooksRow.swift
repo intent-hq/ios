@@ -33,6 +33,16 @@ struct BackgroundHooksRow: View {
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
 
+                if hookStore.error != nil {
+                    Button {
+                        Task { await hookStore.refetch() }
+                    } label: {
+                        Label("Status unavailable · Retry", systemImage: "exclamationmark.triangle")
+                    }
+                    .font(.caption2)
+                    .accessibilityLabel("Hooks may be out of date. Retry refresh")
+                }
+
                 ForEach(hookStore.activeHooks.filter { $0.agentId == viewModel.agentId }) { hook in
                     hookChip(hook)
                 }

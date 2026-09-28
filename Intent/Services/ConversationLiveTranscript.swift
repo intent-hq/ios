@@ -76,6 +76,11 @@ final class ConversationLiveTranscript {
     @ObservationIgnored var chatSubscriptionId: String?
     var chatChannelActive = false
     var chatSeeded = false
+    /// Only the latest accepted snapshot can enable fragment appends.
+    @ObservationIgnored var incrementalDeltas = false
+    /// A known encoding-parameter rejection is remembered for this connection;
+    /// reconnect/reset clears it so a changed daemon can negotiate again.
+    @ObservationIgnored var useFullDeltaEncoding = false
     private var chatExpectedSeq = 0
     /// Registration whose gap / rejected-empty-snapshot recovery is scheduled
     /// or in flight. Recovery is owned per registration: it validates this
@@ -144,6 +149,7 @@ extension ConversationLiveTranscript {
         if hydratedBlocks[key] != nil || hydratingBlockKeys.contains(key) { return }
         hydratingBlockKeys.insert(key)
         defer { hydratingBlockKeys.remove(key) }
+        let stateVersion = liveStateVersion
 
         do {
             let decoded = try await whileBound {
@@ -164,6 +170,9 @@ extension ConversationLiveTranscript {
                 )
                 return
             }
+            // A text read begun before a live update cannot erase fragments
+            // or an authoritative replacement that arrived while it waited.
+            if block.type == .text || block.type == .thinking, stateVersion != liveStateVersion { return }
             storeHydratedBlock(block, forKey: key)
             remergeHydratedBlocks()
         } catch {
@@ -180,6 +189,23 @@ extension ConversationLiveTranscript {
         hydratedBlocks[key] = block
         while hydratedBlockOrder.count > Self.maxHydratedBlocks {
             hydratedBlocks.removeValue(forKey: hydratedBlockOrder.removeFirst())
+        }
+    }
+
+    /// Hydration may expand a partial text body, but a later live update or
+    /// snapshot owns that text. Tool/image previews still keep their full body.
+    private func discardHydratedText(_ block: ContentBlock, messageId: String) {
+        guard block.type == .text || block.type == .thinking else { return }
+        let key = Self.hydratedBlockKey(messageId: messageId, blockId: block.id)
+        guard hydratedBlocks.removeValue(forKey: key) != nil else { return }
+        hydratedBlockOrder.removeAll { $0 == key }
+    }
+
+    private func discardHydratedText(in messages: [ConversationMessage]) {
+        for message in messages {
+            for block in message.contentBlocks {
+                discardHydratedText(block, messageId: message.id)
+            }
         }
     }
 
@@ -208,6 +234,7 @@ extension ConversationLiveTranscript {
     func setTestChannel(subscriptionId: String) {
         chatChannelActive = true
         chatSeeded = false
+        incrementalDeltas = false
         chatSubscriptionId = subscriptionId
     }
 
@@ -270,6 +297,7 @@ extension ConversationLiveTranscript {
         }
         chatLive = true
         chatSeeded = true
+        incrementalDeltas = push.snapshotMeta?["deltaEncoding"] as? String == "incremental"
         snapshotPending = false
         chatExpectedSeq = push.seq + 1
         liveStateVersion &+= 1
@@ -277,6 +305,7 @@ extension ConversationLiveTranscript {
         // `parse` pre-decodes off MainActor; the fallback covers pushes built
         // directly from raw dictionaries (tests).
         messages = snapshotMessages
+        discardHydratedText(in: snapshotMessages)
         remergeHydratedBlocks()
 
         isTruncated = push.snapshotMeta?["truncated"] as? Bool ?? false
@@ -299,8 +328,8 @@ extension ConversationLiveTranscript {
         liveStateVersion &+= 1
         var sawTerminal = false
         var sawUpsert = false
-        let entities = delta.chatBlocks
-            ?? (delta.added + delta.updated).compactMap { SubscriptionPush.ChatBlockEntity(entity: $0) }
+        let entities = (delta.chatBlocks ?? SubscriptionPush.ChatBlockEntity.decodeAll(delta.added + delta.updated))
+            .filter { $0.textDelta == nil || incrementalDeltas }
         for entity in entities {
             let result = upsertBlock(entity)
             sawUpsert = sawUpsert || result.applied
@@ -342,7 +371,7 @@ extension ConversationLiveTranscript {
 
     private func upsertBlock(_ entity: SubscriptionPush.ChatBlockEntity) -> (applied: Bool, terminal: Bool) {
         let messageId = entity.messageId
-        let block = entity.block
+        var block = entity.block
         let streamingComplete = entity.streamingComplete
 
         let messageIndex: Int
@@ -366,6 +395,11 @@ extension ConversationLiveTranscript {
             messages[messageIndex].appMessageId = appMessageId
         }
         var blocks = messages[messageIndex].contentBlocks
+        if let fragment = entity.textDelta {
+            let prior = blocks.first { $0.id == block.id }
+            block.text = (prior?.resolvedText ?? "") + fragment
+        }
+        discardHydratedText(block, messageId: messageId)
         if let index = blocks.firstIndex(where: { $0.id == block.id }) {
             blocks[index] = mergedToolUseBlock(prior: blocks[index], incoming: block)
         } else {
@@ -419,6 +453,8 @@ extension ConversationLiveTranscript {
         releaseActiveRegistration()
         chatChannelActive = false
         chatSeeded = false
+        incrementalDeltas = false
+        useFullDeltaEncoding = false
         snapshotPending = false
         chatExpectedSeq = 0
         recoveryGeneration = nil

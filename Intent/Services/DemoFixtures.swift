@@ -29,8 +29,7 @@ enum DemoMode {
 /// `WorkspaceStore.parseWorkspaces`, `note.list` → `Note.parseNote`,
 /// `agent.list` → `AgentSession.parseAgent`, ...).
 ///
-/// Chat subscriptions deliver a fixture snapshot; other stores use the
-/// legacy fetch fallback when no subscription ID is returned.
+/// Chat subscriptions deliver a snapshot; event feeds acknowledge registrations.
 enum DemoFixtures {
     // Numeric values below are intentional status-image fixture geometry and color data.
     // swiftlint:disable no_magic_numbers number_separator
@@ -149,17 +148,10 @@ enum DemoFixtures {
         }
     }
 
-    /// What `hook.list` for `longConversationWorkspaceId` waits on before
-    /// answering, so the hooks row appears under an already-settled
-    /// transcript — the container-resize path of #272 under `--demo-data`
-    /// (`ConversationTranscriptScrollUITests`). Every other fixture answers
-    /// immediately, apart from `agent.getMessageBlock` behind
-    /// `longConversationBlockHydrationGate`. The default delay suits the
-    /// screenshot flows; a UI test
-    /// that must observe the transcript before the row lands passes
-    /// `--demo-hook-list-trigger-file=<path>` and creates that file when it
-    /// is ready — a clock cannot be made robust against the render time of a
-    /// loaded CI simulator.
+    /// Delays the long transcript's hooks row for container-resize tests (#272).
+    /// UI tests release a trigger file after observing the transcript; a fixed
+    /// delay cannot account for a loaded simulator. Screenshot flows use the
+    /// default delay. Metadata/snapshot and hydration gates are independent.
     static let longConversationHookListGate = hookListGate(from: ProcessInfo.processInfo.arguments)
 
     static let defaultHookListDelay: Duration = .seconds(defaultHookListDelaySeconds)
@@ -325,6 +317,7 @@ enum DemoFixtures {
     /// Gate to wait on before serving `response(for:params:)`, or nil for an
     /// immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
+        if let gate = startupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         switch method {
         case "settings.get" where params["path"] as? String == "providers.enabled":
             return workspaceProviderGate(from: ProcessInfo.processInfo.arguments)
@@ -374,6 +367,8 @@ extension DemoFixtures {
     }
 
     static func transcriptMessages(agentId: String?) -> [[String: Any]] {
+        if agentId == "demo-agent-implementor", let messages = DemoBrowserFixtures.conversationMessages { return messages }
+        if usesStartupTranscript, agentId == longConversationAgentId { return startupTranscriptMessages }
         if let designScenario, agentId == DemoDesignFixtures.agentId { return designScenario.messages }
         if inlineImageConversationRequested(by: ProcessInfo.processInfo.arguments),
            agentId == inlineImageAgentId {
@@ -390,13 +385,14 @@ extension DemoFixtures {
         params: [String: Any],
         snapshotAnchor: Date = Date()
     ) -> Any {
-        if let response = designScenario?.response(for: method, params: params) { return response }
-        if let terminalResponse = DemoTerminalFixtures.response(for: method, params: params) {
-            return terminalResponse
-        }
+        if let response = designScenario?.response(for: method, params: params)
+            ?? DemoTerminalFixtures.response(for: method, params: params)
+            ?? DemoBrowserFixtures.response(for: method, params: params) { return response }
         return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
             if let response = proposalResponse(for: method, params: params) { return response }
             switch method {
+            case "events.subscribe": return ["subscriptionId": "demo-events-\(params["replaceGroup"] as? String ?? "default")"]
+            case "prMonitor.list": return ["monitors": [[String: Any]]()]
             case "workspace.list":
                 return ["workspaces": workspaces]
             case "note.list":
@@ -440,7 +436,10 @@ extension DemoFixtures {
             if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) {
                 return ["agent": assistant]
             }
-            let agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
+            var agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
+            if usesStartupTranscript, agentId == longConversationAgentId {
+                agent["metadata"] = ["lastSeenMessageId": startupSeenMessageId]
+            }
             return ["agent": agent]
         case "agent.getConversation":
             let messages = transcriptMessages(agentId: params["agentId"] as? String)
@@ -465,6 +464,7 @@ extension DemoFixtures {
             return ["queue": [[String: Any]]()]
         case "agent.getSubscriptions":
             let agentId = params["agentId"] as? String
+            if usesStartupTranscript, agentId == longConversationAgentId { return ["subscriptions": []] }
             return agentId == longConversationAgentId ? longConversationSubscriptions : [String: Any]()
         case "hook.list":
             let workspaceId = params["workspaceId"] as? String
