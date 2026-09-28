@@ -11,6 +11,7 @@ enum DemoDesignScenario: String, CaseIterable {
     case blocker
     case composer
     case conversation
+    case questionCards = "question-cards"
     case questionFlow = "question-flow"
     case questions
     case streaming
@@ -47,7 +48,7 @@ final class DemoDesignFixtures {
         isStreaming = scenario == .streaming
     }
 
-    var hasQuestions: Bool { scenario == .questions || scenario == .questionFlow }
+    var hasQuestions: Bool { scenario == .questions || scenario == .questionFlow || scenario == .questionCards }
     var pendingQuestionId: String { hasQuestions && !questionsResolved ? Self.questionMessageId : "" }
     var messages: [[String: Any]] { initialMessages + sentMessages }
 
