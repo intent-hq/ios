@@ -17,11 +17,9 @@ import SwiftUI
 struct GitHubRepoPickerView: View {
     var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
-    var usesCreationTypography = false
 
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .body) private var selectionIconSize: CGFloat = 17
+    @Environment(\.colorSchemeContrast) private var contrast
 
     @State private var searchText = ""
     @State private var searchResults: [GitHubRepo] = []
@@ -43,26 +41,21 @@ struct GitHubRepoPickerView: View {
     }
 
     var body: some View {
-        ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
-
-            if !store.hasCheckedAuth {
-                if store.lastError != nil {
-                    // The cold auth read itself failed: surface the error
-                    // rather than not-connected guidance or an endless spinner.
-                    emptyState
-                } else {
-                    ProgressView {
-                        Text("Checking GitHub connection...").interFont(Constants.Typography.bodyS)
-                    }
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-            } else if !store.isConfigured {
-                notConnectedPlaceholder
-            } else {
-                repoList
+        ScrollView {
+            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
+                Text("Select Repository")
+                    .interFont(Constants.Typography.heading2)
+                    .tracking(CreateWorkspaceRepoStyle.titleTracking)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("creation.repositoryTitle")
+                content
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(CreateWorkspaceFormStyle.pagePadding)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
+        .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
         .task {
             await store.loadIfNeeded()
         }
@@ -73,80 +66,46 @@ struct GitHubRepoPickerView: View {
 
     // MARK: - Subviews
 
+    @ViewBuilder
+    private var content: some View {
+        if !store.hasCheckedAuth {
+            if store.lastError != nil {
+                emptyState
+            } else {
+                ProgressView {
+                    Text("Checking GitHub connection...").interFont(Constants.Typography.bodyS)
+                }
+                .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+            }
+        } else if !store.isConfigured {
+            notConnectedPlaceholder
+        } else {
+            repoList
+        }
+    }
+
     private var repoList: some View {
-        Group {
-            if store.isLoading || pendingSearchQuery != nil, suggestions.isEmpty {
+        let sections = suggestions
+        return VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
+            GitHubRepoSearchField(text: $searchText)
+            if store.isLoading || pendingSearchQuery != nil, sections.isEmpty {
                 ProgressView {
                     Text("Loading repositories...").interFont(Constants.Typography.bodyS)
                 }
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            } else if suggestions.isEmpty {
+                .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+            } else if sections.isEmpty {
                 emptyState
             } else {
-                List {
-                    if !suggestions.recents.isEmpty {
-                        Section {
-                            ForEach(suggestions.recents) { repo in
-                                repoRow(repo)
-                            }
-                        } header: {
-                            Text("Recent").interFont(Constants.Typography.eyebrow)
-                        }
+                LazyVStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
+                    if !sections.recents.isEmpty {
+                        GitHubRepoSection(title: "Recent", repos: sections.recents, selectedRepo: $selectedRepo)
                     }
-                    if !suggestions.others.isEmpty {
-                        Section {
-                            ForEach(suggestions.others) { repo in
-                                repoRow(repo)
-                            }
-                        }
+                    if !sections.others.isEmpty {
+                        GitHubRepoSection(title: "More", repos: sections.others, selectedRepo: $selectedRepo)
                     }
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
             }
         }
-        .searchable(
-            text: $searchText,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Search GitHub repositories"
-        )
-    }
-
-    private func repoRow(_ repo: GitHubRepo) -> some View {
-        Button {
-            selectedRepo = repo
-        } label: {
-            HStack(spacing: Constants.GitHubRepoPicker.rowSpacing) {
-                RepoOwnerAvatarView(owner: repo.owner)
-                VStack(alignment: .leading, spacing: Constants.GitHubRepoPicker.rowTextSpacing) {
-                    Text(repo.name)
-                        .interFont(usesCreationTypography
-                            ? Constants.Typography.bodyM
-                            : Constants.Typography.bodyM.withFace(.semibold))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.GitHubRepoPicker.repositoryNameLineLimit)
-                    Text(repo.fullName)
-                        .interFont(Constants.Typography.bodyXS)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                        .truncationMode(.middle)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
-                Spacer()
-                if selectedRepo?.id == repo.id {
-                    Image(.check)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: selectionIconSize, height: selectionIconSize)
-                        .foregroundStyle(Theme.primary(for: colorScheme))
-                        .accessibilityLabel("Selected")
-                }
-            }
-            .padding(.vertical, Constants.GitHubRepoPicker.rowVerticalPadding)
-        }
-        .accessibilityAddTraits(selectedRepo?.id == repo.id ? .isSelected : [])
-        .listRowBackground(Theme.card(for: colorScheme))
     }
 
     @ViewBuilder
@@ -220,6 +179,178 @@ struct GitHubRepoPickerView: View {
                 completedSearchQuery = query
             }
             pendingSearchQuery = nil
+        }
+    }
+}
+
+private struct GitHubRepoSearchField: View {
+    @Binding var text: String
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
+
+    var body: some View {
+        HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: iconSize))
+                .frame(width: iconSize, height: iconSize)
+                .accessibilityHidden(true)
+            TextField("Search GitHub repositories", text: $text)
+                .interFont(Constants.Typography.bodyS)
+                .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .accessibilityIdentifier("creation.repositorySearch")
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(.close)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: iconSize, height: iconSize)
+                        .frame(minWidth: CreateWorkspaceFormStyle.controlHeight, minHeight: CreateWorkspaceFormStyle.controlHeight)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+        .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
+        .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+        .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(cornerRadius: CreateWorkspaceFormStyle.cornerRadius))
+    }
+}
+
+private struct GitHubRepoSection: View {
+    let title: LocalizedStringKey
+    let repos: [GitHubRepo]
+    @Binding var selectedRepo: GitHubRepo?
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
+            Text(title)
+                .interFont(Constants.Typography.eyebrow)
+                .textCase(.uppercase)
+                .tracking(CreateWorkspaceRepoStyle.sectionTracking)
+                .foregroundStyle(CreateWorkspaceRepoStyle.sectionForeground(for: colorScheme, contrast: contrast))
+                .accessibilityAddTraits(.isHeader)
+            LazyVStack(spacing: 0) {
+                ForEach(Array(repos.enumerated()), id: \.element.id) { index, repo in
+                    GitHubRepoRow(repo: repo, isSelected: selectedRepo?.id == repo.id) {
+                        selectedRepo = repo
+                    }
+                    .overlay(alignment: .bottom) {
+                        if index + 1 < repos.count,
+                           selectedRepo?.id != repo.id,
+                           selectedRepo?.id != repos[index + 1].id {
+                            CreateWorkspaceRepoStyle.divider(for: colorScheme)
+                                .frame(height: CreateWorkspaceRepoStyle.dividerHeight)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct GitHubRepoRow: View {
+    let repo: GitHubRepo
+    let isSelected: Bool
+    let onSelect: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(alignment: .top, spacing: CreateWorkspaceRepoStyle.rowSpacing) {
+                RepoOwnerAvatarView(owner: repo.owner, size: iconSize, cornerRadius: CreateWorkspaceRepoStyle.avatarRadius)
+                GitHubRepoLabel(repo: repo)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if isSelected {
+                    // The shared asset is outlined. Keep its check, with the filled
+                    // green disc from this Figma frame, without changing other uses.
+                    Image(.checkCircle)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: iconSize, height: iconSize)
+                        .foregroundStyle(.white)
+                        .clipShape(.rect().inset(by: iconSize * CreateWorkspaceRepoStyle.checkCropRatio))
+                        .background(SettingsStyle.connected, in: Circle().inset(
+                            by: iconSize * CreateWorkspaceRepoStyle.checkCircleInsetRatio
+                        ))
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(CreateWorkspaceFormStyle.pagePadding)
+            .frame(minHeight: CreateWorkspaceRepoStyle.rowMinimumHeight)
+            .background(isSelected ? CreateWorkspaceRepoStyle.card(for: colorScheme) : .clear, in: .rect(cornerRadius: CreateWorkspaceFormStyle.cornerRadius))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("creation.repository.\(repo.fullName)")
+    }
+}
+
+private struct GitHubRepoLabel: View {
+    let repo: GitHubRepo
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var nameCapHeight = CreateWorkspaceRepoStyle.nameCapHeight
+    @ScaledMetric(relativeTo: .caption) private var fullNameCapHeight = CreateWorkspaceRepoStyle.fullNameCapHeight
+
+    var body: some View {
+        GitHubRepoLabelLayout(capHeights: [nameCapHeight, fullNameCapHeight], spacing: CreateWorkspaceRepoStyle.rowTextSpacing) {
+            Text(repo.name)
+                .interFont(Constants.Typography.bodySEmphasized)
+                .tracking(CreateWorkspaceRepoStyle.nameTracking)
+                .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.GitHubRepoPicker.repositoryNameLineLimit)
+            Text(repo.fullName)
+                .interFont(Constants.Typography.subtextXXS)
+                .tracking(CreateWorkspaceRepoStyle.fullNameTracking)
+                .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .truncationMode(.middle)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Match Figma's cap-to-baseline text spacing while letting multiline and
+/// accessibility text grow naturally. No glyphs are clipped to a fixed height.
+private struct GitHubRepoLabelLayout: Layout {
+    let capHeights: [CGFloat]
+    let spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let textProposal = ProposedViewSize(width: proposal.width, height: nil)
+        var size = CGSize.zero
+        for (subview, capHeight) in zip(subviews, capHeights) {
+            let dimensions = subview.dimensions(in: textProposal)
+            size.width = max(size.width, dimensions.width)
+            size.height += dimensions[.lastTextBaseline] - dimensions[.firstTextBaseline] + capHeight
+        }
+        size.height += spacing * CGFloat(max(0, subviews.count - 1))
+        return size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        let textProposal = ProposedViewSize(width: bounds.width, height: nil)
+        var capTop = bounds.minY
+        for (subview, capHeight) in zip(subviews, capHeights) {
+            let dimensions = subview.dimensions(in: textProposal)
+            let origin = capTop + capHeight - dimensions[.firstTextBaseline]
+            subview.place(at: CGPoint(x: bounds.minX, y: origin), anchor: .topLeading, proposal: textProposal)
+            capTop += dimensions[.lastTextBaseline] - dimensions[.firstTextBaseline]
+                + capHeight + spacing
         }
     }
 }
