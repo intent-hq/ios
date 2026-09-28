@@ -97,7 +97,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     @MainActor
     func testIPadQuestionsKeepNextAndSendAvailable() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad window-level menu")
-        XCUIDevice.shared.orientation = .portrait
+        XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=question-cards"]
@@ -108,6 +108,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let agent = app.buttons["workspace.agent.demo-agent-design"]
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
         agent.tap()
+        XCUIDevice.shared.orientation = .portrait
         let firstAnswer = app.buttons["Keep working locally"]
         XCTAssertTrue(firstAnswer.waitForExistence(timeout: Self.timeout))
         firstAnswer.tap()
