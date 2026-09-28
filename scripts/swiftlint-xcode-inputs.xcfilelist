@@ -183,6 +183,7 @@ $(SRCROOT)/Intent/Services/WorkspaceProviderOptions.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusStore+Loading.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusWaiters.swift
+$(SRCROOT)/Intent/Services/WorkspaceStore+EventClassification.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceVideo.swift
 $(SRCROOT)/Intent/Utils/AppLog.swift
@@ -663,6 +664,7 @@ $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
+$(SRCROOT)/IntentTests/WorkspaceFallbackRefreshTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift
 $(SRCROOT)/IntentTests/WorkspaceLinksTests.swift
 $(SRCROOT)/IntentTests/WorkspaceListViewModelTests.swift
