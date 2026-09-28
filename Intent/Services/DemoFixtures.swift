@@ -390,23 +390,27 @@ extension DemoFixtures {
             ?? DemoBrowserFixtures.response(for: method, params: params) { return response }
         if let changesResponse = DemoChangesFixtures.response(for: method, params: params) { return changesResponse }
         return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
-            if let response = proposalResponse(for: method, params: params) { return response }
-            switch method {
-            case "events.subscribe": return ["subscriptionId": "demo-events-\(params["replaceGroup"] as? String ?? "default")"]
-            case "prMonitor.list": return ["monitors": [[String: Any]]()]
-            case "workspace.list":
-                return ["workspaces": workspaces]
-            case "note.list":
-                return ["notes": notes]
-            case "note.get":
-                let noteId = params["noteId"] as? String
-                let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]
-                return ["note": note]
-            case "note.readAsset":
-                return assetResponse(params: params)
-            default:
-                return agentAndTaskResponse(for: method, params: params)
-            }
+            workspaceAndNoteResponse(for: method, params: params)
+        }
+    }
+
+    private static func workspaceAndNoteResponse(for method: String, params: [String: Any]) -> Any {
+        if let response = proposalResponse(for: method, params: params) { return response }
+        switch method {
+        case "events.subscribe": return ["subscriptionId": "demo-events-\(params["replaceGroup"] as? String ?? "default")"]
+        case "prMonitor.list": return ["monitors": [[String: Any]]()]
+        case "workspace.list":
+            return ["workspaces": workspaces]
+        case "note.list":
+            return ["notes": notes]
+        case "note.get":
+            let noteId = params["noteId"] as? String
+            let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]
+            return ["note": note]
+        case "note.readAsset":
+            return assetResponse(params: params)
+        default:
+            return agentAndTaskResponse(for: method, params: params)
         }
     }
 
