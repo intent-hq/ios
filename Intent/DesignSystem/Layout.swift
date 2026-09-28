@@ -257,7 +257,7 @@ extension Constants.WorkspaceRow {
     static let pillBackgroundOpacity: Double = 0.12
     static let verticalPadding: CGFloat = 6
     static let horizontalPadding: CGFloat = 4
-    static let statusIconSize: CGFloat = 12
+    static let statusIconSize: CGFloat = 16
     static let statusGlyphScale: CGFloat = 0.5
     static let statusRingWidth: CGFloat = 2
     // visionOS attention cue: single-step z-lift + scale on rows needing

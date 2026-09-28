@@ -176,7 +176,7 @@ struct WorkspaceRowPresentationTests {
     func renderedStatusUsesPlainDotOrNotStartedRing(wireStatus: String) throws {
         let workspace = makeWorkspace(displayStatus: wireStatus)
         let status = resolveDisplayStatus(for: workspace)
-        let color = expectedStatusColor(status)
+        let color = try expectedStatusColor(status)
         for scheme in [ColorScheme.light, .dark] {
             let pixels = try renderStatus(workspace, scheme: scheme)
             try expectStatusSilhouette(pixels, color: color, scheme: scheme, ring: status == .notStarted)
@@ -197,18 +197,25 @@ struct WorkspaceRowPresentationTests {
 }
 
 extension WorkspaceRowPresentationTests {
-    private func expectedStatusColor(_ status: WorkspaceDisplayStatus) -> Color {
-        // Independent Figma bytes: these must not derive from the colors under test.
+    private func expectedStatusColor(_ status: WorkspaceDisplayStatus) throws -> Color {
+        // Figma Status Colors (3448:29525): independent of the assets under test.
         // swiftlint:disable no_magic_numbers
         let figmaRGB: [WorkspaceDisplayStatus: RGBA] = [
-            .inProgress: RGBA(red: 211, green: 222, blue: 93, alpha: 1),
-            .needsAttention: RGBA(red: 232, green: 127, blue: 57, alpha: 1),
+            .failed: RGBA(red: 232, green: 127, blue: 57, alpha: 1),
+            .blocked: RGBA(red: 191, green: 99, blue: 38, alpha: 1),
+            .needsAttention: RGBA(red: 250, green: 167, blue: 85, alpha: 1),
+            .idle: RGBA(red: 186, green: 186, blue: 183, alpha: 1),
+            .notStarted: RGBA(red: 140, green: 140, blue: 137, alpha: 1),
+            .inProgress: RGBA(red: 221, green: 236, blue: 97, alpha: 1),
             .complete: RGBA(red: 111, green: 163, blue: 86, alpha: 1),
-            .idle: RGBA(red: 140, green: 140, blue: 137, alpha: 1),
-            .notStarted: RGBA(red: 82, green: 82, blue: 80, alpha: 1)
+            .prReady: RGBA(red: 130, green: 205, blue: 98, alpha: 1),
+            .prOpen: RGBA(red: 192, green: 168, blue: 237, alpha: 1),
+            .prQueued: RGBA(red: 194, green: 212, blue: 242, alpha: 1),
+            .prMerged: RGBA(red: 194, green: 212, blue: 242, alpha: 1),
+            .unknown: RGBA(red: 207, green: 207, blue: 205, alpha: 1)
         ]
         // swiftlint:enable no_magic_numbers
-        guard let rgb = figmaRGB[status] else { return status.color }
+        let rgb = try #require(figmaRGB[status])
         return Color(
             .sRGB,
             red: Double(rgb.red) / StatusRaster.byteMaximum,
@@ -221,18 +228,18 @@ extension WorkspaceRowPresentationTests {
     private enum StatusRaster {
         static let padding: CGFloat = 4
         static let scale: CGFloat = 3
-        static let side = 60
+        static let side = 72
         static let channels = 4
         static let alphaOffset = 3
         static let bitsPerComponent = 8
         static let byteMaximum = 255.0
-        static let center = 30.0
-        static let outsideRadius = 19.0
-        static let insideRadius = 17.0
-        static let holeRadius = 11.0
-        static let borderRadius = 13.0
+        static let center = 36.0
+        static let outsideRadius = 25.0
+        static let insideRadius = 23.0
+        static let holeRadius = 17.0
+        static let borderRadius = 19.0
         static let firstPixel = 12
-        static let lastPixel = 47
+        static let lastPixel = 59
     }
 
     private func renderStatus(_ workspace: Workspace, scheme: ColorScheme = .dark) throws -> [UInt8] {
@@ -242,7 +249,7 @@ extension WorkspaceRowPresentationTests {
             .environment(\.colorScheme, scheme))
         renderer.scale = StatusRaster.scale
         let image = try #require(renderer.cgImage)
-        // 12 pt icon + 4 pt padding on each side, rendered at 3×.
+        // 16 pt icon + 4 pt padding on each side, rendered at 3×.
         try #require(image.width == side && image.height == side)
         var pixels = [UInt8](repeating: 0, count: side * side * StatusRaster.channels)
         let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
@@ -269,7 +276,7 @@ extension WorkspaceRowPresentationTests {
             expected.red * expected.alpha, expected.green * expected.alpha,
             expected.blue * expected.alpha, expected.alpha
         ].map { Double($0) * StatusRaster.byteMaximum }
-        // A 36 px circle has radius 18; a 2 pt border leaves a 12 px inner radius.
+        // A 48 px circle has radius 24; a 2 pt border leaves an 18 px inner radius.
         // Leave a one-pixel tolerance at curved edges for antialiasing.
         #expect((0..<side * side).allSatisfy { index in
             let radius = hypot(
