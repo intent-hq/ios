@@ -12,8 +12,8 @@ struct WorkspaceProviderOptionsTests {
         ["path": "providers.enabled", "value": enabled]
     }
 
-    private func configuredHost(enabled: [String: Bool] = ["codex": true]) -> FakeConnectionManager {
-        let fake = FakeConnectionManager()
+    private func configuredHost(enabled: [String: Bool] = ["codex": true]) -> RPCRecordingConnection {
+        let fake = RPCRecordingConnection()
         fake.responseMap["providers.catalog"] = ["providers": [entry("codex"), entry("auggie")]]
         fake.responseMap["settings.get"] = settings(enabled)
         fake.responseMap["host.providerAuthStatus"] = [
@@ -255,19 +255,45 @@ struct WorkspaceProviderOptionsTests {
 
     @Test func reconnectClearsWorkspacePolicyAndKeepsHostsIsolated() async throws {
         let firstHost = configuredHost()
+        let secondHost = configuredHost(enabled: ["auggie": true])
+        firstHost.simulateConnect()
+        secondHost.simulateConnect()
         let first = CreationOptionsStore(connectionManager: firstHost)
-        let second = CreationOptionsStore(connectionManager: configuredHost(enabled: ["auggie": true]))
-        await first.workspaceProviderOptions.load()
-        await second.workspaceProviderOptions.load()
+        let second = CreationOptionsStore(connectionManager: secondHost)
+        let consumer = UUID()
+        defer {
+            first.releaseCatalogs(consumer: consumer)
+            second.releaseCatalogs(consumer: consumer)
+            first.reset()
+            second.reset()
+        }
+        await loadWorkspacePicker(first, consumer: consumer)
+        await loadWorkspacePicker(second, consumer: consumer)
+        let checkpoint = firstHost.checkpoint
+        let isolated = secondHost.checkpoint
         firstHost.simulateDisconnect()
         try await waitUntil("disconnected policy clear") { first.workspaceProviderOptions.state == .idle }
         #expect(first.workspaceProviderOptions.providers.isEmpty)
         #expect(second.workspaceProviderOptions.providers.map(\.id) == ["auggie"])
+        #expect(firstHost.traffic(since: checkpoint).requests.isEmpty)
         firstHost.responseMap["settings.get"] = settings([:])
         firstHost.simulateConnect()
-        try await waitUntil("reconnected policy load") { first.workspaceProviderOptions.state == .loaded([]) }
+        try await waitUntil("reconnected picker load") {
+            first.workspaceProviderOptions.state == .loaded([]) && first.hasLoaded && firstHost.traffic().pendingCount == 0
+        }
         #expect(second.workspaceProviderOptions.providers.map(\.id) == ["auggie"])
-        #expect(!firstHost.didCallMethod("specialist.list"))
+        #expect(secondHost.traffic(since: isolated).requests.isEmpty)
+        #expect(firstHost.traffic(since: checkpoint).methodCounts == [
+            "specialist.list": 1, "host.providerAuthStatus": 2, "providers.catalog": 1, "settings.get": 1
+        ])
+        printCatalogLedger("workspace-picker-active-reconnect", firstHost.traffic(since: checkpoint))
+        first.releaseCatalogs(consumer: consumer)
+        let released = firstHost.checkpoint
+        firstHost.simulateDisconnect()
+        firstHost.simulateConnect()
+        try await expectNever("closed picker reconnect discovery") { !firstHost.traffic(since: released).requests.isEmpty }
+        #expect(first.workspaceProviderOptions.state == .idle)
+        printCatalogLedger("workspace-picker-released-reconnect", firstHost.traffic(since: released))
     }
 
     @Test func workspacePolicyDoesNotFilterSharedAgentProvidersOrModels() async {
@@ -286,6 +312,45 @@ struct WorkspaceProviderOptionsTests {
 }
 
 extension WorkspaceProviderOptionsTests {
+    private func loadWorkspacePicker(_ store: CreationOptionsStore, consumer: UUID) async {
+        store.retainCreationOptions(consumer: consumer)
+        async let policy: () = store.workspaceProviderOptions.load()
+        await store.loadIfNeeded(consumer: consumer)
+        await policy
+    }
+
+    @Test func workspacePolicyReconnectWithOnlyLabelsDoesNotDiscoverProviders() async throws {
+        let connection = configuredHost()
+        connection.simulateConnect()
+        let store = CreationOptionsStore(connectionManager: connection)
+        defer { store.reset() }
+        let consumer = UUID()
+        store.retainSpecialists(consumer: consumer)
+        await store.ensureSpecialists(consumer: consumer)
+        // A previously opened workspace picker does not retain a creation
+        // interest merely because its policy was loaded on this session.
+        await store.workspaceProviderOptions.load()
+        let checkpoint = connection.checkpoint
+        connection.simulateDisconnect()
+        connection.simulateConnect()
+        try await waitUntil("interested labels refreshed") { store.specialistCatalog.isFresh }
+        try await expectNever("label-only reconnect provider discovery") {
+            connection.traffic(since: checkpoint).requests.contains { $0.method != "specialist.list" }
+        }
+        #expect(connection.traffic(since: checkpoint).methodCounts == ["specialist.list": 1])
+        #expect(store.workspaceProviderOptions.state == .idle)
+        printCatalogLedger("workspace-policy-label-only-reconnect", connection.traffic(since: checkpoint))
+        store.releaseCatalogs(consumer: consumer)
+        let inactive = connection.checkpoint
+        CreationOptionsStoreTests().catalogEvent(connection, type: "settings:changed", paths: ["providers.enabled"])
+        CreationOptionsStoreTests().catalogEvent(connection, type: "specialists:changed")
+        connection.simulateDisconnect()
+        connection.simulateConnect()
+        try await expectNever("inactive policy/catalog discovery") { !connection.traffic(since: inactive).requests.isEmpty }
+        #expect(store.workspaceProviderOptions.state == .idle)
+        printCatalogLedger("workspace-policy-inactive-events-and-reconnect", connection.traffic(since: inactive))
+    }
+
     @Test func demoCreationFixturesLoadSelectableProvidersAndNamedModels() async {
         let fake = FakeConnectionManager()
         for method in ["providers.catalog", "host.providerAuthStatus", "specialist.list"] {

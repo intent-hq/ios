@@ -7,10 +7,15 @@ import SwiftUI
 /// TurnFailureNotice.svelte.
 struct AttentionNoticeView: View {
     let notice: AttentionNotice
+    var onLayoutChange: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isExpanded = true
 
     private typealias Layout = Constants.Conversation.NoticeCard
+    private typealias Design = Constants.Conversation.Design
 
     private var tint: Color {
         switch notice.kind {
@@ -37,6 +42,58 @@ struct AttentionNoticeView: View {
     }
 
     var body: some View {
+        if workspaceDesign, notice.kind == .blockerReport {
+            blockerReport
+        } else {
+            legacyNotice
+        }
+    }
+
+    private var blockerReport: some View {
+        VStack(alignment: .leading, spacing: Design.Transcript.toolRowSpacing) {
+            blockerHeader
+            if isExpanded, !notice.reason.isEmpty {
+                Text(notice.reason)
+                    .interFont(Constants.Typography.bodyS)
+                    .tracking(Design.Typography.bodyTracking)
+                    .foregroundStyle(Design.Palette.blockerBodyForeground(for: colorScheme, contrast: colorSchemeContrast))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, Design.Transcript.expandedContentIndent)
+            }
+        }
+    }
+
+    private var blockerHeader: some View {
+        Button {
+            onLayoutChange?()
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: Constants.Conversation.ToolCall.expansionAnimationDuration)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: Design.Transcript.toolLabelSpacing) {
+                Image(.attentionCircle)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Design.toolIconSize, height: Design.toolIconSize)
+                    .accessibilityHidden(true)
+                Text("Blocker Report")
+                    .interFont(Constants.Typography.bodyS)
+                    .tracking(Design.Typography.bodyTracking)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                WorkspaceTranscriptDisclosure(isExpanded: isExpanded)
+            }
+            .foregroundStyle(Design.Palette.blockerForeground(for: colorScheme, contrast: colorSchemeContrast))
+            .frame(minHeight: Design.minimumTapTarget)
+            .contentShape(Rectangle())
+            .copyContextMenuPassthrough()
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+    }
+
+    private var legacyNotice: some View {
         HStack(alignment: .top, spacing: Constants.Conversation.NoticeCard.contentSpacing) {
             Image(systemName: iconName)
                 .font(.subheadline)

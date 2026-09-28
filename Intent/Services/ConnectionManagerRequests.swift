@@ -27,16 +27,20 @@ extension ConnectionManager {
         params: [String: Any] = [:],
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
-        if DemoMode.isEnabled {
+        if DemoMode.isEnabled || servesDemoFixtures {
             if let gate = DemoFixtures.responseGate(for: method, params: params) {
                 try await DemoFixtures.wait(for: gate)
             }
+            let response = DemoFixtures.response(for: method, params: params)
             // Routed ahead of the ack: the router buffers it until the caller
             // registers its handler, the same order a live daemon can produce.
             if let push = DemoFixtures.subscriptionPush(for: method, params: params) {
                 subscriptionRouter.route(push)
             }
-            return DemoFixtures.response(for: method, params: params)
+            if let event = DemoFixtures.designScenario?.event(for: method, params: params) {
+                for handler in Array(eventHandlers.values) { handler("event", event) }
+            }
+            return response
         }
         guard let currentSocket = socket else {
             let error = DiagnosticErrorOwnership.attaching(
@@ -319,7 +323,9 @@ extension ConnectionManager {
         handleTextMessage(text)
     }
 
-    nonisolated static let globalEventTypes = ["workspace:*", "note:*", "agent:*", "task:*", "host:members-changed"]
+    nonisolated static let globalEventTypes = [
+        "workspace:*", "note:*", "agent:*", "task:*", "specialists:changed", "settings:changed", "host:members-changed"
+    ]
     nonisolated static let globalSubscriptionMaxAttempts = 5
     nonisolated static let globalSubscriptionBackoffMaximumSeconds = 8
     nonisolated static let globalSubscriptionBackoffMaximumExponent = 3

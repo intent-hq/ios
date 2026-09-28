@@ -44,6 +44,8 @@ struct CreateWorkspaceView: View {
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var idempotencyKey = UUID().uuidString
+    @State private var catalogConsumer = UUID()
+    @State private var catalogIsVisible = true
 
     init(session: BackendSession) {
         self.session = session
@@ -118,6 +120,11 @@ struct CreateWorkspaceView: View {
 
     var body: some View {
         navigationContent
+        .onAppear { catalogIsVisible = true }
+        .onDisappear {
+            catalogIsVisible = false
+            optionsStore.releaseCatalogs(consumer: catalogConsumer)
+        }
         // The cached-first paint, the authoritative listing replacing it and
         // a background revalidation all land here: keep the selection if the
         // new listing still has it, else fall back to default → first.
@@ -322,9 +329,11 @@ struct CreateWorkspaceView: View {
     /// superseded by a reconnect clear publishes nothing: the
     /// `loadGeneration` change starts a fresh load that settles and reconciles.
     private func fetchCreationOptions() async {
+        guard catalogIsVisible, !Task.isCancelled else { return }
+        optionsStore.retainCreationOptions(consumer: catalogConsumer)
         let generation = optionsStore.loadGeneration
         async let providerLoad: Void = providerOptions.load()
-        await optionsStore.loadIfNeeded()
+        await optionsStore.loadIfNeeded(consumer: catalogConsumer)
         await providerLoad
         guard settledLoads.settleOptions(startedAt: generation, current: optionsStore.loadGeneration) else {
             return
@@ -349,11 +358,13 @@ struct CreateWorkspaceView: View {
     /// provider switch (the daemon default applies), even when the new
     /// provider's catalog shares a bare model id with the old one.
     private func reconcileProviderSelection() async {
+        guard catalogIsVisible else { return }
         CreationSelectionPolicy.reconcileWorkspaceProvider(
             provider: &selectedProvider,
             model: &selectedModel,
             state: providerOptions.state
         )
+        optionsStore.selectModelProvider(selectedProvider?.id, consumer: catalogConsumer)
         guard !providerOptions.isLoading, let provider = selectedProvider else { return }
         await loadModels(for: provider)
     }
@@ -369,8 +380,10 @@ struct CreateWorkspaceView: View {
     /// Create gate only when the load returned in the generation it started
     /// in — a completion from before a reconnect clear settles nothing.
     private func loadModels(for provider: ProviderInfo) async {
+        guard catalogIsVisible, selectedProvider?.id == provider.id, !Task.isCancelled else { return }
+        optionsStore.selectModelProvider(provider.id, consumer: catalogConsumer)
         let generation = optionsStore.loadGeneration
-        await optionsStore.loadModelsIfNeeded(providerId: provider.id)
+        await optionsStore.loadModelsIfNeeded(providerId: provider.id, consumer: catalogConsumer)
         settledLoads.settleModels(
             for: provider.id,
             startedAt: generation,

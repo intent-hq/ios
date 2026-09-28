@@ -10,6 +10,7 @@ struct MobileTerminalView: View {
     @State private var controls = MobileTerminalControls()
     @State private var confirmClose = false
     @State private var isClosing = false
+    @State private var hasPresented = false
 
     init(terminal: MobileTerminal, workspaceName: String, store: MobileTerminalStore) {
         self.terminal = terminal
@@ -26,18 +27,13 @@ struct MobileTerminalView: View {
         VStack(spacing: 0) {
             header
             connectionStatus
-            TerminalEmulatorView(connection: connection, controls: controls)
-                .padding(.horizontal, TerminalAppearance.terminalInset)
-                .disabled(!connection.isReady || !store.isActive(terminal))
-                .task(id: attachmentKey) {
-                    if scenePhase == .active { await connection.attach() } else { connection.detach() }
-                }
-                .onDisappear { connection.detach() }
+            terminalContent
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             TerminalKeyBar(controls: controls, isEnabled: connection.isReady && store.isActive(terminal))
         }
         .background(TerminalAppearance.background.ignoresSafeArea())
+        .background(TerminalPresentationObserver { hasPresented = true })
         .preferredColorScheme(.dark)
         .tint(.white)
         .interactiveDismissDisabled(isClosing)
@@ -47,6 +43,31 @@ struct MobileTerminalView: View {
         .onChange(of: store.isActive(terminal)) { _, active in
             if !active { connection.detach() }
         }
+    }
+
+    private var terminalContent: some View {
+        ZStack(alignment: .top) {
+            if hasPresented {
+                TerminalEmulatorView(connection: connection, controls: controls)
+                    .disabled(!connection.isReady || !store.isActive(terminal))
+                    .task(id: attachmentKey) {
+                        if scenePhase == .active { await connection.attach() } else { connection.detach() }
+                    }
+                    .onDisappear { connection.detach() }
+            } else {
+                Color.clear
+            }
+            if !connection.isReady, store.isConnected, store.isActive(terminal),
+               connection.errorMessage == nil, store.errorMessage(workspaceId: terminal.workspaceId) == nil {
+                ProgressView {
+                    Text("Connecting to terminal…").interFont(Constants.Typography.bodyS)
+                }
+                .tint(TerminalAppearance.green)
+                .padding()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, TerminalAppearance.terminalInset)
     }
 
     private var header: some View {
@@ -94,7 +115,7 @@ struct MobileTerminalView: View {
                     Image(systemName: "arrow.clockwise")
                 }
             }
-            .disabled(!store.isConnected || !store.isActive(terminal))
+            .disabled(!hasPresented || !store.isConnected || !store.isActive(terminal))
             Button(role: .destructive) {
                 confirmClose = true
             } label: {
@@ -135,12 +156,6 @@ struct MobileTerminalView: View {
             status("Disconnected. Your terminal stays on the server.")
         } else if let error = connection.errorMessage ?? store.errorMessage(workspaceId: terminal.workspaceId) {
             status(error)
-        } else if !connection.isReady {
-            ProgressView {
-                Text("Connecting to terminal…").interFont(Constants.Typography.bodyS)
-            }
-            .tint(TerminalAppearance.green)
-            .padding()
         }
     }
 

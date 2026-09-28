@@ -36,8 +36,15 @@ import os
     static let shared = ConnectionManager()
 
     var connectionState: ConnectionState = .disconnected {
-        didSet { connectionStateSubject.send(connectionState) }
+        didSet {
+            if isDemoConnection {
+                globalSubscriptionState = connectionState == .connected ? .subscribed : .idle
+            }
+            connectionStateSubject.send(connectionState)
+        }
     }
+    @ObservationIgnored private var isDemoConnection = false
+    @ObservationIgnored var servesDemoFixtures = false
     private var admittedPrincipal: ConnectionPrincipal?
     @ObservationIgnored var admission: ConnectionAdmission?
     @ObservationIgnored private(set) var pairingAttemptID: UUID?
@@ -126,7 +133,13 @@ import os
     #endif
 
     @ObservationIgnored var eventHandlers: [UUID: (String, Any) -> Void] = [:]
-    var globalSubscriptionState: GlobalSubscriptionState = .idle
+    @ObservationIgnored private let globalSubscriptionSubject = CurrentValueSubject<GlobalSubscriptionState, Never>(.idle)
+    var globalSubscriptionState: GlobalSubscriptionState = .idle {
+        didSet { globalSubscriptionSubject.send(globalSubscriptionState) }
+    }
+    var globalSubscriptionPublisher: AnyPublisher<GlobalSubscriptionState, Never> {
+        globalSubscriptionSubject.eraseToAnyPublisher()
+    }
 
     /// The candidate label the tunnel route races under (also the host shown
     /// in its transport errors). Not a dialable name: the tunnel connects via
@@ -149,6 +162,15 @@ import os
 }
 
 extension ConnectionManager {
+    /// Demo sessions use fixture pushes instead of a socket's remote feed.
+    /// Keep readiness tied to the same connection transitions as their stores.
+    func connectDemo(serveFixtures: Bool) {
+        if !isDemoConnection { disconnect() }
+        isDemoConnection = true
+        servesDemoFixtures = serveFixtures
+        connectionState = .connected
+    }
+
     /// Combine compatibility for stores that depend on ConnectionManagerRouting.
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> {
         connectionStateSubject.eraseToAnyPublisher()
@@ -384,6 +406,8 @@ extension ConnectionManager {
     /// `connect()` to the same target must keep the accumulated mismatches,
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
+        isDemoConnection = false
+        servesDemoFixtures = false
         connectionGeneration += 1
         pairingAttemptID = nil
         clearPrincipal()

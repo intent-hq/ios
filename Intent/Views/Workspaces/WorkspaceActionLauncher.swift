@@ -19,7 +19,8 @@ struct WorkspaceActionLauncher: ViewModifier {
 
     private enum Layout {
         static let blurRadius: CGFloat = 16
-        static let shadeOpacity = 0.6
+        static let lightShadeOpacity = 0.72
+        static let darkShadeOpacity = 0.6
         static let springResponse = 0.35
         static let springDamping = 0.85
         static let footerSpacing: CGFloat = 20
@@ -60,8 +61,8 @@ struct WorkspaceActionLauncher: ViewModifier {
     private var actionOverlay: some View {
         ZStack(alignment: Alignment(horizontal: alignment, vertical: .bottom)) {
             if isOpen {
-                Theme.background(for: colorScheme)
-                    .opacity(reduceTransparency ? 1 : Layout.shadeOpacity)
+                (colorScheme == .light ? Color.black : Theme.background(for: colorScheme))
+                    .opacity(backdropOpacity)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { isOpen = false }
@@ -73,6 +74,11 @@ struct WorkspaceActionLauncher: ViewModifier {
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOpen ? .isModal : [])
         .accessibilityAction(.escape) { isOpen = false }
+    }
+
+    private var backdropOpacity: Double {
+        if reduceTransparency { return 1 }
+        return colorScheme == .light ? Layout.lightShadeOpacity : Layout.darkShadeOpacity
     }
 
     private var actionControls: some View {

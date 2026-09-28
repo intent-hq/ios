@@ -2,6 +2,39 @@ import SwiftTerm
 import SwiftUI
 import UIKit
 
+struct TerminalPresentationObserver: UIViewControllerRepresentable {
+    let onPresented: () -> Void
+
+    func makeUIViewController(context _: Context) -> Controller {
+        let controller = Controller()
+        controller.onPresented = onPresented
+        return controller
+    }
+
+    func updateUIViewController(_ controller: Controller, context _: Context) {
+        controller.onPresented = onPresented
+    }
+
+    static func dismantleUIViewController(_ controller: Controller, coordinator _: Void) {
+        controller.onPresented = nil
+    }
+
+    final class Controller: UIViewController {
+        var onPresented: (() -> Void)?
+
+        override func loadView() {
+            view = UIView()
+            view.isUserInteractionEnabled = false
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            // SwiftUI onAppear runs before the cover's presentation animation finishes.
+            onPresented?()
+        }
+    }
+}
+
 struct TerminalEmulatorView: UIViewRepresentable {
     let connection: MobileTerminalConnection
     let controls: MobileTerminalControls

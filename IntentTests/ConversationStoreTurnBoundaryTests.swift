@@ -9,7 +9,7 @@ extension ConversationStoreTests {
         // Regression (PR #210 review): a turn ending mid-load must still raise
         // the pending-questions marker. There is no stream-event buffer any
         // more: agent:idle / agent:status-changed refresh the marker as they
-        // land, one raiseOnly agent.get each, and the seq-0 snapshot neither
+        // land, one shared raiseOnly agent.get, and the seq-0 snapshot neither
         // replays them nor issues a refresh of its own.
         let fake = FakeConnectionManager()
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat"]
@@ -37,8 +37,8 @@ extension ConversationStoreTests {
         try await waitUntil("the mid-load turn boundaries to refresh the marker") {
             store.pendingQuestionsMessageId == "a1"
         }
-        try await waitUntil("one agent.get per turn boundary") {
-            fake.requestLog.filter { $0.method == "agent.get" }.count == 2
+        try await waitUntil("coalesced turn-boundary detail read") {
+            fake.requestLog.filter { $0.method == "agent.get" }.count == 1
         }
         #expect(store.isLoading, "the marker refresh does not finish the initial load")
 
@@ -52,7 +52,7 @@ extension ConversationStoreTests {
         // The snapshot is the transcript; it neither replays the boundaries
         // nor adds a refresh of its own.
         try await expectNever("an agent.get issued by the snapshot") {
-            fake.requestLog.filter { $0.method == "agent.get" }.count > 2
+            fake.requestLog.filter { $0.method == "agent.get" }.count > 1
         }
         #expect(
             store.pendingQuestionsMessageId == "a1",
