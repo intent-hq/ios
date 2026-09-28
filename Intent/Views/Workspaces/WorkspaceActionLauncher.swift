@@ -77,6 +77,10 @@ struct WorkspaceActionLauncher: ViewModifier {
             if !isSearching {
                 actionControls
                     .padding(.bottom, bottomInset)
+                    .animation(
+                        reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
+                        value: bottomInset
+                    )
             }
         }
         .accessibilityElement(children: .contain)
