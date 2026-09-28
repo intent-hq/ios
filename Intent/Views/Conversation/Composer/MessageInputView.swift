@@ -5,6 +5,9 @@ import UniformTypeIdentifiers
 struct MessageInputView: View {
     @Bindable var viewModel: ConversationViewModel
     private let store: ConversationStore
+    private let usesWorkspaceDesign: Bool
+    private let allowsSending: Bool
+    private let onFocusChange: ((Bool) -> Void)?
     @Environment(\.colorScheme) var colorScheme
 
     @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
@@ -31,9 +34,18 @@ struct MessageInputView: View {
     // during streaming (every legacy-store publication triggers a re-render).
     @State private var localText: String = ""
 
-    init(viewModel: ConversationViewModel, store: ConversationStore) {
+    init(
+        viewModel: ConversationViewModel,
+        store: ConversationStore,
+        usesWorkspaceDesign: Bool = false,
+        allowsSending: Bool = true,
+        onFocusChange: ((Bool) -> Void)? = nil
+    ) {
         self.viewModel = viewModel
         self.store = store
+        self.usesWorkspaceDesign = usesWorkspaceDesign
+        self.allowsSending = allowsSending
+        self.onFocusChange = onFocusChange
     }
 
     /// Overlay visibility is presentation policy, not permission to consume a
@@ -43,9 +55,33 @@ struct MessageInputView: View {
     var body: some View {
         VStack(spacing: 0) {
             supplementalRows
-            inputRow
+            if usesWorkspaceDesign {
+                WorkspaceComposerRow(
+                    text: $localText,
+                    isFocused: $isFocused,
+                    isStreaming: store.isStreaming,
+                    hasAttachments: viewModel.hasPendingAttachments,
+                    canSend: hasSendableContent,
+                    onSend: sendCurrentMessage,
+                    onStop: {
+                        HapticManager.impact(.light)
+                        Task { await viewModel.stopStreaming() }
+                    },
+                    onPhotos: { isPhotoPickerPresented = true },
+                    onFiles: { isFilePickerPresented = true }
+                )
+            } else {
+                inputRow
+            }
         }
-        .background(Theme.card(for: colorScheme))
+        .background {
+            if usesWorkspaceDesign {
+                RoundedRectangle(cornerRadius: workspaceCornerRadius)
+                    .fill(Constants.Conversation.Design.Palette.surface(for: colorScheme))
+            } else {
+                Theme.card(for: colorScheme)
+            }
+        }
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
@@ -66,6 +102,9 @@ struct MessageInputView: View {
         }
         .onAppear {
             localText = viewModel.messageText
+        }
+        .onChange(of: isFocused) { _, focused in
+            onFocusChange?(focused)
         }
         .onChange(of: localText) { _, newValue in
             // Push local edits to viewModel (for draft persistence)
@@ -91,6 +130,12 @@ struct MessageInputView: View {
 }
 
 private extension MessageInputView {
+    var workspaceCornerRadius: CGFloat {
+        let active = store.isStreaming || !localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || viewModel.hasPendingAttachments
+        return active ? Constants.Conversation.Design.Composer.activeCornerRadius : Constants.Conversation.Design.cornerRadius
+    }
+
     @ViewBuilder
     var supplementalRows: some View {
         #if os(visionOS)
@@ -209,6 +254,7 @@ private extension MessageInputView {
             || viewModel.hasPendingAttachments)
             && !viewModel.isUploadingFiles
             && isConnectionReadyForSending
+            && allowsSending
     }
 
     private func updateTextViewHeight(_ naturalHeight: CGFloat) {
@@ -364,10 +410,11 @@ private extension MessageInputView {
                                 .font(.callout)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 .accessibilityHidden(true)
-                            Text(prompt)
+                            Text(LocalizedStringKey(prompt))
                                 .interFont(Constants.Typography.bodyS)
                                 .lineLimit(Constants.Conversation.Composer.suggestedPromptLineLimit)
                                 .foregroundStyle(Theme.foreground(for: colorScheme))
+                                .allowsHitTesting(false)
                         }
                         .padding(.horizontal, Constants.Conversation.Composer.suggestedPromptHorizontalPadding)
                         .frame(minHeight: Constants.Conversation.Composer.suggestedPromptChipMinimumHeight)
@@ -391,7 +438,7 @@ private extension MessageInputView {
     // MARK: - Actions
 
     private func sendCurrentMessage() {
-        guard isConnectionReadyForSending else { return }
+        guard isConnectionReadyForSending, allowsSending else { return }
         #if os(visionOS)
         // Stop app dictation before the text is consumed; a late final
         // result must not resurrect the sent text (.send cancels outright).
@@ -413,7 +460,7 @@ private extension MessageInputView {
             // files, but the text view's submit callback still lands here —
             // pendingFiles clears only after success, so a second send
             // would duplicate the uploads.
-            guard !viewModel.isUploadingFiles, isConnectionReadyForSending else { return }
+            guard !viewModel.isUploadingFiles, isConnectionReadyForSending, allowsSending else { return }
             let text = localText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty || viewModel.hasPendingAttachments else {
                 isFocused = true

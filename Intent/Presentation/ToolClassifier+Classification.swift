@@ -71,7 +71,7 @@ private extension ToolClassifier {
             } ?? true
             if let label = titleIsRawName ? (summary ?? acpTitle) : (acpTitle ?? summary) {
                 return ToolDisplay(
-                    icon: "📁",
+                    icon: .workspace,
                     verb: String(label.prefix(Constants.Conversation.ToolClassifier.titleMaximumLength)),
                     subject: nil,
                     path: nil
@@ -89,7 +89,7 @@ private extension ToolClassifier {
             if let p {
                 let hasSearch = input["search_query_regex"]?.value is String
                 let verb = hasSearch ? "Search" : isDir ? "List" : "Read"
-                return ToolDisplay(icon: "📄", verb: verb, subject: filename(p), path: dirname(p))
+                return ToolDisplay(icon: .file, verb: verb, subject: filename(p), path: dirname(p))
             }
             // _acpTitle fallback: extract the path from e.g. "Read `src/foo.rs`"
             // (no end anchor: multi-line titles match on the first line, like desktop)
@@ -102,7 +102,7 @@ private extension ToolClassifier {
                         options: [.regularExpression, .caseInsensitive]
                     ) != nil
                 return ToolDisplay(
-                    icon: "📄",
+                    icon: .file,
                     verb: titleIsDir ? "List" : "Read",
                     subject: filename(candidate),
                     path: dirname(candidate)
@@ -126,14 +126,14 @@ private extension ToolClassifier {
             let verb = (clean.contains("save") || clean.contains("write")) ? "Save" : "Edit"
             if p != nil || input["file_content"]?.value != nil || input["old_str_1"]?.value != nil {
                 let file = p ?? ""
-                return ToolDisplay(icon: "✏️", verb: verb, subject: filename(file), path: dirname(file))
+                return ToolDisplay(icon: .edit, verb: verb, subject: filename(file), path: dirname(file))
             }
             // _acpTitle fallback: extract the path from e.g. "Edit `src/foo.ts`"
             if let title = acpTitle,
                let captured = firstCapture(#"^(?:Edit|Save|Read|Write|Delete|View|Create)\s+(.+)"#, in: title),
                let candidate = pathCandidate(captured) {
                 return ToolDisplay(
-                    icon: "✏️",
+                    icon: .edit,
                     verb: verb,
                     subject: filename(candidate),
                     path: dirname(candidate)
@@ -147,12 +147,12 @@ private extension ToolClassifier {
            !clean.contains("comment") {
             if let paths = input["file_paths"]?.value as? [Any], !paths.isEmpty {
                 if paths.count == 1, let first = paths[0] as? String {
-                    return ToolDisplay(icon: "🗑️", verb: "Delete", subject: filename(first), path: dirname(first))
+                    return ToolDisplay(icon: .delete, verb: "Delete", subject: filename(first), path: dirname(first))
                 }
-                return ToolDisplay(icon: "🗑️", verb: "Delete", subject: "\(paths.count) files", path: nil)
+                return ToolDisplay(icon: .delete, verb: "Delete", subject: "\(paths.count) files", path: nil)
             }
             if let p {
-                return ToolDisplay(icon: "🗑️", verb: "Delete", subject: filename(p), path: dirname(p))
+                return ToolDisplay(icon: .delete, verb: "Delete", subject: filename(p), path: dirname(p))
             }
         }
 
@@ -173,7 +173,7 @@ private extension ToolClassifier {
         let invocation = context.command.map(terminalCommandInvocation)
             ?? terminalTitleInvocation(context.acpTitle)
             ?? TerminalInvocation(verb: "Run", subject: nil)
-        return ToolDisplay(icon: "▶️", verb: invocation.verb, subject: invocation.subject, path: nil)
+        return ToolDisplay(icon: .terminal, verb: invocation.verb, subject: invocation.subject, path: nil)
     }
 
     private struct TerminalInvocation {
@@ -190,16 +190,16 @@ private extension ToolClassifier {
 
     private static func terminalOperationDisplay(clean: String) -> ToolDisplay? {
         if clean.contains("read") {
-            return ToolDisplay(icon: "▶️", verb: "Read", subject: "terminal", path: nil)
+            return ToolDisplay(icon: .terminal, verb: "Read", subject: "terminal", path: nil)
         }
         if clean.contains("write") {
-            return ToolDisplay(icon: "▶️", verb: "Write to", subject: "terminal", path: nil)
+            return ToolDisplay(icon: .terminal, verb: "Write to", subject: "terminal", path: nil)
         }
         if clean.contains("kill") {
-            return ToolDisplay(icon: "▶️", verb: "Kill", subject: "terminal", path: nil)
+            return ToolDisplay(icon: .terminal, verb: "Kill", subject: "terminal", path: nil)
         }
         if clean.contains("list") {
-            return ToolDisplay(icon: "▶️", verb: "List", subject: "processes", path: nil)
+            return ToolDisplay(icon: .terminal, verb: "List", subject: "processes", path: nil)
         }
         return nil
     }
@@ -242,11 +242,11 @@ private extension ToolClassifier {
         // Script operations
         if clean.contains("script") {
             let scriptName = input["name"]?.value as? String
-            if clean.contains("create") { return ToolDisplay(icon: "▶️", verb: "Create script", subject: scriptName, path: nil) }
-            if clean.contains("start") || clean.contains("run") { return ToolDisplay(icon: "▶️", verb: "Run script", subject: scriptName, path: nil) }
-            if clean.contains("stop") { return ToolDisplay(icon: "▶️", verb: "Stop script", subject: scriptName, path: nil) }
-            if clean.contains("output") { return ToolDisplay(icon: "▶️", verb: "Script output", subject: scriptName, path: nil) }
-            return ToolDisplay(icon: "▶️", verb: "Script", subject: scriptName, path: nil)
+            if clean.contains("create") { return ToolDisplay(icon: .terminal, verb: "Create script", subject: scriptName, path: nil) }
+            if clean.contains("start") || clean.contains("run") { return ToolDisplay(icon: .terminal, verb: "Run script", subject: scriptName, path: nil) }
+            if clean.contains("stop") { return ToolDisplay(icon: .terminal, verb: "Stop script", subject: scriptName, path: nil) }
+            if clean.contains("output") { return ToolDisplay(icon: .terminal, verb: "Script output", subject: scriptName, path: nil) }
+            return ToolDisplay(icon: .terminal, verb: "Script", subject: scriptName, path: nil)
         }
 
         // Context engine
@@ -257,14 +257,14 @@ private extension ToolClassifier {
             let subject = request.map { request in
                 "\(source) · \(String(request.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength)))"
             } ?? source
-            return ToolDisplay(icon: "🧠", verb: "Context Engine", subject: subject, path: nil)
+            return ToolDisplay(icon: .context, verb: "Context Engine", subject: subject, path: nil)
         }
 
         // Search
         if clean.contains("search") || clean.contains("grep") || clean.contains("glob") || clean.contains("find") {
             if clean.contains("web") {
                 return ToolDisplay(
-                    icon: "🌐",
+                    icon: .web,
                     verb: "Search web",
                     subject: query.map { query in
                         String(query.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
@@ -274,7 +274,7 @@ private extension ToolClassifier {
             }
             let request = query ?? infoReq ?? (input["pattern"]?.value as? String)
             return ToolDisplay(
-                icon: "🔍",
+                icon: .search,
                 verb: "Search",
                 subject: request.map { request in
                     String(request.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))

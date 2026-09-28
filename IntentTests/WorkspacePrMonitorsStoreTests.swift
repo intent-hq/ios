@@ -51,6 +51,7 @@ struct WorkspacePrMonitorsStoreTests {
         fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-rows"]
         fake.responseMap["prMonitor.list"] = ["monitors": monitors]
         let store = WorkspacePrMonitorsStore(connectionManager: fake)
+        store.retain(workspaceId: workspaceId)
         await store.seed(workspaceId: workspaceId)
         return store
     }
@@ -83,6 +84,7 @@ struct WorkspacePrMonitorsStoreTests {
                 makeMonitorDict(monitorId: "prm-9", workspaceId: "ws-def", prNumber: 9)
             ]
         ]
+        store.retain(workspaceId: "ws-def")
         await store.seed(workspaceId: "ws-def")
         #expect(fake.paramsForMethod("prMonitor.list").first?["workspaceId"] as? String == "ws-def")
         // One global subscription serves both workspaces.
@@ -191,6 +193,7 @@ struct WorkspacePrMonitorsStoreTests {
         let fake = FakeConnectionManager()
         let store = await makeSeededStore(fake)
         fake.responseMap["prMonitor.list"] = ["monitors": [] as [[String: Any]]]
+        store.retain(workspaceId: "ws-def")
         await store.seed(workspaceId: "ws-def")
         fake.clearRequestLog()
         fake.responseMap["prMonitor.list"] = [
@@ -220,6 +223,7 @@ struct WorkspacePrMonitorsStoreTests {
         let fake = FakeConnectionManager()
         let store = await makeSeededStore(fake, monitors: [makeMonitorDict()])
         fake.responseMap["prMonitor.list"] = ["monitors": [] as [[String: Any]]]
+        store.retain(workspaceId: "ws-def")
         await store.seed(workspaceId: "ws-def")
         fake.clearRequestLog()
         fake.responseMap["prMonitor.list"] = ["monitors": [makeMonitorDict()]]
@@ -256,19 +260,12 @@ struct WorkspacePrMonitorsStoreTests {
             store.monitors(for: "ws-abc").isEmpty
         }
 
-        // Resolve the in-flight request with the STALE payload — it still
-        // lists the cancelled monitor. The discarded response queues exactly
-        // one follow-up fetch, which stays suspended.
+        // Replay the complete cancellation over the stale seed. No recovery
+        // read is needed, and the removed row must never reappear.
         fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
-        try await fake.waitForRequests("prMonitor.list", count: 2)
-        #expect(fake.paramsForMethod("prMonitor.list").count == 2)
-
-        #expect(store.monitors(for: "ws-abc").isEmpty)
-
-        // Fresh server state (post-cancel) for the queued follow-up fetch.
-        fake.resolvePending("prMonitor.list", with: ["monitors": [] as [[String: Any]]])
         await refetchTask.value
         #expect(store.monitors(for: "ws-abc").isEmpty)
+        #expect(fake.paramsForMethod("prMonitor.list").count == 1)
     }
 
     @Test func deinitRemovesEventHandler() async throws {

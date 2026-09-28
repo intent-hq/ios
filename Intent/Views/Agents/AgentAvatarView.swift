@@ -12,6 +12,7 @@ struct AgentAvatarView: View {
     var icon: String?  // Specialist icon metadata (PROTOCOL §5.11)
     var isActive: Bool = false
     var state: AgentAvatarState = .idle
+    var workspaceStyle = false
 
     private var design: AgentAvatarDesign {
         AgentAvatarDesign.design(agentId: agentId, specialist: specialist, icon: icon)
@@ -19,8 +20,12 @@ struct AgentAvatarView: View {
 
     // Desktop geometry ratios (avatar-size.ts "standard": surface 20,
     // art 16, clear space 2, corner radius 6).
-    private var artSize: CGFloat { size * Constants.AgentAvatar.artSizeRatio }
-    private var cornerRadius: CGFloat { size * Constants.AgentAvatar.cornerRadiusRatio }
+    private var artSize: CGFloat {
+        size * (workspaceStyle ? WorkspaceDetailStyle.avatarArtRatio : Constants.AgentAvatar.artSizeRatio)
+    }
+    private var cornerRadius: CGFloat {
+        size * (workspaceStyle ? WorkspaceDetailStyle.avatarCornerRatio : Constants.AgentAvatar.cornerRadiusRatio)
+    }
 
     var body: some View {
         ZStack {
@@ -65,6 +70,9 @@ struct AgentAvatarView: View {
     /// Desktop tile surface per state (`--agent-avatar-surface-*` tokens);
     /// idle is the neutral hsl(145 14% 92%) light / hsl(145 12% 78%) dark.
     private var surfaceColor: Color {
+        if workspaceStyle, state == .idle || state == .running {
+            return design == .coordinator ? WorkspaceDetailStyle.accent : WorkspaceDetailStyle.neutral
+        }
         switch state {
         case .idle: return Constants.Colors.AgentAvatar.surface
         case .running: return Constants.Colors.AgentAvatar.surfaceActive
@@ -80,7 +88,10 @@ struct AgentAvatarView: View {
     /// stays light, so the glyph stays dark. The completed tile darkens in
     /// dark mode, so it carries its own foreground token.
     private var glyphColor: Color {
-        state == .completed
+        if workspaceStyle, state == .idle || state == .running {
+            return design == .coordinator ? WorkspaceDetailStyle.onAccent : .white
+        }
+        return state == .completed
             ? Constants.Colors.AgentAvatar.glyphCompleted
             : Constants.Colors.AgentAvatar.glyph
     }

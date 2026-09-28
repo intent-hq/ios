@@ -44,6 +44,46 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     }
 
     @MainActor
+    func testEdgeSwipeBackReturnsThroughWorkspaceAndCanBeCancelled() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .phone, "Compact navigation gesture")
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
+        workspace.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        agent.tap()
+        let back = app.buttons["conversation.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: Fixture.elementTimeout))
+
+        edgeSwipe(in: app, progress: 0.15)
+        XCTAssertTrue(back.exists, "A cancelled swipe must keep the conversation open")
+        edgeSwipe(in: app)
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertFalse(back.exists)
+        edgeSwipe(in: app)
+        let search = app.buttons[Fixture.workspaceListIdentifier]
+        XCTAssertTrue(search.waitForExistence(timeout: Fixture.elementTimeout))
+
+        edgeSwipe(in: app)
+        workspace.tap()
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        agent.tap()
+        XCTAssertTrue(back.waitForExistence(timeout: Fixture.elementTimeout))
+        back.tap()
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+    }
+
+    @MainActor
+    private func edgeSwipe(in app: XCUIApplication, progress: CGFloat = 0.85) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: progress, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
+    }
+
+    @MainActor
     func testCreateNewAgentMenuOpensAgentSetup() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
@@ -151,5 +191,81 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
             workspaceRow.waitForExistence(timeout: Fixture.workspaceTimeout),
             "the fixture workspace row never appeared in the workspace list"
         )
+    }
+
+    @MainActor
+    func testAgentRowOpensConversationFromPreviewAndEmptySpace() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        showWorkspaceList(in: app, workspaceRow: workspace)
+        workspace.tap()
+
+        let row = app.buttons["workspace.agent.demo-agent-implementor"]
+        let preview = app.staticTexts["Review CSV export"].firstMatch
+        let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
+        for target in ["Markdown preview", "row center", "trailing space", "bottom padding"] {
+            XCTAssertTrue(row.waitForExistence(timeout: Fixture.elementTimeout))
+            XCTAssertTrue(preview.waitForExistence(timeout: Fixture.elementTimeout))
+            let point = agentRowTapPoint(target, row: row.frame, preview: preview.frame)
+            app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: point.x, dy: point.y))
+                .tap()
+            XCTAssertTrue(
+                transcript.waitForExistence(timeout: Fixture.elementTimeout),
+                "Tapping \(target) must open the agent conversation"
+            )
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                XCTAssertTrue(app.staticTexts["Dashboard Implementor, Agent"].exists)
+                app.buttons["conversation.back"].tap()
+            } else {
+                XCTAssertTrue(app.navigationBars["Dashboard Implementor"].exists)
+                let agentsBack = app.navigationBars.buttons["Agents"].firstMatch
+                if agentsBack.exists {
+                    agentsBack.tap()
+                } else {
+                    app.navigationBars.buttons.element(boundBy: 0).tap()
+                }
+            }
+            XCTAssertTrue(transcript.waitForNonExistence(timeout: Fixture.elementTimeout))
+        }
+    }
+
+    @MainActor
+    func testDelegatedAgentRowOpensConversationFromIndentation() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
+        showWorkspaceList(in: app, workspaceRow: workspace)
+        workspace.tap()
+        let delegates = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "delegated agents")).firstMatch
+        XCTAssertTrue(delegates.waitForExistence(timeout: Fixture.elementTimeout))
+        delegates.tap()
+        let row = app.buttons["workspace.agent.demo-agent-deflake-capture"]
+        XCTAssertTrue(row.waitForExistence(timeout: Fixture.elementTimeout))
+        row.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+            .withOffset(CGVector(dx: 2, dy: 0))
+            .tap()
+        let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
+        XCTAssertTrue(
+            transcript.waitForExistence(timeout: Fixture.elementTimeout),
+            "Tapping the empty indentation must open the delegated agent conversation"
+        )
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            XCTAssertTrue(app.staticTexts["Capture Race Fixer, Agent"].exists)
+        } else {
+            XCTAssertTrue(app.navigationBars["Capture Race Fixer"].exists)
+        }
+    }
+
+    private func agentRowTapPoint(_ target: String, row: CGRect, preview: CGRect) -> CGPoint {
+        switch target {
+        case "Markdown preview": CGPoint(x: preview.midX, y: preview.midY)
+        case "row center": CGPoint(x: row.midX, y: row.midY)
+        case "trailing space": CGPoint(x: row.maxX - 2, y: preview.midY)
+        default: CGPoint(x: row.midX, y: row.maxY - 2)
+        }
     }
 }

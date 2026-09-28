@@ -120,7 +120,8 @@ extension WorkspaceStore {
             activePullRequest: context.activePullRequest,
             statusImageAssetId: WorkspaceStatusImageLayout.normalizedAssetId(
                 dictionary["statusImageAssetId"] as? String
-            )
+            ),
+            statusMessage: dictionary["statusMessage"] as? String
         )
     }
 }

@@ -6,8 +6,17 @@ import SwiftUI
 @Observable class ConversationViewModel {
     var store: ConversationStore {
         didSet {
-            oldValue.onStreamingChanged = nil
+            if store !== oldValue {
+                hasLatchedNewMessagesDividerAnchor = false
+                latchedNewMessagesDividerAnchorId = nil
+            }
+            if let streamingObserverId { oldValue.streamingObservers[streamingObserverId] = nil }
+            oldValue.entryObservers[conversationConsumer] = nil
+            if activeLiveStoreActivation != nil { oldValue.releaseConversation(conversationConsumer) }
             observeStreaming()
+            if activeLiveStoreActivation != nil {
+                store.retainConversation(conversationConsumer, agentId: agentId, workspaceId: workspaceId)
+            }
         }
     }
     var hookStore: BackgroundHookStore
@@ -20,7 +29,8 @@ import SwiftUI
 
     var isTruncated: Bool { store.isTruncated }
     var totalMessageCount: Int { store.totalMessageCount }
-    var agentNotFound: Bool { store.agentNotFound }
+    var agentNotFound: Bool { store.agentNotFound || workspaceMismatch }
+    var workspaceMismatch = false
     var activeAgentHooks: [BackgroundHook] {
         hookStore.activeHooks.filter { $0.agentId == agentId }
     }
@@ -48,10 +58,17 @@ import SwiftUI
     var currentModelId: String?
     var currentProviderId: String?
     @ObservationIgnored var modelMetadataGeneration: Int?
+    @ObservationIgnored var modelMetadataEpoch: Int?
     var modelCatalogLoadFailed = false
     let optionsStore: CreationOptionsStore
-    var specialistName: String?
-    var specialistDescription: String?
+    let agentDetails: AgentDetailStore
+    @ObservationIgnored var detailConsumer: UUID?
+    var currentSpecialistId: String?
+    var specialistName: String? { currentSpecialist?.name }
+    var specialistDescription: String? { currentSpecialist?.description }
+    private var currentSpecialist: SpecialistInfo? {
+        optionsStore.specialists.first { $0.id == currentSpecialistId }
+    }
     var dismissQuestionsError: String?
 
     let attachmentPipeline: ConversationAttachmentPipeline
@@ -95,6 +112,9 @@ import SwiftUI
     @ObservationIgnored var markSeenDebounceTask: Task<Void, Never>?
     @ObservationIgnored var liveStoreActivationGeneration = 0
     @ObservationIgnored var activeLiveStoreActivation: Int?
+    @ObservationIgnored var loadTask: Task<Void, Never>?
+    @ObservationIgnored let conversationConsumer = UUID()
+    @ObservationIgnored var streamingObserverId: UUID?
 
     init(
         agentId: String,
@@ -102,16 +122,23 @@ import SwiftUI
         agentName: String,
         connection: any ConnectionManagerRouting,
         uploadService: AttachmentUploadService,
-        optionsStore: CreationOptionsStore
+        optionsStore: CreationOptionsStore,
+        agentDetails: AgentDetailStore? = nil,
+        conversations: ConversationStorePool? = nil,
+        hooks: WorkspaceStatusStore<BackgroundHook>? = nil,
+        monitors: WorkspacePrMonitorsStore? = nil
     ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
         self.agentName = agentName
         self.connection = connection
         self.optionsStore = optionsStore
-        self.store = ConversationStore(connectionManager: connection)
-        self.hookStore = BackgroundHookStore(connectionManager: connection)
-        self.monitoredPrStore = MonitoredPrStore(connectionManager: connection)
+        let sharedStore = conversations?.store(agentId: agentId)
+        let details = sharedStore?.commands.agentDetails ?? agentDetails ?? AgentDetailStore(connection: connection)
+        self.agentDetails = details
+        self.store = sharedStore ?? ConversationStore(connectionManager: connection, agentDetails: details)
+        self.hookStore = BackgroundHookStore(connectionManager: connection, source: hooks)
+        self.monitoredPrStore = MonitoredPrStore(connectionManager: connection, source: monitors)
         self.attachmentPipeline = ConversationAttachmentPipeline(uploadService: uploadService)
         self.messageText = PersistenceManager.shared.loadDraft(
             workspaceId: workspaceId,
@@ -133,5 +160,19 @@ import SwiftUI
             }
 
         observeStreaming()
+    }
+
+    isolated deinit {
+        releaseOwnedResources()
+    }
+
+    private func releaseOwnedResources() {
+        optionsStore.releaseCatalogs(consumer: conversationConsumer)
+        loadTask?.cancel()
+        markSeenDebounceTask?.cancel()
+        if let streamingObserverId { store.streamingObservers[streamingObserverId] = nil }
+        store.entryObservers[conversationConsumer] = nil
+        store.releaseConversation(conversationConsumer)
+        if let detailConsumer { agentDetails.release(agentId: agentId, consumer: detailConsumer) }
     }
 }

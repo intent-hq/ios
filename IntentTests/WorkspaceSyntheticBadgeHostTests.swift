@@ -4,104 +4,19 @@ import Testing
 import UIKit
 
 @MainActor
-final class SyntheticBadgeHostLifecycleWaiter: NSObject {
-    enum Event: String, Hashable {
-        case didAppear
-        case didDisappear
-    }
-
-    enum WaitError: Error, Equatable {
-        case concurrentWait
-        case timedOut(Event)
-    }
-
-    private var continuation: CheckedContinuation<Void, any Error>?
-    private var expectedEvent: Event?
-    private var receivedEvents: Set<Event> = []
-    private var timer: Timer?
-
-    func wait(
-        for event: Event,
-        timeout: TimeInterval,
-        honoringCancellation: Bool,
-        trigger: () -> Void
-    ) async throws {
-        guard !receivedEvents.contains(event) else { return }
-        guard continuation == nil else { throw WaitError.concurrentWait }
-        if honoringCancellation {
-            try await withTaskCancellationHandler {
-                try await installWait(for: event, timeout: timeout, trigger: trigger)
-            } onCancel: {
-                Task { @MainActor [weak self] in
-                    self?.cancelWait(for: event)
-                }
-            }
-        } else {
-            try await installWait(for: event, timeout: timeout, trigger: trigger)
-        }
-    }
-
-    func receive(_ event: Event) {
-        receivedEvents.insert(event)
-        guard expectedEvent == event else { return }
-        finish(with: .success(()))
-    }
-
-    private func installWait(
-        for event: Event,
-        timeout: TimeInterval,
-        trigger: () -> Void
-    ) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-            guard self.continuation == nil else {
-                continuation.resume(throwing: WaitError.concurrentWait)
-                return
-            }
-            self.continuation = continuation
-            expectedEvent = event
-            let timer = Timer(
-                timeInterval: timeout,
-                target: self,
-                selector: #selector(timeoutFired),
-                userInfo: nil,
-                repeats: false
-            )
-            self.timer = timer
-            RunLoop.main.add(timer, forMode: .common)
-            trigger()
-        }
-    }
-
-    private func cancelWait(for event: Event) {
-        guard expectedEvent == event else { return }
-        finish(with: .failure(CancellationError()))
-    }
-
-    @objc private func timeoutFired() {
-        guard let expectedEvent else { return }
-        finish(with: .failure(WaitError.timedOut(expectedEvent)))
-    }
-
-    private func finish(with result: Result<Void, any Error>) {
-        guard let continuation else { return }
-        self.continuation = nil
-        expectedEvent = nil
-        timer?.invalidate()
-        timer = nil
-        continuation.resume(with: result)
-    }
-}
-
-@MainActor
 private final class SyntheticBadgeHostingController<Content: View>: UIHostingController<Content> {
-    private let lifecycleWaiter = SyntheticBadgeHostLifecycleWaiter()
+    private let lifecycleWaiter: SyntheticBadgeHostLifecycleWaiter
     private let observeLifecycle: ((SyntheticBadgeHostLifecycleWaiter.Event) -> Void)?
+    private let diagnostics: SyntheticBadgeHostTrace
 
     init(
         rootView: Content,
-        observeLifecycle: ((SyntheticBadgeHostLifecycleWaiter.Event) -> Void)?
+        observeLifecycle: ((SyntheticBadgeHostLifecycleWaiter.Event) -> Void)?,
+        diagnostics: SyntheticBadgeHostTrace
     ) {
         self.observeLifecycle = observeLifecycle
+        self.diagnostics = diagnostics
+        lifecycleWaiter = SyntheticBadgeHostLifecycleWaiter(diagnostics: diagnostics)
         super.init(rootView: rootView)
     }
 
@@ -111,15 +26,23 @@ private final class SyntheticBadgeHostingController<Content: View>: UIHostingCon
     }
 
     override func viewDidAppear(_ animated: Bool) {
+        diagnostics.record("didAppear.entry")
         super.viewDidAppear(animated)
+        diagnostics.record("didAppear.super.return")
         observeLifecycle?(.didAppear)
+        diagnostics.record("didAppear.observer.return")
         lifecycleWaiter.receive(.didAppear)
+        diagnostics.record("didAppear.receiver.return")
     }
 
     override func viewDidDisappear(_ animated: Bool) {
+        diagnostics.record("didDisappear.entry")
         super.viewDidDisappear(animated)
+        diagnostics.record("didDisappear.super.return")
         observeLifecycle?(.didDisappear)
+        diagnostics.record("didDisappear.observer.return")
         lifecycleWaiter.receive(.didDisappear)
+        diagnostics.record("didDisappear.receiver.return")
     }
 
     func wait(
@@ -154,23 +77,43 @@ private final class SyntheticBadgeHostSession<Content: View> {
     private let callbackTimeout: TimeInterval
     private let afterShowingWindow: (() -> Void)?
     private var teardownStarted = false
+    private let diagnostics: SyntheticBadgeHostTrace
 
     init(
         rootView: Content,
         width: CGFloat,
         height: CGFloat,
+        safeAreaRegions: SafeAreaRegions,
         callbackTimeout: TimeInterval,
         afterShowingWindow: (() -> Void)?,
-        observeLifecycle: ((SyntheticBadgeHostLifecycleWaiter.Event) -> Void)?
-    ) {
+        observeLifecycle: ((SyntheticBadgeHostLifecycleWaiter.Event) -> Void)?,
+        diagnostics: SyntheticBadgeHostTrace
+    ) throws {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = try #require(
+            SyntheticBadgeHostScene.resolve(in: scenes),
+            "SyntheticBadgeHost requires a connected foreground window scene: \(SyntheticBadgeHostScene.description(of: scenes))"
+        )
+        print("SYNTHETIC host scene: \(SyntheticBadgeHostScene.description(of: scenes))")
         controller = SyntheticBadgeHostingController(
             rootView: rootView,
-            observeLifecycle: observeLifecycle
+            observeLifecycle: observeLifecycle,
+            diagnostics: diagnostics
         )
-        window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
+        controller.safeAreaRegions = safeAreaRegions
+        // A detached window can lay out and deliver appearance callbacks while
+        // SwiftUI exposes no accessibility tree to the application. Foreground
+        // inactivity (for example during a system alert) stops event delivery,
+        // not the connected scene's ability to host this view's hierarchy.
+        window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: width, height: height)
         self.callbackTimeout = callbackTimeout
         self.afterShowingWindow = afterShowingWindow
+        self.diagnostics = diagnostics
+        diagnostics.bind(window: window, controller: controller)
+        diagnostics.record("host.allocated")
         window.rootViewController = controller
+        diagnostics.record("host.root.assigned")
     }
 
     func appear() async throws {
@@ -179,14 +122,24 @@ private final class SyntheticBadgeHostSession<Content: View> {
             timeout: callbackTimeout,
             honoringCancellation: false
         ) {
+            diagnostics.record("show.begin")
             window.isHidden = false
+            diagnostics.record("show.return")
             afterShowingWindow?()
         }
+        diagnostics.record("appearance.wait.return")
         window.layoutIfNeeded()
         controller.view.layoutIfNeeded()
+        diagnostics.record("appearance.layout.return")
     }
 
     func disappear() async throws {
+        diagnostics.record("teardown.begin")
+        defer {
+            diagnostics.record("teardown.detach.begin")
+            window.windowScene = nil
+            diagnostics.record("teardown.detached")
+        }
         try await controller.wait(
             for: .didDisappear,
             timeout: callbackTimeout,
@@ -194,9 +147,13 @@ private final class SyntheticBadgeHostSession<Content: View> {
         ) {
             guard !teardownStarted else { return }
             teardownStarted = true
+            diagnostics.record("hide.begin")
             window.isHidden = true
+            diagnostics.record("hide.return")
             window.rootViewController = nil
+            diagnostics.record("teardown.root.cleared")
         }
+        diagnostics.record("disappearance.wait.return")
     }
 }
 
@@ -224,33 +181,56 @@ enum SyntheticBadgeHost {
     private static let probeHeight: CGFloat = 100
     private static let callbackTimeout: TimeInterval = 5
 
+    // Keep the existing lifecycle/error/cleanup order together while recording its boundaries.
+    // swiftlint:disable:next function_body_length
     static func render<Content: View, Result>(
         _ content: Content,
         width: CGFloat,
         height: CGFloat,
+        safeAreaRegions: SafeAreaRegions = .all,
+        diagnostics: SyntheticBadgeHostTrace? = nil,
         lifecycleHooks: LifecycleHooks? = nil,
         observeLifecycle: ((LifecycleEvent) -> Void)? = nil,
         inspect: (_ hostView: UIView, _ window: UIWindow) throws -> Result
     ) async throws -> Result {
-        let session = autoreleasepool {
+        let diagnostics = diagnostics ?? SyntheticBadgeHostTrace(context: String(reflecting: Content.self))
+        diagnostics.record("render.begin")
+        defer {
+            diagnostics.record("render.exit")
+            diagnostics.publish()
+        }
+        #if targetEnvironment(simulator)
+            let accessibilityOwner = try SyntheticBadgeAccessibilityRuntime.shared.acquire()
+            diagnostics.record("accessibility.acquired")
+            defer {
+                SyntheticBadgeAccessibilityRuntime.shared.release(accessibilityOwner)
+                diagnostics.record("accessibility.released")
+            }
+        #endif
+        let session = try autoreleasepool {
             let rootView = SyntheticBadgeHostRoot(content: content, width: width, height: height)
-            return SyntheticBadgeHostSession(
+            return try SyntheticBadgeHostSession(
                 rootView: rootView,
                 width: width,
                 height: height,
+                safeAreaRegions: safeAreaRegions,
                 callbackTimeout: callbackTimeout,
                 afterShowingWindow: lifecycleHooks?.afterShowingWindow,
-                observeLifecycle: observeLifecycle
+                observeLifecycle: observeLifecycle,
+                diagnostics: diagnostics
             )
         }
         var operationResult: Swift.Result<Result, any Error>
         do {
             try await session.appear()
             try Task.checkCancellation()
+            diagnostics.record("inspection.begin")
             let inspected = try inspect(session.controller.view, session.window)
+            diagnostics.record("inspection.return")
             try Task.checkCancellation()
             operationResult = .success(inspected)
         } catch {
+            diagnostics.record("operation.error", fields: ["error": String(describing: error)])
             operationResult = .failure(error)
         }
 
@@ -259,6 +239,7 @@ enum SyntheticBadgeHost {
             try await session.disappear()
             teardownResult = .success(())
         } catch {
+            diagnostics.record("teardown.error", fields: ["error": String(describing: error)])
             teardownResult = .failure(error)
         }
         if Task.isCancelled, case .success = operationResult {
@@ -306,15 +287,27 @@ enum SyntheticBadgeHost {
     }
 
     static func accessibilityElements(in view: UIView) -> [NSObject] {
-        let elementCount = view.accessibilityElementCount()
-        let direct =
-            elementCount == NSNotFound
-            ? (view.accessibilityElements ?? []).compactMap { $0 as? NSObject }
-            : (0..<elementCount).compactMap { index in
-                view.accessibilityElement(at: index) as? NSObject
+        var visited: Set<ObjectIdentifier> = []
+        var elements: [NSObject] = []
+        func visit(_ object: NSObject) {
+            guard visited.insert(ObjectIdentifier(object)).inserted else { return }
+            if object !== view { elements.append(object) }
+            // ScrollView/Menu can publish intermediate SwiftUI accessibility
+            // containers which are NSObjects, not UIViews. Walk their children
+            // too; stopping at the first container hides the actual menu chips.
+            var children = (object.accessibilityElements ?? []).compactMap { $0 as? NSObject }
+            let count = object.accessibilityElementCount()
+            if count != NSNotFound, count > 0 {
+                children += (0..<count).compactMap { object.accessibilityElement(at: $0) as? NSObject }
             }
-        return (view.isAccessibilityElement ? [view] : direct)
-            + view.subviews.flatMap(accessibilityElements(in:))
+            children.forEach(visit)
+            if let view = object as? UIView {
+                view.subviews.forEach(visit)
+            }
+        }
+        if view.isAccessibilityElement { elements.append(view) }
+        visit(view)
+        return elements
     }
 
     /// SwiftUI's accessibility nodes are not `UIView`s, so read the identifier
@@ -337,18 +330,27 @@ struct SyntheticBadgeHostTests {
 
     @Test func renderUsesRootViewControllerContainmentAcrossCompleteLifecycle() async throws {
         var stages: [String] = []
+        var renderedWindow: UIWindow?
         try await SyntheticBadgeHost.render(
             Text("content"),
             width: 200,
             height: 100
         ) { stages.append($0.rawValue) } inspect: { hostView, window in
             stages.append("inspection")
+            renderedWindow = window
             let controller = try #require(window.rootViewController)
+            let scene = try #require(window.windowScene, "A detached window cannot publish the hosted accessibility tree")
+            #expect(UIApplication.shared.connectedScenes.contains(scene))
+            #expect(scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive)
+            #expect(scene.windows.contains { $0 === window })
             #expect(controller.view === hostView)
             #expect(hostView.window === window)
             #expect(hostView.frame == window.bounds)
         }
         #expect(stages == ["didAppear", "inspection", "didDisappear"])
+        #expect(renderedWindow?.isHidden == true)
+        #expect(renderedWindow?.rootViewController == nil)
+        #expect(renderedWindow?.windowScene == nil)
     }
 
     @Test func inspectionFailureStillCompletesDisappearance() async {

@@ -6,12 +6,51 @@ struct QuestionWizardCollapsedBanner: View {
     let dismissed: Bool
     let onExpand: () -> Void
     let onDismiss: () -> Void
+    var usesWorkspaceDesign = false
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private typealias Layout = Constants.Conversation.QuestionWizard.CollapsedBanner
+    private typealias Design = Constants.Conversation.Design
 
     var body: some View {
+        if usesWorkspaceDesign {
+            workspaceBanner
+        } else {
+            legacyBanner
+        }
+    }
+
+    private var workspaceBanner: some View {
+        VStack(alignment: .leading, spacing: Design.Question.notificationSpacing) {
+            Text("Agent has \(questionCount) questions")
+                .interFont(Constants.Typography.bodySEmphasized)
+                .tracking(Design.Typography.compactBodyTracking)
+                .foregroundStyle(Design.Palette.foreground(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: Design.Question.buttonSpacing))
+                : AnyLayout(HStackLayout(spacing: Design.Question.buttonSpacing))
+            layout {
+                if showsDismiss {
+                    Button("Dismiss", action: onDismiss)
+                        .buttonStyle(WorkspaceQuestionButtonStyle(fillsWidth: true))
+                        .accessibilityIdentifier("question.dismiss")
+                }
+                Button("Answer", action: onExpand)
+                    .buttonStyle(WorkspaceQuestionButtonStyle(primary: true, fillsWidth: true))
+                    .accessibilityIdentifier("question.answer")
+            }
+            .disabled(dismissed)
+        }
+        .padding(.horizontal, Design.Question.horizontalPadding)
+        .padding(.top, Design.Question.topPadding)
+        .padding(.bottom, Design.Question.bottomPadding)
+    }
+
+    private var legacyBanner: some View {
         HStack(spacing: 0) {
             expandButton
             if showsDismiss {

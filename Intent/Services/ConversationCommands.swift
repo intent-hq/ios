@@ -62,50 +62,72 @@ final class ConversationCommands {
     struct SubscriptionSnapshot {
         let watchedAgentIds: [String]
         let delegationGroupStatus: (completed: Int, total: Int)?
+        let groups: [WatchedAgentGroup]
+        let agentStatuses: [String: String]
+        let summaryBoundary: AgentSummaryStore.ReadBoundary
     }
 
     var queuedMessages: [QueuedMessage] = [] {
         didSet { queueRevision &+= 1 }
     }
-    private var queueRevision = 0
+    var queueRevision = 0
+    private var queueReadGeneration = 0
+    private var queueSeedSequence = 0
+
+    var queueReads: [UUID: QueueRead] = [:]
+    @ObservationIgnored let queueMutations = QueueMutationHistory()
     @ObservationIgnored var onQueueSnapshot: (([QueuedMessage]) -> Void)?
-    var pendingQuestionsMessageId: String?
-    var dismissedQuestionsMessageId: String?
-    var lastSeenMessageId: String?
+    var pendingQuestionsMessageId: String? {
+        didSet {
+            markerRevision &+= 1
+            pendingMarkerRevision &+= 1
+        }
+    }
+    var dismissedQuestionsMessageId: String? {
+        didSet {
+            markerRevision &+= 1
+            dismissedMarkerRevision &+= 1
+        }
+    }
+    private(set) var pendingMarkerRevision = 0
+    private(set) var dismissedMarkerRevision = 0
+    var lastSeenMessageId: String? {
+        didSet {
+            markerRevision &+= 1
+            seenMarkerRevision &+= 1
+        }
+    }
+    private(set) var seenMarkerRevision = 0
+    private(set) var confirmedMarkerRevisions: [String: Int] = [:]
+    private(set) var markerRevision = 0
+    let agentDetails: AgentDetailStore
 
     @ObservationIgnored private let connectionManager: ConnectionManagerRouting
     private var lastMarkSeenSentId: String?
     private var resetGeneration = 0
 
-    init(connectionManager: ConnectionManagerRouting) {
+    init(connectionManager: ConnectionManagerRouting, agentDetails: AgentDetailStore? = nil) {
         self.connectionManager = connectionManager
+        self.agentDetails = agentDetails ?? AgentDetailStore(connection: connectionManager)
     }
 }
 
 extension ConversationCommands {
-    func fetchAgentState(agentId: String) async throws -> AgentState? {
-        let result = try await connectionManager.request(
-            "agent.get",
-            params: ["agentId": agentId]
-        )
-        guard let response = result as? [String: Any],
-              let agent = response["agent"] as? [String: Any] else { return nil }
-        let metadata = agent["metadata"] as? [String: Any]
+    func fetchAgentState(agentId: String, workspaceId: String? = nil, refresh: Bool = true) async throws -> AgentState? {
+        let detail = try await agentDetails.load(agentId: agentId, workspaceId: workspaceId, refresh: refresh)
+        let agent = detail.values
+        let metadata = detail.metadata
         return AgentState(
             isStreaming: (agent["isStreaming"] as? Bool ?? false)
                 || (agent["isResponding"] as? Bool ?? false)
                 || (agent["turnInFlight"] as? Bool ?? false),
-            pendingQuestionsMessageId: metadata?["pendingQuestionsMessageId"] as? String,
-            dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String,
-            lastSeenMessageId: metadata?["lastSeenMessageId"] as? String
+            pendingQuestionsMessageId: metadata["pendingQuestionsMessageId"] as? String,
+            dismissedQuestionsMessageId: metadata["dismissedQuestionsMessageId"] as? String,
+            lastSeenMessageId: metadata["lastSeenMessageId"] as? String
         )
     }
 
-    /// Targeted seek for one message outside the loaded page
-    /// (`agent.getConversation` with `aroundMessageId` + `limit: 1`, PROTOCOL
-    /// §5.5). Returns the row when the page contains it, nil when the daemon
-    /// served a page without it. An unknown id surfaces as the daemon's
-    /// `-32602` (`unknown message id`) — the caller classifies it.
+    /// Seeks one message; nil if absent, with unknown-id errors classified by the caller.
     func fetchMessage(
         agentId: String,
         messageId: String,
@@ -122,36 +144,6 @@ extension ConversationCommands {
         guard let response = result as? [String: Any],
               let items = response["messages"] as? [[String: Any]] else { return nil }
         return items.compactMap(ConversationMessage.parseMessage).first { $0.id == messageId }
-    }
-
-    func subscribeToEvents(agentId: String, workspaceId: String) async throws -> String? {
-        let result = try await connectionManager.request(
-            "events.subscribe",
-            params: [
-                "eventTypes": [
-                    "agent:stream:*",
-                    "agent:queue:*",
-                    "agent:user-message:*",
-                    "agent:subscribed",
-                    "agent:unsubscribed",
-                    "agent:status-changed",
-                    "agent:idle",
-                    "agent:woken-by-subscription",
-                    "agent:deleted",
-                    "agent:updated"
-                ],
-                "workspaceId": workspaceId,
-                "replaceGroup": "streaming-\(agentId)"
-            ]
-        )
-        return (result as? [String: Any])?["subscriptionId"] as? String
-    }
-
-    func unsubscribeEvents(subscriptionId: String) async throws {
-        _ = try await connectionManager.request(
-            "events.unsubscribe",
-            params: ["subscriptionId": subscriptionId]
-        )
     }
 
     func sendMessage(_ request: SendRequest) async throws -> SendAcceptance {
@@ -208,6 +200,8 @@ extension ConversationCommands {
             if let confirmedId = (result as? [String: Any])?["dismissedQuestionsMessageId"]
                 as? String {
                 dismissedQuestionsMessageId = confirmedId
+                confirmedMarkerRevisions["dismissedQuestionsMessageId", default: 0] &+= 1
+                agentDetails.updateMetadata(agentId: agentId, fields: ["dismissedQuestionsMessageId": confirmedId])
             }
         } catch {
             if dismissedQuestionsMessageId == messageId {
@@ -238,6 +232,8 @@ extension ConversationCommands {
             )
             if let confirmedId = (result as? [String: Any])?["lastSeenMessageId"] as? String {
                 lastSeenMessageId = confirmedId
+                confirmedMarkerRevisions["lastSeenMessageId", default: 0] &+= 1
+                agentDetails.updateMetadata(agentId: agentId, fields: ["lastSeenMessageId": confirmedId])
             }
         } catch {
             if lastMarkSeenSentId == messageId { lastMarkSeenSentId = nil }
@@ -251,6 +247,7 @@ extension ConversationCommands {
         imagePayload: OutgoingImagePayload,
         filePayload: OutgoingFilePayload
     ) async throws {
+        let generation = queueMutations.generation
         var params: [String: Any] = ["agentId": agentId, "content": content]
         imagePayload.apply(to: &params)
         filePayload.apply(to: &params)
@@ -260,28 +257,34 @@ extension ConversationCommands {
               let data = try? JSONSerialization.data(withJSONObject: dictionary),
               let message = try? JSONDecoder().decode(QueuedMessage.self, from: data)
         else { return }
-        queuedMessages.append(message)
+        confirmQueueMutation(.append(message), generation: generation)
     }
 
     func stop(agentId: String) async throws {
         _ = try await connectionManager.request("agent.stop", params: ["agentId": agentId])
     }
 
-    /// Replaces the local queue with the daemon's `agent.getQueue` snapshot.
-    ///
-    /// Malformed-envelope policy: when the response is not an object carrying
-    /// a `queue` array, the previous local queue is kept unchanged — the
-    /// daemon told us nothing usable, so blanking would lose entries the user
-    /// can still see and act on. A well-formed empty `queue` is authoritative
-    /// and clears the queue. Elements are decoded one by one (see
-    /// `decodeQueueSnapshot`) so one malformed entry never blanks its siblings.
+    func invalidateQueueReads() { queueReadGeneration &+= 1 }
+
+    func queueSeedSupersedes(_ receivedAt: Int) -> Bool { receivedAt < queueSeedSequence }
+
+    /// Replaces the queue from agent.getQueue. Malformed envelopes preserve
+    /// existing rows; a valid empty array clears them. Later acknowledged changes
+    /// and processing removals fold in without discarding unrelated seed rows.
     func fetchQueue(agentId: String) async throws {
         let generation = resetGeneration
+        let readGeneration = queueReadGeneration
+        let read = QueueRead(revision: queueRevision, sequence: agentDetails.nextStateSequence())
+        let readID = UUID()
+        queueReads[readID] = read
+        defer { queueReads[readID] = nil }
         let result = try await connectionManager.request(
             "agent.getQueue",
             params: ["agentId": agentId]
         )
-        guard generation == resetGeneration else { throw CancellationError() }
+        guard !Task.isCancelled, generation == resetGeneration,
+              readGeneration == queueReadGeneration else { throw CancellationError() }
+        guard read.revision == queueRevision else { return }
         guard let response = result as? [String: Any],
               let decoded = Self.decodeQueueSnapshot(response["queue"], source: "agent.getQueue")
         else {
@@ -291,17 +294,16 @@ extension ConversationCommands {
             )
             return
         }
-        queuedMessages = decoded
-        onQueueSnapshot?(decoded)
+        let isComplete = decoded.count == (response["queue"] as? [Any])?.count
+        guard isComplete || !read.replayedEarlierEvent else { return }
+        if isComplete { queueSeedSequence = read.sequence }
+        queuedMessages = read.applying(to: decoded)
+        onQueueSnapshot?(queuedMessages)
     }
 
-    /// Element-tolerant decoding shared by the `agent.getQueue` response and
-    /// the `agent:queue:updated` push (PROTOCOL §5.5). Returns `nil` when
-    /// `queue` is not an array (malformed envelope — callers decide the
-    /// policy); otherwise every element that fails to decode is dropped and
-    /// the valid siblings are returned in their original order with their
-    /// identities intact. Only safe metadata (position in the array, error
-    /// shape) is logged — never message content or metadata payloads.
+    /// Shared getQueue/queue:updated decoder (PROTOCOL §5.5). Non-arrays return
+    /// nil; invalid elements are dropped, retaining valid rows' order and ids.
+    /// Logs only array positions/error shapes, never content or metadata.
     static func decodeQueueSnapshot(
         _ queue: Any?, source: String
     ) -> [QueuedMessage]? { // swiftlint:disable:this discouraged_optional_collection
@@ -332,9 +334,7 @@ extension ConversationCommands {
         return messages
     }
 
-    /// Content-free description of a queue element decoding failure: the
-    /// `DecodingError` case and the coding path that failed, or the error
-    /// type for anything else.
+    /// Content-free failure description: decoding case/path or other error type.
     private static func describeDecodingFailure(_ error: Error) -> String {
         guard let decodingError = error as? DecodingError else {
             return String(describing: type(of: error))
@@ -358,13 +358,12 @@ extension ConversationCommands {
     }
 
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {
+        let generation = queueMutations.generation
         _ = try await connectionManager.request(
             "agent.editQueuedMessage",
             params: ["agentId": agentId, "messageId": messageId, "content": content]
         )
-        if let index = queuedMessages.firstIndex(where: { $0.id == messageId }) {
-            queuedMessages[index].content = content
-        }
+        confirmQueueMutation(.edit(messageId, content: content, fallback: queuedMessages.first { $0.id == messageId }), generation: generation)
     }
 
     func sendQueuedMessageNow(
@@ -372,6 +371,7 @@ extension ConversationCommands {
         messageId: String,
         workspaceId: String
     ) async throws {
+        let generation = queueMutations.generation
         let result: Any
         do {
             result = try await connectionManager.request(
@@ -383,6 +383,7 @@ extension ConversationCommands {
                 ]
             )
         } catch let error as NSError where error.isEntityNotFound {
+            guard generation == queueMutations.generation else { throw error }
             do {
                 try await fetchQueue(agentId: agentId)
             } catch {
@@ -399,15 +400,16 @@ extension ConversationCommands {
             throw error
         }
         if (result as? [String: Any])?["queued"] as? Bool == true { return }
-        queuedMessages.removeAll { $0.id == messageId }
+        confirmQueueMutation(.remove(messageId), generation: generation)
     }
 
     func removeQueuedMessage(agentId: String, messageId: String) async throws {
+        let generation = queueMutations.generation
         _ = try await connectionManager.request(
             "agent.removeQueuedMessage",
             params: ["agentId": agentId, "messageId": messageId]
         )
-        queuedMessages.removeAll { $0.id == messageId }
+        confirmQueueMutation(.remove(messageId), generation: generation)
     }
 
     func getModels(agentId: String) async throws -> [[String: Any]] {
@@ -429,16 +431,19 @@ extension ConversationCommands {
         agentId: String,
         workspaceId: String
     ) async throws -> SubscriptionSnapshot? {
+        let summaryBoundary = agentDetails.summaries.beginRead()
         let result = try await connectionManager.request(
             "agent.getSubscriptions",
             params: ["agentId": agentId, "workspaceId": workspaceId]
         )
         guard let response = result as? [String: Any] else { return nil }
         let subscriptions = response["subscriptions"] as? [[String: Any]] ?? []
-        let groups = response["delegationGroups"] as? [[String: Any]] ?? []
+        let groups = (response["delegationGroups"] as? [[String: Any]] ?? []).map(WatchedAgentGroup.init)
         var agentIds = Set<String>()
         for group in groups {
-            agentIds.formUnion(group["expectedAgentIds"] as? [String] ?? [])
+            agentIds.formUnion(group.expectedAgentIds)
+            agentIds.formUnion(group.completedAgentIds)
+            agentIds.formUnion(group.deletedAgentIds)
         }
         for subscription in subscriptions {
             if let actorIds = subscription["actorIds"] as? [String] {
@@ -450,12 +455,16 @@ extension ConversationCommands {
         let status: (completed: Int, total: Int)? = groups.isEmpty ? nil : groups.reduce(
             into: (completed: 0, total: 0)
         ) { status, group in
-            status.completed += (group["completedAgentIds"] as? [String])?.count ?? 0
-            status.total += (group["expectedAgentIds"] as? [String])?.count ?? 0
+            status.completed += group.completedAgentIds.union(group.deletedAgentIds).count
+            status.total += group.expectedAgentIds.count
         }
         return SubscriptionSnapshot(
-            watchedAgentIds: Array(agentIds),
-            delegationGroupStatus: status
+            watchedAgentIds: agentIds.sorted(),
+            delegationGroupStatus: status,
+            groups: groups,
+            agentStatuses: (response["agentStatuses"] as? [String: Any] ?? [:])
+                .compactMapValues { $0 as? String }.filter { agentIds.contains($0.key) },
+            summaryBoundary: summaryBoundary
         )
     }
 
@@ -466,31 +475,10 @@ extension ConversationCommands {
         )
     }
 
-    func fetchAgent(agentId: String) async throws -> AgentSession? {
-        let result = try await connectionManager.request(
-            "agent.get",
-            params: ["agentId": agentId]
-        )
-        guard let response = result as? [String: Any],
-              let dictionary = response["agent"] as? [String: Any] else { return nil }
-        return AgentSession.parseAgent(dictionary)
-    }
-
-    func listAgents(workspaceId: String, watchedAgentIds: [String]) async throws -> AgentListFetchResult {
-        let result = try await connectionManager.request(
-            "agent.list",
-            params: ["workspaceId": workspaceId]
-        )
-        guard let response = result as? [String: Any],
-              let dictionaries = response["agents"] as? [[String: Any]] else { return .unavailable }
-        let watchedSet = Set(watchedAgentIds)
-        return .sessions(
-            dictionaries.compactMap(AgentSession.parseAgent).filter { watchedSet.contains($0.id) }
-        )
-    }
-
     func reset() {
         resetGeneration &+= 1
+        queueMutations.cancel()
+        queueSeedSequence = 0
         queuedMessages = []
         pendingQuestionsMessageId = nil
         dismissedQuestionsMessageId = nil

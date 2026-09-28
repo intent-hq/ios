@@ -9,6 +9,18 @@ import UIKit
 
 @MainActor
 struct DemoFixturesTests {
+    @Test func statusFeedFixturesReturnRegistrationIDsForEachOwner() throws {
+        let groups = ["global", "ios-pr-monitors-rows", "ios-hooks-demo"]
+        let ids = try groups.map { group in
+            let result = try #require(DemoFixtures.response(for: "events.subscribe", params: ["replaceGroup": group]) as? [String: Any])
+            return try #require(result["subscriptionId"] as? String)
+        }
+        #expect(Set(ids).count == groups.count)
+        #expect(ids.allSatisfy { !$0.isEmpty })
+        let monitors = try #require(DemoFixtures.response(for: "prMonitor.list", params: [:]) as? [String: Any])
+        #expect((monitors["monitors"] as? [[String: Any]])?.isEmpty == true)
+    }
+
     // MARK: - Launch-argument gating
 
     @Test func demoModeInactiveWithoutArguments() {
@@ -755,7 +767,7 @@ extension DemoFixturesTests {
             #expect(toolUse.type == .toolUse)
             #expect(!toolUse.inputTruncation.isTruncated)
             #expect(toolUse.input["path"]?.value as? String == call.file)
-            let slimResult = try #require(blocks.first { $0.resolvedToolUseId == call.id })
+            let slimResult = try #require(MessageBlockPartitioning.pairToolResults(blocks)[toolUse.id])
             #expect(slimResult.type == .toolResult)
             #expect(slimResult.outputTruncation.isTruncated)
             let preview = try #require(slimResult.output?.value as? String)

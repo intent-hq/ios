@@ -143,6 +143,8 @@ class AppCoordinator {
     /// root, not the coordinator, owns the registry's attachment count.
     @ObservationIgnored var returnWindowToSavedMachines: (() -> Void)?
 
+    var agentDetails: AgentDetailStore
+
     init(
         workspaceStore: WorkspaceStore,
         connection: any SessionConnectionManaging,
@@ -155,6 +157,7 @@ class AppCoordinator {
         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
         claimScreenRestoration: @escaping @MainActor () -> Bool = { true }
     ) {
+        agentDetails = AgentDetailStore(connection: connection)
         dependencies = AppCoordinatorDependencies(
             workspaceStore: workspaceStore,
             connection: connection,

@@ -33,7 +33,7 @@ struct ProposalCardView: View {
         .padding(Layout.padding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.muted(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius))
-        .task { await store?.refresh() }
+        .task { await store?.loadIfNeeded() }
         .confirmationDialog("Dismiss this proposal?", isPresented: $confirmingDismiss, titleVisibility: .visible) {
             Button("Dismiss proposal", role: .destructive) {
                 Task { await store?.dismiss(proposal, messageId: messageId) }

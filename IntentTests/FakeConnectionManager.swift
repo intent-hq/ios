@@ -168,8 +168,21 @@ class FakeConnectionManager: SessionConnectionManaging {
     var certMismatches: [HostCertMismatch] = []
 
     var tunnelDialer: any TunnelDialing = UnavailableTunnelDialer()
+    var browserProxyFactory: (@MainActor () async throws -> any BrowserProxySession)?
 
-    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState = .idle
+    func makeBrowserProxy() async throws -> any BrowserProxySession {
+        guard let browserProxyFactory else { throw BrowserTunnelError.unavailable }
+        return try await browserProxyFactory()
+    }
+
+    private let globalSubscriptionSubject = CurrentValueSubject<ConnectionManager.GlobalSubscriptionState, Never>(.subscribed)
+    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState {
+        get { globalSubscriptionSubject.value }
+        set { globalSubscriptionSubject.send(newValue) }
+    }
+    var globalSubscriptionPublisher: AnyPublisher<ConnectionManager.GlobalSubscriptionState, Never> {
+        globalSubscriptionSubject.eraseToAnyPublisher()
+    }
     private(set) var retryGlobalSubscriptionCallCount = 0
 
     func retryGlobalSubscription() {
@@ -186,6 +199,11 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     private(set) var disconnectCallCount = 0
     private(set) var refreshHostRoutesCallCount = 0
+
+    func connectDemo(serveFixtures _: Bool) {
+        globalSubscriptionState = .subscribed
+        connectionState = .connected
+    }
 
     func connect(
         hosts: [String],
@@ -488,6 +506,8 @@ class FakeConnectionManager: SessionConnectionManaging {
     func hasSubscriptionHandler(id: String) -> Bool {
         subscriptionHandlers[id] != nil
     }
+
+    var eventHandlerIDs: Set<UUID> { Set(eventHandlers.keys) }
 
     /// Count of registered event handlers.
     var eventHandlerCount: Int {

@@ -178,6 +178,7 @@ struct ScrollViewFinderTests {
         #expect(proxy.scrollView === scrollView)
         #expect(proxy.hasResolvedScrollView)
         #expect(ScrollViewFinder.hasKeyboardDismissTap(scrollView))
+        let firstHosting = proxy.hostingRevision
         let tapCount = { scrollView.gestureRecognizers?.count ?? 0 }
         let installed = tapCount()
 
@@ -186,6 +187,7 @@ struct ScrollViewFinderTests {
         window.addSubview(scrollView)
         #expect(proxy.scrollView === scrollView)
         #expect(tapCount() == installed)
+        #expect(proxy.hostingRevision > firstHosting, "the same UIScrollView returning must announce a new hosting edge")
     }
 
     @Test func finderWithoutProxyAttachesWithoutInstallingAnything() {

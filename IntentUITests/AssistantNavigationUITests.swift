@@ -83,7 +83,7 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertFalse(launcher.exists)
         XCTAssertFalse(app.tabBars.firstMatch.exists)
 
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["conversation.back"].tap()
         XCTAssertTrue(agentRow.waitForExistence(timeout: Fixture.timeout))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))

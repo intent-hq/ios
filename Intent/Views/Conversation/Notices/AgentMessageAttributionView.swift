@@ -8,6 +8,7 @@ import SwiftUI
 /// disclosure are sibling tap targets so neither can activate the other —
 /// the iOS counterpart of cloudlands-fe's `AgentMessageAttributionHeader`.
 struct AgentMessageAttributionView: View {
+    private static let minimumSenderWidth: CGFloat = 44
     let attribution: AgentMessageAttribution
     /// One-line body preview shown next to "sent a message".
     var preview: String = ""
@@ -15,22 +16,55 @@ struct AgentMessageAttributionView: View {
     /// Tap-through on the sender identity; nil renders it non-interactive.
     var onOpenAgent: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
-            if let onOpenAgent {
-                Button(action: onOpenAgent) { identity }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open \(attribution.displayName)'s conversation")
+        Group {
+            if workspaceDesign {
+                ViewThatFits(in: .horizontal) {
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
+                            senderIdentity
+                                .frame(
+                                    minWidth: Self.minimumSenderWidth,
+                                    idealWidth: Self.minimumSenderWidth,
+                                    maxWidth: .infinity,
+                                    alignment: .leading
+                                )
+                            // Drop the optional preview before squeezing the disclosure phrase.
+                            disclosureButton(singleLine: true)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .layoutPriority(2)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: Constants.Conversation.Attribution.spacing) {
+                        senderIdentity
+                        disclosureButton(singleLine: false)
+                    }
+                }
             } else {
-                identity
+                HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
+                    senderIdentity
+                    disclosureButton(singleLine: false)
+                }
             }
-            disclosureButton
         }
         .frame(maxWidth: .infinity)
     }
 
-    private var disclosureButton: some View {
+    @ViewBuilder
+    private var senderIdentity: some View {
+        if let onOpenAgent {
+            Button(action: onOpenAgent) { identity }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(attribution.displayName)'s conversation")
+        } else {
+            identity
+        }
+    }
+
+    private func disclosureButton(singleLine: Bool) -> some View {
         Button {
             withAnimation(.easeInOut(duration: Constants.Conversation.Attribution.expansionAnimationDuration)) {
                 isExpanded.toggle()
@@ -41,7 +75,8 @@ struct AgentMessageAttributionView: View {
                     .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .layoutPriority(1)
-                if !preview.isEmpty {
+                    .fixedSize(horizontal: singleLine, vertical: workspaceDesign)
+                if !preview.isEmpty, !singleLine {
                     Text("— \(preview)")
                         .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -52,6 +87,7 @@ struct AgentMessageAttributionView: View {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .fixedSize(horizontal: workspaceDesign, vertical: workspaceDesign)
             }
             .contentShape(Rectangle())
         }
@@ -60,8 +96,7 @@ struct AgentMessageAttributionView: View {
         .accessibilityValue(isExpanded ? "expanded" : "collapsed")
     }
 
-    /// Agent icon + truncated sender name (name is pre-truncated to ~20
-    /// chars by the extraction, so it can never crowd out the preview).
+    /// The workspace name yields space to the disclosure before truncating its phrase.
     private var identity: some View {
         HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
             Image(systemName: "person.crop.circle.badge.checkmark")
@@ -73,6 +108,6 @@ struct AgentMessageAttributionView: View {
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .lineLimit(1)
         }
-        .layoutPriority(1)
+        .layoutPriority(workspaceDesign ? 0 : 1)
     }
 }

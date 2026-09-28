@@ -3,8 +3,8 @@ import Foundation
 import Testing
 
 /// Session-lifetime specialist / provider / model cache: cold load,
-/// stale-while-revalidate, single-flight, invalidation and reconnect
-/// hard-clear (same contract as `GitHubRepoStoreTests`).
+/// explicit stale-while-revalidate, shared reads, hard reset and interested
+/// reconnect revalidation while preserving the last successful labels.
 @MainActor
 struct CreationOptionsStoreTests {
     private func specialistDict(id: String, name: String? = nil, role: String? = nil) -> [String: Any] {
@@ -343,12 +343,14 @@ extension CreationOptionsStoreTests {
 
     // MARK: - Reconnect
 
-    @Test func reconnectHardClearsCacheThenReloadsCold() async throws {
+    @Test func reconnectRevalidatesAnOpenPickerAndKeepsLastGoodLabels() async throws {
         let (store, fake) = await makeLoadedStore()
+        let consumer = UUID()
+        store.retainCreationOptions(consumer: consumer)
+        defer { store.releaseCatalogs(consumer: consumer) }
         await store.loadModelsIfNeeded(providerId: "auggie")
         fake.responseMap["specialist.list"] = ["specialists": [specialistDict(id: "fresh")]]
-        // Hold the reload's reads so the cleared state is observable before
-        // any fresh data lands.
+        // Hold the reload so last-good labels remain observable.
         fake.pendingMethods = ["specialist.list", "host.providerAuthStatus"]
         fake.clearRequestLog()
 
@@ -357,11 +359,10 @@ extension CreationOptionsStoreTests {
         try await waitFor("reload reads") {
             fake.didCallMethod("specialist.list") && fake.didCallMethod("host.providerAuthStatus")
         }
-        // Stale lists (models included) are gone before the reload answers;
-        // the picker shows the cold loading state rather than a stale list.
-        #expect(store.specialists.isEmpty)
+        // Labels survive a connection flap; creation/auth readiness is reset.
+        #expect(store.specialists.map(\.id) == ["implementor", "coordinator"])
         #expect(store.providers.isEmpty)
-        #expect(store.models(for: "auggie") == nil)
+        #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
         #expect(store.hasLoaded == false)
         #expect(store.lastLoadedAt == nil)
         #expect(store.isLoading)
@@ -377,11 +378,14 @@ extension CreationOptionsStoreTests {
         #expect(fake.didCallMethod("models.list") == false)
     }
 
-    @Test func reconnectAfterFailedColdLoadClearsPartialCacheAndRetries() async throws {
+    @Test func reconnectRetriesAnOpenPickerAfterFailedColdLoad() async throws {
         let fake = FakeConnectionManager()
         configureLoadResponses(fake)
         fake.errorMap["host.providerAuthStatus"] = NSError(domain: "t", code: -1)
         let store = CreationOptionsStore(connectionManager: fake)
+        let consumer = UUID()
+        store.retainCreationOptions(consumer: consumer)
+        defer { store.releaseCatalogs(consumer: consumer) }
         await store.loadIfNeeded()
         #expect(store.specialists.isEmpty == false)
         #expect(store.hasLoaded == false)
@@ -391,7 +395,7 @@ extension CreationOptionsStoreTests {
 
         fake.simulateConnect()
 
-        // The reconnect still hard-clears the partial cache and retries.
+        // Only the open picker retries the partial options load.
         try await waitFor("retry completion") { store.hasLoaded }
         #expect(fake.paramsForMethod("specialist.list").count == 1)
         #expect(fake.paramsForMethod("host.providerAuthStatus").count == 1)
@@ -401,6 +405,9 @@ extension CreationOptionsStoreTests {
 
     @Test func reconnectDoesNotJoinOrApplyPreReconnectRefresh() async throws {
         let (store, fake) = await makeLoadedStore()
+        let consumer = UUID()
+        store.retainCreationOptions(consumer: consumer)
+        defer { store.releaseCatalogs(consumer: consumer) }
         // A silent refresh whose specialist read is still in flight when the
         // connection flaps.
         fake.pendingMethods = ["specialist.list"]
@@ -410,9 +417,9 @@ extension CreationOptionsStoreTests {
         fake.simulateConnect()
 
         // The reconnect starts its own cold load instead of joining the
-        // superseded flight, and the cache is already cleared.
+        // superseded flight, while last-good labels remain available.
         try await waitFor("reconnect read") { fake.paramsForMethod("specialist.list").count == 3 }
-        #expect(store.specialists.isEmpty)
+        #expect(store.specialists.map(\.id) == ["implementor", "coordinator"])
         #expect(store.hasLoaded == false)
         #expect(store.isLoading)
 
@@ -420,7 +427,7 @@ extension CreationOptionsStoreTests {
         // data: dropped.
         fake.resolvePending("specialist.list", with: ["specialists": [specialistDict(id: "stale")]])
         try await Task.sleep(nanoseconds: 100_000_000)
-        #expect(store.specialists.isEmpty)
+        #expect(store.specialists.map(\.id) == ["implementor", "coordinator"])
         #expect(store.hasLoaded == false)
         #expect(store.isLoading)
 
@@ -432,9 +439,9 @@ extension CreationOptionsStoreTests {
     }
 
     /// A models-only consumer (the conversation menu, before any creation
-    /// picker ran `loadIfNeeded`) still gets its catalog cleared on
-    /// reconnect; the options lists are not fetched on its behalf.
-    @Test func reconnectClearsModelsOnlyCacheWithoutLoadingOptions() async throws {
+    /// picker ran `loadIfNeeded`) keeps last-good data but expires freshness
+    /// on reconnect; no inactive catalog is fetched on its behalf.
+    @Test func reconnectExpiresInactiveModelsWithoutLoadingOptions() async throws {
         let fake = FakeConnectionManager()
         configureLoadResponses(fake)
         let store = CreationOptionsStore(connectionManager: fake)
@@ -443,16 +450,16 @@ extension CreationOptionsStoreTests {
         fake.clearRequestLog()
 
         fake.simulateConnect()
-        try await waitFor("model cache clear") { store.models(for: "auggie") == nil }
+        try await waitFor("model freshness expired") { !store.modelCatalog(for: "auggie").isFresh }
         try await Task.sleep(nanoseconds: 200_000_000)
 
         #expect(store.loadGeneration == 1)
         #expect(fake.requestLog.isEmpty)
         #expect(store.hasLoaded == false)
 
-        // The consumer's next ask runs cold and repopulates the catalog.
+        // The consumer's next ensure awaits a fresh catalog.
         fake.responseMap["models.list"] = ["models": [modelDict(id: "fresh")]]
-        await store.loadModelsIfNeeded(providerId: "auggie")
+        await store.ensureModels(providerId: "auggie")
         #expect(store.models(for: "auggie")?.map(\.id) == ["fresh"])
         #expect(fake.paramsForMethod("models.list").count == 1)
         #expect(fake.didCallMethod("specialist.list") == false)
