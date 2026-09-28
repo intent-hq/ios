@@ -15,8 +15,8 @@ import Observation
 /// survive a connection flap.
 @MainActor
 @Observable class CreationOptionsStore {
-    /// Host enablement applies only to workspace creation, not the shared
-    /// agent picker or conversation model menus.
+    /// Host enablement for workspace and agent creation; conversation model
+    /// menus can still load catalogs for existing agents on disabled providers.
     let workspaceProviderOptions: WorkspaceProviderOptions
     /// Unfiltered specialist catalog; pickers apply `modalPickable`.
     var specialists: [SpecialistInfo] = []

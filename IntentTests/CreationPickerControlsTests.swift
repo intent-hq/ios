@@ -756,6 +756,7 @@ private struct PickerLayoutHost: View {
             ProviderModelStepView(
                 providers: [Self.provider],
                 isLoadingProviders: false,
+                providerGuidance: nil,
                 selectedProvider: $selectedProvider,
                 models: [Self.model],
                 isLoadingModels: false,
@@ -764,7 +765,9 @@ private struct PickerLayoutHost: View {
                 isCreating: isCreating,
                 isCreateDisabled: isCreating,
                 colorScheme: .light,
-            ) {}
+                onRetryProviders: {},
+                onCreate: {}
+            )
         }
     }
 
