@@ -4,6 +4,19 @@ import Foundation
 import Testing
 
 extension ConnectionManagerTests {
+    @Test func globalFeedIncludesCatalogInvalidationOnce() throws {
+        for event in ["specialists:changed", "settings:changed"] {
+            #expect(ConnectionManager.globalEventTypes.filter { $0 == event }.count == 1)
+        }
+        let request = try RPCFixtureJSON.request(
+            method: "events.subscribe",
+            params: ["eventTypes": ConnectionManager.globalEventTypes, "replaceGroup": "global"]
+        )
+        // Connection setup is outside conversation startup, but its added
+        // event names still cost bytes: 185 now versus 144 at the base.
+        #expect(request.count == 185)
+    }
+
     static let subscribeMethod = "events.subscribe"
 
     static func isSubscriptionFailed(_ state: ConnectionManager.GlobalSubscriptionState) -> Bool {

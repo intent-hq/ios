@@ -146,7 +146,7 @@ struct ConversationStartupRPCTests {
         #expect(large.totalBytes == small.totalBytes)
     }
 
-    @Test func deferredSelectedCatalogIsCountedAndReusedButSpecialistsStillRead() async {
+    @Test func deferredSelectedCatalogIsCountedAndBothCatalogsAreReused() async {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
         fixture.modelId = "fixture-model"
@@ -169,13 +169,13 @@ struct ConversationStartupRPCTests {
             print("Startup with catalogs (model reads \(expectedModelReads)): \(traffic.summary)")
             #expect(traffic.calls("models.list").count == expectedModelReads)
             #expect(traffic.calls("models.list").allSatisfy { $0.params["providerId"] as? String == "auggie" })
-            #expect(traffic.calls("specialist.list").count == 1)
+            #expect(traffic.calls("specialist.list").count == expectedModelReads)
             var expected = currentQuietCounts
             if expectedModelReads == 0 {
                 for method in currentQuietCounts.keys { expected[method] = nil }
             }
             expected["models.list"] = expectedModelReads == 1 ? 1 : nil
-            expected["specialist.list"] = 1
+            expected["specialist.list"] = expectedModelReads == 1 ? 1 : nil
             #expect(traffic.methodCounts == expected)
             #expect(traffic.calls("host.providerAuthStatus").isEmpty)
             #expect(traffic.pendingCount == 0 && traffic.failures.isEmpty)

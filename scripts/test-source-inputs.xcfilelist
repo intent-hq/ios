@@ -368,6 +368,8 @@ $(SRCROOT)/Intent/Services/ConversationStore+Streaming.swift
 $(SRCROOT)/Intent/Services/ConversationStore.swift
 $(SRCROOT)/Intent/Services/ConversationStorePool.swift
 $(SRCROOT)/Intent/Services/ConversationWatchedAgents.swift
+$(SRCROOT)/Intent/Services/CreationCatalog.swift
+$(SRCROOT)/Intent/Services/CreationOptionsStore+Events.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
 $(SRCROOT)/Intent/Services/DemoConnectionLoss.swift
@@ -680,6 +682,8 @@ $(SRCROOT)/IntentTests/ConnectionPairingTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceMigrationTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
+$(SRCROOT)/IntentTests/ConversationCatalogLifecycleTests.swift
+$(SRCROOT)/IntentTests/ConversationCatalogReuseTests.swift
 $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
 $(SRCROOT)/IntentTests/ConversationDeltaCompatibilityTests.swift
@@ -742,6 +746,9 @@ $(SRCROOT)/IntentTests/CreateWorkspaceBranchTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCatalogTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCreationGateTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceParamsTests.swift
+$(SRCROOT)/IntentTests/CreationOptionsCatalogEventTests.swift
+$(SRCROOT)/IntentTests/CreationOptionsCatalogIsolationTests.swift
+$(SRCROOT)/IntentTests/CreationOptionsCatalogTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreModelTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift

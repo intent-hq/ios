@@ -175,6 +175,7 @@ final class BackendSession {
     /// Disconnects the backend connection. Called by the registry when the
     /// last window detaches from the session.
     func teardown() {
+        creationOptionsStore.reset()
         hooksStore.reset()
         prMonitorsStore.reset()
         conversations.reset()

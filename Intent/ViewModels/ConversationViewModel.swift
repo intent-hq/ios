@@ -58,12 +58,17 @@ import SwiftUI
     var currentModelId: String?
     var currentProviderId: String?
     @ObservationIgnored var modelMetadataGeneration: Int?
+    @ObservationIgnored var modelMetadataEpoch: Int?
     var modelCatalogLoadFailed = false
     let optionsStore: CreationOptionsStore
     let agentDetails: AgentDetailStore
     @ObservationIgnored var detailConsumer: UUID?
-    var specialistName: String?
-    var specialistDescription: String?
+    var currentSpecialistId: String?
+    var specialistName: String? { currentSpecialist?.name }
+    var specialistDescription: String? { currentSpecialist?.description }
+    private var currentSpecialist: SpecialistInfo? {
+        optionsStore.specialists.first { $0.id == currentSpecialistId }
+    }
     var dismissQuestionsError: String?
 
     let attachmentPipeline: ConversationAttachmentPipeline
@@ -162,6 +167,7 @@ import SwiftUI
     }
 
     private func releaseOwnedResources() {
+        optionsStore.releaseCatalogs(consumer: conversationConsumer)
         loadTask?.cancel()
         markSeenDebounceTask?.cancel()
         if let streamingObserverId { store.streamingObservers[streamingObserverId] = nil }

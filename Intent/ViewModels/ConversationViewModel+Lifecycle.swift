@@ -160,10 +160,15 @@ extension ConversationViewModel {
             let (detail, generation) = try await loadCurrentDetail(refresh: refresh)
             guard activation == liveStoreActivationGeneration, !Task.isCancelled else { return }
             modelMetadataGeneration = generation
+            modelMetadataEpoch = agentDetails.connectionEpoch
             currentModelId = detail.values["model"] as? String
             currentProviderId = (detail.values["provider"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-            if let specialistId = detail.metadata["specialist"] as? String {
-                await fetchSpecialistInfo(specialistId: specialistId, activation: activation)
+            currentSpecialistId = detail.metadata["specialist"] as? String
+            if currentSpecialistId != nil {
+                optionsStore.retainSpecialists(consumer: conversationConsumer)
+                await optionsStore.ensureSpecialists(consumer: conversationConsumer)
+            } else {
+                optionsStore.releaseSpecialists(consumer: conversationConsumer)
             }
         } catch {
             if activation == liveStoreActivationGeneration, !Task.isCancelled { validateWorkspaceIfKnown() }
@@ -190,21 +195,6 @@ extension ConversationViewModel {
             needsRefresh = epoch == agentDetails.connectionEpoch
             generation = optionsStore.loadGeneration
             epoch = agentDetails.connectionEpoch
-        }
-    }
-
-    private func fetchSpecialistInfo(specialistId: String, activation: Int) async {
-        do {
-            let result = try await connection.request("specialist.list")
-            guard !Task.isCancelled, activation == liveStoreActivationGeneration else { return }
-            if let dict = result as? [String: Any],
-               let items = dict["specialists"] as? [[String: Any]],
-               let match = items.first(where: { ($0["id"] as? String) == specialistId }) {
-                specialistName = match["name"] as? String
-                specialistDescription = match["description"] as? String
-            }
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Fetch specialist info failed: \(error)")
         }
     }
 }
