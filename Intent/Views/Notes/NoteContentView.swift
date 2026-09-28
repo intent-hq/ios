@@ -5,6 +5,7 @@ import SwiftUI
 /// `TaskItemNodeView` treatment instead of the old emoji marker substitution.
 struct NoteContentView: View {
     let content: String
+    var workspaceId: String?
     /// Resolve a note ID against the workspace note list (live linked-task
     /// title/status); nil when unknown.
     let resolveNote: (String) -> Note?
@@ -25,7 +26,7 @@ struct NoteContentView: View {
             ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                 switch segment {
                 case .markdown(let text):
-                    MarkdownTextView(text: text, onOpenURL: onOpenURL)
+                    MarkdownTextView(text: text, onOpenURL: onOpenURL, workspaceId: workspaceId)
                 case .taskLine(let line):
                     if let linked = line.linkedTask {
                         LinkedTaskCardRow(
@@ -37,7 +38,8 @@ struct NoteContentView: View {
                         )
                     } else {
                         PlainTaskRow(
-                            line: line
+                            line: line,
+                            workspaceId: workspaceId
                         ) { onSetLineStatus(line.lineNumber, $0) }
                     }
                 }
@@ -56,6 +58,7 @@ private func indentPadding(_ columns: Int) -> CGFloat {
 /// todo → in-progress → done → todo, plus the line's inline markdown text.
 private struct PlainTaskRow: View {
     let line: NoteTaskLine
+    let workspaceId: String?
     let onSetStatus: (String) -> Void
 
     private var nextStatus: String {
@@ -81,7 +84,7 @@ private struct PlainTaskRow: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Change status for \(line.text)")
             .accessibilityValue(line.markerStatus.label)
-            MarkdownTextView(text: line.text)
+            MarkdownTextView(text: line.text, workspaceId: workspaceId)
         }
         .padding(.leading, indentPadding(line.indentColumns))
     }

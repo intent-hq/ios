@@ -295,6 +295,42 @@ struct DeltaSubscriptionTests {
 }
 
 extension DeltaSubscriptionTests {
+    @Test func fragmentDecodePreservesTextSeparatelyOnBothDecodePaths() throws {
+        let entities: [[String: Any]] = ["text", "thinking"].map { type in
+            ["messageId": "message", "block": ["id": type, "type": type, "textDelta": " café 🦊"]]
+        }
+        let push = try #require(SubscriptionPush.parse(method: "subscription.push", params: [
+            "subscriptionId": "chat", "kind": "delta", "seq": 1,
+            "delta": ["added": entities, "updated": [], "removedIds": []]
+        ]))
+        let decoded = try #require(push.delta?.chatBlocks)
+        #expect(decoded.count == 2)
+        for (entity, block) in zip(entities, decoded) {
+            let individual = try #require(SubscriptionPush.ChatBlockEntity(entity: entity))
+            #expect(block.textDelta == " café 🦊")
+            #expect(block.block.resolvedText == nil)
+            #expect(individual.textDelta == block.textDelta)
+            #expect(individual.block == block.block)
+        }
+    }
+
+    @Test func fragmentDecodeRejectsInvalidFragmentIdentityAndTextWithoutAffectingFullBlocks() {
+        let blocks: [[String: Any]] = [
+            ["id": "valid", "type": "text", "textDelta": ""],
+            ["id": "invalid-delta", "type": "text", "textDelta": 42],
+            ["type": "thinking", "textDelta": "missing id"],
+            ["id": "", "type": "text", "textDelta": "empty id"],
+            ["id": "invalid-text", "type": "text", "text": 42, "textDelta": "fragment"],
+            ["id": "full", "type": "text", "text": "authority", "textDelta": "ignored"],
+            ["id": "resource", "type": "resource", "textDelta": "not a text fragment"]
+        ]
+        let entities = blocks.map { ["messageId": "message", "block": $0] as [String: Any] }
+        let decoded = SubscriptionPush.ChatBlockEntity.decodeAll(entities)
+        #expect(decoded.map(\.block.id) == ["valid", "full", "resource"])
+        #expect(decoded.map(\.textDelta) == ["", nil, nil])
+        #expect(decoded.map(\.block) == entities.compactMap { SubscriptionPush.ChatBlockEntity(entity: $0)?.block })
+    }
+
     // MARK: - DeltaReconciler
 
     @Test func reconcilerSnapshot() {

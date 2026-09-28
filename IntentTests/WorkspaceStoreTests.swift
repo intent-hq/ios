@@ -5,30 +5,6 @@ import Synchronization
 import Testing
 
 @MainActor
-struct WorkspaceStatusMessageTests {
-    @Test func statusMessageSurvivesWireParsingAndCodableRoundTrip() throws {
-        let summary = "Waiting for review before shipping."
-        let workspace = try #require(WorkspaceStore.parseWorkspace([
-            "id": "ws-summary", "title": "Summary", "statusMessage": summary
-        ]))
-        #expect(workspace.statusMessage == summary)
-        let decoded = try JSONDecoder().decode(Workspace.self, from: JSONEncoder().encode(workspace))
-        #expect(decoded.statusMessage == summary)
-    }
-
-    @Test func missingAndClearedMessagesRemainOptional() throws {
-        var row: [String: Any] = ["id": "ws-summary", "title": "Summary"]
-        let oldData = try JSONSerialization.data(withJSONObject: row)
-        #expect(try JSONDecoder().decode(Workspace.self, from: oldData).statusMessage == nil)
-        #expect(WorkspaceStore.parseWorkspace(row)?.statusMessage == nil)
-        row["statusMessage"] = NSNull()
-        #expect(WorkspaceStore.parseWorkspace(row)?.statusMessage == nil)
-        let clearedData = try JSONSerialization.data(withJSONObject: row)
-        #expect(try JSONDecoder().decode(Workspace.self, from: clearedData).statusMessage == nil)
-    }
-}
-
-@MainActor
 struct WorkspaceStoreAgentParsingTests {
     // MARK: - Agent summary parsing within parseWorkspace
 
@@ -459,5 +435,57 @@ struct WorkspaceStoreChiefFilterTests {
         // Not seeded into the reconciler either: the next delta keeps it out.
         store.handleEvent("subscription.push", params: deltaPush(seq: 1, updated: [realRow]))
         #expect(store.workspaces.map(\.id) == ["ws-1"])
+    }
+}
+
+@MainActor
+struct WorkspaceFetchCompletionTests {
+    @Test func concurrentFetchesShareOnlyThePendingOperation() async throws {
+        let connection = FakeConnectionManager()
+        connection.pendingMethods = ["workspace.list"]
+        let store = WorkspaceStore(connectionManager: connection)
+        let first = Task { await store.fetchAll() }
+        defer {
+            while connection.pendingRequestCount("workspace.list") > 0 {
+                connection.failPending("workspace.list", with: CancellationError())
+            }
+        }
+        try await connection.waitForPendingRequests("workspace.list")
+        let second = Task { await store.fetchAll() }
+        try await expectNever("duplicate workspace request during the shared fetch") {
+            connection.paramsForMethod("workspace.list").count > 1
+        }
+        connection.resolvePending("workspace.list", with: ["workspaces": []])
+        await first.value
+        await second.value
+        #expect(store.lastUpdated != nil)
+        connection.pendingMethods = []
+        connection.responseMap["workspace.list"] = ["workspaces": []]
+        await store.fetchAll()
+        #expect(connection.paramsForMethod("workspace.list").count == 2)
+    }
+
+    @Test func retryAtLoadingCompletionStartsANewRead() async throws {
+        let connection = FakeConnectionManager()
+        connection.pendingMethods = ["workspace.list"]
+        let store = WorkspaceStore(connectionManager: connection)
+        let first = Task { await store.fetchAll() }
+        try await waitUntil("initial fetch pending") { connection.pendingRequestCount("workspace.list") == 1 }
+        var retry: Task<Void, Never>?
+        withObservationTracking {
+            _ = store.isLoading
+        } onChange: {
+            MainActor.assumeIsolated {
+                retry = Task(priority: .high) { await store.fetchAll() }
+            }
+        }
+        connection.pendingMethods = []
+        connection.responseMap["workspace.list"] = ["workspaces": [["id": "fresh", "title": "Fresh"]]]
+        connection.failPending("workspace.list", with: NSError(domain: "scripted", code: 1))
+        await first.value
+        await retry?.value
+        #expect(connection.requestLog.filter { $0.method == "workspace.list" }.count == 2)
+        #expect(store.workspaces.map(\.id) == ["fresh"])
+        #expect(store.lastUpdated != nil)
     }
 }

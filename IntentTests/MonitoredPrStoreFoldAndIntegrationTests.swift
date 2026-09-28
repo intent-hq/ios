@@ -159,8 +159,8 @@ extension MonitoredPrStoreTests {
 
         let subscribeParams = try #require(fake.paramsForMethod("events.subscribe").first)
         #expect(subscribeParams["eventTypes"] as? [String] == ["prMonitor:*"])
-        #expect(subscribeParams["workspaceId"] as? String == "ws-abc")
-        #expect(subscribeParams["replaceGroup"] as? String == "ios-pr-monitors-ws-abc-agent-1")
+        #expect(subscribeParams["workspaceId"] == nil)
+        #expect(subscribeParams["replaceGroup"] as? String == "ios-pr-monitors-rows")
         #expect(fake.paramsForMethod("prMonitor.list").first?["workspaceId"] as? String == "ws-abc")
         #expect(store.monitors.count == 1)
         #expect(store.activeMonitors.count == 1)
@@ -288,8 +288,8 @@ extension MonitoredPrStoreTests {
         let registrations = fake.paramsForMethod("events.subscribe")
         #expect(registrations.count == 1)
         #expect(registrations.first?["eventTypes"] as? [String] == ["prMonitor:*"])
-        #expect(registrations.first?["workspaceId"] as? String == "ws-abc")
-        #expect(registrations.first?["replaceGroup"] as? String == "ios-pr-monitors-ws-abc-agent-1")
+        #expect(registrations.first?["workspaceId"] == nil)
+        #expect(registrations.first?["replaceGroup"] as? String == "ios-pr-monitors-rows")
         #expect(fake.eventHandlerCount == 1)
         #expect(fake.paramsForMethod("prMonitor.list").count == 1)
         #expect(fake.paramsForMethod("prMonitor.list").first?["workspaceId"] as? String == "ws-abc")
@@ -355,22 +355,12 @@ extension MonitoredPrStoreTests {
         ] as [String: Any])
         try await waitUntil("prMonitor:cancelled fold") { store.monitors.isEmpty }
 
-        // Resolve the in-flight request with the STALE payload — it still
-        // lists the cancelled monitor. The queued follow-up stays suspended,
-        // so a wrongly applied stale response cannot be masked by
-        // convergence.
+        // Replay the complete cancellation over the stale seed. No recovery
+        // read is needed, and the removed row must never reappear.
         fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
-        // The discarded response queues exactly one follow-up fetch to converge.
-        try await fake.waitForRequests("prMonitor.list", count: 2)
-        #expect(fake.paramsForMethod("prMonitor.list").count == 2)
-
-        // The stale response must not restore the cancelled monitor.
-        #expect(store.monitors.isEmpty)
-
-        // Fresh server state (post-cancel) for the queued follow-up fetch.
-        fake.resolvePending("prMonitor.list", with: ["monitors": [] as [[String: Any]]])
         await refetchTask.value
         #expect(store.monitors.isEmpty)
+        #expect(fake.paramsForMethod("prMonitor.list").count == 1)
     }
 
     @Test func staleListResponseAfterUnsubscribeIsDiscarded() async throws {

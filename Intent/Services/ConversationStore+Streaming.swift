@@ -4,72 +4,47 @@ import SwiftUI
 extension ConversationStore {
     // MARK: - Streaming subscription
 
+    /// Binding is entirely local. ConnectionManager owns the backend-wide
+    /// agent feed; a view must never wait for or open its own remote feed.
     @discardableResult
-    func subscribeToStreaming(agentId: String, workspaceId: String) async -> Int? {
-        guard !Task.isCancelled, !isSubscribing else { return nil }
-        eventRegistrationGeneration &+= 1
-        let generation = eventRegistrationGeneration
-        streamingEventsActive = true
-        isSubscribing = true
-        defer {
-            if generation == eventRegistrationGeneration {
-                isSubscribing = false
-            }
+    func bindStreaming(agentId: String, workspaceId: String?) -> Int {
+        if streamingEventsActive, self.agentId == agentId, self.workspaceId == workspaceId {
+            return eventRegistrationGeneration
         }
-
+        deactivateStreaming()
         bindAgent(agentId)
         self.workspaceId = workspaceId
-
-        let previousSubscriptionId = detachStreamingRegistration()
-        if let previousSubscriptionId {
-            await releaseStreamingSubscription(previousSubscriptionId)
-        }
-        guard ownsStreamingRegistration(generation), !Task.isCancelled else { return nil }
-
+        streamingEventsActive = true
+        metadataReadyForEntry = false
+        needsFeedReconciliation = connectionManager.globalSubscriptionState != .subscribed
+        let generation = eventRegistrationGeneration
         eventHandlerId = connectionManager.onEvent { [weak self] method, params in
-            Task { @MainActor [weak self] in
-                guard let self, ownsStreamingRegistration(generation) else { return }
-                handleStreamEvent(method, params: params)
-            }
-        }
-
-        let outcome: Result<String?, Error>
-        do {
-            outcome = .success(try await commands.subscribeToEvents(
-                agentId: agentId,
-                workspaceId: workspaceId
-            ))
-        } catch {
-            outcome = .failure(error)
-        }
-
-        guard ownsStreamingRegistration(generation), !Task.isCancelled else {
-            if case .success(let orphanedId?) = outcome {
-                Self.releaseStreamingSubscription(orphanedId, via: connectionManager)
-            }
-            return nil
-        }
-
-        switch outcome {
-        case .success(let subscriptionId):
-            self.subscriptionId = subscriptionId
-            AppLog.conversation.info("[ConversationStore] Subscribed to streaming events")
-        case .failure(let error):
-            AppLog.conversation.error("[ConversationStore] Failed to subscribe: \(error)")
+            guard let self, ownsStreamingRegistration(generation) else { return }
+            handleStreamEvent(method, params: params)
         }
         return generation
     }
 
-    /// Invalidates this screen activation before remote cleanup begins. A late
-    /// acknowledgement is released by its generation check instead of being
-    /// installed into a later activation.
+    @discardableResult
+    func subscribeToStreaming(agentId: String, workspaceId: String) async -> Int? {
+        guard !Task.isCancelled else { return nil }
+        return bindStreaming(agentId: agentId, workspaceId: workspaceId)
+    }
+
     func deactivateStreaming() {
         eventRegistrationGeneration &+= 1
+        cancelBootstrap()
+        cancelMetadataRefreshes()
+        pendingWorkspaceEvents.removeAll()
         streamingEventsActive = false
-        isSubscribing = false
-        if let subscriptionId = detachStreamingRegistration() {
-            Self.releaseStreamingSubscription(subscriptionId, via: connectionManager)
-        }
+        if let eventHandlerId { connectionManager.removeEventHandler(id: eventHandlerId) }
+        eventHandlerId = nil
+        // Preserve visible rows and send recovery state while releasing ownership.
+        liveTranscript.releaseActiveRegistration()
+        liveTranscript.prepareForReconnect()
+        liveTranscript.snapshotPending = false
+        liveTranscript.resumeSnapshotWaiters()
+        clearPendingQuestionRecovery()
     }
 
     // MARK: - Live chat subscription
@@ -98,47 +73,11 @@ extension ConversationStore {
         liveTranscript.handlePush(push)
     }
 
-    private func detachStreamingRegistration() -> String? {
-        if let handlerId = eventHandlerId {
-            connectionManager.removeEventHandler(id: handlerId)
-            eventHandlerId = nil
-        }
-        let subId = subscriptionId
-        subscriptionId = nil
-        return subId
-    }
-
     func ownsStreamingRegistration(_ generation: Int) -> Bool {
         streamingEventsActive && generation == eventRegistrationGeneration
     }
 
-    private func releaseStreamingSubscription(_ subscriptionId: String) async {
-        do {
-            try await commands.unsubscribeEvents(subscriptionId: subscriptionId)
-            AppLog.conversation.debug("[ConversationStore] Unsubscribed streaming subscription: \(subscriptionId)")
-        } catch {
-            AppLog.conversation.error("[ConversationStore] Failed to unsubscribe: \(error)")
-        }
-    }
-
-    static func releaseStreamingSubscription(
-        _ subscriptionId: String,
-        via connectionManager: ConnectionManagerRouting
-    ) {
-        Task { @MainActor in
-            do {
-                _ = try await connectionManager.request("events.unsubscribe", params: [
-                    "subscriptionId": subscriptionId
-                ])
-            } catch {
-                AppLog.conversation.error(
-                    "[ConversationStore] Failed to release streaming subscription \(subscriptionId): \(error)"
-                )
-            }
-        }
-    }
-
-    func handleStreamEvent(_ method: String, params: Any) {
+    func handleStreamEvent(_ method: String, params: Any, ignoringMarkers: Set<String> = [], receivedAt: Int? = nil) {
         guard let dict = params as? [String: Any] else { return }
 
         if let push = SubscriptionPush.parse(method: method, params: params) {
@@ -159,6 +98,17 @@ extension ConversationStore {
               let data = event["data"] as? [String: Any] else { return }
 
         let eventAgentId = data["agentId"] as? String
+        let receivedAt = receivedAt ?? commands.agentDetails.nextStateSequence()
+        if workspaceId == nil, bootstrapWorkspaceHint != nil, eventAgentId == agentId {
+            if eventType == "agent:queue:updated" || eventType == "agent:queue:processing" { commands.queueMutations.beginDeferring() }
+            pendingWorkspaceEvents.append(PendingWorkspaceEvent(
+                event: event, receivedAt: receivedAt, confirmedMarkerRevisions: commands.confirmedMarkerRevisions
+            ))
+            // The shared detail store coalesces these callers. Keep the event
+            // until authority succeeds, including after a failed initial read.
+            scheduleMetadataRefresh()
+            return
+        }
         guard shouldContinueAfterWorkspaceEvent(
             eventType,
             data: data,
@@ -166,11 +116,11 @@ extension ConversationStore {
         ) else { return }
 
         if eventType == "agent:updated" {
-            handleAgentUpdated(data)
+            handleAgentUpdated(data, ignoringMarkers: ignoringMarkers)
             return
         }
 
-        handleAgentStreamEvent(eventType, data: data)
+        handleAgentStreamEvent(eventType, data: data, receivedAt: receivedAt)
     }
 
     private func shouldContinueAfterWorkspaceEvent(
@@ -184,6 +134,7 @@ extension ConversationStore {
                 agentNotFound = true
                 clearPendingQuestionRecovery()
             }
+            handleWatchedDeletion(eventAgentId)
             return false
         case "agent:subscribed", "agent:unsubscribed", "agent:woken-by-subscription":
             refreshSubscriptions()
@@ -210,26 +161,30 @@ extension ConversationStore {
         return eventAgentId == agentId
     }
 
+    private func handleWatchedDeletion(_ eventAgentId: String?) {
+        guard let eventAgentId, watchedAgentIds.contains(eventAgentId) else { return }
+        watchedAgentCoordinator.handleStatusChange(agentId: eventAgentId)
+        refreshSubscriptions()
+    }
+
     private func refreshSubscriptions() {
-        if let agentId, let workspaceId {
-            Task { await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) }
-        }
+        invalidateSubscriptions()
     }
 
     /// `agent:stream:*` carries no transcript content: the `chat.subscribe`
     /// channel is the transcript's only source and owns the streaming flag
     /// once its snapshot applied (`chatLive`). Until then the firehose is the
     /// only liveness signal, so it raises and lowers the flag alone.
-    private func handleAgentStreamEvent(_ eventType: String, data: [String: Any]) {
+    private func handleAgentStreamEvent(_ eventType: String, data: [String: Any], receivedAt: Int) {
         switch eventType {
         case "agent:stream:start", "agent:stream:activity":
             if !liveTranscript.chatLive { isStreaming = true }
         case "agent:stream:end":
             if !liveTranscript.chatLive { isStreaming = false }
         case "agent:queue:updated":
-            handleQueueUpdated(data)
+            handleQueueUpdated(data, receivedAt: receivedAt)
         case "agent:queue:processing":
-            handleQueueProcessing(data)
+            handleQueueProcessing(data, receivedAt: receivedAt)
         case "agent:user-message:sent":
             handleUserMessageSent(data)
         case "agent:status-changed":
@@ -266,9 +221,8 @@ extension ConversationStore {
     private func refreshStateAfterTurnBoundary() {
         guard let agentId else { return }
         let liveStateVersion = liveTranscript.liveStateVersion
-        Task {
-            await fetchAgentStreamingState(agentId: agentId, raiseOnly: true, liveStateVersion: liveStateVersion)
-        }
+        commands.agentDetails.invalidate(agentId: agentId)
+        scheduleMetadataRefresh(liveStateVersion: liveStateVersion)
     }
 
     private func shouldIgnoreStreamEvent(_ event: [String: Any]) -> Bool {
@@ -284,47 +238,51 @@ extension ConversationStore {
             }
         }
 
-        let eventSubscriptionId = event["subscriptionId"] as? String
-        return if let subscriptionId, let eventSubscriptionId {
-            eventSubscriptionId != subscriptionId
-        } else {
-            false
-        }
+        let envelope = event["event"] as? [String: Any] ?? event
+        let data = envelope["data"] as? [String: Any] ?? [:]
+        if let workspace = (data["workspaceId"] ?? envelope["workspaceId"]) as? String,
+           let workspaceId, workspace != workspaceId, data["agentId"] as? String == agentId { return true }
+        if let child = data["agentId"] as? String, child != agentId, watchedAgentIds.contains(child),
+           let workspace = (data["workspaceId"] ?? envelope["workspaceId"]) as? String,
+           let known = watchedAgentCoordinator.row(child).workspaceId, workspace != known { return true }
+        return false
     }
 
-    private func handleAgentUpdated(_ data: [String: Any]) {
+    private func handleAgentUpdated(_ data: [String: Any], ignoringMarkers: Set<String>) {
         sessionMetadataGeneration += 1
-        if let pendingId = data["pendingQuestionsMessageId"] as? String {
+        if AgentDetailStore.requiresReconciliation(data) { scheduleMetadataRefresh() }
+        if !ignoringMarkers.contains("pendingQuestionsMessageId"), let pendingId = data["pendingQuestionsMessageId"] as? String {
             pendingQuestionsMessageId = pendingId
         }
-        if let dismissedId = data["dismissedQuestionsMessageId"] as? String {
+        if !ignoringMarkers.contains("dismissedQuestionsMessageId"), let dismissedId = data["dismissedQuestionsMessageId"] as? String {
             dismissedQuestionsMessageId = dismissedId
         }
-        if let seenId = data["lastSeenMessageId"] as? String {
+        if !ignoringMarkers.contains("lastSeenMessageId"), let seenId = data["lastSeenMessageId"] as? String {
             lastSeenMessageId = seenId
+            metadataReadyForEntry = connectionManager.globalSubscriptionState == .subscribed
         }
+        notifyEntryStateChanged()
         reconcilePendingQuestionRecovery()
     }
 
-    private func handleQueueUpdated(_ data: [String: Any]) {
+    private func handleQueueUpdated(_ data: [String: Any], receivedAt: Int) {
+        guard !commands.queueSeedSupersedes(receivedAt) else { return }
         if let decoded = ConversationCommands.decodeQueueSnapshot(
             data["queue"],
             source: "agent:queue:updated"
         ) {
-            queuedMessages = decoded
-            reconcileSendAttempts(queue: decoded)
+            commands.applyQueueEvent(decoded, receivedAt: receivedAt)
             return
         }
-        if let agentId {
-            Task { await fetchQueue(agentId: agentId) }
-        }
+        refreshQueue()
     }
 
-    private func handleQueueProcessing(_ data: [String: Any]) {
+    private func handleQueueProcessing(_ data: [String: Any], receivedAt: Int) {
+        guard !commands.queueSeedSupersedes(receivedAt) else { return }
         if let messageId = data["messageId"] as? String {
-            queuedMessages.removeAll { $0.id == messageId }
-        } else if let agentId {
-            Task { await fetchQueue(agentId: agentId) }
+            commands.removeProcessingMessage(messageId, receivedAt: receivedAt)
+        } else {
+            refreshQueue()
         }
     }
 

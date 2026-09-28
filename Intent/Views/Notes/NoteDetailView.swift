@@ -29,7 +29,7 @@ struct NoteDetailView: View {
         self.noteTitle = noteTitle
         self.onNavigateToNote = onNavigateToNote
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
-        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection))
+        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection, summaries: session.agentSummaries))
     }
 
     var agentStoreConnectionID: ObjectIdentifier {
@@ -176,6 +176,7 @@ struct NoteDetailView: View {
         if !note.content.isEmpty {
             NoteContentView(
                 content: note.content,
+                workspaceId: workspaceId,
                 resolveNote: { noteStore.note(byId: $0) },
                 onOpenURL: { url in
                     if let link = Self.parseIntentNoteLink(url) {

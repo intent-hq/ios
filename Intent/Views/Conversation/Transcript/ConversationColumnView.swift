@@ -5,6 +5,7 @@ struct ConversationColumnView: View {
     let onNavigateToNote: (String, String, String) -> Void
     let onNavigateToAgent: (String, String, String) -> Void
     var usesWorkspaceDesign = false
+    var onDemoCover: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var questionWizardCollapsed = false
@@ -44,6 +45,7 @@ struct ConversationColumnView: View {
         }
         .onChange(of: viewModel.filteredMessages.map(\.id), initial: true) { _, messageIDs in
             transcriptScrollState.rowHeightCache.retainMessages(withIDs: Set(messageIDs))
+            transcriptScrollState.retainViewportMessages(withIDs: Set(messageIDs))
         }
         #if os(visionOS)
         .onAppear {
@@ -70,6 +72,16 @@ struct ConversationColumnView: View {
 
     @ViewBuilder
     private var columnContent: some View {
+        if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript {
+            Button("Open conversation cover", action: onDemoCover)
+                .accessibilityIdentifier("demo.conversation.cover")
+                .accessibilityValue(
+                    "metadata=\(viewModel.store.metadataReadyForEntry ? "ready" : "pending") "
+                        + "entry=\(viewModel.isEntryScrollReady ? "ready" : "pending") "
+                        + "positioned=\(transcriptScrollState.hasInitiallyScrolled) "
+                        + "anchor=\(viewModel.newMessagesDividerAnchorId ?? "none") consumer=\(viewModel.conversationConsumer)"
+                )
+        }
         if viewModel.isLoading, viewModel.filteredMessages.isEmpty {
             ConversationLoadingView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -114,7 +126,7 @@ struct ConversationColumnView: View {
 
         if composerVisible || usesWorkspaceDesign {
             VStack(spacing: Design.Status.composerSpacing) {
-                if usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty {
+                if usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
                     MonitoredPrsRow(
                         viewModel: viewModel,
                         monitoredPrStore: viewModel.monitoredPrStore,
@@ -159,7 +171,7 @@ struct ConversationColumnView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
 
-        if !usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty {
+        if !usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
             VStack(spacing: 0) {
                 MonitoredPrsRow(
                     viewModel: viewModel,
@@ -170,7 +182,7 @@ struct ConversationColumnView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
 
-        if !viewModel.activeAgentHooks.isEmpty {
+        if !viewModel.activeAgentHooks.isEmpty || viewModel.hookStore.error != nil {
             VStack(spacing: 0) {
                 BackgroundHooksRow(
                     viewModel: viewModel,

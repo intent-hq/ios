@@ -44,6 +44,9 @@ protocol ConnectionManagerRouting: AnyObject {
     var connectionState: ConnectionState { get }
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> { get }
 
+    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
+    var globalSubscriptionPublisher: AnyPublisher<ConnectionManager.GlobalSubscriptionState, Never> { get }
+
     func request(_ method: String, params: [String: Any], timeout: TimeInterval) async throws -> Any
     @discardableResult func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID
     func removeEventHandler(id: UUID)
@@ -52,6 +55,11 @@ protocol ConnectionManagerRouting: AnyObject {
 }
 
 extension ConnectionManagerRouting {
+    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { .subscribed }
+    var globalSubscriptionPublisher: AnyPublisher<ConnectionManager.GlobalSubscriptionState, Never> {
+        Just(globalSubscriptionState).eraseToAnyPublisher()
+    }
+
     func request(_ method: String) async throws -> Any {
         try await request(method, params: [:], timeout: ConnectionManager.defaultRequestTimeout)
     }

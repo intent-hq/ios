@@ -61,12 +61,13 @@ extension ConversationStore {
         sendAttempts[index].status = .sending
         appendOptimisticSend(attempt)
         sendThinkingMessageIds.insert(messageId)
+        let queueGeneration = commands.queueMutations.generation
         do {
             let acceptance = try await commands.sendMessage(attempt.request)
             guard let current = sendAttempts.first(where: { $0.id == messageId }) else { throw CancellationError() }
             if current.status != .accepted, let seed = acceptance.queueSeed,
                !queuedMessages.contains(where: { $0.id == seed.id }) {
-                queuedMessages.append(seed)
+                commands.confirmQueueMutation(.append(seed), generation: queueGeneration)
             }
             confirmSendAttempt(
                 messageId,

@@ -151,9 +151,12 @@ enum WorkspaceDetailHeaderLayout {
 }
 
 struct WorkspaceActionsMenu: View {
+    let workspaceId: String
+    let scriptStore: WorkspaceScriptStore
     let isTerminalDisabled: Bool
     let onCreateAgent: () -> Void
     let onCreateTerminal: () -> Void
+    let onCreateBrowser: () -> Void
     let onArchive: () -> Void
     let onDelete: () -> Void
 
@@ -166,6 +169,10 @@ struct WorkspaceActionsMenu: View {
                 Label { Text("New terminal").interFont(Constants.Typography.bodyS) } icon: { Image(.terminal) }
             }
             .disabled(isTerminalDisabled)
+            Button(action: onCreateBrowser) {
+                Label { Text("New browser").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "globe") }
+            }
+            WorkspaceScriptsMenu(workspaceId: workspaceId, store: scriptStore)
             Divider()
             Button(action: onArchive) {
                 Label { Text("Archive").interFont(Constants.Typography.bodyS) } icon: { Image(.archive) }
@@ -177,6 +184,43 @@ struct WorkspaceActionsMenu: View {
             ToolbarOverflowLabel()
         }
         .accessibilityLabel("Workspace actions")
+    }
+}
+
+struct WorkspaceDetailHeader: View {
+    let workspaceId: String
+    let workspace: Workspace?
+    let title: String
+    @Binding var selection: WorkspaceTab
+
+    var body: some View {
+        WorkspaceDetailHeading(
+            title: title,
+            repositoryOwner: workspace?.repositoryOwner,
+            repositoryName: workspace?.repositoryName,
+            statusMessage: workspace?.statusMessage
+        )
+        if let assetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
+            WorkspaceStatusImageView(workspaceId: workspaceId, assetId: assetId, style: .detail)
+                .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+                .padding(.bottom, Constants.WorkspaceDetail.statusImageBottomPadding)
+        }
+        if let total = workspace?.taskStatsTotal,
+           let progress = WorkspaceTaskProgressLayout(
+               total: total,
+               completed: workspace?.taskStatsCompleted ?? 0,
+               inProgress: workspace?.taskStatsInProgress ?? 0
+           ) {
+            WorkspaceTaskProgressView(progress: progress)
+        }
+        #if !os(visionOS)
+        WorkspaceContentTabs(selection: $selection)
+            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+            .padding(.top, WorkspaceDetailHeaderLayout.tabTopPadding(
+                hasTaskProgress: (workspace?.taskStatsTotal ?? 0) > 0
+            ))
+            .padding(.bottom, WorkspaceDetailStyle.sectionSpacing)
+        #endif
     }
 }
 

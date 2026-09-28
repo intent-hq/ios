@@ -375,8 +375,8 @@ extension ConversationStoreTests {
             "the stale reply must not revert the pushed seen marker"
         )
         #expect(
-            store.isStreaming,
-            "streaming state is still applied from the reply"
+            !store.isStreaming,
+            "the idle chat snapshot remains authoritative over the detail reply"
         )
     }
 
