@@ -87,6 +87,11 @@ nonisolated enum WorkspaceBrowserURL {
     private static let httpsPort = 443
     private static let localAliases: Set<String> = ["localhost", "daemon.localhost", "0.0.0.0", "[::]", "[::1]"]
 
+    static func isLocalHost(_ host: String) -> Bool {
+        let host = host.lowercased()
+        return host == "127.0.0.1" || localAliases.contains(host)
+    }
+
     static func normalize(_ input: String) throws -> String {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
@@ -108,7 +113,7 @@ nonisolated enum WorkspaceBrowserURL {
         guard !authority.hasSuffix(":") else { throw WorkspaceBrowserError.invalidURL }
         components.scheme = scheme
         let normalizedHost = host.lowercased()
-        components.host = localAliases.contains(normalizedHost) ? "127.0.0.1" : normalizedHost
+        components.host = isLocalHost(normalizedHost) ? "127.0.0.1" : normalizedHost
         guard let normalized = components.url?.absoluteString else { throw WorkspaceBrowserError.invalidURL }
         return normalized
     }

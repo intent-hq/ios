@@ -716,6 +716,7 @@ private struct PickerLayoutHost: View {
     @State private var selectedProvider: ProviderInfo? = Self.provider
     @State private var selectedModel: ModelInfo?
     @State private var message = ""
+    @State private var images = WorkspaceCreationImages()
     @State private var showError = false
 
     init(layout: PickerHostLayout, isCreating: Bool) {
@@ -743,6 +744,7 @@ private struct PickerLayoutHost: View {
                 reasoningLevels: [],
                 selectedReasoningEffort: .constant(nil),
                 messageText: $message,
+                images: images,
                 isCreating: isCreating,
                 errorMessage: nil,
                 showError: $showError,

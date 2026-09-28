@@ -80,8 +80,8 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case .complete: return Constants.Colors.WorkspaceStatus.complete
         case .prReady: return Constants.Colors.WorkspaceStatus.prReady
         case .prOpen: return Constants.Colors.WorkspaceStatus.prOpen
-        // Shares the open colour, matching the FE's `text-info` for both.
-        case .prQueued: return Constants.Colors.WorkspaceStatus.prOpen
+        // Queued and merged share Blue 600 in the Figma Status Colors legend.
+        case .prQueued: return Constants.Colors.WorkspaceStatus.prMerged
         case .prMerged: return Constants.Colors.WorkspaceStatus.prMerged
         case .unknown: return Constants.Colors.WorkspaceStatus.unknown
         }
@@ -127,10 +127,6 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         }
     }
 }
-
-/// The unread-dot blue (#3B82F6), shared by the row overlay and any other
-/// unread affordances.
-let kWorkspaceUnreadColor = Constants.Colors.WorkspaceStatus.unread
 
 /// True when the workspace carries the server-owned unread attention flag
 /// (the blue dot). `review_required` and `none` don't count — only `unread`
