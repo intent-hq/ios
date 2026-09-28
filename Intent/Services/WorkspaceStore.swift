@@ -9,7 +9,15 @@ import Observation
     var workspaces: [Workspace] = []
     var lastUpdated: Date?
     var isLoading = false
+    var agentSummaries: AgentSummaryStore? {
+        didSet {
+            if let agentSummaries { agentSummaries.seedWorkspaces(workspaces, since: agentSummaries.beginRead()) }
+        }
+    }
 
+    @ObservationIgnored private var fetchTask: Task<Void, Never>?
+    @ObservationIgnored private var fetchRevision = 0
+    @ObservationIgnored private var fetchNeedsRefresh = false
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var eventHandlerId: UUID?
     @ObservationIgnored private let connectionManager: ConnectionManagerRouting
@@ -72,26 +80,77 @@ import Observation
 
     // MARK: - Fetch
 
+    func fetchIfNeeded() async {
+        guard lastUpdated == nil || fetchNeedsRefresh else { return }
+        await fetchAll()
+    }
+
     func fetchAll() async {
-        await _fetchAll()
+        await startFetch().value
+    }
+
+    private func startFetch() -> Task<Void, Never> {
+        if let fetchTask { return fetchTask }
+        let task = Task { await self._fetchAll() }
+        fetchTask = task
+        return task
+    }
+
+    private func invalidateFetchForEvent() {
+        fetchRevision &+= 1
+        fetchNeedsRefresh = true
+        _ = startFetch()
     }
 
     private func _fetchAll() async {
+        fetchNeedsRefresh = true
         isLoading = true
-        do {
-            let result = try await connectionManager.request("workspace.list")
-            publishFetchedWorkspaces(Self.parseWorkspaces(from: result))
-        } catch {
-            AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
+        var needsSuccessor = false
+        defer {
+            // Retire this owner before handing off or announcing idle. Passive
+            // callers join the successor; completion observers may start anew.
+            fetchTask = nil
+            if needsSuccessor {
+                _ = startFetch()
+            } else {
+                isLoading = false
+            }
         }
-        isLoading = false
+        // Passive callers share this owner. Events during a read invalidate
+        // its snapshot and coalesce into one trailing read. An event during
+        // that read belongs to one successor, keeping the list loading until
+        // events settle. Failure alone stays dirty without automatic retries.
+        for round in 0..<2 {
+            let revision = fetchRevision
+            do {
+                let summaryBoundary = agentSummaries?.beginRead()
+                let result = try await connectionManager.request("workspace.list")
+                if revision == fetchRevision {
+                    fetchNeedsRefresh = false
+                    publishFetchedWorkspaces(Self.parseWorkspaces(from: result), summaryBoundary: summaryBoundary)
+                    return
+                }
+            } catch {
+                AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
+            }
+            guard revision != fetchRevision else { return }
+            needsSuccessor = round == 1
+        }
     }
 
     /// Publishes a fetched workspace list. `lastUpdated` is set **before** `workspaces`
     /// so observers that gate on "fetched at least once" (e.g. AppCoordinator's
     /// missing-workspace validation) see a non-nil `lastUpdated` on the very first
     /// post-fetch change.
-    func publishFetchedWorkspaces(_ parsed: [Workspace]) {
+    func publishFetchedWorkspaces(_ parsed: [Workspace], summaryBoundary: AgentSummaryStore.ReadBoundary? = nil) {
+        if let agentSummaries {
+            let changed = parsed.filter { incoming in
+                summaryBoundary != nil
+                    || workspaces.first { $0.id == incoming.id }?.agentSummaryAgents != incoming.agentSummaryAgents
+                    || incoming.agentSummaryAgents.contains { agentSummaries.cached(agentId: $0.id).isEmpty }
+            }
+            agentSummaries.seedWorkspaces(changed, since: summaryBoundary ?? agentSummaries.beginRead())
+        }
         lastUpdated = Date()
         workspaces = parsed
     }
@@ -195,7 +254,7 @@ extension WorkspaceStore {
         switch Self.classify(type: eventType, data: data) {
         case .refetch:
             if !workspaceLive {
-                Task { await fetchAll() }
+                invalidateFetchForEvent()
             }
         case .patchInPlace, .ignore:
             break
@@ -208,80 +267,6 @@ extension WorkspaceStore {
     /// event dictionaries used by tests and legacy callers.
     private static func eventDictionary(from dictionary: [String: Any]) -> [String: Any] {
         (dictionary["event"] as? [String: Any]) ?? dictionary
-    }
-
-    // MARK: - Event classification
-
-    nonisolated static let handledChannels = ["workspace:", "agent:"]
-
-    nonisolated static let refetchEventTypes: Set<String> = [
-        "workspace:created", "workspace:deleted",
-        "workspace:activity-changed", "workspace:displayStatus-changed",
-        "workspace:attention-changed",
-        "agent:started", "agent:completed", "agent:failed", "agent:created",
-        "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed"
-    ]
-
-    nonisolated static let patchInPlaceEventTypes: Set<String> = [
-        "workspace:waiting-changed"
-    ]
-
-    nonisolated static let ignoredEventTypes: Set<String> = [
-        "workspace:delete-scheduled", "workspace:delete-cancelled",
-        "workspace:opened", "workspace:closed", "workspace:activity",
-        "workspace:setup:started", "workspace:setup:completed",
-        "workspace:transfer:failed", "workspace:transfer:progress",
-        "workspace:transfer:ready", "workspace:tokenUsage-changed",
-        "workspace:context-changed",
-        "agent:attention-requested", "agent:delete-cancelled",
-        "agent:delete-scheduled", "agent:delivery-confirmed",
-        "agent:event-delivery-failed", "agent:event-delivery-timeout",
-        "agent:last-message", "agent:message", "agent:message:delivery-failed",
-        "agent:message:received", "agent:message:sent",
-        "agent:permission:request", "agent:permission:resolved",
-        "agent:process:evicted", "agent:process:queued", "agent:process:resumed",
-        "agent:queue:processing", "agent:queue:processing-cancelled",
-        "agent:queue:stale-message", "agent:queue:updated",
-        "agent:restored", "agent:retired", "agent:session-stats-changed",
-        "agent:stream:activity", "agent:stream:end", "agent:stream:start",
-        "agent:stream:status", "agent:subscribed", "agent:subscriptions-changed",
-        "agent:subscriptions-restored", "agent:tool:call", "agent:unsubscribed",
-        "agent:updated", "agent:user-message:sent", "agent:woken-by-subscription"
-    ]
-
-    nonisolated static let workspaceUpdatedChangeKeyClassification: [String: EventClassification] = [
-        "lastActivity": .patchInPlace,
-        "activePullRequest": .refetch, "archived": .refetch, "archivedAt": .refetch,
-        "attention": .refetch, "autoCommitEnabled": .refetch, "autoUnarchive": .refetch,
-        "baseCommitSha": .refetch, "baseRef": .refetch, "branch": .refetch,
-        "browserClientId": .refetch, "defaultModel": .refetch, "isRemote": .refetch,
-        "mcpServerToggled": .refetch, "members": .refetch, "path": .refetch,
-        "prNumber": .refetch, "prStatus": .refetch, "prUrl": .refetch,
-        "pullRequests": .refetch, "removedPrincipalId": .refetch,
-        "repositoryName": .refetch, "repositoryOwner": .refetch,
-        "repositoryPath": .refetch, "scope": .refetch, "setupScript": .refetch,
-        "skipIsolation": .refetch, "status": .refetch, "statusImageAssetId": .refetch,
-        "statusMessage": .refetch, "tags": .refetch, "title": .refetch,
-        "worktreePath": .refetch
-    ]
-
-    nonisolated static func classify(
-        type: String,
-        data: [String: Any]? // swiftlint:disable:this discouraged_optional_collection
-    ) -> EventClassification? {
-        if refetchEventTypes.contains(type) { return .refetch }
-        if patchInPlaceEventTypes.contains(type) { return .patchInPlace }
-        if ignoredEventTypes.contains(type) { return .ignore }
-        if type == "workspace:updated" {
-            guard let changes = data?["changes"] as? [String: Any], !changes.isEmpty else {
-                return .refetch
-            }
-            let allPatched = changes.keys.allSatisfy { key in
-                workspaceUpdatedChangeKeyClassification[key] == .patchInPlace
-            }
-            return allPatched ? .patchInPlace : .refetch
-        }
-        return nil
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {

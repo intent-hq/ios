@@ -6,6 +6,8 @@ import SwiftUI
 struct ConversationTranscriptView: View {
     typealias Layout = Constants.Conversation.Transcript
 
+    nonisolated static let viewportCoordinateSpace = "conversation-transcript-viewport"
+
     let viewModel: ConversationViewModel
     let scrollState: ConversationTranscriptScrollState
     let onNavigateToNote: (String, String, String) -> Void
@@ -90,15 +92,20 @@ private extension ConversationTranscriptView {
                     runInitialScrollIfNeeded(proxy: proxy)
                 }
             }
+            .onChange(of: viewModel.isEntryScrollReady) { _, ready in
+                if ready { runInitialScrollIfNeeded(proxy: proxy) }
+            }
             .onAppear {
+                restoreRetainedViewport(proxy: proxy)
                 // On first open the transcript mounts only after loading settles,
                 // so onAppear is also an entry-scroll trigger for cached data.
                 if !viewModel.isLoading {
                     runInitialScrollIfNeeded(proxy: proxy)
                 }
             }
-            .onChange(of: scrollMomentumProxy.hasResolvedScrollView) { _, resolved in
-                if resolved {
+            .onChange(of: scrollMomentumProxy.hostingRevision) { _, _ in
+                restoreRetainedViewport(proxy: proxy)
+                if scrollMomentumProxy.hasResolvedScrollView {
                     handleScrollViewResolved(proxy: proxy)
                 }
             }
@@ -146,16 +153,12 @@ private extension ConversationTranscriptView {
             .background(ScrollViewFinder(proxy: scrollMomentumProxy))
         }
         .defaultScrollAnchor(.bottom)
+        .coordinateSpace(name: Self.viewportCoordinateSpace)
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.always)
         .accessibilityIdentifier("transcript.scrollView")
-        .demoAccessibilityValue(
-            ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
-                outcome: scrollState.lastForcedFollowOutcome,
-                corrections: scrollState.lastForcedFollowCorrections,
-                endRecovery: unrealizedEndRecoveryDemoReport.summary
-            )
-        )
+        .demoAccessibilityValue(transcriptDemoReport)
+        .demoStartupGestureProbe(scrollState: scrollState)
         .demoEndDerealization(
             triggerFile: DemoFixtures.configuredEndDerealizationTriggerFile,
             onTrigger: withdrawEndRowForDemo,
@@ -202,6 +205,8 @@ private extension ConversationTranscriptView {
             scrollState.isUserScrollPhase = newPhase.isUserDriven
             if newPhase.isUserDriven {
                 takeOverPendingFollowIfGesture(isInteracting: true, proxy: proxy)
+            } else {
+                scrollState.observeViewportGesture(isInteracting: false)
             }
             guard oldPhase.isUserDriven, !newPhase.isUserDriven, !isScrollingToBottom else { return }
             let distance = ConversationTranscriptScrollPolicy.distanceToBottom(
@@ -237,6 +242,7 @@ private extension ConversationTranscriptView {
             }
         }
         .onDisappear {
+            scrollState.suspendViewport()
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
             cancelBottomBandRePin()

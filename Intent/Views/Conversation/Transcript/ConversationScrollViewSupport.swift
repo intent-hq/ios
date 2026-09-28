@@ -15,6 +15,9 @@ class ScrollViewMomentumProxy {
     /// it stays true after the scroll view deallocates while `scrollView` and
     /// `distanceToBottom` are nil again.
     private(set) var hasResolvedScrollView = false
+    private(set) var hostingRevision = 0
+
+    func didAttachToWindow() { hostingRevision &+= 1 }
 
     /// Gap between the viewport's bottom edge and the end of the content, or
     /// nil before the scroll view has been found.
@@ -169,6 +172,7 @@ struct ScrollViewFinder: UIViewRepresentable {
                 AppLog.userInterface.debug("[SCROLL] Found UIScrollView: \(scrollView)")
             }
             ScrollViewFinder.installKeyboardDismissTap(on: scrollView)
+            proxy.didAttachToWindow()
         }
     }
 

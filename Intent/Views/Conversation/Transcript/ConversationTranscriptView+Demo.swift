@@ -1,6 +1,23 @@
 import SwiftUI
 
 extension ConversationTranscriptView {
+    /// A preserved entry has no forced follow to finish. Keep that distinct
+    /// from a requested follow, and expose the actual authority/owner state.
+    var transcriptDemoReport: String {
+        var follow = ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
+            outcome: scrollState.lastForcedFollowOutcome,
+            corrections: scrollState.lastForcedFollowCorrections,
+            endRecovery: unrealizedEndRecoveryDemoReport.summary
+        )
+        if scrollState.lastForcedFollowOutcome == nil { follow += " " + unrealizedEndRecoveryDemoReport.summary }
+        let entry = scrollState.entryViewportPreserved ? "preserved" : (hasInitiallyScrolled ? "positioned" : "pending")
+        return follow + " entry=\(entry) metadataReady=\(viewModel.isEntryScrollReady)"
+            + " forcedRequested=\(scrollState.hasRequestedForcedFollow) followActive=\(isFollowing)"
+            + " forcedRequests=\(scrollState.forcedFollowRequestCount)"
+            + " phase=\(isUserInteracting ? "gesture" : "idle")"
+            + " workspace=\(viewModel.store.workspaceId ?? "pending")"
+    }
+
     /// The last episode's report or, with one in flight (`recovering`) or
     /// none armed yet (`notAttempted`), the classifier's reading of the
     /// current state.
@@ -68,6 +85,21 @@ extension ConversationTranscriptView {
 }
 
 extension View {
+    /// Only the startup demo exposes this live query surface. The one-point
+    /// overlay does not participate in transcript layout or receive gestures.
+    @ViewBuilder
+    func demoStartupGestureProbe(scrollState: ConversationTranscriptScrollState) -> some View {
+        if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript {
+            overlay(alignment: .topLeading) {
+                TranscriptGestureProbe(scrollState: scrollState)
+                    .frame(width: 1, height: 1)
+                    .allowsHitTesting(false)
+            }
+        } else {
+            self
+        }
+    }
+
     /// Under `--demo-data` only: exposes `value` as the view's accessibility
     /// value so the XCUITests can read the transcript's landing outcome.
     /// Zero-impact otherwise — the value is neither computed (so the observed
@@ -106,5 +138,27 @@ extension View {
         } else {
             self
         }
+    }
+}
+
+private struct TranscriptGestureProbe: UIViewRepresentable {
+    let scrollState: ConversationTranscriptScrollState
+
+    func makeUIView(context _: Context) -> TranscriptGestureAccessibilityView {
+        let view = TranscriptGestureAccessibilityView()
+        view.isAccessibilityElement = true
+        view.accessibilityIdentifier = "transcript.gestureState"
+        view.accessibilityLabel = "Transcript gesture state"
+        view.isUserInteractionEnabled = false
+        view.scrollState = scrollState
+        return view
+    }
+
+    func updateUIView(_ view: TranscriptGestureAccessibilityView, context _: Context) {
+        view.scrollState = scrollState
+    }
+
+    static func dismantleUIView(_ view: TranscriptGestureAccessibilityView, coordinator _: Void) {
+        view.scrollState = nil
     }
 }

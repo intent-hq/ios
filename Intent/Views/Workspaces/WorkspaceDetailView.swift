@@ -24,7 +24,7 @@ struct WorkspaceDetailView: View {
 
     init(workspaceId: String, session: BackendSession) {
         self.workspaceId = workspaceId
-        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection))
+        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection, summaries: session.agentSummaries))
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
         _scriptStore = State(initialValue: WorkspaceScriptStore(connection: session.connection))
     }

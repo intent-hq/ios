@@ -5,17 +5,31 @@ import SwiftUI
 extension ConversationTranscriptView {
     @ViewBuilder
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
+        let generation = scrollState.initialScrollGeneration
+        let ownershipRevision = scrollState.viewportOwnershipRevision
         if viewModel.isTruncated {
             truncationBanner
                 .id("truncation-banner")
         }
 
         ForEach(viewModel.filteredMessages) { message in
-            messageRow(for: message)
-                .id(message.id)
-            if message.id == dividerAnchorId {
-                NewMessagesDividerView()
-                    .id("new-messages-divider")
+            // One stable lazy-stack target per message. A late divider changes
+            // its height without shifting the identity of all following rows.
+            VStack(spacing: Layout.transcriptRowSpacing) {
+                messageRow(for: message)
+                if message.id == dividerAnchorId {
+                    entryDivider(generation: generation, ownershipRevision: ownershipRevision)
+                }
+            }
+            .id(message.id)
+            .overlay(alignment: .top) { restorationMarker(for: message.id) }
+            .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
+                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
+            } action: { measurement in
+                preserveRowOffsetAfterDividerChange(messageId: message.id, measurement: measurement, proxy: proxy)
+            }
+            .onDisappear {
+                scrollState.viewportAnchor.remove(id: message.id, generation: generation, entryGeneration: scrollState.initialScrollGeneration, ownershipRevision: ownershipRevision)
             }
         }
 
@@ -61,6 +75,62 @@ extension ConversationTranscriptView {
             // a dropped end row.
             Color.clear.frame(height: Layout.bottomAnchorHeight)
                 .padding(.bottom, Layout.bottomAnchorPadding)
+        }
+    }
+
+    private func restorationMarker(for messageId: String) -> some View {
+        // A realized row's top marker lets SwiftUI own the final retained
+        // offset even for partial or viewport-sized rows, without layout space.
+        Color.clear
+            .frame(height: ConversationTranscriptViewportAnchor.restorationMarkerHeight)
+            .id(ConversationTranscriptViewportAnchor.RestorationTarget(messageID: messageId))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private func entryDivider(generation: Int, ownershipRevision: Int) -> some View {
+        NewMessagesDividerView()
+            .id("new-messages-divider")
+            .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
+                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: viewModel.newMessagesDividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
+            } action: { measurement in
+                guard !isUserInteracting, !isFollowing,
+                      let geometry = scrollMomentumProxy.restingGeometry,
+                      let adjustment = scrollState.entryDividerAdjustment(measurement, viewportHeight: geometry.containerHeight) else { return }
+                scrollMomentumProxy.pageTo(offsetY: geometry.contentOffsetY + adjustment)
+            }
+    }
+
+    private func preserveRowOffsetAfterDividerChange(
+        messageId: String, measurement: ConversationTranscriptViewportAnchor.Measurement, proxy: ScrollViewProxy
+    ) {
+        // This live check also covers a queued callback that beats the
+        // column's message-ID observer after an authoritative deletion.
+        scrollState.retainViewportMessages(withIDs: Set(viewModel.filteredMessages.map(\.id)))
+        guard measurement.divider == viewModel.newMessagesDividerAnchorId,
+              let geometry = scrollMomentumProxy.restingGeometry else { return }
+        // The geometry callback includes the divider identity, so even a row
+        // already held by bottom anchoring consumes this revision with no move.
+        let application = scrollState.viewportAnchor.application(
+            id: messageId,
+            measurement: measurement,
+            geometry: geometry,
+            preserve: hasInitiallyScrolled && !isUserInteracting && !isFollowing,
+            entryGeneration: scrollState.initialScrollGeneration
+        )
+        switch application {
+        case .offset(let offset):
+            scrollMomentumProxy.pageTo(offsetY: offset)
+        case let .retainedAlignment(target, anchorY, rowY):
+            proxy.scrollTo(target, anchor: UnitPoint(x: 0.5, y: anchorY))
+            scrollState.viewportAnchor.recordRestorationAlignment(
+                anchorY: anchorY,
+                rowY: rowY,
+                before: geometry.contentOffsetY,
+                immediate: scrollMomentumProxy.restingGeometry?.contentOffsetY
+            )
+        case nil:
+            break
         }
     }
 

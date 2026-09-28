@@ -29,7 +29,7 @@ struct NoteDetailView: View {
         self.noteTitle = noteTitle
         self.onNavigateToNote = onNavigateToNote
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
-        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection))
+        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection, summaries: session.agentSummaries))
     }
 
     var agentStoreConnectionID: ObjectIdentifier {

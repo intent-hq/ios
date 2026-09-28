@@ -5,6 +5,72 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
     @MainActor
+    func testHorizontalCardsKeepReferenceHeightAcrossContentAndSelection() throws {
+        let app = try openQuestions(scenario: "question-cards", collapsed: false)
+        let first = app.buttons["question.option.0"]
+        let second = app.buttons["question.option.1"]
+        XCTAssertTrue(second.waitForExistence(timeout: Self.timeout))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "question-cards-mixed-reference"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        assertReferenceCards(first, second)
+
+        let carousel = app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch
+        carousel.swipeLeft()
+        let third = app.buttons["question.option.2"]
+        XCTAssertTrue(third.isHittable)
+        XCTAssertEqual(third.frame.height, 166, accuracy: 1, "Missing descriptions must not shrink cards")
+        carousel.swipeRight()
+        tap(first)
+        XCTAssertTrue(app.staticTexts["Short answers"].waitForExistence(timeout: Self.timeout))
+        assertReferenceCards(first, second)
+        tap(first)
+        XCTAssertEqual(first.value as? String, "Selected")
+        assertReferenceCards(first, second)
+        tap(app.buttons["question.back"])
+        XCTAssertTrue(app.staticTexts["Publish verified changes"].waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(first.value as? String, "Selected")
+        assertReferenceCards(first, second)
+    }
+
+    @MainActor
+    func testOversizedHorizontalAnswerUsesReadableVerticalFallback() throws {
+        let app = try openQuestions(scenario: "question-cards", collapsed: false)
+        tap(app.buttons["question.skip"])
+        XCTAssertTrue(app.staticTexts["Short answers"].waitForExistence(timeout: Self.timeout))
+        tap(app.buttons["question.skip"])
+        XCTAssertTrue(app.staticTexts["Detailed answers"].waitForExistence(timeout: Self.timeout))
+        let first = app.buttons["question.option.0"]
+        let second = app.buttons["question.option.1"]
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "question-cards-overflow"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTAssertLessThan(first.frame.maxY, second.frame.minY)
+        XCTAssertEqual(first.frame.minX, second.frame.minX, accuracy: 1)
+        let shortHeight = first.frame.height
+        let scroll = app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch
+        scroll.swipeUp()
+        let last = app.buttons["question.option.3"]
+        XCTAssertTrue(last.isHittable)
+        XCTAssertGreaterThan(last.frame.height, shortHeight, "The vertical fallback must retain natural text heights")
+        tap(last)
+        XCTAssertEqual(last.value as? String, "Selected")
+        if !app.buttons["question.next"].isHittable { scroll.swipeUp() }
+        tap(app.buttons["question.next"])
+        assertSentMessage(in: app, contains: ["A: Full review"])
+    }
+
+    @MainActor
+    private func assertReferenceCards(_ first: XCUIElement, _ second: XCUIElement) {
+        XCTAssertGreaterThan(second.frame.minX, first.frame.minX, "This must exercise the horizontal carousel")
+        XCTAssertEqual(first.frame.minY, second.frame.minY, accuracy: 1)
+        XCTAssertEqual(first.frame.height, 166, accuracy: 1)
+        XCTAssertEqual(second.frame.height, 166, accuracy: 1)
+    }
+
+    @MainActor
     func testWorkspaceQuestionsStackAtDefaultPhoneSize() throws {
         let app = try openQuestions(scenario: "questions", collapsed: false)
         let first = app.buttons["question.option.0"]

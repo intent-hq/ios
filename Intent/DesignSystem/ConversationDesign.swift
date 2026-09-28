@@ -84,6 +84,8 @@ extension Constants.Conversation.Design {
         // Reference widths only: the question layout owner adapts to available space and text size.
         static let carouselAnswerWidth: CGFloat = 243
         static let carouselAnswerMinimumHeight: CGFloat = 120
+        // Screenshot-calibrated standard; oversized native text uses the vertical fallback (#570).
+        static let carouselAnswerHeight: CGFloat = 166
         static let buttonSpacing: CGFloat = 8
         static let buttonHorizontalPadding: CGFloat = 20
         static let buttonHeight: CGFloat = 40

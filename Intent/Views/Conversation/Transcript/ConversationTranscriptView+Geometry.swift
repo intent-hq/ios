@@ -41,7 +41,7 @@ extension ConversationTranscriptView {
     /// (the lifecycle's viewport owner), and so does the Go to End tap until
     /// its request is made.
     var isFollowing: Bool {
-        lifecycle.isFollowing || isScrollingToBottom
+        scrollState.isFollowing
     }
 
     func cancelPastEndRePin() {
