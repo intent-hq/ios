@@ -49,7 +49,7 @@ struct ConnectingView: View {
             // Demo/screenshot mode: no daemon. Mark the connection live so the
             // stores run their normal on-connected fetches (served from
             // DemoFixtures under --demo-data) and go straight to the app.
-            session.connection.connectionState = .connected
+            session.connection.connectDemo(serveFixtures: DemoMode.isEnabled)
         } else {
             guard let connection = coordinator.windowConnection else {
                 if coordinator.backendID != nil {

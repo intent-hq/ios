@@ -19,11 +19,7 @@ extension ConversationLiveTranscript {
 
         let outcome: Result<String?, Error>
         do {
-            let result = try await connectionManager.request("chat.subscribe", params: [
-                "agentId": agentId,
-                "replaceGroup": "ios-chat-\(agentId)",
-                "projection": "slim"
-            ])
+            let result = try await requestSubscription(agentId: agentId, generation: generation)
             outcome = .success((result as? [String: Any])?["subscriptionId"] as? String)
         } catch {
             outcome = .failure(error)
@@ -39,6 +35,41 @@ extension ConversationLiveTranscript {
         applySubscribeOutcome(outcome, generation: generation)
     }
 
+    private func requestSubscription(agentId: String, generation: Int) async throws -> Any {
+        var params: [String: Any] = [
+            "agentId": agentId,
+            "replaceGroup": "ios-chat-\(agentId)",
+            "projection": "slim"
+        ]
+        if !useFullDeltaEncoding { params["deltaEncoding"] = "incremental" }
+        do {
+            return try await connectionManager.request("chat.subscribe", params: params)
+        } catch {
+            guard generation == registrationGeneration, !useFullDeltaEncoding,
+                  Self.rejectsDeltaEncoding(error) else { throw error }
+            // Retry only this known optional-field rejection, once. Normal
+            // recovery keeps omitting it until reconnect negotiates anew.
+            useFullDeltaEncoding = true
+            params.removeValue(forKey: "deltaEncoding")
+            return try await connectionManager.request("chat.subscribe", params: params)
+        }
+    }
+
+    private static let invalidParametersCode = -32_602
+
+    private static func rejectsDeltaEncoding(_ error: Error) -> Bool {
+        let error = error as NSError
+        guard error.domain == "WebSocket", error.code == invalidParametersCode else { return false }
+        let message = error.localizedDescription.lowercased()
+        // Bind the rejection to this exact parameter. Its name in an
+        // expected-field list or another clause is not a compatibility signal.
+        let field = #"(?:`deltaencoding`|"deltaencoding"|'deltaencoding'|deltaencoding(?=$|[\s,;:()]|\.(?:\s|$)))"#
+        return [
+            #"\b(?:unknown|unrecognized|unsupported|unexpected)\s+(?:field|parameter)(?:\s*:\s*|\s+)\#(field)"#,
+            #"(?:^|:\s*)(?:(?:field|parameter)\s+)?\#(field)\s+(?:is\s+)?not\s+supported\b"#
+        ].contains { message.range(of: $0, options: .regularExpression) != nil }
+    }
+
     /// Opens a registration: the current channel is released (its handler
     /// no longer reaches `handlePush` and its daemon-side subscription is
     /// let go without waiting), pending self-heal is dropped, and the token
@@ -51,6 +82,7 @@ extension ConversationLiveTranscript {
         cancelSnapshotRecovery()
         releaseActiveRegistration()
         chatLive = false
+        incrementalDeltas = false
         registrationGeneration &+= 1
         return registrationGeneration
     }
@@ -110,6 +142,7 @@ extension ConversationLiveTranscript {
         cancelSnapshotRecovery()
         chatLive = false
         chatSeeded = false
+        incrementalDeltas = false
 
         await releaseCurrentSubscription()
 
@@ -121,6 +154,8 @@ extension ConversationLiveTranscript {
 
     func prepareForReconnect() {
         chatLive = false
+        incrementalDeltas = false
+        useFullDeltaEncoding = false
         if let subscriptionId = chatSubscriptionId {
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
         }

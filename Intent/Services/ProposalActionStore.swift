@@ -6,18 +6,27 @@ final class ProposalActionStore {
     private let connection: ConnectionManagerRouting
     private let agentId: String
     private let workspaceId: String
-    private(set) var pending: [String: String] = [:]
-    private(set) var resolutions: [String: String] = [:]
+    let details: AgentDetailStore
+    var pending: [String: String] {
+        var result: [String: String] = [:]
+        for ref in details.cached(agentId: agentId)?.metadata["pendingProposals"] as? [[String: Any]] ?? [] {
+            if let id = ref["proposalId"] as? String, let message = ref["messageId"] as? String { result[id] = message }
+        }
+        return result
+    }
+    var resolutions: [String: String] {
+        details.cached(agentId: agentId)?.metadata["proposalResolutions"] as? [String: String] ?? [:]
+    }
     private(set) var completed: [String: Set<String>] = [:]
     private(set) var errors: [String: String] = [:]
     private(set) var isBusy = false
     private(set) var loadError: String?
-    private var generation = 0
 
-    init(connection: ConnectionManagerRouting, agentId: String, workspaceId: String) {
+    init(connection: ConnectionManagerRouting, agentId: String, workspaceId: String, details: AgentDetailStore? = nil) {
         self.connection = connection
         self.agentId = agentId
         self.workspaceId = workspaceId
+        self.details = details ?? AgentDetailStore(connection: connection)
     }
 
     func isPending(_ proposal: ActionProposal, messageId: String) -> Bool {
@@ -33,21 +42,19 @@ final class ProposalActionStore {
         do { try await load() } catch { loadError = error.localizedDescription }
     }
 
-    private func load() async throws {
-        generation += 1
-        let requestedGeneration = generation
-        let response = try await connection.request("agent.get", params: ["agentId": agentId, "workspaceId": workspaceId])
-        guard requestedGeneration == generation else { return }
-        guard let response = response as? [String: Any], let agent = response["agent"] as? [String: Any] else {
-            throw ProposalError.invalidResponse
-        }
-        let metadata = agent["metadata"] as? [String: Any] ?? [:]
-        var next: [String: String] = [:]
-        for ref in metadata["pendingProposals"] as? [[String: Any]] ?? [] {
-            if let id = ref["proposalId"] as? String, let message = ref["messageId"] as? String { next[id] = message }
-        }
-        pending = next
-        resolutions = metadata["proposalResolutions"] as? [String: String] ?? [:]
+    func loadIfPresent(in messages: [ConversationMessage]) async {
+        guard messages.contains(where: { $0.contentBlocks.contains { ActionProposal.parse($0) != nil } }) else { return }
+        await loadIfNeeded()
+    }
+
+    /// Card appearance and metadata-generation view tasks reuse settled detail.
+    func loadIfNeeded() async {
+        guard !isBusy else { return }
+        do { try await load(refresh: false) } catch { loadError = error.localizedDescription }
+    }
+
+    private func load(refresh: Bool = true) async throws {
+        _ = try await details.load(agentId: agentId, workspaceId: workspaceId, refresh: refresh)
         loadError = nil
     }
 
@@ -91,9 +98,10 @@ final class ProposalActionStore {
         ])
         guard let result = response as? [String: Any], result["success"] as? Bool == true,
               let recorded = result["outcome"] as? String else { throw ProposalError.invalidResponse }
-        generation += 1
+        var resolutions = resolutions
         resolutions[proposal.id] = recorded
-        pending[proposal.id] = nil
+        let pending = pending.filter { $0.key != proposal.id }.map { ["proposalId": $0.key, "messageId": $0.value] }
+        details.updateMetadata(agentId: agentId, fields: ["pendingProposals": pending, "proposalResolutions": resolutions])
     }
 }
 

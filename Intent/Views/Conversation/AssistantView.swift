@@ -53,8 +53,9 @@ struct AssistantView: View {
                 Menu {
                     AssistantHistoryMenu(store: store)
                 } label: {
-                    Label("Assistant actions", systemImage: "ellipsis.circle")
+                    ToolbarOverflowLabel()
                 }
+                .accessibilityLabel("Assistant actions")
                 .accessibilityIdentifier("assistant.actions")
             }
         }

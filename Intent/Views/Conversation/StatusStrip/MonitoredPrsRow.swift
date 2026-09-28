@@ -33,17 +33,20 @@ struct MonitoredPrsRow: View {
 
     var body: some View {
         if usesWorkspaceDesign {
-            if activeMonitors.count == 1, let monitor = activeMonitors.first {
-                monitorChip(monitor)
-            } else {
-                ScrollView(.horizontal) {
-                    HStack(spacing: Constants.Conversation.Design.Status.composerSpacing) {
-                        ForEach(activeMonitors) { monitor in
-                            monitorChip(monitor)
+            VStack(alignment: .leading, spacing: Constants.Conversation.Design.Status.composerSpacing) {
+                if monitoredPrStore.error != nil { retryButton }
+                if activeMonitors.count == 1, let monitor = activeMonitors.first {
+                    monitorChip(monitor)
+                } else if !activeMonitors.isEmpty {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: Constants.Conversation.Design.Status.composerSpacing) {
+                            ForEach(activeMonitors) { monitor in
+                                monitorChip(monitor)
+                            }
                         }
                     }
+                    .scrollIndicators(.hidden)
                 }
-                .scrollIndicators(.hidden)
             }
         } else {
             legacyRow
@@ -61,6 +64,8 @@ struct MonitoredPrsRow: View {
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
 
+                if monitoredPrStore.error != nil { retryButton }
+
                 ForEach(monitoredPrStore.activeMonitors.filter { $0.agentId == viewModel.agentId }) { monitor in
                     monitorChip(monitor)
                 }
@@ -71,6 +76,17 @@ struct MonitoredPrsRow: View {
         .scrollIndicators(.hidden)
         .background(Theme.card(for: colorScheme).opacity(Constants.Conversation.StatusStrip.backgroundOpacity))
         .opacity(Constants.Conversation.StatusStrip.contentOpacity)
+    }
+
+    private var retryButton: some View {
+        Button {
+            Task { await monitoredPrStore.refetch() }
+        } label: {
+            Label("Status unavailable · Retry", systemImage: "exclamationmark.triangle")
+        }
+        .font(.caption2)
+        .accessibilityLabel("PR monitors may be out of date. Retry refresh")
+        .accessibilityIdentifier("monitoredPr.retry")
     }
 
     // MARK: - Chip

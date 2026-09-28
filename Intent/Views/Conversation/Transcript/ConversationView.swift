@@ -17,14 +17,18 @@ struct ConversationView: View {
     ) {
         self.onAgentUnavailable = onAgentUnavailable
         self.assistantStore = assistantStore
-        _proposals = State(initialValue: ProposalActionStore(connection: session.connection, agentId: agentId, workspaceId: workspaceId))
+        _proposals = State(initialValue: ProposalActionStore(connection: session.connection, agentId: agentId, workspaceId: workspaceId, details: session.agentDetails))
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
             workspaceId: workspaceId,
             agentName: agentName,
             connection: session.connection,
             uploadService: session.attachmentUploadService,
-            optionsStore: session.creationOptionsStore
+            optionsStore: session.creationOptionsStore,
+            agentDetails: session.agentDetails,
+            conversations: session.conversations,
+            hooks: session.hooksStore,
+            monitors: session.prMonitorsStore
         ))
     }
 
@@ -36,9 +40,7 @@ struct ConversationView: View {
         )
         .environment(proposals)
         .task(id: viewModel.store.sessionMetadataGeneration) {
-            if viewModel.store.messages.contains(where: { message in message.contentBlocks.contains { ActionProposal.parse($0) != nil } }) {
-                await proposals.refresh()
-            }
+            await proposals.loadIfPresent(in: viewModel.store.messages)
         }
     }
 }
@@ -60,6 +62,7 @@ private struct ConversationViewContent: View {
     @State private var renameText = ""
     @State private var presentedNote: NoteSheetInfo?
     @State private var childAgent: AgentDestination?
+    @State private var showDemoCover = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -76,6 +79,11 @@ private struct ConversationViewContent: View {
     /// Outermost layer: navigation destination + load/lifecycle handlers.
     private var conversationLifecycle: some View {
         conversationPresentation
+            .navigationDestination(isPresented: $showDemoCover) {
+                Button("Return to conversation") { showDemoCover = false }
+                    .accessibilityIdentifier("demo.conversation.return")
+                    .navigationTitle("Conversation cover")
+            }
             .navigationDestination(item: $childAgent) { dest in
                 ConversationView(
                     agentId: dest.agentId,
@@ -200,6 +208,7 @@ private struct ConversationViewContent: View {
         if usesWorkspaceDesign {
             conversationColumn
                 .toolbar(.hidden, for: .navigationBar, .tabBar)
+                .nativeNavigationBackGesture()
                 .safeAreaInset(edge: .top, spacing: 0) {
                     WorkspaceConversationHeader(title: viewModel.agentName, onBack: { dismiss() }, actions: { agentMenu })
                 }
@@ -230,7 +239,7 @@ private struct ConversationViewContent: View {
             onNavigateToNote: navigateToNote,
             onNavigateToAgent: navigateToAgent,
             usesWorkspaceDesign: usesWorkspaceDesign
-        )
+        ) { showDemoCover = true }
     }
 
     /// Presented-or-not binding for the dismiss-failure alert, hoisted out of
@@ -291,20 +300,7 @@ private struct ConversationViewContent: View {
                 Label("Delete Agent", systemImage: "trash")
             }
         } label: {
-            if usesWorkspaceDesign {
-                Image(.more)
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: Constants.Conversation.Design.iconSize, height: Constants.Conversation.Design.iconSize)
-                    .accessibilityHidden(true)
-                    .frame(width: Constants.Conversation.Design.Header.controlSize, height: Constants.Conversation.Design.Header.controlSize)
-                    .contentShape(Rectangle())
-                    .foregroundStyle(Constants.Conversation.Design.Palette.foreground(for: colorScheme))
-            } else {
-                Image(systemName: "ellipsis.circle")
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-            }
+            ToolbarOverflowLabel()
         }
         .accessibilityLabel(assistantStore == nil ? "Agent actions" : "Assistant actions")
         .accessibilityIdentifier(assistantStore == nil ? "agent.actions" : "assistant.actions")

@@ -5,21 +5,27 @@ struct WorkspaceQuestionAnswerCards: View {
     let selectedIndices: [Int]
     let isMulti: Bool
     let horizontal: Bool
+    let availableHeight: CGFloat
     let onSelect: (Int) -> Void
 
     private typealias Design = Constants.Conversation.Design
 
     var body: some View {
         if horizontal {
-            ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: Design.Question.answerSpacing) {
-                    cards
+            QuestionCarouselFitLayout(
+                standardHeight: Design.Question.carouselAnswerHeight,
+                availableHeight: availableHeight
+            ) {
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: Design.Question.answerSpacing) {
+                        cards
+                    }
+                    .scrollTargetLayout()
                 }
-                .scrollTargetLayout()
+                .scrollTargetBehavior(.viewAligned)
+                .scrollIndicators(.hidden)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .scrollTargetBehavior(.viewAligned)
-            .scrollIndicators(.hidden)
-            .fixedSize(horizontal: false, vertical: true)
         } else {
             VStack(spacing: Design.Question.answerSpacing) {
                 cards
@@ -72,7 +78,11 @@ private struct WorkspaceQuestionAnswerCard: View {
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding(Design.Question.answerPadding)
-            .frame(maxWidth: .infinity, minHeight: Design.minimumTapTarget, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: horizontal ? Design.Question.carouselAnswerHeight : Design.minimumTapTarget,
+                alignment: horizontal ? .topLeading : .leading
+            )
             .background(selected ? Design.Palette.raisedSurface(for: colorScheme) : .clear)
             .clipShape(.rect(cornerRadius: Design.innerCornerRadius))
             .overlay {
@@ -116,5 +126,29 @@ private struct WorkspaceQuestionAnswerCard: View {
                     .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
             }
         }
+    }
+}
+
+/// Keep natural text measurement so no option (including off-screen ones) is clipped.
+/// Reject an oversized carousel in the step's ViewThatFits, instead of growing the
+/// standard height or keeping stateful measurements that can oscillate between candidates.
+private struct QuestionCarouselFitLayout: Layout {
+    let standardHeight: CGFloat
+    let availableHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        guard let carousel = subviews.first else { return .zero }
+        var size = carousel.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        if size.height > standardHeight {
+            size.height = max(size.height, availableHeight + 1)
+        }
+        return size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        subviews.first?.place(
+            at: bounds.origin,
+            proposal: ProposedViewSize(width: bounds.width, height: nil)
+        )
     }
 }

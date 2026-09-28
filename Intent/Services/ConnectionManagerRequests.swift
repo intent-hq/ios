@@ -27,7 +27,7 @@ extension ConnectionManager {
         params: [String: Any] = [:],
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
-        if DemoMode.isEnabled {
+        if DemoMode.isEnabled || servesDemoFixtures {
             if let gate = DemoFixtures.responseGate(for: method, params: params) {
                 try await DemoFixtures.wait(for: gate)
             }
@@ -322,7 +322,9 @@ extension ConnectionManager {
         handleTextMessage(text)
     }
 
-    nonisolated static let globalEventTypes = ["workspace:*", "note:*", "agent:*", "task:*"]
+    nonisolated static let globalEventTypes = [
+        "workspace:*", "note:*", "agent:*", "task:*", "specialists:changed", "settings:changed"
+    ]
     nonisolated static let globalSubscriptionMaxAttempts = 5
     nonisolated static let globalSubscriptionBackoffMaximumSeconds = 8
     nonisolated static let globalSubscriptionBackoffMaximumExponent = 3

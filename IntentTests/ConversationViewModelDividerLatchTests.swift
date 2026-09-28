@@ -73,4 +73,51 @@ struct ConversationViewModelDividerLatchTests {
         viewModel.store.lastSeenMessageId = "m1"
         #expect(viewModel.newMessagesDividerAnchorId == nil)
     }
+
+    @Test func retainedReappearanceKeepsItsDividerWhileMetadataRevalidates() async throws {
+        let fixture = ConversationStartupFixture()
+        let model = fixture.makeViewModel()
+        fixture.connection.pendingMethods = ["agent.get"]
+        let opening = Task { await model.load() }
+        defer { opening.cancel(); fixture.stop() }
+        try await fixture.connection.waitForPendingRequests("agent.get")
+        try await waitUntil("early transcript") { model.store.liveTranscript.chatSeeded }
+        model.store.messages.append(message("unread"))
+        fixture.connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
+        await opening.value
+        #expect(model.newMessagesDividerAnchorId == ConversationStartupFixture.messageId)
+        model.teardownLiveStores()
+        let returning = Task { await model.load() }
+        defer { returning.cancel() }
+        try await fixture.connection.waitForPendingRequests("agent.get")
+        #expect(!model.store.metadataReadyForEntry)
+        #expect(model.isEntryScrollReady, "same-view authority was already established on first entry")
+        #expect(model.newMessagesDividerAnchorId == ConversationStartupFixture.messageId,
+                "removing the retained divider shifts every visible row below it")
+        var detail = fixture.agent(ConversationStartupFixture.parentId)
+        detail["metadata"] = ["lastSeenMessageId": "unread"]
+        fixture.connection.resolvePending("agent.get", with: ["agent": detail])
+        await returning.value
+        #expect(model.newMessagesDividerAnchorId == ConversationStartupFixture.messageId)
+        #expect(fixture.connection.paramsForMethod("agent.get").count == 2)
+        #expect(fixture.connection.paramsForMethod("chat.subscribe").count == 2)
+    }
+
+    @Test func onlyAChangedStoreClearsTheEntryAuthorityLatch() {
+        let model = makeViewModel()
+        model.store.messages = [message("seen"), message("unread")]
+        model.store.lastSeenMessageId = "seen"
+        model.latchNewMessagesDividerAnchorIfNeeded()
+        let sameStore = model.store
+        model.store = sameStore
+        #expect(model.newMessagesDividerAnchorId == "seen")
+        let otherBackend = FakeConnectionManager()
+        model.store = ConversationStore(connectionManager: otherBackend)
+        #expect(!model.isEntryScrollReady)
+        #expect(model.latchedNewMessagesDividerAnchorId == nil)
+        model.store.messages = [message("other-seen"), message("other-unread")]
+        model.store.lastSeenMessageId = "other-seen"
+        model.latchNewMessagesDividerAnchorIfNeeded()
+        #expect(model.newMessagesDividerAnchorId == "other-seen")
+    }
 }

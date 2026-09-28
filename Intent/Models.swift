@@ -193,6 +193,7 @@ struct Workspace: Codable, Identifiable, Equatable {
     let pullRequestsWereReported: Bool
     let activePullRequest: WorkspacePullRequest?  // single active PR (§5.1); nil when absent
     let statusImageAssetId: String?
+    let statusMessage: String?
 
     private enum CodingKeys: String, CodingKey {
         case activePullRequest
@@ -214,6 +215,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         case repositoryOwner
         case status
         case statusImageAssetId
+        case statusMessage
         case taskStatsCompleted
         case taskStatsInProgress
         case taskStatsTotal
@@ -252,7 +254,8 @@ struct Workspace: Codable, Identifiable, Equatable {
         agentSummaryWasReported: Bool = false,
         pullRequestsWereReported: Bool = false,
         activePullRequest: WorkspacePullRequest? = nil,
-        statusImageAssetId: String? = nil
+        statusImageAssetId: String? = nil,
+        statusMessage: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -281,6 +284,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.pullRequestsWereReported = pullRequestsWereReported || !pullRequests.isEmpty
         self.activePullRequest = activePullRequest
         self.statusImageAssetId = WorkspaceStatusImageLayout.normalizedAssetId(statusImageAssetId)
+        self.statusMessage = statusMessage
     }
 
     /// Custom decode so `waiting` honors the wire contract (PROTOCOL §5.1:
@@ -327,6 +331,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         statusImageAssetId = WorkspaceStatusImageLayout.normalizedAssetId(
             try container.decodeIfPresent(String.self, forKey: .statusImageAssetId)
         )
+        statusMessage = try container.decodeIfPresent(String.self, forKey: .statusMessage)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -356,6 +361,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         if pullRequestsWereReported { try container.encode(pullRequests, forKey: .pullRequests) }
         try container.encodeIfPresent(activePullRequest, forKey: .activePullRequest)
         try container.encodeIfPresent(statusImageAssetId, forKey: .statusImageAssetId)
+        try container.encodeIfPresent(statusMessage, forKey: .statusMessage)
     }
 }
 

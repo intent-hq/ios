@@ -44,6 +44,46 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     }
 
     @MainActor
+    func testEdgeSwipeBackReturnsThroughWorkspaceAndCanBeCancelled() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .phone, "Compact navigation gesture")
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
+        workspace.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        agent.tap()
+        let back = app.buttons["conversation.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: Fixture.elementTimeout))
+
+        edgeSwipe(in: app, progress: 0.15)
+        XCTAssertTrue(back.exists, "A cancelled swipe must keep the conversation open")
+        edgeSwipe(in: app)
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertFalse(back.exists)
+        edgeSwipe(in: app)
+        let search = app.buttons[Fixture.workspaceListIdentifier]
+        XCTAssertTrue(search.waitForExistence(timeout: Fixture.elementTimeout))
+
+        edgeSwipe(in: app)
+        workspace.tap()
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        agent.tap()
+        XCTAssertTrue(back.waitForExistence(timeout: Fixture.elementTimeout))
+        back.tap()
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+    }
+
+    @MainActor
+    private func edgeSwipe(in app: XCUIApplication, progress: CGFloat = 0.85) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: progress, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
+    }
+
+    @MainActor
     func testCreateNewAgentMenuOpensAgentSetup() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]

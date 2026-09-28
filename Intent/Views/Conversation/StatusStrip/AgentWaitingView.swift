@@ -5,6 +5,10 @@ struct AgentWaitingView: View {
     private let store: ConversationStore
     let onNavigateToAgent: ((String, String, String) -> Void)?
     @Environment(\.colorScheme) var colorScheme
+    @State private var visibilityConsumer = UUID()
+    @State private var selectionTask: Task<Void, Never>?
+
+    private let visibleFraction = 0.01
 
     private typealias Layout = Constants.Conversation.AgentWaiting
 
@@ -21,6 +25,10 @@ struct AgentWaitingView: View {
     var body: some View {
         if store.isWaitingForAgents {
             waitingContent
+                .onDisappear {
+                    store.watchedAgentCoordinator.releaseVisibility(consumer: visibilityConsumer)
+                    selectionTask?.cancel()
+                }
         }
     }
 
@@ -45,81 +53,55 @@ struct AgentWaitingView: View {
         .padding(.vertical, Layout.headerVerticalPadding)
     }
 
-    @ViewBuilder
     private var waitingList: some View {
-        if !store.watchedAgents.isEmpty {
-            Divider()
-                .padding(.horizontal, Layout.horizontalPadding)
-            watchedAgentsList
-        } else if !store.watchedAgentIds.isEmpty {
-            watchedAgentIdsList
-        }
-    }
-
-    private var watchedAgentsList: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                ForEach(store.watchedAgents) { agent in
-                    watchedAgentRow(agent)
+            LazyVStack(spacing: 0) {
+                ForEach(store.watchedAgentCoordinator.rows) { row in
+                    watchedAgentRow(row)
+                        .onScrollVisibilityChange(threshold: visibleFraction) { visible in
+                            store.watchedAgentCoordinator.setVisible(row.id, visible: visible, consumer: visibilityConsumer)
+                        }
+                        .onDisappear {
+                            store.watchedAgentCoordinator.setVisible(row.id, visible: false, consumer: visibilityConsumer)
+                        }
                 }
             }
         }
-        .frame(maxHeight: min(
-            CGFloat(store.watchedAgents.count) * Constants.Conversation.AgentWaiting.rowHeight,
-            Constants.Conversation.AgentWaiting.maximumListHeight
-        ))
+        .frame(maxHeight: min(CGFloat(store.watchedAgentIds.count) * Layout.rowHeight, Layout.maximumListHeight))
+        .accessibilityIdentifier("watched-agent-list")
     }
 
-    @ViewBuilder
-    private func watchedAgentRow(_ agent: AgentSession) -> some View {
-        if let onNavigateToAgent {
-            Button {
-                onNavigateToAgent(agent.id, viewModel.workspaceId, agent.name)
-            } label: {
-                agentRow(agent, showChevron: true)
-            }
-            .buttonStyle(.plain)
-            .contextMenu { agentContextMenu(agent) }
-        } else {
-            agentRow(agent)
-                .contextMenu { agentContextMenu(agent) }
-        }
-    }
-
-    private var watchedAgentIdsList: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(store.watchedAgentIds, id: \.self) { agentId in
-                    fallbackRow(agentId)
-                }
+    private func watchedAgentRow(_ row: WatchedAgentRow) -> some View {
+        Group {
+            if onNavigateToAgent != nil, !row.isDeleted {
+                Button {
+                    selectionTask?.cancel()
+                    selectionTask = Task {
+                        guard let selected = await store.watchedAgentCoordinator.selectedAgent(row.id),
+                              let workspace = selected.workspaceId, !Task.isCancelled else { return }
+                        onNavigateToAgent?(selected.id, workspace, selected.agent.name)
+                    }
+                } label: { agentRow(row) }
+                    .buttonStyle(.plain)
+            } else {
+                agentRow(row)
             }
         }
-        .frame(maxHeight: min(
-            CGFloat(store.watchedAgentIds.count) * Constants.Conversation.AgentWaiting.fallbackRowHeight,
-            Constants.Conversation.AgentWaiting.fallbackMaximumListHeight
-        ))
-    }
-
-    private func fallbackRow(_ agentId: String) -> some View {
-        HStack(spacing: Layout.fallbackRowSpacing) {
-            ProgressView()
-                .scaleEffect(Constants.Conversation.AgentWaiting.fallbackProgressScale)
-            Text(agentId.prefix(Constants.Conversation.AgentWaiting.fallbackAgentIdMaximumLength) + "...")
-                .interFont(Constants.Typography.subtextXXS)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            Spacer()
+        .accessibilityIdentifier("watched-agent-" + row.id)
+        .contextMenu {
+            if !row.isDeleted { agentContextMenu(row.agent) }
+            if store.watchedAgentCoordinator.errors[row.id] != nil {
+                Button("Retry Loading") { store.watchedAgentCoordinator.retry(row.id) }
+            }
         }
-        .padding(.horizontal, Layout.horizontalPadding)
-        .padding(.vertical, Layout.rowVerticalPadding)
     }
 
-    @ViewBuilder
-    private func agentRow(_ agent: AgentSession, showChevron: Bool = false) -> some View {
+    private func agentRow(_ row: WatchedAgentRow) -> some View {
         HStack(spacing: Layout.agentRowSpacing) {
-            agentAvatar(agent)
-            agentDescription(agent)
+            agentAvatar(row)
+            agentDescription(row)
             Spacer()
-            if showChevron {
+            if onNavigateToAgent != nil, !row.isDeleted {
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -131,25 +113,28 @@ struct AgentWaitingView: View {
         .contentShape(Rectangle())
     }
 
-    private func agentAvatar(_ agent: AgentSession) -> some View {
+    private func agentAvatar(_ row: WatchedAgentRow) -> some View {
         ZStack(alignment: .topTrailing) {
             AgentAvatarView(
-                agentId: agent.id,
+                agentId: row.id,
                 size: Constants.Conversation.AgentWaiting.avatarSize,
-                specialist: agent.specialist,
-                isActive: agent.isActive
+                specialist: row.agent.specialist,
+                isActive: row.agent.isActive && !row.isDeleted
             )
-            agentStatusBadge(agent)
+            agentStatusBadge(row)
         }
     }
 
     @ViewBuilder
-    private func agentStatusBadge(_ agent: AgentSession) -> some View {
-        if agent.isErrored {
+    private func agentStatusBadge(_ row: WatchedAgentRow) -> some View {
+        let agent = row.agent
+        if row.isDeleted {
+            statusBadge(systemName: "minus.circle.fill", color: .gray)
+        } else if agent.isErrored {
             statusBadge(systemName: "xmark.circle.fill", color: .red)
         } else if let attention = agent.pendingAttentionRequest {
             statusBadge(systemName: attention.kind.systemImage, color: attention.kind.color)
-        } else if !agent.isActive, agent.digest != nil {
+        } else if row.isCompleted || agent.status == "completed" {
             statusBadge(systemName: "checkmark.circle.fill", color: .green)
         } else if agent.isActive {
             activeStatusDot
@@ -184,13 +169,22 @@ struct AgentWaitingView: View {
             )
     }
 
-    private func agentDescription(_ agent: AgentSession) -> some View {
-        VStack(alignment: .leading, spacing: Layout.descriptionSpacing) {
+    private func agentDescription(_ row: WatchedAgentRow) -> some View {
+        let agent = row.agent
+        return VStack(alignment: .leading, spacing: Layout.descriptionSpacing) {
             Text(agent.name)
                 .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .lineLimit(1)
-            if let attention = agent.pendingAttentionRequest {
+            if row.isDeleted || row.isCompleted {
+                Text(row.statusText)
+                    .interFont(Constants.Typography.subtextXXS)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            } else if store.watchedAgentCoordinator.errors[row.id] != nil {
+                Text("Couldn’t load agent. Tap to retry.")
+                    .interFont(Constants.Typography.subtextXXS)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            } else if let attention = agent.pendingAttentionRequest {
                 Text(attention.reason.map { "\(attention.kind.label) — \($0)" } ?? attention.kind.label)
                     .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(attention.kind.color)
@@ -201,7 +195,7 @@ struct AgentWaitingView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .lineLimit(1)
             } else {
-                Text(agent.isActive ? "Working..." : (agent.isErrored ? "Error" : "Idle"))
+                Text(row.statusText)
                     .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(agent.isErrored ? .red : Theme.mutedForeground(for: colorScheme))
             }

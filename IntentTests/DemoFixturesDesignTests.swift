@@ -36,10 +36,12 @@ extension DemoFixturesTests {
             #expect(notice.kind == .blockerReport)
             #expect(notice.reason.contains("runner inventory returns 403"))
         }
-        if scenario == .questions || scenario == .questionFlow {
+        if scenario == .questions || scenario == .questionFlow || scenario == .questionCards {
             let questions = try #require(viewModel.pendingQuestions)
-            #expect(questions.questions.first?.question == "Can I access the repository?")
-            #expect(questions.questions.count == (scenario == .questionFlow ? 2 : 1))
+            let expectedQuestion = scenario == .questionCards ? "What should happen next?" : "Can I access the repository?"
+            let expectedCount = scenario == .questionCards ? 3 : (scenario == .questionFlow ? 2 : 1)
+            #expect(questions.questions.first?.question == expectedQuestion)
+            #expect(questions.questions.count == expectedCount)
             #expect(viewModel.store.pendingQuestionsMessageId == questions.messageId)
             #expect(!viewModel.isPendingQuestionRecoveryLoading)
         } else {

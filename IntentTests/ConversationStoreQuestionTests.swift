@@ -287,11 +287,10 @@ extension ConversationStoreTests {
         )
     }
 
-    @Test func agentGetReplyAfterMarkerPushStillAppliesStreaming() async throws {
-        // Pins the split: a generation bump without an agent change (an
-        // agent:updated push for the same agent) skips only the markers —
-        // streaming state is not carried by the push and must still be taken
-        // from the reply.
+    @Test(arguments: [false, true])
+    func agentGetReplyAfterMarkerPushPreservesChatStreamingAuthority(seenChanged: Bool) async throws {
+        // Markers follow the newer push, while streaming follows the already
+        // subscribed idle chat snapshot instead of a later detail reply.
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
@@ -301,13 +300,12 @@ extension ConversationStoreTests {
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
         try await fake.waitForPendingRequests("agent.get")
 
+        var pushedMarkers = ["agentId": "a", "pendingQuestionsMessageId": "a2"]
+        if seenChanged { pushedMarkers["lastSeenMessageId"] = "m4" }
         store.handleStreamEvent("events.event", params: [
             "event": [
                 "type": "agent:updated",
-                "data": [
-                    "agentId": "a",
-                    "pendingQuestionsMessageId": "a2"
-                ]
+                "data": pushedMarkers
             ] as [String: Any]
         ])
 
@@ -324,15 +322,29 @@ extension ConversationStoreTests {
         ] as [String: Any])
         await refresh.value
 
-        #expect(store.isStreaming, "streaming state is applied despite the marker push")
+        #expect(!store.isStreaming, "the idle chat snapshot remains authoritative")
         #expect(
             store.pendingQuestionsMessageId == "a2",
             "the pushed marker wins over the stale reply"
         )
         #expect(
-            store.lastSeenMessageId == nil,
-            "the stale reply's seen marker is skipped"
+            store.lastSeenMessageId == (seenChanged ? "m4" : "m3"),
+            "a newer seen event wins; an unrelated question marker does not erase entry read state"
         )
+    }
+
+    @Test func agentGetReplyBeforeChatSnapshotAppliesStreaming() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = [
+            "agent": ["id": "a", "isStreaming": true, "metadata": ["pendingQuestionsMessageId": "a1"]]
+        ] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+        store.bindAgent("a")
+
+        await store.fetchAgentStreamingState(agentId: "a")
+
+        #expect(store.isStreaming, "agent detail supplies liveness before chat becomes authoritative")
+        #expect(store.pendingQuestionsMessageId == "a1")
     }
 
     @Test func agentUpdatedEventWithoutPendingMarkerLeavesItUntouched() async {
