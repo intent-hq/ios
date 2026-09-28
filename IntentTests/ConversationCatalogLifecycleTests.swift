@@ -3,7 +3,8 @@ import Foundation
 import Testing
 
 extension ConversationStartupRPCTests {
-    @Test func completeCatalogReconnectIncludesDeferredConsumerReads() async throws {
+    @Test(arguments: [false, true])
+    func completeCatalogReconnectIncludesDeferredConsumerReads(duringBootstrap: Bool) async throws {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
         configureCatalogs(fixture)
@@ -13,9 +14,20 @@ extension ConversationStartupRPCTests {
         await viewModel.loadModelCatalogIfNeeded()
         connection.releaseConnectionStateDelivery()
         let checkpoint = connection.checkpoint
+        if duringBootstrap { connection.pendingMethods = ["agent.get"] }
         connection.simulateDisconnect()
         connection.simulateConnect()
         connection.simulateConnect()
+        if duringBootstrap {
+            try await connection.waitForPendingRequests("agent.get")
+            var entered = false
+            let labels = Task { entered = true; await viewModel.loadModelCatalogIfNeeded() }
+            defer { labels.cancel() }
+            try await waitUntil("catalog caller joins pending reconnect detail") { entered }
+            connection.pendingMethods.remove("agent.get")
+            connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
+            await labels.value
+        }
         try await waitUntil("reconnect bootstrap and catalogs settled") {
             connection.traffic(since: checkpoint).calls("chat.subscribe").count == 1
                 && fixture.options.specialistCatalog.isFresh
@@ -24,9 +36,9 @@ extension ConversationStartupRPCTests {
         }
         // This is the actual separate SwiftUI catalog task, included even if
         // its scheduling happens after every fast reconnect response.
-        await viewModel.loadModelCatalogIfNeeded()
+        if !duringBootstrap { await viewModel.loadModelCatalogIfNeeded() }
         let traffic = connection.traffic(since: checkpoint)
-        printCatalogLedger("full-reconnect-with-deferred-task", traffic)
+        printCatalogLedger(duringBootstrap ? "full-reconnect-during-bootstrap" : "full-reconnect-with-deferred-task", traffic)
         #expect(traffic.calls("specialist.list").count == 1)
         #expect(traffic.calls("models.list").count == 1)
         #expect(traffic.calls("agent.get").count == 1)
