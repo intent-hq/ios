@@ -1,29 +1,6 @@
 import Foundation
 import UIKit
 
-/// Launch-argument-driven demo mode for screenshot UI tests: with
-/// `--demo-data` the app skips pairing, serves fixture data from
-/// `DemoFixtures` instead of a live daemon connection, and runs
-/// `PersistenceManager.shared` over an ephemeral store (see
-/// `PersistenceManager.ephemeral()`). Zero-impact when the arguments are
-/// absent.
-enum DemoMode {
-    /// True when fixture data should be served (`--demo-data`).
-    static let isEnabled = demoDataRequested(by: ProcessInfo.processInfo.arguments)
-
-    /// True when the pairing flow should be skipped (`--pretend-paired`,
-    /// implied by `--demo-data`).
-    static let pretendPaired = pretendPairedRequested(by: ProcessInfo.processInfo.arguments)
-
-    static func demoDataRequested(by arguments: [String]) -> Bool {
-        arguments.contains("--demo-data")
-    }
-
-    static func pretendPairedRequested(by arguments: [String]) -> Bool {
-        arguments.contains("--pretend-paired") || demoDataRequested(by: arguments)
-    }
-}
-
 /// Static fixture responses for demo mode. Shapes mirror the daemon's
 /// JSON-RPC results exactly as the stores parse them (`workspace.list` →
 /// `WorkspaceStore.parseWorkspaces`, `note.list` → `Note.parseNote`,

@@ -404,6 +404,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
+$(SRCROOT)/Intent/Services/DemoMode.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/DemoRepositoryScriptFixtures.swift
 $(SRCROOT)/Intent/Services/DemoSettings.swift
