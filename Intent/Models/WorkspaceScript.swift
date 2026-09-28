@@ -5,6 +5,8 @@ nonisolated struct WorkspaceScript: Equatable, Identifiable, Sendable {
     let workspaceId: String
     let name: String
     let command: String
+    let mode: String
+    let isRegistered: Bool
     var status: String = "idle"
     var detectedURL: String?
     var error: String?
@@ -12,11 +14,23 @@ nonisolated struct WorkspaceScript: Equatable, Identifiable, Sendable {
 
     var isActive: Bool { status != "idle" && status != "exited" }
 
-    init(id: String, workspaceId: String, name: String, command: String, status: String = "idle", detectedURL: String? = nil, error: String? = nil) {
+    init(
+        id: String,
+        workspaceId: String,
+        name: String,
+        command: String,
+        status: String = "idle",
+        detectedURL: String? = nil,
+        error: String? = nil,
+        mode: String = "command",
+        isRegistered: Bool = true
+    ) {
         self.id = id
         self.workspaceId = workspaceId
         self.name = name
         self.command = command
+        self.mode = mode
+        self.isRegistered = isRegistered
         self.status = status
         self.detectedURL = detectedURL
         self.error = error
@@ -28,7 +42,7 @@ nonisolated struct WorkspaceScript: Equatable, Identifiable, Sendable {
               definition["workspaceId"] as? String == workspaceId,
               let name = definition["name"] as? String,
               let command = definition["command"] as? String else { return nil }
-        self.init(id: id, workspaceId: workspaceId, name: name, command: command)
+        self.init(id: id, workspaceId: workspaceId, name: name, command: command, mode: definition["mode"] as? String ?? "command")
         if let runtime = definition["runtime"] as? [String: Any] { apply(runtime: runtime) }
     }
 

@@ -55,10 +55,33 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchWorkspace() -> XCUIApplication {
+    func testRepositoryScriptsAppearBesideSavedCommandAndRegisterOnFirstLaunch() {
+        let app = launchWorkspace(repositoryScripts: true)
+        openScriptsMenu(in: app)
+        XCTAssertTrue(app.buttons["workspace.script.menu.demo-verification"].exists)
+        let dev = app.buttons["workspace.script.menu.manifest:package.json:dev"]
+        XCTAssertTrue(dev.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspace.script.menu.manifest:package.json:build"].exists)
+        XCTAssertTrue(app.buttons["workspace.script.menu.manifest:package.json:test"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "workspace-repository-scripts-menu"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        dev.tap()
+        assertServerBrowser(in: app)
+        app.buttons["Done"].tap()
+        let row = app.buttons["workspace.script.demo-repo-dev"]
+        for _ in 0..<5 where !row.isHittable { app.swipeUp() }
+        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.buttons["workspace.script.demo-verification"].exists)
+        XCTAssertFalse(app.buttons["workspace.script.manifest:package.json:build"].exists)
+    }
+
+    @MainActor
+    private func launchWorkspace(repositoryScripts: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["--demo-data", "--demo-browsers", "--demo-scripts"]
+        app.launchArguments = ["--demo-data", "--demo-browsers", repositoryScripts ? "--demo-repo-scripts" : "--demo-scripts"]
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))

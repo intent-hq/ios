@@ -8,7 +8,7 @@ import Observation
 final class WorkspaceScriptStore {
     private struct Launch {
         let id = UUID()
-        let scriptId: String
+        var scriptId: String
         var observing = false
     }
 
@@ -20,6 +20,7 @@ final class WorkspaceScriptStore {
     private static let eventTypes = ["script:state", "script:changed"]
     private(set) var isConnected: Bool
     private var definitions: [String: [WorkspaceScript]] = [:]
+    private var discovered: [String: [WorkspaceScript]] = [:]
     private var errors: [String: String] = [:]
     private var loadErrors: [String: String] = [:]
     private var pending: [String: Launch] = [:]
@@ -61,7 +62,14 @@ final class WorkspaceScriptStore {
         }
     }
 
-    func scripts(workspaceId: String) -> [WorkspaceScript] { definitions[workspaceId, default: []] }
+    func scripts(workspaceId: String) -> [WorkspaceScript] {
+        let registered = definitions[workspaceId, default: []]
+        let names = Set(registered.map(\.name))
+        let commands = Set(registered.map(\.command))
+        return registered + discovered[workspaceId, default: []].filter { candidate in
+            !names.contains(candidate.name) && !commands.contains(candidate.command)
+        }
+    }
 
     func scriptsWithRuns(workspaceId: String) -> [WorkspaceScript] {
         scripts(workspaceId: workspaceId).filter(\.hasRun)
@@ -118,6 +126,7 @@ final class WorkspaceScriptStore {
         let workspaceId = script.workspaceId
         try await ensureSubscribed(generation: currentGeneration)
         guard owns(launch, workspaceId: workspaceId, generation: currentGeneration) else { return }
+        guard let script = try await registeredScript(script, launch: launch, generation: currentGeneration) else { return }
         // Reselecting a script whose start is in flight shares that request.
         let key = ScriptKey(workspaceId: workspaceId, scriptId: script.id)
         let existingStart = startTasks[key]
@@ -133,6 +142,21 @@ final class WorkspaceScriptStore {
         guard owns(launch, workspaceId: workspaceId, generation: currentGeneration) else { return }
         pending[workspaceId]?.observing = true
         considerPresentation(current)
+    }
+
+    private func registeredScript(_ candidate: WorkspaceScript, launch: Launch, generation currentGeneration: Int) async throws -> WorkspaceScript? {
+        guard !candidate.isRegistered else { return candidate }
+        let script = try await WorkspaceScriptRepository.register(candidate, connection: connection)
+        let workspaceId = candidate.workspaceId
+        guard owns(launch, workspaceId: workspaceId, generation: currentGeneration) else { return nil }
+        pending[workspaceId]?.scriptId = script.id
+        if let index = definitions[workspaceId]?.firstIndex(where: { $0.id == script.id }) {
+            definitions[workspaceId]?[index] = script
+        } else {
+            definitions[workspaceId, default: []].append(script)
+        }
+        revisions[workspaceId, default: 0] += 1
+        return script
     }
 
     private func owns(_ launch: Launch, workspaceId: String, generation currentGeneration: Int) -> Bool {
@@ -221,6 +245,9 @@ private extension WorkspaceScriptStore {
 
     func fetch(workspaceId: String, generation currentGeneration: Int) async {
         defer { if generation == currentGeneration { refreshTasks[workspaceId] = nil } }
+        let candidates = await WorkspaceScriptRepository.discover(connection: connection, workspaceId: workspaceId)
+        guard isCurrent(currentGeneration) else { return }
+        discovered[workspaceId] = candidates
         while isCurrent(currentGeneration) {
             let revision = revisions[workspaceId, default: 0]
             do {
@@ -236,9 +263,7 @@ private extension WorkspaceScriptStore {
                     .filter { seen.insert($0.id).inserted }
                 definitions[workspaceId] = scripts
                 loadErrors[workspaceId] = nil
-                if let launch = pending[workspaceId], !scripts.contains(where: { $0.id == launch.scriptId }) {
-                    cancelPendingLaunch(workspaceId: workspaceId)
-                }
+                cancelMissingLaunch(workspaceId: workspaceId, scripts: scripts)
                 if let browser = presentations[workspaceId], !scripts.contains(where: { $0.browser == browser }) {
                     presentations[workspaceId] = nil
                 }
@@ -249,6 +274,13 @@ private extension WorkspaceScriptStore {
                 loadErrors[workspaceId] = error.localizedDescription
                 return
             }
+        }
+    }
+
+    func cancelMissingLaunch(workspaceId: String, scripts: [WorkspaceScript]) {
+        if let launch = pending[workspaceId], !scripts.contains(where: { $0.id == launch.scriptId }),
+           !discovered[workspaceId, default: []].contains(where: { $0.id == launch.scriptId }) {
+            cancelPendingLaunch(workspaceId: workspaceId)
         }
     }
 
@@ -291,6 +323,7 @@ private extension WorkspaceScriptStore {
         refreshTasks.removeAll()
         startTasks.removeAll()
         definitions.removeAll()
+        discovered.removeAll()
         pending.removeAll()
         presentations.removeAll()
         errors.removeAll()

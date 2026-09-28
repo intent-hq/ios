@@ -144,6 +144,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
+$(SRCROOT)/Intent/Services/DemoRepositoryScriptFixtures.swift
 $(SRCROOT)/Intent/Services/DemoSettings.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
@@ -180,6 +181,8 @@ $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceProviderOptions.swift
+$(SRCROOT)/Intent/Services/WorkspaceScriptDiscovery.swift
+$(SRCROOT)/Intent/Services/WorkspaceScriptRepository.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceVideo.swift
@@ -625,9 +628,11 @@ $(SRCROOT)/IntentTests/WorkspaceRowLayoutPolicyTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPrIndicatorTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPrPresentationTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPresentationTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptDiscoveryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptFixture.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptIsolationTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptLaunchRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptRepositoryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusImageViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreAgentLifecycleTests.swift

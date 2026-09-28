@@ -59,7 +59,7 @@ struct WorkspaceScriptStoreTests {
         fixture.startReplies()
         await fixture.store.launch(script)
         #expect(fixture.store.isLaunching(script))
-        let methods = fixture.fake.requestLog.map(\.method)
+        let methods = fixture.fake.requestLog.map(\.method).filter { !$0.hasPrefix("file.") }
         #expect(methods == ["events.subscribe", "script.list", "script.status", "script.start", "script.status"])
         let params = try #require(fixture.fake.paramsForMethod("script.start").first)
         #expect(params["workspaceId"] as? String == "workspace")

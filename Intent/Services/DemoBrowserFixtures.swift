@@ -19,6 +19,8 @@ enum DemoBrowserFixtures {
     }
 
     static func response(for method: String, params: [String: Any]) -> Any? {
+        if ProcessInfo.processInfo.arguments.contains("--demo-repo-scripts"),
+           let response = DemoRepositoryScriptFixtures.response(for: method, params: params) { return response }
         if ProcessInfo.processInfo.arguments.contains("--demo-scripts"),
            let response = scriptResponse(for: method, params: params) { return response }
         switch method {
