@@ -122,7 +122,9 @@ struct WorkspaceChangesView: View {
     private func fileRow(_ file: WorkspaceChange) -> some View {
         Button { selectedFile = file } label: {
             VStack(alignment: .leading, spacing: WorkspaceChangesLayout.rowSpacing) {
-                Text(file.path).interFont(Constants.Typography.bodyS).foregroundStyle(.primary)
+                Text(file.path)
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Text(file.status.capitalized)
@@ -170,7 +172,8 @@ struct WorkspaceChangesView: View {
         Button { selectedCommit = commit } label: {
             VStack(alignment: .leading, spacing: WorkspaceChangesLayout.rowSpacing) {
                 Text(commit.message.components(separatedBy: "\n").first ?? commit.message)
-                    .interFont(Constants.Typography.bodyS).foregroundStyle(.primary)
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Text(String(commit.hash.prefix(WorkspaceChangesLayout.shortHashLength))).monospaced()

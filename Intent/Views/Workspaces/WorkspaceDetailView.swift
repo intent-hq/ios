@@ -229,15 +229,7 @@ struct WorkspaceDetailView: View {
             #if os(visionOS)
             // The workspace picker lives in the top toolbar on visionOS.
             ToolbarItem(placement: .topBarTrailing) {
-                Picker("Workspace Content", selection: $selectedTab) {
-                    Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "person.2") }
-                    .tag(WorkspaceTab.agents)
-                    Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "doc.text") }
-                    .tag(WorkspaceTab.context)
-                    Label { Text("Changes").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "plus.forwardslash.minus") }
-                    .tag(WorkspaceTab.changes)
-                }
-                .pickerStyle(.segmented)
+                toolbarWorkspacePicker
             }
             #else
             ToolbarItem(placement: .topBarLeading) {
@@ -340,6 +332,18 @@ private extension WorkspaceDetailView {
             || browserStore.errorMessage(workspaceId: workspaceId) != nil
             || !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty
             || scriptStore.errorMessage(workspaceId: workspaceId) != nil
+    }
+
+    var toolbarWorkspacePicker: some View {
+        Picker("Workspace Content", selection: $selectedTab) {
+            Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "person.2") }
+            .tag(WorkspaceTab.agents)
+            Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "doc.text") }
+            .tag(WorkspaceTab.context)
+            Label { Text("Changes").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "plus.forwardslash.minus") }
+            .tag(WorkspaceTab.changes)
+        }
+        .pickerStyle(.segmented)
     }
 
     @ViewBuilder
