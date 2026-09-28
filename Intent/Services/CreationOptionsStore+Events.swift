@@ -43,6 +43,7 @@ extension CreationOptionsStore {
         if eventHandlerID == nil {
             eventHandlerID = connectionManager.onEvent { [weak self] _, params in self?.handleCatalogEvent(params) }
         }
+        observeGlobalFeed()
         guard connectionObserver == nil else { return }
         previousConnectionState = connectionManager.connectionState
         connectionObserver = connectionManager.connectionStatePublisher.sink { [weak self] state in
@@ -54,6 +55,26 @@ extension CreationOptionsStore {
             if creationConsumers.isEmpty { specialistCatalog.refreshIfInterested() }
             for catalog in modelCatalogs.values { catalog.refreshIfInterested() }
             refreshCreationOptionsIfInterested()
+        }
+    }
+
+    private func observeGlobalFeed() {
+        guard feedObserver == nil else { return }
+        observedFeedReady = connectionManager.globalSubscriptionState == .subscribed
+        feedObserver = connectionManager.globalSubscriptionPublisher.sink { [weak self] state in
+            guard let self else { return }
+            let ready = state == .subscribed
+            guard ready != observedFeedReady else { return }
+            observedFeedReady = ready
+            guard ready else { return }
+            // Reads before this ACK cannot cover changes missed while the
+            // feed was unavailable. Bump catalog revisions so even a late
+            // pre-ACK response must reconcile before becoming fresh again.
+            // Idle caches only expire; the initial already-ready replay and
+            // repeated readiness never add reads or provider discovery.
+            let refresh = connectionManager.connectionState == .connected
+            specialistCatalog.invalidate(refresh: refresh)
+            for catalog in modelCatalogs.values { catalog.invalidate(refresh: refresh) }
         }
     }
 

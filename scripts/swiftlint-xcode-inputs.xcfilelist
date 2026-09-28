@@ -511,6 +511,7 @@ $(SRCROOT)/IntentTests/CreateWorkspaceParamsTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsCatalogEventTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsCatalogIsolationTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsCatalogTests.swift
+$(SRCROOT)/IntentTests/CreationOptionsFeedReadinessTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreModelTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift

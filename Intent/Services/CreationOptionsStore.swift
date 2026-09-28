@@ -21,6 +21,8 @@ import Observation
     @ObservationIgnored var modelConsumers: [UUID: String] = [:]
     @ObservationIgnored var eventHandlerID: UUID?
     @ObservationIgnored var connectionObserver: AnyCancellable?
+    @ObservationIgnored var feedObserver: AnyCancellable?
+    @ObservationIgnored var observedFeedReady = false
     @ObservationIgnored var previousConnectionState: ConnectionState
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var loadIdentity = UUID()
@@ -117,6 +119,7 @@ import Observation
         if let eventHandlerID { connectionManager.removeEventHandler(id: eventHandlerID) }
         eventHandlerID = nil
         connectionObserver = nil
+        feedObserver = nil
     }
 
     /// `host.providerAuthStatus` (PROTOCOL §5.14); `authenticated` is
