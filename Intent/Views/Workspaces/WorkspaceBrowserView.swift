@@ -62,7 +62,9 @@ struct WorkspaceBrowserView: View {
 
     private var addressBar: some View {
         VStack(alignment: .leading, spacing: BrowserAppearance.labelSpacing) {
-            HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
+            HStack(spacing: BrowserAppearance.labelSpacing) {
+                navigationButton("Back", systemImage: "chevron.left", isEnabled: page.canGoBack, action: page.goBack)
+                navigationButton("Forward", systemImage: "chevron.right", isEnabled: page.canGoForward, action: page.goForward)
                 TextField("Enter a URL", text: $addressInput)
                     .interFont(Constants.Typography.bodyS)
                     .keyboardType(.URL)
@@ -72,15 +74,13 @@ struct WorkspaceBrowserView: View {
                     .focused($addressFocused)
                     .accessibilityLabel("Browser URL")
                     .onSubmit(submitAddress)
+                    .frame(minWidth: 0, maxWidth: .infinity)
                 if page.isLoading {
                     BrowserLoadingIndicator()
-                } else {
-                    Image(systemName: "globe")
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .accessibilityHidden(true)
                 }
+                navigationButton("Reload", systemImage: "arrow.clockwise", isEnabled: isConnected, action: reloadPage)
             }
-            .padding(.horizontal, Constants.WorkspaceSearch.horizontalPadding)
+            .padding(.horizontal, BrowserAppearance.labelSpacing)
             .frame(minHeight: Constants.WorkspaceSearch.buttonSize)
             .background(Theme.muted(for: colorScheme), in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
             if let addressError {
@@ -89,6 +89,25 @@ struct WorkspaceBrowserView: View {
         }
         .padding(.horizontal)
         .padding(.bottom, BrowserAppearance.rowSpacing)
+    }
+
+    private func navigationButton(_ title: String, systemImage: String, isEnabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .frame(width: BrowserAppearance.controlSize, height: BrowserAppearance.controlSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(title)
+        .disabled(!isEnabled)
+    }
+
+    private func reloadPage() {
+        if page.errorMessage != nil || page.webView == nil {
+            retry = UUID()
+        } else {
+            page.reload()
+        }
     }
 
     private func submitAddress() {
@@ -125,21 +144,6 @@ struct WorkspaceBrowserView: View {
     private var browserToolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
             Button("Done") { dismiss() }
-        }
-        ToolbarItemGroup(placement: .bottomBar) {
-            Button("Back", systemImage: "chevron.left", action: page.goBack)
-                .disabled(!page.canGoBack)
-            Button("Forward", systemImage: "chevron.right", action: page.goForward)
-                .disabled(!page.canGoForward)
-            Spacer()
-            Button("Reload", systemImage: "arrow.clockwise") {
-                if page.errorMessage != nil || page.webView == nil {
-                    retry = UUID()
-                } else {
-                    page.reload()
-                }
-            }
-            .disabled(!isConnected)
         }
     }
 
