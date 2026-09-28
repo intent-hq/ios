@@ -77,6 +77,7 @@ struct ManualTokenEntryView: View {
     @State private var host = ""
     @State private var port = "5180"
     @State private var token = ""
+    @State private var isTokenVisible = false
     @State private var isValidating = false
     @State private var errorMessage: String?
     @State private var probedFingerprint: String?
@@ -171,7 +172,13 @@ struct ManualTokenEntryView: View {
     private var tokenField: some View {
         ManualConnectionField(label: "API TOKEN", verticalPadding: Constants.ManualTokenEntry.pasteVerticalPadding) {
             HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
-                TextField("Paste token", text: $token, prompt: placeholder("Paste token"))
+                Group {
+                    if isTokenVisible {
+                        TextField("Paste token", text: $token, prompt: placeholder("Paste token"))
+                    } else {
+                        SecureField("Paste token", text: $token, prompt: placeholder("Paste token"))
+                    }
+                }
                     .interFont(Constants.Typography.bodySEmphasized)
                     .accessibilityLabel("API Token")
                     .accessibilityIdentifier("manual.token")
@@ -198,9 +205,27 @@ struct ManualTokenEntryView: View {
                     // Preserve the visible light paste affordance rather than Figma's white-on-white export.
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .accessibilityLabel("Paste API token")
-                    // Expand the hit region inward, retaining the reference's 24pt glyph inset.
-                    .padding(.trailing, -Constants.ManualTokenEntry.pasteHitExpansion)
                 }
+                Button {
+                    isTokenVisible.toggle()
+                    focusedField = .token
+                } label: {
+                    Image(systemName: isTokenVisible ? "eye.slash" : "eye")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                        .frame(
+                            width: Constants.ConnectionSheet.minimumTouchTarget,
+                            height: Constants.ConnectionSheet.minimumTouchTarget
+                        )
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.foreground(for: colorScheme)
+                    .opacity(colorScheme == .dark ? Constants.ConnectionSheet.placeholderOpacity : 1))
+                .accessibilityLabel(isTokenVisible ? "Hide API token" : "Show API token")
+                // Expand the trailing hit region inward, retaining the reference's 24pt glyph inset.
+                .padding(.trailing, -Constants.ManualTokenEntry.pasteHitExpansion)
             }
         }
     }
