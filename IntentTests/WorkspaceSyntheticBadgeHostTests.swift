@@ -83,6 +83,7 @@ private final class SyntheticBadgeHostSession<Content: View> {
         rootView: Content,
         width: CGFloat,
         height: CGFloat,
+        safeAreaRegions: SafeAreaRegions,
         callbackTimeout: TimeInterval,
         afterShowingWindow: (() -> Void)?,
         observeLifecycle: ((SyntheticBadgeHostLifecycleWaiter.Event) -> Void)?,
@@ -99,6 +100,7 @@ private final class SyntheticBadgeHostSession<Content: View> {
             observeLifecycle: observeLifecycle,
             diagnostics: diagnostics
         )
+        controller.safeAreaRegions = safeAreaRegions
         // A detached window can lay out and deliver appearance callbacks while
         // SwiftUI exposes no accessibility tree to the application. Foreground
         // inactivity (for example during a system alert) stops event delivery,
@@ -185,6 +187,7 @@ enum SyntheticBadgeHost {
         _ content: Content,
         width: CGFloat,
         height: CGFloat,
+        safeAreaRegions: SafeAreaRegions = .all,
         diagnostics: SyntheticBadgeHostTrace? = nil,
         lifecycleHooks: LifecycleHooks? = nil,
         observeLifecycle: ((LifecycleEvent) -> Void)? = nil,
@@ -210,6 +213,7 @@ enum SyntheticBadgeHost {
                 rootView: rootView,
                 width: width,
                 height: height,
+                safeAreaRegions: safeAreaRegions,
                 callbackTimeout: callbackTimeout,
                 afterShowingWindow: lifecycleHooks?.afterShowingWindow,
                 observeLifecycle: observeLifecycle,

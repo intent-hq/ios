@@ -3,6 +3,62 @@ import XCTest
 nonisolated final class MobileTerminalUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        continueAfterFailure = false
+    }
+
+    override func tearDownWithError() throws {
+        continueAfterFailure = true
+        try super.tearDownWithError()
+    }
+
+    @MainActor
+    func testSwipeDeleteCanBeCancelledAndConfirmedFromWorkspace() {
+        let app = launchWorkspaceWithTerminal()
+        let terminal = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Terminal 1")).firstMatch
+        XCTAssertTrue(terminal.waitForExistence(timeout: Self.timeout))
+        terminal.swipeLeft()
+        let delete = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "terminal.delete.")).firstMatch
+        XCTAssertTrue(delete.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(delete.isHittable)
+        capture(app, name: "mobile-terminal-swipe-delete")
+        delete.tap()
+        let confirmation = app.alerts["Delete terminal?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertTrue(terminal.exists)
+        terminal.swipeRight()
+        XCTAssertFalse(delete.isHittable)
+        terminal.tap()
+        XCTAssertTrue(app.staticTexts["mobile-terminal-title"].waitForExistence(timeout: Self.timeout))
+        app.buttons["Back to workspace"].tap()
+        terminal.swipeLeft()
+        delete.tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        confirmation.buttons["Delete terminal"].tap()
+        XCTAssertTrue(terminal.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Workspace actions"].exists)
+    }
+
+    @MainActor
+    private func launchWorkspaceWithTerminal() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        workspace.tap()
+        let actions = app.buttons["Workspace actions"]
+        XCTAssertTrue(actions.waitForExistence(timeout: Self.timeout))
+        actions.tap()
+        app.buttons["New terminal"].tap()
+        XCTAssertTrue(app.staticTexts["mobile-terminal-title"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        app.buttons["Back to workspace"].tap()
+        return app
+    }
+
     @MainActor
     func testTerminalIsCreatedExplicitlyAndCanBeReopenedAndClosed() {
         let app = XCUIApplication()

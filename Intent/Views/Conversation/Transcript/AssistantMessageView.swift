@@ -3,6 +3,8 @@ import SwiftUI
 struct AssistantMessageView: View {
     private typealias Layout = Constants.Conversation.AssistantMessage
 
+    @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+
     let message: ConversationMessage
     let workspaceId: String
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
@@ -67,7 +69,8 @@ struct AssistantMessageView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+        VStack(alignment: .leading, spacing: workspaceDesign
+            ? Constants.Conversation.Design.Transcript.toolRowSpacing : Layout.contentSpacing) {
             ForEach(Array(renderBlocks.enumerated()), id: \.element.id) { index, renderBlock in
                 switch renderBlock {
                 case .contentBlock(let block):
@@ -97,7 +100,7 @@ struct AssistantMessageView: View {
             // Rebuild cached markdown when a streamed prompt block closes and disappears.
             .id(hasStrippedPrompts)
         }
-        .padding(.vertical, Layout.verticalPadding)
+        .padding(.vertical, workspaceDesign ? 0 : Layout.verticalPadding)
         .environment(\.assistantMessageStreaming, message.isStreaming)
         .environment(\.proposalMessageId, message.id)
         .environment(\.proposalWorkspaceIDs, proposalWorkspaceIDs)

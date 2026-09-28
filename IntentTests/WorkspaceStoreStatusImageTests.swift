@@ -8,10 +8,13 @@ struct WorkspaceStoreStatusImageTests {
         store.workspaces = [workspace()]
         store.clearUnreadAttentionLocally(workspaceId: "ws-1")
         #expect(store.workspaces[0].statusImageAssetId == "asset-1.png")
+        #expect(store.workspaces[0].statusMessage == "Ready for review")
         store.updateWaiting(workspaceId: "ws-1", waiting: true)
         #expect(store.workspaces[0].statusImageAssetId == "asset-1.png")
+        #expect(store.workspaces[0].statusMessage == "Ready for review")
         store.updateLastActivity(workspaceId: "ws-1", lastActivity: "2026-09-01T00:00:00Z")
         #expect(store.workspaces[0].statusImageAssetId == "asset-1.png")
+        #expect(store.workspaces[0].statusMessage == "Ready for review")
     }
 
     private func workspace() -> Workspace {
@@ -35,7 +38,8 @@ struct WorkspaceStoreStatusImageTests {
             taskStatsCompleted: nil,
             taskStatsInProgress: nil,
             agentSummaryCount: nil,
-            statusImageAssetId: "asset-1.png"
+            statusImageAssetId: "asset-1.png",
+            statusMessage: "Ready for review"
         )
     }
 }

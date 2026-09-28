@@ -44,6 +44,46 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     }
 
     @MainActor
+    func testEdgeSwipeBackReturnsThroughWorkspaceAndCanBeCancelled() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .phone, "Compact navigation gesture")
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
+        workspace.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        agent.tap()
+        let back = app.buttons["conversation.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: Fixture.elementTimeout))
+
+        edgeSwipe(in: app, progress: 0.15)
+        XCTAssertTrue(back.exists, "A cancelled swipe must keep the conversation open")
+        edgeSwipe(in: app)
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertFalse(back.exists)
+        edgeSwipe(in: app)
+        let search = app.buttons[Fixture.workspaceListIdentifier]
+        XCTAssertTrue(search.waitForExistence(timeout: Fixture.elementTimeout))
+
+        edgeSwipe(in: app)
+        workspace.tap()
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        agent.tap()
+        XCTAssertTrue(back.waitForExistence(timeout: Fixture.elementTimeout))
+        back.tap()
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+    }
+
+    @MainActor
+    private func edgeSwipe(in app: XCUIApplication, progress: CGFloat = 0.85) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: progress, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
+    }
+
+    @MainActor
     func testCreateNewAgentMenuOpensAgentSetup() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
@@ -176,12 +216,17 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
                 transcript.waitForExistence(timeout: Fixture.elementTimeout),
                 "Tapping \(target) must open the agent conversation"
             )
-            XCTAssertTrue(app.navigationBars["Dashboard Implementor"].exists)
-            let agentsBack = app.navigationBars.buttons["Agents"].firstMatch
-            if agentsBack.exists {
-                agentsBack.tap()
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                XCTAssertTrue(app.staticTexts["Dashboard Implementor, Agent"].exists)
+                app.buttons["conversation.back"].tap()
             } else {
-                app.navigationBars.buttons.element(boundBy: 0).tap()
+                XCTAssertTrue(app.navigationBars["Dashboard Implementor"].exists)
+                let agentsBack = app.navigationBars.buttons["Agents"].firstMatch
+                if agentsBack.exists {
+                    agentsBack.tap()
+                } else {
+                    app.navigationBars.buttons.element(boundBy: 0).tap()
+                }
             }
             XCTAssertTrue(transcript.waitForNonExistence(timeout: Fixture.elementTimeout))
         }
@@ -208,7 +253,11 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
             transcript.waitForExistence(timeout: Fixture.elementTimeout),
             "Tapping the empty indentation must open the delegated agent conversation"
         )
-        XCTAssertTrue(app.navigationBars["Capture Race Fixer"].exists)
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            XCTAssertTrue(app.staticTexts["Capture Race Fixer, Agent"].exists)
+        } else {
+            XCTAssertTrue(app.navigationBars["Capture Race Fixer"].exists)
+        }
     }
 
     private func agentRowTapPoint(_ target: String, row: CGRect, preview: CGRect) -> CGPoint {

@@ -40,7 +40,14 @@ enum Fixture {
     // frame's bottom edge is that much above the row's.
     static let thinkingIndicatorLabel = "Thinking..."
     static let thinkingIndicatorLabelInset: CGFloat = 4
-    static let endRowGap: CGFloat = 36
+    // Workspace iPhone: 32pt section gap plus the 8pt anchor and 12pt footer.
+    // The shared non-phone presentation retains the original 16pt section gap.
+    private static let workspaceEndRowGap: CGFloat = 52
+    private static let legacyEndRowGap: CGFloat = 36
+
+    @MainActor static var endRowGap: CGFloat {
+        UIDevice.current.userInterfaceIdiom == .phone ? workspaceEndRowGap : legacyEndRowGap
+    }
     // Slack on `endRowGap`: the follow lands within 1 pt
     // (Constants.Conversation.Transcript.followLandingTolerance) and
     // accessibility frames round to the pixel grid.
@@ -428,7 +435,8 @@ func leaveConversation(in app: XCUIApplication) {
     let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
     var backTapsLeft = Fixture.backNavigationAttempts
     while backTapsLeft > 0, !workspaceList.waitForExistence(timeout: Fixture.backNavigationTimeout) {
-        let back = app.navigationBars.buttons.element(boundBy: 0)
+        let workspaceBack = app.buttons["conversation.back"]
+        let back = workspaceBack.exists ? workspaceBack : app.navigationBars.buttons.element(boundBy: 0)
         guard back.exists else { break }
         back.tap()
         backTapsLeft -= 1

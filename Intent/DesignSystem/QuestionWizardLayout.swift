@@ -1,6 +1,14 @@
 import SwiftUI
 
 extension Constants.Conversation.QuestionWizard {
+    enum Workspace {
+        /// Leave a portion of the next card visible at every container width.
+        /// This is not a reference-device breakpoint or a text-height estimate.
+        static let carouselWidthFraction: CGFloat = 0.78
+        static let pressedOpacity = 0.8
+        static let disabledOpacity = 0.5
+    }
+
     enum Step {
         static let titleSpacing: CGFloat = 3
         static let headerKerning: CGFloat = 0.5

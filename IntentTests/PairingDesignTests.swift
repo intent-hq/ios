@@ -5,11 +5,15 @@ import UIKit
 
 @MainActor
 struct PairingDesignTests {
-    @Test func exportedGlyphsLoadAsDistinctNonemptyTemplateImages() throws {
+    @Test(arguments: [
+        (["ConnectQR", "ConnectManual", "ConnectSaved"], 24),
+        (["ConversationChevronRight", "ConversationChevronUp"], 20)
+    ])
+    func exportedGlyphsLoadAsDistinctNonemptyTemplateImages(names: [String], side: Int) throws {
         var representations = Set<Data>()
-        for name in ["ConnectQR", "ConnectManual", "ConnectSaved"] {
+        for name in names {
             let image = try #require(UIImage(named: name))
-            #expect(image.size == CGSize(width: 24, height: 24))
+            #expect(image.size == CGSize(width: CGFloat(side), height: CGFloat(side)))
             #expect(image.renderingMode == .alwaysTemplate)
             let bitmap = try #require(image.cgImage)
             let width = bitmap.width
@@ -32,7 +36,7 @@ struct PairingDesignTests {
             #expect(opaquePixels < width * height, "The glyph must retain a transparent background")
             representations.insert(try #require(image.pngData()))
         }
-        #expect(representations.count == 3, "The three actions must not accidentally share one glyph")
+        #expect(representations.count == names.count, "The exported actions must not accidentally share one glyph")
     }
 
     @Test(arguments: [ColorScheme.light, .dark])

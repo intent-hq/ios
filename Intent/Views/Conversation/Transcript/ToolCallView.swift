@@ -13,9 +13,20 @@ struct ToolCallView: View {
     var onHydrate: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @ScaledMetric(relativeTo: .caption2) private var iconSize = Constants.Conversation.ToolCall.iconSize
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isExpanded = false
+    @State private var isInputExpanded = false
 
     private typealias Layout = Constants.Conversation.ToolCall
+    private typealias Design = Constants.Conversation.Design
+
+    private var inlineForeground: Color {
+        if hasError { return Theme.destructive(for: colorScheme) }
+        return isExpanded ? Design.Palette.foreground(for: colorScheme)
+            : Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast)
+    }
 
     private var toolName: String {
         block.resolvedName ?? "tool"
@@ -47,29 +58,55 @@ struct ToolCallView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: workspaceDesign ? Design.Transcript.toolRowSpacing : 0) {
             headerButton
             if isExpanded {
                 expandedContent
             }
         }
         .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(borderColor)
-                .frame(width: Layout.statusBorderWidth)
+            if !workspaceDesign {
+                Rectangle()
+                    .fill(borderColor)
+                    .frame(width: Layout.statusBorderWidth)
+            }
         }
     }
 
     private var headerButton: some View {
         Button {
             onLayoutChange?()
-            withAnimation(.easeInOut(duration: Constants.Conversation.ToolCall.expansionAnimationDuration)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: Layout.expansionAnimationDuration)) {
                 isExpanded.toggle()
             }
             if isExpanded, isTruncated {
                 onHydrate?()
             }
         } label: {
+            headerLabel
+                .copyContextMenuPassthrough()
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+    }
+
+    @ViewBuilder
+    private var headerLabel: some View {
+        if workspaceDesign {
+            HStack(alignment: .top, spacing: Design.Transcript.toolLabelSpacing) {
+                toolIcon
+                    .frame(width: Design.toolIconSize, height: Design.toolIconSize)
+                    .accessibilityHidden(true)
+                Text([classified.verb, classified.subject, classified.path].compactMap { $0 }.joined(separator: " "))
+                    .interFont(Constants.Typography.bodyS)
+                    .tracking(Design.Typography.bodyTracking)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                WorkspaceTranscriptDisclosure(isExpanded: isExpanded)
+            }
+            .foregroundStyle(inlineForeground)
+            .frame(minHeight: Design.minimumTapTarget, alignment: .center)
+        } else {
             HStack(spacing: Layout.headerSpacing) {
                 toolIcon
                 Text(classified.verb)
@@ -95,12 +132,7 @@ struct ToolCallView: View {
             }
             .padding(.leading, Layout.headerLeadingPadding)
             .padding(.vertical, Layout.headerVerticalPadding)
-            // Text-bearing assistant rows carry the copy overlay
-            // (MessageCopyContextMenu); without a pass-through marker it
-            // claims the header tap and the row never expands (ios#344).
-            .copyContextMenuPassthrough()
         }
-        .buttonStyle(.plain)
     }
 
     private var toolIcon: some View {
@@ -108,8 +140,11 @@ struct ToolCallView: View {
             .renderingMode(.template)
             .resizable()
             .scaledToFit()
-            .frame(width: iconSize, height: iconSize)
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .frame(
+                width: workspaceDesign ? Design.toolIconSize : iconSize,
+                height: workspaceDesign ? Design.toolIconSize : iconSize
+            )
+            .foregroundStyle(workspaceDesign ? inlineForeground : Theme.mutedForeground(for: colorScheme))
             .accessibilityHidden(true)
     }
 
@@ -119,15 +154,53 @@ struct ToolCallView: View {
             if isTruncated {
                 hydrationStatus
             }
-            if !block.input.isEmpty {
-                inputSection
+            if workspaceDesign {
+                inlineResult
+                if !block.input.isEmpty {
+                    DisclosureGroup("Input", isExpanded: inputExpansion) {
+                        inputSection
+                    }
+                    .interFont(Constants.Typography.bodyXS)
+                    .tint(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+                    .copyContextMenuPassthrough()
+                }
+            } else {
+                if !block.input.isEmpty {
+                    inputSection
+                }
+                if let result = toolResult {
+                    resultSection(result)
+                }
             }
-            if let result = toolResult {
+        }
+        .padding(.leading, workspaceDesign ? Design.Transcript.expandedContentIndent : Layout.expandedHorizontalPadding)
+        .padding(.trailing, workspaceDesign ? 0 : Layout.expandedHorizontalPadding)
+        .padding(.bottom, Layout.expandedBottomPadding)
+    }
+
+    private var inputExpansion: Binding<Bool> {
+        Binding(get: { isInputExpanded }, set: { expanded in
+            onLayoutChange?()
+            isInputExpanded = expanded
+        })
+    }
+
+    @ViewBuilder
+    private var inlineResult: some View {
+        if let result = toolResult {
+            if let output = result.output?.value as? String {
+                Text(String(output.prefix(Layout.outputCharacterLimit)))
+                    .interFont(Constants.Typography.bodyS)
+                    .tracking(Design.Typography.bodyTracking)
+                    .foregroundStyle(hasError ? Theme.destructive(for: colorScheme)
+                        : Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
                 resultSection(result)
             }
         }
-        .padding(.horizontal, Layout.expandedHorizontalPadding)
-        .padding(.bottom, Layout.expandedBottomPadding)
     }
 
     private var hydrationStatus: some View {

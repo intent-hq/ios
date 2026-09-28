@@ -81,12 +81,12 @@ struct AgentRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: Constants.AgentRow.rowSpacing) {
+        HStack(alignment: .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
             avatar
             agentDetails
         }
-        .padding(.vertical, Constants.AgentRow.verticalPadding)
-        .padding(.leading, indented ? Constants.AgentRow.nestedLeadingPadding : 0)
+        .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: .top)
+        .padding(.leading, indented ? WorkspaceDetailStyle.noteIndentation : 0)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }
@@ -95,10 +95,11 @@ struct AgentRowView: View {
         ZStack(alignment: .topTrailing) {
             AgentAvatarView(
                 agentId: agent.id,
-                size: Constants.AgentRow.avatarSize,
+                size: WorkspaceDetailStyle.avatarSize,
                 specialist: agent.specialist,
                 isActive: avatarState == .running,
-                state: avatarState
+                state: avatarState,
+                workspaceStyle: true
             )
             if avatarState == .running {
                 Circle()
@@ -120,7 +121,7 @@ struct AgentRowView: View {
     }
 
     private var agentDetails: some View {
-        VStack(alignment: .leading, spacing: Constants.AgentRow.textSpacing) {
+        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
             titleAndTimestamp
             agentStatusDescription
         }
@@ -130,22 +131,23 @@ struct AgentRowView: View {
     private var agentStatusDescription: some View {
         if avatarState == .question {
             Text(avatarState.accessibilityLabel)
-                .interFont(Constants.Typography.bodyXS)
+                .interFont(Constants.Typography.bodyS)
                 .foregroundStyle(avatarState.cornerColor)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         } else if avatarState != .running, let attention = agent.pendingAttentionRequest {
             Text(attention.reason.map { "\(attention.kind.label) — \($0)" } ?? attention.kind.label)
-                .interFont(Constants.Typography.bodyXS)
+                .interFont(Constants.Typography.bodyS)
                 .foregroundStyle(attention.kind.color)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
         } else if let message = agent.displayMessage {
             Text(Self.previewText(message))
-                .interFont(Constants.Typography.bodyXS)
-                .foregroundStyle(Theme.mutedForeground(
+                .interFont(Constants.Typography.bodyS)
+                .tracking(WorkspaceDetailStyle.bodyTracking)
+                .foregroundStyle(WorkspaceDetailStyle.secondary(
                     for: colorScheme,
                     contrast: colorSchemeContrast
                 ))
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .allowsHitTesting(false)
         }
     }
@@ -178,8 +180,9 @@ struct AgentRowView: View {
     private var agentIdentity: some View {
         HStack(alignment: .firstTextBaseline, spacing: Constants.AgentRow.titleSpacing) {
             Text(agent.name)
-                .interFont(Constants.Typography.bodyS)
-                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .interFont(Constants.Typography.bodyM)
+                .tracking(WorkspaceDetailStyle.rowTitleTracking)
+                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .layoutPriority(1)
 
@@ -193,7 +196,7 @@ struct AgentRowView: View {
         if agent.notificationsMuted {
             Image(systemName: "bell.slash")
                 .font(.system(size: Constants.AgentRow.badgeFontSize, weight: .semibold))
-                .foregroundStyle(Theme.mutedForeground(
+                .foregroundStyle(WorkspaceDetailStyle.secondary(
                     for: colorScheme,
                     contrast: colorSchemeContrast
                 ))
@@ -238,7 +241,7 @@ struct AgentRowView: View {
         if let timestamp = agent.bestTimestamp {
             Text(relativeDate(from: timestamp))
                 .interFont(Constants.Typography.subtextXXS)
-                .foregroundStyle(Theme.mutedForeground(
+                .foregroundStyle(WorkspaceDetailStyle.secondary(
                     for: colorScheme,
                     contrast: colorSchemeContrast
                 ))
@@ -265,19 +268,22 @@ struct DelegatedAgentsRow: View {
     let isExpanded: Bool
     let colorScheme: ColorScheme
     let onToggle: () -> Void
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(alignment: .top, spacing: Constants.AgentRow.headerSpacing) {
-                summaryLabel
-                    .layoutPriority(1)
-
-                Spacer(minLength: Constants.AgentRow.headerSpacing)
-                chevron
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: WorkspaceDetailStyle.stackSpacing) {
+                    avatarStack
+                    summaryLabel
+                }
+                VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
+                    avatarStack
+                    summaryLabel
+                }
             }
-            .padding(.leading, Constants.AgentRow.avatarSize + Constants.AgentRow.rowSpacing)
-            .padding(.vertical, Constants.AgentRow.delegatedVerticalPadding)
-            .frame(minHeight: Constants.Accessibility.minimumTapTarget)
+            .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget, alignment: .leading)
+            .padding(.leading, WorkspaceDetailStyle.avatarSize + WorkspaceDetailStyle.avatarSpacing)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -287,17 +293,30 @@ struct DelegatedAgentsRow: View {
     }
 
     private var summaryLabel: some View {
-        Text(summaryTitle)
-            .interFont(Constants.Typography.bodyXS)
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        Text("+\(agents.count) delegated")
+            .interFont(Constants.Typography.subtextXXS)
+            .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var chevron: some View {
-        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-            .font(.caption)
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .accessibilityHidden(true)
+    private var avatarStack: some View {
+        HStack(spacing: Constants.AgentRow.avatarOverlap) {
+            ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars).enumerated()), id: \.element.id) { index, agent in
+                AgentAvatarView(
+                    agentId: agent.id,
+                    size: WorkspaceDetailStyle.stackAvatarSize,
+                    specialist: agent.specialist,
+                    state: AgentAvatarState.state(for: agent),
+                    workspaceStyle: true
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: WorkspaceDetailStyle.stackAvatarSize * WorkspaceDetailStyle.avatarCornerRatio)
+                        .strokeBorder(WorkspaceDetailStyle.background(for: colorScheme), lineWidth: WorkspaceDetailStyle.stackBorderWidth)
+                }
+                .zIndex(Double(Constants.AgentRow.maximumHeaderAvatars - index))
+            }
+        }
+        .accessibilityHidden(true)
     }
 
     private var summaryTitle: String {

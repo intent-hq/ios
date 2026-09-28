@@ -106,7 +106,11 @@ extension MonitoredPrsRowTests {
         #expect(SyntheticBadgeHost.accessibilityElements(in: host).filter { $0 === chip }.count == 1)
     }
 
-    private func makeRow(monitors: [MonitoredPr]) -> some View {
+    private func makeRow(
+        monitors: [MonitoredPr],
+        usesWorkspaceDesign: Bool = false,
+        error: String? = nil
+    ) -> some View {
         let connection = FakeConnectionManager()
         let workspaceStore = WorkspaceStore(forTesting: true)
         workspaceStore.workspaces = [
@@ -133,8 +137,13 @@ extension MonitoredPrsRowTests {
         let monitoredPrStore = MonitoredPrStore(connectionManager: connection)
         monitoredPrStore.activate(workspaceId: "ws-abc")
         monitoredPrStore.source.cache.buckets["ws-abc"]?.rows = monitors
+        monitoredPrStore.source.cache.buckets["ws-abc"]?.error = error
         let session = makeSession(connection: connection, workspaceStore: workspaceStore)
-        return MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: monitoredPrStore)
+        return MonitoredPrsRow(
+            viewModel: viewModel,
+            monitoredPrStore: monitoredPrStore,
+            usesWorkspaceDesign: usesWorkspaceDesign
+        )
             .environment(session)
     }
 
@@ -197,9 +206,10 @@ extension MonitoredPrsRowTests {
             )
         ) {
             await SyntheticBadgeHost.publishesAccessibilityTree()
-        }
+        },
+        arguments: [false, true]
     )
-    func renderedChipsExposePendingStateAndPreserveMenuRole() async throws {
+    func renderedChipsExposePendingStateAndPreserveMenuRole(usesWorkspaceDesign: Bool) async throws {
         let row = makeRow(monitors: [
             makeMonitor(
                 monitorId: "prm-pending",
@@ -212,7 +222,7 @@ extension MonitoredPrsRowTests {
                 hasPendingChanges: true
             ),
             makeMonitor(monitorId: "prm-current", repo: "other/repo", prNumber: 34)
-        ])
+        ], usesWorkspaceDesign: usesWorkspaceDesign)
         let identifiers = [
             "monitoredPr.prm-pending",
             "monitoredPr.prm-pending-without-details",
@@ -228,12 +238,36 @@ extension MonitoredPrsRowTests {
                 identifiedBy: identifiers,
                 in: hostView
             )
-            #expect(elements.map(\.accessibilityLabel) == ["#12", "#23", "other/repo: #34"])
+            let labels = ["#12", "#23", "other/repo: #34"].map { label in
+                usesWorkspaceDesign ? "Monitoring PR \(label)" : label
+            }
+            #expect(elements.map(\.accessibilityLabel) == labels)
             #expect(
                 elements.map(\.accessibilityValue)
                     == ["1 pending change", "Pending changes", "No pending changes"]
             )
             #expect(elements.allSatisfy { $0.accessibilityTraits.contains(.button) })
+        }
+    }
+
+    @Test(
+        .enabled("Requires the hosted SwiftUI accessibility tree") {
+            await SyntheticBadgeHost.publishesAccessibilityTree()
+        },
+        arguments: [0, 1]
+    )
+    func workspaceDesignPreservesRetryWithEmptyOrRetainedMonitors(monitorCount: Int) async throws {
+        let monitors = monitorCount == 0 ? [] : [makeMonitor(hasPendingChanges: true)]
+        let row = makeRow(monitors: monitors, usesWorkspaceDesign: true, error: "Refresh failed")
+        try await SyntheticBadgeHost.render(row, width: Self.hostWidth, height: Self.hostHeight) { hostView, _ in
+            let identifiers = ["monitoredPr.retry"] + monitors.map { "monitoredPr.\($0.monitorId)" }
+            let elements = try Self.accessibilityElements(identifiedBy: identifiers, in: hostView)
+            #expect(elements.first?.accessibilityLabel == "PR monitors may be out of date. Retry refresh")
+            #expect(elements.allSatisfy { $0.accessibilityTraits.contains(.button) })
+            if monitorCount == 1 {
+                #expect(elements.last?.accessibilityLabel == "Monitoring PR #12")
+                #expect(elements.last?.accessibilityValue == "Pending changes")
+            }
         }
     }
 

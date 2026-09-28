@@ -767,7 +767,7 @@ extension DemoFixturesTests {
             #expect(toolUse.type == .toolUse)
             #expect(!toolUse.inputTruncation.isTruncated)
             #expect(toolUse.input["path"]?.value as? String == call.file)
-            let slimResult = try #require(blocks.first { $0.resolvedToolUseId == call.id })
+            let slimResult = try #require(MessageBlockPartitioning.pairToolResults(blocks)[toolUse.id])
             #expect(slimResult.type == .toolResult)
             #expect(slimResult.outputTruncation.isTruncated)
             let preview = try #require(slimResult.output?.value as? String)

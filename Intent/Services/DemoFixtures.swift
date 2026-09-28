@@ -352,10 +352,9 @@ enum DemoFixtures {
 }
 
 extension DemoFixtures {
-    /// The subscription push a fixture method owes alongside its response:
-    /// `chat.subscribe` answers with the seq-0 transcript snapshot the
-    /// transcript is loaded from. Nil for every other method.
+    /// Chat snapshots, plus opt-in design scenario updates after commands.
     static func subscriptionPush(for method: String, params: [String: Any]) -> SubscriptionPush? {
+        if let push = designScenario?.subscriptionPush(for: method, params: params) { return push }
         guard method == "chat.subscribe" else { return nil }
         let agentId = params["agentId"] as? String
         let messages = transcriptMessages(agentId: agentId)
@@ -369,6 +368,7 @@ extension DemoFixtures {
 
     static func transcriptMessages(agentId: String?) -> [[String: Any]] {
         if usesStartupTranscript, agentId == longConversationAgentId { return startupTranscriptMessages }
+        if let designScenario, agentId == DemoDesignFixtures.agentId { return designScenario.messages }
         if inlineImageConversationRequested(by: ProcessInfo.processInfo.arguments),
            agentId == inlineImageAgentId {
             return inlineImageConversationMessages
@@ -378,13 +378,13 @@ extension DemoFixtures {
         return agentId == longConversationAgentId ? longConversationMessages : conversationMessages
     }
 
-    /// Fixture response for a JSON-RPC method. Unknown methods return an
-    /// empty dictionary, which every call site parses as "no data" safely.
+    /// JSON-RPC fixture response. Unknown methods return an empty dictionary.
     static func response(
         for method: String,
         params: [String: Any],
         snapshotAnchor: Date = Date()
     ) -> Any {
+        if let response = designScenario?.response(for: method, params: params) { return response }
         if let terminalResponse = DemoTerminalFixtures.response(for: method, params: params) {
             return terminalResponse
         }
