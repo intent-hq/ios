@@ -367,6 +367,7 @@ extension DemoFixtures {
     }
 
     static func transcriptMessages(agentId: String?) -> [[String: Any]] {
+        if agentId == "demo-agent-implementor", let messages = DemoBrowserFixtures.conversationMessages { return messages }
         if usesStartupTranscript, agentId == longConversationAgentId { return startupTranscriptMessages }
         if let designScenario, agentId == DemoDesignFixtures.agentId { return designScenario.messages }
         if inlineImageConversationRequested(by: ProcessInfo.processInfo.arguments),
@@ -384,10 +385,9 @@ extension DemoFixtures {
         params: [String: Any],
         snapshotAnchor: Date = Date()
     ) -> Any {
-        if let response = designScenario?.response(for: method, params: params) { return response }
-        if let terminalResponse = DemoTerminalFixtures.response(for: method, params: params) {
-            return terminalResponse
-        }
+        if let response = designScenario?.response(for: method, params: params)
+            ?? DemoTerminalFixtures.response(for: method, params: params)
+            ?? DemoBrowserFixtures.response(for: method, params: params) { return response }
         return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
             if let response = proposalResponse(for: method, params: params) { return response }
             switch method {

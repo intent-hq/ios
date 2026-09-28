@@ -25,6 +25,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
 
     func retryGlobalSubscription()
+    func makeBrowserProxy() async throws -> any BrowserProxySession
 
     func connect(
         hosts: [String],
@@ -43,6 +44,12 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     func refreshHostRoutes() async
     func connectDemo(serveFixtures: Bool)
     func disconnect()
+}
+
+extension SessionConnectionManaging {
+    func makeBrowserProxy() async throws -> any BrowserProxySession {
+        throw BrowserTunnelError.unavailable
+    }
 }
 
 extension ConnectionManager: SessionConnectionManaging {}
@@ -82,6 +89,7 @@ final class BackendSession {
     let hooksStore: WorkspaceStatusStore<BackgroundHook>
     let prMonitorsStore: WorkspacePrMonitorsStore
     let mobileTerminalStore: MobileTerminalStore
+    let browserStore: WorkspaceBrowserStore
     let attachmentUploadService: AttachmentUploadService
     let workspaceFileImageLoader: WorkspaceFileImageLoader
     let attachmentImageLoader: AttachmentImageLoader
@@ -120,6 +128,7 @@ final class BackendSession {
             connection: connection,
             persistence: MobileTerminalPersistence(backendID: backendID)
         )
+        browserStore = WorkspaceBrowserStore(connection: connection, backendID: backendID)
         self.attachmentUploadService = attachmentUploadService
         self.workspaceFileImageLoader = workspaceFileImageLoader
         self.attachmentImageLoader = attachmentImageLoader

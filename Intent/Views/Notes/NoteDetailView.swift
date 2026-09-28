@@ -176,6 +176,7 @@ struct NoteDetailView: View {
         if !note.content.isEmpty {
             NoteContentView(
                 content: note.content,
+                workspaceId: workspaceId,
                 resolveNote: { noteStore.note(byId: $0) },
                 onOpenURL: { url in
                     if let link = Self.parseIntentNoteLink(url) {
