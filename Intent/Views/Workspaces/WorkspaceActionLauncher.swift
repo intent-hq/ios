@@ -4,6 +4,7 @@ import SwiftUI
 struct WorkspaceActionLauncher: ViewModifier {
     let isSearching: Bool
     var alignment: HorizontalAlignment = .trailing
+    var avoidsComposer = true
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
@@ -36,7 +37,8 @@ struct WorkspaceActionLauncher: ViewModifier {
                 // Resolve the composer anchor in the window overlay's coordinate space.
                 // swiftlint:disable:next geometry_reader_usage
                 GeometryReader { proxy in
-                    let bottomInset = composerAnchor.map { max(0, proxy.size.height - proxy[$0].minY) } ?? 0
+                    let activeAnchor = avoidsComposer ? composerAnchor : nil
+                    let bottomInset = activeAnchor.map { max(0, proxy.size.height - proxy[$0].minY) } ?? 0
                     actionOverlay(bottomInset: bottomInset)
                 }
             }

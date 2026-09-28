@@ -213,6 +213,7 @@ $(SRCROOT)/Intent/Views/Agents/AgentAvatarView.swift
 $(SRCROOT)/Intent/Views/Agents/AgentRowView.swift
 $(SRCROOT)/Intent/Views/Components/AssistantLaunchButton.swift
 $(SRCROOT)/Intent/Views/Components/NavigationBackGesture.swift
+$(SRCROOT)/Intent/Views/Components/NavigationPopObserver.swift
 $(SRCROOT)/Intent/Views/Components/NavigationTitleSubtitleView.swift
 $(SRCROOT)/Intent/Views/Components/RepoOwnerAvatarView.swift
 $(SRCROOT)/Intent/Views/Components/TaskProgressRingView.swift
@@ -502,6 +503,7 @@ $(SRCROOT)/IntentTests/ModelsTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrStoreFoldAndIntegrationTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrStoreTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrsRowTests.swift
+$(SRCROOT)/IntentTests/NavigationPopObserverTests.swift
 $(SRCROOT)/IntentTests/NetworkAvailabilityTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerAnchorTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerTests.swift
