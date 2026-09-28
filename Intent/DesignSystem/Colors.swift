@@ -18,6 +18,7 @@ extension Constants.Colors {
         static let needsAttention = Color(.workspaceStatusNeedsAttention)
         static let idle = Color(.workspaceStatusIdle)
         static let notStarted = Color(.workspaceStatusNotStarted)
+        static let notStartedRing = Color(.workspaceStatusNotStartedRing)
         static let inProgress = Color(.workspaceStatusInProgress)
         static let complete = Color(.workspaceStatusComplete)
         static let prReady = Color(.workspaceStatusPrReady)
