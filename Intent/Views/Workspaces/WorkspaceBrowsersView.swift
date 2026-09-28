@@ -18,7 +18,7 @@ struct WorkspaceBrowsersView: View {
                     .buttonStyle(.plain)
                     .visionListRowHitTarget()
                     .contextMenu {
-                        if browser.command == nil {
+                        if browser.isSavedSession {
                             Button("Remove browser", systemImage: "trash", role: .destructive) {
                                 store.remove(browser)
                             }

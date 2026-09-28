@@ -26,7 +26,9 @@ struct WorkspaceBrowserStoreTests {
         let params = try #require(fixture.fake.paramsForMethod("script.list").first)
         #expect(params["workspaceId"] as? String == "workspace")
         let subscription = try #require(fixture.fake.paramsForMethod("events.subscribe").first)
-        #expect(subscription["eventTypes"] as? [String] == ["script:state", "script:changed"])
+        #expect(subscription["eventTypes"] as? [String] == [
+            "script:state", "script:changed", "browser:tab-opened", "browser:tab-updated", "browser:tab-closed"
+        ])
     }
 
     @Test func manualSessionsPersistPerBackendAndWorkspace() throws {
@@ -158,5 +160,33 @@ struct WorkspaceBrowserStoreTests {
         #expect(fixture.fake.paramsForMethod("events.subscribe").count == 1)
         let workspaces = fixture.fake.paramsForMethod("script.list").compactMap { $0["workspaceId"] as? String }
         #expect(Set(workspaces) == ["workspace", "other"])
+    }
+
+    @Test func openingAURLReusesAnExactMatchWithinItsWorkspace() async throws {
+        let fixture = try WorkspaceBrowserFixture()
+        fixture.fake.responseMap["script.list"] = ["scripts": [fixture.script(url: "localhost:3000/docs?q=1")]]
+        await fixture.store.refresh(workspaceId: "workspace")
+        let server = try #require(fixture.store.browsers(workspaceId: "workspace").first)
+        #expect(try fixture.store.open(workspaceId: "workspace", url: "http://daemon.localhost:3000/docs?q=1") == server)
+        #expect(!server.isSavedSession)
+        let saved = try fixture.store.open(workspaceId: "workspace", url: "localhost:3000/settings?q=2#section")
+        #expect(saved.isSavedSession)
+        #expect(saved.url == "http://127.0.0.1:3000/settings?q=2#section")
+        #expect(try fixture.store.open(workspaceId: "workspace", url: saved.url) == saved)
+        #expect(fixture.store.browsers(workspaceId: "workspace").count == 2)
+        let other = try fixture.store.open(workspaceId: "other", url: saved.url)
+        #expect(other.workspaceId == "other")
+        #expect(other.id != saved.id)
+    }
+
+    @Test func openingKeepsDistinctQueriesAndCreateKeepsExplicitSessionSemantics() throws {
+        let fixture = try WorkspaceBrowserFixture()
+        let first = try fixture.store.open(workspaceId: "workspace", url: "localhost:3000/docs?q=1")
+        let second = try fixture.store.open(workspaceId: "workspace", url: "localhost:3000/docs?q=2")
+        let explicit = try fixture.store.create(workspaceId: "workspace", url: first.url)
+        #expect(first.id != second.id)
+        #expect(first.url != second.url)
+        #expect(first.id != explicit.id)
+        #expect(explicit.url == first.url)
     }
 }

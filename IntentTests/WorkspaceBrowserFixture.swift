@@ -15,7 +15,34 @@ struct WorkspaceBrowserFixture {
         fake.connectionState = .connected
         fake.responseMap["events.subscribe"] = ["subscriptionId": "browser-sub"]
         fake.responseMap["script.list"] = ["scripts": []]
+        fake.responseMap["browser.listTabs"] = ["tabs": []]
         store = WorkspaceBrowserStore(connection: fake, backendID: backendID, defaults: defaults)
+    }
+
+    func tab(
+        id: String = "agent-preview",
+        workspaceId: String = "workspace",
+        url: String = "http://localhost:3000/docs",
+        requestedURL: String? = nil
+    ) -> [String: Any] {
+        var tab: [String: Any] = [
+            "tabId": id, "workspaceId": workspaceId, "url": url, "title": "Agent preview",
+            "hostClientId": "desktop", "ownerAgentId": "agent-one", "visibility": "hidden", "hostConnected": true
+        ]
+        if let requestedURL { tab["requestedUrl"] = requestedURL }
+        return tab
+    }
+
+    func tabEvent(
+        tab: [String: Any],
+        type: String = "browser:tab-opened",
+        workspaceId: String = "workspace",
+        subscriptionId: String = "browser-sub"
+    ) {
+        fake.deliverEvent(method: "events.event", params: [
+            "subscriptionId": subscriptionId,
+            "event": ["type": type, "workspaceId": workspaceId, "data": ["tab": tab]]
+        ])
     }
 
     func script(

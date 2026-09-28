@@ -72,4 +72,32 @@ struct WorkspaceBrowserTests {
         ]
         #expect(WorkspaceBrowser.detected(script: script, workspaceId: "workspace") == nil)
     }
+
+    @Test(arguments: [
+        ("http://127.0.0.1:49152/docs?q=1#top", "http://daemon.localhost:3000/docs?q=1#top", "http://127.0.0.1:3000/docs?q=1#top"),
+        ("http://daemon-host:3000/docs", "http://daemon.localhost:3000/docs", "http://127.0.0.1:3000/docs"),
+        ("http://localhost:3000/settings?mode=full", "http://daemon.localhost:3000/", "http://127.0.0.1:3000/settings?mode=full"),
+        ("https://example.com/current", "https://example.com/old", "https://example.com/current"),
+        ("https://redirected.example.com/current", "https://example.com/old", "https://redirected.example.com/current"),
+        ("about:blank", "http://daemon.localhost:3000/docs", "http://127.0.0.1:3000/docs"),
+        ("http://127.0.0.1:49152/docs", "http://client.localhost:3000/docs", "http://client.localhost:3000/docs")
+    ])
+    func tabTargetsUseOriginalServerPortsAndCurrentNavigation(current: String, requested: String, expected: String) {
+        #expect(WorkspaceBrowserURL.tabURL(current: current, requested: requested) == expected)
+    }
+
+    @Test func tabDecodingRejectsNonWebAndCrossWorkspaceRows() {
+        let tab: [String: Any] = ["tabId": "one", "workspaceId": "workspace", "url": "https://example.com", "title": "Preview"]
+        let browser = WorkspaceBrowser.detected(tab: tab, workspaceId: "workspace")
+        #expect(browser?.id == "tab:one")
+        #expect(browser?.title == "Preview")
+        #expect(browser?.isSavedSession == false)
+        #expect(browser?.command == nil)
+        #expect(WorkspaceBrowser.detected(tab: tab, workspaceId: "other") == nil)
+        for url in ["", "about:blank", "file:///tmp/test", "javascript:alert(1)", "http://user:password@localhost:3000"] {
+            var invalid = tab
+            invalid["url"] = url
+            #expect(WorkspaceBrowser.detected(tab: invalid, workspaceId: "workspace") == nil)
+        }
+    }
 }

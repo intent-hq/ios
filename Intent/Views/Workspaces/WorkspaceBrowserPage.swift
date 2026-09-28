@@ -11,6 +11,8 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     private(set) var canGoForward = false
     private(set) var errorMessage: String?
     private(set) var address = ""
+    private(set) var title = ""
+    @ObservationIgnored private var titleObserver: NSKeyValueObservation?
     @ObservationIgnored private var proxy: (any BrowserProxySession)?
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var originalOrigins: [String: URLComponents] = [:]
@@ -39,6 +41,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
             webView.uiDelegate = self
             webView.allowsBackForwardNavigationGestures = true
             self.webView = webView
+            observeTitle(webView)
             webView.load(URLRequest(url: forwarded))
         } catch {
             guard self.generation == generation else { return }
@@ -49,6 +52,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func stop() {
         generation = UUID()
+        titleObserver = nil
         webView?.stopLoading()
         webView?.navigationDelegate = nil
         webView?.uiDelegate = nil
@@ -58,6 +62,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
         isLoading = false
         errorMessage = nil
         address = ""
+        title = ""
         originalOrigins.removeAll()
         if let proxy {
             self.proxy = nil
@@ -67,6 +72,38 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func goBack() { webView?.goBack() }
     func goForward() { webView?.goForward() }
+
+    func navigate(to input: String) async throws {
+        let normalized = try WorkspaceBrowserURL.normalize(input)
+        guard let url = URL(string: normalized), let proxy, let webView else { throw BrowserTunnelError.closed }
+        generation = UUID()
+        let generation = generation
+        webView.stopLoading()
+        errorMessage = nil
+        isLoading = true
+        do {
+            let forwarded = try await proxy.forward(url)
+            try Task.checkCancellation()
+            guard self.generation == generation else { return }
+            rememberOrigin(url, forwarded: forwarded)
+            address = normalized
+            webView.load(URLRequest(url: forwarded))
+        } catch {
+            guard self.generation == generation else { return }
+            isLoading = false
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            throw error
+        }
+    }
+
+    private func observeTitle(_ webView: WKWebView) {
+        titleObserver = webView.observe(\.title, options: [.initial, .new]) { @Sendable [weak self, weak webView] _, _ in
+            Task { @MainActor in
+                guard let self, let webView, self.webView === webView else { return }
+                title = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            }
+        }
+    }
 
     func reload() {
         errorMessage = nil

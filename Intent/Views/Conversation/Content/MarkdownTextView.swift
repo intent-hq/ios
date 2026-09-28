@@ -20,6 +20,7 @@ struct MarkdownTextView: View {
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
     @State private var videoItem: VideoItem?
+    @State private var browserItem: WorkspaceBrowser?
     @State private var attachmentAttempt = 0
 
     private static let maximumBlockIndent = 3
@@ -108,12 +109,35 @@ struct MarkdownTextView: View {
                 VideoLightboxView(video: item.video)
             }
 
-        if let handler = onOpenURL {
-            markdownView
-                .environment(\.openURL, OpenURLAction(handler: handler))
-        } else {
-            markdownView
+        markdownView
+            .environment(\.openURL, OpenURLAction(handler: openLink))
+            .fullScreenCover(item: $browserItem) { browser in
+                if let session {
+                    WorkspaceBrowserView(browser: browser, connection: session.connection)
+                }
+            }
+    }
+
+    private func openLink(_ url: URL) -> OpenURLAction.Result {
+        do {
+            if let browser = try Self.workspaceBrowser(for: url, workspaceId: workspaceId, store: session?.browserStore) {
+                browserItem = browser
+                return .handled
+            }
+        } catch {
+            return .discarded
         }
+        return onOpenURL?(url) ?? .systemAction
+    }
+
+    static func workspaceBrowser(
+        for url: URL,
+        workspaceId: String?,
+        store: WorkspaceBrowserStore?
+    ) throws -> WorkspaceBrowser? {
+        guard let workspaceId, !workspaceId.isEmpty, let store,
+              let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) else { return nil }
+        return try store.open(workspaceId: workspaceId, url: url.absoluteString)
     }
 
     /// Routes attachment taps: only loaded markdown images (intent-file, saved assets and

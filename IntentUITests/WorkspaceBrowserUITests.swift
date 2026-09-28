@@ -4,6 +4,43 @@ nonisolated final class WorkspaceBrowserUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
     @MainActor
+    func testAgentBrowserAppearsAndMessageLinkOpensInApp() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "--demo-browsers"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        workspace.tap()
+        let browser = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Agent browser")).firstMatch
+        for _ in 0..<3 where !browser.isHittable { app.swipeUp() }
+        XCTAssertTrue(browser.waitForExistence(timeout: Self.timeout))
+        browser.tap()
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: Self.timeout))
+        done.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+        for _ in 0..<3 where !agent.isHittable { app.swipeDown() }
+        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        agent.tap()
+        let link = app.links["Open server preview"].firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: Self.timeout))
+        link.tap()
+        XCTAssertTrue(done.waitForExistence(timeout: Self.timeout))
+        let address = app.textFields["Browser URL"]
+        XCTAssertEqual(address.value as? String, "http://127.0.0.1:5173/preview?view=phone")
+        address.tap()
+        let delete = String(repeating: XCUIKeyboardKey.delete.rawValue, count: (address.value as? String ?? "").count)
+        address.typeText(delete + "127.0.0.1:4321/settings\n")
+        XCTAssertEqual(address.value as? String, "http://127.0.0.1:4321/settings")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "workspace-browser-address-bar"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        done.tap()
+        XCTAssertTrue(link.waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
     func testCreatingBrowserValidatesAddressAndKeepsSessionAfterDismissal() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-browsers"]

@@ -7,6 +7,8 @@ nonisolated struct WorkspaceBrowser: Codable, Equatable, Identifiable, Sendable 
     let url: String
     let command: String?
 
+    var isSavedSession: Bool { id.hasPrefix("browser:") }
+
     static func detected(script: [String: Any], workspaceId: String) -> Self? {
         guard let id = script["id"] as? String, !id.isEmpty,
               script["workspaceId"] as? String == workspaceId,
@@ -24,6 +26,47 @@ nonisolated struct WorkspaceBrowser: Codable, Equatable, Identifiable, Sendable 
             command: command
         )
     }
+
+    static func detected(tab: [String: Any], workspaceId: String) -> Self? {
+        guard let id = tab["tabId"] as? String, !id.isEmpty,
+              tab["workspaceId"] as? String == workspaceId,
+              let rawURL = tab["url"] as? String,
+              let url = WorkspaceBrowserURL.tabURL(current: rawURL, requested: tab["requestedUrl"] as? String) else {
+            return nil
+        }
+        let title = (tab["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self(
+            id: "tab:\(id)",
+            workspaceId: workspaceId,
+            title: title.flatMap { $0.isEmpty ? nil : $0 } ?? url,
+            url: url,
+            command: nil
+        )
+    }
+
+    static func merging(scripts: [Self], tabs: [Self]) -> [Self] {
+        var browsers = scripts
+        var mergedScriptIds: Set<String> = []
+        for tab in tabs {
+            if let index = browsers.firstIndex(where: { browser in
+                browser.command != nil && !mergedScriptIds.contains(browser.id)
+                    && WorkspaceBrowserURL.matchesServer(tab.url, server: browser.url)
+            }) {
+                let script = browsers[index]
+                browsers[index] = Self(
+                    id: script.id,
+                    workspaceId: script.workspaceId,
+                    title: script.title,
+                    url: tab.url,
+                    command: script.command
+                )
+                mergedScriptIds.insert(script.id)
+            } else if !browsers.contains(where: { $0.url == tab.url }) {
+                browsers.append(tab)
+            }
+        }
+        return browsers
+    }
 }
 
 nonisolated enum WorkspaceBrowserError: LocalizedError {
@@ -40,6 +83,8 @@ nonisolated enum WorkspaceBrowserError: LocalizedError {
 
 nonisolated enum WorkspaceBrowserURL {
     private static let maximumPort = 65_535
+    private static let httpPort = 80
+    private static let httpsPort = 443
     private static let localAliases: Set<String> = ["localhost", "daemon.localhost", "0.0.0.0", "[::]", "[::1]"]
 
     static func normalize(_ input: String) throws -> String {
@@ -67,6 +112,32 @@ nonisolated enum WorkspaceBrowserURL {
         guard let normalized = components.url?.absoluteString else { throw WorkspaceBrowserError.invalidURL }
         return normalized
     }
+
+    static func tabURL(current: String, requested: String?) -> String? {
+        let currentURL = try? normalize(current)
+        guard let requested, let requestedURL = try? normalize(requested) else { return currentURL }
+        guard let currentURL else {
+            return current.isEmpty || current == "about:blank" ? requestedURL : nil
+        }
+        if origin(currentURL) == origin(requestedURL) { return currentURL }
+        // The registry retains the pre-rewrite address and rebases its path as
+        // the desktop navigates. Its loaded address can use a desktop-only port.
+        let host = URLComponents(string: requestedURL)?.host
+        return host == "127.0.0.1" || host == "client.localhost" ? requestedURL : currentURL
+    }
+
+    static func matchesServer(_ tab: String, server: String) -> Bool {
+        if tab == server { return true }
+        guard origin(tab) == origin(server), let components = URLComponents(string: server) else { return false }
+        return ["", "/"].contains(components.path) && components.query == nil && components.fragment == nil
+    }
+
+    private static func origin(_ url: String) -> String? {
+        guard let components = URLComponents(string: url),
+              let scheme = components.scheme, let host = components.host else { return nil }
+        let port = components.port ?? (scheme == "https" ? httpsPort : httpPort)
+        return "\(scheme)://\(host):\(port)"
+    }
 }
 
 @MainActor
@@ -82,7 +153,7 @@ final class WorkspaceBrowserPersistence {
     func load() -> [WorkspaceBrowser] {
         guard let key, let data = defaults.data(forKey: key),
               let browsers = try? JSONDecoder().decode([WorkspaceBrowser].self, from: data) else { return [] }
-        return browsers.filter { $0.command == nil && (try? WorkspaceBrowserURL.normalize($0.url)) == $0.url }
+        return browsers.filter { $0.isSavedSession && (try? WorkspaceBrowserURL.normalize($0.url)) == $0.url }
     }
 
     func save(_ browsers: [WorkspaceBrowser]) {

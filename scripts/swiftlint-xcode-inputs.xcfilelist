@@ -604,6 +604,7 @@ $(SRCROOT)/IntentTests/WorkspaceBrowserFixture.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserPageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserStoreTests.swift
+$(SRCROOT)/IntentTests/WorkspaceBrowserTabTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift

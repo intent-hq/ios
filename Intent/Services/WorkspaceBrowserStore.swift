@@ -5,9 +5,15 @@ import Observation
 @MainActor
 @Observable
 final class WorkspaceBrowserStore {
+    private static let methodNotFoundCode = -32_601
+    private static let eventTypes = [
+        "script:state", "script:changed", "browser:tab-opened", "browser:tab-updated", "browser:tab-closed"
+    ]
+
     private(set) var isConnected: Bool
     private var saved: [WorkspaceBrowser]
     private var detected: [String: [WorkspaceBrowser]] = [:]
+    private var tabs: [String: [WorkspaceBrowser]] = [:]
     private var dismissed: [String: Set<String>] = [:]
     private var errors: [String: String] = [:]
 
@@ -43,10 +49,15 @@ final class WorkspaceBrowserStore {
     }
 
     func browsers(workspaceId: String) -> [WorkspaceBrowser] {
-        let servers = detected[workspaceId, default: []].filter { browser in
+        let discovered = WorkspaceBrowser.merging(
+            scripts: detected[workspaceId, default: []],
+            tabs: tabs[workspaceId, default: []]
+        )
+        let servers = discovered.filter { browser in
             !dismissed[workspaceId, default: []].contains(browser.id)
         }
-        return servers + saved.filter { $0.workspaceId == workspaceId }
+        let discoveredURLs = Set(servers.map(\.url))
+        return servers + saved.filter { $0.workspaceId == workspaceId && !discoveredURLs.contains($0.url) }
     }
 
     func errorMessage(workspaceId: String) -> String? { errors[workspaceId] }
@@ -69,6 +80,14 @@ final class WorkspaceBrowserStore {
         saved.append(browser)
         persistence.save(saved)
         return browser
+    }
+
+    func open(workspaceId: String, url: String) throws -> WorkspaceBrowser {
+        let normalized = try WorkspaceBrowserURL.normalize(url)
+        if let existing = browsers(workspaceId: workspaceId).first(where: { $0.url == normalized }) {
+            return existing
+        }
+        return try create(workspaceId: workspaceId, url: normalized)
     }
 
     func remove(_ browser: WorkspaceBrowser) {
@@ -97,26 +116,43 @@ final class WorkspaceBrowserStore {
             do {
                 try await ensureSubscribed(generation: currentGeneration)
                 guard isCurrent(currentGeneration) else { return }
-                let response = try await connection.request("script.list", params: ["workspaceId": workspaceId])
-                guard isCurrent(currentGeneration) else { return }
+                let scripts = await discovery(workspaceId: workspaceId, method: "script.list", key: "scripts")
+                guard isCurrent(currentGeneration), revisions[workspaceId, default: 0] == revision else { continue }
+                let browserTabs = await discovery(workspaceId: workspaceId, method: "browser.listTabs", key: "tabs")
                 // Events can invalidate a list already in flight. Coalesce all of them
                 // into one trailing fetch rather than publishing the stale snapshot.
-                guard revisions[workspaceId, default: 0] == revision else { continue }
-                guard let result = response as? [String: Any],
-                      let scripts = result["scripts"] as? [[String: Any]] else {
-                    throw WorkspaceBrowserError.invalidResponse
-                }
-                var seen: Set<String> = []
-                detected[workspaceId] = scripts.compactMap { WorkspaceBrowser.detected(script: $0, workspaceId: workspaceId) }
-                    .filter { seen.insert($0.id).inserted }
-                errors[workspaceId] = nil
+                guard isCurrent(currentGeneration), revisions[workspaceId, default: 0] == revision else { continue }
+                if scripts.error == nil { detected[workspaceId] = scripts.browsers }
+                if browserTabs.error == nil { tabs[workspaceId] = browserTabs.browsers }
+                errors[workspaceId] = scripts.error ?? browserTabs.error
                 return
             } catch {
-                guard isCurrent(currentGeneration) else { return }
-                guard revisions[workspaceId, default: 0] == revision else { continue }
+                guard isCurrent(currentGeneration), revisions[workspaceId, default: 0] == revision else { continue }
                 errors[workspaceId] = error.localizedDescription
                 return
             }
+        }
+    }
+
+    private func discovery(workspaceId: String, method: String, key: String) async -> (browsers: [WorkspaceBrowser], error: String?) {
+        do {
+            let response = try await connection.request(method, params: ["workspaceId": workspaceId])
+            guard let result = response as? [String: Any], let rows = result[key] as? [[String: Any]] else {
+                throw WorkspaceBrowserError.invalidResponse
+            }
+            var seen: Set<String> = []
+            let browsers = rows.compactMap { row in
+                key == "scripts"
+                    ? WorkspaceBrowser.detected(script: row, workspaceId: workspaceId)
+                    : WorkspaceBrowser.detected(tab: row, workspaceId: workspaceId)
+            }
+            .filter { seen.insert($0.id).inserted }
+            return (browsers, nil)
+        } catch {
+            if method == "browser.listTabs", (error as NSError).code == Self.methodNotFoundCode {
+                return ([], nil)
+            }
+            return ([], error.localizedDescription)
         }
     }
 
@@ -128,7 +164,7 @@ final class WorkspaceBrowserStore {
         } else {
             task = Task { [connection] in
                 let response = try await connection.request("events.subscribe", params: [
-                    "eventTypes": ["script:state", "script:changed"], "replaceGroup": "ios-workspace-browsers"
+                    "eventTypes": Self.eventTypes, "replaceGroup": "ios-workspace-browsers"
                 ])
                 guard let result = response as? [String: Any],
                       let id = result["subscriptionId"] as? String, !id.isEmpty else {
@@ -157,6 +193,7 @@ final class WorkspaceBrowserStore {
         for task in refreshTasks.values { task.cancel() }
         refreshTasks.removeAll()
         detected.removeAll()
+        tabs.removeAll()
         errors.removeAll()
         if isConnected {
             for workspaceId in observedWorkspaces { _ = refreshTask(workspaceId: workspaceId) }
@@ -166,16 +203,37 @@ final class WorkspaceBrowserStore {
     private func handleEvent(_ method: String, params: Any) {
         guard isConnected, method == "events.event", let envelope = params as? [String: Any],
               let event = envelope["event"] as? [String: Any],
-              let type = event["type"] as? String, ["script:state", "script:changed"].contains(type),
+              let type = event["type"] as? String, Self.eventTypes.contains(type),
               let workspaceId = event["workspaceId"] as? String, observedWorkspaces.contains(workspaceId),
-              let data = event["data"] as? [String: Any], let scriptId = data["scriptId"] as? String else { return }
-        if let subscriptionId, envelope["subscriptionId"] as? String != subscriptionId { return }
-        revisions[workspaceId, default: 0] += 1
-        let stopped = type == "script:state" && data["status"] as? String != "running"
-        let removed = type == "script:changed" && data["action"] as? String == "removed"
-        if stopped || removed {
-            detected[workspaceId]?.removeAll { $0.id == "script:\(scriptId)" }
+              let data = event["data"] as? [String: Any] else { return }
+        guard let subscriptionId, envelope["subscriptionId"] as? String == subscriptionId else { return }
+        if type.hasPrefix("browser:") {
+            guard applyTabEvent(type, data: data, workspaceId: workspaceId) else { return }
+        } else {
+            guard let scriptId = data["scriptId"] as? String else { return }
+            let stopped = type == "script:state" && data["status"] as? String != "running"
+            let removed = type == "script:changed" && data["action"] as? String == "removed"
+            if stopped || removed { detected[workspaceId]?.removeAll { $0.id == "script:\(scriptId)" } }
         }
+        revisions[workspaceId, default: 0] += 1
         _ = refreshTask(workspaceId: workspaceId)
+    }
+
+    private func applyTabEvent(_ type: String, data: [String: Any], workspaceId: String) -> Bool {
+        guard let tab = data["tab"] as? [String: Any],
+              tab["workspaceId"] as? String == workspaceId,
+              let id = tab["tabId"] as? String, !id.isEmpty else { return false }
+        let browser = WorkspaceBrowser.detected(tab: tab, workspaceId: workspaceId)
+        let index = tabs[workspaceId, default: []].firstIndex { $0.id == "tab:\(id)" }
+        if type == "browser:tab-closed" || browser == nil {
+            tabs[workspaceId]?.removeAll { $0.id == "tab:\(id)" }
+        } else if let browser {
+            if let index {
+                tabs[workspaceId]?[index] = browser
+            } else {
+                tabs[workspaceId, default: []].append(browser)
+            }
+        }
+        return true
     }
 }

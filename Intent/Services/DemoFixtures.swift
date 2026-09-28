@@ -374,6 +374,7 @@ extension DemoFixtures {
     }
 
     static func transcriptMessages(agentId: String?) -> [[String: Any]] {
+        if agentId == "demo-agent-implementor", let messages = DemoBrowserFixtures.conversationMessages { return messages }
         if let designScenario, agentId == DemoDesignFixtures.agentId { return designScenario.messages }
         if inlineImageConversationRequested(by: ProcessInfo.processInfo.arguments),
            agentId == inlineImageAgentId {

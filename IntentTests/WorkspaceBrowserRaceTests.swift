@@ -121,4 +121,70 @@ struct WorkspaceBrowserRaceTests {
         await fixture.store.refresh(workspaceId: "workspace")
         #expect(fixture.store.errorMessage(workspaceId: "workspace") == nil)
     }
+
+    @Test func tabCloseDuringAListCannotResurrectTheClosedTab() async throws {
+        let fixture = try WorkspaceBrowserFixture()
+        let tab = fixture.tab()
+        fixture.fake.responseMap["browser.listTabs"] = ["tabs": [tab]]
+        await fixture.store.refresh(workspaceId: "workspace")
+        fixture.fake.pendingMethods.insert("browser.listTabs")
+        let refresh = Task { await fixture.store.refresh(workspaceId: "workspace") }
+        try await fixture.fake.waitForPendingRequests("browser.listTabs")
+        fixture.tabEvent(tab: tab, type: "browser:tab-closed")
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
+        fixture.fake.resolvePending("browser.listTabs", with: ["tabs": [tab]])
+        try await fixture.fake.waitForPendingRequests("browser.listTabs")
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
+        fixture.fake.resolvePending("browser.listTabs", with: ["tabs": []])
+        await refresh.value
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
+    }
+
+    @Test func tabUpdateStormCoalescesAndPreservesManualChanges() async throws {
+        let fixture = try WorkspaceBrowserFixture()
+        fixture.fake.pendingMethods.insert("browser.listTabs")
+        let refresh = Task { await fixture.store.refresh(workspaceId: "workspace") }
+        try await fixture.fake.waitForPendingRequests("browser.listTabs")
+        let tab = fixture.tab(url: "localhost:3000/settings?q=2")
+        let eventCount = 20
+        for _ in 0..<eventCount { fixture.tabEvent(tab: tab, type: "browser:tab-updated") }
+        let manual = try fixture.store.open(workspaceId: "workspace", url: "localhost:4000/docs")
+        fixture.fake.resolvePending("browser.listTabs", with: ["tabs": []])
+        try await fixture.fake.waitForPendingRequests("browser.listTabs")
+        #expect(fixture.store.browsers(workspaceId: "workspace").first?.url == "http://127.0.0.1:3000/settings?q=2")
+        fixture.fake.resolvePending("browser.listTabs", with: ["tabs": [tab]])
+        await refresh.value
+        #expect(fixture.store.browsers(workspaceId: "workspace").last == manual)
+        #expect(fixture.fake.paramsForMethod("browser.listTabs").count == 2)
+    }
+
+    @Test func reconnectRejectsThePreviousConnectionsTabSnapshot() async throws {
+        let fixture = try WorkspaceBrowserFixture()
+        fixture.fake.pendingMethods.insert("browser.listTabs")
+        let oldRefresh = Task { await fixture.store.refresh(workspaceId: "workspace") }
+        try await fixture.fake.waitForPendingRequests("browser.listTabs")
+        fixture.fake.connectionState = .disconnected
+        fixture.fake.pendingMethods.remove("browser.listTabs")
+        fixture.fake.responseMap["browser.listTabs"] = ["tabs": [fixture.tab(url: "localhost:3000/new")]]
+        fixture.fake.connectionState = .connected
+        fixture.fake.resolvePending("browser.listTabs", with: ["tabs": [fixture.tab(url: "localhost:3000/old")]])
+        await oldRefresh.value
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.browsers(workspaceId: "workspace").first?.url == "http://127.0.0.1:3000/new")
+        #expect(fixture.store.errorMessage(workspaceId: "workspace") == nil)
+    }
+
+    @Test func oldTabEventsAreIgnoredWhileTheNewSubscriptionIsPending() async throws {
+        let fixture = try WorkspaceBrowserFixture()
+        await fixture.store.refresh(workspaceId: "workspace")
+        fixture.fake.connectionState = .disconnected
+        fixture.fake.pendingMethods.insert("events.subscribe")
+        fixture.fake.connectionState = .connected
+        try await fixture.fake.waitForPendingRequests("events.subscribe")
+        fixture.tabEvent(tab: fixture.tab())
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
+        fixture.fake.resolvePending("events.subscribe", with: ["subscriptionId": "new-sub"])
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
+    }
 }
