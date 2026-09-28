@@ -41,6 +41,8 @@ enum AgentDetailError: LocalizedError {
 /// through its coalesced trailing read (proposal mutations use this path).
 @MainActor @Observable
 final class AgentDetailStore {
+    let summaries = AgentSummaryStore()
+    @ObservationIgnored private let requestLimiter = AgentDetailRequestLimiter()
     /// Cancellation can arrive off-actor while the shared request is suspended.
     /// Record it synchronously so a late reply cannot start work for a dead caller.
     nonisolated private final class LoadInterest: Sendable {
@@ -134,6 +136,11 @@ final class AgentDetailStore {
     private func load(agentId: String, workspaceId: String?, refresh: Bool, activation: Int?) async throws -> AgentDetail {
         try Task.checkCancellation()
         let entry = entry(for: agentId)
+        if entry.task?.isCancelled == true {
+            entry.task = nil
+            entry.requestID = UUID()
+            entry.fresh = false
+        }
         if let activation {
             guard activation == entry.activationGeneration, !entry.consumers.isEmpty else { throw CancellationError() }
         }
@@ -158,6 +165,10 @@ final class AgentDetailStore {
             try await task.value
         } onCancel: {
             interest.cancel()
+            Task { @MainActor [weak self] in
+                guard let self, !hasInterest(in: entry) else { return }
+                entry.task?.cancel()
+            }
         }
         try Task.checkCancellation()
         guard epoch == self.connectionEpoch else { throw CancellationError() }
@@ -181,6 +192,7 @@ final class AgentDetailStore {
 
     func reset() {
         connectionEpoch &+= 1
+        summaries.reset()
         for entry in entries.values {
             entry.task?.cancel()
             entry.task = nil
@@ -204,6 +216,8 @@ final class AgentDetailStore {
     private func read(agentId: String, entry: Entry, requestID: UUID, epoch: Int) async throws -> AgentDetail {
         defer { if entry.requestID == requestID { entry.task = nil } }
         do {
+            try await requestLimiter.acquire()
+            defer { requestLimiter.release() }
             for round in 0..<2 {
                 try Task.checkCancellation()
                 guard hasInterest(in: entry) else { throw CancellationError() }
@@ -211,10 +225,12 @@ final class AgentDetailStore {
                 let invalidation = entry.invalidation
                 let revision = entry.revision
                 let sequence = nextStateSequence()
+                let summaryBoundary = summaries.beginRead()
                 // Agent ids are backend-wide. Do not accidentally scope a
                 // watched child to its parent's workspace; validate per caller.
                 let response = try await connection.request("agent.get", params: ["agentId": agentId])
-                guard epoch == self.connectionEpoch, entry.requestID == requestID else { throw CancellationError() }
+                try Task.checkCancellation()
+                guard epoch == self.connectionEpoch, entry.requestID == requestID, hasInterest(in: entry) else { throw CancellationError() }
                 guard let envelope = response as? [String: Any],
                       let values = envelope["agent"] as? [String: Any], !values.isEmpty else {
                     throw AgentDetailError.invalidResponse
@@ -227,6 +243,7 @@ final class AgentDetailStore {
                     throw CancellationError()
                 }
                 snapshots[agentId] = detail
+                summaries.seed([detail.values], since: summaryBoundary)
                 entry.workspaceId = detail.values["workspaceId"] as? String
                 entry.fresh = invalidation == entry.invalidation && activationGeneration == entry.activationGeneration
                 return detail
@@ -308,6 +325,7 @@ final class AgentDetailStore {
     }
 
     private func handleEvent(_ params: Any) {
+        summaries.handleEvent(params)
         guard let envelope = params as? [String: Any] else { return }
         let event = envelope["event"] as? [String: Any] ?? envelope
         guard let type = event["type"] as? String, let data = event["data"] as? [String: Any],

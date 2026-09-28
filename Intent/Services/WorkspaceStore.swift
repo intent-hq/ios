@@ -9,6 +9,11 @@ import Observation
     var workspaces: [Workspace] = []
     var lastUpdated: Date?
     var isLoading = false
+    var agentSummaries: AgentSummaryStore? {
+        didSet {
+            if let agentSummaries { agentSummaries.seedWorkspaces(workspaces, since: agentSummaries.beginRead()) }
+        }
+    }
 
     @ObservationIgnored private var fetchTask: Task<Void, Never>?
     @ObservationIgnored private var connectionObserver: AnyCancellable?
@@ -94,8 +99,9 @@ import Observation
             isLoading = false
         }
         do {
+            let summaryBoundary = agentSummaries?.beginRead()
             let result = try await connectionManager.request("workspace.list")
-            publishFetchedWorkspaces(Self.parseWorkspaces(from: result))
+            publishFetchedWorkspaces(Self.parseWorkspaces(from: result), summaryBoundary: summaryBoundary)
         } catch {
             AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
         }
@@ -105,7 +111,15 @@ import Observation
     /// so observers that gate on "fetched at least once" (e.g. AppCoordinator's
     /// missing-workspace validation) see a non-nil `lastUpdated` on the very first
     /// post-fetch change.
-    func publishFetchedWorkspaces(_ parsed: [Workspace]) {
+    func publishFetchedWorkspaces(_ parsed: [Workspace], summaryBoundary: AgentSummaryStore.ReadBoundary? = nil) {
+        if let agentSummaries {
+            let changed = parsed.filter { incoming in
+                summaryBoundary != nil
+                    || workspaces.first { $0.id == incoming.id }?.agentSummaryAgents != incoming.agentSummaryAgents
+                    || incoming.agentSummaryAgents.contains { agentSummaries.cached(agentId: $0.id).isEmpty }
+            }
+            agentSummaries.seedWorkspaces(changed, since: summaryBoundary ?? agentSummaries.beginRead())
+        }
         lastUpdated = Date()
         workspaces = parsed
     }

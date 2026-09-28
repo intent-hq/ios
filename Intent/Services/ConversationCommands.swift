@@ -62,6 +62,9 @@ final class ConversationCommands {
     struct SubscriptionSnapshot {
         let watchedAgentIds: [String]
         let delegationGroupStatus: (completed: Int, total: Int)?
+        let groups: [WatchedAgentGroup]
+        let agentStatuses: [String: String]
+        let summaryBoundary: AgentSummaryStore.ReadBoundary
     }
 
     var queuedMessages: [QueuedMessage] = [] {
@@ -428,16 +431,19 @@ extension ConversationCommands {
         agentId: String,
         workspaceId: String
     ) async throws -> SubscriptionSnapshot? {
+        let summaryBoundary = agentDetails.summaries.beginRead()
         let result = try await connectionManager.request(
             "agent.getSubscriptions",
             params: ["agentId": agentId, "workspaceId": workspaceId]
         )
         guard let response = result as? [String: Any] else { return nil }
         let subscriptions = response["subscriptions"] as? [[String: Any]] ?? []
-        let groups = response["delegationGroups"] as? [[String: Any]] ?? []
+        let groups = (response["delegationGroups"] as? [[String: Any]] ?? []).map(WatchedAgentGroup.init)
         var agentIds = Set<String>()
         for group in groups {
-            agentIds.formUnion(group["expectedAgentIds"] as? [String] ?? [])
+            agentIds.formUnion(group.expectedAgentIds)
+            agentIds.formUnion(group.completedAgentIds)
+            agentIds.formUnion(group.deletedAgentIds)
         }
         for subscription in subscriptions {
             if let actorIds = subscription["actorIds"] as? [String] {
@@ -449,12 +455,16 @@ extension ConversationCommands {
         let status: (completed: Int, total: Int)? = groups.isEmpty ? nil : groups.reduce(
             into: (completed: 0, total: 0)
         ) { status, group in
-            status.completed += (group["completedAgentIds"] as? [String])?.count ?? 0
-            status.total += (group["expectedAgentIds"] as? [String])?.count ?? 0
+            status.completed += group.completedAgentIds.union(group.deletedAgentIds).count
+            status.total += group.expectedAgentIds.count
         }
         return SubscriptionSnapshot(
-            watchedAgentIds: Array(agentIds),
-            delegationGroupStatus: status
+            watchedAgentIds: agentIds.sorted(),
+            delegationGroupStatus: status,
+            groups: groups,
+            agentStatuses: (response["agentStatuses"] as? [String: Any] ?? [:])
+                .compactMapValues { $0 as? String }.filter { agentIds.contains($0.key) },
+            summaryBoundary: summaryBoundary
         )
     }
 
@@ -462,24 +472,6 @@ extension ConversationCommands {
         _ = try await connectionManager.request(
             "agent.cancelSubscriptions",
             params: ["agentId": agentId, "workspaceId": workspaceId]
-        )
-    }
-
-    func fetchAgent(agentId: String) async throws -> AgentSession? {
-        let detail = try await agentDetails.load(agentId: agentId, refresh: true)
-        return AgentSession.parseAgent(detail.values)
-    }
-
-    func listAgents(workspaceId: String, watchedAgentIds: [String]) async throws -> AgentListFetchResult {
-        let result = try await connectionManager.request(
-            "agent.list",
-            params: ["workspaceId": workspaceId]
-        )
-        guard let response = result as? [String: Any],
-              let dictionaries = response["agents"] as? [[String: Any]] else { return .unavailable }
-        let watchedSet = Set(watchedAgentIds)
-        return .sessions(
-            dictionaries.compactMap(AgentSession.parseAgent).filter { watchedSet.contains($0.id) }
         )
     }
 

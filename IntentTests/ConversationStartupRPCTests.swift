@@ -118,9 +118,9 @@ struct ConversationStartupRPCTests {
         #expect(proposals.pendingCount == 0)
     }
 
-    @Test func unrelatedWorkspaceRowsIncreaseWatchedResponseBytes() async throws {
+    @Test func unrelatedWorkspaceRowsDoNotChangeWatchedStartupTraffic() async throws {
         var measurements: [RPCTraffic] = []
-        for unrelatedCount in [0, 1000] {
+        for unrelatedCount in [10, 10_000] {
             let fixture = ConversationStartupFixture()
             defer { fixture.stop() }
             fixture.watchedIds = [ConversationStartupFixture.childId]
@@ -130,9 +130,10 @@ struct ConversationStartupRPCTests {
             let traffic = fixture.connection.traffic()
             print("Watched fixture, unrelated agents \(unrelatedCount): \(traffic.summary)")
             measurements.append(traffic)
-            #expect(viewModel.store.watchedAgents.map(\.id) == [ConversationStartupFixture.childId])
-            #expect(traffic.calls("agent.list").count == 1)
-            #expect(traffic.requests.count == 9)
+            #expect(viewModel.store.watchedAgentIds == [ConversationStartupFixture.childId])
+            #expect(traffic.calls("agent.list").isEmpty)
+            // Cold status adds four to the four core reads. No row is visible yet.
+            #expect(traffic.requests.count == 8)
             #expect(traffic.calls("chat.subscribe").count == 1)
             #expect(traffic.pendingCount == 0 && traffic.failures.isEmpty)
         }
@@ -141,8 +142,8 @@ struct ConversationStartupRPCTests {
         #expect(small.methodCounts == large.methodCounts)
         #expect(small.requestBytes == large.requestBytes)
         #expect(small.notificationBytes == large.notificationBytes)
-        #expect(large.responseBytes > small.responseBytes)
-        #expect(large.totalBytes > small.totalBytes)
+        #expect(large.responseBytes == small.responseBytes)
+        #expect(large.totalBytes == small.totalBytes)
     }
 
     @Test func deferredSelectedCatalogIsCountedAndReusedButSpecialistsStillRead() async {

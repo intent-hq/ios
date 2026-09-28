@@ -71,6 +71,7 @@ final class BackendSession {
     let assistantStore: AssistantStore
     /// Authoritative detail state shared by routes, conversations and proposal cards.
     let agentDetails: AgentDetailStore
+    var agentSummaries: AgentSummaryStore { agentDetails.summaries }
     let conversations: ConversationStorePool
     /// Session-lifetime GitHub repo cache for the New Workspace repo step;
     /// outlives the sheet so a reopen renders the cached list instantly.
@@ -105,9 +106,10 @@ final class BackendSession {
         self.backendID = backendID
         self.connection = connection
         self.workspaceStore = workspaceStore
-        self.assistantStore = AssistantStore(connection: connection)
         let details = AgentDetailStore(connection: connection)
         self.agentDetails = details
+        workspaceStore.agentSummaries = details.summaries
+        self.assistantStore = AssistantStore(connection: connection, summaries: details.summaries)
         self.conversations = ConversationStorePool(connection: connection, details: details)
         self.coordinatorFactory = coordinatorFactory
         self.githubRepoStore = githubRepoStore

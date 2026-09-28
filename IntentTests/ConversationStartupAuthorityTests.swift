@@ -110,7 +110,9 @@ struct ConversationStartupAuthorityTests {
         await firstLoad.value
         await validLoad.value
         #expect(valid.store.watchedAgentIds == [ConversationStartupFixture.childId])
-        #expect(connection.paramsForMethod("agent.list").compactMap { $0["workspaceId"] as? String } == [ConversationStartupFixture.workspaceId])
+        #expect(connection.paramsForMethod("agent.list").isEmpty)
+        #expect(valid.store.watchedAgentCoordinator.row(ConversationStartupFixture.childId).agent.status == "active")
+        #expect(!valid.store.watchedAgentCoordinator.row(ConversationStartupFixture.childId).hasSummary)
         #expect(connection.paramsForMethod("agent.getSubscriptions").count == (staleHint ? 2 : 1))
         for method in ["chat.subscribe", "agent.get", "agent.getQueue"] { #expect(connection.paramsForMethod(method).count == 1) }
         first.teardownLiveStores()
@@ -160,7 +162,9 @@ struct ConversationStartupAuthorityTests {
         defer { load.cancel(); fixture.stop() }
         try await connection.waitForPendingRequests("agent.getSubscriptions")
         connection.resolvePending("agent.getSubscriptions", with: fixture.subscriptions())
-        try await expectNever("children before failed authority") { connection.didCallMethod("agent.list") }
+        try await expectNever("children before failed authority") {
+            !model.store.watchedAgentIds.isEmpty || !fixture.session.agentSummaries.cached(agentId: ConversationStartupFixture.childId).isEmpty
+        }
         if missingWorkspace {
             var agent = fixture.agent(ConversationStartupFixture.parentId)
             agent["workspaceId"] = nil
@@ -176,12 +180,12 @@ struct ConversationStartupAuthorityTests {
         try await waitUntil("recovered subscriptions") { model.isEntryScrollReady && model.store.watchedAgents.count == 1 }
         #expect(connection.paramsForMethod("agent.getSubscriptions").count == 2)
         #expect(connection.paramsForMethod("agent.get").count == 2)
-        #expect(connection.paramsForMethod("agent.list").count == 1)
+        #expect(connection.paramsForMethod("agent.list").isEmpty)
         #expect(connection.paramsForMethod("chat.subscribe").count == 1)
         let traffic = connection.traffic()
         #expect(traffic.methodCounts == [
             "chat.subscribe": 1, "agent.get": 2, "agent.getQueue": 1, "agent.getSubscriptions": 2,
-            "agent.list": 1, "events.subscribe": 2, "hook.list": 1, "prMonitor.list": 1
+            "events.subscribe": 2, "hook.list": 1, "prMonitor.list": 1
         ])
         #expect(traffic.pendingCount == 0 && traffic.failures.count == (missingWorkspace ? 0 : 1))
         print("Authority failure and recovery missingWorkspace=\(missingWorkspace), all startup side calls: \(traffic.summary)")
@@ -216,7 +220,9 @@ struct ConversationStartupAuthorityTests {
         connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
         await firstLoad.value
         await secondLoad.value
-        try await expectNever("late authority applies closed-window children") { connection.didCallMethod("agent.list") }
+        try await expectNever("late authority applies closed-window children") {
+            !second.store.watchedAgentIds.isEmpty || !fixture.session.agentSummaries.cached(agentId: ConversationStartupFixture.childId).isEmpty
+        }
         try await waitUntil("exact final cleanup") { connection.traffic().calls("chat.unsubscribe").first?.completed != nil }
         #expect(connection.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == [registration])
         #expect(connection.paramsForMethod("agent.getSubscriptions").count == 1)
@@ -242,7 +248,7 @@ struct ConversationStartupAuthorityTests {
         let traffic = connection.traffic()
         #expect(traffic.methodCounts == [
             "chat.subscribe": 1, "chat.unsubscribe": 1, "agent.get": 1, "agent.getQueue": 1,
-            "agent.getSubscriptions": staleHint ? 2 : 1, "agent.list": 1,
+            "agent.getSubscriptions": staleHint ? 2 : 1,
             "events.subscribe": registrations, "events.unsubscribe": registrations, "hook.list": lists, "prMonitor.list": lists
         ])
         #expect(traffic.pendingCount == 0 && traffic.failures.isEmpty)

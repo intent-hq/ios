@@ -299,6 +299,7 @@ $(SRCROOT)/Intent/Models/PendingFile.swift
 $(SRCROOT)/Intent/Models/PrMonitorWakeAttribution.swift
 $(SRCROOT)/Intent/Models/Question.swift
 $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
+$(SRCROOT)/Intent/Models/WatchedAgentRow.swift
 $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
 $(SRCROOT)/Intent/Models/WorkspaceTask.swift
 $(SRCROOT)/Intent/PersistenceKeychainStorage.swift
@@ -334,8 +335,10 @@ $(SRCROOT)/Intent/Resources
 $(SRCROOT)/Intent/Resources/Fonts
 $(SRCROOT)/Intent/Resources/Fonts/Inter
 $(SRCROOT)/Intent/Services
+$(SRCROOT)/Intent/Services/AgentDetailRequestLimiter.swift
 $(SRCROOT)/Intent/Services/AgentDetailStore.swift
 $(SRCROOT)/Intent/Services/AgentStore.swift
+$(SRCROOT)/Intent/Services/AgentSummaryStore.swift
 $(SRCROOT)/Intent/Services/AssistantStore.swift
 $(SRCROOT)/Intent/Services/AttachmentImageLoader.swift
 $(SRCROOT)/Intent/Services/AttachmentUploadService.swift
@@ -622,6 +625,7 @@ $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
 $(SRCROOT)/IntentTests/AgentSessionDisplayTests.swift
 $(SRCROOT)/IntentTests/AgentSessionTests.swift
 $(SRCROOT)/IntentTests/AgentStoreTests.swift
+$(SRCROOT)/IntentTests/AgentWaitingViewTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorAssistantTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorAutoOpenTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorBackendRegistryTests.swift
@@ -728,6 +732,10 @@ $(SRCROOT)/IntentTests/ConversationViewModelRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelSeenTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelTests.swift
+$(SRCROOT)/IntentTests/ConversationWatchedAgentsConcurrencyTests.swift
+$(SRCROOT)/IntentTests/ConversationWatchedAgentsEventTests.swift
+$(SRCROOT)/IntentTests/ConversationWatchedAgentsLifetimeTests.swift
+$(SRCROOT)/IntentTests/ConversationWatchedAgentsTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceBranchTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCatalogTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCreationGateTests.swift

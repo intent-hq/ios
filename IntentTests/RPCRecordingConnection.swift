@@ -16,6 +16,9 @@ final class RPCRecordingConnection: FakeConnectionManager {
     /// Fixture responses selected by the actual request params. Use
     /// pendingMethods to pause these; resolvePending then supplies the reply.
     var responseForRequest: ((String, [String: Any]) -> Any?)?
+    /// An opt-in non-cooperative server response barrier. The normal ledger
+    /// still records start, late completion and errors around this response.
+    var suspendedResponse: (@MainActor (String, [String: Any]) async throws -> Any?)?
 
     /// Holds publisher delivery, not connection state or requests. Releasing
     /// emits the current state once so tests control initial connected replay
@@ -80,7 +83,12 @@ final class RPCRecordingConnection: FakeConnectionManager {
             if let response = responseForRequest?(method, params) {
                 responseMap[method] = response
             }
-            let result = try await super.request(method, params: params, timeout: timeout)
+            let result: Any
+            if let suspended = try await suspendedResponse?(method, params) {
+                result = suspended
+            } else {
+                result = try await super.request(method, params: params, timeout: timeout)
+            }
             recordedRequests[index].responseJSON = try RPCFixtureJSON.response(result)
             recordedRequests[index].completed = milestone()
             return result

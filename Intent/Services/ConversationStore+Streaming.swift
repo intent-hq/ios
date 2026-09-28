@@ -134,6 +134,7 @@ extension ConversationStore {
                 agentNotFound = true
                 clearPendingQuestionRecovery()
             }
+            handleWatchedDeletion(eventAgentId)
             return false
         case "agent:subscribed", "agent:unsubscribed", "agent:woken-by-subscription":
             refreshSubscriptions()
@@ -158,6 +159,12 @@ extension ConversationStore {
             break
         }
         return eventAgentId == agentId
+    }
+
+    private func handleWatchedDeletion(_ eventAgentId: String?) {
+        guard let eventAgentId, watchedAgentIds.contains(eventAgentId) else { return }
+        watchedAgentCoordinator.handleStatusChange(agentId: eventAgentId)
+        refreshSubscriptions()
     }
 
     private func refreshSubscriptions() {
@@ -235,6 +242,9 @@ extension ConversationStore {
         let data = envelope["data"] as? [String: Any] ?? [:]
         if let workspace = (data["workspaceId"] ?? envelope["workspaceId"]) as? String,
            let workspaceId, workspace != workspaceId, data["agentId"] as? String == agentId { return true }
+        if let child = data["agentId"] as? String, child != agentId, watchedAgentIds.contains(child),
+           let workspace = (data["workspaceId"] ?? envelope["workspaceId"]) as? String,
+           let known = watchedAgentCoordinator.row(child).workspaceId, workspace != known { return true }
         return false
     }
 
