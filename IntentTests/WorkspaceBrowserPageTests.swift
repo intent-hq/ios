@@ -1,6 +1,7 @@
 import Foundation
 @testable import Intent
 import Testing
+import WebKit
 
 @MainActor
 struct WorkspaceBrowserPageTests {
@@ -117,7 +118,8 @@ struct WorkspaceBrowserLinkTests {
     @Test func workspaceWebLinksUseTheBrowserAndKeepTheirAddress() throws {
         let fixture = try WorkspaceBrowserFixture()
         let url = try #require(URL(string: "http://daemon.localhost:5173/preview?view=phone#details"))
-        let browser = try #require(MarkdownTextView.workspaceBrowser(for: url, workspaceId: "workspace", store: fixture.store))
+        let opened = try MarkdownTextView.workspaceBrowser(for: url, workspaceId: "workspace", store: fixture.store)
+        let browser = try #require(opened)
         #expect(browser.url == "http://127.0.0.1:5173/preview?view=phone#details")
         #expect(fixture.store.browsers(workspaceId: "workspace") == [browser])
         #expect(try MarkdownTextView.workspaceBrowser(for: url, workspaceId: "workspace", store: fixture.store) == browser)
