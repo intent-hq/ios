@@ -1,0 +1,35 @@
+# UI smoke tests run by the "iOS UI Tests" job on pull requests and the merge
+# queue. The full IntentUITests bundle (about an hour) runs on main at
+# 09:00 and 21:00 UTC and on `gh workflow run ci.yml -f ui_suite=full`.
+#
+# One IntentUITests/Suite/test selector per line; `#` starts a comment. Keep
+# the list short (under ~10 minutes of test time): one or two fast tests per
+# core flow. A renamed or deleted test fails the job with exit 82 from
+# scripts/xcodebuild.sh, so update this file along with the test.
+
+# Pairing and connections
+IntentUITests/PairingDesignUITests/testSavedConnectionActionsRemainAvailableWhenEmpty
+IntentUITests/ManualConnectionDesignUITests/testEmptyAndFilledReferencePlacement
+IntentUITests/ConnectionLossUITests/testSustainedBackgroundLossPresentsOverlayAndHomeStillWorks
+IntentUITests/ConnectionLossUITests/testPermissionAndCertificateFailureRemainInline
+
+# Workspaces
+IntentUITests/WorkspaceEntryUITests/testCreateNewAgentMenuOpensAgentSetup
+IntentUITests/WorkspaceEntryUITests/testDelegatedAgentRowOpensConversationFromIndentation
+IntentUITests/WorkspaceSearchUITests/testSearchFiltersAndClearAndCancelRestoreWorkspaces
+IntentUITests/WorkspaceScriptUITests/testRepositoryScriptsAppearBesideSavedCommandAndRegisterOnFirstLaunch
+IntentUITests/WorkspaceStatusImageUITests/testStatusImageRendersOnTheCardAndOpensFullSizeFromDetail
+
+# Conversation
+IntentUITests/WorkspaceComposerUITests/testMultilineSendAndStopPreserveAnInProgressDraft
+IntentUITests/ConversationTranscriptScrollUITests/testTappingSuggestedPromptKeepsTranscriptAtBottomAndGoToEndHidden
+IntentUITests/ConversationTranscriptScrollUITests/testReadyMetadataPositionsLongUnreadEntryAtTheAuthoritativeDivider
+IntentUITests/QuestionWizardUITests/testHorizontalCardsKeepReferenceHeightAcrossContentAndSelection
+
+# Assistant
+IntentUITests/AssistantNavigationUITests/testWorkspaceBlockOpensWorkspaceOverview
+IntentUITests/AssistantProposalUITests/testDismissProposal
+
+# Home menu and settings
+IntentUITests/HomeActionMenuUITests/testLogOffRequiresConfirmationAndCanBeCancelled
+IntentUITests/SettingsUITests/testPairingCancellationAndAcknowledgementsReturnToSettings

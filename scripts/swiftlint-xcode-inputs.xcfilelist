@@ -66,6 +66,8 @@ $(SRCROOT)/Intent/Models/Question.swift
 $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
 $(SRCROOT)/Intent/Models/WatchedAgentRow.swift
 $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
+$(SRCROOT)/Intent/Models/WorkspaceChanges.swift
+$(SRCROOT)/Intent/Models/WorkspaceDiff.swift
 $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
 $(SRCROOT)/Intent/Models/WorkspaceScript.swift
 $(SRCROOT)/Intent/Models/WorkspaceTask.swift
@@ -143,6 +145,8 @@ $(SRCROOT)/Intent/Services/CreationOptionsStore+Events.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
 $(SRCROOT)/Intent/Services/DemoBrowserFixtures.swift
+$(SRCROOT)/Intent/Services/DemoChangesFixtures.swift
+$(SRCROOT)/Intent/Services/DemoChangesRootFixtures.swift
 $(SRCROOT)/Intent/Services/DemoConnectionLoss.swift
 $(SRCROOT)/Intent/Services/DemoFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixturesAssistant.swift
@@ -155,6 +159,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
+$(SRCROOT)/Intent/Services/DemoMode.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/DemoRepositoryScriptFixtures.swift
 $(SRCROOT)/Intent/Services/DemoSettings.swift
@@ -189,6 +194,9 @@ $(SRCROOT)/Intent/Services/WebSocketMessageAssembler.swift
 $(SRCROOT)/Intent/Services/WebSocketPingSupport.swift
 $(SRCROOT)/Intent/Services/WebSocketTransportError.swift
 $(SRCROOT)/Intent/Services/WorkspaceBrowserStore.swift
+$(SRCROOT)/Intent/Services/WorkspaceChangesStore.swift
+$(SRCROOT)/Intent/Services/WorkspaceCreationImages.swift
+$(SRCROOT)/Intent/Services/WorkspaceDiffLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
@@ -363,6 +371,7 @@ $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormStyle.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspacePrompt.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSourceCard.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
@@ -385,11 +394,15 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAttentionCue.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserPage.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowsersView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspacePromptTextView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptSwipeGesture.swift
@@ -442,6 +455,7 @@ $(SRCROOT)/IntentTests/CertMismatchListViewTests.swift
 $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
+$(SRCROOT)/IntentTests/ComposerDraftBindingTests.swift
 $(SRCROOT)/IntentTests/ComposerSubmitPolicyTests.swift
 $(SRCROOT)/IntentTests/ConnectionFailureViewTests.swift
 $(SRCROOT)/IntentTests/ConnectionLossPresenterTests.swift
@@ -697,7 +711,15 @@ $(SRCROOT)/IntentTests/WorkspaceBrowserRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserTabTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserTests.swift
+$(SRCROOT)/IntentTests/WorkspaceChangesModelTests.swift
+$(SRCROOT)/IntentTests/WorkspaceChangesRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceChangesRootRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceChangesRootTests.swift
+$(SRCROOT)/IntentTests/WorkspaceChangesStoreTests.swift
+$(SRCROOT)/IntentTests/WorkspaceCreationImagesTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
+$(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
+$(SRCROOT)/IntentTests/WorkspaceDiffTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFallbackRefreshTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift
 $(SRCROOT)/IntentTests/WorkspaceLinksTests.swift
@@ -752,6 +774,7 @@ $(SRCROOT)/IntentUITests/QuestionWizardUITests.swift
 $(SRCROOT)/IntentUITests/SettingsUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/WorkspaceBrowserUITests.swift
+$(SRCROOT)/IntentUITests/WorkspaceChangesUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceComposerUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceEntryUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceScriptUITests.swift

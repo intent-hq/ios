@@ -1,8 +1,70 @@
+import UIKit
 import XCTest
 
 /// Exercises the real navigation, observation and reconciliation path for #446.
 nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     private static let elementTimeout: TimeInterval = 15
+
+    @MainActor
+    func testImagePasteSurvivesBackAndFailedCreationAndCanBeRemoved() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data"]
+        app.launch()
+        openCreationForm(in: app)
+        let prompt = app.textViews["creation.prompt"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        prompt.tap()
+        prompt.typeText("Use this design")
+        seedImageClipboard()
+        defer { UIPasteboard.general.items = [] }
+        prompt.press(forDuration: 1.2)
+        let paste = app.menuItems["Paste"]
+        XCTAssertTrue(paste.waitForExistence(timeout: Self.elementTimeout))
+        paste.tap()
+        let allowPaste = app.alerts.buttons["Allow Paste"]
+        if allowPaste.waitForExistence(timeout: 2) { allowPaste.tap() }
+        let remove = app.buttons["creation.removeImage"]
+        XCTAssertTrue(remove.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertEqual(prompt.value as? String, "Use this design")
+        attachEvidence(in: app, name: "image-pasted-in-workspace-prompt")
+        app.buttons["creation.back"].tap()
+        app.buttons["Next"].tap()
+        XCTAssertTrue(remove.waitForExistence(timeout: Self.elementTimeout))
+        // Demo workspace.create returns no workspace: exercise the real failure UI,
+        // without creating live data or adding a test-only production hook.
+        app.buttons["Create"].tap()
+        XCTAssertTrue(app.alerts["Error"].waitForExistence(timeout: Self.elementTimeout))
+        app.alerts.buttons["OK"].tap()
+        XCTAssertTrue(remove.exists)
+        XCTAssertEqual(prompt.value as? String, "Use this design")
+        cancelAttachmentPickers(in: app)
+        XCTAssertTrue(remove.exists)
+        remove.tap()
+        XCTAssertFalse(remove.exists)
+        XCTAssertEqual(prompt.value as? String, "Use this design")
+    }
+
+    @MainActor
+    private func seedImageClipboard() {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 30))
+        UIPasteboard.general.image = renderer.image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
+        }
+    }
+
+    @MainActor
+    private func cancelAttachmentPickers(in app: XCUIApplication) {
+        for picker in ["Photos", "Files"] {
+            app.buttons["composer.attachment"].tap()
+            app.buttons[picker].tap()
+            let cancel = app.buttons["Cancel"]
+            XCTAssertTrue(cancel.waitForExistence(timeout: Self.elementTimeout))
+            cancel.tap()
+            XCTAssertTrue(app.textViews["creation.prompt"].waitForExistence(timeout: Self.elementTimeout))
+        }
+    }
 
     @MainActor
     func testBackThenForwardPreservesProviderAndNamedModelThroughRefresh() throws {
@@ -51,7 +113,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
 
     @MainActor
     private func editSourceAndCheckDraft(in app: XCUIApplication) {
-        let prompt = app.textFields["creation.prompt"]
+        let prompt = app.textViews["creation.prompt"]
         XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
         let draft = "Keep these instructions when editing the source."
         prompt.tap()

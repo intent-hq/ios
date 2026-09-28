@@ -14,26 +14,6 @@ import Testing
 nonisolated struct ShapeIsolationTests {
     private static let tolerance: CGFloat = 0.01
 
-    // MARK: - HalfCircle
-
-    @Test func halfCircleCoversTheRightHalfOfItsRect() {
-        let rect = CGRect(x: 0, y: 0, width: 20, height: 20)
-        let bounds = HalfCircle().path(in: rect).boundingRect
-        #expect(abs(bounds.minX - rect.midX) < Self.tolerance)
-        #expect(abs(bounds.maxX - rect.maxX) < Self.tolerance)
-        #expect(abs(bounds.minY - rect.minY) < Self.tolerance)
-        #expect(abs(bounds.maxY - rect.maxY) < Self.tolerance)
-    }
-
-    @Test func halfCircleFollowsAnOffsetRect() {
-        let rect = CGRect(x: 30, y: 40, width: 12, height: 12)
-        let bounds = HalfCircle().path(in: rect).boundingRect
-        #expect(abs(bounds.minX - 36) < Self.tolerance)
-        #expect(abs(bounds.maxX - 42) < Self.tolerance)
-        #expect(abs(bounds.minY - 40) < Self.tolerance)
-        #expect(abs(bounds.maxY - 52) < Self.tolerance)
-    }
-
     // MARK: - IntentLogo
 
     @Test func intentLogoScalesWithItsRect() {
