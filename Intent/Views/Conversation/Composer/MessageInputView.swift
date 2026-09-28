@@ -107,10 +107,12 @@ struct MessageInputView: View {
             onFocusChange?(focused)
         }
         .onChange(of: localText) { _, newValue in
+            ComposerInputTrace.record("push local: \(newValue.debugDescription); model=\(viewModel.messageText.debugDescription)")
             // Push local edits to viewModel (for draft persistence)
             viewModel.messageText = newValue
         }
         .onChange(of: viewModel.messageText) { _, newValue in
+            ComposerInputTrace.record("pull model: \(newValue.debugDescription); local=\(localText.debugDescription)")
             // Pull viewModel changes (e.g. cleared after send, draft restore)
             if newValue != localText {
                 localText = newValue

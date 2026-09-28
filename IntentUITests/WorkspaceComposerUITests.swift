@@ -4,6 +4,7 @@ import XCTest
 /// design demo's transport, not a separate screenshot-only screen.
 nonisolated final class WorkspaceComposerUITests: XCTestCase {
     private enum Fixture {
+        static let diagnosticIterations = 20
         static let timeout: TimeInterval = 15
         static let minimumTapTarget: CGFloat = 44
         static let workspace = "Workspace agent design"
@@ -84,12 +85,27 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
 
     @MainActor
     func testAccessibilityTextKeepsDraftAndStreamingActionsReachable() {
+        for iteration in 0..<Fixture.diagnosticIterations {
+            XCTContext.runActivity(named: "Composer input diagnosis \(iteration)") { _ in
+                checkAccessibilityDraft()
+            }
+        }
+    }
+
+    @MainActor
+    private func checkAccessibilityDraft() {
         let app = launch(scenario: "streaming", accessibleText: true)
         let composer = app.textViews["composer.textView"]
         composer.tap()
         let draft = "An accessible draft with enough text to wrap onto multiple lines"
         composer.typeText(draft)
-        XCTAssertEqual(composer.value as? String, draft)
+        let delivered = composer.value as? String
+        let attachment = XCTAttachment(string: composer.label)
+        attachment.name = "Composer input trace"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        print("COMPOSER TRACE BEGIN\n\(composer.label)\nCOMPOSER TRACE END")
+        XCTAssertEqual(delivered, draft)
         let send = app.buttons["composer.send"]
         XCTAssertTrue(send.waitForExistence(timeout: Fixture.timeout))
         assertReachable(send, in: app)
@@ -101,7 +117,7 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
     private func launch(scenario: String, accessibleText: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data", "--demo-design-scenario=\(scenario)"]
+        app.launchArguments += ["--demo-data", "--demo-design-scenario=\(scenario)", "--trace-composer-input"]
         if accessibleText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }

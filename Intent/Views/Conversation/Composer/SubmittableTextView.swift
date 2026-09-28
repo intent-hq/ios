@@ -2,6 +2,19 @@ import GameController
 import SwiftUI
 import UIKit
 
+// Temporary, opt-in #575 diagnosis. Removed before the fix is submitted.
+@MainActor
+enum ComposerInputTrace {
+    static let enabled = ProcessInfo.processInfo.arguments.contains("--trace-composer-input")
+        && ProcessInfo.processInfo.arguments.contains("--demo-data")
+    static var events: [String] = []
+
+    static func record(_ event: @autoclosure () -> String) {
+        guard enabled else { return }
+        events.append(event())
+    }
+}
+
 /// Decides whether bare Return submits the composer message (Shift+Return
 /// always inserts a newline).
 ///
@@ -23,6 +36,11 @@ enum ComposerSubmitPolicy {
 /// A UITextView subclass that intercepts hardware keyboard Return to submit,
 /// while letting Shift+Return insert a newline.
 class KeyCommandTextView: UITextView {
+    override var accessibilityLabel: String? {
+        get { ComposerInputTrace.enabled ? ComposerInputTrace.events.joined(separator: "\n") : super.accessibilityLabel }
+        set { super.accessibilityLabel = newValue }
+    }
+
     var onSubmit: (() -> Void)?
     var onLayoutChange: (() -> Void)?
 
@@ -223,6 +241,7 @@ struct SubmittableTextView: UIViewRepresentable {
 
         // Sync text from SwiftUI → UIKit (avoid cursor jump during editing)
         if textView.text != text {
+            ComposerInputTrace.record("rewrite: \(textView.text.debugDescription) -> \(text.debugDescription)")
             textView.text = text
 
             let idealHeight = textView.naturalHeight
@@ -231,6 +250,7 @@ struct SubmittableTextView: UIViewRepresentable {
             }
         }
 
+        ComposerInputTrace.record("update focus=\(isFocused) responder=\(textView.isFirstResponder)")
         // Sync focus
         if isFocused, !textView.isFirstResponder {
             DispatchQueue.main.async { textView.becomeFirstResponder() }
@@ -251,6 +271,7 @@ struct SubmittableTextView: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
+            ComposerInputTrace.record("didChange: \(textView.text.debugDescription)")
             parent.text = textView.text
 
             // Report ideal content height to SwiftUI
@@ -271,16 +292,19 @@ struct SubmittableTextView: UIViewRepresentable {
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             let range = textView.selectedRange
+            ComposerInputTrace.record("selection: \(range)")
             parent.onCaretChange?(range.location + range.length)
         }
 
         func textViewDidBeginEditing(_: UITextView) {
+            ComposerInputTrace.record("beginEditing")
             DispatchQueue.main.async {
                 self.parent.isFocused = true
             }
         }
 
         func textViewDidEndEditing(_: UITextView) {
+            ComposerInputTrace.record("endEditing")
             DispatchQueue.main.async {
                 self.parent.isFocused = false
             }
@@ -292,9 +316,10 @@ struct SubmittableTextView: UIViewRepresentable {
         /// detect the held Shift key and allow the newline insertion.
         func textView(
             _ textView: UITextView,
-            shouldChangeTextIn _: NSRange,
+            shouldChangeTextIn range: NSRange,
             replacementText text: String
         ) -> Bool {
+            ComposerInputTrace.record("input: \(range) \(text.debugDescription)")
             if text == "\n" {
                 // Shift+Return on hardware keyboard → insert newline
                 if let kbTextView = textView as? KeyCommandTextView, kbTextView.isShiftHeld {
