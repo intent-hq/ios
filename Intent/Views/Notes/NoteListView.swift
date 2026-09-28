@@ -9,12 +9,11 @@ struct NoteListView: View {
 
     var body: some View {
         if noteStore.isLoading || !noteStore.hasLoaded, noteStore.notes.isEmpty {
-            Spacer()
             ProgressView {
                 Text("Loading notes...").interFont(Constants.Typography.bodyS)
             }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            Spacer()
+                .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
         } else if noteStore.sortedNotes.isEmpty {
             ContentUnavailableView {
                 Label {
@@ -26,27 +25,23 @@ struct NoteListView: View {
                 Text("Notes will appear here when created.")
                     .interFont(Constants.Typography.bodyXS)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
         } else {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(noteStore.rootNotes) { note in
-                        NoteTreeNodeView(
-                            note: note,
-                            noteStore: noteStore,
-                            workspaceId: workspaceId,
-                            depth: 0,
-                            collapsedIds: $collapsedIds,
-                            colorScheme: colorScheme
-                        )
-                        .environment(coordinator)
-                    }
+            LazyVStack(spacing: WorkspaceDetailStyle.sectionSpacing) {
+                ForEach(noteStore.rootNotes) { note in
+                    NoteTreeNodeView(
+                        note: note,
+                        noteStore: noteStore,
+                        workspaceId: workspaceId,
+                        depth: 0,
+                        collapsedIds: $collapsedIds,
+                        colorScheme: colorScheme
+                    )
+                    .environment(coordinator)
                 }
-                .padding(.horizontal, Constants.Notes.List.horizontalPadding)
             }
-            .refreshable {
-                await noteStore.fetchNotes(workspaceId: workspaceId)
-            }
+            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+            .padding(.bottom, WorkspaceDetailStyle.pageInset)
         }
     }
 }
@@ -91,17 +86,20 @@ struct NoteTreeNodeView: View {
 
             // Children (if expanded)
             if hasChildren, !isCollapsed {
-                ForEach(children) { child in
-                    Self(
-                        note: child,
-                        noteStore: noteStore,
-                        workspaceId: workspaceId,
-                        depth: depth + 1,
-                        collapsedIds: $collapsedIds,
-                        colorScheme: colorScheme
-                    )
-                    .environment(coordinator)
+                VStack(spacing: WorkspaceDetailStyle.taskRowSpacing) {
+                    ForEach(children) { child in
+                        Self(
+                            note: child,
+                            noteStore: noteStore,
+                            workspaceId: workspaceId,
+                            depth: depth + 1,
+                            collapsedIds: $collapsedIds,
+                            colorScheme: colorScheme
+                        )
+                        .environment(coordinator)
+                    }
                 }
+                .padding(.top, depth == 0 ? WorkspaceDetailStyle.pageInset : WorkspaceDetailStyle.taskRowSpacing)
             }
         }
     }
@@ -121,8 +119,7 @@ struct NoteTreeNodeView: View {
 
 struct NoteRowView: View {
     let note: Note
-    /// Full note list, used to resolve linked-task IDs for the progress
-    /// ring; recomputed on every NoteStore publish so the ring stays live.
+    /// Resolve live task progress from the complete note list.
     var allNotes: [Note] = []
     var depth: Int = 0
     var hasChildren: Bool = false
@@ -131,111 +128,66 @@ struct NoteRowView: View {
     var onToggleCollapse: (() -> Void)?
     var onNavigate: (() -> Void)?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     private var usesAccessibilityLayout: Bool {
         dynamicTypeSize.isAccessibilitySize
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: Constants.Notes.List.rowSpacing) {
-            indentation
-            disclosure
+        HStack(alignment: .top, spacing: 0) {
+            if hasChildren {
+                disclosure
+            }
             noteButton
         }
-        .padding(
-            .vertical,
-            depth == 0
-            ? Constants.Notes.List.rootVerticalPadding
-            : Constants.Notes.List.nestedVerticalPadding
-        )
-        .padding(.trailing, Constants.Notes.List.horizontalRowPadding)
+        .padding(.leading, NoteRowLayout.indentation(for: depth, usesAccessibilityLayout: usesAccessibilityLayout))
     }
 
-    @ViewBuilder
-    private var indentation: some View {
-        if depth > 0 {
-            Spacer()
-                .frame(width: NoteRowLayout.indentation(
-                    for: depth,
-                    usesAccessibilityLayout: usesAccessibilityLayout
-                ))
-        }
-    }
-
-    @ViewBuilder
     private var disclosure: some View {
-        if hasChildren {
-            Button { onToggleCollapse?() } label: {
-                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .padding(.top, NoteRowLayout.firstLineIconTopPadding)
-                    .frame(
-                        width: NoteRowLayout.disclosureTargetSize,
-                        height: NoteRowLayout.disclosureTargetSize,
-                        alignment: .top
-                    )
-                    .contentShape(Rectangle())
-                    .accessibilityHidden(true)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Child notes for \(note.title)")
-            .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
-        } else if NoteRowLayout.reservesDisclosureSpace(
-            depth: depth,
-            hasChildren: hasChildren,
-            usesAccessibilityLayout: usesAccessibilityLayout
-        ) {
-            Spacer().frame(width: NoteRowLayout.disclosureTargetSize)
+        Button { onToggleCollapse?() } label: {
+            leadingIcon
+                .frame(width: NoteRowLayout.disclosureTargetSize, height: NoteRowLayout.disclosureTargetSize, alignment: .topLeading)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Child notes for \(note.title)")
+        .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
+        .accessibilityHint("Double-tap to \(isCollapsed ? "expand" : "collapse") child notes")
     }
 
     private var noteButton: some View {
         Button { onNavigate?() } label: {
-            HStack(alignment: .top, spacing: Constants.Notes.List.contentSpacing) {
-                leadingIcon
+            HStack(alignment: .top, spacing: WorkspaceDetailStyle.noteTextSpacing) {
+                if !hasChildren {
+                    leadingIcon
+                        .frame(width: NoteRowLayout.disclosureTargetSize, alignment: .leading)
+                }
                 titleAndTags
-                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.leading, hasChildren ? WorkspaceDetailStyle.noteTextSpacing : 0)
             .frame(
                 minWidth: Constants.Accessibility.minimumTapTarget,
                 maxWidth: .infinity,
                 minHeight: Constants.Accessibility.minimumTapTarget,
-                alignment: .leading
+                alignment: .topLeading
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    @ViewBuilder
     private var leadingIcon: some View {
-        Group {
-            switch NoteRowIcon.kind(for: note, notes: allNotes) {
-            case .star:
-                starIcon
-            case .starWithProgressRing(let stats):
-                starIcon
-                TaskProgressRingView(stats: stats)
-            case .taskStatus(let status):
-                TaskStatusIconView(status: status, size: Constants.Notes.List.leadingIconSize)
-            case .progressRing(let stats):
-                TaskProgressRingView(stats: stats)
-            case .document:
-                Image(systemName: "doc.text")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .accessibilityHidden(true)
-            }
-        }
-        .padding(.top, NoteRowLayout.firstLineIconTopPadding)
+        WorkspaceNoteIcon(kind: NoteRowIcon.kind(for: note, notes: allNotes))
     }
 
     private var titleAndTags: some View {
-        VStack(alignment: .leading, spacing: Constants.Notes.List.titleSpacing) {
+        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
             Text(note.title)
                 .interFont(depth == 0 ? Constants.Typography.bodyM : Constants.Typography.bodyS)
-                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .tracking(depth == 0 ? WorkspaceDetailStyle.rowTitleTracking : WorkspaceDetailStyle.bodyTracking)
+                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
                 .lineLimit(NoteRowLayout.titleLineLimit(
                     usesAccessibilityLayout: usesAccessibilityLayout
                 ))
@@ -254,62 +206,35 @@ struct NoteRowView: View {
                 }
             } else if depth == 0, let preview = note.preview {
                 Text(preview)
-                    .interFont(Constants.Typography.subtextXXS)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .lineLimit(Constants.Notes.List.previewLineLimit)
+                    .interFont(Constants.Typography.bodyS)
+                    .tracking(WorkspaceDetailStyle.bodyTracking)
+                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
+                    .lineLimit(usesAccessibilityLayout ? nil : 1)
             }
         }
-    }
-
-    private var starIcon: some View {
-        Image(systemName: "star.fill")
-            .font(.caption)
-            .foregroundStyle(.yellow)
-            .accessibilityLabel("Spec note")
     }
 }
 
 enum NoteRowLayout {
-    static let firstLineIconTopPadding = Constants.Notes.List.titleSpacing
-
     static var disclosureTargetSize: CGFloat {
         max(Constants.Notes.List.disclosureSize, Constants.Accessibility.minimumTapTarget)
     }
 
     static func indentation(for depth: Int, usesAccessibilityLayout: Bool) -> CGFloat {
         let width = usesAccessibilityLayout
-            ? Constants.Notes.List.contentSpacing * Constants.Notes.List.accessibilityIndentSpacingMultiplier
-            : Constants.Notes.List.indentationWidth
+            ? WorkspaceDetailStyle.accessibilityIndentation
+            : WorkspaceDetailStyle.noteIndentation
         return CGFloat(max(0, depth)) * width
     }
 
-    /// Nested leaves keep the disclosure slot at every text size so their
-    /// content never starts left of the parent's (which sits after its own
-    /// disclosure button).
-    static func reservesDisclosureSpace(
-        depth: Int,
-        hasChildren: Bool,
-        usesAccessibilityLayout: Bool = false
-    ) -> Bool {
-        depth > 0 && !hasChildren && !usesAccessibilityLayout
-    }
-
-    /// Leading edge of the row's content button, mirroring the spacers and
-    /// disclosure slot laid out in `NoteRowView.body`.
+    /// Disclosure and navigation share the same icon slot so siblings align.
     static func contentLeadingOffset(
         depth: Int,
-        hasChildren: Bool,
+        hasChildren _: Bool,
         usesAccessibilityLayout: Bool
     ) -> CGFloat {
-        var offset: CGFloat = 0
-        if depth > 0 {
-            offset += indentation(for: depth, usesAccessibilityLayout: usesAccessibilityLayout)
-                + Constants.Notes.List.rowSpacing
-        }
-        if hasChildren || reservesDisclosureSpace(depth: depth, hasChildren: hasChildren) {
-            offset += disclosureTargetSize + Constants.Notes.List.rowSpacing
-        }
-        return offset
+        indentation(for: depth, usesAccessibilityLayout: usesAccessibilityLayout)
+            + disclosureTargetSize + WorkspaceDetailStyle.noteTextSpacing
     }
 
     static func titleLineLimit(usesAccessibilityLayout: Bool) -> Int? {
