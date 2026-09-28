@@ -244,6 +244,10 @@ enum SyntheticBadgeHost {
         observeLifecycle: ((LifecycleEvent) -> Void)? = nil,
         inspect: (_ hostView: UIView, _ window: UIWindow) throws -> Result
     ) async throws -> Result {
+        #if targetEnvironment(simulator)
+            let accessibilityOwner = try SyntheticBadgeAccessibilityRuntime.shared.acquire()
+            defer { SyntheticBadgeAccessibilityRuntime.shared.release(accessibilityOwner) }
+        #endif
         let session = try autoreleasepool {
             let rootView = SyntheticBadgeHostRoot(content: content, width: width, height: height)
             return try SyntheticBadgeHostSession(
