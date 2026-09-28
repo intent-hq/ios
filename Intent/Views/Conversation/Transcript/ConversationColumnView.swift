@@ -104,6 +104,9 @@ struct ConversationColumnView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { accessoriesHeight = $0 }
 
         questionRegion
+            .anchorPreference(key: WorkspaceActionMenuInputBounds.self, value: .bounds) { bounds in
+                composerVisible || usesWorkspaceDesign ? nil : bounds
+            }
             // Offer the measured question budget before the flexible transcript
             // takes its share; otherwise VStack halves the remaining height and
             // ViewThatFits rejects stacks that fit within workspaceQuestionHeight.
@@ -128,7 +131,7 @@ struct ConversationColumnView: View {
             .padding(.horizontal, usesWorkspaceDesign ? composerHorizontalInset : 0)
             .padding(.vertical, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
-            .anchorPreference(key: WorkspaceActionMenuComposerBounds.self, value: .bounds) { $0 }
+            .anchorPreference(key: WorkspaceActionMenuInputBounds.self, value: .bounds) { $0 }
         }
     }
 

@@ -4,7 +4,7 @@ import SwiftUI
 struct WorkspaceActionLauncher: ViewModifier {
     let isSearching: Bool
     var alignment: HorizontalAlignment = .trailing
-    var avoidsComposer = true
+    var avoidsConversationInput = true
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
@@ -33,11 +33,11 @@ struct WorkspaceActionLauncher: ViewModifier {
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
             .accessibilityHidden(isOpen)
-            .overlayPreferenceValue(WorkspaceActionMenuComposerBounds.self) { composerAnchor in
-                // Resolve the composer anchor in the window overlay's coordinate space.
+            .overlayPreferenceValue(WorkspaceActionMenuInputBounds.self) { inputAnchor in
+                // Resolve the active input anchor in the window overlay's coordinate space.
                 // swiftlint:disable:next geometry_reader_usage
                 GeometryReader { proxy in
-                    let activeAnchor = avoidsComposer ? composerAnchor : nil
+                    let activeAnchor = avoidsConversationInput ? inputAnchor : nil
                     let bottomInset = activeAnchor.map { max(0, proxy.size.height - proxy[$0].minY) } ?? 0
                     actionOverlay(bottomInset: bottomInset)
                 }
@@ -137,7 +137,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 }
 
-struct WorkspaceActionMenuComposerBounds: PreferenceKey {
+struct WorkspaceActionMenuInputBounds: PreferenceKey {
     nonisolated static var defaultValue: Anchor<CGRect>? { nil }
 
     nonisolated static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {

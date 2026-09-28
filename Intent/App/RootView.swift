@@ -163,7 +163,7 @@ struct RootView: View {
             .modifier(WorkspaceActionLauncher(
                 isSearching: isSearchingWorkspaces,
                 alignment: .trailing,
-                avoidsComposer: !conversationIsPopping,
+                avoidsConversationInput: !conversationIsPopping,
                 onCreateWorkspace: { showingCreateWorkspace = true },
                 onConnections: { showingConnections = true }
             ))

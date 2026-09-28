@@ -580,6 +580,20 @@ jobs:
           ONLY_TESTING: IntentUITests
         run: scripts/xcodebuild.sh test-without-building
 
+      - name: Run iPad menu regression tests
+        env:
+          RESULT_BUNDLE: IPadMenuTestResults
+          ONLY_TESTING: >-
+            IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsSendAndMenuAvailable
+            IntentUITests/HomeActionMenuUITests/testIPadQuestionsKeepNextAndSendAvailable
+        run: |
+          SIM_UDID=$(xcrun simctl list devices available --json | jq -er '
+            [.devices | to_entries[] | select(.key | contains("iOS"))
+              | .value[] | select(.name | startswith("iPad"))]
+            | last | .udid // error("No available iPad simulator")')
+          export SIM_UDID
+          scripts/xcodebuild.sh test-without-building
+
       - name: Upload UI test results
         if: failure()
         uses: actions/upload-artifact@v7
@@ -588,6 +602,8 @@ jobs:
           path: |
             UITestResults
             UITestResults-retry
+            IPadMenuTestResults
+            IPadMenuTestResults-retry
 
       # ConversationTranscriptScrollUITests attaches one content-free JSON
       # record per launch proving the unrealized-end recovery ran. Export only
