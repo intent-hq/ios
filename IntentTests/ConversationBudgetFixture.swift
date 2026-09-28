@@ -23,11 +23,14 @@ final class ConversationBudgetFixture {
                 registration += 1
                 let id = "ios-budget-chat-\(registration)"
                 let agentId = params["agentId"] as? String ?? ConversationStartupFixture.parentId
-                connection.stubChatSnapshot(subscriptionId: id, messages: messages(agentId), meta: [
+                var metadata: [String: Any] = [
                     "agentId": agentId, "totalMessages": rows, "truncated": false,
-                    "nextToken": NSNull(), "isResponding": false, "turnInFlight": false,
-                    "deltaEncoding": "incremental"
-                ])
+                    "nextToken": NSNull(), "isResponding": false, "turnInFlight": false
+                ]
+                if params["deltaEncoding"] as? String == "incremental" {
+                    metadata["deltaEncoding"] = "incremental"
+                }
+                connection.stubChatSnapshot(subscriptionId: id, messages: messages(agentId), meta: metadata)
                 return ["subscriptionId": id]
             case "agent.getConversation":
                 return ["messages": [], "truncated": false, "totalMessages": rows, "nextToken": NSNull()]

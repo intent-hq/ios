@@ -85,6 +85,7 @@ struct ConversationStartupBudgetTests {
         #expect(attempts.count == 2)
         #expect(try attempts.first?.responseJSON == RPCFixtureJSON.encode(rejection.json))
         #expect(attempts.last?.params["deltaEncoding"] == nil)
+        #expect(!model.store.liveTranscript.incrementalDeltas)
         #expect(!model.isLoading && model.messages.count == 1)
         #expect(opened.requests.count == 9 && opened.pendingCount == 0)
         try ConversationBudgetEvidence.emit("compatibility-open", opened)
