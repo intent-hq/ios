@@ -34,12 +34,30 @@ struct ConnectingView: View {
             }
         }
         .padding(.bottom, Layout.contentBottomPadding)
+        .frame(maxWidth: .infinity)
+        .safeAreaInset(edge: .top, alignment: .leading, spacing: 0) {
+            homeButton
+                .padding(.horizontal, Constants.ConnectionSheet.inset)
+        }
         // Keyed on connectionAttemptId: a connection switch performed while
         // this view is already showing (same screen value) bumps the id to
         // restart the attempt, which a plain one-shot .task would not.
         .task(id: coordinator.connectionAttemptId) {
             await attemptConnection()
         }
+    }
+
+    private var homeButton: some View {
+        Button(action: coordinator.onReturnToSavedMachines) {
+            Label("Back", systemImage: "chevron.backward")
+                .interFont(Constants.Typography.bodyS)
+                .frame(minHeight: Constants.ConnectionSheet.minimumTouchTarget)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.primary(for: colorScheme))
+        .accessibilityLabel("Back to Home")
+        .accessibilityHint("Return to your saved machines without forgetting this connection.")
+        .accessibilityIdentifier("connecting.home")
     }
 
     private func attemptConnection() async {

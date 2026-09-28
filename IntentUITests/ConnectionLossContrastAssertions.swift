@@ -3,6 +3,37 @@ import XCTest
 /// Screenshot helpers check real source-to-overlay appearance and full-screen coverage.
 /// Run the owning Home test in light/dark and actual Reduce Transparency modes.
 extension ConnectionLossUITests {
+    @MainActor
+    func testBackDuringStartupRetainsMachineAndAllowsFreshConnection() throws {
+        let timeout: TimeInterval = 15
+        let directory = try makeTriggerDirectory()
+        let app = launch(directory: directory, arguments: ["--demo-connection-loss-pending-startup"], waitForStartup: false)
+        assertStartupState("connected", in: app)
+        let back = app.buttons["connecting.home"]
+        XCTAssertTrue(back.waitForExistence(timeout: timeout))
+        XCTAssertEqual(back.label, "Back to Home")
+        XCTAssertTrue(back.isHittable)
+        XCTAssertLessThan(back.frame.maxX, app.frame.midX)
+        XCTAssertLessThan(back.frame.maxY, app.frame.midY)
+        capture(app, named: "connecting-back")
+        back.tap()
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: timeout))
+        XCTAssertFalse(back.exists)
+        // Release the abandoned startup's data wait after leaving the screen.
+        try trigger("initial-data", in: directory)
+        saved.tap()
+        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
+        XCTAssertTrue(machine.waitForExistence(timeout: timeout))
+        XCTAssertFalse(app.buttons["intent.menu.open"].exists, "A late startup completion must not leave Home")
+        XCTAssertFalse(app.staticTexts["Can't Connect"].exists)
+        capture(app, named: "connecting-returned-home")
+        machine.tap()
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: timeout))
+        XCTAssertFalse(back.exists)
+        capture(app, named: "connecting-machine-reselected")
+    }
+
     private enum Backdrop {
         static let nearEdge = 0.1
         static let farEdge = 0.9
@@ -72,6 +103,23 @@ extension ConnectionLossUITests {
             // Single-tinted source ranges from 17 to 106; reject a black gap or exposed page.
             XCTAssertTrue(Backdrop.allowedRedValues.contains(Int(bytes[0])), "The backdrop must cover every screen quadrant")
         }
+    }
+
+    @MainActor
+    func assertFailureBackReturnsHome(in app: XCUIApplication, timeout: TimeInterval) {
+        let back = app.buttons["connection-failure.home"]
+        XCTAssertTrue(back.waitForExistence(timeout: timeout))
+        XCTAssertEqual(back.label, "Back to Home")
+        XCTAssertTrue(back.isHittable)
+        XCTAssertLessThan(back.frame.maxX, app.frame.midX)
+        XCTAssertLessThan(back.frame.maxY, app.staticTexts["Can't Connect"].frame.minY)
+        capture(app, named: "connection-failure-back")
+        back.tap()
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: timeout))
+        XCTAssertFalse(back.exists)
+        XCTAssertFalse(app.staticTexts["Can't Connect"].exists)
+        capture(app, named: "connection-failure-returned-home")
     }
 
     @MainActor
