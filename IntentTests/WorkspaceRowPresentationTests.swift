@@ -176,9 +176,7 @@ struct WorkspaceRowPresentationTests {
     func renderedStatusUsesPlainDotOrNotStartedRing(wireStatus: String) throws {
         let workspace = makeWorkspace(displayStatus: wireStatus)
         let status = resolveDisplayStatus(for: workspace)
-        let color = status == .notStarted
-            ? Color(red: StatusRaster.ringRedGreen, green: StatusRaster.ringRedGreen, blue: StatusRaster.ringBlue)
-            : status.color
+        let color = expectedStatusColor(status)
         for scheme in [ColorScheme.light, .dark] {
             let pixels = try renderStatus(workspace, scheme: scheme)
             try expectStatusSilhouette(pixels, color: color, scheme: scheme, ring: status == .notStarted)
@@ -199,6 +197,27 @@ struct WorkspaceRowPresentationTests {
 }
 
 extension WorkspaceRowPresentationTests {
+    private func expectedStatusColor(_ status: WorkspaceDisplayStatus) -> Color {
+        // Independent Figma bytes: these must not derive from the colors under test.
+        // swiftlint:disable no_magic_numbers
+        let figmaRGB: [WorkspaceDisplayStatus: RGBA] = [
+            .inProgress: RGBA(red: 211, green: 222, blue: 93, alpha: 1),
+            .needsAttention: RGBA(red: 232, green: 127, blue: 57, alpha: 1),
+            .complete: RGBA(red: 111, green: 163, blue: 86, alpha: 1),
+            .idle: RGBA(red: 140, green: 140, blue: 137, alpha: 1),
+            .notStarted: RGBA(red: 82, green: 82, blue: 80, alpha: 1)
+        ]
+        // swiftlint:enable no_magic_numbers
+        guard let rgb = figmaRGB[status] else { return status.color }
+        return Color(
+            .sRGB,
+            red: Double(rgb.red) / StatusRaster.byteMaximum,
+            green: Double(rgb.green) / StatusRaster.byteMaximum,
+            blue: Double(rgb.blue) / StatusRaster.byteMaximum,
+            opacity: Double(rgb.alpha)
+        )
+    }
+
     private enum StatusRaster {
         static let padding: CGFloat = 4
         static let scale: CGFloat = 3
@@ -207,10 +226,6 @@ extension WorkspaceRowPresentationTests {
         static let alphaOffset = 3
         static let bitsPerComponent = 8
         static let byteMaximum = 255.0
-        static let ringRedGreenByte = 82.0
-        static let ringBlueByte = 80.0
-        static let ringRedGreen = ringRedGreenByte / byteMaximum
-        static let ringBlue = ringBlueByte / byteMaximum
         static let center = 30.0
         static let outsideRadius = 19.0
         static let insideRadius = 17.0
