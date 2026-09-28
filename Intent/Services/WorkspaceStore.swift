@@ -105,16 +105,21 @@ import Observation
     private func _fetchAll() async {
         fetchNeedsRefresh = true
         isLoading = true
+        var needsSuccessor = false
         defer {
-            // A completion observer may retry immediately. Retire the shared
-            // operation before announcing idle, rather than in its caller.
+            // Retire this owner before handing off or announcing idle. Passive
+            // callers join the successor; completion observers may start anew.
             fetchTask = nil
-            isLoading = false
+            if needsSuccessor {
+                _ = startFetch()
+            } else {
+                isLoading = false
+            }
         }
         // Passive callers share this owner. Events during a read invalidate
-        // its snapshot and coalesce into one trailing read, including after
-        // failure. Further invalidation stays dirty for the next caller/event
-        // instead of publishing old data or creating an unbounded read loop.
+        // its snapshot and coalesce into one trailing read. An event during
+        // that read belongs to one successor, keeping the list loading until
+        // events settle. Failure alone stays dirty without automatic retries.
         for round in 0..<2 {
             let revision = fetchRevision
             do {
@@ -128,7 +133,8 @@ import Observation
             } catch {
                 AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
             }
-            guard revision != fetchRevision, round == 0 else { return }
+            guard revision != fetchRevision else { return }
+            needsSuccessor = round == 1
         }
     }
 

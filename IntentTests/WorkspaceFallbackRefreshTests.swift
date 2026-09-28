@@ -32,7 +32,7 @@ extension WorkspaceFetchCompletionTests {
     }
 
     @Test(arguments: [false, true])
-    func invalidatedTrailingWorkspaceReadRemainsDirty(failedRead: Bool) async throws {
+    func invalidatedTrailingWorkspaceReadStartsSharedSuccessor(failedRead: Bool) async throws {
         let (store, connection) = try await fallbackStore()
         defer { drainWorkspaceReads(connection) }
         connection.pendingMethods = ["workspace.list"]
@@ -53,23 +53,80 @@ extension WorkspaceFetchCompletionTests {
             connection.resolvePending("workspace.list", with: workspaceReply("First rename"))
         }
         await first.value
-        #expect(!store.isLoading)
+        try await waitUntil("automatic successor for trailing invalidation") {
+            connection.traffic(since: checkpoint).requests.count == 3 && connection.pendingRequestCount("workspace.list") == 1
+        }
+        #expect(store.isLoading)
         #expect(store.workspaces.first?.title == "Initial title")
-        try await expectNever("unbounded workspace refresh loop") { connection.traffic(since: checkpoint).requests.count > 2 }
-        printCatalogLedger("workspace-invalidated-trailing-failed-\(failedRead)", connection.traffic(since: checkpoint))
-        let retryCheckpoint = connection.checkpoint
+        let passive = Task { await store.fetchAll() }
+        let joined = Task { await store.fetchIfNeeded() }
+        try await expectNever("parallel successor read") { connection.traffic(since: checkpoint).requests.count > 3 }
+        connection.resolvePending("workspace.list", with: workspaceReply("Latest rename"))
+        await passive.value
+        await joined.value
+        #expect(!store.isLoading)
+        #expect(store.workspaces.first?.title == "Latest rename")
+        await store.fetchIfNeeded()
+        try await expectNever("extra successor after convergence") { connection.traffic(since: checkpoint).requests.count > 3 }
+        #expect(connection.traffic(since: checkpoint).methodCounts == ["workspace.list": 3])
+        printCatalogLedger("workspace-trailing-successor-failed-\(failedRead)", connection.traffic(since: checkpoint))
+    }
+
+    @Test func workspaceBurstsAcrossSuccessorsConvergeWhenQuiet() async throws {
+        let (store, connection) = try await fallbackStore(withSummary: true)
+        defer { drainWorkspaceReads(connection) }
+        connection.pendingMethods = ["workspace.list"]
+        let checkpoint = connection.checkpoint
+        workspaceRename(connection, "Rename 0")
+        try await connection.waitForPendingRequests("workspace.list")
+        for read in 1...5 {
+            for _ in 0..<20 { workspaceRename(connection, "Rename \(read)") }
+            try await expectNever("parallel read during burst \(read)") { connection.traffic(since: checkpoint).requests.count > read }
+            connection.resolvePending("workspace.list", with: workspaceSummaryReply("Rename \(read - 1)"))
+            try await waitUntil("read after burst \(read)") {
+                connection.traffic(since: checkpoint).requests.count == read + 1 && connection.pendingRequestCount("workspace.list") == 1
+            }
+            #expect(store.isLoading)
+            #expect(store.workspaces.first?.title == "Initial title")
+            #expect(store.agentSummaries?.cached(agentId: "agent")["name"] as? String == "Initial title")
+        }
+        connection.resolvePending("workspace.list", with: workspaceSummaryReply("Rename 5"))
+        try await waitUntil("quiet burst automatically converges") { !store.isLoading && store.workspaces.first?.title == "Rename 5" }
+        #expect(store.agentSummaries?.cached(agentId: "agent")["name"] as? String == "Rename 5")
+        try await expectNever("refresh after events stop") { connection.traffic(since: checkpoint).requests.count > 6 }
+        #expect(connection.traffic(since: checkpoint).methodCounts == ["workspace.list": 6])
+        #expect(connection.traffic(since: checkpoint).pendingCount == 0)
+        printCatalogLedger("workspace-successive-bursts", connection.traffic(since: checkpoint))
+    }
+
+    @Test func failedWorkspaceSuccessorNeedsNewInvalidationOrExplicitRetry() async throws {
+        let (store, connection) = try await fallbackStore()
+        defer { drainWorkspaceReads(connection) }
+        connection.pendingMethods = ["workspace.list"]
+        let checkpoint = connection.checkpoint
+        workspaceRename(connection, "Rename 0")
+        try await connection.waitForPendingRequests("workspace.list")
+        for read in 1...2 {
+            workspaceRename(connection, "Rename \(read)")
+            try await expectNever("parallel invalidated read") { connection.traffic(since: checkpoint).requests.count > read }
+            connection.failPending("workspace.list", with: URLError(.networkConnectionLost))
+            try await waitUntil("event-driven read after failure") {
+                connection.traffic(since: checkpoint).requests.count == read + 1 && connection.pendingRequestCount("workspace.list") == 1
+            }
+        }
+        connection.failPending("workspace.list", with: URLError(.networkConnectionLost))
+        try await waitUntil("failed successor becomes idle") { !store.isLoading }
+        #expect(store.workspaces.first?.title == "Initial title")
+        try await expectNever("failure-only automatic retry") { connection.traffic(since: checkpoint).requests.count > 3 }
         let retry = Task { await store.fetchIfNeeded() }
         try await connection.waitForPendingRequests("workspace.list")
-        let joined = Task { await store.fetchIfNeeded() }
-        try await expectNever("parallel dirty retry") { connection.traffic(since: retryCheckpoint).requests.count > 1 }
-        connection.resolvePending("workspace.list", with: workspaceReply("Latest rename"))
+        connection.resolvePending("workspace.list", with: workspaceReply("Recovered"))
         await retry.value
-        await joined.value
-        #expect(store.workspaces.first?.title == "Latest rename")
-        #expect(connection.traffic(since: retryCheckpoint).methodCounts == ["workspace.list": 1])
+        #expect(store.workspaces.first?.title == "Recovered")
+        #expect(!store.isLoading)
         await store.fetchIfNeeded()
-        #expect(connection.traffic(since: retryCheckpoint).requests.count == 1)
-        printCatalogLedger("workspace-dirty-retry-failed-\(failedRead)", connection.traffic(since: retryCheckpoint))
+        #expect(connection.traffic(since: checkpoint).methodCounts == ["workspace.list": 4])
+        printCatalogLedger("workspace-failed-successor-explicit-retry", connection.traffic(since: checkpoint))
     }
 
     @Test func failedWorkspaceRefreshIsRetryableWithoutAnotherEvent() async throws {
@@ -78,6 +135,7 @@ extension WorkspaceFetchCompletionTests {
         let checkpoint = connection.checkpoint
         await store.fetchAll()
         #expect(store.workspaces.first?.title == "Initial title")
+        try await expectNever("automatic retry without invalidation") { connection.traffic(since: checkpoint).requests.count > 1 }
         connection.errorMap["workspace.list"] = nil
         connection.responseMap["workspace.list"] = workspaceReply("Recovered")
         await store.fetchIfNeeded()
@@ -119,12 +177,13 @@ extension WorkspaceFetchCompletionTests {
         printCatalogLedger("workspace-live-passive-control", connection.traffic(since: checkpoint))
     }
 
-    private func fallbackStore() async throws -> (WorkspaceStore, RPCRecordingConnection) {
+    private func fallbackStore(withSummary: Bool = false) async throws -> (WorkspaceStore, RPCRecordingConnection) {
         let connection = RPCRecordingConnection()
-        connection.responseMap["workspace.list"] = workspaceReply("Initial title")
+        connection.responseMap["workspace.list"] = withSummary ? workspaceSummaryReply("Initial title") : workspaceReply("Initial title")
         let methodNotFound = -32_601
         connection.errorMap["workspace.subscribe"] = NSError(domain: "WebSocket", code: methodNotFound)
         let store = WorkspaceStore(connectionManager: connection)
+        if withSummary { store.agentSummaries = AgentSummaryStore() }
         connection.simulateConnect()
         try await waitUntil("unsupported live workspace subscription") {
             store.workspaces.first?.title == "Initial title" && connection.traffic().calls("workspace.subscribe").count == 1
@@ -135,6 +194,14 @@ extension WorkspaceFetchCompletionTests {
 
     private func workspaceReply(_ title: String) -> [String: Any] {
         ["workspaces": [["id": "workspace", "title": title]]]
+    }
+
+    private func workspaceSummaryReply(_ title: String) -> [String: Any] {
+        let workspace: [String: Any] = [
+            "id": "workspace", "title": title,
+            "agentSummary": ["count": 1, "agents": [["id": "agent", "name": title, "status": "idle"]]]
+        ]
+        return ["workspaces": [workspace]]
     }
 
     private func workspaceRename(_ connection: RPCRecordingConnection, _ title: String) {
