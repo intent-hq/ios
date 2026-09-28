@@ -277,8 +277,9 @@ extension WorkspaceChangesStore {
               (data["workspaceId"] as? String ?? event["workspaceId"] as? String) == workspaceId else { return }
         if let subscriptionId, let receivedId = envelope["subscriptionId"] as? String,
            receivedId != subscriptionId { return }
-        // Inventory events may remove the selection or change its branch/boundary metadata.
-        guard type.hasPrefix("gitRoot:") || data["gitRootId"] as? String == selectedRootId else { return }
+        // Rootless events invalidate the workspace; inventory events may change the selection.
+        if !type.hasPrefix("gitRoot:"),
+           let rootId = data["gitRootId"] as? String, rootId != selectedRootId { return }
         queueRefresh(workspaceId: workspaceId)
     }
 

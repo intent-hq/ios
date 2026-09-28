@@ -98,14 +98,43 @@ extension WorkspaceChangesStoreTests {
         store.stopObserving()
     }
 
-    @Test func selectedRootEventsRefreshWhileOtherRootAndPrimaryEventsAreIgnored() async throws {
+    @Test(arguments: ["changes:tracked", "changes:git-status", "git:commit"])
+    func workspaceWideEventsRefreshSelectedRoot(type: String) async throws {
+        let fake = makeRootsFake()
+        let store = WorkspaceChangesStore(connectionManager: fake)
+        await store.startObserving(workspaceId: "workspace-1")
+        await store.selectRoot(id: "root-a")
+        fake.clearRequestLog()
+        fake.responseMap["git.status"] = [
+            "files": [["path": "edited.swift", "status": "M", "staged": false]]
+        ]
+        fake.responseMap["git.commits"] = WorkspaceChangesFixture.secondaryPage(["workspace-event"])
+
+        deliverChange(fake, type: type)
+
+        try await waitUntil("selected repository refresh from a workspace-wide event") {
+            store.unstagedChanges.map(\.path) == ["edited.swift"]
+                && store.commits.first?.hash == "workspace-event" && !store.isLoading
+        }
+        #expect(store.selectedRootId == "root-a")
+        #expect(store.stagedChanges.isEmpty)
+        for method in ["git.status", "git.commits"] {
+            let params = try #require(fake.paramsForMethod(method).first)
+            #expect(params["gitRootId"] as? String == "root-a")
+            #expect(params["workspaceId"] as? String == "workspace-1")
+        }
+        #expect(fake.didCallMethod("file-tracking.getChanges") == false)
+        #expect(fake.didCallMethod("file-tracking.loadCommits") == false)
+        store.stopObserving()
+    }
+
+    @Test func selectedRootEventsRefreshWhileOtherRootsAreIgnored() async throws {
         let fake = makeRootsFake()
         let store = WorkspaceChangesStore(connectionManager: fake)
         await store.startObserving(workspaceId: "workspace-1")
         await store.selectRoot(id: "root-a")
         fake.clearRequestLog()
         deliverRootEvent(fake, rootId: "root-b")
-        deliverChange(fake, type: "git:commit")
         try await expectNever("refresh from another repository's changes") {
             fake.didCallMethod("git.status") || fake.didCallMethod("gitRoot.list")
         }
