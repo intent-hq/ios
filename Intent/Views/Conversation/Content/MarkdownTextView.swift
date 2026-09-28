@@ -136,7 +136,9 @@ struct MarkdownTextView: View {
         store: WorkspaceBrowserStore?
     ) throws -> WorkspaceBrowser? {
         guard let workspaceId, !workspaceId.isEmpty, let store,
-              let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) else { return nil }
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = components.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = components.host, WorkspaceBrowserURL.isLocalHost(host) else { return nil }
         return try store.open(workspaceId: workspaceId, url: url.absoluteString)
     }
 

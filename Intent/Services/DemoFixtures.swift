@@ -1,29 +1,6 @@
 import Foundation
 import UIKit
 
-/// Launch-argument-driven demo mode for screenshot UI tests: with
-/// `--demo-data` the app skips pairing, serves fixture data from
-/// `DemoFixtures` instead of a live daemon connection, and runs
-/// `PersistenceManager.shared` over an ephemeral store (see
-/// `PersistenceManager.ephemeral()`). Zero-impact when the arguments are
-/// absent.
-enum DemoMode {
-    /// True when fixture data should be served (`--demo-data`).
-    static let isEnabled = demoDataRequested(by: ProcessInfo.processInfo.arguments)
-
-    /// True when the pairing flow should be skipped (`--pretend-paired`,
-    /// implied by `--demo-data`).
-    static let pretendPaired = pretendPairedRequested(by: ProcessInfo.processInfo.arguments)
-
-    static func demoDataRequested(by arguments: [String]) -> Bool {
-        arguments.contains("--demo-data")
-    }
-
-    static func pretendPairedRequested(by arguments: [String]) -> Bool {
-        arguments.contains("--pretend-paired") || demoDataRequested(by: arguments)
-    }
-}
-
 /// Static fixture responses for demo mode. Shapes mirror the daemon's
 /// JSON-RPC results exactly as the stores parse them (`workspace.list` →
 /// `WorkspaceStore.parseWorkspaces`, `note.list` → `Note.parseNote`,
@@ -388,24 +365,29 @@ extension DemoFixtures {
         if let response = designScenario?.response(for: method, params: params)
             ?? DemoTerminalFixtures.response(for: method, params: params)
             ?? DemoBrowserFixtures.response(for: method, params: params) { return response }
+        if let changesResponse = DemoChangesFixtures.response(for: method, params: params) { return changesResponse }
         return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
-            if let response = proposalResponse(for: method, params: params) { return response }
-            switch method {
-            case "events.subscribe": return ["subscriptionId": "demo-events-\(params["replaceGroup"] as? String ?? "default")"]
-            case "prMonitor.list": return ["monitors": [[String: Any]]()]
-            case "workspace.list":
-                return ["workspaces": workspaces]
-            case "note.list":
-                return ["notes": notes]
-            case "note.get":
-                let noteId = params["noteId"] as? String
-                let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]
-                return ["note": note]
-            case "note.readAsset":
-                return assetResponse(params: params)
-            default:
-                return agentAndTaskResponse(for: method, params: params)
-            }
+            workspaceAndNoteResponse(for: method, params: params)
+        }
+    }
+
+    private static func workspaceAndNoteResponse(for method: String, params: [String: Any]) -> Any {
+        if let response = proposalResponse(for: method, params: params) { return response }
+        switch method {
+        case "events.subscribe": return ["subscriptionId": "demo-events-\(params["replaceGroup"] as? String ?? "default")"]
+        case "prMonitor.list": return ["monitors": [[String: Any]]()]
+        case "workspace.list":
+            return ["workspaces": workspaces]
+        case "note.list":
+            return ["notes": notes]
+        case "note.get":
+            let noteId = params["noteId"] as? String
+            let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]
+            return ["note": note]
+        case "note.readAsset":
+            return assetResponse(params: params)
+        default:
+            return agentAndTaskResponse(for: method, params: params)
         }
     }
 

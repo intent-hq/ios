@@ -115,9 +115,10 @@ struct WorkspaceBrowserPageTests {
 
 @MainActor
 struct WorkspaceBrowserLinkTests {
-    @Test func workspaceWebLinksUseTheBrowserAndKeepTheirAddress() throws {
+    @Test(arguments: ["localhost", "LOCALHOST", "daemon.localhost", "127.0.0.1", "0.0.0.0", "[::]", "[::1]"])
+    func localWebLinksUseTheBrowserAndKeepTheirAddress(host: String) throws {
         let fixture = try WorkspaceBrowserFixture()
-        let url = try #require(URL(string: "http://daemon.localhost:5173/preview?view=phone#details"))
+        let url = try #require(URL(string: "http://\(host):5173/preview?view=phone#details"))
         let opened = try MarkdownTextView.workspaceBrowser(for: url, workspaceId: "workspace", store: fixture.store)
         let browser = try #require(opened)
         #expect(browser.url == "http://127.0.0.1:5173/preview?view=phone#details")
@@ -126,14 +127,46 @@ struct WorkspaceBrowserLinkTests {
         #expect(fixture.store.browsers(workspaceId: "workspace").count == 1)
     }
 
+    @Test func secureLocalWebLinksUseTheBrowserWithoutAnExplicitPort() throws {
+        let fixture = try WorkspaceBrowserFixture()
+        let url = try #require(URL(string: "https://LOCALHOST/preview"))
+        let opened = try MarkdownTextView.workspaceBrowser(for: url, workspaceId: "workspace", store: fixture.store)
+        #expect(try #require(opened).url == "https://127.0.0.1/preview")
+    }
+
+    @Test(arguments: [
+        "https://github.com/intent-hq/ios/pull/123",
+        "http://example.com:5173/preview",
+        "https://localhost.example.com/preview",
+        "https://daemon.localhost.example.com/preview",
+        "https://127.0.0.1.example.com/preview",
+        "https://localhost@github.com/intent-hq/ios",
+        "https://example.com/localhost?next=http://127.0.0.1:5173#daemon.localhost"
+    ])
+    func externalWebLinksKeepSystemRoutingWithoutSavingABrowser(address: String) throws {
+        let fixture = try WorkspaceBrowserFixture()
+        let url = try #require(URL(string: address))
+        #expect(try MarkdownTextView.workspaceBrowser(for: url, workspaceId: "workspace", store: fixture.store) == nil)
+        #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
+    }
+
+    @Test func savedExternalBrowserDoesNotInterceptExternalLinks() throws {
+        let fixture = try WorkspaceBrowserFixture()
+        let saved = try fixture.store.create(workspaceId: "workspace", url: "https://github.com/intent-hq/ios")
+        let url = try #require(URL(string: saved.url))
+        #expect(try MarkdownTextView.workspaceBrowser(for: url, workspaceId: "workspace", store: fixture.store) == nil)
+        #expect(fixture.store.browsers(workspaceId: "workspace") == [saved])
+    }
+
     @Test func nonWebLinksAndMissingContextKeepTheirExistingRouting() throws {
         let fixture = try WorkspaceBrowserFixture()
-        for address in ["intent://local/note/spec", "mailto:hello@example.com", "file:///tmp/file"] {
+        for address in ["intent://local/note/spec", "intent://local/file/report.pdf", "mailto:hello@example.com", "file:///tmp/file"] {
             let url = try #require(URL(string: address))
             #expect(try MarkdownTextView.workspaceBrowser(for: url, workspaceId: "workspace", store: fixture.store) == nil)
         }
-        let url = try #require(URL(string: "https://example.com"))
+        let url = try #require(URL(string: "http://localhost:5173"))
         #expect(try MarkdownTextView.workspaceBrowser(for: url, workspaceId: nil, store: fixture.store) == nil)
+        #expect(try MarkdownTextView.workspaceBrowser(for: url, workspaceId: "", store: fixture.store) == nil)
         #expect(try MarkdownTextView.workspaceBrowser(for: url, workspaceId: "workspace", store: nil) == nil)
         #expect(fixture.store.browsers(workspaceId: "workspace").isEmpty)
     }

@@ -40,6 +40,7 @@ struct CreateWorkspaceView: View {
     @State private var selectedModel: ModelInfo?
     @State private var selectedReasoningEffort: String?
     @State private var messageText = ""
+    @State private var images = WorkspaceCreationImages()
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var showError = false
@@ -124,6 +125,7 @@ struct CreateWorkspaceView: View {
         .onDisappear {
             catalogIsVisible = false
             optionsStore.releaseCatalogs(consumer: catalogConsumer)
+            images.cancelImport()
         }
         // The cached-first paint, the authoritative listing replacing it and
         // a background revalidation all land here: keep the selection if the
@@ -231,6 +233,7 @@ struct CreateWorkspaceView: View {
                 reasoningLevels: reasoningLevels,
                 selectedReasoningEffort: $selectedReasoningEffort,
                 messageText: $messageText,
+                images: images,
                 isCreating: isCreating,
                 errorMessage: errorMessage,
                 showError: $showError,
@@ -432,7 +435,8 @@ extension CreateWorkspaceView {
     }
 
     private func createWorkspace() {
-        guard !isCreating, canSubmitProvider, let repo = selectedRepo, let branch = selectedBranch else { return }
+        guard !isCreating, !images.isImporting, canSubmitProvider,
+              let repo = selectedRepo, let branch = selectedBranch else { return }
         isCreating = true
 
         Task { await performCreateWorkspace(repo: repo, branch: branch) }
@@ -441,7 +445,7 @@ extension CreateWorkspaceView {
     private func performCreateWorkspace(repo: GitHubRepo, branch: String) async {
         // Recheck at the request boundary: a refresh may have removed the
         // selection after the button was tapped but before this task ran.
-        guard canSubmitProvider else {
+        guard canSubmitProvider, !images.isImporting else {
             isCreating = false
             return
         }
@@ -455,11 +459,11 @@ extension CreateWorkspaceView {
                     provider: selectedProvider,
                     model: selectedModel,
                     message: messageText,
-                    // Read the current catalog here too: a refresh can arrive
-                    // before SwiftUI runs the selection reconciliation observer.
-                    reasoningEffort: validatedReasoningEffort
+                    reasoningEffort: validatedReasoningEffort,
+                    imageBlocks: images.images.map(\.block)
                 )
             )
+            try WorkspaceCreationImages.validateRequest(params)
             let result = try await session.connection.request(
                 "workspace.create",
                 params: params,

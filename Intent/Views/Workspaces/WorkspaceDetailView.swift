@@ -20,6 +20,7 @@ struct WorkspaceDetailView: View {
     @State private var selectedTab = WorkspaceTab.agents
     @State private var noteStore: NoteStore
     @State private var scriptStore: WorkspaceScriptStore
+    @State private var changesStore: WorkspaceChangesStore
     @Environment(BackendSession.self) private var session
 
     init(workspaceId: String, session: BackendSession) {
@@ -27,19 +28,22 @@ struct WorkspaceDetailView: View {
         _agentStore = State(initialValue: AgentStore(connectionManager: session.connection, summaries: session.agentSummaries))
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
         _scriptStore = State(initialValue: WorkspaceScriptStore(connection: session.connection))
+        _changesStore = State(initialValue: WorkspaceChangesStore(connectionManager: session.connection))
     }
 
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
 
     var noteStoreConnectionID: ObjectIdentifier { ObjectIdentifier(noteStore.connectionManager) }
 
+    var changesStoreConnectionID: ObjectIdentifier {
+        ObjectIdentifier(changesStore.connectionManager)
+    }
+
     private var workspaceStore: WorkspaceStore { session.workspaceStore }
     private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
     private var browserStore: WorkspaceBrowserStore { session.browserStore }
 
-    private var workspace: Workspace? {
-        workspaceStore.workspaces.first { $0.id == workspaceId }
-    }
+    private var workspace: Workspace? { workspaceStore.workspaces.first { $0.id == workspaceId } }
 
     private var workspaceTitle: String {
         guard let title = workspace?.title,
@@ -61,8 +65,7 @@ struct WorkspaceDetailView: View {
                     connectionId: connectionId
                 )
             }
-            // Don't clear viewModel.agents here — AgentStore handles that when workspaceId changes.
-            // Clearing here causes an empty list flash when swiping back from conversation.
+            // AgentStore retains rows while returning from a conversation.
             agentStore.startObservingEvents()
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: workspaceId) }
@@ -73,8 +76,7 @@ struct WorkspaceDetailView: View {
         }
         .onDisappear {
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
-            // Keyed by (workspace, connection): removing this pair never
-            // clobbers another window's visibility.
+            // Remove only this workspace/connection pair, preserving other windows.
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: workspaceId,
@@ -225,17 +227,9 @@ struct WorkspaceDetailView: View {
         #endif
         .toolbar {
             #if os(visionOS)
-            // The Agents/Context switcher lives in the detail's top toolbar
-            // on visionOS instead of the in-window segmented control, so it
-            // visibly belongs to the workspace rather than the sidebar.
+            // The workspace picker lives in the top toolbar on visionOS.
             ToolbarItem(placement: .topBarTrailing) {
-                Picker("Workspace Content", selection: $selectedTab) {
-                    Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "person.2") }
-                    .tag(WorkspaceTab.agents)
-                    Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "doc.text") }
-                    .tag(WorkspaceTab.context)
-                }
-                .pickerStyle(.segmented)
+                toolbarWorkspacePicker
             }
             #else
             ToolbarItem(placement: .topBarLeading) {
@@ -324,6 +318,8 @@ private extension WorkspaceDetailView {
                 await terminalStore.refresh(workspaceId: workspaceId)
                 await browserStore.refresh(workspaceId: workspaceId)
                 await scriptStore.refresh(workspaceId: workspaceId)
+            } else if selectedTab == .changes {
+                await changesStore.refresh(workspaceId: workspaceId)
             } else {
                 await noteStore.fetchNotes(workspaceId: workspaceId)
             }
@@ -336,6 +332,18 @@ private extension WorkspaceDetailView {
             || browserStore.errorMessage(workspaceId: workspaceId) != nil
             || !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty
             || scriptStore.errorMessage(workspaceId: workspaceId) != nil
+    }
+
+    var toolbarWorkspacePicker: some View {
+        Picker("Workspace Content", selection: $selectedTab) {
+            Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "person.2") }
+            .tag(WorkspaceTab.agents)
+            Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "doc.text") }
+            .tag(WorkspaceTab.context)
+            Label { Text("Changes").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "plus.forwardslash.minus") }
+            .tag(WorkspaceTab.changes)
+        }
+        .pickerStyle(.segmented)
     }
 
     @ViewBuilder
@@ -355,6 +363,8 @@ private extension WorkspaceDetailView {
             } else {
                 agentListContent
             }
+        } else if selectedTab == .changes {
+            WorkspaceChangesView(workspaceId: workspaceId, store: changesStore)
         } else {
             NoteListView(workspaceId: workspaceId, noteStore: noteStore)
         }
