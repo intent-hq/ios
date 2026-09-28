@@ -292,7 +292,7 @@ extension ConnectionManagerTests {
 
     // MARK: - Tunnel race candidate
 
-    nonisolated private final class FakeTunnelSession: TunnelSession, @unchecked Sendable {
+    nonisolated final class FakeTunnelSession: TunnelSession, @unchecked Sendable {
         let localPort: Int
         let closed = OSAllocatedUnfairLock(initialState: false)
 
@@ -302,7 +302,7 @@ extension ConnectionManagerTests {
         var isClosed: Bool { closed.withLock { $0 } }
     }
 
-    nonisolated private struct FakeTunnelDialer: TunnelDialing {
+    nonisolated struct FakeTunnelDialer: TunnelDialing {
         let result: Result<FakeTunnelSession, WebSocketTransportError>
 
         func open(tcAddress _: String, remotePort _: Int) async throws -> any TunnelSession {
@@ -314,25 +314,22 @@ extension ConnectionManagerTests {
     /// `UnavailableTunnelDialer`: a tunnel candidate fails with the clear
     /// unavailable error, labeled to the tunnel route, instead of crashing.
     @Test func unavailableTunnelDialerFailsWithClearError() async {
-        do {
-            _ = try await ConnectionManager.connectViaTunnel(
+        let outcome = await ConnectionManager.raceCandidates([ConnectionManager.tunnelCandidateLabel]) { _ in
+            try await ConnectionManager.connectViaTunnel(
                 dialer: UnavailableTunnelDialer(),
                 tcAddress: "tc-x",
                 remotePort: 5181,
                 token: "t",
                 certFingerprint: nil
             )
-            Issue.record("expected connectViaTunnel to throw")
-        } catch let error as WebSocketTransportError {
-            guard case let .failed(host, message, _) = error else {
-                Issue.record("unexpected transport error: \(error)")
-                return
-            }
-            #expect(host == ConnectionManager.tunnelCandidateLabel)
-            #expect(message == UnavailableTunnelDialer.unavailableMessage)
-        } catch {
-            Issue.record("unexpected error: \(error)")
         }
+        guard let error = outcome.failure as? WebSocketTransportError,
+              case let .failed(host, message, _) = error else {
+            Issue.record("expected the original tunnel transport failure")
+            return
+        }
+        #expect(host == ConnectionManager.tunnelCandidateLabel)
+        #expect(message == UnavailableTunnelDialer.unavailableMessage)
     }
 
     /// A failed tunnel dial surfaces as a candidate failure with the tunnel
@@ -347,8 +344,8 @@ extension ConnectionManagerTests {
                 message: "no derp"
             ))
         )
-        await #expect(throws: WebSocketTransportError.self) {
-            _ = try await ConnectionManager.connectViaTunnel(
+        let outcome = await ConnectionManager.raceCandidates([ConnectionManager.tunnelCandidateLabel]) { _ in
+            try await ConnectionManager.connectViaTunnel(
                 dialer: dialer,
                 tcAddress: "tc-x",
                 remotePort: 5181,
@@ -356,6 +353,7 @@ extension ConnectionManagerTests {
                 certFingerprint: nil
             )
         }
+        #expect(outcome.failure is WebSocketTransportError)
     }
 
     /// When the tunnel establishes but the WSS handshake through it fails,
