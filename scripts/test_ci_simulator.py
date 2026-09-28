@@ -503,7 +503,8 @@ class SimulatorTests(unittest.TestCase):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
         build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
         self.assertIn("(inputs.only_testing != '' || inputs.simulator_family == 'ipad') && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test'", build)
-        self.assertIn("echo \"SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)\" >> \"$GITHUB_ENV\"", build)
+        self.assertIn("udid=$(scripts/xcodebuild.sh pick-simulator)", build)
+        self.assertIn('echo "SIM_UDID=$udid" >> "$GITHUB_ENV"', build)
         self.assertIn("scripts/xcodebuild.sh test-without-building-unit", build)
         self.assertIn("scripts/xcodebuild.sh test-ios-unit", build)
         self.assertIn("name: Source-independence check", build)
@@ -512,6 +513,39 @@ class SimulatorTests(unittest.TestCase):
         self.assertIn("name: Upload iPad execution evidence\n        if: always() && env.SIMULATOR_FAMILY == 'ipad'", build)
         self.assertLess(build.index("ci_simulator.py cleanup"), build.index("name: Upload iPad execution evidence"))
         self.assertNotIn("${{ inputs", "\n".join(line for line in build.splitlines() if line.startswith("          ") and not line.lstrip().startswith("ONLY_TESTING:")))
+
+    def test_simulator_selection_preserves_ipad_ownership_and_runner_defaults(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
+        step = build.split("      - name: Pick simulator device\n", 1)[1].split("\n      - name:", 1)[0]
+        command = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        for family in ("iphone", "ipad"):
+            for runner in ("github-hosted", "self-hosted"):
+                for exit_code in (0, 1):
+                    with self.subTest(family=family, runner=runner, exit_code=exit_code), tempfile.TemporaryDirectory() as temporary:
+                        root = Path(temporary)
+                        for directory in ("scripts", ".github/scripts", "bin"):
+                            (root / directory).mkdir(parents=True)
+                        selected = "ipad" if family == "ipad" else ("local" if runner == "self-hosted" else "hosted")
+                        for path, name in (("bin/python3", "ipad"), (".github/scripts/select-local-simulator.sh", "local"),
+                                           ("scripts/xcodebuild.sh", "hosted")):
+                            stub = root / path
+                            output = 'printf "SIM_UDID=ipad-device\\n" >> "$GITHUB_ENV"' if name == "ipad" else f'printf "{name}-device\\n"'
+                            stub.write_text(f'#!/bin/bash\nprintf "{name}:%s\\n" "$*" >> "$CALLS"\n'
+                                            f'[ "$STUB_EXIT" = 0 ] || exit "$STUB_EXIT"\n{output}\n')
+                            stub.chmod(0o755)
+                        environment = root / "environment"
+                        environment.touch()
+                        env = {"PATH": str(root / "bin") + os.pathsep + os.environ["PATH"], "SIMULATOR_FAMILY": family,
+                               "GITHUB_ENV": str(environment), "CALLS": str(root / "calls"), "STUB_EXIT": str(exit_code)}
+                        result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c",
+                                                 command.replace("${{ runner.environment }}", runner)],
+                                                cwd=root, env=env, text=True, capture_output=True)
+                        calls = (root / "calls").read_text().splitlines()
+                        expected_args = {"ipad": "scripts/ci_simulator.py prepare", "local": "", "hosted": "pick-simulator"}
+                        self.assertEqual(calls, [f"{selected}:{expected_args[selected]}"])
+                        self.assertEqual(result.returncode, exit_code, result.stderr)
+                        self.assertEqual(environment.read_text(), "" if exit_code else f"SIM_UDID={selected}-device\n")
 
 
 if __name__ == "__main__":

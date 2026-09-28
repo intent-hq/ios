@@ -166,8 +166,10 @@ struct WorkspaceDetailViewTests {
 
         #expect(view.agentStoreConnectionID == ObjectIdentifier(fake))
         #expect(view.noteStoreConnectionID == ObjectIdentifier(fake))
+        #expect(view.changesStoreConnectionID == ObjectIdentifier(fake))
         #expect(view.agentStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
         #expect(view.noteStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
+        #expect(view.changesStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
     }
 
     /// Same contract for the note detail: its note/agent stores are bound

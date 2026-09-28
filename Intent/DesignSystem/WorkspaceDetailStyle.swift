@@ -81,6 +81,7 @@ struct WorkspaceContentTabs: View {
         HStack(spacing: 0) {
             tab("Agents", value: .agents)
             tab("Context", value: .context)
+            tab("Changes", value: .changes)
         }
         .padding(WorkspaceDetailStyle.tabInset)
         .background(WorkspaceDetailStyle.surface(for: colorScheme), in: .rect(
