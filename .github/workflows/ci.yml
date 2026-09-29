@@ -172,11 +172,13 @@ jobs:
       # and write the test result bundle where the artifact upload expects it.
       SPM_CLONE_DIR: build/SourcePackages
       RESULT_BUNDLE: TestResults
-      # Persistent runners must not mix Swift objects from different branches.
-      DERIVED_DATA_DIR: ${{ runner.temp }}/intent-derived-data-${{ github.run_id }}-${{ github.run_attempt }}-unit
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # Persistent runners must not mix Swift objects from different branches.
+      - name: Use isolated build directory
+        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-unit" >> "$GITHUB_ENV"
 
       - name: SwiftLint wrapper tests on the native shell
         run: scripts/test-swiftlint.sh
@@ -548,10 +550,12 @@ jobs:
       GIT_TERMINAL_PROMPT: '0'
       SPM_CLONE_DIR: build/SourcePackages
       RESULT_BUNDLE: UITestResults
-      DERIVED_DATA_DIR: ${{ runner.temp }}/intent-derived-data-${{ github.run_id }}-${{ github.run_attempt }}-ui
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Use isolated build directory
+        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui" >> "$GITHUB_ENV"
 
       - name: Select Xcode
         run: |
@@ -739,10 +743,12 @@ jobs:
       GIT_TERMINAL_PROMPT: '0'
       # Knob for scripts/xcodebuild.sh: pin SPM clones to the cached path.
       SPM_CLONE_DIR: build/SourcePackages
-      DERIVED_DATA_DIR: ${{ runner.temp }}/intent-derived-data-${{ github.run_id }}-${{ github.run_attempt }}-visionos
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Use isolated build directory
+        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-visionos" >> "$GITHUB_ENV"
 
       - name: Select Xcode
         run: |
