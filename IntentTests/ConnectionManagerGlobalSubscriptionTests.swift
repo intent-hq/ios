@@ -5,16 +5,24 @@ import Testing
 
 extension ConnectionManagerTests {
     @Test func globalFeedIncludesCatalogInvalidationOnce() throws {
-        for event in ["specialists:changed", "settings:changed"] {
+        for event in ["specialists:changed", "settings:changed", "host:members-changed"] {
             #expect(ConnectionManager.globalEventTypes.filter { $0 == event }.count == 1)
         }
         let request = try RPCFixtureJSON.request(
             method: "events.subscribe",
             params: ["eventTypes": ConnectionManager.globalEventTypes, "replaceGroup": "global"]
         )
-        // Connection setup is outside conversation startup, but its added
-        // event names still cost bytes: 185 now versus 144 at the base.
-        #expect(request.count == 185)
+        // Keep the catalog-only byte accounting; the required membership event
+        // adds exactly 23 bytes to the shared subscription request.
+        let catalogRequest = try RPCFixtureJSON.request(
+            method: "events.subscribe",
+            params: [
+                "eventTypes": ConnectionManager.globalEventTypes.filter { $0 != "host:members-changed" },
+                "replaceGroup": "global"
+            ]
+        )
+        #expect(catalogRequest.count == 185)
+        #expect(request.count == 208)
     }
 
     static let subscribeMethod = "events.subscribe"

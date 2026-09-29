@@ -13,7 +13,10 @@ struct HomeActionTiles: View {
 
     let connectionCount: Int
     let appearance: String
+    let themePreference: String
     let onSelect: (Action) -> Void
+    var allowsWorkspaceCreation = true
+    var allowsAssistant = true
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var tileWidth: CGFloat = 172
     @ScaledMetric(relativeTo: .body) private var tileHeight: CGFloat = 240
@@ -29,7 +32,9 @@ struct HomeActionTiles: View {
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Layout.spacing) {
-                ForEach(Action.allCases, id: \.self) { action in
+                ForEach(Action.allCases.filter { action in
+                    (action != .workspace || allowsWorkspaceCreation) && (action != .assistant || allowsAssistant)
+                }, id: \.self) { action in
                     tile(action)
                 }
             }
@@ -62,6 +67,9 @@ struct HomeActionTiles: View {
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
         }
         .buttonStyle(HomeActionTileStyle())
+        .accessibilityLabel(action == .appearance ? "Appearance" : title(action))
+        .accessibilityValue(action == .appearance ? appearance : "")
+        .accessibilityHint(action == .appearance ? "Changes appearance" : "")
         .accessibilityIdentifier("intent.menu.\(action.rawValue)")
     }
 
@@ -104,7 +112,12 @@ struct HomeActionTiles: View {
         case .assistant: .intentDandelion
         case .workspace: .addIcon
         case .connections: .connectionLaptop
-        case .appearance: .night
+        case .appearance:
+            switch themePreference {
+            case "light": .brightnessFull
+            case "dark": .night
+            default: .brightnessRise
+            }
         case .acknowledgements: .file
         case .settings: .settings2
         case .logOff: .logout

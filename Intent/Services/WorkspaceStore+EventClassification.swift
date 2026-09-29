@@ -3,9 +3,11 @@ import Foundation
 extension WorkspaceStore {
     // MARK: - Event classification
 
-    nonisolated static let handledChannels = ["workspace:", "agent:"]
+    /// A trailing colon denotes a channel prefix; other entries name exact events.
+    nonisolated static let handledChannels = ["workspace:", "agent:", "host:members-changed"]
 
     nonisolated static let refetchEventTypes: Set<String> = [
+        "host:members-changed",
         "workspace:created", "workspace:deleted",
         "workspace:activity-changed", "workspace:displayStatus-changed",
         "workspace:attention-changed",

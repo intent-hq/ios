@@ -746,6 +746,7 @@ private struct PickerLayoutHost: View {
                 messageText: $message,
                 images: images,
                 isCreating: isCreating,
+                allowsCreation: true,
                 errorMessage: nil,
                 showError: $showError,
                 colorScheme: .light,

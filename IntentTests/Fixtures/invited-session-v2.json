@@ -1,0 +1,83 @@
+{
+  "feCommit": "25bf2bbd5d36459d202d84b4d18917a8ab5f4c24",
+  "protocolCommit": "68c7dacba5011e91feda3f065b23d0f965205bae",
+  "frozenV1Sha256": "9ff86ff24aacf2bba4f2ed7248384f39645b41e335b148eca0624c934fb58e3f",
+  "fingerprint": "abababababababababababababababababababababababababababababababab",
+  "sessions": [
+    {
+      "principalId": "B",
+      "utf8Hex": "42",
+      "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f73657373696f6e00abababababababababababababababababababababababababababababababab0000000142",
+      "account": "invited-v2-s:8e4ca5301c7e9fdeb66c53a80eb0c36dcd84707596e010f972342e9631b39c02"
+    },
+    {
+      "principalId": "C",
+      "utf8Hex": "43",
+      "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f73657373696f6e00abababababababababababababababababababababababababababababababab0000000143",
+      "account": "invited-v2-s:8b7992fc9596dc890a8acb87157e82a26cbf1cea7e7f3cf1d6747198b3db5015"
+    },
+    {
+      "principalId": "\u00e9",
+      "utf8Hex": "c3a9",
+      "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f73657373696f6e00abababababababababababababababababababababababababababababababab00000002c3a9",
+      "account": "invited-v2-s:397d72f58023e3b4931f01f0f521bdb0cb82260caedf458af7c2a0c57e22ab78"
+    },
+    {
+      "principalId": "e\u0301",
+      "utf8Hex": "65cc81",
+      "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f73657373696f6e00abababababababababababababababababababababababababababababababab0000000365cc81",
+      "account": "invited-v2-s:4cc1b4b4573baa92f555948a6790c216c64e068acee6998839fc869a92c2a25d"
+    },
+    {
+      "principalId": " B",
+      "utf8Hex": "2042",
+      "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f73657373696f6e00abababababababababababababababababababababababababababababababab000000022042",
+      "account": "invited-v2-s:3fe55d53e561d6f6b78a05bd259b05d365c43751b6499ec4910b515ff80d6f52"
+    },
+    {
+      "principalId": "\u6771\u4eac",
+      "utf8Hex": "e69db1e4baac",
+      "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f73657373696f6e00abababababababababababababababababababababababababababababababab00000006e69db1e4baac",
+      "account": "invited-v2-s:e9712ebf5955782832e0c55724b8dcc1c11a6256aec5c82254c1eddcac6bd93a"
+    },
+    {
+      "principalId": "\ud83d\ude42",
+      "utf8Hex": "f09f9982",
+      "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f73657373696f6e00abababababababababababababababababababababababababababababababab00000004f09f9982",
+      "account": "invited-v2-s:1ed0db52eaa75511d1593087950f01a2835a4c5f7569f6786891485ab29adf0a"
+    },
+    {
+      "principalId": "a\u0000b",
+      "utf8Hex": "610062",
+      "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f73657373696f6e00abababababababababababababababababababababababababababababababab00000003610062",
+      "account": "invited-v2-s:7764ef6dbb6f0538010058697119d1366dad1f2810bb41be93385ac71a16ff63"
+    },
+    {
+      "principalId": "\ud800\udc00",
+      "utf8Hex": "f0908080",
+      "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f73657373696f6e00abababababababababababababababababababababababababababababababab00000004f0908080",
+      "account": "invited-v2-s:7202d54718cf7e5ea5de3d4a5237f2ee2672a39f53b46fac874c6b003ae0a024"
+    },
+    {
+      "principalId": "\ue000",
+      "utf8Hex": "ee8080",
+      "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f73657373696f6e00abababababababababababababababababababababababababababababababab00000003ee8080",
+      "account": "invited-v2-s:5890414ab7bda2bd798ef98e69a0bc3bd932cd1c67e0785b5d1d0195fff09fc4"
+    }
+  ],
+  "removal": {
+    "principalId": "B",
+    "removalId": "00000000-0000-4000-8000-000000000001",
+    "removedThrough": 200,
+    "legacyAccounts": [
+      "old.example:443"
+    ],
+    "preimageHex": "696e74656e742e696e76697465642d73796e632f76322f72656d6f76616c00abababababababababababababababababababababababababababababababab00000001420000000000004000800000000000000100000000000000c8000000010000000f6f6c642e6578616d706c653a343433",
+    "account": "invited-v2-r:afb2ccf2baac828571f18cf41dc2df0f1e6938f53476efeda9aad4738b4ef56f"
+  },
+  "inputHashes": {
+    "invited-session-key.ts": "29ebe8ff54a83d02baed1bce43a5cd308a7d2e47a90fb850b59b1ad8c3189b64",
+    "invited-session-key.test.ts": "b77cc3604d90a071bf85e7b2ef652a7a0ea50df2446ad3b94c39d1df1fafe1dd",
+    "invited-session-sync.test.ts": "ae313d736124fc531cc5816d5c892c21f4db4a997ee76ef2b35bf7f3297eb9cb"
+  }
+}

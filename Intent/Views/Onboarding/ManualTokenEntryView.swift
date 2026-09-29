@@ -375,20 +375,29 @@ extension ManualTokenEntryView {
         persistence: PersistenceManager = .shared,
         diagnostics: DiagnosticStore = .shared
     ) async throws -> StoredConnection {
+        let attemptID = UUID()
+        var persisted = false
+        defer { if !persisted { connection.disconnectPairingAttempt(attemptID) } }
         PairingDiagnostics.phase(.connect, .started, store: diagnostics)
         do {
-            try await DiagnosticConnectContext.$origin.withValue(.pairing) {
-                try await connection.connect(
-                    hosts: input.hosts,
-                    port: port,
-                    token: token,
-                    certFingerprint: fingerprint,
-                    tcAddress: input.tcAddress
-                )
+            try await PairingConnectionContext.$attemptID.withValue(attemptID) {
+                try await DiagnosticConnectContext.$origin.withValue(.pairing) {
+                    try await connection.connect(
+                        hosts: input.hosts,
+                        port: port,
+                        token: token,
+                        certFingerprint: fingerprint,
+                        tcAddress: input.tcAddress
+                    )
+                }
             }
         } catch {
             PairingDiagnostics.phase(.connect, error is CancellationError ? .cancelled : .failed, store: diagnostics)
             throw error
+        }
+        if Task.isCancelled || connection.pairingAttemptID != attemptID {
+            PairingDiagnostics.phase(.connect, .cancelled, store: diagnostics)
+            throw CancellationError()
         }
         let server = PairedServer(
             hosts: input.hosts,
@@ -406,11 +415,11 @@ extension ManualTokenEntryView {
                 connection: connection,
                 persistence: persistence
             )
+            persisted = true
             PairingDiagnostics.phase(.save, .succeeded, store: diagnostics)
             return stored
         } catch {
-            PairingDiagnostics.phase(.save, .failed, store: diagnostics)
-            connection.disconnect()
+            PairingDiagnostics.phase(.save, error is CancellationError ? .cancelled : .failed, store: diagnostics)
             throw error
         }
     }

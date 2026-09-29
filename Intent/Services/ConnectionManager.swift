@@ -23,6 +23,7 @@ import os
         let token: String
         let certFingerprint: String?
         let tcAddress: String?
+        let pairingAttemptID = PairingConnectionContext.attemptID
     }
 
     private struct ConnectAttemptContext {
@@ -44,6 +45,17 @@ import os
     }
     @ObservationIgnored private var isDemoConnection = false
     @ObservationIgnored var servesDemoFixtures = false
+    private var admittedPrincipal: ConnectionPrincipal?
+    @ObservationIgnored var admission: ConnectionAdmission?
+    @ObservationIgnored private(set) var pairingAttemptID: UUID?
+    var currentPrincipal: ConnectionPrincipal? {
+        get { DemoMode.isEnabled ? .demoOwner : admittedPrincipal }
+        set { admittedPrincipal = newValue }
+    }
+    @ObservationIgnored var authorityRefreshTask: Task<Void, Never>?
+    @ObservationIgnored var pendingAuthorityRevision: Double = -1
+    @ObservationIgnored var authorityBeforeRefresh: ConnectionPrincipal?
+
     var certMismatchDetected = false {
         didSet { certMismatchSubject.send(certMismatchDetected) }
     }
@@ -60,12 +72,14 @@ import os
     @ObservationIgnored private let certMismatchesSubject = CurrentValueSubject<[HostCertMismatch], Never>([])
     @ObservationIgnored let subscriptionRouter: ConnectionSubscriptionRouter
     @ObservationIgnored let diagnostics: DiagnosticStore
+    @ObservationIgnored let persistence: PersistenceManager
 
     @ObservationIgnored var socket: WebSocketConnection?
     @ObservationIgnored var messagePumpTask: Task<Void, Never>?
     @ObservationIgnored var pendingRequests: [Int: CheckedContinuation<Any, Error>] = [:]
     @ObservationIgnored private var nextRequestId = 1
     @ObservationIgnored private(set) var connectionGeneration: Int = 0
+    @ObservationIgnored private(set) var reconnectCredentialsRevision = 0
     /// Supersession order among overlapping `connect()` calls. The preserving
     /// path (pairing over a live connection) does not tear down — and so does
     /// not advance `connectionGeneration` — up front, so overlapping attempts
@@ -135,12 +149,14 @@ import os
     /// Internal (not private) so `BackendSessionRegistry` can construct one
     /// additional instance per pinned backend session; `.shared` remains the
     /// process-wide default used by the default session and existing code.
-    init(diagnostics: DiagnosticStore = .shared) {
+    init(diagnostics: DiagnosticStore = .shared, persistence: PersistenceManager = .shared) {
         self.diagnostics = diagnostics
+        self.persistence = persistence
         subscriptionRouter = ConnectionSubscriptionRouter(diagnostics: diagnostics)
     }
 
     isolated deinit {
+        authorityRefreshTask?.cancel()
         stopPathMonitor()
     }
 }
@@ -224,6 +240,7 @@ extension ConnectionManager {
         defer {
             recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration)
         }
+        let principal = try await admit(winner, token: target.token, fingerprint: target.certFingerprint)
         let raceEnd = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms (at +\(Int((raceEnd - connectStart) * Self.millisecondsPerSecond))ms)")
         AppLog.connection.debug("[ConnectionManager] Race won by \(winner.host), generation=\(context.generation)")
@@ -240,6 +257,7 @@ extension ConnectionManager {
         }
         lateMismatchGeneration = adoptConnectedWinner(
             winner,
+            principal: principal,
             target: target,
             preservesLiveConnection: context.preservesLiveConnection,
             initialGeneration: context.generation
@@ -307,6 +325,7 @@ extension ConnectionManager {
 
     private func adoptConnectedWinner(
         _ winner: RacedConnection,
+        principal: ConnectionPrincipal,
         target: ConnectTarget,
         preservesLiveConnection: Bool,
         initialGeneration: Int
@@ -321,6 +340,9 @@ extension ConnectionManager {
         activeTunnel = winner.tunnel
         host = winner.host
         configureSocketMessagePump()
+        currentPrincipal = principal
+        admission = ConnectionAdmission(id: UUID(), token: target.token, fingerprint: target.certFingerprint, principal: principal)
+        bindSavedIdentity(principal)
         connectionState = .connected
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = 0
@@ -332,11 +354,14 @@ extension ConnectionManager {
     }
 
     private func cacheConnectTarget(_ target: ConnectTarget) {
-        hosts = target.hosts
-        port = target.port
-        token = target.token
-        certFingerprint = target.certFingerprint
-        tcAddress = target.tcAddress
+        pairingAttemptID = target.pairingAttemptID
+        updateCachedCredentials(
+            hosts: target.hosts,
+            port: target.port,
+            token: target.token,
+            certFingerprint: target.certFingerprint,
+            tcAddress: target.tcAddress
+        )
     }
 
     /// Adopt registry-merged fields for the ACTIVE connection (called when a
@@ -352,6 +377,9 @@ extension ConnectionManager {
         certFingerprint: String?,
         tcAddress: String?
     ) {
+        if self.hosts != hosts || self.port != port || self.token != token || self.certFingerprint != certFingerprint || self.tcAddress != tcAddress {
+            reconnectCredentialsRevision += 1
+        }
         self.hosts = hosts
         self.port = port
         self.token = token
@@ -381,6 +409,8 @@ extension ConnectionManager {
         isDemoConnection = false
         servesDemoFixtures = false
         connectionGeneration += 1
+        pairingAttemptID = nil
+        clearPrincipal()
         stopHeartbeat()
         stopPathMonitor()
         stopGlobalSubscription()
@@ -427,10 +457,12 @@ extension ConnectionManager {
     }
 
     func applyRefreshedHosts(_ refreshedHosts: [String]) {
+        if hosts != refreshedHosts { reconnectCredentialsRevision += 1 }
         hosts = refreshedHosts
     }
 
-    func applyRefreshedTunnelAddress(_ refreshedAddress: String) {
+    func applyRefreshedTunnelAddress(_ refreshedAddress: String?) {
+        if tcAddress != refreshedAddress { reconnectCredentialsRevision += 1 }
         tcAddress = refreshedAddress
     }
 }

@@ -26,15 +26,22 @@ struct PairingPayload: Equatable {
               components.scheme == "intent",
               components.host == "pair",
               let items = components.queryItems,
-              let token = items.first(where: { $0.name == "token" })?.value,
-              let hostStr = items.first(where: { $0.name == "host" })?.value,
+              let token = items.first(where: { $0.name == "token" })?.value, !token.isEmpty,
               let portStr = items.first(where: { $0.name == "port" })?.value,
               let port = Int(portStr) else {
             return nil
         }
 
-        let hosts = hostStr.split(separator: ",").map(String.init)
-        guard !hosts.isEmpty else { return nil }
+        let sensitive = ["token", "host", "port", "fp", "certFingerprint", "tc", "v"]
+        guard sensitive.allSatisfy({ name in items.filter { $0.name == name }.count <= 1 }),
+              InvitedSyncRecord.validPort(Double(port)),
+              items.first(where: { $0.name == "v" }).map({ $0.value == "1" }) ?? true,
+              components.user == nil, components.password == nil, components.fragment == nil,
+              components.path.isEmpty || components.path == "/" else { return nil }
+        let hostStr = items.first { $0.name == "host" }?.value ?? ""
+        let rawHosts = hostStr.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+        let hosts = rawHosts.compactMap(SyncedBackendConnectionMerge.usableHost)
+        guard hostStr.isEmpty || hosts.count == rawHosts.count else { return nil }
 
         // The first non-empty fingerprint wins, canonical `fp=` first (so an
         // empty `fp=` falls back to a non-empty legacy `certFingerprint=`).
@@ -49,6 +56,8 @@ struct PairingPayload: Equatable {
 
         let tcAddress = items.first { $0.name == "tc" }?.value
             .flatMap { $0.isEmpty ? nil : $0 }
+
+        guard !hosts.isEmpty || tcAddress != nil else { return nil }
 
         return Self(
             hosts: hosts,
