@@ -6,9 +6,16 @@ import Security
 protocol SyncedKeychainWriting: SyncedKeychainListing {
     func add(_ attributes: [String: Any]) -> OSStatus
     func update(matching query: [String: Any], attributes: [String: Any]) -> OSStatus
+    func delete(matching query: [String: Any]) -> OSStatus
+}
+
+extension SyncedKeychainWriting {
+    func delete(matching _: [String: Any]) -> OSStatus { errSecUnimplemented }
 }
 
 extension SecItemSyncedKeychain: SyncedKeychainWriting {
+    func delete(matching query: [String: Any]) -> OSStatus { SecItemDelete(query as CFDictionary) }
+
     func add(_ attributes: [String: Any]) -> OSStatus {
         SecItemAdd(attributes as CFDictionary, nil)
     }
@@ -193,7 +200,7 @@ struct SyncedBackendPublisher {
     }
 
     private func target(for connection: StoredConnection) -> Target? {
-        guard !connection.token.isEmpty,
+        guard connection.principal?.isOwner == true, !connection.token.isEmpty,
               !SyncedBackendConnectionMerge.normalizeFingerprint(connection.server.certFingerprint).isEmpty,
               let host = connection.server.hosts.compactMap(SyncedBackendConnectionMerge.usableHost).first
                 ?? SyncedBackendPayload.tunnelAddress(connection.server.tcAddress)

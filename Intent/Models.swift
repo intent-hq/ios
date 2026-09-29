@@ -61,6 +61,13 @@ struct StoredConnection: Codable, Identifiable, Equatable {
     /// only an explicit pairing newer than a remembered removal can resume it.
     var localPairingSyncClock: Double?
     var pendingRoutePublication: PendingBackendRoutePublication?
+    var principal: ConnectionPrincipal?
+    /// Exact invited-v2 payload, protected by the existing local Keychain blob.
+    var invitedSyncPayload: Data?
+    var invitedPersonKey: String? {
+        guard let principal, !principal.isOwner, let pin = server.certFingerprint else { return nil }
+        return try? InvitedSyncKey.session(fingerprint: pin, principalId: principal.id)
+    }
 
     init(
         id: UUID,

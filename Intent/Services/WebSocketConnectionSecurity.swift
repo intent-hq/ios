@@ -83,9 +83,10 @@ extension WebSocketConnection {
             .joined(separator: ":")
     }
 
-    /// Case-insensitive fingerprint comparison — the sole trust decision for
-    /// pinned connections.
+    /// Compare validated SHA-256 bytes, accepting both supported spellings.
     nonisolated static func fingerprintMatches(_ received: String, pinned: String) -> Bool {
-        received.lowercased() == pinned.lowercased()
+        guard let received = try? InvitedSyncKey.fingerprint(received),
+              let pinned = try? InvitedSyncKey.fingerprint(pinned) else { return false }
+        return received == pinned
     }
 }

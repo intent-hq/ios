@@ -190,13 +190,8 @@ extension AppCoordinator {
     /// uses them.
     @discardableResult
     func refreshSyncedBackends() -> SyncedBackendMergeOutcome? {
-        defer {
-            savedConnections = dependencies.persistence.loadConnections().sorted { lhs, rhs in
-                if lhs.id == windowConnectionID { return rhs.id != windowConnectionID }
-                if rhs.id == windowConnectionID { return false }
-                return (lhs.lastConnectedAt ?? .distantPast) > (rhs.lastConnectedAt ?? .distantPast)
-            }
-        }
+        defer { refreshSavedConnectionsPresentation() }
+        refreshInvitedConnections()
         dependencies.persistence.publishPendingBackends()
         guard case .available(let records) = dependencies.syncedRegistry.listBackends() else { return nil }
         let windowID = windowConnectionID
@@ -235,6 +230,69 @@ extension AppCoordinator {
             }
         }
         return outcome
+    }
+
+    func refreshSavedConnectionsPresentation() {
+        guard let records = dependencies.persistence.loadConnectionsWithOutcome().connections else { return }
+        savedConnections = records.sorted { lhs, rhs in
+            if lhs.id == windowConnectionID { return rhs.id != windowConnectionID }
+            if rhs.id == windowConnectionID { return false }
+            return (lhs.lastConnectedAt ?? .distantPast) > (rhs.lastConnectedAt ?? .distantPast)
+        }
+        refreshInvitedReconnectCredentials(savedConnections)
+        if case .pairing = currentScreen { pairingShowsSavedConnections = !savedConnections.isEmpty }
+    }
+
+    func refreshInvitedConnections(authenticate: PersistenceManager.InvitedAuthenticator? = nil) {
+        let persistence = dependencies.persistence
+        guard persistence.invitedRegistry != nil, invitedRefreshTask == nil else { return }
+        invitedRefreshTask = Task { [weak self] in
+            let outcome = await persistence.refreshInvitedSessions(authenticate: authenticate ?? { candidate in
+                let connection = ConnectionManager(persistence: persistence)
+                defer { connection.disconnect() }
+                try await connection.connect(
+                    hosts: candidate.server.hosts,
+                    port: candidate.server.port,
+                    token: candidate.token,
+                    certFingerprint: candidate.server.certFingerprint,
+                    tcAddress: candidate.server.tcAddress
+                )
+                return try await connection.confirmedPrincipal()
+            })
+            guard let self else { return }
+            invitedRefreshTask = nil
+            applyInvitedImportOutcome(outcome)
+        }
+    }
+
+    func applyInvitedImportOutcome(_ outcome: InvitedImportOutcome) {
+        let registry = dependencies.sessionRegistry
+        registry.markBackendsRemoved(outcome.removedIds.map(BackendID.init))
+        registry.clearRemovedMarks(outcome.addedIds.map(BackendID.init))
+        for id in outcome.removedIds {
+            registry.session(for: BackendID(id))?.connection.disconnect()
+            dependencies.persistence.clearLastScreen(for: id)
+        }
+        refreshSavedConnectionsPresentation()
+        if let windowID = windowConnectionID, outcome.removedIds.contains(windowID) { exitRemovedBackend() }
+    }
+
+    private func refreshInvitedReconnectCredentials(_ records: [StoredConnection]) {
+        for record in records where record.invitedPersonKey != nil {
+            guard !dependencies.sessionRegistry.isBackendRemoved(BackendID(record.id)) else { continue }
+            let target = dependencies.sessionRegistry.session(for: BackendID(record.id))?.connection
+                ?? (record.id == windowConnectionID ? dependencies.connection : nil)
+            guard let target, let saved = record.principal else { continue }
+            if let admitted = target.admission?.principal ?? target.currentPrincipal,
+               !ConnectionPrincipal.samePerson(admitted.id, saved.id) { continue }
+            target.updateCachedCredentials(
+                hosts: record.server.hosts,
+                port: record.server.port,
+                token: record.token,
+                certFingerprint: record.server.certFingerprint,
+                tcAddress: record.server.tcAddress
+            )
+        }
     }
 
     /// Keep the existing bounded startup fallback, even during transport-owned

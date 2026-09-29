@@ -707,6 +707,22 @@ assert_eq "the temporary result bundle is removed after a passing run" "$(temp_b
 assert_eq "results scratch files are removed" "$(ls "$work" | grep -c '^xcodebuild-results\.')" 0
 assert_lacks "a passing filtered run keeps no bundle" "$(cat "$work/target.out")" "Result bundle kept at"
 
+echo "# optional resolved identity evidence leaves default selection unchanged"
+status=$(run_filtered identityexport "IntentTests/DemoFixturesTests" test-without-building ONLY_TESTING_IDENTITIES_PATH="$work/identities.json")
+assert_eq "requested identity export exits 0" "$status" 0
+assert_eq "identity export adds no xcodebuild invocation" "$(argv_count identityexport)" 2
+assert_eq "identity export retains the actual resolver matches" \
+  "$(python3 -c 'import json, sys; d=json.load(open(sys.argv[1])); print(d["version"]); print("\n".join(d["selectors"]["IntentTests/DemoFixturesTests"]))' "$work/identities.json")" \
+  $'1\nIntentTests/DemoFixturesTests/testFoo()\nIntentTests/DemoFixturesTests/testBar()'
+status=$(run_filtered identityfailure "IntentTests/DemoFixturesTests" test-without-building ONLY_TESTING_IDENTITIES_PATH="$work")
+assert_eq "failed requested identity export exits 83" "$status" 83
+assert_eq "failed identity export never starts tests" "$(argv_count identityfailure)" 1
+assert_lock_free "failed identity export releases the simulator lock"
+status=$(run_filtered identityempty "" test-without-building ONLY_TESTING_IDENTITIES_PATH="$work/empty-identities.json")
+assert_eq "unfiltered identity knob does not change the exit" "$status" 0
+assert_eq "unfiltered identity knob adds no enumeration" "$(argv_count identityempty)" 1
+[ ! -e "$work/empty-identities.json" ] && pass "unfiltered run writes no identity evidence" || fail "unfiltered run exported identities"
+
 echo "# Target/Class selectors resolve for XCTest and Swift Testing suites"
 status=$(run_filtered xctest "IntentTests/DemoFixturesTests" test-without-building)
 assert_eq "XCTest suite selector exits 0" "$status" 0
