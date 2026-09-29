@@ -35,7 +35,11 @@ extension PersistenceManager {
     /// Save this route intent atomically with the observed route. Unlike a
     /// deliberate re-pair, this must not authorize recreation after removal.
     func queueRoutePublication(_ connection: inout StoredConnection, previousRoute: String?, newRoute: String? = nil) {
-        guard let backendPublisher, routePublicationAllowed(connection) else { return }
+        if connection.invitedPersonKey != nil {
+            queueInvitedRoutePublication(&connection, newRoute: newRoute)
+            return
+        }
+        guard connection.principal?.isOwner == true, let backendPublisher, routePublicationAllowed(connection) else { return }
         let previous = connection.pendingRoutePublication
         let clock = backendPublisher.routeClock(for: connection)
         let route = SyncedBackendPayload.tunnelAddress(newRoute)
@@ -60,9 +64,11 @@ extension PersistenceManager {
     /// Backfill uses the original pairing time, never today's clock, so an
     /// old installation cannot revive a newer shared removal or edit.
     func publishPendingBackends() {
+        publishPendingInvitedSessions()
         guard backendPublisher != nil, var connections = loadConnectionsWithOutcome().connections else { return }
         var queuedBackfill = false
-        for index in connections.indices where connections[index].syncUpdatedAt == nil
+        for index in connections.indices where connections[index].principal?.isOwner == true
+            && connections[index].syncUpdatedAt == nil
             && connections[index].pendingSyncUpdatedAt == nil {
             connections[index].pendingSyncUpdatedAt = connections[index].server.pairedAt.timeIntervalSince1970 * 1000 // swiftlint:disable:this no_magic_numbers
             connections[index].localPairingSyncClock = connections[index].pendingSyncUpdatedAt
@@ -72,7 +78,7 @@ extension PersistenceManager {
         // have been saved together in the device-local registry.
         if queuedBackfill, !saveConnectionsLocked(connections) { return }
         var acknowledged = false
-        for index in connections.indices {
+        for index in connections.indices where connections[index].principal?.isOwner == true {
             if publishPairing(&connections[index]) { acknowledged = true }
             if publishRoutes(&connections[index]) { acknowledged = true }
         }

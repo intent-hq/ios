@@ -248,10 +248,10 @@ extension ManualTokenEntryViewTests {
     UrVnMDEwITAJBgUrDgMCGgUABBQ2+7hWu5Qe6SsZHyl7pq9jBLcTsQQIfjmQQ3oB\
     8nUCAggA
     """
-    nonisolated private static let fixtureIdentityFingerprint =
+    nonisolated static let fixtureIdentityFingerprint =
         "e7:24:5c:fe:e7:65:5b:70:6b:e9:7e:02:1f:81:dc:f5:a1:15:38:8c:d1:a3:5f:22:90:08:f6:5e:97:3c:cc:ea"
 
-    nonisolated private static func fixtureIdentity() throws -> SecIdentity {
+    nonisolated static func fixtureIdentity() throws -> SecIdentity {
         let p12 = try #require(Data(base64Encoded: fixtureIdentityP12Base64))
         var items: CFArray?
         let status = SecPKCS12Import(

@@ -121,12 +121,29 @@ class AppCoordinator {
     /// workspace-loading registration before that registration is abandoned.
     private var reconnectLoadingObservationGeneration = 0
     @ObservationIgnored private var reconnectOverlayTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored var invitedRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var savedConnectionsObserver: AnyCancellable?
 
     @ObservationIgnored let dependencies: AppCoordinatorDependencies
     @ObservationIgnored let lifecycleState = AppCoordinatorLifecycleState()
     @ObservationIgnored let routingState = AppCoordinatorRoutingState()
     @ObservationIgnored let navigationState = AppCoordinatorNavigationState()
     @ObservationIgnored let connectionLossPresentation: ConnectionLossPresentation
+    var canCreateWorkspace: Bool {
+        dependencies.connection.connectionState == .connected && dependencies.connection.currentPrincipal?.canManageWorkspaces == true
+    }
+
+    /// Temporary transport recovery keeps the draft while submission remains
+    /// gated. An authority invalidation, demotion, or final disconnect closes it.
+    var shouldDismissWorkspaceCreation: Bool {
+        if case .reconnecting = dependencies.connection.connectionState { return false }
+        return dependencies.connection.currentPrincipal?.canManageWorkspaces != true
+    }
+
+    var canUseAssistant: Bool {
+        dependencies.connection.connectionState == .connected && dependencies.connection.currentPrincipal?.isOwner == true
+    }
+
     /// The backend this coordinator's window is bound to; nil only for a
     /// window that has no backend yet (pairing session). Bound windows route
     /// straight to .connecting on load and dial this backend's saved record.
@@ -171,6 +188,9 @@ class AppCoordinator {
         self.backendID = backendID
         self.connectionLossPresentation = connectionLossPresentation
         lifecycleState.workspaceDataAtInitialFlowStart = workspaceStore.lastUpdated
+        savedConnectionsObserver = persistence.connectionsDidChange.sink { [weak self] _ in
+            self?.refreshSavedConnectionsPresentation()
+        }
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
@@ -190,6 +210,7 @@ class AppCoordinator {
     }
 
     isolated deinit {
+        invitedRefreshTask?.cancel()
         connectionLossPresentation.reset()
         reconnectOverlayTimeoutTask?.cancel()
         cancelReconnectLoadingObservation()

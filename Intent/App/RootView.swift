@@ -166,9 +166,12 @@ struct RootView: View {
                 isSearching: isSearchingWorkspaces,
                 alignment: .trailing,
                 avoidsConversationInput: !conversationIsPopping,
-                onCreateWorkspace: { showingCreateWorkspace = true },
+                onCreateWorkspace: { if coordinator.canCreateWorkspace { showingCreateWorkspace = true } },
                 onConnections: { showingConnections = true }
             ))
+            .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
+                if shouldDismiss { showingCreateWorkspace = false }
+            }
             .sheet(isPresented: $showingCreateWorkspace) {
                 CreateWorkspaceView(session: session)
                     .environment(coordinator)

@@ -55,11 +55,14 @@ struct WorkspaceListView: View {
         }
         .modifier(WorkspaceActionLauncher(
             isSearching: isSearching,
-            onCreateWorkspace: { showingCreateWorkspace = true },
+            onCreateWorkspace: { if coordinator.canCreateWorkspace { showingCreateWorkspace = true } },
             onConnections: { showingConnections = true }
         ))
         .navigationTitle("Workspaces")
         .toolbar(.hidden, for: .navigationBar)
+        .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
+            if shouldDismiss { showingCreateWorkspace = false }
+        }
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView(session: session)
                 .environment(coordinator)

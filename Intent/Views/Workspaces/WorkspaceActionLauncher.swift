@@ -93,7 +93,9 @@ struct WorkspaceActionLauncher: ViewModifier {
                     connectionCount: connectionCount,
                     appearance: appearanceTitle,
                     themePreference: themePreference,
-                    onSelect: select
+                    onSelect: select,
+                    allowsWorkspaceCreation: coordinator.canCreateWorkspace,
+                    allowsAssistant: coordinator.canUseAssistant
                 )
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
             }
@@ -121,7 +123,7 @@ struct WorkspaceActionLauncher: ViewModifier {
         isOpen = false
         switch action {
         case .assistant: coordinator.onSelectAssistant()
-        case .workspace: onCreateWorkspace()
+        case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
         case .connections: onConnections()
         case .acknowledgements: showingAcknowledgements = true
         case .settings: coordinator.onOpenSettings()
