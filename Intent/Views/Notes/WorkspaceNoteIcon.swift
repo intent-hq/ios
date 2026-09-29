@@ -52,6 +52,12 @@ struct WorkspaceNoteIcon: View {
                 }
                 .opacity(status == .cancelled && colorSchemeContrast == .standard ? WorkspaceDetailStyle.cancelledOpacity : 1)
                 .accessibilityLabel(status.label)
+        case .reviewRequired:
+            Image(.eye)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
+                .accessibilityLabel(status.label)
         default:
             TaskStatusIconView(status: status, size: WorkspaceDetailStyle.iconSize)
         }

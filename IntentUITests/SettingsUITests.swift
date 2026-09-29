@@ -109,9 +109,10 @@ nonisolated final class SettingsUITests: XCTestCase {
         assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-LargeText-Actions")
         app.buttons["Log Off"].tap()
-        let confirmation = app.alerts["Log Off?"]
+        let confirmation = app.staticTexts["log-off.title"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
-        confirmation.buttons["Cancel"].tap()
+        capture(app, named: "Log-Off-Light-LargeText")
+        app.buttons["log-off.cancel"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
         assertConnections(app, current: "Studio Mac", other: "Travel Mac")
@@ -182,7 +183,7 @@ nonisolated final class SettingsUITests: XCTestCase {
 
     @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        let scrollView = app.scrollViews.firstMatch
+        let scrollView = app.scrollViews["settings.scroll"]
         let viewport = scrollView.frame.intersection(app.frame)
         for _ in 0..<Self.maximumSwipes where !element.isHittable || !viewport.contains(element.frame) {
             scrollView.swipeUp()
@@ -193,7 +194,9 @@ nonisolated final class SettingsUITests: XCTestCase {
 
     @MainActor
     private func scrollToTop(_ app: XCUIApplication) {
-        for _ in 0..<Self.maximumSwipes where !app.buttons["settings.close"].isHittable { app.swipeDown() }
+        for _ in 0..<Self.maximumSwipes where !app.buttons["settings.close"].isHittable {
+            app.scrollViews["settings.scroll"].swipeDown()
+        }
     }
 
     @MainActor

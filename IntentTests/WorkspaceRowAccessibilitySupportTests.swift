@@ -5,15 +5,15 @@ import Testing
 import UIKit
 
 extension WorkspaceRowPresentationTests {
-    private static let mergedPullRequestNumber = 123_456_789
+    private static let pullRequestNumber = 123_456_789
     private static let additionalPullRequestCount = 100
     private static let renderedBadgeHostHeight: CGFloat = 300
     private static let runLoopObservationInterval = 0.01
     private static let maximumClassNameLength = 80
 
-    static var badgeLabels: [String?] {
+    static func badgeLabels(for status: WorkspacePrPill.Status) -> [String?] {
         [
-            "Merged pull request #123456789", "100 additional pull requests"
+            "\(status.rawValue.capitalized) pull request #123456789", "100 additional pull requests"
         ]
     }
 
@@ -38,18 +38,25 @@ extension WorkspaceRowPresentationTests {
     // Badges are located by their stable accessibility identifier; the spoken
     // label is asserted separately so a copy change cannot masquerade as a
     // missing element.
-    func renderBadges(width: CGFloat) async throws -> RenderedBadges {
+    func renderBadges(
+        width: CGFloat,
+        status: WorkspacePrPill.Status,
+        colorScheme: ColorScheme,
+        dynamicTypeSize: DynamicTypeSize = .accessibility3
+    ) async throws -> RenderedBadges {
         let indicator = WorkspaceRowView.PrIndicatorModel(
-            pill: .init(status: .merged, number: Self.mergedPullRequestNumber),
+            pill: .init(status: status, number: Self.pullRequestNumber),
             otherMonitorCount: Self.additionalPullRequestCount
         )
         let rootView = WorkspaceRowView.PullRequestBadges(
             indicator: indicator,
-            colorScheme: .light,
+            colorScheme: colorScheme,
             colorSchemeContrast: .standard,
             expanded: true
         )
-        .environment(\.dynamicTypeSize, .accessibility3)
+        .environment(\.dynamicTypeSize, dynamicTypeSize)
+        .environment(\.colorScheme, colorScheme)
+        .background(Theme.background(for: colorScheme))
         return try await SyntheticBadgeHost.render(
             rootView,
             width: width,
@@ -78,8 +85,21 @@ extension WorkspaceRowPresentationTests {
                 try #require(initialBadge)
             }
             let hostFrame = hostView.convert(hostView.bounds, to: nil)
+            try recordBadges(
+                in: hostView,
+                named: "pr-badges-\(status.rawValue)-\(colorScheme)-\(dynamicTypeSize)-\(Int(width)).png"
+            )
             return RenderedBadges(hostFrame: hostFrame, badges: badges)
         }
+    }
+
+    private func recordBadges(in hostView: UIView, named name: String) throws {
+        var drawn = false
+        let image = UIGraphicsImageRenderer(bounds: hostView.bounds).image { _ in
+            drawn = hostView.drawHierarchy(in: hostView.bounds, afterScreenUpdates: true)
+        }
+        try #require(drawn, "The hosted PR badges could not be captured")
+        Attachment.record(try #require(image.pngData()), named: name)
     }
 
     func initialBadgeFrames(

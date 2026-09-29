@@ -118,21 +118,12 @@ struct RootView: View {
         // change. Group distributes its modifiers to both outgoing and
         // incoming content, briefly giving each its own overlay window.
         ZStack {
-            if isWorkspaceFlow {
+            if isWorkspaceFlow || showsSettingsSheet {
                 workspaceFlowContent
             } else {
                 launchContent
             }
         }
-    }
-
-    @ViewBuilder private var workspaceFlowContent: some View {
-        workspaceNavigationContent
-            .sheet(isPresented: assistantPresented) {
-                AssistantView(session: session)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
     }
 
     private var assistantPresented: Binding<Bool> {
@@ -359,6 +350,51 @@ struct RootView: View {
             session.releaseWorkspaceStatus(workspaceId: previous, consumer: statusConsumer)
         }
         statusWorkspaceId = workspaceId
+    }
+}
+
+private extension RootView {
+    var showsSettingsSheet: Bool {
+        #if os(iOS)
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return false }
+        if case .settings = coordinator.currentScreen { return true }
+        #endif
+        return false
+    }
+
+    var settingsPresented: Binding<Bool> {
+        Binding(
+            get: { showsSettingsSheet },
+            set: { presented in
+                if !presented, case .settings = coordinator.currentScreen {
+                    coordinator.onSettingsBack()
+                }
+            }
+        )
+    }
+
+    @ViewBuilder var workspaceFlowContent: some View {
+        workspaceNavigationContent
+            .sheet(isPresented: assistantPresented) {
+                AssistantView(session: session)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: settingsPresented) {
+                SettingsView(presentedAsSheet: true, contentColorScheme: colorScheme)
+                    // The system status bar sits over the dark backdrop; content retains the selected theme.
+                    .preferredColorScheme(.dark)
+                    .presentationBackground(SettingsStyle.surface(for: colorScheme))
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+                    .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
+            }
+            .background {
+                Color.clear.preference(
+                    key: ConnectionBackdropPreference.self,
+                    value: showsSettingsSheet ? ConnectionBackdropPreference.manualOpacity : 0
+                )
+            }
     }
 }
 

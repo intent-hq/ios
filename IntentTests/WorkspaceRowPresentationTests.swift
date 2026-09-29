@@ -19,10 +19,19 @@ struct WorkspaceRowPresentationTests {
             )
         ) {
             await SyntheticBadgeHost.publishesAccessibilityTree()
-        }
+        },
+        arguments: [WorkspacePrPill.Status.open, .draft, .merged, .closed],
+        [ColorScheme.light, .dark]
     )
-    func renderedPrBadgesFitThenFallBackInsideSyntheticHost() async throws {
-        let fit = try await renderBadges(width: 600)
+    func renderedPrBadgesFitThenFallBackInsideSyntheticHost(
+        status: WorkspacePrPill.Status,
+        colorScheme: ColorScheme
+    ) async throws {
+        let labels = Self.badgeLabels(for: status)
+        let normal = try await renderBadges(width: 600, status: status, colorScheme: colorScheme, dynamicTypeSize: .large)
+        #expect(normal.badges.map { $0.label } == labels)
+        #expect(normal.badges.allSatisfy { normal.hostFrame.contains($0.frame) })
+        let fit = try await renderBadges(width: 600, status: status, colorScheme: colorScheme)
         let combinedIdealWidth = fit.badges[0].frame.union(fit.badges[1].frame).width
         let largestBadgeWidth = fit.badges.map { $0.frame.width }.max() ?? 0
         let fallbackWidth = ceil(largestBadgeWidth) + 1
@@ -37,14 +46,14 @@ struct WorkspaceRowPresentationTests {
         #expect(fallbackWidth < combinedIdealWidth)
         #expect(fit.badges.allSatisfy { $0.frame.width <= fallbackWidth })
         #expect(fit.badges.allSatisfy { fit.hostFrame.contains($0.frame) })
-        #expect(fit.badges.map { $0.label } == Self.badgeLabels)
+        #expect(fit.badges.map { $0.label } == labels)
 
-        let fallback = try await renderBadges(width: fallbackWidth)
+        let fallback = try await renderBadges(width: fallbackWidth, status: status, colorScheme: colorScheme)
 
         #expect(fallback.badges[0].frame.minX == fallback.badges[1].frame.minX)
         #expect(fallback.badges[0].frame.maxY < fallback.badges[1].frame.minY)
         #expect(fallback.badges.allSatisfy { fallback.hostFrame.contains($0.frame) })
-        #expect(fallback.badges.map { $0.label } == Self.badgeLabels)
+        #expect(fallback.badges.map { $0.label } == labels)
         print("SYNTHETIC PR badge fit geometry: \(fit)")
         print("SYNTHETIC PR badge fallback geometry: \(fallback)")
     }

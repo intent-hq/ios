@@ -91,6 +91,7 @@ struct ContentBlockBody: View, Equatable {
     var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @State private var thinkingExpanded = false
     @State private var lightboxPresented = false
     /// Set when a thumbnail tap started hydration: the lightbox then opens
@@ -199,6 +200,14 @@ struct ContentBlockBody: View, Equatable {
 
     @ViewBuilder
     private var thinkingView: some View {
+        if workspaceDesign {
+            WorkspaceThinkingView(text: block.resolvedText ?? "", isExpanded: thinkingExpansion)
+        } else {
+            legacyThinkingView
+        }
+    }
+
+    private var legacyThinkingView: some View {
         DisclosureGroup(isExpanded: thinkingExpansion) {
             Text(block.resolvedText ?? "")
                 .interFont(Constants.Typography.bodyS)

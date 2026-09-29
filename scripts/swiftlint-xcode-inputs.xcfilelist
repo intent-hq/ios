@@ -280,6 +280,7 @@ $(SRCROOT)/Intent/Views/Connection/ConnectionLossOverlay.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossPresenter.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionNetworkMessage.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionNetworkStatusView.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionPairingButtons.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSheet.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSheetButtonStyle.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSheetText.swift
@@ -334,6 +335,7 @@ $(SRCROOT)/Intent/Views/Conversation/StatusStrip/AgentWaitingView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/BackgroundHooksRow.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/AssistantMessageView.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationActionMenu.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationColumnView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationScrollViewSupport.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptGestureProbe.swift
@@ -370,6 +372,7 @@ $(SRCROOT)/Intent/Views/Settings/AcknowledgementsView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticExportView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticPreviewSection.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticShareSheet.swift
+$(SRCROOT)/Intent/Views/Settings/LogOffConfirmationSheet.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsActionLabel.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsAppearanceSelector.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsConnectionCard.swift
@@ -789,6 +792,7 @@ $(SRCROOT)/IntentUITests/AssistantNavigationUITests.swift
 $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossContrastAssertions.swift
 $(SRCROOT)/IntentUITests/ConnectionLossUITests.swift
+$(SRCROOT)/IntentUITests/ConversationActionsUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptFullGateUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Keyboard.swift

@@ -8,7 +8,6 @@ struct WorkspaceActionLauncher: ViewModifier {
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @AppStorage("appThemePreference") private var themePreference = "system"
@@ -18,9 +17,11 @@ struct WorkspaceActionLauncher: ViewModifier {
     @State private var confirmingLogOff = false
 
     private enum Layout {
-        static let blurRadius: CGFloat = 16
-        static let lightShadeOpacity = 0.72
-        static let darkShadeOpacity = 0.6
+        static let blurRadius: CGFloat = 15
+        static let shadeOpacity = 0.8
+        // The shared light/dark home-menu fade in IOS Working.
+        // swiftlint:disable:next no_magic_numbers
+        static let shade = Color(.sRGB, red: 26 / 255, green: 26 / 255, blue: 25 / 255)
         static let springResponse = 0.35
         static let springDamping = 0.85
         static let footerSpacing: CGFloat = 20
@@ -49,26 +50,26 @@ struct WorkspaceActionLauncher: ViewModifier {
             .sheet(isPresented: $showingAcknowledgements) {
                 HomeActionSettingsView()
             }
-            .alert("Log Off?", isPresented: $confirmingLogOff) {
-                Button("Cancel", role: .cancel) {}
-                Button("Log Off", role: .destructive) {
+            .sheet(isPresented: $confirmingLogOff) {
+                LogOffConfirmationSheet {
                     isOpen = false
                     coordinator.onLogOff()
                 }
-            } message: {
-                Text("Are you sure? You'll need to pair again to reconnect.")
             }
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
             }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
-            .onDisappear { isOpen = false }
+            .onDisappear {
+                // A full-screen sheet adaptation must still return to the menu on cancel.
+                if !confirmingLogOff { isOpen = false }
+            }
     }
 
     private func actionOverlay(bottomInset: CGFloat) -> some View {
         ZStack(alignment: Alignment(horizontal: alignment, vertical: .bottom)) {
             if isOpen {
-                (colorScheme == .light ? Color.black : Theme.background(for: colorScheme))
+                Layout.shade
                     .opacity(backdropOpacity)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
@@ -92,7 +93,7 @@ struct WorkspaceActionLauncher: ViewModifier {
 
     private var backdropOpacity: Double {
         if reduceTransparency { return 1 }
-        return colorScheme == .light ? Layout.lightShadeOpacity : Layout.darkShadeOpacity
+        return Layout.shadeOpacity
     }
 
     private var actionControls: some View {

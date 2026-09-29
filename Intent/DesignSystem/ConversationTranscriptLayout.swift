@@ -32,6 +32,24 @@ extension Constants.Conversation.Transcript {
     static let truncationBannerCornerRadius: CGFloat = 10
 }
 
+extension Constants.Conversation.Design {
+    enum SuggestedPrompt {
+        static let contentSpacing = Constants.Conversation.Design.Status.iconSpacing
+        static let horizontalPadding = Constants.Conversation.Design.Question.buttonHorizontalPadding
+        static let verticalPadding: CGFloat = 12
+        static let minimumHeight = Constants.Conversation.Design.Composer.minimumHeight
+        static let borderWidth: CGFloat = 1
+        static let pressedOverlayOpacity: Double = 0.08
+        static let disabledOpacity: Double = 0.4
+    }
+
+    enum HistoryNotice {
+        static let contentSpacing = Constants.Conversation.Design.Status.iconSpacing
+        static let horizontalPadding = Constants.Conversation.Design.Status.leadingPadding
+        static let verticalPadding: CGFloat = 12
+    }
+}
+
 extension Constants.Conversation.Column {
     static let questionBannerBackgroundOpacity: Double = 0.4
     static let questionBannerCornerRadius: CGFloat = 12

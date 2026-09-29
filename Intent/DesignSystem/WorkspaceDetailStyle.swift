@@ -13,6 +13,7 @@ enum WorkspaceDetailStyle {
     static let controlSize: CGFloat = 48
     static let iconSize: CGFloat = 24
     static let tabInset: CGFloat = 4
+    static let tabLabelTracking: CGFloat = -0.32
     static let tabCornerRadius: CGFloat = 20
     static let selectedTabCornerRadius: CGFloat = 16
     static let progressHeight: CGFloat = 8
@@ -30,6 +31,8 @@ enum WorkspaceDetailStyle {
     static let accessibilityIndentation: CGFloat = 8
     static let noteTextSpacing: CGFloat = 4
     static let noteTitleSpacing: CGFloat = 8
+    static let notePreviewSpacing: CGFloat = 12
+    // Minimum 44-point rows plus this gap leave 24 points between 24-point icons.
     static let taskRowSpacing: CGFloat = 4
     static let checkboxCornerRadius: CGFloat = 8
     static let checkboxStrokeWidth: CGFloat = 2
@@ -94,7 +97,8 @@ struct WorkspaceContentTabs: View {
     private func tab(_ title: String, value: WorkspaceTab) -> some View {
         Button { selection = value } label: {
             Text(title)
-                .interFont(Constants.Typography.bodyXSEmphasized)
+                .interFont(Constants.Typography.bodySEmphasized)
+                .tracking(WorkspaceDetailStyle.tabLabelTracking)
                 .padding(.vertical, WorkspaceDetailStyle.tabInset)
                 .frame(maxWidth: .infinity, minHeight: WorkspaceDetailStyle.controlSize)
                 .foregroundStyle(selection == value
