@@ -145,20 +145,60 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
-    func testConnectionsAndAppearanceTilesOpenTheirScreens() {
+    func testConnectionsTileOpensScreenAndAppearanceTileCyclesTheme() {
         let app = launchHome()
         openMenu(app)
         reveal("connections", in: app).tap()
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
         // Relaunch restores the home screen without depending on the connection sheet's detent.
         app.terminate()
+        // Argument-domain overrides mask later writes, so remove it before exercising live changes.
+        app.launchArguments = ["--demo-data", "--demo-long-workspace-list"]
         app.launch()
         openMenu(app)
-        reveal("appearance", in: app).tap()
-        XCTAssertTrue(app.navigationBars["Appearance"].waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["System"].exists || app.staticTexts["System"].exists)
-        app.navigationBars["Appearance"].buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        reveal("settings", in: app).tap()
+        let system = app.buttons["settings.appearance.system"]
+        XCTAssertTrue(system.waitForExistence(timeout: Self.timeout))
+        system.tap()
+        app.buttons["settings.close"].tap()
+        openMenu(app)
+        let appearance = reveal("appearance", in: app)
+        XCTAssertEqual(appearance.value as? String, "System")
+        for mode in ["Light Mode", "Dark Mode", "System", "Light Mode"] {
+            appearance.tap()
+            let updated = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", mode), object: appearance
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: Self.timeout), .completed)
+            XCTAssertEqual(appearance.label, "Appearance")
+            XCTAssertTrue(app.scrollViews["intent.menu.tiles"].exists)
+            XCTAssertTrue(app.buttons["intent.menu.close"].isHittable)
+            XCTAssertFalse(app.navigationBars["Appearance"].exists)
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Appearance tile - \(mode)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+        }
+        app.terminate()
+        app.launch()
+        openMenu(app)
+        XCTAssertEqual(reveal("appearance", in: app).value as? String, "Light Mode")
+    }
+
+    @MainActor
+    func testUnknownAppearanceCyclesFromSystemToLight() {
+        let app = launchHome(themePreference: "legacy")
+        openMenu(app)
+        let appearance = reveal("appearance", in: app)
+        XCTAssertEqual(appearance.value as? String, "System")
+        appearance.tap()
+        XCTAssertTrue(app.scrollViews["intent.menu.tiles"].exists)
+        app.terminate()
+        // Read the new stored value without the legacy launch override masking it.
+        app.launchArguments = ["--demo-data", "--demo-long-workspace-list"]
+        app.launch()
+        openMenu(app)
+        XCTAssertEqual(reveal("appearance", in: app).value as? String, "Light Mode")
     }
 
     @MainActor
@@ -210,9 +250,9 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchHome() -> XCUIApplication {
+    private func launchHome(themePreference: String = "system") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data", "--demo-long-workspace-list"]
+        app.launchArguments += ["--demo-data", "--demo-long-workspace-list", "-appThemePreference", themePreference]
         app.launch()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         return app
