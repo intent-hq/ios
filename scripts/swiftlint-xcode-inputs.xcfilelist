@@ -393,7 +393,6 @@ $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSourceCard.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceView.swift
 $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
-$(SRCROOT)/Intent/Views/Workspaces/HomeActionSettingsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/HomeActionTiles.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalControls.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalView.swift

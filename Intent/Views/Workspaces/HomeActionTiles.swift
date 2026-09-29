@@ -7,7 +7,6 @@ struct HomeActionTiles: View {
         case workspace
         case connections
         case appearance
-        case acknowledgements
         case settings
     }
 
@@ -134,7 +133,6 @@ struct HomeActionTiles: View {
         case .workspace: "New\nWorkspace"
         case .connections: "Connections:\n\(connectionCount) \(connectionCount == 1 ? "Device" : "Devices")"
         case .appearance: "Appearance:\n\(appearance)"
-        case .acknowledgements: "Acks &\nLogs"
         case .settings: "Settings"
         }
     }
@@ -150,7 +148,6 @@ struct HomeActionTiles: View {
             case "dark": .night
             default: .brightnessRise
             }
-        case .acknowledgements: .file
         case .settings: .settings2
         }
     }

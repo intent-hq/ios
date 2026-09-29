@@ -13,7 +13,6 @@ struct WorkspaceActionLauncher: ViewModifier {
     @AppStorage("appThemePreference") private var themePreference = "system"
     @State private var isOpen = false
     @State private var connectionCount = 0
-    @State private var showingAcknowledgements = false
 
     private enum Layout {
         static let blurRadius: CGFloat = 15
@@ -46,9 +45,6 @@ struct WorkspaceActionLauncher: ViewModifier {
                 reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
                 value: isOpen
             )
-            .sheet(isPresented: $showingAcknowledgements) {
-                HomeActionSettingsView()
-            }
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
             }
@@ -126,7 +122,6 @@ struct WorkspaceActionLauncher: ViewModifier {
         case .assistant: coordinator.onSelectAssistant()
         case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
         case .connections: onConnections()
-        case .acknowledgements: showingAcknowledgements = true
         case .settings: coordinator.onOpenSettings()
         case .appearance: break
         }
