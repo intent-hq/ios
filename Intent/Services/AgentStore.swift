@@ -62,8 +62,10 @@ extension SpecialistInfo {
               let description = item["description"] as? String else { return nil }
         self.init(
             id: id,
-            name: name,
-            description: description,
+            name: AgentSession.displayName(for: name),
+            description: id == "chief-of-staff"
+                ? description.replacingOccurrences(of: "Chief of Staff", with: "Assistant", options: .caseInsensitive)
+                : description,
             resolvedModel: item["resolvedModel"] as? String,
             resolvedProvider: item["resolvedProvider"] as? String,
             hidden: item["hidden"] as? Bool ?? false,
