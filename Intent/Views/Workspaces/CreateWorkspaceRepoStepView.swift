@@ -6,24 +6,62 @@ struct CreateWorkspaceRepoStepView: View {
     let onClose: () -> Void
     let onNext: () -> Void
     let onRepoChanged: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        GitHubRepoPickerView(store: store, selectedRepo: $selectedRepo, usesCreationTypography: true)
-            .navigationTitle("Select Repository")
-            .toolbarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel, action: onClose)
-                        .interFont(Constants.Typography.bodyS)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Next", action: onNext)
-                        .interFont(Constants.Typography.bodySEmphasized)
-                        .disabled(selectedRepo == nil)
-                }
+        VStack(spacing: 0) {
+            CreateWorkspaceSelectionHeader(isNextDisabled: selectedRepo == nil, onLeadingAction: onClose, onNext: onNext)
+            GitHubRepoPickerView(store: store, selectedRepo: $selectedRepo)
+        }
+        .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .onChange(of: selectedRepo?.id) { _, _ in
+            onRepoChanged()
+        }
+    }
+}
+
+struct CreateWorkspaceSelectionHeader: View {
+    enum LeadingControl {
+        case close, back
+    }
+
+    var leadingControl: LeadingControl = .close
+    let isNextDisabled: Bool
+    let onLeadingAction: () -> Void
+    let onNext: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .title3) private var iconSize = CreateWorkspaceRepoStyle.iconSize
+
+    var body: some View {
+        HStack {
+            Button(action: onLeadingAction) {
+                Image(leadingControl == .back ? .arrowLeft : .close)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+                    .frame(minWidth: CreateWorkspaceFormStyle.controlHeight, minHeight: CreateWorkspaceFormStyle.controlHeight)
+                    .contentShape(.rect)
             }
-            .onChange(of: selectedRepo?.id) { _, _ in
-                onRepoChanged()
+            .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
+            .accessibilityLabel(leadingControl == .back ? "Back" : "Close")
+            .accessibilityIdentifier(leadingControl == .back ? "creation.branchBack" : "creation.close")
+            Spacer()
+            Button(action: onNext) {
+                Text("Next")
+                    .interFont(Constants.Typography.bodySEmphasized)
+                    .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
+                    .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
+                    .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+                    .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
+                    .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(
+                        cornerRadius: CreateWorkspaceFormStyle.cornerRadius
+                    ))
+                    .opacity(isNextDisabled ? 0.5 : 1)
             }
+            .disabled(isNextDisabled)
+        }
+        .buttonStyle(.plain)
+        .padding(CreateWorkspaceFormStyle.pagePadding)
     }
 }

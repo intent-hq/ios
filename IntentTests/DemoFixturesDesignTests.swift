@@ -25,6 +25,11 @@ extension DemoFixturesTests {
         await viewModel.load()
 
         #expect(!viewModel.isLoading)
+        if scenario == .empty {
+            #expect(viewModel.messages.isEmpty)
+            return
+        }
+        #expect(viewModel.totalMessageCount == viewModel.messages.count + (scenario == .history ? 100 : 0))
         #expect(viewModel.messages.first?.joinedTextContent.hasPrefix("Worth adding tests?") == true)
         #expect(viewModel.messages.contains { $0.role == .user && $0.joinedTextContent.contains("attention circle not fill") })
         let tools = try #require(viewModel.messages.first { $0.id == "demo-design-tools" })

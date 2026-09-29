@@ -4,10 +4,10 @@ import XCTest
 /// Uses demo data, never a live backend or an automatic share destination.
 nonisolated final class DiagnosticExportUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
-    private static let maximumSwipes = 6
+    private static let maximumSwipes = 12
 
     @MainActor
-    func testHomeMenuPreviewClearCancelAndReopen() {
+    func testSettingsPreviewClearCancelAndReopen() {
         let app = launch()
         openLogs(app)
         assertPreview(app)
@@ -28,7 +28,8 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         XCTAssertEqual(retainedRecords.label, originalCount, "Cancelling must preserve the reviewed history")
         XCTAssertFalse(app.staticTexts["diagnosticNotice"].exists)
         app.navigationBars["Export logs"].buttons["Done"].tap()
-        app.navigationBars["Acks & Logs"].buttons["Done"].tap()
+        XCTAssertTrue(app.navigationBars["Export logs"].waitForNonExistence(timeout: Self.timeout))
+        closeSettings(app)
         openLogs(app)
         assertPreview(app)
         XCTAssertTrue(sessionStarted.exists, "Reopening must still read the retained session history")
@@ -43,14 +44,7 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
     @MainActor
     func testSettingsEntryAndLargeTextKeepExplicitActionsAccessible() {
         let app = launch(largeText: true)
-        app.openHomeAction("settings")
-        let export = app.buttons["Export logs"]
-        for _ in 0..<Self.maximumSwipes {
-            if export.isHittable { break }
-            app.swipeUp()
-        }
-        XCTAssertTrue(export.isHittable)
-        export.tap()
+        openLogs(app)
         assertPreview(app)
         XCTAssertTrue(app.buttons["diagnosticShareZIP"].isHittable)
         XCTAssertTrue(app.buttons["diagnosticClear"].isHittable)
@@ -69,8 +63,29 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
 
     @MainActor
     private func openLogs(_ app: XCUIApplication) {
-        app.openHomeAction("acknowledgements")
-        app.buttons["Export logs"].tap()
+        app.openHomeAction("settings")
+        let scrollView = app.scrollViews["settings.scroll"]
+        XCTAssertTrue(scrollView.waitForExistence(timeout: Self.timeout))
+        let export = app.buttons["Export logs"]
+        let viewport = scrollView.frame.intersection(app.frame)
+        for _ in 0..<Self.maximumSwipes {
+            if export.isHittable, viewport.contains(export.frame) { break }
+            scrollView.swipeUp()
+        }
+        XCTAssertTrue(export.isHittable)
+        XCTAssertTrue(viewport.contains(export.frame))
+        export.tap()
+    }
+
+    @MainActor
+    private func closeSettings(_ app: XCUIApplication) {
+        let close = app.buttons["settings.close"]
+        for _ in 0..<Self.maximumSwipes {
+            if close.isHittable { break }
+            app.scrollViews["settings.scroll"].swipeDown()
+        }
+        XCTAssertTrue(close.isHittable)
+        close.tap()
     }
 
     @MainActor

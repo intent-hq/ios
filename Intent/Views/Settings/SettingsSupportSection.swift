@@ -8,6 +8,8 @@ struct SettingsSupportSection: View {
         VStack(spacing: 0) {
             NavigationLink {
                 AcknowledgementsView()
+                    .environment(\.colorScheme, colorScheme)
+                    .toolbarColorScheme(colorScheme, for: .navigationBar)
                     .toolbar(.visible, for: .navigationBar)
             } label: {
                 SettingsActionLabel(title: "Acknowledgements", image: .file)
@@ -18,6 +20,9 @@ struct SettingsSupportSection: View {
             }
         }
         .background(SettingsStyle.card(for: colorScheme), in: .rect(cornerRadius: SettingsStyle.cardRadius))
-        .sheet(isPresented: $showingDiagnosticLogs) { DiagnosticExportView() }
+        .sheet(isPresented: $showingDiagnosticLogs) {
+            DiagnosticExportView()
+                .preferredColorScheme(colorScheme)
+        }
     }
 }

@@ -1,26 +1,72 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    var presentedAsSheet = false
+    var contentColorScheme: ColorScheme?
+
+    var body: some View {
+        NavigationStack {
+            SettingsContent(presentedAsSheet: presentedAsSheet)
+                .environment(\.colorScheme, contentColorScheme ?? colorScheme)
+        }
+        #if os(iOS)
+        .background {
+            if presentedAsSheet {
+                SettingsStatusBarCapture()
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+            }
+        }
+        #endif
+    }
+}
+
+#if os(iOS)
+private struct SettingsStatusBarCapture: UIViewControllerRepresentable {
+    func makeUIViewController(context _: Context) -> Controller { Controller() }
+
+    func updateUIViewController(_ controller: Controller, context _: Context) {
+        controller.captureStatusBar()
+    }
+
+    final class Controller: UIViewController {
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            captureStatusBar()
+        }
+
+        func captureStatusBar() {
+            var presentation: UIViewController = self
+            while let parent = presentation.parent { presentation = parent }
+            guard presentation.presentingViewController != nil else { return }
+            // Non-fullscreen presentations otherwise keep the presenting screen's status-bar style.
+            presentation.modalPresentationCapturesStatusBarAppearance = true
+            presentation.setNeedsStatusBarAppearanceUpdate()
+        }
+    }
+}
+#endif
+
+private struct SettingsContent: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
     @AppStorage("appThemePreference") private var themePreference: String = "system"
     @State private var showLogOffConfirmation = false
     @ScaledMetric(relativeTo: .callout) private var iconSize = SettingsStyle.iconWidth
+    var presentedAsSheet = false
 
     var body: some View {
-        NavigationStack {
-            settingsSurface
-                .onAppear { coordinator.refreshSyncedBackends() }
-                .refreshable { coordinator.refreshSyncedBackends() }
-                .toolbar(.hidden, for: .navigationBar)
-                .alert("Log Off?", isPresented: $showLogOffConfirmation) {
-                    Button("Cancel", role: .cancel) {}
-                    Button("Log Off", role: .destructive) { coordinator.onLogOff() }
-                } message: {
-                    Text("Are you sure? You'll need to pair again to reconnect.")
-                }
-        }
+        settingsSurface
+            .onAppear { coordinator.refreshSyncedBackends() }
+            .refreshable { coordinator.refreshSyncedBackends() }
+            .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showLogOffConfirmation) {
+                LogOffConfirmationSheet { coordinator.onLogOff() }
+                    .environment(\.colorScheme, colorScheme)
+            }
     }
 
     private var settingsSurface: some View {
@@ -47,6 +93,7 @@ struct SettingsView: View {
             .frame(maxWidth: SettingsStyle.maximumContentWidth)
             .frame(maxWidth: .infinity)
         }
+        .accessibilityIdentifier("settings.scroll")
         .buttonStyle(.plain)
         .foregroundStyle(SettingsStyle.foreground(for: colorScheme))
         .clipShape(UnevenRoundedRectangle(
@@ -63,7 +110,11 @@ struct SettingsView: View {
         }
         // Keep the real system status bar and its light/dark contrast. Do not
         // draw the status bar or force the rest of Settings into dark mode.
-        .background((colorScheme == .dark ? SettingsStyle.charcoal : SettingsStyle.lightChrome).ignoresSafeArea())
+        .background(outerBackground.ignoresSafeArea())
+    }
+
+    private var outerBackground: Color {
+        presentedAsSheet ? .clear : (colorScheme == .dark ? SettingsStyle.charcoal : SettingsStyle.lightChrome)
     }
 
     private func selectConnection(_ id: UUID) {

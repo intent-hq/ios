@@ -137,6 +137,7 @@ extension ConversationTranscriptScrollUITests {
         )
 
         XCTAssertEqual(prompt.label, Fixture.firstSuggestedPromptLabel)
+        add(transcriptScreenshot(in: app, named: "Workspace-Suggested-Prompts"))
 
         // 2. Tap it: the prompt rows collapse, the sent row and the thinking
         //    indicator appear as the new tail.

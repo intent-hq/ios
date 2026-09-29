@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 struct NoteListView: View {
@@ -147,10 +148,12 @@ struct NoteRowView: View {
     private var disclosure: some View {
         Button { onToggleCollapse?() } label: {
             leadingIcon
-                .frame(width: NoteRowLayout.disclosureTargetSize, height: NoteRowLayout.disclosureTargetSize, alignment: .topLeading)
+                .frame(width: NoteRowLayout.disclosureTargetSize, alignment: .leading)
+                .padding(.vertical, NoteRowLayout.tapTargetPadding)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.vertical, -NoteRowLayout.tapTargetPadding)
         .accessibilityLabel("Child notes for \(note.title)")
         .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
         .accessibilityHint("Double-tap to \(isCollapsed ? "expand" : "collapse") child notes")
@@ -170,12 +173,15 @@ struct NoteRowView: View {
             .frame(
                 minWidth: Constants.Accessibility.minimumTapTarget,
                 maxWidth: .infinity,
-                minHeight: Constants.Accessibility.minimumTapTarget,
+                minHeight: WorkspaceDetailStyle.iconSize,
                 alignment: .topLeading
             )
+            .padding(.vertical, NoteRowLayout.tapTargetPadding)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("workspace.note.\(note.id)")
+        .padding(.vertical, -NoteRowLayout.tapTargetPadding)
     }
 
     private var leadingIcon: some View {
@@ -183,15 +189,18 @@ struct NoteRowView: View {
     }
 
     private var titleAndTags: some View {
-        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
-            Text(note.title)
-                .interFont(depth == 0 ? Constants.Typography.bodyM : Constants.Typography.bodyS)
+        let visibleTags = NoteRowLayout.visibleTags(for: note)
+        return VStack(alignment: .leading, spacing: visibleTags.isEmpty
+            ? WorkspaceDetailStyle.notePreviewSpacing
+            : WorkspaceDetailStyle.noteTitleSpacing) {
+            NoteRowText(
+                note.title,
+                style: depth == 0 ? Constants.Typography.bodyM : Constants.Typography.bodyS,
+                lineLimit: NoteRowLayout.titleLineLimit(usesAccessibilityLayout: usesAccessibilityLayout),
+                alignsWithCheckbox: true
+            )
                 .tracking(depth == 0 ? WorkspaceDetailStyle.rowTitleTracking : WorkspaceDetailStyle.bodyTracking)
                 .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                .lineLimit(NoteRowLayout.titleLineLimit(
-                    usesAccessibilityLayout: usesAccessibilityLayout
-                ))
-            let visibleTags = NoteRowLayout.visibleTags(for: note)
             if !visibleTags.isEmpty {
                 HStack(spacing: Constants.Notes.List.contentSpacing) {
                     ForEach(visibleTags.prefix(Constants.Notes.List.maximumTagCount), id: \.self) { tag in
@@ -205,17 +214,48 @@ struct NoteRowView: View {
                     }
                 }
             } else if depth == 0, let preview = note.preview {
-                Text(preview)
-                    .interFont(Constants.Typography.bodyS)
+                NoteRowText(preview, style: Constants.Typography.bodyS, lineLimit: usesAccessibilityLayout ? nil : 1)
                     .tracking(WorkspaceDetailStyle.bodyTracking)
                     .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
-                    .lineLimit(usesAccessibilityLayout ? nil : 1)
             }
         }
     }
 }
 
+private struct NoteRowText: View {
+    let text: String
+    let style: Constants.Typography.Style
+    let lineLimit: Int?
+    let alignsWithCheckbox: Bool
+    @Environment(\.legibilityWeight) private var legibilityWeight
+    @ScaledMetric private var fontSize: CGFloat
+
+    init(_ text: String, style: Constants.Typography.Style, lineLimit: Int?, alignsWithCheckbox: Bool = false) {
+        self.text = text
+        self.style = style
+        self.lineLimit = lineLimit
+        self.alignsWithCheckbox = alignsWithCheckbox
+        _fontSize = ScaledMetric(wrappedValue: style.size, relativeTo: style.relativeTo)
+    }
+
+    var body: some View {
+        let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
+        let font = CTFontCreateWithName(face.rawValue as CFString, fontSize, nil)
+        let capHeight = CTFontGetCapHeight(font)
+        WorkspaceTextTrimLayout(capHeight: capHeight) {
+            Text(text)
+                .interFont(style)
+                .lineLimit(lineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, alignsWithCheckbox ? max(0, (WorkspaceDetailStyle.iconSize - capHeight) / 2) : 0)
+    }
+}
+
 enum NoteRowLayout {
+    // Expand each button's hit area into the row gap without changing visible spacing.
+    static let tapTargetPadding = (Constants.Accessibility.minimumTapTarget - WorkspaceDetailStyle.iconSize) / 2
+
     static var disclosureTargetSize: CGFloat {
         max(Constants.Notes.List.disclosureSize, Constants.Accessibility.minimumTapTarget)
     }

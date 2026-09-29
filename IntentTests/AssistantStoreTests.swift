@@ -44,6 +44,47 @@ struct AssistantStoreTests {
         #expect(store.errorMessage == nil)
     }
 
+    @Test func legacyThreadNamesUseAssistantOnLoadAndCreation() async {
+        let connection = FakeConnectionManager()
+        var legacy = thread("legacy")
+        legacy["name"] = "Chief of Staff"
+        var custom = thread("custom", date: "2026-09-23T10:00:00Z")
+        custom["name"] = "Plan the release"
+        connection.responseMap["agent.list"] = ["agents": [legacy, custom]]
+        let store = AssistantStore(connection: connection)
+
+        await store.refresh()
+
+        #expect(store.threads.map(\.name) == ["Assistant", "Plan the release"])
+        var created = thread("created")
+        created["name"] = "Chief of staff"
+        connection.responseMap["agent.create"] = ["agent": created]
+
+        #expect(await store.createThread() == "created")
+        #expect(store.threads.first?.name == "Assistant")
+        #expect(connection.paramsForMethod("agent.create").last?["name"] as? String == "Assistant")
+    }
+
+    @Test func legacyConversationTitleUsesAssistantAndAllowsRenaming() async throws {
+        let connection = FakeConnectionManager()
+        connection.responseMap["agent.rename"] = [:] as [String: Any]
+        let viewModel = ConversationViewModel(
+            agentId: "assistant",
+            workspaceId: Workspace.chiefWorkspaceId,
+            agentName: "Chief of staff",
+            connection: connection,
+            uploadService: AttachmentUploadService(connection: connection),
+            optionsStore: CreationOptionsStore(connectionManager: connection)
+        )
+        #expect(viewModel.agentName == "Assistant")
+
+        try await viewModel.renameAgent("Plan the release")
+        #expect(viewModel.agentName == "Plan the release")
+
+        try await viewModel.renameAgent("Chief of Staff")
+        #expect(viewModel.agentName == "Assistant")
+    }
+
     @Test func malformedHistoryDoesNotBecomeAnEmptySuccess() async {
         let connection = FakeConnectionManager()
         connection.responseMap["agent.list"] = ["unexpected": true]

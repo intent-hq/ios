@@ -33,6 +33,16 @@ struct AgentMessageAttributionTests {
         ]) == nil)
     }
 
+    @Test func legacyAssistantSenderUsesCurrentName() {
+        let attribution = AgentMessageAttribution.from([
+            "type": AnyCodable("agent_message"),
+            "fromAgentId": AnyCodable("assistant"),
+            "fromAgentName": AnyCodable(" Chief of staff ")
+        ])
+        #expect(attribution?.rawName == "Assistant")
+        #expect(attribution?.displayName == "Assistant")
+    }
+
     @Test func nilWhenFromAgentIdMissingBlankOrNonString() {
         #expect(AgentMessageAttribution.from(["type": AnyCodable("agent_message")]) == nil)
         #expect(AgentMessageAttribution.from([

@@ -130,7 +130,7 @@ struct EventWakeAttribution: Equatable {
         for key in ["agentName", "name"] {
             guard let value = data[key] as? String else { continue }
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty, !looksLikeAgentId(trimmed) { return trimmed }
+            if !trimmed.isEmpty, !looksLikeAgentId(trimmed) { return AgentSession.displayName(for: trimmed) }
         }
         return nil
     }

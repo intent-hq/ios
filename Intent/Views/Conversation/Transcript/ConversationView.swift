@@ -270,8 +270,35 @@ private struct ConversationViewContent: View {
         )
     }
 
-    /// Ellipsis toolbar menu (model info, rename, delete).
+    /// Branded iOS agent actions; shared Assistant and spatial menus retain their native behavior.
+    @ViewBuilder
     private var agentMenu: some View {
+        if assistantStore == nil,
+           UIDevice.current.userInterfaceIdiom == .phone || UIDevice.current.userInterfaceIdiom == .pad {
+            ConversationActionMenu(
+                modelDisplayName: viewModel.currentModelDisplayName,
+                canChangeModel: viewModel.filteredMessages.isEmpty,
+                onAction: handleAgentAction
+            )
+        } else {
+            nativeAgentMenu
+        }
+    }
+
+    private func handleAgentAction(_ action: ConversationActionMenu.Action) {
+        switch action {
+        case .changeModel:
+            if viewModel.filteredMessages.isEmpty { showModelPicker = true }
+        case .delete:
+            showDeleteConfirmation = true
+        case .rename:
+            renameText = viewModel.agentName
+            showRenameAlert = true
+        }
+    }
+
+    /// Ellipsis toolbar menu (model info, rename, delete).
+    private var nativeAgentMenu: some View {
         Menu {
             if let assistantStore {
                 AssistantHistoryMenu(store: assistantStore)
@@ -281,21 +308,16 @@ private struct ConversationViewContent: View {
                 Text("Model: \(displayName)")
             }
             if viewModel.filteredMessages.isEmpty {
-                Button {
-                    showModelPicker = true
-                } label: {
+                Button { handleAgentAction(.changeModel) } label: {
                     Label("Change Model", systemImage: "cpu")
                 }
             }
-            Button {
-                renameText = viewModel.agentName
-                showRenameAlert = true
-            } label: {
+            Button { handleAgentAction(.rename) } label: {
                 Label("Rename", systemImage: "pencil")
             }
             Divider()
             Button(role: .destructive) {
-                showDeleteConfirmation = true
+                handleAgentAction(.delete)
             } label: {
                 Label("Delete Agent", systemImage: "trash")
             }

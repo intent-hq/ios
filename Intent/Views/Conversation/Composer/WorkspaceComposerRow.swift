@@ -99,6 +99,7 @@ private struct WorkspaceComposerEditor: View {
 struct WorkspaceAttachmentMenu: View {
     let onPhotos: () -> Void
     let onFiles: () -> Void
+    var glyphAlignment: Alignment = .center
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -115,7 +116,7 @@ struct WorkspaceAttachmentMenu: View {
                 .frame(width: Design.iconSize, height: Design.iconSize)
                 .accessibilityHidden(true)
                 .foregroundStyle(Design.Palette.placeholderForeground(for: colorScheme, contrast: contrast))
-                .frame(minWidth: Design.minimumTapTarget, minHeight: Design.minimumTapTarget)
+                .frame(minWidth: Design.minimumTapTarget, minHeight: Design.minimumTapTarget, alignment: glyphAlignment)
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("Add attachment")

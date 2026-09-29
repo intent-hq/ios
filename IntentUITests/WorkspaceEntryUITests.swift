@@ -269,3 +269,49 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         }
     }
 }
+
+extension WorkspaceEntryUITests {
+    @MainActor
+    func testDisclosureAndNoteNavigationKeepSeparateTouchTargets() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-design-scenario=context"]
+        app.launch()
+        let workspace = app.staticTexts["Workspace agent design"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: 30))
+        workspace.tap()
+        let context = app.buttons["Context"].firstMatch
+        XCTAssertTrue(context.waitForExistence(timeout: 15))
+        context.tap()
+
+        let disclosure = app.buttons["Child notes for Spec"]
+        let task = app.buttons["workspace.note.context-task-1"]
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 15))
+        XCTAssertTrue(task.waitForExistence(timeout: 15))
+        for _ in 0..<6 where !task.isHittable { app.swipeUp() }
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Context with single-line and wrapped task labels"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        disclosure.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1))
+            .withOffset(CGVector(dx: 0, dy: -2))
+            .tap()
+        XCTAssertTrue(task.waitForNonExistence(timeout: 15))
+        XCTAssertEqual(disclosure.value as? String, "Collapsed")
+        disclosure.tap()
+        XCTAssertTrue(task.waitForExistence(timeout: 15))
+        XCTAssertEqual(disclosure.value as? String, "Expanded")
+
+        task.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1))
+            .withOffset(CGVector(dx: 0, dy: -2))
+            .tap()
+        let taskNavigation = app.navigationBars["Build the icon gallery interface"]
+        XCTAssertTrue(taskNavigation.waitForExistence(timeout: 15))
+        taskNavigation.buttons.element(boundBy: 0).tap()
+        let spec = app.buttons["workspace.note.spec"]
+        XCTAssertTrue(spec.waitForExistence(timeout: 15))
+        spec.tap()
+        XCTAssertTrue(app.navigationBars["Spec"].waitForExistence(timeout: 15))
+    }
+}

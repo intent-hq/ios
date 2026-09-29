@@ -8,22 +8,23 @@ struct WorkspaceActionLauncher: ViewModifier {
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @AppStorage("appThemePreference") private var themePreference = "system"
     @State private var isOpen = false
     @State private var connectionCount = 0
-    @State private var showingAcknowledgements = false
-    @State private var confirmingLogOff = false
 
     private enum Layout {
-        static let blurRadius: CGFloat = 16
-        static let lightShadeOpacity = 0.72
-        static let darkShadeOpacity = 0.6
+        static let blurRadius: CGFloat = 15
+        static let shadeOpacity = 0.8
+        // The shared light/dark home-menu fade in IOS Working.
+        // swiftlint:disable:next no_magic_numbers
+        static let shade = Color(.sRGB, red: 26 / 255, green: 26 / 255, blue: 25 / 255)
         static let springResponse = 0.35
         static let springDamping = 0.85
-        static let footerSpacing: CGFloat = 20
+        static let footerSpacing: CGFloat = 23
+        static let menuBottomInset: CGFloat = 24
+        static let launcherBottomInset: CGFloat = 12
         static let tileEntranceOffset: CGFloat = 20
     }
 
@@ -46,18 +47,6 @@ struct WorkspaceActionLauncher: ViewModifier {
                 reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
                 value: isOpen
             )
-            .sheet(isPresented: $showingAcknowledgements) {
-                HomeActionSettingsView()
-            }
-            .alert("Log Off?", isPresented: $confirmingLogOff) {
-                Button("Cancel", role: .cancel) {}
-                Button("Log Off", role: .destructive) {
-                    isOpen = false
-                    coordinator.onLogOff()
-                }
-            } message: {
-                Text("Are you sure? You'll need to pair again to reconnect.")
-            }
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
             }
@@ -68,7 +57,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     private func actionOverlay(bottomInset: CGFloat) -> some View {
         ZStack(alignment: Alignment(horizontal: alignment, vertical: .bottom)) {
             if isOpen {
-                (colorScheme == .light ? Color.black : Theme.background(for: colorScheme))
+                Layout.shade
                     .opacity(backdropOpacity)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
@@ -78,7 +67,8 @@ struct WorkspaceActionLauncher: ViewModifier {
             }
             if !isSearching {
                 actionControls
-                    .padding(.bottom, bottomInset)
+                    .padding(.bottom, bottomInset + (isOpen && bottomInset == 0 ? Layout.menuBottomInset : Layout.launcherBottomInset))
+                    .ignoresSafeArea(.container, edges: isOpen && bottomInset == 0 ? .bottom : [])
                     .animation(
                         reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
                         value: bottomInset
@@ -92,7 +82,7 @@ struct WorkspaceActionLauncher: ViewModifier {
 
     private var backdropOpacity: Double {
         if reduceTransparency { return 1 }
-        return colorScheme == .light ? Layout.lightShadeOpacity : Layout.darkShadeOpacity
+        return Layout.shadeOpacity
     }
 
     private var actionControls: some View {
@@ -130,19 +120,13 @@ struct WorkspaceActionLauncher: ViewModifier {
             themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"
             return
         }
-        // Cancellation of Log Off returns to the menu; destinations dismiss it.
-        if action == .logOff {
-            confirmingLogOff = true
-            return
-        }
         isOpen = false
         switch action {
         case .assistant: coordinator.onSelectAssistant()
         case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
         case .connections: onConnections()
-        case .acknowledgements: showingAcknowledgements = true
         case .settings: coordinator.onOpenSettings()
-        case .appearance, .logOff: break
+        case .appearance: break
         }
     }
 }
