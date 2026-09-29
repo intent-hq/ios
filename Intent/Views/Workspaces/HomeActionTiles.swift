@@ -22,8 +22,8 @@ struct HomeActionTiles: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .body) private var tileHeight: CGFloat = 240
-    @ScaledMetric(relativeTo: .headline) private var titleTracking: CGFloat = -0.36
-    @ScaledMetric(relativeTo: .headline) private var titleSize = Constants.Typography.bodyM.size
+    @ScaledMetric(relativeTo: .body) private var titleTracking: CGFloat = -0.32
+    @ScaledMetric(relativeTo: .body) private var titleSize = Constants.Typography.bodySEmphasized.size
 
     private enum Layout {
         static let inset: CGFloat = 24
@@ -67,8 +67,8 @@ struct HomeActionTiles: View {
             .padding(Layout.inset)
             .frame(maxWidth: .infinity, minHeight: tileHeight, alignment: .leading)
             .containerRelativeFrame(.horizontal, count: dynamicTypeSize.isAccessibilitySize ? 1 : 2, spacing: Layout.spacing)
-            .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius))
-            .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+            .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
+            .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
         }
         .buttonStyle(HomeActionTileStyle())
         .accessibilityLabel(action == .appearance ? "Appearance" : title(action))
@@ -78,19 +78,23 @@ struct HomeActionTiles: View {
     }
 
     private func tileTitle(_ action: Action) -> some View {
-        let style = Constants.Typography.bodyM
+        let style = Constants.Typography.bodySEmphasized
         let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
         let font = CTFontCreateWithName(face.rawValue as CFString, titleSize, nil)
-        let lineHeight = CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
-        return WorkspaceTextTrimLayout(capHeight: CTFontGetCapHeight(font)) {
-            Text(title(action))
-                .interFont(style)
-                .tracking(titleTracking)
-                .lineSpacing(titleSize - lineHeight)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+        let capHeight = CTFontGetCapHeight(font)
+        return VStack(alignment: .leading, spacing: titleSize - capHeight) {
+            ForEach(title(action).components(separatedBy: "\n"), id: \.self) { line in
+                WorkspaceTextTrimLayout(capHeight: capHeight) {
+                    Text(line)
+                        .interFont(style)
+                        .tracking(titleTracking)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+                }
+            }
         }
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder private func icon(_ action: Action) -> some View {

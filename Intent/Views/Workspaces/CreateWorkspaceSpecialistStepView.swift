@@ -29,7 +29,9 @@ struct CreateWorkspaceSpecialistStepView: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .title) private var headingTracking = CreateWorkspaceFormStyle.headingTracking
+    @ScaledMetric(relativeTo: .title) private var headingSize = Constants.Typography.heading2.size
 
     var body: some View {
         ZStack {
@@ -77,10 +79,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     private var optionsList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Create Workspace")
-                    .interFont(Constants.Typography.heading2)
-                    .tracking(headingTracking)
-                    .accessibilityAddTraits(.isHeader)
+                pageHeading
                     .padding(.bottom, CreateWorkspaceFormStyle.headingSpacing)
                 CreateWorkspacePrompt(text: $messageText, attachments: images)
                 CreateWorkspaceSourceCard(repositoryFullName: repositoryFullName, branch: branch, onEdit: onBack)
@@ -90,12 +89,25 @@ struct CreateWorkspaceSpecialistStepView: View {
             }
             .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))
             .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
-            .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
+            .padding(.top, CreateWorkspaceFormStyle.pagePadding)
             .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
         }
         #if !os(visionOS)
         .scrollDismissesKeyboard(.interactively)
         #endif
+    }
+
+    private var pageHeading: some View {
+        let style = Constants.Typography.heading2
+        let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
+        let font = CTFontCreateWithName(face.rawValue as CFString, headingSize, nil)
+        return WorkspaceTextTrimLayout(capHeight: CTFontGetCapHeight(font)) {
+            Text("Create Workspace")
+                .interFont(style)
+                .tracking(headingTracking)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+        }
     }
 
     @ViewBuilder

@@ -24,7 +24,9 @@ struct WorkspaceActionLauncher: ViewModifier {
         static let shade = Color(.sRGB, red: 26 / 255, green: 26 / 255, blue: 25 / 255)
         static let springResponse = 0.35
         static let springDamping = 0.85
-        static let footerSpacing: CGFloat = 20
+        static let footerSpacing: CGFloat = 23
+        static let menuBottomInset: CGFloat = 24
+        static let launcherBottomInset: CGFloat = 12
         static let tileEntranceOffset: CGFloat = 20
     }
 
@@ -79,7 +81,8 @@ struct WorkspaceActionLauncher: ViewModifier {
             }
             if !isSearching {
                 actionControls
-                    .padding(.bottom, bottomInset)
+                    .padding(.bottom, bottomInset + (isOpen && bottomInset == 0 ? Layout.menuBottomInset : Layout.launcherBottomInset))
+                    .ignoresSafeArea(.container, edges: isOpen && bottomInset == 0 ? .bottom : [])
                     .animation(
                         reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
                         value: bottomInset

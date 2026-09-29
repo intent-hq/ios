@@ -41,23 +41,9 @@ struct GitHubRepoPickerView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
-                Text("Select Repository")
-                    .interFont(Constants.Typography.heading2)
-                    .tracking(CreateWorkspaceRepoStyle.titleTracking)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("creation.repositoryTitle")
-                content
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(CreateWorkspaceFormStyle.pagePadding)
+        CreateWorkspaceSelectionPage(title: "Select Repository", titleIdentifier: "creation.repositoryTitle") {
+            content
         }
-        #if !os(visionOS)
-        .scrollDismissesKeyboard(.interactively)
-        #endif
-        .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
-        .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
         .task {
             await store.loadIfNeeded()
         }
@@ -89,7 +75,7 @@ struct GitHubRepoPickerView: View {
     private var repoList: some View {
         let sections = suggestions
         return VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
-            GitHubRepoSearchField(text: $searchText)
+            CreateWorkspaceSelectionSearchField(text: $searchText)
             if store.isLoading || pendingSearchQuery != nil, sections.isEmpty {
                 ProgressView {
                     Text("Loading repositories...").interFont(Constants.Typography.bodyS)
@@ -185,8 +171,37 @@ struct GitHubRepoPickerView: View {
     }
 }
 
-private struct GitHubRepoSearchField: View {
+struct CreateWorkspaceSelectionPage<Content: View>: View {
+    let title: LocalizedStringKey
+    let titleIdentifier: String
+    @ViewBuilder let content: Content
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
+                Text(title)
+                    .interFont(Constants.Typography.heading2)
+                    .tracking(CreateWorkspaceRepoStyle.titleTracking)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier(titleIdentifier)
+                content
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(CreateWorkspaceFormStyle.pagePadding)
+        }
+        #if !os(visionOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
+        .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
+        .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
+    }
+}
+
+struct CreateWorkspaceSelectionSearchField: View {
     @Binding var text: String
+    var placeholder: LocalizedStringKey = "Search GitHub repositories"
+    var identifier = "creation.repositorySearch"
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
@@ -197,13 +212,13 @@ private struct GitHubRepoSearchField: View {
                 .font(.system(size: iconSize))
                 .frame(width: iconSize, height: iconSize)
                 .accessibilityHidden(true)
-            TextField("Search GitHub repositories", text: $text)
+            TextField(placeholder, text: $text)
                 .interFont(Constants.Typography.bodyS)
                 .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
-                .accessibilityIdentifier("creation.repositorySearch")
+                .accessibilityIdentifier(identifier)
             if !text.isEmpty {
                 Button {
                     text = ""
@@ -275,18 +290,7 @@ private struct GitHubRepoRow: View {
                 GitHubRepoLabel(repo: repo)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if isSelected {
-                    // The shared asset is outlined. Keep its check, with the filled
-                    // green disc from this Figma frame, without changing other uses.
-                    Image(.checkCircle)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: iconSize, height: iconSize)
-                        .foregroundStyle(.white)
-                        .clipShape(.rect().inset(by: iconSize * CreateWorkspaceRepoStyle.checkCropRatio))
-                        .background(SettingsStyle.connected, in: Circle().inset(
-                            by: iconSize * CreateWorkspaceRepoStyle.checkCircleInsetRatio
-                        ))
-                        .accessibilityHidden(true)
+                    CreateWorkspaceSelectionMark()
                 }
             }
             .padding(CreateWorkspaceFormStyle.pagePadding)
@@ -297,6 +301,23 @@ private struct GitHubRepoRow: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("creation.repository.\(repo.fullName)")
+    }
+}
+
+struct CreateWorkspaceSelectionMark: View {
+    @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
+
+    var body: some View {
+        Image(.checkCircle)
+            .resizable()
+            .scaledToFit()
+            .frame(width: iconSize, height: iconSize)
+            .foregroundStyle(.white)
+            .clipShape(.rect().inset(by: iconSize * CreateWorkspaceRepoStyle.checkCropRatio))
+            .background(SettingsStyle.connected, in: Circle().inset(
+                by: iconSize * CreateWorkspaceRepoStyle.checkCircleInsetRatio
+            ))
+            .accessibilityHidden(true)
     }
 }
 

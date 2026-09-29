@@ -4,7 +4,7 @@ import SwiftUI
 /// Scoped to the final workspace form; other creation flows keep their theme.
 enum CreateWorkspaceFormStyle {
     static let pagePadding: CGFloat = 24
-    static let headingSpacing: CGFloat = 32
+    static let headingSpacing: CGFloat = 40
     static let sectionSpacing: CGFloat = 48
     static let rowSpacing: CGFloat = 8
     static let controlPadding: CGFloat = 20
@@ -51,8 +51,7 @@ enum CreateWorkspaceFormStyle {
     }
 }
 
-/// Figma's repository page is grey with white selection/control surfaces.
-/// Keep these overrides local so the later creation steps retain their styling.
+/// Shared presentation for repository and branch selection.
 enum CreateWorkspaceRepoStyle {
     static let titleSpacing: CGFloat = 56
     static let sectionSpacing: CGFloat = 32
