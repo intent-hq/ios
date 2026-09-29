@@ -215,7 +215,7 @@ export PATH="$stubs:$PATH"
 export TMPDIR=$work
 # The wrapper appends to a caller's step summary; the self-test's own CI job
 # must not receive the fixture tables.
-unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING BUILD_CONFIGURATION
+unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING BUILD_CONFIGURATION DERIVED_DATA_DIR
 export SIM_UDID=00000000-0000-0000-0000-000000000001
 export SIM_LOCK_DIR=$work/locks
 lock=$SIM_LOCK_DIR/xcodebuild-sim-$SIM_UDID.lock
@@ -882,6 +882,29 @@ for config in Profile release 'Release -sdk iphoneos'; do
     'BUILD_CONFIGURATION must be Debug or Release'
   assert_eq "invalid configuration never invokes xcodebuild" "$(argv_count badconfig)" 0
 done
+echo "# derived data is shared within a job, including enumeration and retries"
+derived_data="$work/Derived Data"
+for sub in resolve build-ios build-visionos build-for-testing test-ios test-ios-unit test-without-building test-without-building-unit; do
+  status=$(run_filtered "derived-$sub" "IntentTests/DemoFixturesTests" "$sub" DERIVED_DATA_DIR="$derived_data")
+  assert_eq "$sub with explicit derived data exits 0" "$status" 0
+  args=$(grep '^argv:' "$work/derived-$sub.args" | grep -v -F '[-showsdks]')
+  while IFS= read -r line; do
+    assert_contains "$sub forwards the derived data path as one argument" "$line" \
+      "[-derivedDataPath] [$derived_data]"
+  done <<< "$args"
+done
+assert_eq "derived data test run covers build, enumeration, and execution" "$(argv_count derived-test-ios-unit)" 3
+status=$(run_filtered emptyderived "" build-ios DERIVED_DATA_DIR=)
+assert_eq "empty derived data keeps the default argv" "$(argv_line emptyderived 1)" "$(argv_line defaultbuild 1)"
+status=$(run_filtered derivedcrash "" test-without-building-unit DERIVED_DATA_DIR="$derived_data" \
+  STUB_MODE=crash STUB_THEN=pass STUB_STATE="$work/derivedcrash.state")
+assert_eq "derived data crash retry recovers" "$status" 0
+assert_eq "derived data crash retries exactly once" "$(argv_count derivedcrash)" 2
+assert_contains "initial test uses the requested derived data" "$(argv_line derivedcrash 1)" \
+  "[-derivedDataPath] [$derived_data]"
+assert_contains "crash retry uses the same derived data" "$(argv_line derivedcrash 2)" \
+  "[-derivedDataPath] [$derived_data]"
+
 for extra in -sdk -configuration; do
   status=0
   BUILD_CONFIGURATION=Release "$SCRIPT" build-ios "$extra" > "$work/extra.out" 2>&1 || status=$?

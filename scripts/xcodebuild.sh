@@ -41,6 +41,8 @@
 #   SIM_UDID              Simulator UDID for test destinations; when unset the
 #                         newest available iPhone simulator is picked automatically.
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
+#   DERIVED_DATA_DIR      Passed as -derivedDataPath to every build/test call.
+#                         CI uses a fresh directory per job and run attempt.
 #   RESULT_BUNDLE         Passed as -resultBundlePath to test-without-building;
 #                         an existing bundle at that path is removed first.
 #                         A filtered run (ONLY_TESTING set) with no RESULT_BUNDLE
@@ -202,7 +204,7 @@ Usage: scripts/xcodebuild.sh <subcommand>
   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 
 Optional env knobs: BUILD_CONFIGURATION (Debug or Release; unset keeps defaults),
-SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING,
+SIM_UDID, SPM_CLONE_DIR, DERIVED_DATA_DIR, RESULT_BUNDLE, ONLY_TESTING,
 TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see
 script header).
 Release tests enable @testable access, not DEBUG. Use focused release-compatible
@@ -293,6 +295,9 @@ common_args() {
   fi
   if [ -n "${SPM_CLONE_DIR:-}" ]; then
     printf '%s\n' -clonedSourcePackagesDirPath "$SPM_CLONE_DIR"
+  fi
+  if [ -n "${DERIVED_DATA_DIR:-}" ]; then
+    printf '%s\n' -derivedDataPath "$DERIVED_DATA_DIR"
   fi
 }
 
