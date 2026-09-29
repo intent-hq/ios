@@ -1,12 +1,15 @@
 import SwiftUI
 
 struct WorkspaceSearchBar: View {
+    private static let selectionAnimationDuration = 0.35
+
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var viewMode: ViewMode
     @Binding var isSearching: Bool
     var horizontalPadding: CGFloat = Constants.WorkspaceList.pickerHorizontalPadding
     var isCompact = false
+    @Namespace private var selectionAnimation
     @ScaledMetric(relativeTo: .body) private var segmentTracking: CGFloat = -0.32
 
     private var controlHeight: CGFloat {
@@ -60,22 +63,25 @@ struct WorkspaceSearchBar: View {
                         .foregroundStyle(viewMode == mode
                             ? Constants.Pairing.foreground(for: colorScheme == .dark ? .light : .dark)
                             : Constants.Pairing.foreground(for: colorScheme))
-                        .background(
-                            viewMode == mode ? Constants.Pairing.foreground(for: colorScheme) : Color.clear,
-                            in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius, style: .circular)
-                        )
                         .contentShape(RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius, style: .circular))
                 }
                 .buttonStyle(.plain)
+                .matchedGeometryEffect(id: mode, in: selectionAnimation)
                 .accessibilityAddTraits(viewMode == mode ? .isSelected : [])
                 .accessibilityIdentifier("workspaces.viewMode.\(mode.rawValue)")
             }
+        }
+        .background {
+            RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius, style: .circular)
+                .fill(Constants.Pairing.foreground(for: colorScheme))
+                .matchedGeometryEffect(id: viewMode, in: selectionAnimation, isSource: false)
         }
         .padding(segmentInset)
         .background(
             Constants.WorkspaceList.controlSurface(for: colorScheme),
             in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
         )
+        .animation(reduceMotion ? nil : .snappy(duration: Self.selectionAnimationDuration), value: viewMode)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Workspace view")
     }

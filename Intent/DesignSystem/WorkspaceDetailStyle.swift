@@ -77,8 +77,12 @@ struct ToolbarOverflowLabel: View {
 }
 
 struct WorkspaceContentTabs: View {
+    private static let selectionAnimationDuration = 0.35
+
     @Binding var selection: WorkspaceTab
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionAnimation
 
     var body: some View {
         HStack(spacing: 0) {
@@ -86,10 +90,18 @@ struct WorkspaceContentTabs: View {
             tab("Context", value: .context)
             tab("Changes", value: .changes)
         }
+        .background {
+            if selection == .agents || selection == .context || selection == .changes {
+                RoundedRectangle(cornerRadius: WorkspaceDetailStyle.selectedTabCornerRadius)
+                    .fill(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    .matchedGeometryEffect(id: selection, in: selectionAnimation, isSource: false)
+            }
+        }
         .padding(WorkspaceDetailStyle.tabInset)
         .background(WorkspaceDetailStyle.surface(for: colorScheme), in: .rect(
             cornerRadius: WorkspaceDetailStyle.tabCornerRadius
         ))
+        .animation(reduceMotion ? nil : .snappy(duration: Self.selectionAnimationDuration), value: selection)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Workspace Content")
     }
@@ -104,12 +116,10 @@ struct WorkspaceContentTabs: View {
                 .foregroundStyle(selection == value
                     ? WorkspaceDetailStyle.surface(for: colorScheme)
                     : WorkspaceDetailStyle.foreground(for: colorScheme))
-                .background(selection == value ? WorkspaceDetailStyle.foreground(for: colorScheme) : .clear, in: .rect(
-                    cornerRadius: WorkspaceDetailStyle.selectedTabCornerRadius
-                ))
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .matchedGeometryEffect(id: value, in: selectionAnimation)
         .accessibilityAddTraits(selection == value ? .isSelected : [])
     }
 }
