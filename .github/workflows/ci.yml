@@ -384,6 +384,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
+
       - name: Resolve SPM packages
         run: scripts/xcodebuild.sh resolve
 
@@ -620,6 +627,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
+
       - name: Resolve SPM packages
         run: scripts/xcodebuild.sh resolve
 
@@ -777,6 +791,13 @@ jobs:
           key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-spm-
+
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
 
       - name: Resolve SPM packages
         run: scripts/xcodebuild.sh resolve
