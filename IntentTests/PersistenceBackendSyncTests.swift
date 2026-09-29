@@ -5,6 +5,17 @@ import Testing
 @testable import Intent
 
 struct PersistenceBackendSyncTests {
+    @Test func unclassifiedLegacyPairingNeverPublishesOwnerCredentials() throws {
+        let store = try BackendSyncTestStore()
+        defer { store.cleanUp() }
+        let local = BackendSyncFixtures.local()
+        #expect(store.manager.savePairing(server: local.server, token: local.token))
+        store.manager.publishPendingBackends()
+        #expect(store.cloud.writeCount == 0)
+        #expect(store.manager.activeConnection()?.principal == nil)
+        #expect(store.manager.activeConnection()?.token == local.token)
+    }
+
     @Test func equalClockRouteUpgradeUpdatesLiveCacheWithoutPublication() throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
@@ -34,6 +45,7 @@ struct PersistenceBackendSyncTests {
         let connection = FakeConnectionManager()
         connection.responseMap["host.status"] = ["prettyHostname": "Paired Mac"]
         let local = BackendSyncFixtures.local()
+        try await connection.connect(hosts: local.server.hosts, port: local.server.port, token: local.token, certFingerprint: local.server.certFingerprint, tcAddress: local.server.tcAddress)
         let paired = try await ConnectionPairing.finalize(
             server: local.server,
             token: local.token,
@@ -65,7 +77,7 @@ struct PersistenceBackendSyncTests {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
         let local = BackendSyncFixtures.local(hosts: [])
-        #expect(store.manager.savePairing(server: local.server, token: local.token))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: local.server, token: local.token))
         let registry = SyncedBackendRegistry(keychain: store.cloud, accessGroup: BackendSyncFixtures.accessGroup)
         guard case .available(let records) = registry.listBackends() else {
             Issue.record("Expected available registry")
@@ -82,11 +94,13 @@ struct PersistenceBackendSyncTests {
         defer { store.cleanUp() }
         store.local.setSaveFailure(true)
         let local = BackendSyncFixtures.local()
+        let connection = FakeConnectionManager()
+        try await connection.connect(hosts: local.server.hosts, port: local.server.port, token: local.token, certFingerprint: local.server.certFingerprint, tcAddress: local.server.tcAddress)
         await #expect(throws: ConnectionPairing.PersistenceError.saveFailed) {
             try await ConnectionPairing.finalize(
                 server: local.server,
                 token: local.token,
-                connection: FakeConnectionManager(),
+                connection: connection,
                 persistence: store.manager
             )
         }
@@ -100,7 +114,7 @@ struct PersistenceBackendSyncTests {
         defer { store.cleanUp() }
         store.cloud.writeFailure = errSecNotAvailable
         let local = BackendSyncFixtures.local()
-        #expect(store.manager.savePairing(server: local.server, token: local.token))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: local.server, token: local.token))
         let pending = try #require(store.manager.activeConnection())
         #expect(pending.token == local.token)
         #expect(pending.pendingSyncUpdatedAt == 1000)
@@ -124,10 +138,10 @@ struct PersistenceBackendSyncTests {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
         let first = BackendSyncFixtures.local()
-        #expect(store.manager.savePairing(server: first.server, token: first.token))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: first.server, token: first.token))
         let original = try #require(store.manager.activeConnection())
         let repaired = BackendSyncFixtures.local(hosts: ["new-host.local"], token: "rotated-token")
-        #expect(store.manager.savePairing(server: repaired.server, token: repaired.token))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: repaired.server, token: repaired.token))
         let current = try #require(store.manager.activeConnection())
         #expect(current.id == original.id)
         #expect(store.manager.loadConnections().count == 1)
@@ -142,7 +156,7 @@ struct PersistenceBackendSyncTests {
         defer { store.cleanUp() }
         store.cloud.readFailure = errSecInteractionNotAllowed
         let local = BackendSyncFixtures.local()
-        #expect(store.manager.savePairing(server: local.server, token: local.token))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: local.server, token: local.token))
         store.cloud.readFailure = nil
         try store.cloud.put(BackendSyncFixtures.remote(clock: 3000))
         let coordinator = AppCoordinator(
@@ -162,7 +176,7 @@ struct PersistenceBackendSyncTests {
         defer { store.cleanUp() }
         store.cloud.readFailure = errSecInteractionNotAllowed
         let local = BackendSyncFixtures.local()
-        #expect(store.manager.savePairing(server: local.server, token: local.token))
+        #expect(store.manager.saveVerifiedOwnerForTesting(server: local.server, token: local.token))
         store.cloud.readFailure = nil
         let millisecondsPerSecond = 1000.0
         let clock = Date().timeIntervalSince1970 * millisecondsPerSecond
@@ -250,7 +264,10 @@ extension PersistenceBackendSyncTests {
         store.local.setSaveFailure(false)
         relaunched.publishPendingBackends()
         #expect(store.cloud.writeCount == 0)
-        #expect(relaunched.savePairing(server: pending.server, token: "deliberate-repair"))
+        #expect(relaunched.saveVerifiedOwnerForTesting(server: pending.server, token: "deliberate-repair"))
+        #expect(relaunched.loadConnections().count == 1)
+        #expect(relaunched.activeConnection()?.id == pending.id)
+        #expect(relaunched.activeConnection()?.principal == pending.principal)
         #expect(try store.cloud.object()["token"] as? String == "deliberate-repair")
         #expect(try store.cloud.object()["updatedAt"] as? Double == 201)
     }

@@ -78,6 +78,11 @@
 #                         command line untouched.
 #                         test-without-building-ui defaults to IntentUITests
 #                         and excludes IntentTests from enumeration and execution.
+#   ONLY_TESTING_IDENTITIES_PATH
+#                         Optional JSON evidence of the resolver's matched test
+#                         identities, used by the filtered iPad proof lane.
+#                         Unset leaves output and selection unchanged. A failed
+#                         requested export exits 83 before tests start.
 #   GITHUB_STEP_SUMMARY   When set (GitHub Actions does), the per-selector table
 #                         of a filtered run is also appended there as Markdown,
 #                         as is every test-process crash or restart (the crash
@@ -864,7 +869,7 @@ def excluded_message(selector, skip):
 # look-alike targets/suites), 2 when the catalog is unreadable or lists no
 # tests at all.
 ONLY_TESTING_RESOLVER_PY='
-import difflib, json
+import difflib, json, os
 catalog_path = sys.argv[1]
 skips, selectors = split_skips(sys.argv[2:])
 def unverified(reason):
@@ -911,6 +916,7 @@ def suggest(selector):
             scored.append((-score, candidate))
     return [candidate for _, candidate in sorted(scored)[:5]]
 unmatched = 0
+resolved_identities = {}
 for selector in selectors:
     parts = selector.split("/")
     excluded = excluded_by(selector, skips)
@@ -920,6 +926,7 @@ for selector in selectors:
         continue
     hits = [i for i in enabled if matches(parts, i)]
     if hits:
+        resolved_identities[selector] = hits
         sys.stderr.write("ONLY_TESTING: %s -> %d test(s)\n" % (selector, len(hits)))
         sys.stdout.write("%d\t%s\n" % (len(hits), selector))
         continue
@@ -935,6 +942,14 @@ if unmatched:
     sys.stderr.write("error: %d ONLY_TESTING selector(s) matched nothing; the test run was not started.\n" % unmatched)
     sys.stderr.write("A selector is Target/Suite or Target/Suite/test as enumerated by xcodebuild, not a file name (IntentTests/FooTests.swift never matches).\n")
     sys.exit(1)
+evidence_path = os.environ.get("ONLY_TESTING_IDENTITIES_PATH")
+if evidence_path:
+    try:
+        with open(evidence_path, "w") as evidence:
+            json.dump({"version": 1, "selectors": resolved_identities}, evidence, indent=2)
+            evidence.write("\n")
+    except OSError as error:
+        unverified("the requested resolved identity export could not be written (%s)" % error)
 '
 
 # Enumerates the tests of the built revision and resolves every ONLY_TESTING

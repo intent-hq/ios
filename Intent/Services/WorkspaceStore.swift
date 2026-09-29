@@ -253,7 +253,7 @@ extension WorkspaceStore {
 
         switch Self.classify(type: eventType, data: data) {
         case .refetch:
-            if !workspaceLive {
+            if !workspaceLive || eventType == "host:members-changed" {
                 invalidateFetchForEvent()
             }
         case .patchInPlace, .ignore:

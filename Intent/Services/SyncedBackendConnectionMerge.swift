@@ -124,13 +124,13 @@ enum SyncedBackendConnectionMerge {
         let fingerprint = normalizeFingerprint(record.fingerprint)
         if !fingerprint.isEmpty,
             let index = connections.firstIndex(where: { connection in
-                normalizeFingerprint(connection.server.certFingerprint) == fingerprint
+                connection.invitedPersonKey == nil && normalizeFingerprint(connection.server.certFingerprint) == fingerprint
             }) {
             return index
         }
         let hosts = Set(candidateHosts(of: record).map(normalizeHost))
         return connections.firstIndex { connection in
-            normalizeFingerprint(connection.server.certFingerprint).isEmpty
+            connection.invitedPersonKey == nil && normalizeFingerprint(connection.server.certFingerprint).isEmpty
                 && connection.server.port == record.port
                 && !hosts.isDisjoint(with: connection.server.hosts.map(normalizeHost))
         }
@@ -264,6 +264,10 @@ enum SyncedBackendConnectionMerge {
             lastConnectedAt: existing.lastConnectedAt,
             syncUpdatedAt: record.updatedAt
         )
+        // The shared owner row supplies no identity. Retain only the
+        // classification previously verified on this device; live authority
+        // still comes from admission of the current socket.
+        updated.principal = existing.principal
         updated.localPairingSyncClock = existing.localPairingSyncClock
         updated.pendingRoutePublication = existing.pendingRoutePublication
         return updated

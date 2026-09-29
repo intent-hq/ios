@@ -1,6 +1,12 @@
 import Foundation
 
 extension ConnectionManager {
+    private struct HostRefreshContext {
+        let admission: ConnectionAdmission
+        let generation: Int
+        let credentialsRevision: Int
+    }
+
     enum HostRouteRefreshDecision: Equatable {
         case failed
         case stale
@@ -27,12 +33,15 @@ extension ConnectionManager {
     /// Failures are non-fatal: older daemons without `localIps` and transport
     /// errors are skipped silently and the connection proceeds unchanged.
     func refreshHostRoutes() async {
-        guard connectionState == .connected, let token, let port else { return }
-        let myGeneration = connectionGeneration
+        guard connectionState == .connected, let admission, let port else { return }
+        let token = admission.token
+        let context = HostRefreshContext(admission: admission, generation: connectionGeneration, credentialsRevision: reconnectCredentialsRevision)
+        guard hostRefreshIsCurrent(context) else { return }
 
         // Refresh the stored display name first: it must run even when the
         // localIps flow below bails out (older daemon, transport hiccup).
-        await refreshStoredDisplayName(token: token, port: port)
+        await refreshStoredDisplayName(token: token, port: port, context: context)
+        guard hostRefreshIsCurrent(context) else { return }
 
         let response: Result<Any, Error>
         do {
@@ -40,9 +49,10 @@ extension ConnectionManager {
         } catch {
             response = .failure(error)
         }
+        guard hostRefreshIsCurrent(context) else { return }
         switch Self.hostRouteRefreshDecision(
             response: response,
-            requestedGeneration: myGeneration,
+            requestedGeneration: context.generation,
             currentGeneration: connectionGeneration
         ) {
         case .failed:
@@ -50,9 +60,20 @@ extension ConnectionManager {
         case .stale:
             break
         case let .current(localIps, reportedTc):
+            if case .success(let value) = response, (value as? [String: Any])?["tcAddress"] is NSNull,
+               let saved = savedConnection(token: token, port: port), saved.invitedPersonKey != nil {
+                applyRefreshedTunnelAddress(nil)
+                _ = persistence.clearInvitedTunnelRoute(id: saved.id)
+            }
             applyReportedTunnelAddress(reportedTc, token: token, port: port)
             applyReportedHosts(localIps, token: token, port: port)
         }
+    }
+
+    private func hostRefreshIsCurrent(_ context: HostRefreshContext) -> Bool {
+        connectionState == .connected && admission?.id == context.admission.id
+            && connectionGeneration == context.generation && reconnectCredentialsRevision == context.credentialsRevision
+            && token == context.admission.token && InvitedSyncKey.sameFingerprint(certFingerprint, context.admission.fingerprint)
     }
 
     private func applyReportedTunnelAddress(_ reportedTc: String?, token: String, port: Int) {
@@ -64,10 +85,10 @@ extension ConnectionManager {
         // The active connection, verified against the live token + port
         // (same record-matching rules as the host persistence below).
         if let reportedTc,
-            let stored = PersistenceManager.shared.activeConnection(),
+            let stored = savedConnection(token: token, port: port),
             stored.token == token, stored.server.port == port,
             stored.server.tcAddress != reportedTc {
-            if !PersistenceManager.shared.updateConnectionTcAddress(
+            if !persistence.updateConnectionTcAddress(
                 id: stored.id,
                 tcAddress: reportedTc
             ) {
@@ -101,11 +122,11 @@ extension ConnectionManager {
         // record holds (e.g. a single-host manual re-pair while the record
         // also has a NAT hostname), and persisting the in-memory merge alone
         // would drop those hosts.
-        if let stored = PersistenceManager.shared.activeConnection(),
+        if let stored = savedConnection(token: token, port: port),
             stored.token == token, stored.server.port == port {
             let persistedHosts = Self.mergeHosts(existing: stored.server.hosts, reported: merged)
             if stored.server.hosts != persistedHosts {
-                if !PersistenceManager.shared.updateConnectionHosts(
+                if !persistence.updateConnectionHosts(
                     id: stored.id,
                     hosts: persistedHosts
                 ) {
@@ -135,26 +156,32 @@ extension ConnectionManager {
     /// `refreshHostRoutes()`: the active connection, verified against the live
     /// token + port. Failures are non-fatal: older daemons and transport errors
     /// are skipped silently and the existing name is kept.
-    private func refreshStoredDisplayName(token: String, port: Int) async {
-        let myGeneration = connectionGeneration
+    private func refreshStoredDisplayName(token: String, port: Int, context: HostRefreshContext) async {
         guard let result = try? await request("host.status"),
               let name = ConnectionPairing.displayName(fromHostStatus: result) else {
             return
         }
 
-        // A newer connect() may have superseded us while the RPC was in flight.
-        guard connectionGeneration == myGeneration else { return }
+        // A reconnect, credential import, or local route edit can supersede
+        // this reply while the admitted socket remains otherwise usable.
+        guard hostRefreshIsCurrent(context) else { return }
 
-        if let stored = PersistenceManager.shared.activeConnection(),
+        if let stored = savedConnection(token: token, port: port),
             stored.token == token, stored.server.port == port,
             stored.displayName != name {
-            AppLog.connection.debug("[ConnectionManager] Display name refresh: \(stored.displayName) -> \(name)")
-            if !PersistenceManager.shared.updateConnectionDisplayName(
+            AppLog.connection.debug("[ConnectionManager] Display name refreshed")
+            if !persistence.updateConnectionDisplayName(
                 id: stored.id,
                 displayName: name
             ) {
                 AppLog.connection.warning("[ConnectionManager] Could not persist refreshed display name")
             }
+        }
+    }
+
+    private func savedConnection(token: String, port: Int) -> StoredConnection? {
+        persistence.loadConnections().first { saved in
+            saved.token == token && saved.server.port == port && InvitedSyncKey.sameFingerprint(saved.server.certFingerprint, admission?.fingerprint)
         }
     }
 

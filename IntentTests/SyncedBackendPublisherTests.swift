@@ -61,6 +61,7 @@ struct SyncedBackendPublisherTests {
         let cloud = MemorySyncedKeychain()
         try cloud.put(BackendSyncFixtures.remote())
         var local = SyncedBackendConnectionMergeTests().local(hosts: ["mac.local"], token: "repaired")
+        local.principal = .demoOwner
         local.pendingSyncUpdatedAt = 1000
         #expect(BackendSyncFixtures.publisher(cloud).publish(local) == .published)
         #expect(try cloud.object()["tcAddress"] as? String == "tcDesktop")

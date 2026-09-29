@@ -24,6 +24,12 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     /// with a retry action routed to `retryGlobalSubscription()` (ios#254).
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
 
+    var currentPrincipal: ConnectionPrincipal? { get }
+    var admission: ConnectionAdmission? { get }
+    var pairingAttemptID: UUID? { get }
+
+    func confirmedPrincipal() async throws -> ConnectionPrincipal
+
     func retryGlobalSubscription()
     func makeBrowserProxy() async throws -> any BrowserProxySession
 

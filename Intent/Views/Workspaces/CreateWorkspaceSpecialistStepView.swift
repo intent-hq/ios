@@ -17,6 +17,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     @Binding var messageText: String
     let images: WorkspaceCreationImages
     let isCreating: Bool
+    let allowsCreation: Bool
     let errorMessage: String?
     @Binding var showError: Bool
     let colorScheme: ColorScheme
@@ -39,6 +40,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                         isLoadingProviders: isLoadingProviders,
                         providers: providers,
                         selectedProvider: selectedProvider,
+                        allowsCreation: allowsCreation,
                         isImportingImages: images.isImporting
                     ),
                     isCreating: isCreating,
@@ -266,9 +268,11 @@ extension CreateWorkspaceView {
         isLoadingProviders: Bool,
         providers: [ProviderInfo],
         selectedProvider: ProviderInfo?,
+        allowsCreation: Bool = true,
         isImportingImages: Bool = false
     ) -> Bool {
-        guard !isCreating, !isLoadingProviders, !isImportingImages, let selectedProvider else { return true }
+        guard allowsCreation, !isCreating, !isLoadingProviders, !isImportingImages,
+              let selectedProvider else { return true }
         return !providers.contains { $0.id == selectedProvider.id && $0.isSelectable }
     }
 

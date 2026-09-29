@@ -4,7 +4,7 @@ import SwiftUI
 struct WorkspaceActionLauncher: ViewModifier {
     let isSearching: Bool
     var alignment: HorizontalAlignment = .trailing
-    var conversationBottomClearance: CGFloat = 0
+    var avoidsConversationInput = true
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
@@ -14,7 +14,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     @AppStorage("appThemePreference") private var themePreference = "system"
     @State private var isOpen = false
     @State private var connectionCount = 0
-    @State private var destination: HomeActionDestination?
+    @State private var showingAcknowledgements = false
     @State private var confirmingLogOff = false
 
     private enum Layout {
@@ -29,18 +29,25 @@ struct WorkspaceActionLauncher: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .environment(\.workspaceActionMenuBottomClearance, isSearching ? 0 : conversationBottomClearance)
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
             .accessibilityHidden(isOpen)
-            .overlay { actionOverlay }
+            .overlayPreferenceValue(WorkspaceActionMenuInputBounds.self) { inputAnchor in
+                // Resolve the active input anchor in the window overlay's coordinate space.
+                // swiftlint:disable:next geometry_reader_usage
+                GeometryReader { proxy in
+                    let activeAnchor = avoidsConversationInput ? inputAnchor : nil
+                    let bottomInset = activeAnchor.map { max(0, proxy.size.height - proxy[$0].minY) } ?? 0
+                    actionOverlay(bottomInset: bottomInset)
+                }
+            }
             .animation(
                 reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
                 value: isOpen
             )
-            .sheet(item: $destination) { destination in
-                HomeActionSettingsView(destination: destination)
+            .sheet(isPresented: $showingAcknowledgements) {
+                HomeActionSettingsView()
             }
             .alert("Log Off?", isPresented: $confirmingLogOff) {
                 Button("Cancel", role: .cancel) {}
@@ -58,7 +65,7 @@ struct WorkspaceActionLauncher: ViewModifier {
             .onDisappear { isOpen = false }
     }
 
-    private var actionOverlay: some View {
+    private func actionOverlay(bottomInset: CGFloat) -> some View {
         ZStack(alignment: Alignment(horizontal: alignment, vertical: .bottom)) {
             if isOpen {
                 (colorScheme == .light ? Color.black : Theme.background(for: colorScheme))
@@ -69,7 +76,14 @@ struct WorkspaceActionLauncher: ViewModifier {
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
-            if !isSearching { actionControls }
+            if !isSearching {
+                actionControls
+                    .padding(.bottom, bottomInset)
+                    .animation(
+                        reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
+                        value: bottomInset
+                    )
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOpen ? .isModal : [])
@@ -85,7 +99,14 @@ struct WorkspaceActionLauncher: ViewModifier {
         VStack(alignment: alignment, spacing: Layout.footerSpacing) {
             Spacer(minLength: 0)
             if isOpen {
-                HomeActionTiles(connectionCount: connectionCount, appearance: appearanceTitle, onSelect: select)
+                HomeActionTiles(
+                    connectionCount: connectionCount,
+                    appearance: appearanceTitle,
+                    themePreference: themePreference,
+                    onSelect: select,
+                    allowsWorkspaceCreation: coordinator.canCreateWorkspace,
+                    allowsAssistant: coordinator.canUseAssistant
+                )
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
             }
             AssistantLaunchButton(isOpen: isOpen) {
@@ -105,6 +126,10 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 
     private func select(_ action: HomeActionTiles.Action) {
+        if action == .appearance {
+            themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"
+            return
+        }
         // Cancellation of Log Off returns to the menu; destinations dismiss it.
         if action == .logOff {
             confirmingLogOff = true
@@ -113,16 +138,19 @@ struct WorkspaceActionLauncher: ViewModifier {
         isOpen = false
         switch action {
         case .assistant: coordinator.onSelectAssistant()
-        case .workspace: onCreateWorkspace()
+        case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
         case .connections: onConnections()
-        case .appearance: destination = .appearance
-        case .acknowledgements: destination = .acknowledgements
+        case .acknowledgements: showingAcknowledgements = true
         case .settings: coordinator.onOpenSettings()
-        case .logOff: break
+        case .appearance, .logOff: break
         }
     }
 }
 
-extension EnvironmentValues {
-    @Entry var workspaceActionMenuBottomClearance: CGFloat = 0
+struct WorkspaceActionMenuInputBounds: PreferenceKey {
+    nonisolated static var defaultValue: Anchor<CGRect>? { nil }
+
+    nonisolated static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
 }

@@ -40,6 +40,43 @@ struct WorkspaceCreationImagesTests {
         #expect(draft.errorMessage == nil)
     }
 
+    @Test(arguments: [ConnectionPrincipal.HostRole.member, .owner])
+    func finishingImageImportCannotRestoreLostCreationAuthority(role: ConnectionPrincipal.HostRole) async throws {
+        let connection = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(connectionManager: connection),
+            connection: connection,
+            persistence: .ephemeral()
+        )
+        connection.currentPrincipal = InvitedSessionFixtures.principal(role: role)
+        connection.connectionState = .connected
+        let draft = WorkspaceCreationImages()
+        let provider = ProviderInfo(id: "auggie", authenticated: .signedIn)
+        func isCreateDisabled() -> Bool {
+            CreateWorkspaceView.isCreateDisabled(
+                isCreating: false,
+                isLoadingProviders: false,
+                providers: [provider],
+                selectedProvider: provider,
+                allowsCreation: coordinator.canCreateWorkspace,
+                isImportingImages: draft.isImporting
+            )
+        }
+        let data = try png()
+        let task = try #require(draft.add([{ data }]))
+        #expect(coordinator.canCreateWorkspace)
+        #expect(draft.isImporting)
+        #expect(isCreateDisabled())
+        connection.currentPrincipal = InvitedSessionFixtures.principal(role: .guest)
+        await task.value
+        #expect(!draft.isImporting)
+        #expect(draft.images.count == 1)
+        #expect(coordinator.shouldDismissWorkspaceCreation)
+        #expect(isCreateDisabled())
+        connection.currentPrincipal = InvitedSessionFixtures.principal(role: role)
+        #expect(!isCreateDisabled())
+    }
+
     @Test func failedBatchPreservesDraftAndRemovalFreesASelectionSlot() async throws {
         let draft = WorkspaceCreationImages()
         let data = try png()

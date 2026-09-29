@@ -235,6 +235,7 @@ struct CreateWorkspaceView: View {
                 messageText: $messageText,
                 images: images,
                 isCreating: isCreating,
+                allowsCreation: coordinator.canCreateWorkspace,
                 errorMessage: errorMessage,
                 showError: $showError,
                 colorScheme: colorScheme,
@@ -443,8 +444,7 @@ extension CreateWorkspaceView {
     }
 
     private func performCreateWorkspace(repo: GitHubRepo, branch: String) async {
-        // Recheck at the request boundary: a refresh may have removed the
-        // selection after the button was tapped but before this task ran.
+        // Recheck at the request boundary: a refresh may have removed the selection after the tap but before this task ran.
         guard canSubmitProvider, !images.isImporting else {
             isCreating = false
             return
@@ -493,7 +493,8 @@ extension CreateWorkspaceView {
             isCreating: false,
             isLoadingProviders: isLoadingOptions || providerOptions.isLoading || isLoadingSelectedModelCatalog,
             providers: providers,
-            selectedProvider: selectedProvider
+            selectedProvider: selectedProvider,
+            allowsCreation: coordinator.canCreateWorkspace
         )
     }
 }

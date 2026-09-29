@@ -49,18 +49,31 @@ enum ConnectionPairing {
         connection: any SessionConnectionManaging,
         persistence: PersistenceManager = .shared
     ) async throws -> StoredConnection {
+        let admissionID = connection.admission?.id
+        let principal = try await connection.confirmedPrincipal()
+        try Task.checkCancellation()
+        let receipt = try connection.pairingAdmission(token: token, fingerprint: server.certFingerprint)
+        guard receipt.id == admissionID else { throw ConnectionPrincipal.AdmissionError.personChanged }
+        let personKey = principal.isOwner ? nil : try server.certFingerprint.map { try InvitedSyncKey.session(fingerprint: $0, principalId: principal.id) }
+        let floor = personKey.flatMap { persistence.invitedJournal.floors[$0] } ?? 0
         var displayName: String?
         if let result = try? await connection.request("host.status") {
             displayName = Self.displayName(fromHostStatus: result)
         }
-        let outcome = persistence.upsertConnectionWithOutcome(
-            StoredConnection(
+        try Task.checkCancellation()
+        try connection.validatePairingAdmission(receipt)
+        guard (personKey.flatMap { persistence.invitedJournal.floors[$0] } ?? 0) == floor else { throw ConnectionPrincipal.AdmissionError.personChanged }
+        var candidate = StoredConnection(
                 server: server,
                 token: token,
                 displayName: displayName,
                 lastConnectedAt: Date()
             )
-        )
+        candidate.principal = principal
+        try persistence.prepareInvitedPairing(&candidate)
+        try Task.checkCancellation()
+        try connection.validatePairingAdmission(receipt)
+        let outcome = persistence.upsertConnectionWithOutcome(candidate)
         guard !outcome.registryUndecodable else { throw PersistenceError.registryUndecodable }
         guard outcome.persisted else { throw PersistenceError.saveFailed }
         let stored = outcome.connection
@@ -69,6 +82,7 @@ enum ConnectionPairing {
         // the refresh fired by connect() may have run before the upsert above
         // and found no stored record to persist the daemon-reported IPs into.
         Task {
+            guard (try? connection.validatePairingAdmission(receipt)) != nil else { return }
             await connection.refreshHostRoutes()
             persistence.publishPendingBackends()
         }
@@ -137,6 +151,7 @@ struct ConnectionsView: View {
             coordinator.refreshSyncedBackends()
             reload()
         }
+        .onReceive(coordinator.dependencies.persistence.connectionsDidChange) { reload() }
     }
 
     private var connectionsList: some View {
@@ -244,8 +259,8 @@ struct ConnectionsView: View {
     }
 
     private func reload() {
-        connections = PersistenceManager.shared.loadConnections()
-            .sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
+        guard let records = coordinator.dependencies.persistence.loadConnectionsWithOutcome().connections else { return }
+        connections = records.sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
     }
 }
 

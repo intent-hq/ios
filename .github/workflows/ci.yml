@@ -44,6 +44,15 @@ on:
         type: string
         required: false
         default: ''
+      simulator_family:
+        description: >-
+          iPhone keeps the existing default. iPad creates one disposable
+          simulator for a non-gating run and requires 1–20 Target/Suite[/test]
+          selectors in only_testing; full bundles and skipped selections fail.
+        type: choice
+        options: [iphone, ipad]
+        required: false
+        default: iphone
 
 permissions:
   contents: read
@@ -97,6 +106,9 @@ jobs:
       # scripts/xcodebuild.sh against stubbed xcrun/xcodebuild; needs bash + python3.
       - name: xcodebuild.sh self-tests
         run: scripts/test_xcodebuild.sh
+
+      - name: Disposable iPad route tests
+        run: python3 scripts/test_ci_simulator.py
 
       # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
       # override on both Darwin and Linux paths against a stubbed swiftlint.
@@ -155,7 +167,7 @@ jobs:
         run: scripts/swiftlint.sh
 
   build-and-test:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
+    name: ${{ github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad') && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
     if: ${{ !cancelled() }}
     # The repo ruleset requires only this job. A job skipped because a
     # `needs` dependency failed counts as passing for required checks, so
@@ -172,9 +184,18 @@ jobs:
       # and write the test result bundle where the artifact upload expects it.
       SPM_CLONE_DIR: build/SourcePackages
       RESULT_BUNDLE: TestResults
+      SIMULATOR_FAMILY: ${{ github.event_name == 'workflow_dispatch' && inputs.simulator_family || 'iphone' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Validate simulator request
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
+        run: |
+          export IPAD_EVIDENCE_DIR="$RUNNER_TEMP/ipad-evidence"
+          printf 'IPAD_EVIDENCE_DIR=%s\n' "$IPAD_EVIDENCE_DIR" >> "$GITHUB_ENV"
+          python3 scripts/ci_simulator.py validate
 
       - name: SwiftLint wrapper tests on the native shell
         run: scripts/test-swiftlint.sh
@@ -242,17 +263,23 @@ jobs:
           xcodebuild -downloadComponent MetalToolchain
           xcrun metal -v
 
-      # Device selection lives in scripts/xcodebuild.sh (pick-simulator).
-      # Export the UDID so the pre-boot step and every later script
-      # invocation share one concrete device.
+      # iPhone selection follows the runner's existing route. The optional iPad lane
+      # creates a fresh device and records its ownership before exporting the
+      # UDID used by the same pre-boot and test wrapper paths.
       - name: Pick simulator device
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
-          if [ '${{ runner.environment }}' = self-hosted ]; then
-            udid=$(.github/scripts/select-local-simulator.sh)
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            python3 scripts/ci_simulator.py prepare
           else
-            udid=$(scripts/xcodebuild.sh pick-simulator)
+            if [ '${{ runner.environment }}' = self-hosted ]; then
+              udid=$(.github/scripts/select-local-simulator.sh)
+            else
+              udid=$(scripts/xcodebuild.sh pick-simulator)
+            fi
+            echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
           fi
-          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
@@ -384,6 +411,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
+
       - name: Resolve SPM packages
         run: scripts/xcodebuild.sh resolve
 
@@ -419,7 +453,13 @@ jobs:
         env:
           RESULT_BUNDLE: TestResults-keychain
           ONLY_TESTING: IntentTests/BackendKeychainConformanceTests IntentTests/BackendKeychainFixtureTests IntentTests/SyncedBackendRegistryTests IntentTests/SyncedBackendPublisherTests
-        run: scripts/xcodebuild.sh test-ios-unit
+        run: |
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            set -o pipefail
+            scripts/xcodebuild.sh test-ios-unit 2>&1 | tee "$IPAD_EVIDENCE_DIR/keychain.log"
+          else
+            scripts/xcodebuild.sh test-ios-unit
+          fi
 
       # The script removes any existing result bundle at RESULT_BUNDLE
       # (xcodebuild refuses an existing path). xcodebuild forwards its
@@ -432,17 +472,28 @@ jobs:
       # unverifiable selection with 83, and the per-selector table is appended
       # to the job summary (see the script header).
       - name: Run unit tests
+        id: selected-tests
         env:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
-          if [ "$ONLY_TESTING" = IntentUITests ]; then
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            set -o pipefail
+            export ONLY_TESTING_IDENTITIES_PATH="$IPAD_EVIDENCE_DIR/resolved-tests.json"
+            scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/test.log"
+          elif [ "$ONLY_TESTING" = IntentUITests ]; then
             scripts/xcodebuild.sh test-without-building-ui
           elif [ -n "$ONLY_TESTING" ]; then
             scripts/xcodebuild.sh test-without-building
           else
             scripts/xcodebuild.sh test-without-building-unit
           fi
+
+      - name: Require actual iPad execution
+        if: always() && env.SIMULATOR_FAMILY == 'ipad' && steps.selected-tests.outcome != 'skipped'
+        env:
+          ONLY_TESTING: ${{ inputs.only_testing }}
+        run: python3 scripts/ci_simulator.py verify
 
       # InfoPlistSyncTests, PlatformGuardAllowlistTests,
       # ObjCCallbackIsolationTests, ExternalLinkTests and
@@ -475,7 +526,12 @@ jobs:
           trap restore EXIT
           mv Intent IntentTests Info-visionOS.plist "$moved/"
           mkdir Intent IntentTests
-          scripts/xcodebuild.sh test-without-building
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            set -o pipefail
+            scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/source-moved.log"
+          else
+            scripts/xcodebuild.sh test-without-building
+          fi
 
       - name: Export terminal screenshots
         if: ${{ !cancelled() && contains(inputs.only_testing, 'MobileTerminalUITests') }}
@@ -540,6 +596,25 @@ jobs:
           echo "timed out waiting for the Go unit tests / SwiftLint jobs" >&2
           exit 1
 
+      - name: Clean up owned iPad simulator
+        if: always() && env.SIMULATOR_FAMILY == 'ipad'
+        run: python3 scripts/ci_simulator.py cleanup
+
+      - name: Upload iPad execution evidence
+        if: always() && env.SIMULATOR_FAMILY == 'ipad'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ipad-execution-evidence
+          path: |
+            ${{ env.IPAD_EVIDENCE_DIR }}
+            TestResults
+            TestResults-retry
+            TestResults-keychain
+            TestResults-keychain-retry
+            TestResults-source-moved
+            TestResults-source-moved-retry
+          if-no-files-found: warn
+
   ios-ui-tests:
     name: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && 'iOS UI Tests (full)' || 'iOS UI Tests' }}
     # Pull requests, the merge queue and smoke dispatches run the selectors in
@@ -548,10 +623,10 @@ jobs:
     # requested selector in build-and-test.
     # A human adds this check to the ruleset after merge; build-and-test does not
     # wait for it; the macOS jobs queue on the dedicated Mac.
-    if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
+    if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad')) }}
     needs: select-macos-runner
     runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
-    # The expanded UI suite can exceed an hour with setup/build; leave time for result export.
+    # Allow setup, the full iPhone suite, iPad regressions, and cleanup (ios#429).
     timeout-minutes: 90
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -631,6 +706,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
+
       - name: Resolve SPM packages
         run: scripts/xcodebuild.sh resolve
 
@@ -658,6 +740,20 @@ jobs:
           fi
           scripts/xcodebuild.sh test-without-building-ui
 
+      - name: Run iPad menu regression tests
+        env:
+          RESULT_BUNDLE: IPadMenuTestResults
+          ONLY_TESTING: >-
+            IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsSendAndMenuAvailable
+            IntentUITests/HomeActionMenuUITests/testIPadQuestionsKeepNextAndSendAvailable
+        run: |
+          SIM_UDID=$(xcrun simctl list devices available --json | jq -er '
+            [.devices | to_entries[] | select(.key | contains("iOS"))
+              | .value[] | select(.name | startswith("iPad"))]
+            | last | .udid // error("No available iPad simulator")')
+          export SIM_UDID
+          scripts/xcodebuild.sh test-without-building-ui
+
       - name: Upload UI test results
         if: failure()
         uses: actions/upload-artifact@v7
@@ -666,6 +762,8 @@ jobs:
           path: |
             UITestResults
             UITestResults-retry
+            IPadMenuTestResults
+            IPadMenuTestResults-retry
 
       # ConversationTranscriptScrollUITests attaches one content-free JSON
       # record per launch proving the unrealized-end recovery ran. Export only
@@ -772,6 +870,13 @@ jobs:
           key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-spm-
+
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
 
       - name: Resolve SPM packages
         run: scripts/xcodebuild.sh resolve

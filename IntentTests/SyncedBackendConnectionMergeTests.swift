@@ -83,6 +83,22 @@ struct SyncedBackendConnectionMergeTests {
         #expect(added.server.port == 8843)
         #expect(added.displayName == "Mac Studio")
         #expect(added.syncUpdatedAt == 100)
+        #expect(added.principal == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func importPreservesVerifiedOwnerIdentityWithoutClassifyingUnknownRecords(verifiedOwner: Bool) throws {
+        var existing = local(syncUpdatedAt: 50)
+        existing.principal = verifiedOwner ? .demoOwner : nil
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(token: "rotated-owner-token", updatedAt: 100)],
+            into: [existing]
+        )
+        let updated = try #require(result.connections.first)
+        #expect(result.updatedIds == [existing.id])
+        #expect(updated.token == "rotated-owner-token")
+        #expect(updated.principal == existing.principal)
+        #expect(updated.syncUpdatedAt == 100)
     }
 
     @Test func fingerprintlessNewRecordIsNeverAdded() {

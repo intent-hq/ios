@@ -183,9 +183,9 @@ struct SpecialistPickerSelectionTests {
         SpecialistPickerView.isCreateDisabled(
             hasSpecialist: hasSpecialist,
             isCreating: isCreating,
-            isLoadingProviders: isLoadingProviders,
-            isLoadingModels: isLoadingModels,
-            providers: providers
+            isLoadingOptions: isLoadingProviders || isLoadingModels,
+            providers: providers,
+            selectedProvider: providers.first(where: \.isSelectable)
         )
     }
 
@@ -203,9 +203,21 @@ struct SpecialistPickerSelectionTests {
         #expect(!isCreateDisabled(providers: [ProviderInfo(id: "grok", authenticated: .unknown)]))
     }
 
-    @Test func createEnabledWhenProviderListEmpty() {
-        // Empty list is not the guidance state: the daemon default is used
-        #expect(!isCreateDisabled(providers: []))
+    @Test func createDisabledWhenProviderListEmpty() {
+        #expect(isCreateDisabled(providers: []))
+    }
+
+    @Test func createDisabledForMissingRemovedOrSignedOutSelection() {
+        let providers = [ProviderInfo(id: "codex", authenticated: true), ProviderInfo(id: "auggie", authenticated: false)]
+        for selection in [nil, ProviderInfo(id: "removed"), ProviderInfo(id: "auggie", authenticated: true)] {
+            #expect(SpecialistPickerView.isCreateDisabled(
+                hasSpecialist: true,
+                isCreating: false,
+                isLoadingOptions: false,
+                providers: providers,
+                selectedProvider: selection
+            ))
+        }
     }
 
     @Test func createDisabledWhileLoadingCreatingOrWithoutSpecialist() {
@@ -282,9 +294,37 @@ struct SpecialistPickerSelectionTests {
         #expect(selection.provider == nil)
         #expect(selection.model == nil)
     }
+
+    @Test func omitsStaleModelAfterProviderChanges() {
+        let selection = SpecialistPickerView.buildCreateAgentSelection(
+            provider: ProviderInfo(id: "codex", authenticated: true),
+            model: makeModel("shared-id", provider: "auggie")
+        )
+        #expect(selection.provider == "codex")
+        #expect(selection.model == nil)
+    }
+
+    @Test func omitsModelWithoutSelectableProvider() {
+        for provider in [nil, ProviderInfo(id: "auggie", authenticated: false)] {
+            let selection = SpecialistPickerView.buildCreateAgentSelection(provider: provider, model: makeModel("opus4.7"))
+            #expect(selection.provider == nil)
+            #expect(selection.model == nil)
+        }
+    }
 }
 
 extension SpecialistPickerSelectionTests {
+    @Test func modelsAreScopedToTheSelectedAvailableProvider() {
+        let provider = ProviderInfo(id: "codex", authenticated: true)
+        let model = makeModel("shared-id", provider: "codex")
+        let catalog = [makeModel("shared-id"), model, makeModel("other", provider: "hidden")]
+        #expect(SpecialistPickerView.selectableModels(provider: provider, providers: [provider], models: catalog) == [model])
+        for providers in [[], [ProviderInfo(id: "auggie")], [ProviderInfo(id: "codex", authenticated: false)]] {
+            #expect(SpecialistPickerView.selectableModels(provider: provider, providers: providers, models: catalog).isEmpty)
+        }
+        #expect(SpecialistPickerView.selectableModels(provider: nil, providers: [provider], models: catalog).isEmpty)
+    }
+
     @Test func workspaceReasoningRequiresExplicitModelAndCurrentProviderEvidence() {
         let provider = ProviderInfo(id: "provider-a")
         let selected = ModelInfo(id: "shared-id", name: "Model", provider: provider.id, effortLevels: ["old"])
