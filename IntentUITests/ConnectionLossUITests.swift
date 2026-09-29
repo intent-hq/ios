@@ -236,7 +236,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
-        XCTAssertFalse(app.navigationBars["Select Repository"].exists)
+        XCTAssertFalse(app.staticTexts["creation.repositoryTitle"].exists)
         XCTAssertFalse(app.staticTexts["connection-network.status"].exists, "Home is not an offline failure screen")
         try trigger("network-restored", in: directory)
         try trigger("recover", in: directory)
@@ -441,7 +441,7 @@ extension ConnectionLossUITests {
     @MainActor
     private func openCreateWorkspace(in app: XCUIApplication) {
         app.openHomeAction("workspace")
-        XCTAssertTrue(app.navigationBars["Select Repository"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Fixture.timeout))
     }
 
     @MainActor

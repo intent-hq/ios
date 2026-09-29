@@ -206,7 +206,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let app = launchHome()
         openMenu(app)
         app.buttons["intent.menu.workspace"].tap()
-        XCTAssertTrue(app.navigationBars["Select Repository"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Self.timeout))
         app.terminate()
         app.launch()
         openMenu(app)

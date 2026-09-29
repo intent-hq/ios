@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 /// Scoped to the final workspace form; other creation flows keep their theme.
@@ -45,5 +46,60 @@ enum CreateWorkspaceFormStyle {
             return Color(red: darkSecondaryRedGreen, green: darkSecondaryRedGreen, blue: darkSecondaryBlue)
         }
         return Theme.mutedForeground(for: scheme, contrast: contrast)
+    }
+}
+
+/// Figma's repository page is grey with white selection/control surfaces.
+/// Keep these overrides local so the later creation steps retain their styling.
+enum CreateWorkspaceRepoStyle {
+    static let titleSpacing: CGFloat = 56
+    static let sectionSpacing: CGFloat = 32
+    static let sectionHeaderSpacing: CGFloat = 24
+    static let rowSpacing: CGFloat = 24
+    static let rowTextSpacing: CGFloat = 12
+    static let rowMinimumHeight: CGFloat = 80
+    static let iconSize: CGFloat = 24
+    static let avatarRadius: CGFloat = 8
+    static let titleTracking: CGFloat = -0.56
+    static let sectionTracking: CGFloat = 0.24
+    static let nameTracking: CGFloat = -0.32
+    static let fullNameTracking: CGFloat = -0.12
+    static let dividerHeight: CGFloat = 1
+    static let dividerOpacity = 0.1
+    static let checkCropRatio: CGFloat = 0.25
+    static let checkCircleInsetRatio: CGFloat = 0.0625
+    static let nameCapHeight = capHeight(Constants.Typography.bodySEmphasized)
+    static let fullNameCapHeight = capHeight(Constants.Typography.subtextXXS)
+
+    private static func capHeight(_ style: Constants.Typography.Style) -> CGFloat {
+        CTFontGetCapHeight(CTFontCreateWithName(style.face.rawValue as CFString, style.size, nil))
+    }
+
+    static func background(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? CreateWorkspaceFormStyle.background(for: scheme) : SettingsStyle.lightSurface
+    }
+
+    static func card(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? CreateWorkspaceFormStyle.card(for: scheme) : .white
+    }
+
+    static func foreground(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? CreateWorkspaceFormStyle.foreground(for: scheme) : SettingsStyle.lightForeground
+    }
+
+    static func secondary(for scheme: ColorScheme, contrast: ColorSchemeContrast) -> Color {
+        if contrast == .increased { return foreground(for: scheme) }
+        return scheme == .dark
+            ? CreateWorkspaceFormStyle.secondary(for: scheme, contrast: contrast) : SettingsStyle.lightMuted
+    }
+
+    static func sectionForeground(for scheme: ColorScheme, contrast: ColorSchemeContrast) -> Color {
+        if contrast == .increased { return foreground(for: scheme) }
+        return scheme == .dark
+            ? CreateWorkspaceFormStyle.secondary(for: scheme, contrast: contrast) : SettingsStyle.lightSection
+    }
+
+    static func divider(for scheme: ColorScheme) -> Color {
+        (scheme == .dark ? Color.white : .black).opacity(dividerOpacity)
     }
 }
