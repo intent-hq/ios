@@ -32,7 +32,7 @@ struct AgentMessageAttribution: Equatable {
 
         let trimmedName = (metadata["fromAgentName"]?.stringValue ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let rawName = trimmedName.isEmpty ? fallbackName : trimmedName
+        let rawName = trimmedName.isEmpty ? fallbackName : AgentSession.displayName(for: trimmedName)
         let displayName = rawName.count > maxNameLength
             ? String(rawName.prefix(maxNameLength - 1)) + "…"
             : rawName
