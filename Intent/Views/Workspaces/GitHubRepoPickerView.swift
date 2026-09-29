@@ -53,7 +53,9 @@ struct GitHubRepoPickerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(CreateWorkspaceFormStyle.pagePadding)
         }
+        #if !os(visionOS)
         .scrollDismissesKeyboard(.interactively)
+        #endif
         .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
         .task {
