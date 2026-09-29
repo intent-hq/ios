@@ -11,6 +11,7 @@ struct SettingsView: View {
             SettingsContent(presentedAsSheet: presentedAsSheet)
                 .environment(\.colorScheme, contentColorScheme ?? colorScheme)
         }
+        #if os(iOS)
         .background {
             if presentedAsSheet {
                 SettingsStatusBarCapture()
@@ -18,9 +19,11 @@ struct SettingsView: View {
                     .accessibilityHidden(true)
             }
         }
+        #endif
     }
 }
 
+#if os(iOS)
 private struct SettingsStatusBarCapture: UIViewControllerRepresentable {
     func makeUIViewController(context _: Context) -> Controller { Controller() }
 
@@ -44,6 +47,7 @@ private struct SettingsStatusBarCapture: UIViewControllerRepresentable {
         }
     }
 }
+#endif
 
 private struct SettingsContent: View {
     @Environment(AppCoordinator.self) var coordinator
