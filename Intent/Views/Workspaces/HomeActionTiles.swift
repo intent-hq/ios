@@ -12,6 +12,7 @@ struct HomeActionTiles: View {
 
     let connectionCount: Int
     let appearance: String
+    let themePreference: String
     let onSelect: (Action) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var tileWidth: CGFloat = 172
@@ -61,6 +62,9 @@ struct HomeActionTiles: View {
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
         }
         .buttonStyle(HomeActionTileStyle())
+        .accessibilityLabel(action == .appearance ? "Appearance" : title(action))
+        .accessibilityValue(action == .appearance ? appearance : "")
+        .accessibilityHint(action == .appearance ? "Changes appearance" : "")
         .accessibilityIdentifier("intent.menu.\(action.rawValue)")
     }
 
@@ -102,7 +106,12 @@ struct HomeActionTiles: View {
         case .assistant: .intentDandelion
         case .workspace: .addIcon
         case .connections: .connectionLaptop
-        case .appearance: .night
+        case .appearance:
+            switch themePreference {
+            case "light": .brightnessFull
+            case "dark": .night
+            default: .brightnessRise
+            }
         case .acknowledgements: .file
         case .settings: .settings2
         }

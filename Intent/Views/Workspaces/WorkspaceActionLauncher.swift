@@ -14,7 +14,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     @AppStorage("appThemePreference") private var themePreference = "system"
     @State private var isOpen = false
     @State private var connectionCount = 0
-    @State private var destination: HomeActionDestination?
+    @State private var showingAcknowledgements = false
 
     private enum Layout {
         static let blurRadius: CGFloat = 16
@@ -45,8 +45,8 @@ struct WorkspaceActionLauncher: ViewModifier {
                 reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
                 value: isOpen
             )
-            .sheet(item: $destination) { destination in
-                HomeActionSettingsView(destination: destination)
+            .sheet(isPresented: $showingAcknowledgements) {
+                HomeActionSettingsView()
             }
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
@@ -89,7 +89,12 @@ struct WorkspaceActionLauncher: ViewModifier {
         VStack(alignment: alignment, spacing: Layout.footerSpacing) {
             Spacer(minLength: 0)
             if isOpen {
-                HomeActionTiles(connectionCount: connectionCount, appearance: appearanceTitle, onSelect: select)
+                HomeActionTiles(
+                    connectionCount: connectionCount,
+                    appearance: appearanceTitle,
+                    themePreference: themePreference,
+                    onSelect: select
+                )
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
             }
             AssistantLaunchButton(isOpen: isOpen) {
@@ -109,14 +114,18 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 
     private func select(_ action: HomeActionTiles.Action) {
+        if action == .appearance {
+            themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"
+            return
+        }
         isOpen = false
         switch action {
         case .assistant: coordinator.onSelectAssistant()
         case .workspace: onCreateWorkspace()
         case .connections: onConnections()
-        case .appearance: destination = .appearance
-        case .acknowledgements: destination = .acknowledgements
+        case .acknowledgements: showingAcknowledgements = true
         case .settings: coordinator.onOpenSettings()
+        case .appearance: break
         }
     }
 }
