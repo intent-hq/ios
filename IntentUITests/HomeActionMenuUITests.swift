@@ -202,58 +202,11 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
-    func testWorkspaceAndLogsTilesOpenTheirDestinations() {
+    func testWorkspaceTileOpensRepositoryPicker() {
         let app = launchHome()
         openMenu(app)
         app.buttons["intent.menu.workspace"].tap()
         XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Self.timeout))
-        app.terminate()
-        app.launch()
-        openMenu(app)
-        reveal("acknowledgements", in: app).tap()
-        XCTAssertTrue(app.navigationBars["Acks & Logs"].waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["Acknowledgements"].exists)
-        app.buttons["Export logs"].tap()
-        XCTAssertTrue(app.navigationBars["Export logs"].waitForExistence(timeout: Self.timeout))
-    }
-
-    @MainActor
-    func testLogOffRequiresConfirmationAndCanBeCancelled() {
-        let app = launchHome()
-        openMenu(app)
-        reveal("logOff", in: app).tap()
-        let confirmation = app.staticTexts["log-off.title"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
-        app.buttons["log-off.cancel"].tap()
-        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(waitUntilHittable(app.buttons["intent.menu.close"]))
-        reveal("logOff", in: app).tap()
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
-        app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(waitUntilHittable(app.buttons["intent.menu.close"]))
-        app.buttons["intent.menu.close"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
-    }
-
-    @MainActor
-    func testConfirmedLogOffForgetsOnlyTheCurrentConnection() {
-        let app = XCUIApplication()
-        app.launchArguments += ["--demo-data", "--demo-settings", "-appThemePreference", "dark"]
-        app.launch()
-        app.openHomeAction("logOff")
-        XCTAssertTrue(app.staticTexts["log-off.title"].waitForExistence(timeout: Self.timeout))
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Log-Off-Dark"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-        app.buttons["log-off.confirm"].tap()
-        XCTAssertTrue(app.staticTexts["log-off.title"].waitForNonExistence(timeout: Self.timeout))
-        // Demo launches enter Workspaces again after the window's backend is replaced.
-        app.openHomeAction("connections")
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Travel Mac")).firstMatch.exists)
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Studio Mac")).firstMatch.exists)
     }
 
     @MainActor

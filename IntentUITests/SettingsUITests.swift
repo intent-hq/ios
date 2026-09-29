@@ -119,6 +119,45 @@ nonisolated final class SettingsUITests: XCTestCase {
     }
 
     @MainActor
+    func testLogOffRequiresConfirmationAndCanBeCancelled() {
+        let app = launch()
+        openSettings(app)
+        let logOff = app.buttons["Log Off"]
+        reveal(logOff, in: app)
+        logOff.tap()
+        let confirmation = app.staticTexts["log-off.title"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        app.buttons["log-off.cancel"].tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
+        reveal(logOff, in: app)
+        logOff.tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
+        scrollToTop(app)
+        assertConnections(app, current: "Studio Mac", other: "Travel Mac")
+    }
+
+    @MainActor
+    func testConfirmedLogOffForgetsOnlyTheCurrentConnection() {
+        let app = launch()
+        openSettings(app)
+        app.buttons["settings.appearance.dark"].tap()
+        let logOff = app.buttons["Log Off"]
+        reveal(logOff, in: app)
+        logOff.tap()
+        let confirmation = app.staticTexts["log-off.title"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Log-Off-Dark")
+        app.buttons["log-off.confirm"].tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
+        app.openHomeAction("connections")
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Travel Mac")).firstMatch.exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Studio Mac")).firstMatch.exists)
+    }
+
+    @MainActor
     private func assertScrollingLogOffAndRevealActions(_ app: XCUIApplication) {
         let close = app.buttons["settings.close"]
         let initialCloseY = close.frame.minY

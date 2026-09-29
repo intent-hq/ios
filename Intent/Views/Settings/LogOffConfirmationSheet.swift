@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Shared confirmation for Settings and the workspace action menu.
 struct LogOffConfirmationSheet: View {
     let onLogOff: () -> Void
     @Environment(\.dismiss) private var dismiss

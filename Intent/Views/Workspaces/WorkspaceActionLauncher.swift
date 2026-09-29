@@ -13,8 +13,6 @@ struct WorkspaceActionLauncher: ViewModifier {
     @AppStorage("appThemePreference") private var themePreference = "system"
     @State private var isOpen = false
     @State private var connectionCount = 0
-    @State private var showingAcknowledgements = false
-    @State private var confirmingLogOff = false
 
     private enum Layout {
         static let blurRadius: CGFloat = 15
@@ -49,23 +47,11 @@ struct WorkspaceActionLauncher: ViewModifier {
                 reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
                 value: isOpen
             )
-            .sheet(isPresented: $showingAcknowledgements) {
-                HomeActionSettingsView()
-            }
-            .sheet(isPresented: $confirmingLogOff) {
-                LogOffConfirmationSheet {
-                    isOpen = false
-                    coordinator.onLogOff()
-                }
-            }
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
             }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
-            .onDisappear {
-                // A full-screen sheet adaptation must still return to the menu on cancel.
-                if !confirmingLogOff { isOpen = false }
-            }
+            .onDisappear { isOpen = false }
     }
 
     private func actionOverlay(bottomInset: CGFloat) -> some View {
@@ -134,19 +120,13 @@ struct WorkspaceActionLauncher: ViewModifier {
             themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"
             return
         }
-        // Cancellation of Log Off returns to the menu; destinations dismiss it.
-        if action == .logOff {
-            confirmingLogOff = true
-            return
-        }
         isOpen = false
         switch action {
         case .assistant: coordinator.onSelectAssistant()
         case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
         case .connections: onConnections()
-        case .acknowledgements: showingAcknowledgements = true
         case .settings: coordinator.onOpenSettings()
-        case .appearance, .logOff: break
+        case .appearance: break
         }
     }
 }
