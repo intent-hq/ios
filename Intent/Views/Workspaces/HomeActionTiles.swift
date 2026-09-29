@@ -8,7 +8,6 @@ struct HomeActionTiles: View {
         case appearance
         case acknowledgements
         case settings
-        case logOff
     }
 
     let connectionCount: Int
@@ -95,7 +94,6 @@ struct HomeActionTiles: View {
         case .appearance: "Appearance:\n\(appearance)"
         case .acknowledgements: "Acks &\nLogs"
         case .settings: "Settings"
-        case .logOff: "Log Off"
         }
     }
 
@@ -107,7 +105,6 @@ struct HomeActionTiles: View {
         case .appearance: .night
         case .acknowledgements: .file
         case .settings: .settings2
-        case .logOff: .logout
         }
     }
 

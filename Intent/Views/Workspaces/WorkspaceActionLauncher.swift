@@ -15,7 +15,6 @@ struct WorkspaceActionLauncher: ViewModifier {
     @State private var isOpen = false
     @State private var connectionCount = 0
     @State private var destination: HomeActionDestination?
-    @State private var confirmingLogOff = false
 
     private enum Layout {
         static let blurRadius: CGFloat = 16
@@ -48,15 +47,6 @@ struct WorkspaceActionLauncher: ViewModifier {
             )
             .sheet(item: $destination) { destination in
                 HomeActionSettingsView(destination: destination)
-            }
-            .alert("Log Off?", isPresented: $confirmingLogOff) {
-                Button("Cancel", role: .cancel) {}
-                Button("Log Off", role: .destructive) {
-                    isOpen = false
-                    coordinator.onLogOff()
-                }
-            } message: {
-                Text("Are you sure? You'll need to pair again to reconnect.")
             }
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
@@ -119,11 +109,6 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 
     private func select(_ action: HomeActionTiles.Action) {
-        // Cancellation of Log Off returns to the menu; destinations dismiss it.
-        if action == .logOff {
-            confirmingLogOff = true
-            return
-        }
         isOpen = false
         switch action {
         case .assistant: coordinator.onSelectAssistant()
@@ -132,7 +117,6 @@ struct WorkspaceActionLauncher: ViewModifier {
         case .appearance: destination = .appearance
         case .acknowledgements: destination = .acknowledgements
         case .settings: coordinator.onOpenSettings()
-        case .logOff: break
         }
     }
 }

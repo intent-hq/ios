@@ -178,19 +178,6 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
-    func testLogOffRequiresConfirmationAndCanBeCancelled() {
-        let app = launchHome()
-        openMenu(app)
-        reveal("logOff", in: app).tap()
-        let confirmation = app.alerts["Log Off?"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
-        confirmation.buttons["Cancel"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.close"].isHittable)
-        app.buttons["intent.menu.close"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
-    }
-
-    @MainActor
     private func verifyMenuDragBehavior(in app: XCUIApplication) {
         let carousel = app.scrollViews["intent.menu.tiles"]
         let assistant = app.buttons["intent.menu.assistant"]
