@@ -10,6 +10,7 @@ extension DemoFixtures {
 enum DemoDesignScenario: String, CaseIterable {
     case blocker
     case composer
+    case context
     case conversation
     case empty
     case history
@@ -65,6 +66,9 @@ final class DemoDesignFixtures {
         switch method {
         case "workspace.list":
             return ["workspaces": [workspace]]
+        case "note.list" where ownsWorkspace && scenario == .context: return ["notes": contextNotes]
+        case "note.get" where ownsWorkspace && scenario == .context:
+            return contextNotes.first { $0["id"] as? String == params["noteId"] as? String }.map { ["note": $0] }
         case "agent.list" where ownsWorkspace:
             return ["agents": [agent]]
         case "agent.get" where ownsAgent:

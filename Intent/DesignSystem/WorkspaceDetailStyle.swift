@@ -32,8 +32,7 @@ enum WorkspaceDetailStyle {
     static let noteTextSpacing: CGFloat = 4
     static let noteTitleSpacing: CGFloat = 8
     static let notePreviewSpacing: CGFloat = 12
-    // Minimum 44-point rows plus this gap leave 24 points between 24-point icons.
-    static let taskRowSpacing: CGFloat = 4
+    static let taskRowSpacing: CGFloat = 24
     static let checkboxCornerRadius: CGFloat = 8
     static let checkboxStrokeWidth: CGFloat = 2
     static let checkmarkSize: CGFloat = 16

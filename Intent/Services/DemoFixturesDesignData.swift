@@ -40,6 +40,25 @@ extension DemoDesignFixtures {
         ]
     }
 
+    var contextNotes: [[String: Any]] {
+        let titles = [
+            "Implement Figma discovery and safe icon swapping",
+            "Build the icon gallery interface",
+            "Verify plugin build and interaction coverage"
+        ]
+        let spec: [String: Any] = [
+            "id": "spec", "title": "Spec", "isDefault": true, "content": "# Goal",
+            "createdAt": Self.timestamp, "updatedAt": Self.timestamp
+        ]
+        return [spec] + titles.enumerated().map { index, title in
+            [
+                "id": "context-task-\(index)", "title": title, "parentId": "spec",
+                "content": "Task details for \(title).", "metadata": ["task": ["status": "complete"]],
+                "createdAt": "2026-09-26T09:42:0\(index)Z", "updatedAt": Self.timestamp
+            ]
+        }
+    }
+
     var monitor: [String: Any] {
         [
             "monitorId": Self.monitorId, "workspaceId": Self.workspaceId, "agentId": Self.agentId,
