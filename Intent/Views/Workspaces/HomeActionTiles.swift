@@ -21,13 +21,14 @@ struct HomeActionTiles: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
-    @ScaledMetric(relativeTo: .body) private var tileHeight: CGFloat = 240
+    @ScaledMetric(relativeTo: .body) private var tileHeight = Layout.minimumHeight
     @ScaledMetric(relativeTo: .body) private var titleTracking: CGFloat = -0.32
     @ScaledMetric(relativeTo: .body) private var titleSize = Constants.Typography.bodySEmphasized.size
 
     private enum Layout {
         static let inset: CGFloat = 24
         static let spacing: CGFloat = 8
+        static let minimumHeight: CGFloat = 240
         static let cornerRadius: CGFloat = 20
         static let iconSize: CGFloat = 24
         static let iconOpacity = 0.3
@@ -65,7 +66,7 @@ struct HomeActionTiles: View {
                 tileTitle(action)
             }
             .padding(Layout.inset)
-            .frame(maxWidth: .infinity, minHeight: tileHeight, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: max(Layout.minimumHeight, tileHeight), alignment: .leading)
             .containerRelativeFrame(.horizontal, count: dynamicTypeSize.isAccessibilitySize ? 1 : 2, spacing: Layout.spacing)
             .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
