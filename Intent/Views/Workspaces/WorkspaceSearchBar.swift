@@ -111,7 +111,7 @@ struct WorkspaceSearchInput: View {
                     .scaledToFit()
                     .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                     .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-                    .frame(width: Constants.WorkspaceSearch.compactHeight, height: Constants.WorkspaceSearch.compactHeight)
+                    .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
                     .background(
                         Constants.WorkspaceList.controlSurface(for: colorScheme),
                         in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
@@ -158,8 +158,9 @@ struct WorkspaceSearchInput: View {
             }
         }
         .padding(.leading, Constants.WorkspaceSearch.inputLeadingInset)
-        .padding(.trailing, Constants.WorkspaceSearch.contentSpacing)
-        .frame(minHeight: Constants.WorkspaceSearch.compactHeight)
+        .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
+        .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
+        .frame(minHeight: Constants.WorkspaceSearch.expandedHeight)
         .background(
             Constants.WorkspaceList.controlSurface(for: colorScheme),
             in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)

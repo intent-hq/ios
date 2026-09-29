@@ -176,7 +176,8 @@ struct WorkspaceRowView: View {
     @ViewBuilder
     private func repositoryLabel(lineLimit: Int?) -> some View {
         if showRepo, let repo = workspace.repositoryName {
-            Text(repo)
+            let displayName = workspace.repositoryOwner.map { "\($0)/\(repo)" } ?? repo
+            Text(displayName)
                 .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
@@ -185,7 +186,7 @@ struct WorkspaceRowView: View {
                 .lineLimit(lineLimit)
                 .truncationMode(.middle)
                 .layoutPriority(-1)
-                .accessibilityLabel("Repository \(repo)")
+                .accessibilityLabel("Repository \(displayName)")
         }
     }
 
@@ -197,6 +198,7 @@ struct WorkspaceRowView: View {
             colorSchemeContrast: colorSchemeContrast,
             expanded: expanded
         )
+        .offset(y: spacious ? Constants.WorkspaceRow.spaciousBadgeVerticalOffset : 0)
     }
 
     struct PullRequestBadges: View {
