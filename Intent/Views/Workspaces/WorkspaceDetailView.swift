@@ -251,6 +251,9 @@ struct WorkspaceDetailView: View {
                 workspaceActions
             }
         }
+        #if !os(visionOS)
+        .workspacePhoneNavigation(title: workspaceTitle, onBack: coordinator.onBackToWorkspaceList) { workspaceActions }
+        #endif
     }
 }
 

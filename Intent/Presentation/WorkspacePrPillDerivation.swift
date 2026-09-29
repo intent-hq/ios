@@ -86,12 +86,12 @@ extension WorkspaceRowView {
         }
     }
 
-    static func pillSystemImage(for status: WorkspacePrPill.Status) -> String {
+    static func pillImage(for status: WorkspacePrPill.Status) -> ImageResource {
         switch status {
-        case .merged: return "arrow.triangle.merge"
-        case .open: return "arrow.triangle.pull"
-        case .draft: return "pencil.circle"
-        case .closed: return "xmark.circle"
+        case .merged: return .pullRequestMerged
+        case .open: return .pullRequestOpen
+        case .draft: return .pullRequestDraft
+        case .closed: return .pullRequestClosed
         }
     }
 }

@@ -13,6 +13,7 @@ enum WorkspaceDetailStyle {
     static let controlSize: CGFloat = 48
     static let iconSize: CGFloat = 24
     static let tabInset: CGFloat = 4
+    static let tabLabelTracking: CGFloat = -0.32
     static let tabCornerRadius: CGFloat = 20
     static let selectedTabCornerRadius: CGFloat = 16
     static let progressHeight: CGFloat = 8
@@ -30,7 +31,8 @@ enum WorkspaceDetailStyle {
     static let accessibilityIndentation: CGFloat = 8
     static let noteTextSpacing: CGFloat = 4
     static let noteTitleSpacing: CGFloat = 8
-    static let taskRowSpacing: CGFloat = 4
+    static let notePreviewSpacing: CGFloat = 12
+    static let taskRowSpacing: CGFloat = 24
     static let checkboxCornerRadius: CGFloat = 8
     static let checkboxStrokeWidth: CGFloat = 2
     static let checkmarkSize: CGFloat = 16
@@ -74,8 +76,12 @@ struct ToolbarOverflowLabel: View {
 }
 
 struct WorkspaceContentTabs: View {
+    private static let selectionAnimationDuration = 0.35
+
     @Binding var selection: WorkspaceTab
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionAnimation
 
     var body: some View {
         HStack(spacing: 0) {
@@ -83,10 +89,18 @@ struct WorkspaceContentTabs: View {
             tab("Context", value: .context)
             tab("Changes", value: .changes)
         }
+        .background {
+            if selection == .agents || selection == .context || selection == .changes {
+                RoundedRectangle(cornerRadius: WorkspaceDetailStyle.selectedTabCornerRadius)
+                    .fill(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    .matchedGeometryEffect(id: selection, in: selectionAnimation, isSource: false)
+            }
+        }
         .padding(WorkspaceDetailStyle.tabInset)
         .background(WorkspaceDetailStyle.surface(for: colorScheme), in: .rect(
             cornerRadius: WorkspaceDetailStyle.tabCornerRadius
         ))
+        .animation(reduceMotion ? nil : .snappy(duration: Self.selectionAnimationDuration), value: selection)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Workspace Content")
     }
@@ -94,18 +108,17 @@ struct WorkspaceContentTabs: View {
     private func tab(_ title: String, value: WorkspaceTab) -> some View {
         Button { selection = value } label: {
             Text(title)
-                .interFont(Constants.Typography.bodyXSEmphasized)
+                .interFont(Constants.Typography.bodySEmphasized)
+                .tracking(WorkspaceDetailStyle.tabLabelTracking)
                 .padding(.vertical, WorkspaceDetailStyle.tabInset)
                 .frame(maxWidth: .infinity, minHeight: WorkspaceDetailStyle.controlSize)
                 .foregroundStyle(selection == value
                     ? WorkspaceDetailStyle.surface(for: colorScheme)
                     : WorkspaceDetailStyle.foreground(for: colorScheme))
-                .background(selection == value ? WorkspaceDetailStyle.foreground(for: colorScheme) : .clear, in: .rect(
-                    cornerRadius: WorkspaceDetailStyle.selectedTabCornerRadius
-                ))
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .matchedGeometryEffect(id: value, in: selectionAnimation)
         .accessibilityAddTraits(selection == value ? .isSelected : [])
     }
 }

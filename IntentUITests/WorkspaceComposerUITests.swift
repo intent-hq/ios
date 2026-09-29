@@ -52,7 +52,7 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
     @MainActor
     func testMonitoringAndAttachmentMenusKeepTheirActions() {
         let app = launch(scenario: "conversation")
-        let actions = app.buttons["agent.actions"]
+        let actions = app.buttons["conversation.actions.open"]
         assertReachable(actions, in: app)
         assertReachable(app.buttons["conversation.back"], in: app)
         actions.tap()

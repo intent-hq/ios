@@ -8,10 +8,10 @@ struct AssistantLaunchButton: View {
         static let closeSize: CGFloat = 48
         static let closeCornerRadius: CGFloat = 20
         static let iconSize: CGFloat = 22
+        static let closeIconSize: CGFloat = 24
         static let iconRotation = 90.0
         static let hiddenIconScale = 0.6
         static let horizontalInset: CGFloat = 24
-        static let bottomInset: CGFloat = 12
         static let shadowRadius: CGFloat = 16
         static let shadowOffset: CGFloat = 4
         static let shadowOpacity = 0.15
@@ -36,13 +36,12 @@ struct AssistantLaunchButton: View {
         .accessibilityLabel(isOpen ? "Close Intent menu" : "Intent menu")
         .accessibilityIdentifier(isOpen ? "intent.menu.close" : "intent.menu.open")
         .padding(.horizontal, Layout.horizontalInset)
-        .padding(.bottom, Layout.bottomInset)
     }
 
     private var size: CGFloat { isOpen ? Layout.closeSize : Layout.diameter }
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: isOpen ? Layout.closeCornerRadius : Layout.diameter / 2, style: .continuous)
+        RoundedRectangle(cornerRadius: isOpen ? Layout.closeCornerRadius : Layout.diameter / 2, style: isOpen ? .circular : .continuous)
     }
 
     private var icon: some View {
@@ -62,6 +61,6 @@ struct AssistantLaunchButton: View {
                 .opacity(isOpen ? 1 : 0)
                 .accessibilityHidden(true)
         }
-        .frame(width: Layout.iconSize, height: Layout.iconSize)
+        .frame(width: isOpen ? Layout.closeIconSize : Layout.iconSize, height: isOpen ? Layout.closeIconSize : Layout.iconSize)
     }
 }

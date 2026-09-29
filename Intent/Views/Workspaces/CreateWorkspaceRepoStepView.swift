@@ -10,7 +10,7 @@ struct CreateWorkspaceRepoStepView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            CreateWorkspaceRepoHeader(isNextDisabled: selectedRepo == nil, onClose: onClose, onNext: onNext)
+            CreateWorkspaceSelectionHeader(isNextDisabled: selectedRepo == nil, onLeadingAction: onClose, onNext: onNext)
             GitHubRepoPickerView(store: store, selectedRepo: $selectedRepo)
         }
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
@@ -21,17 +21,22 @@ struct CreateWorkspaceRepoStepView: View {
     }
 }
 
-private struct CreateWorkspaceRepoHeader: View {
+struct CreateWorkspaceSelectionHeader: View {
+    enum LeadingControl {
+        case close, back
+    }
+
+    var leadingControl: LeadingControl = .close
     let isNextDisabled: Bool
-    let onClose: () -> Void
+    let onLeadingAction: () -> Void
     let onNext: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .title3) private var iconSize = CreateWorkspaceRepoStyle.iconSize
 
     var body: some View {
         HStack {
-            Button(action: onClose) {
-                Image(.close)
+            Button(action: onLeadingAction) {
+                Image(leadingControl == .back ? .arrowLeft : .close)
                     .resizable()
                     .scaledToFit()
                     .frame(width: iconSize, height: iconSize)
@@ -39,8 +44,8 @@ private struct CreateWorkspaceRepoHeader: View {
                     .contentShape(.rect)
             }
             .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
-            .accessibilityLabel("Close")
-            .accessibilityIdentifier("creation.close")
+            .accessibilityLabel(leadingControl == .back ? "Back" : "Close")
+            .accessibilityIdentifier(leadingControl == .back ? "creation.branchBack" : "creation.close")
             Spacer()
             Button(action: onNext) {
                 Text("Next")

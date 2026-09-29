@@ -18,8 +18,14 @@ extension Constants.Settings {
 
 extension Constants.WorkspaceRow {
     nonisolated static let titleLineLimit = 2
-    static let pillBorderWidth: CGFloat = 0.5
-    static let increasedContrastPillBorderWidth: CGFloat = 1
+    static let pillBorderWidth: CGFloat = 1
+    static let increasedContrastPillBorderWidth: CGFloat = 2
+    static let outlinedPillHorizontalPadding: CGFloat = 8
+    static let outlinedPillMinimumHeight: CGFloat = 24
+    static let pillIconSize: CGFloat = 12
+    static let pillIconSpacing: CGFloat = 7
+    static let pillSpacing: CGFloat = 4
+    static let pillOutlineOpacity = 0.1
 }
 
 extension Constants.WorkspaceDetail {

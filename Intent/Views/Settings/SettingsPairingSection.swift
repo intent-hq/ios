@@ -8,21 +8,18 @@ struct SettingsPairingSection: View {
 
     var body: some View {
         SettingsSection(title: "PAIR NEW") {
-            VStack(spacing: 0) {
-                if PairingOption.available(showsSavedConnections: false).contains(.qrScan) {
-                    Button { showQRScanner = true } label: {
-                        SettingsActionLabel(title: "QR Code", image: .connectQR)
-                    }
-                    Divider()
-                }
-                Button { showManualEntry = true } label: {
-                    SettingsActionLabel(title: "Manual Connection", image: .connectManual)
-                }
-            }
-            .background(SettingsStyle.card(for: colorScheme), in: .rect(cornerRadius: SettingsStyle.cardRadius))
+            ConnectionPairingButtons(
+                qrTitle: "QR Code",
+                accessibilityPrefix: "settings.pairing",
+                onScan: { showQRScanner = true },
+                onManualEntry: { showManualEntry = true }
+            )
         }
         .fullScreenCover(isPresented: $showQRScanner, onDismiss: refreshConnections) { QRScannerView(onPaired: handlePaired) }
-        .sheet(isPresented: $showManualEntry, onDismiss: refreshConnections) { ManualTokenEntryView(onPaired: handlePaired) }
+        .sheet(isPresented: $showManualEntry, onDismiss: refreshConnections) {
+            ManualTokenEntryView(onPaired: handlePaired)
+                .preferredColorScheme(colorScheme)
+        }
     }
 
     private func refreshConnections() {

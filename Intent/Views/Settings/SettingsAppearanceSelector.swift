@@ -23,7 +23,7 @@ struct SettingsAppearanceSelector: View {
     private func option(_ title: LocalizedStringKey, value: String) -> some View {
         let selected = selection == value
         let selectedForeground = colorScheme == .dark ? SettingsStyle.lightForeground : .white
-        let selectedBackground = colorScheme == .dark ? SettingsStyle.lightSurface : SettingsStyle.charcoal
+        let selectedBackground = colorScheme == .dark ? Color.white : SettingsStyle.charcoal
         return Button { selection = value } label: {
             Text(title)
                 .interFont(Constants.Typography.bodySEmphasized)

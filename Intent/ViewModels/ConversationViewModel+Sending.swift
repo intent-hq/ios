@@ -175,7 +175,7 @@ extension ConversationViewModel {
                 "workspaceId": workspaceId
             ]
         )
-        agentName = newName
+        agentName = AgentSession.displayName(for: newName)
     }
 
     // MARK: - Attachments

@@ -60,6 +60,19 @@ extension ModelsTests {
         #expect(specialist.hidden == false)
     }
 
+    @Test func specialistInfoNormalizesLegacyAssistantLabels() throws {
+        let specialist = try #require(SpecialistInfo(wire: [
+            "id": "chief-of-staff",
+            "name": "Chief of staff",
+            "description": "Your Chief of Staff across workspaces.",
+            "hidden": true
+        ]))
+        #expect(specialist.id == "chief-of-staff")
+        #expect(specialist.name == "Assistant")
+        #expect(specialist.description == "Your Assistant across workspaces.")
+        #expect(specialist.hidden)
+    }
+
     @Test func specialistInfoWireRejectsMissingRequiredFields() async {
         #expect(SpecialistInfo(wire: ["id": "x", "name": "X"]) == nil)
     }

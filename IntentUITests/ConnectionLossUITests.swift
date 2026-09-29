@@ -46,7 +46,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(repository.waitForExistence(timeout: Fixture.timeout))
         repository.tap()
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.navigationBars["Select Branch"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Fixture.timeout))
         let next = app.buttons["Next"]
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Fixture.timeout), .completed)

@@ -202,6 +202,10 @@ struct AgentSession: Identifiable, Equatable {
         )
     }
 
+    static func displayName(for name: String) -> String {
+        name.caseInsensitiveCompare("Chief of Staff") == .orderedSame ? "Assistant" : name
+    }
+
     static func parseAgent(_ dict: [String: Any]) -> Self? {
         guard let id = dict["id"] as? String,
               let name = dict["name"] as? String else { return nil }
@@ -209,7 +213,7 @@ struct AgentSession: Identifiable, Equatable {
         let attentionSurface = attentionRequestSurface(dict)
         return Self(
             id: id,
-            name: name,
+            name: displayName(for: name),
             status: dict["status"] as? String ?? "Idle",
             isBackground: metadata?["isBackground"] as? Bool ?? false,
             isStreaming: dict["isStreaming"] as? Bool ?? false,

@@ -29,6 +29,17 @@ struct EventWakeAttributionTests {
         ))
     }
 
+    @Test(arguments: ["agentName", "name"])
+    func legacyAssistantEventsUseCurrentName(nameKey: String) {
+        let attribution = EventWakeAttribution.from([
+            "type": AnyCodable("event_notification"),
+            "events": AnyCodable([
+                ["type": "agent:idle", "data": [nameKey: "Chief of Staff"]]
+            ])
+        ])
+        #expect(attribution?.events.first?.agentName == "Assistant")
+    }
+
     @Test func nilWhenMetadataAbsentOrWrongType() {
         let message = ConversationMessage(
             id: "m-absent",

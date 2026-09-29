@@ -75,6 +75,27 @@ struct AgentSessionTests {
         #expect(agent?.notificationsMuted == false)
     }
 
+    @Test(arguments: ["Chief of Staff", "Chief of staff", "chief of staff"])
+    func parsesLegacyAssistantName(name: String) {
+        let agent = AgentSession.parseAgent([
+            "id": "assistant",
+            "name": name,
+            "metadata": ["specialist": "chief-of-staff"]
+        ])
+        #expect(agent?.name == "Assistant")
+        #expect(agent?.specialist == "chief-of-staff")
+    }
+
+    @Test(arguments: ["Assistant", "Plan the release", "Ask the Chief of Staff"])
+    func preservesCustomAssistantNames(name: String) {
+        let agent = AgentSession.parseAgent([
+            "id": "assistant",
+            "name": name,
+            "metadata": ["specialist": "chief-of-staff"]
+        ])
+        #expect(agent?.name == name)
+    }
+
     // MARK: - notificationsMuted (PROTOCOL §5.5)
 
     @Test func parseNotificationsMutedTopLevel() {
