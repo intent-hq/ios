@@ -110,13 +110,19 @@ struct CreateWorkspaceSpecialistStepView: View {
         }
     }
 
+    private var agentHeading: some View {
+        Text("AGENT")
+            .interFont(Constants.Typography.eyebrow)
+            .tracking(CreateWorkspaceFormStyle.agentHeadingTracking)
+            .dynamicTypeSize(.large...)
+            .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
+            .accessibilityAddTraits(.isHeader)
+    }
+
     @ViewBuilder
     private var agentSection: some View {
         VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Text("AGENT")
-                .interFont(Constants.Typography.eyebrow)
-                .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
-                .accessibilityAddTraits(.isHeader)
+            agentHeading
                 .padding(.bottom, CreateWorkspaceFormStyle.controlPadding - CreateWorkspaceFormStyle.rowSpacing)
             adaptiveField("Specialist") { specialistPicker }
             if let providerGuidance {

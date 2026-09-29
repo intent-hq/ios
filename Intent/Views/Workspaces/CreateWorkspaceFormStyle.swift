@@ -4,7 +4,7 @@ import SwiftUI
 /// Scoped to the final workspace form; other creation flows keep their theme.
 enum CreateWorkspaceFormStyle {
     static let pagePadding: CGFloat = 24
-    static let headingSpacing: CGFloat = 40
+    static let headingSpacing: CGFloat = 41
     static let sectionSpacing: CGFloat = 48
     static let rowSpacing: CGFloat = 8
     static let controlPadding: CGFloat = 20
@@ -14,6 +14,7 @@ enum CreateWorkspaceFormStyle {
     static let promptHeight: CGFloat = 180
     static let attachmentTarget: CGFloat = 44
     static let headingTracking: CGFloat = -0.56
+    static let agentHeadingTracking: CGFloat = 0.24
     static let bodyTracking: CGFloat = -0.32
     static let sourceHeight: CGFloat = 80
     static let fieldLabelWidth: CGFloat = 106
