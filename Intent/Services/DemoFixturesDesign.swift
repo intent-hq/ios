@@ -11,6 +11,8 @@ enum DemoDesignScenario: String, CaseIterable {
     case blocker
     case composer
     case conversation
+    case empty
+    case history
     case questionCards = "question-cards"
     case questionFlow = "question-flow"
     case questions
@@ -34,6 +36,7 @@ final class DemoDesignFixtures {
     static let agentName = "Continue Spec Writer"
     static let questionMessageId = "demo-design-questions"
     static let monitorId = "demo-design-pr-56"
+    private static let archivedMessageCount = 100
 
     let scenario: DemoDesignScenario
     private(set) var isStreaming: Bool
@@ -51,6 +54,8 @@ final class DemoDesignFixtures {
     var hasQuestions: Bool { scenario == .questions || scenario == .questionFlow || scenario == .questionCards }
     var pendingQuestionId: String { hasQuestions && !questionsResolved ? Self.questionMessageId : "" }
     var messages: [[String: Any]] { initialMessages + sentMessages }
+    private var historyIsTruncated: Bool { scenario == .history }
+    private var totalMessageCount: Int { messages.count + (historyIsTruncated ? Self.archivedMessageCount : 0) }
 
     // This switch is the deliberately small design-demo protocol surface.
     // swiftlint:disable:next cyclomatic_complexity
@@ -65,7 +70,7 @@ final class DemoDesignFixtures {
         case "agent.get" where ownsAgent:
             return ["agent": agent]
         case "agent.getConversation" where ownsAgent:
-            return ["messages": messages, "truncated": false, "totalMessages": messages.count]
+            return ["messages": messages, "truncated": historyIsTruncated, "totalMessages": totalMessageCount]
         case "chat.subscribe" where ownsAgent:
             sequence = 0
             return ["subscriptionId": DemoFixtures.chatSubscriptionId(agentId: Self.agentId)]
@@ -114,7 +119,7 @@ final class DemoDesignFixtures {
             subscriptionId: DemoFixtures.chatSubscriptionId(agentId: Self.agentId),
             seq: sequence,
             conversationSnapshot: messages,
-            metadata: ["truncated": false, "totalMessages": messages.count, "isResponding": isStreaming]
+            metadata: ["truncated": historyIsTruncated, "totalMessages": totalMessageCount, "isResponding": isStreaming]
         )
     }
 

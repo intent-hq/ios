@@ -208,7 +208,7 @@ struct CreationPickerControlsTests {
     ])
     func renderedPickerObservationRejectsBrokenGeometry(fault: String) async throws {
         let fixture = UIView()
-        fixture.backgroundColor = .white
+        fixture.backgroundColor = UIColor(CreateWorkspaceFormStyle.background(for: .light))
         try await SyntheticBadgeHost.render(PickerOracleView(view: fixture), width: 240, height: 240) { _, window in
             try #require(fixture.bounds.size == window.bounds.size)
             try Self.inspectRenderedFault(fault, host: fixture, window: window)
@@ -259,7 +259,7 @@ struct CreationPickerControlsTests {
                 try rendered.frames(associatedWith: axFrames)
             }
         case "missing", "unrelated", "ambiguous", "providerClipped", "modelClipped":
-            // The one-point clipped strip is resampled with its white surroundings;
+            // The one-point clipped strip is resampled with its background;
             // no complete card-color region remains, despite valid, unchanged AX bounds.
             #expect(throws: CreationPickerRenderedGeometry.ObservationError.missingOrAmbiguousRegion) {
                 try rendered.frames(associatedWith: axFrames)

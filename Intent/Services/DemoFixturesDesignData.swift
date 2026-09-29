@@ -56,6 +56,7 @@ extension DemoDesignFixtures {
     }
 
     var initialMessages: [[String: Any]] {
+        if scenario == .empty { return [] }
         var rows = [
             Self.message(id: "demo-design-assistant", role: "assistant", blocks: [DemoFixtures.textBlock(Self.assistantText)]),
             Self.message(id: "demo-design-user", role: "user", blocks: [DemoFixtures.textBlock(Self.userText)]),

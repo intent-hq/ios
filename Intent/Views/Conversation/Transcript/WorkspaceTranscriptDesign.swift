@@ -48,3 +48,74 @@ struct WorkspaceTranscriptDisclosure: View {
             .accessibilityHidden(true)
     }
 }
+
+struct WorkspaceThinkingView: View {
+    let text: String
+    @Binding var isExpanded: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private typealias Design = Constants.Conversation.Design
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Design.Transcript.toolRowSpacing) {
+            Button {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: Constants.Conversation.ToolCall.expansionAnimationDuration)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                WorkspaceThinkingLabel(title: "Thinking", isExpanded: isExpanded)
+                    .frame(minHeight: Design.minimumTapTarget)
+                    .contentShape(Rectangle())
+                    .copyContextMenuPassthrough()
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+
+            if isExpanded {
+                Text(text)
+                    .interFont(Constants.Typography.bodyS.withFace(.italic))
+                    .tracking(Design.Typography.bodyTracking)
+                    .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, Design.Transcript.expandedContentIndent)
+            }
+        }
+    }
+}
+
+/// Shared alignment for persisted thinking disclosures and the live activity row.
+struct WorkspaceThinkingLabel: View {
+    let title: LocalizedStringKey
+    var isExpanded = false
+    var showsDisclosure = true
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private typealias Design = Constants.Conversation.Design
+
+    var body: some View {
+        HStack(spacing: Design.Transcript.disclosureSpacing) {
+            HStack(spacing: Design.Transcript.toolLabelSpacing) {
+                Image(.conversationThinking)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Design.toolIconSize, height: Design.toolIconSize)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .interFont(Constants.Typography.bodyS)
+                    .tracking(Design.Typography.bodyTracking)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if showsDisclosure {
+                WorkspaceTranscriptDisclosure(isExpanded: isExpanded)
+            }
+        }
+        .foregroundStyle(isExpanded ? Design.Palette.foreground(for: colorScheme)
+            : Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+    }
+}

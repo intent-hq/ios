@@ -1,15 +1,24 @@
+import CoreText
 import SwiftUI
 
 struct WorkspaceListView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.legibilityWeight) private var legibilityWeight
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @State private var isSearching = false
+    @State private var isFilterPinned = false
+    @State private var pageHeaderHeight: CGFloat = 0
     @FocusState private var searchFocused: Bool
+    @ScaledMetric(relativeTo: .largeTitle) private var headingTracking: CGFloat = -1.2
+    @ScaledMetric(relativeTo: .title) private var compactHeadingTracking: CGFloat = -0.56
+    @ScaledMetric(relativeTo: .largeTitle) private var headingSize = Constants.Typography.heading1.size
+    @ScaledMetric(relativeTo: .title) private var compactHeadingSize = Constants.Typography.heading2.size
 
     init(workspaceStore: WorkspaceStore) {
         self.workspaceStore = workspaceStore
@@ -20,6 +29,7 @@ struct WorkspaceListView: View {
         ScrollView {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 pageHeader
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageHeaderHeight = $0 }
                 Section {
                     workspaceContent
                 } header: {
@@ -27,9 +37,12 @@ struct WorkspaceListView: View {
                         WorkspaceSearchBar(
                             viewMode: $viewModel.viewMode,
                             isSearching: $isSearching,
-                            horizontalPadding: Constants.WorkspaceList.pageInset
+                            horizontalPadding: Constants.WorkspaceList.pageInset,
+                            isCompact: isFilterPinned
                         )
-                        .background(Theme.background(for: colorScheme))
+                        .background(Constants.WorkspaceList.canvas(for: colorScheme))
+                        .transition(.opacity)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration), value: isFilterPinned)
                     }
                 }
             }
@@ -39,15 +52,21 @@ struct WorkspaceListView: View {
         #if !os(visionOS)
         .scrollDismissesKeyboard(.immediately)
         #endif
-        .background(Theme.background(for: colorScheme))
+        .background(Constants.WorkspaceList.canvas(for: colorScheme))
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            pageHeaderHeight > 0 && geometry.contentOffset.y + geometry.contentInsets.top >= pageHeaderHeight
+        } action: { _, isPinned in
+            isFilterPinned = isPinned
+        }
         .safeAreaInset(edge: .top, spacing: 0) {
             Color.clear.frame(height: 0)
-                .background(Theme.background(for: colorScheme), ignoresSafeAreaEdges: .top)
+                .background(Constants.WorkspaceList.canvas(for: colorScheme), ignoresSafeAreaEdges: .top)
                 .allowsHitTesting(false)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSearching {
                 WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
+                    .transition(reduceMotion ? .identity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
         .refreshable {
@@ -91,15 +110,22 @@ struct WorkspaceListView: View {
     }
 
     private var pageHeader: some View {
-        Text("Workspaces")
-            .font(.largeTitle.bold())
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityIdentifier("workspaces.title")
-            .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
-            .padding(.bottom, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleBottomSpacing)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundStyle(Theme.foreground(for: colorScheme))
-            .padding(.horizontal, Constants.WorkspaceList.pageInset)
+        let style = isSearching ? Constants.Typography.heading2 : Constants.Typography.heading1
+        let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
+        let font = CTFontCreateWithName(face.rawValue as CFString, isSearching ? compactHeadingSize : headingSize, nil)
+        return WorkspaceTextTrimLayout(capHeight: CTFontGetCapHeight(font)) {
+            Text("Workspaces")
+                .interFont(style)
+                .tracking(isSearching ? compactHeadingTracking : headingTracking)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("workspaces.title")
+        }
+        .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
+        .padding(.bottom, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleBottomSpacing)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(Theme.foreground(for: colorScheme))
+        .padding(.horizontal, Constants.WorkspaceList.pageInset)
     }
 
     @ViewBuilder

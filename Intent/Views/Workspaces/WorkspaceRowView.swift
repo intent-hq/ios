@@ -13,6 +13,15 @@ struct WorkspaceRowView: View {
     /// environment (previews/tests).
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var monitorConsumer = UUID()
+    @ScaledMetric(relativeTo: .headline) private var titleTracking: CGFloat = -0.36
+
+    private enum TitleCenterAlignment: AlignmentID {
+        nonisolated static func defaultValue(in dimensions: ViewDimensions) -> CGFloat {
+            dimensions[VerticalAlignment.center]
+        }
+    }
+
+    private static let titleCenter = VerticalAlignment(TitleCenterAlignment.self)
 
     private var monitorsSource: WorkspacePrMonitorsStore {
         session?.prMonitorsStore ?? .shared
@@ -38,20 +47,19 @@ struct WorkspaceRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
+        HStack(alignment: Self.titleCenter, spacing: spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
             // Status icon with agent activity / unread dot overlays
             WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme)
-                .alignmentGuide(.firstTextBaseline) { dimensions in
-                    dimensions[.bottom]
-                }
 
             VStack(alignment: .leading, spacing: spacious ? Constants.WorkspaceRow.spaciousTitleSpacing : Constants.WorkspaceRow.titleSpacing) {
                 titleRow
 
-                if Self.usesExpandedMetadataLayout(for: dynamicTypeSize) {
-                    expandedMetadata
-                } else {
-                    compactMetadata
+                if hasMetadata {
+                    if Self.usesExpandedMetadataLayout(for: dynamicTypeSize) {
+                        expandedMetadata
+                    } else {
+                        compactMetadata
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -66,7 +74,7 @@ struct WorkspaceRowView: View {
                     assetId: statusImageAssetId,
                     style: .card
                 )
-                    .alignmentGuide(.firstTextBaseline) { dimensions in
+                    .alignmentGuide(Self.titleCenter) { dimensions in
                         dimensions[VerticalAlignment.center]
                     }
             }
@@ -86,6 +94,14 @@ struct WorkspaceRowView: View {
         .onDisappear {
             monitorsSource.release(workspaceId: workspace.id, consumer: monitorConsumer)
         }
+    }
+
+    private var hasMetadata: Bool {
+        let hasRepository = showRepo && workspace.repositoryName != nil
+        let hasPullRequests = prIndicator.pill != nil || prIndicator.otherMonitorCount > 0
+        let hasTimestamp = workspace.lastActivity != nil || workspace.updatedAt != nil
+        let showsMetadataTimestamp = !spacious || Self.usesExpandedMetadataLayout(for: dynamicTypeSize)
+        return hasRepository || hasPullRequests || (hasTimestamp && showsMetadataTimestamp)
     }
 
     nonisolated static func usesExpandedMetadataLayout(for size: DynamicTypeSize) -> Bool {
@@ -125,11 +141,15 @@ struct WorkspaceRowView: View {
         let isUntitled = workspace.title.trimmingCharacters(in: .whitespaces).isEmpty
         Text(isUntitled ? "<Untitled>" : workspace.title)
             .interFont(Constants.Typography.bodyM.withFace(.semibold))
+            .tracking(titleTracking)
             .foregroundStyle(isUntitled
                 ? Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast)
                 : Theme.foreground(for: colorScheme))
             .lineLimit(Self.titleLineLimit(for: dynamicTypeSize))
             .fixedSize(horizontal: false, vertical: true)
+            .alignmentGuide(Self.titleCenter) { dimensions in
+                dimensions[VerticalAlignment.center]
+            }
     }
 
     private var compactMetadata: some View {
@@ -156,7 +176,8 @@ struct WorkspaceRowView: View {
     @ViewBuilder
     private func repositoryLabel(lineLimit: Int?) -> some View {
         if showRepo, let repo = workspace.repositoryName {
-            Text(repo)
+            let displayName = workspace.repositoryOwner.map { "\($0)/\(repo)" } ?? repo
+            Text(displayName)
                 .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(
                     for: colorScheme,
@@ -165,7 +186,7 @@ struct WorkspaceRowView: View {
                 .lineLimit(lineLimit)
                 .truncationMode(.middle)
                 .layoutPriority(-1)
-                .accessibilityLabel("Repository \(repo)")
+                .accessibilityLabel("Repository \(displayName)")
         }
     }
 
@@ -177,6 +198,7 @@ struct WorkspaceRowView: View {
             colorSchemeContrast: colorSchemeContrast,
             expanded: expanded
         )
+        .offset(y: spacious ? Constants.WorkspaceRow.spaciousBadgeVerticalOffset : 0)
     }
 
     struct PullRequestBadges: View {
@@ -184,6 +206,8 @@ struct WorkspaceRowView: View {
         let colorScheme: ColorScheme
         let colorSchemeContrast: ColorSchemeContrast
         let expanded: Bool
+        @ScaledMetric(relativeTo: .caption) private var iconSize = Constants.WorkspaceRow.pillIconSize
+        @ScaledMetric(relativeTo: .caption) private var tracking: CGFloat = 0.24
 
         var body: some View {
             if expanded {
@@ -199,7 +223,7 @@ struct WorkspaceRowView: View {
         private var horizontalBadges: some View {
             HStack(
                 alignment: .center,
-                spacing: Constants.WorkspaceRow.metadataSpacing
+                spacing: Constants.WorkspaceRow.pillSpacing
             ) {
                 badgeContent
             }
@@ -217,12 +241,17 @@ struct WorkspaceRowView: View {
                 let pillColor = WorkspaceRowView.pillColor(for: pill.status)
                 HStack(
                     alignment: .center,
-                    spacing: Constants.WorkspaceRow.titleSpacing
+                    spacing: Constants.WorkspaceRow.pillIconSpacing
                 ) {
-                    Image(systemName: WorkspaceRowView.pillSystemImage(for: pill.status))
+                    Image(WorkspaceRowView.pillImage(for: pill.status))
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: iconSize, height: iconSize)
                         .foregroundStyle(pillColor)
+                        .accessibilityHidden(true)
                     Text("PR\(pill.number.map { " #\($0)" } ?? "")")
                         .interFont(Constants.Typography.subtextXXS.withFace(.medium))
+                        .tracking(tracking)
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(Theme.mutedForeground(
@@ -231,20 +260,10 @@ struct WorkspaceRowView: View {
                 ))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
+                .padding(.horizontal, Constants.WorkspaceRow.outlinedPillHorizontalPadding)
                 .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
-                .background(Theme.muted(for: colorScheme), in: Capsule())
-                .overlay {
-                    Capsule().strokeBorder(
-                        Theme.border(
-                            for: colorScheme,
-                            contrast: colorSchemeContrast
-                        ),
-                        lineWidth: colorSchemeContrast == .increased
-                            ? Constants.WorkspaceRow.increasedContrastPillBorderWidth
-                            : Constants.WorkspaceRow.pillBorderWidth
-                    )
-                }
+                .frame(minHeight: Constants.WorkspaceRow.outlinedPillMinimumHeight)
+                .overlay { pillOutline }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(
                     "\(pill.status.rawValue.capitalized) pull request"
@@ -256,31 +275,33 @@ struct WorkspaceRowView: View {
             if indicator.otherMonitorCount > 0 {
                 Text("+\(indicator.otherMonitorCount)")
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
+                    .tracking(tracking)
                     .foregroundStyle(Theme.mutedForeground(
                         for: colorScheme,
                         contrast: colorSchemeContrast
                     ))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
-                    .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
+                    .padding(.horizontal, Constants.WorkspaceRow.outlinedPillHorizontalPadding)
                     .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
-                    .background(Theme.muted(for: colorScheme), in: Capsule())
-                    .overlay {
-                        Capsule().strokeBorder(
-                            Theme.border(
-                                for: colorScheme,
-                                contrast: colorSchemeContrast
-                            ),
-                            lineWidth: colorSchemeContrast == .increased
-                                ? Constants.WorkspaceRow.increasedContrastPillBorderWidth
-                                : Constants.WorkspaceRow.pillBorderWidth
-                        )
-                    }
+                    .frame(minHeight: Constants.WorkspaceRow.outlinedPillMinimumHeight)
+                    .overlay { pillOutline }
                     .accessibilityLabel(WorkspaceRowView.additionalPullRequestsAccessibilityLabel(
                         indicator.otherMonitorCount
                     ))
                     .accessibilityIdentifier(BadgeIdentifier.additionalPullRequests)
             }
+        }
+
+        private var pillOutline: some View {
+            Capsule().strokeBorder(
+                colorSchemeContrast == .increased
+                    ? Theme.border(for: colorScheme, contrast: colorSchemeContrast)
+                    : (colorScheme == .dark ? Color.white : Color.black).opacity(Constants.WorkspaceRow.pillOutlineOpacity),
+                lineWidth: colorSchemeContrast == .increased
+                    ? Constants.WorkspaceRow.increasedContrastPillBorderWidth
+                    : Constants.WorkspaceRow.pillBorderWidth
+            )
         }
     }
 

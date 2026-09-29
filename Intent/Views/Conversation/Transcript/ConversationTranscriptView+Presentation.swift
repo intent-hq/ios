@@ -217,7 +217,17 @@ extension ConversationTranscriptView {
         }
     }
 
+    @ViewBuilder
     private var thinkingIndicatorView: some View {
+        if usesWorkspaceDesign {
+            WorkspaceThinkingLabel(title: "Thinking...", showsDisclosure: false)
+                .padding(.vertical, Layout.thinkingIndicatorVerticalPadding)
+        } else {
+            legacyThinkingIndicatorView
+        }
+    }
+
+    private var legacyThinkingIndicatorView: some View {
         HStack(spacing: Layout.thinkingIndicatorSpacing) {
             ProgressView()
                 .scaleEffect(Layout.thinkingIndicatorScale)
@@ -235,40 +245,87 @@ extension ConversationTranscriptView {
     private var suggestedPromptsView: some View {
         VStack(spacing: Layout.suggestedPromptSpacing) {
             ForEach(Array(viewModel.suggestedPrompts.enumerated()), id: \.element) { index, prompt in
-                Button {
-                    Task { await viewModel.sendSuggestedPrompt(prompt) }
-                } label: {
-                    HStack(spacing: Layout.suggestedPromptSpacing) {
-                        Image(systemName: "paperplane")
-                            .font(.caption)
-                            .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
-                            .accessibilityHidden(true)
-                        Text(LocalizedStringKey(prompt))
-                            .interFont(Constants.Typography.bodyXS)
-                            .foregroundStyle(Theme.foreground(for: transcriptColorScheme))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .allowsHitTesting(false)
-                    }
-                    .padding(.horizontal, Layout.suggestedPromptHorizontalPadding)
-                    .padding(.vertical, Layout.suggestedPromptVerticalPadding)
-                    .background(Theme.muted(for: transcriptColorScheme).opacity(Layout.suggestedPromptBackgroundOpacity))
-                    .clipShape(RoundedRectangle(cornerRadius: Layout.suggestedPromptCornerRadius))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Layout.suggestedPromptCornerRadius)
-                            .strokeBorder(
-                                Theme.border(for: transcriptColorScheme).opacity(Layout.suggestedPromptBorderOpacity),
-                                lineWidth: Layout.suggestedPromptBorderWidth
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("transcript.suggestedPrompt.\(index)")
+                suggestedPromptButton(prompt)
+                    .accessibilityIdentifier("transcript.suggestedPrompt.\(index)")
             }
         }
     }
+
+    @ViewBuilder
+    private func suggestedPromptButton(_ prompt: String) -> some View {
+        if usesWorkspaceDesign {
+            Button {
+                Task { await viewModel.sendSuggestedPrompt(prompt) }
+            } label: {
+                HStack(spacing: Constants.Conversation.Design.SuggestedPrompt.contentSpacing) {
+                    Text(LocalizedStringKey(prompt))
+                        .interFont(Constants.Typography.bodyS)
+                        .tracking(Constants.Conversation.Design.Typography.bodyTracking)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .allowsHitTesting(false)
+                    Image(.arrowRight)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(
+                            width: Constants.Conversation.Design.iconSize,
+                            height: Constants.Conversation.Design.iconSize
+                        )
+                        .accessibilityHidden(true)
+                }
+            }
+            .buttonStyle(WorkspaceSuggestedPromptStyle())
+        } else {
+            legacySuggestedPromptButton(prompt)
+        }
+    }
+
+    private func legacySuggestedPromptButton(_ prompt: String) -> some View {
+        Button {
+            Task { await viewModel.sendSuggestedPrompt(prompt) }
+        } label: {
+            HStack(spacing: Layout.suggestedPromptSpacing) {
+                Image(systemName: "paperplane")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
+                    .accessibilityHidden(true)
+                Text(LocalizedStringKey(prompt))
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(Theme.foreground(for: transcriptColorScheme))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .allowsHitTesting(false)
+            }
+            .padding(.horizontal, Layout.suggestedPromptHorizontalPadding)
+            .padding(.vertical, Layout.suggestedPromptVerticalPadding)
+            .background(Theme.muted(for: transcriptColorScheme).opacity(Layout.suggestedPromptBackgroundOpacity))
+            .clipShape(RoundedRectangle(cornerRadius: Layout.suggestedPromptCornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: Layout.suggestedPromptCornerRadius)
+                    .strokeBorder(
+                        Theme.border(for: transcriptColorScheme).opacity(Layout.suggestedPromptBorderOpacity),
+                        lineWidth: Layout.suggestedPromptBorderWidth
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
     #endif
 
+    @ViewBuilder
     private var truncationBanner: some View {
+        if usesWorkspaceDesign {
+            WorkspaceHistoryNotice(
+                messageCount: viewModel.filteredMessages.count,
+                totalMessageCount: viewModel.totalMessageCount
+            )
+        } else {
+            legacyTruncationBanner
+        }
+    }
+
+    private var legacyTruncationBanner: some View {
         HStack(spacing: Layout.truncationBannerSpacing) {
             Image(systemName: "info.circle")
                 .font(.footnote)
@@ -283,5 +340,74 @@ extension ConversationTranscriptView {
         .frame(maxWidth: .infinity)
         .background(Theme.muted(for: transcriptColorScheme).opacity(Layout.truncationBannerBackgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Layout.truncationBannerCornerRadius))
+    }
+}
+
+private struct WorkspaceSuggestedPromptStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.isEnabled) private var isEnabled
+
+    private typealias Design = Constants.Conversation.Design
+    private typealias Layout = Design.SuggestedPrompt
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(Design.Palette.foreground(for: colorScheme))
+            .padding(.horizontal, Layout.horizontalPadding)
+            .padding(.vertical, Layout.verticalPadding)
+            .frame(minHeight: Layout.minimumHeight)
+            .background {
+                RoundedRectangle(cornerRadius: Design.innerCornerRadius)
+                    .fill(Design.Palette.surface(for: colorScheme))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Design.innerCornerRadius)
+                            .fill(Design.Palette.foreground(for: colorScheme).opacity(
+                                isEnabled && configuration.isPressed ? Layout.pressedOverlayOpacity : 0
+                            ))
+                    }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: Design.innerCornerRadius)
+                    .strokeBorder(
+                        Design.Palette.border(for: colorScheme, contrast: contrast),
+                        lineWidth: Layout.borderWidth
+                    )
+            }
+            .contentShape(.rect(cornerRadius: Design.innerCornerRadius))
+            .opacity(isEnabled ? 1 : Layout.disabledOpacity)
+    }
+}
+
+private struct WorkspaceHistoryNotice: View {
+    let messageCount: Int
+    let totalMessageCount: Int
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private typealias Design = Constants.Conversation.Design
+    private typealias Layout = Design.HistoryNotice
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Layout.contentSpacing) {
+            Image(.infoCircle)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Design.iconSize, height: Design.iconSize)
+                .accessibilityHidden(true)
+            Text("Showing the most recent \(messageCount) of \(totalMessageCount) messages.\nSee the full conversation on the desktop app.")
+                .interFont(Constants.Typography.bodyXS)
+                .tracking(Design.Typography.smallTracking)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+        .padding(.horizontal, Layout.horizontalPadding)
+        .padding(.vertical, Layout.verticalPadding)
+        .background(Design.Palette.surface(for: colorScheme), in: .rect(cornerRadius: Design.innerCornerRadius))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("transcript.historyNotice")
     }
 }

@@ -29,6 +29,7 @@ struct CreateWorkspaceSpecialistStepView: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorSchemeContrast) private var contrast
+    @ScaledMetric(relativeTo: .title) private var headingTracking = CreateWorkspaceFormStyle.headingTracking
 
     var body: some View {
         ZStack {
@@ -78,6 +79,7 @@ struct CreateWorkspaceSpecialistStepView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Create Workspace")
                     .interFont(Constants.Typography.heading2)
+                    .tracking(headingTracking)
                     .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, CreateWorkspaceFormStyle.headingSpacing)
                 CreateWorkspacePrompt(text: $messageText, attachments: images)

@@ -1,22 +1,45 @@
 import SwiftUI
 
-/// Data-only card label; selection and management remain owned by ConnectionsView.
+/// Shared card label; selection and management remain owned by each presenting screen.
 struct SavedConnectionCard: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .title2) private var iconSize = Constants.ConnectionSheet.glyphSize
     let name: String
     let address: String
-    let isCurrentWindow: Bool
+    let status: ConnectionState?
+    let textSpacing: CGFloat
+
+    init(name: String, address: String, isCurrentWindow: Bool) {
+        self.init(name: name, address: address, status: isCurrentWindow ? .connected : nil)
+    }
+
+    init(
+        name: String,
+        address: String,
+        status: ConnectionState?,
+        textSpacing: CGFloat = Constants.Connections.cardTextSpacing
+    ) {
+        self.name = name
+        self.address = address
+        self.status = status
+        self.textSpacing = textSpacing
+    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: Constants.ConnectionSheet.inset) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Constants.Connections.infoSpacing))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: Constants.ConnectionSheet.inset))
+        layout {
             // The laptop icon matches Figma for all saved connections.
             Image(.connectionLaptop)
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
-                .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                .frame(width: iconSize, height: iconSize)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Constants.Connections.cardTextSpacing) {
+            VStack(alignment: .leading, spacing: textSpacing) {
                 ConnectionSheetText(
                     "\(name)", style: Constants.Typography.bodySEmphasized, tracking: Constants.Connections.nameTracking
                 )
@@ -32,13 +55,14 @@ struct SavedConnectionCard: View {
             in: .rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius)
         )
         .contentShape(.rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius))
+        .accessibilityElement(children: .combine)
     }
 
     private var information: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: Constants.Connections.infoSpacing) {
-                if isCurrentWindow {
-                    connectedStatus
+                if status != nil {
+                    statusLabel
                     Rectangle()
                         .fill(Constants.Connections.divider(for: colorScheme))
                         .frame(width: Constants.Connections.dividerWidth, height: Constants.Connections.dividerHeight)
@@ -48,7 +72,7 @@ struct SavedConnectionCard: View {
             }
             .fixedSize(horizontal: true, vertical: false)
             VStack(alignment: .leading, spacing: Constants.Connections.infoSpacing) {
-                if isCurrentWindow { connectedStatus }
+                if status != nil { statusLabel }
                 addressText
             }
         }
@@ -58,18 +82,41 @@ struct SavedConnectionCard: View {
         ConnectionSheetText(
             "\(address)", style: Constants.Typography.subtextXXS, tracking: Constants.Connections.infoTracking
         )
-            .foregroundStyle(Constants.Connections.mutedForeground(for: colorScheme))
+            .foregroundStyle(mutedForeground)
     }
 
-    private var connectedStatus: some View {
+    private var statusLabel: some View {
         HStack(spacing: Constants.Connections.connectedSpacing) {
             Circle()
+                .fill(statusForeground)
                 .frame(width: Constants.Connections.statusDotSize, height: Constants.Connections.statusDotSize)
                 .accessibilityHidden(true)
-            ConnectionSheetText(
-                "Connected", style: Constants.Typography.subtextXXS, tracking: Constants.Connections.infoTracking
-            )
+            if let statusTitle {
+                ConnectionSheetText(
+                    statusTitle, style: Constants.Typography.subtextXXS, tracking: Constants.Connections.infoTracking
+                )
+            }
         }
-        .foregroundStyle(Constants.Connections.connectedForeground(for: colorScheme))
+        .foregroundStyle(contrast == .increased ? Constants.Connections.foreground(for: colorScheme) : statusForeground)
+    }
+
+    private var mutedForeground: Color {
+        contrast == .increased
+            ? Constants.Connections.foreground(for: colorScheme)
+            : Constants.Connections.mutedForeground(for: colorScheme)
+    }
+
+    private var statusForeground: Color {
+        status == .connected ? Constants.Connections.connectedForeground(for: colorScheme) : mutedForeground
+    }
+
+    private var statusTitle: LocalizedStringKey? {
+        switch status {
+        case .connected: "Connected"
+        case .connecting: "Connecting"
+        case .reconnecting: "Reconnecting"
+        case .disconnected: "Disconnected"
+        case nil: nil
+        }
     }
 }

@@ -183,7 +183,10 @@ struct NoteRowView: View {
     }
 
     private var titleAndTags: some View {
-        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
+        let visibleTags = NoteRowLayout.visibleTags(for: note)
+        return VStack(alignment: .leading, spacing: visibleTags.isEmpty
+            ? WorkspaceDetailStyle.notePreviewSpacing
+            : WorkspaceDetailStyle.noteTitleSpacing) {
             Text(note.title)
                 .interFont(depth == 0 ? Constants.Typography.bodyM : Constants.Typography.bodyS)
                 .tracking(depth == 0 ? WorkspaceDetailStyle.rowTitleTracking : WorkspaceDetailStyle.bodyTracking)
@@ -191,7 +194,8 @@ struct NoteRowView: View {
                 .lineLimit(NoteRowLayout.titleLineLimit(
                     usesAccessibilityLayout: usesAccessibilityLayout
                 ))
-            let visibleTags = NoteRowLayout.visibleTags(for: note)
+                // Center one-line titles in the icon band; wrapped titles grow downwards.
+                .frame(minHeight: WorkspaceDetailStyle.iconSize, alignment: .leading)
             if !visibleTags.isEmpty {
                 HStack(spacing: Constants.Notes.List.contentSpacing) {
                     ForEach(visibleTags.prefix(Constants.Notes.List.maximumTagCount), id: \.self) { tag in
