@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Workspace-only host policy. A refresh hides the previous choices until
+/// Host policy for creation forms. A refresh hides the previous choices until
 /// catalog, settings and authentication have all been read successfully.
 @MainActor
 @Observable final class WorkspaceProviderOptions {

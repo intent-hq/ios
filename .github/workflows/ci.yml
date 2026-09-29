@@ -411,6 +411,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
+
       - name: Resolve SPM packages
         run: scripts/xcodebuild.sh resolve
 
@@ -608,7 +615,7 @@ jobs:
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad')) }}
     needs: select-macos-runner
     runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
-    # The expanded UI suite can exceed an hour with setup/build; leave time for result export.
+    # Allow setup, the full iPhone suite, iPad regressions, and cleanup (ios#429).
     timeout-minutes: 90
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -688,6 +695,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
+
       - name: Resolve SPM packages
         run: scripts/xcodebuild.sh resolve
 
@@ -715,6 +729,20 @@ jobs:
           fi
           scripts/xcodebuild.sh test-without-building
 
+      - name: Run iPad menu regression tests
+        env:
+          RESULT_BUNDLE: IPadMenuTestResults
+          ONLY_TESTING: >-
+            IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsSendAndMenuAvailable
+            IntentUITests/HomeActionMenuUITests/testIPadQuestionsKeepNextAndSendAvailable
+        run: |
+          SIM_UDID=$(xcrun simctl list devices available --json | jq -er '
+            [.devices | to_entries[] | select(.key | contains("iOS"))
+              | .value[] | select(.name | startswith("iPad"))]
+            | last | .udid // error("No available iPad simulator")')
+          export SIM_UDID
+          scripts/xcodebuild.sh test-without-building
+
       - name: Upload UI test results
         if: failure()
         uses: actions/upload-artifact@v7
@@ -723,6 +751,8 @@ jobs:
           path: |
             UITestResults
             UITestResults-retry
+            IPadMenuTestResults
+            IPadMenuTestResults-retry
 
       # ConversationTranscriptScrollUITests attaches one content-free JSON
       # record per launch proving the unrealized-end recovery ran. Export only
@@ -829,6 +859,13 @@ jobs:
           key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-spm-
+
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
 
       - name: Resolve SPM packages
         run: scripts/xcodebuild.sh resolve

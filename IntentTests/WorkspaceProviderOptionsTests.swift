@@ -75,6 +75,7 @@ struct WorkspaceProviderOptionsTests {
             providers: options.providers,
             selectedProvider: ProviderInfo(id: "auggie")
         ))
+        #expect(agentCreationIsDisabled(options, provider: ProviderInfo(id: "auggie")))
     }
 
     @Test(arguments: ["providers.catalog", "settings.get", "host.providerAuthStatus"], [false, true])
@@ -153,6 +154,8 @@ struct WorkspaceProviderOptionsTests {
         )
         #expect(provider == expectedProvider)
         #expect(model == (outcome == "unchanged" ? pickedModel : nil))
+        #expect(agentCreationIsDisabled(options, provider: provider) == (outcome == "empty"))
+        #expect(agentCreationIsDisabled(options, provider: pickedProvider) == (outcome != "unchanged"))
         #expect(CreateWorkspaceView.isCreateDisabled(
             isCreating: false,
             isLoadingProviders: options.isLoading,
@@ -186,6 +189,7 @@ struct WorkspaceProviderOptionsTests {
         #expect(provider == nil)
         #expect(model == nil)
         #expect(options.providers.isEmpty)
+        #expect(agentCreationIsDisabled(options, provider: ProviderInfo(id: "codex")))
         #expect(CreateWorkspaceView.isCreateDisabled(
             isCreating: false,
             isLoadingProviders: options.isLoading,
@@ -200,6 +204,7 @@ struct WorkspaceProviderOptionsTests {
         CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: options.state)
         #expect(provider == ProviderInfo(id: "auggie", authenticated: .signedIn))
         #expect(model == nil)
+        #expect(!agentCreationIsDisabled(options, provider: provider))
         #expect(!CreateWorkspaceView.isCreateDisabled(
             isCreating: false,
             isLoadingProviders: options.isLoading,
@@ -219,6 +224,7 @@ struct WorkspaceProviderOptionsTests {
         #expect(model == previousModel)
         #expect(options.isLoading)
         #expect(options.providers.isEmpty)
+        #expect(agentCreationIsDisabled(options, provider: provider))
         #expect(CreateWorkspaceView.isCreateDisabled(
             isCreating: false,
             isLoadingProviders: options.isLoading,
@@ -296,7 +302,7 @@ struct WorkspaceProviderOptionsTests {
         printCatalogLedger("workspace-picker-released-reconnect", firstHost.traffic(since: released))
     }
 
-    @Test func workspacePolicyDoesNotFilterSharedAgentProvidersOrModels() async {
+    @Test func creationPolicyDoesNotFilterCatalogsForExistingAgents() async {
         let fake = configuredHost(enabled: [:])
         fake.responseMap["models.list"] = ["models": [["id": "model", "name": "Model", "provider": "codex"]]]
         let store = CreationOptionsStore(connectionManager: fake)
@@ -312,6 +318,16 @@ struct WorkspaceProviderOptionsTests {
 }
 
 extension WorkspaceProviderOptionsTests {
+    private func agentCreationIsDisabled(_ options: WorkspaceProviderOptions, provider: ProviderInfo?) -> Bool {
+        SpecialistPickerView.isCreateDisabled(
+            hasSpecialist: true,
+            isCreating: false,
+            isLoadingOptions: options.isLoading,
+            providers: options.providers,
+            selectedProvider: provider
+        )
+    }
+
     private func loadWorkspacePicker(_ store: CreationOptionsStore, consumer: UUID) async {
         store.retainCreationOptions(consumer: consumer)
         async let policy: () = store.workspaceProviderOptions.load()
