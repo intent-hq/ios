@@ -19,6 +19,10 @@ struct ConnectionFailureView: View {
             Constants.Connections.background(for: colorScheme).ignoresSafeArea()
             failureContent
         }
+        .safeAreaInset(edge: .top, alignment: .leading, spacing: 0) {
+            homeButton
+                .padding(.horizontal, Constants.ConnectionSheet.inset)
+        }
         .onAppear {
             savedConnections = Self.alternativeConnections(
                 connections: PersistenceManager.shared.loadConnections(),
@@ -331,6 +335,22 @@ struct ConnectionFailureView: View {
 }
 
 extension ConnectionFailureView {
+    private var homeButton: some View {
+        Button {
+            stopAutoRetry()
+            coordinator.onReturnToSavedMachines()
+        } label: {
+            Label("Back", systemImage: "chevron.backward")
+                .interFont(Constants.Typography.bodyS)
+                .frame(minHeight: Constants.ConnectionSheet.minimumTouchTarget)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.primary(for: colorScheme))
+        .accessibilityLabel("Back to Home")
+        .accessibilityHint("Return to your saved machines without forgetting this connection.")
+        .accessibilityIdentifier("connection-failure.home")
+    }
+
     private func savedConnectionRow(_ connection: StoredConnection) -> some View {
         Button {
             stopAutoRetry()

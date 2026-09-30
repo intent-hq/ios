@@ -331,6 +331,63 @@ extension AppCoordinatorTests {
         }
     }
 
+    @Test @MainActor func onPaired_boundWindow_sameBackend_fromFailure_restartsInitialRouting() throws {
+        try assertSameBackendPairingRestartsInitialRouting(from: .connectionFailed(error: "timeout"))
+    }
+
+    @Test @MainActor func onPaired_boundWindow_sameBackend_whileConnecting_restartsInitialRouting() throws {
+        try assertSameBackendPairingRestartsInitialRouting(from: .connecting)
+    }
+
+    @MainActor
+    private func assertSameBackendPairingRestartsInitialRouting(from screen: AppScreen) throws {
+        let originalPort = 4242
+        let refreshedPort = 5252
+        let own = persistence.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: ["10.0.0.1"], port: originalPort, name: "Mac", pairedAt: Date(), certFingerprint: "aa:bb"
+            ),
+            token: "old-test-token"
+        ))
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: fake,
+            backendID: BackendID(own.id),
+            persistence: persistence
+        )
+        coordinator.currentScreen = screen
+        // The real window root does nothing when retargeted to its existing ID.
+        coordinator.retargetWindow = { _ in }
+        let previousAttempt = coordinator.connectionAttemptId
+        let paired = persistence.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: ["10.0.0.2"],
+                port: refreshedPort,
+                name: "Mac",
+                pairedAt: Date(),
+                certFingerprint: "aa:bb",
+                tcAddress: "tc-test-refreshed"
+            ),
+            token: "new-test-token"
+        ))
+        #expect(paired.id == own.id)
+
+        coordinator.onPaired(paired)
+
+        #expect(coordinator.connectionAttemptId != previousAttempt, "Re-pairing must restart initial routing")
+        if case .connecting = coordinator.currentScreen {} else {
+            Issue.record("Expected a fresh connection attempt, got \(coordinator.currentScreen)")
+        }
+        #expect(fake.disconnectCallCount == 0, "Do not run the different-backend repair path")
+        let cached = try #require(fake.updateCachedCredentialsLog.last)
+        #expect(cached.hosts == paired.server.hosts)
+        #expect(cached.port == refreshedPort)
+        #expect(cached.token == "new-test-token")
+        #expect(cached.certFingerprint == "aa:bb")
+        #expect(cached.tcAddress == "tc-test-refreshed")
+    }
+
     /// An unbound (pairing) window routes the pairing via the retarget hook
     /// with no repair — the hook rebinds it in place (single-window) or
     /// replaces it with the target's own window (multi-window).

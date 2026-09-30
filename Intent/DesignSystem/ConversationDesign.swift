@@ -69,6 +69,19 @@ extension Constants.Conversation.Design {
         static let goToEndIconOpacity: Double = 0.3
     }
 
+    enum Queue {
+        static let topPadding: CGFloat = 24
+        static let headerSpacing: CGFloat = 18
+        static let headerTracking: CGFloat = 0.24
+        static let textActionSpacing: CGFloat = 16
+        static let iconSpacing: CGFloat = 20
+        static let rowSpacing: CGFloat = 20
+        static let composerSpacing: CGFloat = 24
+        static let borderWidth: CGFloat = 1
+        static let controlInset = (Constants.Conversation.Design.minimumTapTarget - Constants.Conversation.Design.iconSize) / 2
+        static let actionSpacing = Self.iconSpacing - Self.controlInset * 2
+    }
+
     enum Question {
         static let horizontalPadding: CGFloat = 20
         static let topPadding: CGFloat = 24
