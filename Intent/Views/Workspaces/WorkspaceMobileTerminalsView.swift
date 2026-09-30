@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkspaceMobileTerminalsView: View {
     let workspaceId: String
     let store: MobileTerminalStore
+    @Binding var revealedTarget: WorkspaceSwipeTarget?
     let onSelect: (MobileTerminal) -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -16,9 +17,10 @@ struct WorkspaceMobileTerminalsView: View {
                     .accessibilityAddTraits(.isHeader)
                 LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
                     ForEach(terminals) { terminal in
-                        WorkspaceTerminalRow(terminal: terminal, store: store, onSelect: onSelect)
+                        WorkspaceTerminalRow(terminal: terminal, store: store, revealedTarget: $revealedTarget, onSelect: onSelect)
                     }
                 }
+                .padding(.horizontal, -WorkspaceDetailStyle.pageInset)
             }
         }
     }
@@ -27,16 +29,21 @@ struct WorkspaceMobileTerminalsView: View {
 private struct WorkspaceTerminalRow: View {
     let terminal: MobileTerminal
     let store: MobileTerminalStore
+    @Binding var revealedTarget: WorkspaceSwipeTarget?
     let onSelect: (MobileTerminal) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var isRevealed = false
     @State private var confirmDelete = false
     @State private var isDeleting = false
 
     var body: some View {
-        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: 1) { _ in
+        WorkspaceSwipeContainer(
+            target: .terminal(terminal.id),
+            revealedTarget: $revealedTarget,
+            actionCount: 1,
+            horizontalInset: WorkspaceDetailStyle.pageInset
+        ) { _ in
             terminalButton
         } actions: {
             deleteButton
@@ -52,8 +59,8 @@ private struct WorkspaceTerminalRow: View {
 
     private var terminalButton: some View {
         Button {
-            if isRevealed {
-                isRevealed = false
+            if revealedTarget != nil {
+                revealedTarget = nil
             } else {
                 store.clearError(workspaceId: terminal.workspaceId)
                 onSelect(terminal)
@@ -82,10 +89,10 @@ private struct WorkspaceTerminalRow: View {
 
     private func deleteTerminal() {
         isDeleting = true
+        revealedTarget = nil
         Task {
             _ = await store.close(terminal)
             isDeleting = false
-            isRevealed = false
         }
     }
 

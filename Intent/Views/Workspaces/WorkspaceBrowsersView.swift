@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkspaceBrowsersView: View {
     let workspaceId: String
     let store: WorkspaceBrowserStore
+    @Binding var revealedTarget: WorkspaceSwipeTarget?
     let onSelect: (WorkspaceBrowser) -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -16,9 +17,10 @@ struct WorkspaceBrowsersView: View {
                     .accessibilityAddTraits(.isHeader)
                 LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
                     ForEach(browsers) { browser in
-                        WorkspaceBrowserRow(browser: browser, store: store, onSelect: onSelect)
+                        WorkspaceBrowserRow(browser: browser, store: store, revealedTarget: $revealedTarget, onSelect: onSelect)
                     }
                 }
+                .padding(.horizontal, -WorkspaceDetailStyle.pageInset)
                 if let error = store.errorMessage(workspaceId: workspaceId) {
                     VStack(alignment: .leading) {
                         Text(error).interFont(Constants.Typography.bodyXS)
@@ -38,32 +40,34 @@ struct WorkspaceBrowsersView: View {
 private struct WorkspaceBrowserRow: View {
     let browser: WorkspaceBrowser
     let store: WorkspaceBrowserStore
+    @Binding var revealedTarget: WorkspaceSwipeTarget?
     let onSelect: (WorkspaceBrowser) -> Void
     @Environment(\.colorScheme) private var colorScheme
-    @State private var isRevealed = false
 
     var body: some View {
         WorkspaceSwipeContainer(
-            isRevealed: $isRevealed,
+            target: .browser(browser.id),
+            revealedTarget: $revealedTarget,
             actionCount: 1,
             rowBackground: Theme.card(for: colorScheme),
-            restingCornerRadius: BrowserAppearance.cornerRadius
-        ) { _ in
-            browserButton
+            restingCornerRadius: BrowserAppearance.cornerRadius,
+            horizontalInset: WorkspaceDetailStyle.pageInset
+        ) { progress in
+            browserButton(swipeProgress: progress)
         } actions: {
             deleteButton
         }
     }
 
-    private var browserButton: some View {
+    private func browserButton(swipeProgress: CGFloat) -> some View {
         Button {
-            if isRevealed {
-                isRevealed = false
+            if revealedTarget != nil {
+                revealedTarget = nil
             } else {
                 onSelect(browser)
             }
         } label: {
-            row
+            row(swipeProgress: swipeProgress)
         }
         .buttonStyle(BrowserRowButtonStyle())
         .visionListRowHitTarget()
@@ -90,7 +94,7 @@ private struct WorkspaceBrowserRow: View {
         }
     }
 
-    private var row: some View {
+    private func row(swipeProgress: CGFloat) -> some View {
         HStack(spacing: BrowserAppearance.rowSpacing) {
             Image(systemName: "globe")
                 .font(.title2)
@@ -116,6 +120,7 @@ private struct WorkspaceBrowserRow: View {
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .opacity(1 - Double(swipeProgress))
                 .accessibilityHidden(true)
         }
         .padding(BrowserAppearance.rowPadding)

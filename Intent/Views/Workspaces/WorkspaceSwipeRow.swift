@@ -4,7 +4,7 @@ struct WorkspaceSwipeRow: View {
     let workspace: Workspace
     let showRepo: Bool
     let isUpdating: Bool
-    @Binding var revealedWorkspaceId: String?
+    @Binding var revealedTarget: WorkspaceSwipeTarget?
     @Binding var workspaceSwipeProgress: [String: CGFloat]
     let nextWorkspaceId: String?
     let onSelect: () -> Void
@@ -12,31 +12,18 @@ struct WorkspaceSwipeRow: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var isRevealed: Bool { revealedWorkspaceId == workspace.id }
     private var dividerOpacity: Double {
         let progress = workspaceSwipeProgress[workspace.id, default: 0]
         let nextProgress = nextWorkspaceId.flatMap { workspaceSwipeProgress[$0] } ?? 0
         return Double(1 - min(1, max(progress, nextProgress) / DividerStyle.fadeProgress))
     }
-    private var revealBinding: Binding<Bool> {
-        Binding(
-            get: { isRevealed },
-            set: { revealed in
-                if revealed {
-                    revealedWorkspaceId = workspace.id
-                } else if isRevealed {
-                    revealedWorkspaceId = nil
-                }
-            }
-        )
-    }
 
     var body: some View {
         WorkspaceSwipeContainer(
-            isRevealed: revealBinding,
+            target: .workspace(workspace.id),
+            revealedTarget: $revealedTarget,
             actionCount: 2,
             horizontalInset: Constants.WorkspaceList.pageInset,
-            onSwipeBegan: beginSwipe,
             onSwipeProgressChanged: updateSwipeProgress
         ) { progress in
             workspaceButton(swipeProgress: progress)
@@ -50,10 +37,6 @@ struct WorkspaceSwipeRow: View {
                 .opacity(dividerOpacity)
                 .animation(reduceMotion ? nil : .easeOut(duration: DividerStyle.fadeDuration), value: dividerOpacity)
         }
-    }
-
-    private func beginSwipe() {
-        if !isRevealed { revealedWorkspaceId = nil }
     }
 
     private func updateSwipeProgress(_ progress: CGFloat) {
@@ -71,8 +54,8 @@ struct WorkspaceSwipeRow: View {
 
     private func workspaceButton(swipeProgress: CGFloat) -> some View {
         Button {
-            if revealedWorkspaceId != nil {
-                revealedWorkspaceId = nil
+            if revealedTarget != nil {
+                revealedTarget = nil
             } else {
                 onSelect()
             }
@@ -112,7 +95,7 @@ struct WorkspaceSwipeRow: View {
     }
 
     private func select(_ action: WorkspaceAction) {
-        revealedWorkspaceId = nil
+        revealedTarget = nil
         onAction(action)
     }
 }

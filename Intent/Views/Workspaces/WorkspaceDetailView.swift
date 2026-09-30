@@ -17,6 +17,7 @@ struct WorkspaceDetailView: View {
     @State private var showTransferWorkspace = false
     @State private var terminalCreationRequest: UUID?
     @State private var selectedTab = WorkspaceTab.agents
+    @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var noteStore: NoteStore
     @State private var scriptStore: WorkspaceScriptStore
     @State private var changesStore: WorkspaceChangesStore
@@ -93,6 +94,7 @@ struct WorkspaceDetailView: View {
             createdBrowser = nil
             showNewBrowser = false
             showTransferWorkspace = false
+            revealedSwipeTarget = nil
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: oldId,
@@ -391,13 +393,13 @@ private extension WorkspaceDetailView {
             agentSection(.background, title: "background agents")
             agentSection(.orphaned, title: "delegated agents")
             agentSection(.retired, title: "retired agents")
-            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) { terminal in
+            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore, revealedTarget: $revealedSwipeTarget) { terminal in
                 selectedTerminal = terminal
             }
-            WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore) { browser in
+            WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore, revealedTarget: $revealedSwipeTarget) { browser in
                 selectedBrowser = browser
             }
-            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore)
+            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore, revealedTarget: $revealedSwipeTarget)
         }
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.bottom, WorkspaceDetailStyle.pageInset)

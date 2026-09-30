@@ -11,7 +11,7 @@ struct WorkspaceListView: View {
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
-    @State private var revealedWorkspaceId: String?
+    @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var workspaceSwipeProgress: [String: CGFloat] = [:]
     @State private var pendingAction: PendingAction?
     @State private var actionError: String?
@@ -107,8 +107,8 @@ struct WorkspaceListView: View {
         } message: {
             Text(actionError ?? "Please try again.")
         }
-        .onChange(of: viewModel.viewMode) { _, _ in revealedWorkspaceId = nil }
-        .onChange(of: viewModel.searchText) { _, _ in revealedWorkspaceId = nil }
+        .onChange(of: viewModel.viewMode) { _, _ in revealedSwipeTarget = nil }
+        .onChange(of: viewModel.searchText) { _, _ in revealedSwipeTarget = nil }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
         .preference(
             key: ConnectionBackdropPreference.self,
@@ -225,7 +225,7 @@ struct WorkspaceListView: View {
             workspace: workspace,
             showRepo: showRepo,
             isUpdating: workspaceStore.updatingWorkspaceIDs.contains(workspace.id),
-            revealedWorkspaceId: $revealedWorkspaceId,
+            revealedTarget: $revealedSwipeTarget,
             workspaceSwipeProgress: $workspaceSwipeProgress,
             nextWorkspaceId: nextWorkspaceId
         ) {

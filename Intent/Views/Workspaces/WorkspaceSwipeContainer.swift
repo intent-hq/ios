@@ -1,12 +1,19 @@
 import SwiftUI
 
+enum WorkspaceSwipeTarget: Hashable {
+    case browser(String)
+    case script(String)
+    case terminal(String)
+    case workspace(String)
+}
+
 struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
-    @Binding var isRevealed: Bool
+    let target: WorkspaceSwipeTarget
+    @Binding var revealedTarget: WorkspaceSwipeTarget?
     let actionCount: Int
     var rowBackground: Color = .clear
     var restingCornerRadius: CGFloat = 0
     var horizontalInset: CGFloat = 0
-    var onSwipeBegan: () -> Void = {}
     var onSwipeProgressChanged: (CGFloat) -> Void = { _ in }
     @ViewBuilder var content: (_ swipeProgress: CGFloat) -> Content
     @ViewBuilder var actions: () -> Actions
@@ -19,6 +26,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     @State private var actionsVisible = false
     @State private var animationRevision = 0
 
+    private var isRevealed: Bool { revealedTarget == target }
     private var revealWidth: CGFloat { CGFloat(actionCount) * (actionWidth + WorkspaceSwipeStyle.spacing) }
     private var restingOffset: CGFloat { isRevealed ? -revealWidth : 0 }
     private var swipeProgress: CGFloat { min(1, max(0, -offset / max(revealWidth, 1))) }
@@ -32,11 +40,10 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
 
     var body: some View {
         content(swipeProgress)
+            .background(rowBackground.opacity(1 - Double(swipeProgress)), in: .rect(cornerRadius: restingCornerRadius))
             .padding(.leading, horizontalInset)
             .background {
-                rowBackground.overlay {
-                    (colorScheme == .dark ? Color.white : Color.black).opacity(rowTintOpacity)
-                }
+                (colorScheme == .dark ? Color.white : Color.black).opacity(rowTintOpacity)
             }
             .clipShape(RoundedRectangle(cornerRadius: rowCornerRadius, style: .continuous))
             .offset(x: offset)
@@ -67,7 +74,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
                 dragOrigin = nil
                 offset = 0
                 actionsVisible = false
-                isRevealed = false
+                if isRevealed { revealedTarget = nil }
                 onSwipeProgressChanged(0)
             }
     }
@@ -76,7 +83,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
         if dragOrigin == nil {
             animationRevision += 1
             dragOrigin = offset
-            onSwipeBegan()
+            if !isRevealed { revealedTarget = nil }
         }
         withTransaction(Transaction(animation: nil)) {
             actionsVisible = true
@@ -87,9 +94,9 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
 
     private func finish(_ distance: CGFloat) {
         if distance < -WorkspaceSwipeStyle.revealThreshold {
-            isRevealed = true
-        } else if distance > WorkspaceSwipeStyle.revealThreshold {
-            isRevealed = false
+            revealedTarget = target
+        } else if distance > WorkspaceSwipeStyle.revealThreshold, isRevealed {
+            revealedTarget = nil
         }
         settle()
     }

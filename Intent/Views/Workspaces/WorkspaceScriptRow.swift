@@ -3,9 +3,9 @@ import SwiftUI
 struct WorkspaceScriptRow: View {
     let script: WorkspaceScript
     let store: WorkspaceScriptStore
+    @Binding var revealedTarget: WorkspaceSwipeTarget?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @State private var isRevealed = false
 
     private var canUpdate: Bool { store.isConnected && !store.isUpdating(script) }
 
@@ -23,22 +23,27 @@ struct WorkspaceScriptRow: View {
     }
 
     var body: some View {
-        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: script.isActive ? 2 : 1) { _ in
-            scriptButton
+        WorkspaceSwipeContainer(
+            target: .script(script.id),
+            revealedTarget: $revealedTarget,
+            actionCount: script.isActive ? 2 : 1,
+            horizontalInset: WorkspaceDetailStyle.pageInset
+        ) { progress in
+            scriptButton(swipeProgress: progress)
         } actions: {
             swipeActions
         }
     }
 
-    private var scriptButton: some View {
+    private func scriptButton(swipeProgress: CGFloat) -> some View {
         Button {
-            if isRevealed {
-                isRevealed = false
+            if revealedTarget != nil {
+                revealedTarget = nil
             } else if !store.isLaunching(script) {
                 Task { await store.launch(script) }
             }
         } label: {
-            row
+            row(swipeProgress: swipeProgress)
         }
         .buttonStyle(ScriptRowButtonStyle())
         .visionListRowHitTarget()
@@ -72,12 +77,12 @@ struct WorkspaceScriptRow: View {
     }
 
     private func stop() {
-        isRevealed = false
+        revealedTarget = nil
         Task { await store.stop(script) }
     }
 
     private func remove() {
-        isRevealed = false
+        revealedTarget = nil
         Task { await store.remove(script) }
     }
 
@@ -90,7 +95,7 @@ struct WorkspaceScriptRow: View {
         }
     }
 
-    private var row: some View {
+    private func row(swipeProgress: CGFloat) -> some View {
         HStack(spacing: WorkspaceDetailStyle.avatarSpacing) {
             Image(.terminal)
                 .resizable()
@@ -113,6 +118,7 @@ struct WorkspaceScriptRow: View {
                 ProgressView()
             } else {
                 Image(systemName: script.detectedURL == nil ? "play" : "globe")
+                    .opacity(1 - Double(swipeProgress))
                     .accessibilityHidden(true)
             }
         }
