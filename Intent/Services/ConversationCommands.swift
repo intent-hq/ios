@@ -1,14 +1,5 @@
 import Foundation
 
-enum OutgoingImagePayload {
-    case attachments([[String: Any]])
-    case none
-
-    func apply(to params: inout [String: Any]) {
-        if case let .attachments(blocks) = self { params["imageBlocks"] = blocks }
-    }
-}
-
 enum OutgoingFilePayload {
     case attachments([[String: Any]])
     case none
@@ -160,6 +151,7 @@ extension ConversationCommands {
         request.imagePayload.apply(to: &params)
         request.filePayload.apply(to: &params)
         request.messageMetadata.apply(to: &params)
+        try request.imagePayload.validateRequest(method: "agent.sendMessage", params: params)
         let result = try await connectionManager.request("agent.sendMessage", params: params)
         guard generation == resetGeneration else { throw CancellationError() }
         guard let response = result as? [String: Any],
@@ -251,6 +243,7 @@ extension ConversationCommands {
         var params: [String: Any] = ["agentId": agentId, "content": content]
         imagePayload.apply(to: &params)
         filePayload.apply(to: &params)
+        try imagePayload.validateRequest(method: "agent.queueMessage", params: params)
         let result = try await connectionManager.request("agent.queueMessage", params: params)
         guard let response = result as? [String: Any],
               let dictionary = response["queuedMessage"] as? [String: Any],
