@@ -25,7 +25,7 @@ def runner(name, status="online", labels=None, busy=False):
 
 
 class RunnerSelectionTests(unittest.TestCase):
-    def select(self, runners, token="fixture", curl_status=0, raw=None):
+    def select(self, runners, token="fixture", curl_status=0, raw=None, pool_label="intent-ios"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fixture = root / "response.json"
@@ -43,6 +43,7 @@ class RunnerSelectionTests(unittest.TestCase):
             env.update(
                 PATH=f"{root}:{env['PATH']}",
                 RUNNER_STATUS_TOKEN=token,
+                RUNNER_POOL_LABEL=pool_label,
                 GITHUB_REPOSITORY="intent-hq/ios",
                 GITHUB_OUTPUT=str(root / "output"),
                 TEST_RESPONSE=str(fixture),
@@ -74,6 +75,27 @@ class RunnerSelectionTests(unittest.TestCase):
             with self.subTest(label=label):
                 output, _ = self.select([runner("wrong-pool", labels=[x for x in REQUIRED if x != label])])
                 self.assertEqual(output, f"runs-on={HOSTED}")
+
+    def test_build_pool_is_preferred_over_simulator_pool(self):
+        labels = ["self-hosted", "macOS", "ARM64", "intent-ios-build"]
+        output, _ = self.select([runner("simulator"), runner("build", labels=labels)],
+                                pool_label="intent-ios-build")
+        self.assertEqual(output, 'runs-on=["self-hosted","macOS","ARM64","intent-ios-build"]')
+
+    def test_build_pool_falls_back_to_simulator_pool(self):
+        labels = ["self-hosted", "macOS", "ARM64", "intent-ios-build"]
+        output, _ = self.select([runner("simulator"), runner("build", "offline", labels)],
+                                pool_label="intent-ios-build")
+        self.assertEqual(output, f"runs-on={POOL}")
+
+    def test_simulator_jobs_do_not_select_build_only_runner(self):
+        labels = ["self-hosted", "macOS", "ARM64", "intent-ios-build"]
+        output, _ = self.select([runner("build", labels=labels)])
+        self.assertEqual(output, f"runs-on={HOSTED}")
+
+    def test_build_pool_without_any_online_mac_uses_hosted(self):
+        output, _ = self.select([], pool_label="intent-ios-build")
+        self.assertEqual(output, f"runs-on={HOSTED}")
 
     def test_no_online_runners_uses_hosted(self):
         for runners in [[], [runner("offline", "offline")]]:
