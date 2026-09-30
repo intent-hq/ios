@@ -12,7 +12,7 @@ struct WorkspaceListView: View {
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @State private var revealedWorkspaceId: String?
-    @State private var swipingWorkspaceIDs: Set<String> = []
+    @State private var workspaceSwipeProgress: [String: CGFloat] = [:]
     @State private var pendingAction: PendingAction?
     @State private var actionError: String?
     @State private var isSearching = false
@@ -226,7 +226,7 @@ struct WorkspaceListView: View {
             showRepo: showRepo,
             isUpdating: workspaceStore.updatingWorkspaceIDs.contains(workspace.id),
             revealedWorkspaceId: $revealedWorkspaceId,
-            swipingWorkspaceIDs: $swipingWorkspaceIDs,
+            workspaceSwipeProgress: $workspaceSwipeProgress,
             nextWorkspaceId: nextWorkspaceId
         ) {
             searchFocused = false

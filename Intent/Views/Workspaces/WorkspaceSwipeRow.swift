@@ -5,17 +5,18 @@ struct WorkspaceSwipeRow: View {
     let showRepo: Bool
     let isUpdating: Bool
     @Binding var revealedWorkspaceId: String?
-    @Binding var swipingWorkspaceIDs: Set<String>
+    @Binding var workspaceSwipeProgress: [String: CGFloat]
     let nextWorkspaceId: String?
     let onSelect: () -> Void
     let onAction: (WorkspaceAction) -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isRevealed: Bool { revealedWorkspaceId == workspace.id }
-    private var hidesDivider: Bool {
-        if swipingWorkspaceIDs.contains(workspace.id) { return true }
-        guard let nextWorkspaceId else { return false }
-        return swipingWorkspaceIDs.contains(nextWorkspaceId)
+    private var dividerOpacity: Double {
+        let progress = workspaceSwipeProgress[workspace.id, default: 0]
+        let nextProgress = nextWorkspaceId.flatMap { workspaceSwipeProgress[$0] } ?? 0
+        return Double(1 - min(1, max(progress, nextProgress) / DividerStyle.fadeProgress))
     }
     private var revealBinding: Binding<Bool> {
         Binding(
@@ -36,7 +37,7 @@ struct WorkspaceSwipeRow: View {
             actionCount: 2,
             horizontalInset: Constants.WorkspaceList.pageInset,
             onSwipeBegan: beginSwipe,
-            onSwipeVisibilityChanged: updateSwipeVisibility
+            onSwipeProgressChanged: updateSwipeProgress
         ) { progress in
             workspaceButton(swipeProgress: progress)
         } actions: {
@@ -46,7 +47,8 @@ struct WorkspaceSwipeRow: View {
         .overlay(alignment: .bottom) {
             Divider()
                 .padding(.horizontal, Constants.WorkspaceList.pageInset)
-                .opacity(hidesDivider ? 0 : 1)
+                .opacity(dividerOpacity)
+                .animation(reduceMotion ? nil : .easeOut(duration: DividerStyle.fadeDuration), value: dividerOpacity)
         }
     }
 
@@ -54,12 +56,17 @@ struct WorkspaceSwipeRow: View {
         if !isRevealed { revealedWorkspaceId = nil }
     }
 
-    private func updateSwipeVisibility(_ visible: Bool) {
-        if visible {
-            swipingWorkspaceIDs.insert(workspace.id)
+    private func updateSwipeProgress(_ progress: CGFloat) {
+        if progress > 0 {
+            workspaceSwipeProgress[workspace.id] = progress
         } else {
-            swipingWorkspaceIDs.remove(workspace.id)
+            workspaceSwipeProgress.removeValue(forKey: workspace.id)
         }
+    }
+
+    private enum DividerStyle {
+        static let fadeProgress: CGFloat = 0.15
+        static let fadeDuration = 0.12
     }
 
     private func workspaceButton(swipeProgress: CGFloat) -> some View {

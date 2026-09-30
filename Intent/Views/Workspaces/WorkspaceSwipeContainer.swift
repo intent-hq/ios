@@ -7,7 +7,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     var restingCornerRadius: CGFloat = 0
     var horizontalInset: CGFloat = 0
     var onSwipeBegan: () -> Void = {}
-    var onSwipeVisibilityChanged: (Bool) -> Void = { _ in }
+    var onSwipeProgressChanged: (CGFloat) -> Void = { _ in }
     @ViewBuilder var content: (_ swipeProgress: CGFloat) -> Content
     @ViewBuilder var actions: () -> Actions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -62,14 +62,13 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
                 if offset != restingOffset { settle() }
             }
             .onChange(of: revealWidth) { _, _ in settle() }
-            .onChange(of: actionsVisible) { _, visible in onSwipeVisibilityChanged(visible) }
             .onDisappear {
                 animationRevision += 1
                 dragOrigin = nil
                 offset = 0
                 actionsVisible = false
                 isRevealed = false
-                onSwipeVisibilityChanged(false)
+                onSwipeProgressChanged(0)
             }
     }
 
@@ -82,6 +81,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
         withTransaction(Transaction(animation: nil)) {
             actionsVisible = true
             offset = max(-revealWidth, min(0, (dragOrigin ?? 0) + distance))
+            onSwipeProgressChanged(swipeProgress)
         }
     }
 
@@ -101,6 +101,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
         if isRevealed { actionsVisible = true }
         withAnimation(reduceMotion ? nil : WorkspaceSwipeStyle.spring, completionCriteria: .removed) {
             offset = restingOffset
+            onSwipeProgressChanged(swipeProgress)
         } completion: {
             if animationRevision == revision, !isRevealed, dragOrigin == nil {
                 actionsVisible = false
