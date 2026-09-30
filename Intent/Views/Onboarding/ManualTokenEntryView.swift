@@ -172,62 +172,74 @@ struct ManualTokenEntryView: View {
     private var tokenField: some View {
         ManualConnectionField(label: "API TOKEN", verticalPadding: Constants.ManualTokenEntry.pasteVerticalPadding) {
             HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
-                Group {
-                    if isTokenVisible {
-                        TextField("Paste token", text: $token, prompt: placeholder("Paste token"))
-                    } else {
-                        SecureField("Paste token", text: $token, prompt: placeholder("Paste token"))
-                    }
-                }
-                    .interFont(Constants.Typography.bodySEmphasized)
-                    .accessibilityLabel("API Token")
-                    .accessibilityIdentifier("manual.token")
-                    .focused($focusedField, equals: .token)
-                    .submitLabel(.done)
-                    .onSubmit { focusedField = nil }
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
+                tokenEditor
                 if token.isEmpty {
-                    Button(action: pasteToken) {
-                        Image(.connectionClipboard)
-                            // The exact export already has 30% white strokes.
-                            .renderingMode(colorScheme == .dark ? .original : .template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
-                            .frame(
-                                width: Constants.ConnectionSheet.minimumTouchTarget,
-                                height: Constants.ConnectionSheet.minimumTouchTarget
-                            )
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    // Preserve the visible light paste affordance rather than Figma's white-on-white export.
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                    .accessibilityLabel("Paste API token")
+                    pasteTokenButton
                 }
-                Button {
-                    isTokenVisible.toggle()
-                    focusedField = .token
-                } label: {
-                    Image(systemName: isTokenVisible ? "eye.slash" : "eye")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
-                        .frame(
-                            width: Constants.ConnectionSheet.minimumTouchTarget,
-                            height: Constants.ConnectionSheet.minimumTouchTarget
-                        )
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Theme.foreground(for: colorScheme)
-                    .opacity(colorScheme == .dark ? Constants.ConnectionSheet.placeholderOpacity : 1))
-                .accessibilityLabel(isTokenVisible ? "Hide API token" : "Show API token")
-                // Expand the trailing hit region inward, retaining the reference's 24pt glyph inset.
-                .padding(.trailing, -Constants.ManualTokenEntry.pasteHitExpansion)
+                tokenVisibilityButton
             }
         }
+    }
+
+    private var tokenEditor: some View {
+        Group {
+            if isTokenVisible {
+                TextField("Paste token", text: $token, prompt: placeholder("Paste token"))
+            } else {
+                SecureField("Paste token", text: $token, prompt: placeholder("Paste token"))
+            }
+        }
+            .interFont(Constants.Typography.bodySEmphasized)
+            .accessibilityLabel("API Token")
+            .accessibilityIdentifier("manual.token")
+            .focused($focusedField, equals: .token)
+            .submitLabel(.done)
+            .onSubmit { focusedField = nil }
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+    }
+
+    private var pasteTokenButton: some View {
+        Button(action: pasteToken) {
+            Image(.connectionClipboard)
+                // The exact export already has 30% white strokes.
+                .renderingMode(colorScheme == .dark ? .original : .template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                .frame(
+                    width: Constants.ConnectionSheet.minimumTouchTarget,
+                    height: Constants.ConnectionSheet.minimumTouchTarget
+                )
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        // Preserve the visible light paste affordance rather than Figma's white-on-white export.
+        .foregroundStyle(Theme.foreground(for: colorScheme))
+        .accessibilityLabel("Paste API token")
+    }
+
+    private var tokenVisibilityButton: some View {
+        Button {
+            isTokenVisible.toggle()
+            focusedField = .token
+        } label: {
+            Image(systemName: isTokenVisible ? "eye.slash" : "eye")
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                .frame(
+                    width: Constants.ConnectionSheet.minimumTouchTarget,
+                    height: Constants.ConnectionSheet.minimumTouchTarget
+                )
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.foreground(for: colorScheme)
+            .opacity(colorScheme == .dark ? Constants.ConnectionSheet.placeholderOpacity : 1))
+        .accessibilityLabel(isTokenVisible ? "Hide API token" : "Show API token")
+        // Expand the trailing hit region inward, retaining the reference's 24pt glyph inset.
+        .padding(.trailing, -Constants.ManualTokenEntry.pasteHitExpansion)
     }
 
     private func placeholder(_ text: LocalizedStringKey) -> Text {
