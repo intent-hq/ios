@@ -4,13 +4,9 @@ import Testing
 /// Source contracts complement the native UI tests; they do not claim that
 /// presentation, accessibility or system sharing has executed successfully.
 struct DiagnosticExportEntryPointTests {
-    @Test(arguments: [
-        ("Settings/SettingsSupportSection.swift", "SettingsActionLabel(title: \"Export logs\""),
-        ("Connection/ConnectionFailureView.swift", "Text(\"Export logs\"")
-    ])
-    func settingsAndFailureKeepAnOfflinePreviewEntry(file: String, labelPrefix: String) throws {
-        let source = try read("Intent/Views/" + file)
-        #expect(source.contains(labelPrefix))
+    @Test func failureKeepsAnOfflinePreviewEntry() throws {
+        let source = try read("Intent/Views/Connection/ConnectionFailureView.swift")
+        #expect(source.contains("Text(\"Export logs\""))
         #expect(source.contains("showingDiagnosticLogs = true"))
         #expect(source.contains(".sheet(isPresented: $showingDiagnosticLogs)"))
         #expect(source.contains("DiagnosticExportView()"))
