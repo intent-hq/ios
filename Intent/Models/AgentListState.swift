@@ -10,6 +10,32 @@ enum AgentListGroup: Hashable {
     case retired
 }
 
+/// Successful reads also establish absence: a newer empty whole-bin read
+/// must reject unseen rows from an older, overlapping by-parent response.
+enum AgentListReadScope: Hashable {
+    case allActive
+    case background
+    case delegated(parentId: String?)
+    case orphaned
+    case retired
+    case topLevel
+
+    func contains(_ row: AgentSession) -> Bool {
+        if self == .retired { return row.retiredAt != nil }
+        guard row.retiredAt == nil else { return false }
+        switch self {
+        case .allActive: return true
+        case .background: return row.parentAgentId == nil && row.isBackground
+        case let .delegated(parentId):
+            return row.parentAgentId != nil && (parentId == nil || row.parentAgentId == parentId)
+        case .topLevel: return row.parentAgentId == nil && !row.isBackground
+        // An orphan read has authority over its own membership only. An
+        // incomplete cache cannot classify an arbitrary delegated row.
+        case .orphaned, .retired: return false
+        }
+    }
+}
+
 struct AgentScopeCounts: Equatable {
     let topLevel: Int
     let delegated: Int
@@ -73,6 +99,7 @@ final class AgentListState {
     @ObservationIgnored var requestedGroups: Set<AgentListGroup> = []
     @ObservationIgnored var members: [AgentListGroup: Set<String>] = [:]
     @ObservationIgnored var rowSequences: [String: Int] = [:]
+    @ObservationIgnored var coverage: [AgentListReadScope: Int] = [:]
 
     func reset() {
         epoch = UUID()
@@ -88,6 +115,7 @@ final class AgentListState {
         groupRequests = [:]
         members = [:]
         rowSequences = [:]
+        coverage = [:]
         metadataSequence = 0
         topLevelRequest = 0
     }

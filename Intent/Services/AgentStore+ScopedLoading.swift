@@ -146,7 +146,11 @@ extension AgentStore {
     private func replaceRows(
         _ rows: [[String: Any]], group: AgentListGroup?, sequence: Int, orphanOnly: Bool = false
     ) {
-        let parsed = rows.compactMap { AgentSession.parseAgent($0) }
+        let scope = readScope(group: group, orphanOnly: orphanOnly)
+        let parsed = rows.compactMap { AgentSession.parseAgent($0) }.filter { row in
+            !list.coverage.contains { $0.value > sequence && $0.key.contains(row) }
+        }
+        list.coverage[scope] = max(list.coverage[scope] ?? 0, sequence)
         let incomingIds = Set(parsed.map(\.id))
         let previousMembers = group.flatMap { list.members[$0] } ?? []
         if let group {
@@ -157,6 +161,7 @@ extension AgentStore {
         // requested group; deletion converges once every owning scope drops it.
         var active = agents
         var retired = list.retiredAgents
+        invalidateCoveredMemberships(scope, incomingIds: incomingIds, sequence: sequence)
         // A scope snapshot can remove its old rows, but cannot erase a row
         // obtained by a newer overlapping read (including retirement moves).
         let removed = (active + retired).filter { row in
@@ -185,6 +190,26 @@ extension AgentStore {
         if retired != list.retiredAgents { list.retiredAgents = retired }
         list.orphanedAgentIds.subtract(removedIds)
         list.orphanedAgentIds.subtract(retired.map(\.id))
+    }
+
+    private func readScope(group: AgentListGroup?, orphanOnly: Bool) -> AgentListReadScope {
+        if group == .retired { return .retired }
+        if !scopedLoading || list.scopeCounts == nil { return .allActive }
+        switch group {
+        case nil: return .topLevel
+        case .background: return .background
+        case let .delegated(parentId): return .delegated(parentId: parentId)
+        case .orphaned: return orphanOnly ? .orphaned : .delegated(parentId: nil)
+        case .retired: return .retired
+        }
+    }
+
+    private func invalidateCoveredMemberships(_ scope: AgentListReadScope, incomingIds: Set<String>, sequence: Int) {
+        let absent = (agents + list.retiredAgents).filter { row in
+            !incomingIds.contains(row.id) && (list.rowSequences[row.id] ?? 0) <= sequence && scope.contains(row)
+        }
+        let absentIds = Set(absent.map(\.id))
+        for group in Array(list.members.keys) { list.members[group]?.subtract(absentIds) }
     }
 
     private func retainedByAnotherGroup(_ row: AgentSession, excluding group: AgentListGroup?) -> Bool {

@@ -248,3 +248,39 @@ extension AgentStoreTests {
         #expect(store.agents.map(\.id) == ["parent"])
     }
 }
+
+extension AgentStoreTests {
+    @Test func newerEmptyWholeDelegatedReadRejectsUnseenChildFromOlderParentRead() async throws {
+        let fake = HeldAgentListConnection()
+        let store = AgentStore(connectionManager: fake, scopedLoading: true)
+        fake.responseMap["agent.list"] = scopedResponse([scopedRow("parent")], orphaned: false)
+        await store.fetchAgents(workspaceId: "ws-1")
+        fake.holdNext = true
+        fake.responseMap["agent.list"] = scopedResponse([scopedRow("deleted", parent: "parent")], orphaned: false)
+        let old = Task { await store.loadAgentGroup(.delegated(parentId: "parent"), workspaceId: "ws-1") }
+        try await waitUntil("held parent read") { fake.held }
+        fake.responseMap["agent.list"] = scopedResponse([], orphaned: false)
+        await store.loadAgentGroup(.orphaned, workspaceId: "ws-1")
+        fake.gate.open()
+        await old.value
+        #expect(store.agents.map(\.id) == ["parent"])
+    }
+
+    @Test func newerEmptyParentReadRejectsUnseenChildFromOlderWholeDelegatedRead() async throws {
+        let fake = HeldAgentListConnection()
+        let store = AgentStore(connectionManager: fake, scopedLoading: true)
+        fake.responseMap["agent.list"] = scopedResponse([scopedRow("parent")], orphaned: false)
+        await store.fetchAgents(workspaceId: "ws-1")
+        fake.holdNext = true
+        fake.responseMap["agent.list"] = scopedResponse([
+            scopedRow("deleted", parent: "parent"), scopedRow("unrelated", parent: "other-parent")
+        ], orphaned: false)
+        let old = Task { await store.loadAgentGroup(.orphaned, workspaceId: "ws-1") }
+        try await waitUntil("held whole delegated read") { fake.held }
+        fake.responseMap["agent.list"] = scopedResponse([], orphaned: false)
+        await store.loadAgentGroup(.delegated(parentId: "parent"), workspaceId: "ws-1")
+        fake.gate.open()
+        await old.value
+        #expect(Set(store.agents.map(\.id)) == ["parent", "unrelated"])
+    }
+}
