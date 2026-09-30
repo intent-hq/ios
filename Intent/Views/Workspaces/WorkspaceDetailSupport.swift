@@ -157,6 +157,7 @@ struct WorkspaceActionsMenu: View {
     let onCreateAgent: () -> Void
     let onCreateTerminal: () -> Void
     let onCreateBrowser: () -> Void
+    var onTransfer: (() -> Void)?
     let onArchive: () -> Void
     let onDelete: () -> Void
 
@@ -174,6 +175,14 @@ struct WorkspaceActionsMenu: View {
             }
             WorkspaceScriptsMenu(workspaceId: workspaceId, store: scriptStore)
             Divider()
+            if let onTransfer {
+                Button(action: onTransfer) {
+                    Label { Text("Transfer workspace").interFont(Constants.Typography.bodyS) } icon: {
+                        Image(systemName: "arrow.right.arrow.left")
+                    }
+                }
+                .accessibilityIdentifier("workspace.transfer")
+            }
             Button(action: onArchive) {
                 Label { Text("Archive").interFont(Constants.Typography.bodyS) } icon: { Image(.archive) }
             }
