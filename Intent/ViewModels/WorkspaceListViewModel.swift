@@ -169,14 +169,14 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
 
     /// The window's workspace store, injected from its `BackendSession`.
     @ObservationIgnored private let workspaceStore: WorkspaceStore
-    @ObservationIgnored private let activityTime: (Workspace) -> TimeInterval
+    @ObservationIgnored private let activityTime: @MainActor (Workspace) -> TimeInterval
     @ObservationIgnored private var activityTimes: [String: ActivityTime] = [:]
     @ObservationIgnored private var sortedCache: SortedWorkspaces?
     @ObservationIgnored private var derivedCache: DerivedWorkspaces?
 
     init(
         workspaceStore: WorkspaceStore,
-        activityTime: @escaping (Workspace) -> TimeInterval = workspaceActivityDisplayTime
+        activityTime: @escaping @MainActor (Workspace) -> TimeInterval = workspaceActivityDisplayTime
     ) {
         self.workspaceStore = workspaceStore
         self.activityTime = activityTime
@@ -241,7 +241,7 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         var nextTimes: [String: ActivityTime] = [:]
         let timed = workspaces.compactMap { workspace -> (workspace: Workspace, time: TimeInterval)? in
             let status = workspace.status?.lowercased() ?? ""
-            guard status != "archived" && status != "deleted" else { return nil }
+            guard status != "archived", status != "deleted" else { return nil }
             let inputs = ActivityTimeInputs(workspace)
             let entry: ActivityTime
             if let cached = activityTimes[workspace.id], cached.inputs == inputs {
