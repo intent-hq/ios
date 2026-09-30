@@ -28,6 +28,7 @@ jobs:
       TEST_CRASH_RETRY: '0'
       SIM_LOCK_TIMEOUT: '0'
       TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO: '1'
+      SOURCE_SHA: 8ac22ada2b624d40d3d6d1733d18de81435419f9
       ONLY_TESTING: >-
         IntentUITests/ConversationTranscriptScrollUITests/testKeyboardOpenKeepsTranscriptAtEnd
         IntentUITests/ConversationTranscriptScrollUITests/testSoftwareKeyboardPrerequisiteSkipsWhenKeyboardIsAbsent
@@ -46,10 +47,13 @@ jobs:
       - name: Record source and simulator provenance
         run: |
           mkdir evidence
+          git fetch --no-tags --depth=1 origin "$SOURCE_SHA"
+          test "$(git diff --name-only "$SOURCE_SHA" HEAD)" = .github/workflows/ci.yml
           {
             date -u
             git show -s --format='%H%n%P%n%s' HEAD
-            git diff HEAD^ --stat
+            echo "Source commit: $SOURCE_SHA"
+            git diff "$SOURCE_SHA" HEAD --stat
             xcodebuild -version
             sw_vers
             uptime
