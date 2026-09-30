@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkspaceScriptsView: View {
     let workspaceId: String
     let store: WorkspaceScriptStore
+    @Binding var revealedTarget: WorkspaceSwipeTarget?
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -15,9 +16,10 @@ struct WorkspaceScriptsView: View {
                     .accessibilityAddTraits(.isHeader)
                 LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
                     ForEach(scripts) { script in
-                        WorkspaceScriptRow(script: script, store: store)
+                        WorkspaceScriptRow(script: script, store: store, revealedTarget: $revealedTarget)
                     }
                 }
+                .padding(.horizontal, -WorkspaceDetailStyle.pageInset)
                 if let error = store.errorMessage(workspaceId: workspaceId) {
                     VStack(alignment: .leading) {
                         Text(error).interFont(Constants.Typography.bodyXS)

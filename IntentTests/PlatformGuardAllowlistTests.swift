@@ -26,6 +26,7 @@ struct PlatformGuardAllowlistTests {
         "Intent/Utils/NotificationManager.swift",
         "Intent/Views/Components/NavigationTitleSubtitleView.swift",
         "Intent/Views/Components/WindowFeedbackSoundEmitter.swift",
+        "Intent/Views/Connection/ConnectingView.swift",
         "Intent/Views/Connection/ConnectionSheet.swift",
         "Intent/Views/Conversation/Composer/MessageInputView.swift",
         "Intent/Views/Conversation/Composer/SubmittableTextView.swift",
