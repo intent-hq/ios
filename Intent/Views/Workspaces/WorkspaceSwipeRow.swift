@@ -19,8 +19,11 @@ struct WorkspaceSwipeRow: View {
         Binding(
             get: { isRevealed },
             set: { revealed in
-                if revealed { revealedWorkspaceId = workspace.id }
-                else if isRevealed { revealedWorkspaceId = nil }
+                if revealed {
+                    revealedWorkspaceId = workspace.id
+                } else if isRevealed {
+                    revealedWorkspaceId = nil
+                }
             }
         )
     }
