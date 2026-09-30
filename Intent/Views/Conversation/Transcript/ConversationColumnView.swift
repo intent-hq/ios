@@ -12,6 +12,8 @@ struct ConversationColumnView: View {
     @State private var conversationHeight: CGFloat = 0
     @State private var composerHeight: CGFloat = 0
     @State private var accessoriesHeight: CGFloat = 0
+    @State private var questionInputTop: CGFloat?
+    @State private var composerInputTop: CGFloat?
     @State private var composerFocused = false
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
 
@@ -116,9 +118,8 @@ struct ConversationColumnView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { accessoriesHeight = $0 }
 
         questionRegion
-            .anchorPreference(key: WorkspaceActionMenuInputBounds.self, value: .bounds) { bounds in
-                composerVisible || usesWorkspaceDesign ? nil : bounds
-            }
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { questionInputTop = $0 }
+            .preference(key: WorkspaceActionMenuInputTop.self, value: composerVisible || usesWorkspaceDesign ? nil : questionInputTop)
             // Offer the measured question budget before the flexible transcript
             // takes its share; otherwise VStack halves the remaining height and
             // ViewThatFits rejects stacks that fit within workspaceQuestionHeight.
@@ -149,7 +150,8 @@ struct ConversationColumnView: View {
                 }
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
-            .anchorPreference(key: WorkspaceActionMenuInputBounds.self, value: .bounds) { $0 }
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerInputTop = $0 }
+            .preference(key: WorkspaceActionMenuInputTop.self, value: composerInputTop)
         }
     }
 

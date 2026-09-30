@@ -13,6 +13,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     @AppStorage("appThemePreference") private var themePreference = "system"
     @State private var isOpen = false
     @State private var connectionCount = 0
+    @State private var overlayBottom: CGFloat = 0
 
     private enum Layout {
         static let blurRadius: CGFloat = 15
@@ -34,14 +35,13 @@ struct WorkspaceActionLauncher: ViewModifier {
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
             .accessibilityHidden(isOpen)
-            .overlayPreferenceValue(WorkspaceActionMenuInputBounds.self) { inputAnchor in
-                // Resolve the active input anchor in the window overlay's coordinate space.
-                // swiftlint:disable:next geometry_reader_usage
-                GeometryReader { proxy in
-                    let activeAnchor = avoidsConversationInput ? inputAnchor : nil
-                    let bottomInset = activeAnchor.map { max(0, proxy.size.height - proxy[$0].minY) } ?? 0
-                    actionOverlay(bottomInset: bottomInset)
-                }
+            .overlayPreferenceValue(WorkspaceActionMenuInputTop.self) { inputTop in
+                let bottomInset = avoidsConversationInput ? inputTop.map { max(0, overlayBottom - $0) } ?? 0 : 0
+                // Keep the overlay's measured extent independent of its padded controls.
+                Color.clear
+                    .allowsHitTesting(false)
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { overlayBottom = $0 }
+                    .overlay { actionOverlay(bottomInset: bottomInset) }
             }
             .animation(
                 reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
@@ -131,10 +131,11 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 }
 
-struct WorkspaceActionMenuInputBounds: PreferenceKey {
-    nonisolated static var defaultValue: Anchor<CGRect>? { nil }
+/// The active input's top edge in the same global coordinate space as the launcher overlay.
+struct WorkspaceActionMenuInputTop: PreferenceKey {
+    nonisolated static var defaultValue: CGFloat? { nil }
 
-    nonisolated static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+    nonisolated static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
         value = nextValue() ?? value
     }
 }
