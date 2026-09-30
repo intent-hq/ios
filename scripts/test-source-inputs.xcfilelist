@@ -653,7 +653,6 @@ $(SRCROOT)/Intent/Views/Settings/DiagnosticPreviewSection.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticShareSheet.swift
 $(SRCROOT)/Intent/Views/Settings/LogOffConfirmationSheet.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsActionLabel.swift
-$(SRCROOT)/Intent/Views/Settings/SettingsAppearanceSelector.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsConnectionCard.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsConnectionsSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsHeader.swift

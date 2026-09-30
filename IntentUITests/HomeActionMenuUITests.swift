@@ -146,8 +146,11 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
 
     @MainActor
     func testConnectionsTileOpensScreenAndAppearanceTileCyclesTheme() throws {
-        let app = launchHome()
+        let app = launchHome(themePreference: "dark")
         openMenu(app)
+        // Seed stored System through the Home tile before removing the launch override.
+        XCTAssertEqual(reveal("appearance", in: app).value as? String, "Dark Mode")
+        reveal("appearance", in: app).tap()
         reveal("connections", in: app).tap()
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
         // Relaunch restores the home screen without depending on the connection sheet's detent.
@@ -155,12 +158,6 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         // Argument-domain overrides mask later writes, so remove it before exercising live changes.
         app.launchArguments = ["--demo-data", "--demo-long-workspace-list"]
         app.launch()
-        openMenu(app)
-        reveal("settings", in: app).tap()
-        let system = app.buttons["settings.appearance.system"]
-        XCTAssertTrue(system.waitForExistence(timeout: Self.timeout))
-        system.tap()
-        app.buttons["settings.close"].tap()
         openMenu(app)
         let appearance = reveal("appearance", in: app)
         XCTAssertEqual(appearance.value as? String, "System")

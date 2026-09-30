@@ -6,38 +6,22 @@ nonisolated final class SettingsUITests: XCTestCase {
     private static let maximumSwipes = 12
 
     @MainActor
-    func testAppearancePersistsAcrossCloseAndLaunchWithLightDarkScreenshots() {
-        let app = launch()
-        openSettings(app)
-        let light = app.buttons["settings.appearance.light"]
-        light.tap()
-        XCTAssertTrue(light.isSelected)
-        capture(app, named: "Settings-Light")
-        assertScrollingLogOffAndRevealActions(app)
-        capture(app, named: "Settings-Light-Actions")
-        scrollToTop(app)
-        captureWorkspaceSurfaces(app, appearance: "Light")
-        let dark = app.buttons["settings.appearance.dark"]
-        dark.tap()
-        XCTAssertTrue(dark.isSelected)
-        capture(app, named: "Settings-Dark")
-        assertScrollingLogOffAndRevealActions(app)
-        capture(app, named: "Settings-Dark-Actions")
-        scrollToTop(app)
-        captureWorkspaceSurfaces(app, appearance: "Dark")
-        app.buttons["settings.close"].tap()
-        openSettings(app)
-        XCTAssertTrue(dark.isSelected)
-        app.terminate()
-        app.launch()
-        openSettings(app)
-        XCTAssertTrue(dark.isSelected, "Theme selection must survive a fresh process")
-        let system = app.buttons["settings.appearance.system"]
-        system.tap()
-        XCTAssertTrue(system.isSelected)
-        app.buttons["settings.close"].tap()
-        openSettings(app)
-        XCTAssertTrue(system.isSelected)
+    func testSettingsHasNoAppearanceControlsWithLightDarkScreenshots() {
+        for appearance in ["Light", "Dark"] {
+            let app = launch(themePreference: appearance.lowercased())
+            openSettings(app)
+            XCTAssertTrue(app.staticTexts["CONNECTIONS"].exists)
+            XCTAssertFalse(app.staticTexts["APPEARANCE"].exists)
+            for choice in ["Light", "Dark", "System"] {
+                XCTAssertFalse(app.buttons[choice].exists, "Theme controls belong only in the Home menu")
+            }
+            capture(app, named: "Settings-" + appearance)
+            assertScrollingLogOffAndRevealActions(app)
+            capture(app, named: "Settings-" + appearance + "-Actions")
+            scrollToTop(app)
+            captureWorkspaceSurfaces(app, appearance: appearance)
+            app.terminate()
+        }
     }
 
     @MainActor
@@ -102,9 +86,8 @@ nonisolated final class SettingsUITests: XCTestCase {
 
     @MainActor
     func testLargeTextKeepsPairingSupportAndLogOffCancellationReachable() {
-        let app = launch(largeText: true)
+        let app = launch(largeText: true, themePreference: "light")
         openSettings(app)
-        app.buttons["settings.appearance.light"].tap()
         capture(app, named: "Settings-LargeText-Top")
         assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-LargeText-Actions")
@@ -140,9 +123,8 @@ nonisolated final class SettingsUITests: XCTestCase {
 
     @MainActor
     func testConfirmedLogOffForgetsOnlyTheCurrentConnection() {
-        let app = launch()
+        let app = launch(themePreference: "dark")
         openSettings(app)
-        app.buttons["settings.appearance.dark"].tap()
         let logOff = app.buttons["Log Off"]
         reveal(logOff, in: app)
         logOff.tap()
@@ -186,10 +168,11 @@ nonisolated final class SettingsUITests: XCTestCase {
     }
 
     @MainActor
-    private func launch(largeText: Bool = false) -> XCUIApplication {
+    private func launch(largeText: Bool = false, themePreference: String = "system") -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-settings", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments += ["-appThemePreference", themePreference]
         if largeText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"]
         }
