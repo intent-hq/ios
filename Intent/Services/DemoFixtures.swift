@@ -384,8 +384,7 @@ extension DemoFixtures {
         switch method {
         case "events.subscribe": return ["subscriptionId": "demo-events-\(params["replaceGroup"] as? String ?? "default")"]
         case "prMonitor.list": return ["monitors": [[String: Any]]()]
-        case "workspace.list":
-            return ["workspaces": workspaces]
+        case "workspace.list": return ["workspaces": workspaces]
         case "workspace.transfer.plan":
             return [
                 "plan": [
