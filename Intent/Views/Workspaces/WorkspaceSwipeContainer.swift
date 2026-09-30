@@ -133,7 +133,9 @@ struct WorkspaceSwipeIconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .frame(width: size, height: size)
-            .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+            .foregroundStyle(configuration.role == .destructive
+                ? Theme.destructive(for: colorScheme)
+                : Constants.Pairing.foreground(for: colorScheme))
             .background(
                 Constants.WorkspaceList.controlSurface(for: colorScheme),
                 in: .rect(cornerRadius: Constants.WorkspaceList.swipeButtonCornerRadius)

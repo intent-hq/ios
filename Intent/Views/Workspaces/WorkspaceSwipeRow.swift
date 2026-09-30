@@ -85,7 +85,7 @@ struct WorkspaceSwipeRow: View {
     }
 
     private func actionButton(_ action: WorkspaceAction) -> some View {
-        Button { select(action) } label: {
+        Button(role: action == .delete ? .destructive : nil) { select(action) } label: {
             Image(action == .archive ? .archive : .delete)
                 .resizable()
                 .scaledToFit()
