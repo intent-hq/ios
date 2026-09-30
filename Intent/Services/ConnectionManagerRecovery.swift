@@ -23,7 +23,6 @@ extension ConnectionManager {
     }
 
     // MARK: - Host Racing
-
     /// A won race: the winner plus the background drain of the candidates
     /// still in flight (`HostRaceOutcome.drain`). The drain is handed to the
     /// caller because only it knows which connection generation the drain's
@@ -46,7 +45,7 @@ extension ConnectionManager {
             candidates.append(Self.tunnelCandidateLabel)
         }
         let dialer = tunnelDialer
-        let outcome = await Self.raceCandidates(candidates) { [certFingerprint, token, tcAddress] candidate in
+        let outcome = await Self.raceCandidates(candidates, diagnostics: diagnostics) { [certFingerprint, token, tcAddress] candidate in
             let candidateStart = CFAbsoluteTimeGetCurrent()
             if candidate == Self.tunnelCandidateLabel, let tcAddress {
                 AppLog.connection.debug("[ConnectionManager] Racing tailcat tunnel")
@@ -115,7 +114,12 @@ extension ConnectionManager {
         token: String,
         certFingerprint: String?
     ) async throws -> RacedConnection {
-        let tunnel = try await dialer.open(tcAddress: tcAddress, remotePort: remotePort)
+        let tunnel: any TunnelSession
+        do {
+            tunnel = try await dialer.open(tcAddress: tcAddress, remotePort: remotePort)
+        } catch {
+            throw TunnelEstablishmentFailure(underlyingError: error)
+        }
         do {
             try Task.checkCancellation()
             let socket = try await WebSocketConnection.connect(
@@ -138,22 +142,18 @@ extension ConnectionManager {
             if let transportError = error as? WebSocketTransportError {
                 switch transportError {
                 case .certificateMismatch(_, let fingerprint):
-                    throw WebSocketTransportError.certificateMismatch(
-                        host: tunnelCandidateLabel,
-                        fingerprint: fingerprint
-                    )
+                    throw WebSocketTransportError.certificateMismatch(host: tunnelCandidateLabel, fingerprint: fingerprint)
                 case .invalidURL:
                     throw WebSocketTransportError.invalidURL(host: tunnelCandidateLabel)
                 case .missingCertificatePin:
-                    throw WebSocketTransportError.missingCertificatePin(
-                        host: tunnelCandidateLabel
-                    )
+                    throw WebSocketTransportError.missingCertificatePin(host: tunnelCandidateLabel)
                 case .timedOut:
                     throw WebSocketTransportError.timedOut(host: tunnelCandidateLabel)
-                case .failed(_, let message):
+                case let .failed(_, message, failure):
                     throw WebSocketTransportError.failed(
                         host: tunnelCandidateLabel,
-                        message: message
+                        message: message,
+                        diagnosticFailure: failure
                     )
                 case let .disconnected(_, code, reason):
                     throw WebSocketTransportError.disconnected(
@@ -189,6 +189,8 @@ extension ConnectionManager {
         let currentSocket = socket
         messagePumpTask?.cancel()
         guard let currentSocket else { return }
+        // Keep the existing socket pump intact; diagnostics do not alter dispatch.
+        // swiftlint:disable:next closure_body_length
         messagePumpTask = Task.detached { [weak self] in
             do {
                 while !Task.isCancelled {
@@ -196,12 +198,14 @@ extension ConnectionManager {
                     guard let self else { return }
                     switch message {
                     case .string(let text):
-                        let preview = String(text.prefix(Constants.Connection.logPreviewCharacterLimit))
-                        AppLog.connection.debug("[ConnectionManager] Received text: \(preview)...")
+                        AppLog.connection.debug("[ConnectionManager] Received text bytes: \(text.utf8.count)")
                         let parseStart = CFAbsoluteTimeGetCurrent()
                         let frame = Self.parseInboundFrame(text)
                         let parseEnd = CFAbsoluteTimeGetCurrent()
-                        guard let frame else { continue }
+                        guard let frame else {
+                            await recordMalformedFrame(from: currentSocket)
+                            continue
+                        }
                         let accepted = await acceptInboundFrame(
                             frame,
                             byteCount: text.utf8.count,
@@ -246,17 +250,24 @@ extension ConnectionManager {
 
     func handleSocketFailure(_ error: any Error, from origin: WebSocketConnection) {
         guard socket === origin else { return }
-        AppLog.connection.debug("[ConnectionManager] Socket error: \(error.localizedDescription)")
-        handleDisconnection()
+        if handleAuthoritativeSocketFailure(error) { return }
+        handleDisconnection(cause: .socketFailure, failure: TransportDiagnosticFailure.classify(error))
     }
 
-    func handleDisconnection() {
+    func handleDisconnection(
+        cause: DiagnosticEvent.Context = .socketFailure,
+        failure: DiagnosticFailure = DiagnosticFailure(origin: .transport, classification: .connectionClosed)
+    ) {
         let disconnectTime = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] handleDisconnection called, current state=\(connectionState)")
         guard connectionState != .disconnected else {
             AppLog.connection.debug("[ConnectionManager] Already disconnected, ignoring")
             return
         }
+        if socket != nil || connectionState == .connected {
+            recordConnectionLoss(cause: cause, failure: failure)
+        }
+        clearPrincipal()
         stopHeartbeat()
         stopPathMonitor()
         stopGlobalSubscription()
@@ -328,6 +339,9 @@ extension ConnectionManager {
         let attemptStart = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) starting at +\(Int((attemptStart - reconnectStart) * Self.millisecondsPerSecond))ms")
         guard !Task.isCancelled, connectionGeneration == generation else { return true }
+        if attempt == Self.initialReconnectAttempt {
+            recordConnectionAttempt(.started, context: .automaticRecovery)
+        }
         connectionState = .reconnecting(attempt: attempt)
         let parameters = ReconnectParameters(
             hosts: hosts,
@@ -363,11 +377,10 @@ extension ConnectionManager {
             certFingerprint: parameters.certFingerprint,
             tcAddress: parameters.tcAddress
         )
-        let raceEnd = CFAbsoluteTimeGetCurrent()
-        AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms")
         let winner = raced.winner
         recordLateCertMismatches(from: raced.drain, generation: generation)
-        guard !Task.isCancelled, adoptReconnectWinner(winner, attempt: attempt, generation: generation) else {
+        let principal = try await admit(winner, token: parameters.token, fingerprint: parameters.certFingerprint)
+        guard !Task.isCancelled, adoptReconnectWinner(winner, principal: principal, parameters: parameters, attempt: attempt, generation: generation) else {
             await winner.disconnect()
             return true
         }
@@ -378,6 +391,8 @@ extension ConnectionManager {
 
     private func adoptReconnectWinner(
         _ winner: RacedConnection,
+        principal: ConnectionPrincipal,
+        parameters: ReconnectParameters,
         attempt: Int,
         generation: Int
     ) -> Bool {
@@ -386,9 +401,10 @@ extension ConnectionManager {
         activeTunnel = winner.tunnel
         host = winner.host
         configureSocketMessagePump()
-        connectionState = .connected
+        finishIdentityAdmission(principal, token: parameters.token, fingerprint: parameters.certFingerprint)
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = attempt
+        recordConnectionAttempt(.recovered, context: activeTunnel == nil ? .direct : .tunnel)
         subscribeToAllEvents()
         startHeartbeat()
         startPathMonitor()
@@ -397,6 +413,15 @@ extension ConnectionManager {
     }
 
     private func handleReconnectFailure(_ error: Error, attempt: Int, generation: Int) -> Bool {
+        if stopAfterIdentityFailure(error, generation: generation) { return true }
+        if !Task.isCancelled, !(error is CancellationError), connectionGeneration == generation {
+            let failure = TransportDiagnosticFailure.classify(error)
+            recordConnectionAttempt(
+                failure.classification == .pinMismatch ? .exhausted : .retrying,
+                failure: failure,
+                context: .automaticRecovery
+            )
+        }
         if let transportError = error as? WebSocketTransportError,
            transportError.isCertificateMismatch {
             guard !Task.isCancelled, connectionGeneration == generation else { return true }
@@ -410,13 +435,25 @@ extension ConnectionManager {
     }
 
     // MARK: - Network path monitoring
-
     func startPathMonitor() {
         stopPathMonitor()
         pathMonitorID += 1
         let monitorID = pathMonitorID
-        if let socket, let path = readSocketPath(socket), path.isOnPhysicalInterface {
-            socketInterface = path.primaryInterface
+        if let socket {
+            let observation = readSocketPath(socket)
+            socketPathObservation = observation
+            let path = observation.current?.path
+            socketInterface = path?.isOnPhysicalInterface == true ? path?.primaryInterface : nil
+            let generation = connectionGeneration
+            observation.observe { @Sendable [weak self, weak socket, weak observation] in
+                Task { @MainActor in
+                    guard let self, let socket, let observation,
+                          self.socket === socket, self.connectionGeneration == generation,
+                          self.pathMonitorID == monitorID, self.socketPathObservation === observation,
+                          self.connectionState == .connected, observation.current?.isLost == true else { return }
+                    self.handleDisconnection(cause: .endpointPathLost)
+                }
+            }
         }
         let monitor = makePathMonitor()
         pathMonitor = monitor
@@ -426,6 +463,8 @@ extension ConnectionManager {
     }
 
     func stopPathMonitor() {
+        socketPathObservation?.removeObserver()
+        socketPathObservation = nil
         pathMonitor?.cancel()
         pathMonitor = nil
         lastPathSnapshot = nil
@@ -436,26 +475,26 @@ extension ConnectionManager {
         guard pathMonitorID == monitorID, pathMonitor != nil else { return }
         let previous = lastPathSnapshot
         lastPathSnapshot = snapshot
-        guard connectionState == .connected, socket != nil else { return }
+        // An embedded tunnel's local socket cannot observe its remote underlay.
+        // Direct sockets (including system VPNs) use only their endpoint evidence.
+        guard connectionState == .connected, socket != nil, activeTunnel != nil else { return }
 
         let pathDied: Bool
-        let interfaceChanged: Bool
         if let previous {
             pathDied = previous.isSatisfied && !snapshot.isSatisfied
-            interfaceChanged = snapshot.isSatisfied
-                && snapshot.primaryInterface != previous.primaryInterface
         } else {
             pathDied = !snapshot.isSatisfied
-            interfaceChanged = false
         }
-        let socketInterfaceLost = socketInterface.map { interface in
+        // Preference/virtual-name changes alone do not invalidate a serving tunnel.
+        let previousPhysicalInterface = previous?.physicalInterfaces.first
+        let physicalInterfaceLost = previousPhysicalInterface.map { interface in
             snapshot.isSatisfied && !snapshot.availableInterfaces.contains(interface)
         } ?? false
-        guard pathDied || interfaceChanged || socketInterfaceLost else { return }
+        guard pathDied || physicalInterfaceLost else { return }
         AppLog.connection.debug(
             "[ConnectionManager] Network path changed (\(String(describing: previous)) -> "
                 + "\(String(describing: snapshot))), reconnecting"
         )
-        handleDisconnection()
+        handleDisconnection(cause: .tunnelUnderlayLost)
     }
 }

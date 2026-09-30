@@ -7,6 +7,12 @@ extension ConversationViewModel {
         case pending
     }
 
+    private struct SendComposerState {
+        let textRevision: Int
+        let imageRevision: Int
+        let imageRecovery: ComposerImageRecovery
+    }
+
     func sendMessage(_ content: String) async {
         await sendMessage(content, imageSelection: .pending)
     }
@@ -16,6 +22,10 @@ extension ConversationViewModel {
     }
 
     private func sendMessage(_ content: String, imageSelection: ComposerImageSelection) async {
+        let sendingStore = store
+        let sourceFiles = pendingFiles
+        let textRevision = composerTextRevision
+        let imageRevision = attachmentPipeline.imageSelectionRevision
         let sourceImages: [UIImage]
         let imageRecovery: ComposerImageRecovery
         switch imageSelection {
@@ -26,49 +36,91 @@ extension ConversationViewModel {
             sourceImages = pendingImages
             imageRecovery = .preserveCurrentSelection
         }
+        let composer = SendComposerState(
+            textRevision: textRevision,
+            imageRevision: imageRevision,
+            imageRecovery: imageRecovery
+        )
+        let attemptId = sendingStore.beginSendAttempt(
+            agentId: agentId,
+            content: content,
+            workspaceId: workspaceId,
+            images: sourceImages,
+            files: sourceFiles,
+            fileAccess: attachmentPipeline.retainFileAccess(for: sourceFiles)
+        )
+        guard let attempt = sendingStore.sendAttempts.first(where: { $0.id == attemptId }),
+              await prepareSendAttempt(attempt, in: sendingStore, composer: composer) else { return }
+        do {
+            try await sendingStore.sendPreparedAttempt(attemptId)
+            guard store === sendingStore else { return }
+            attachmentPipeline.clearPendingFiles(ids: Set(sourceFiles.map(\.id)))
+            if case .pending = imageSelection, imageRevision == attachmentPipeline.imageSelectionRevision {
+                pendingImages.removeAll()
+            }
+            if composerTextRevision == textRevision {
+                PersistenceManager.shared.clearDraft(workspaceId: workspaceId, agentId: agentId)
+            }
+            scheduleDebouncedMarkSeen()
+        } catch {
+            // Retained state owns recovery; raw foreign diagnostics are not UI.
+            AppLog.conversation.error("[ConversationViewModel] Message delivery was not confirmed")
+        }
+    }
 
+    private func prepareSendAttempt(
+        _ attempt: ConversationSendAttempt,
+        in sendingStore: ConversationStore,
+        composer: SendComposerState
+    ) async -> Bool {
         let imagePayload: OutgoingImagePayload
         do {
-            imagePayload = try await buildImageBlocks(from: sourceImages)
+            imagePayload = try await buildImageBlocks(from: attempt.images)
         } catch {
-            AppLog.conversation.error("[ConversationViewModel] Image placement failed: \(error)")
+            sendingStore.failSendPreparation(attempt.id)
+            guard ownsSendPreparation(attempt.id, in: sendingStore) else { return false }
             attachmentPipeline.surfaceImagePlacementFailure(
                 error,
-                content: content,
-                imageRecovery: imageRecovery,
+                content: composerTextRevision == composer.textRevision ? attempt.content : "",
+                imageRecovery: attachmentPipeline.imageSelectionRevision == composer.imageRevision
+                    ? composer.imageRecovery : .preserveCurrentSelection,
                 messageText: &messageText
             )
-            return
+            return false
         }
+        guard ownsSendPreparation(attempt.id, in: sendingStore) else { return false }
+        sendingStore.prepareSendAttempt(attempt.id, imagePayload: imagePayload, filePayload: .none, complete: false)
 
         let filePayload: OutgoingFilePayload
         do {
-            filePayload = try await buildFileBlocks(from: pendingFiles)
+            filePayload = try await buildFileBlocks(from: attempt.files)
         } catch {
-            AppLog.conversation.error("[ConversationViewModel] File placement failed: \(error)")
+            sendingStore.failSendPreparation(attempt.id)
+            guard ownsSendPreparation(attempt.id, in: sendingStore) else { return false }
             attachmentPipeline.surfaceFilePlacementFailure(
                 error,
-                content: content,
-                imageRecovery: imageRecovery,
+                content: composerTextRevision == composer.textRevision ? attempt.content : "",
+                imageRecovery: attachmentPipeline.imageSelectionRevision == composer.imageRevision
+                    ? composer.imageRecovery : .preserveCurrentSelection,
                 messageText: &messageText
             )
-            return
+            return false
         }
+        guard ownsSendPreparation(attempt.id, in: sendingStore) else { return false }
+        sendingStore.prepareSendAttempt(attempt.id, imagePayload: imagePayload, filePayload: filePayload)
+        return true
+    }
 
-        do {
-            try await store.sendMessage(
-                agentId: agentId,
-                content: content,
-                workspaceId: workspaceId,
-                imagePayload: imagePayload,
-                filePayload: filePayload
-            )
-            clearPendingFiles()
-            PersistenceManager.shared.clearDraft(workspaceId: workspaceId, agentId: agentId)
-            scheduleDebouncedMarkSeen()
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Send failed: \(error)")
-        }
+    private func ownsSendPreparation(_ messageId: String, in sendingStore: ConversationStore) -> Bool {
+        store === sendingStore && sendingStore.sendAttempts.contains { $0.id == messageId }
+    }
+
+    var sendRecoveryAttempts: [ConversationSendAttempt] {
+        store.sendAttempts.filter { $0.status.needsRecovery }
+    }
+
+    func inspectSendAttempt(_ messageId: String) async {
+        await store.inspectSendAttempt(messageId)
     }
 
     func queueMessage(_ content: String) async {
@@ -123,7 +175,7 @@ extension ConversationViewModel {
                 "workspaceId": workspaceId
             ]
         )
-        agentName = newName
+        agentName = AgentSession.displayName(for: newName)
     }
 
     // MARK: - Attachments

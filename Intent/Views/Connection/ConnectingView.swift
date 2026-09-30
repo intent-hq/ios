@@ -7,23 +7,38 @@ import SwiftUI
 struct ConnectingView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
+    @Environment(\.colorScheme) private var colorScheme
+    var networkStatus: NetworkAvailability.Status = .unknown
 
-    private enum Layout {
-        static let mismatchHorizontalPadding: CGFloat = 32
-        static let contentBottomPadding: CGFloat = 24
-    }
+    private typealias Layout = Constants.Connecting
 
     var body: some View {
         VStack {
             Spacer()
+            if DemoConnectionLoss.initialDataGate != nil {
+                Text(verbatim: String(describing: session.connection.connectionState))
+                    .accessibilityIdentifier("demo-connection-startup")
+            }
+            if ConnectionNetworkMessage(status: networkStatus).isUnavailable {
+                ConnectionNetworkStatusView(status: networkStatus)
+                    .padding(.horizontal, Layout.mismatchHorizontalPadding)
+            }
             // Passive per-host cert-mismatch list: hosts that presented a
             // wrong certificate while the race continues on the others.
             if !session.connection.certMismatches.isEmpty {
-                CertMismatchListView(mismatches: session.connection.certMismatches)
-                    .padding(.horizontal, Layout.mismatchHorizontalPadding)
+                CertMismatchListView(
+                    mismatches: session.connection.certMismatches,
+                    warningForeground: Theme.foreground(for: colorScheme)
+                )
+                .padding(.horizontal, Layout.mismatchHorizontalPadding)
             }
         }
         .padding(.bottom, Layout.contentBottomPadding)
+        .frame(maxWidth: .infinity)
+        .safeAreaInset(edge: .top, alignment: .leading, spacing: 0) {
+            homeButton
+                .padding(.horizontal, Constants.ConnectionSheet.inset)
+        }
         // Keyed on connectionAttemptId: a connection switch performed while
         // this view is already showing (same screen value) bumps the id to
         // restart the attempt, which a plain one-shot .task would not.
@@ -32,12 +47,46 @@ struct ConnectingView: View {
         }
     }
 
+    @ViewBuilder
+    private var homeButton: some View {
+        #if os(visionOS)
+        homeButtonContent
+            .glassBackgroundEffect(in: Circle())
+        #else
+        if #available(iOS 26.0, *) {
+            homeButtonContent
+                .glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            homeButtonContent
+                .background(.regularMaterial, in: Circle())
+        }
+        #endif
+    }
+
+    private var homeButtonContent: some View {
+        Button(action: coordinator.onReturnToSavedMachines) {
+            Image(.arrowLeft)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                .frame(width: Constants.Accessibility.minimumTapTarget, height: Constants.Accessibility.minimumTapTarget)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+        .accessibilityLabel("Back to Home")
+        .accessibilityHint("Return to your saved machines without forgetting this connection.")
+        .accessibilityIdentifier("connecting.home")
+    }
+
     private func attemptConnection() async {
+        guard !coordinator.lifecycleState.hasReturnedToSavedMachines else { return }
+        let attemptID = coordinator.connectionAttemptId
         if DemoMode.pretendPaired {
             // Demo/screenshot mode: no daemon. Mark the connection live so the
             // stores run their normal on-connected fetches (served from
             // DemoFixtures under --demo-data) and go straight to the app.
-            session.connection.connectionState = .connected
+            session.connection.connectDemo(serveFixtures: DemoMode.isEnabled)
         } else {
             guard let connection = coordinator.windowConnection else {
                 if coordinator.backendID != nil {
@@ -54,13 +103,15 @@ struct ConnectingView: View {
             }
 
             do {
-                try await session.connection.connect(
-                    hosts: connection.server.hosts,
-                    port: connection.server.port,
-                    token: connection.token,
-                    certFingerprint: connection.server.certFingerprint,
-                    tcAddress: connection.server.tcAddress
-                )
+                try await DiagnosticConnectContext.$origin.withValue(.saved) {
+                    try await session.connection.connect(
+                        hosts: connection.server.hosts,
+                        port: connection.server.port,
+                        token: connection.token,
+                        certFingerprint: connection.server.certFingerprint,
+                        tcAddress: connection.server.tcAddress
+                    )
+                }
             } catch {
                 // A bumped connectionAttemptId cancels this task and starts a
                 // replacement: the superseded attempt's failure must not stomp
@@ -79,6 +130,9 @@ struct ConnectingView: View {
         // WorkspaceStore auto-fetches on .connected and sets lastUpdated
         // when done. Poll with a 5-second timeout to avoid getting stuck.
         do {
+            if let gate = DemoConnectionLoss.initialRoutingGate {
+                try await DemoFixtures.wait(for: gate)
+            }
             try await waitForWorkspaceData(timeout: Constants.Connecting.workspaceLoadTimeout)
         } catch {
             // Cancelled mid-wait (attempt restarted or view dismissed): the
@@ -86,7 +140,7 @@ struct ConnectingView: View {
             // replacement owns either (ios#230).
             return
         }
-        coordinator.onConnectionSuccess()
+        coordinator.onInitialWorkspaceLoadComplete(attemptID: attemptID)
     }
 
     /// Waits for the session's `WorkspaceStore.lastUpdated` to become

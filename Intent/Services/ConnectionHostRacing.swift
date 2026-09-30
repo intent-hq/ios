@@ -43,6 +43,41 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
     let drain: Task<[HostCertMismatch], Never>?
 }
 
+/// Carries the tunnel phase to the race without changing the failure returned
+/// to connection owners. In particular, cancellation and trust errors survive.
+nonisolated struct TunnelEstablishmentFailure: Error {
+    let underlyingError: any Error
+}
+
+nonisolated private struct HostRaceCandidateFailure: Error {
+    let underlyingError: any Error
+    let context: DiagnosticEvent.Context
+    let stage: DiagnosticEvent.Stage
+
+    init(host: String, error: any Error) {
+        let establishment = error as? TunnelEstablishmentFailure
+        underlyingError = establishment?.underlyingError ?? error
+        let isTunnel = host == ConnectionManager.tunnelCandidateLabel
+        context = isTunnel ? .tunnel : .lan
+        stage = isTunnel ? (establishment == nil ? .tunnelHandshake : .tunnelEstablish) : .connect
+    }
+
+    func diagnosticEvent(outcome: DiagnosticEvent.Outcome) -> DiagnosticEvent {
+        let failure = TransportDiagnosticFailure.classify(underlyingError)
+        let trustRejected = failure.classification == .pinMismatch || failure.classification == .noCertificate
+        return DiagnosticEvent(
+            kind: trustRejected ? .trustRejected : .connectionAttempt,
+            operation: trustRejected ? .trustReject : .connectionAttempt,
+            site: .webSocket,
+            stage: stage,
+            outcome: outcome,
+            failure: failure,
+            effect: .candidateRejected,
+            context: context
+        )
+    }
+}
+
 /// A single-consumer mailbox for raced candidate results. `raceCandidates`
 /// runs its candidates as unstructured tasks — a task group's body cannot
 /// return before every child finishes, which is exactly the stall a slow
@@ -50,15 +85,17 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
 /// keeps working after the consuming task is cancelled, so cleanup can still
 /// drain every candidate.
 nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
+    typealias CandidateResult = Result<Connection, HostRaceCandidateFailure>
+
     private struct State: Sendable {
-        var pending: [Result<Connection, any Error>] = []
-        var waiter: CheckedContinuation<Result<Connection, any Error>, Never>?
+        var pending: [CandidateResult] = []
+        var waiter: CheckedContinuation<CandidateResult, Never>?
     }
 
     private let lock = OSAllocatedUnfairLock(initialState: State())
 
-    func deliver(_ result: Result<Connection, any Error>) {
-        let waiter = lock.withLock { state -> CheckedContinuation<Result<Connection, any Error>, Never>? in
+    func deliver(_ result: CandidateResult) {
+        let waiter = lock.withLock { state -> CheckedContinuation<CandidateResult, Never>? in
             if let waiter = state.waiter {
                 state.waiter = nil
                 return waiter
@@ -69,9 +106,9 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         waiter?.resume(returning: result)
     }
 
-    func next() async -> Result<Connection, any Error> {
+    func next() async -> CandidateResult {
         await withCheckedContinuation { continuation in
-            let ready = lock.withLock { state -> Result<Connection, any Error>? in
+            let ready = lock.withLock { state -> CandidateResult? in
                 if state.pending.isEmpty {
                     state.waiter = continuation
                     return nil
@@ -108,6 +145,7 @@ extension ConnectionManager {
     /// connection so tests can race fakes; internal for test visibility.
     nonisolated static func raceCandidates<Connection: HostRacingConnection>(
         _ hosts: [String],
+        diagnostics: DiagnosticStore = .shared,
         connect: @escaping @Sendable (String) async throws -> Connection
     ) async -> HostRaceOutcome<Connection> {
         let mailbox = RaceMailbox<Connection>()
@@ -118,9 +156,15 @@ extension ConnectionManager {
             let settlement = await settleCandidates(
                 count: hosts.count,
                 candidates: candidates,
-                mailbox: mailbox
+                mailbox: mailbox,
+                diagnostics: diagnostics
             )
-            let drain = makeDrain(remaining: settlement.remaining, mailbox: mailbox)
+            let drain = makeDrain(
+                remaining: settlement.remaining,
+                mailbox: mailbox,
+                diagnostics: diagnostics,
+                hasWinner: settlement.winner != nil
+            )
             return await makeOutcome(settlement: settlement, hosts: hosts, drain: drain)
         } onCancel: {
             cancelAll()
@@ -138,7 +182,7 @@ extension ConnectionManager {
                     let connection = try await connect(host)
                     mailbox.deliver(.success(connection))
                 } catch {
-                    mailbox.deliver(.failure(error))
+                    mailbox.deliver(.failure(HostRaceCandidateFailure(host: host, error: error)))
                 }
             }
         }
@@ -153,7 +197,8 @@ extension ConnectionManager {
     nonisolated private static func settleCandidates<Connection: HostRacingConnection>(
         count: Int,
         candidates: [Task<Void, Never>],
-        mailbox: RaceMailbox<Connection>
+        mailbox: RaceMailbox<Connection>,
+        diagnostics: DiagnosticStore
     ) async -> HostRaceSettlement<Connection> {
         var lastError: Error?
         var mismatches: [HostCertMismatch] = []
@@ -173,7 +218,11 @@ extension ConnectionManager {
                 }
                 winner = connection
                 break settle
-            case .failure(let error):
+            case .failure(let candidate):
+                let error = candidate.underlyingError
+                if !Task.isCancelled, !(error is CancellationError) {
+                    diagnostics.record(candidate.diagnosticEvent(outcome: .fallbackPending))
+                }
                 if Task.isCancelled {
                     cancellationObserved = true
                     cancelCandidates(candidates)
@@ -205,7 +254,9 @@ extension ConnectionManager {
 
     nonisolated private static func makeDrain<Connection: HostRacingConnection>(
         remaining: Int,
-        mailbox: RaceMailbox<Connection>
+        mailbox: RaceMailbox<Connection>,
+        diagnostics: DiagnosticStore,
+        hasWinner: Bool
     ) -> Task<[HostCertMismatch], Never>? {
         guard remaining > 0 else { return nil }
         AppLog.connection.debug("[ConnectionManager] Host racing settled; draining \(remaining) candidate(s) in the background")
@@ -215,8 +266,15 @@ extension ConnectionManager {
                 switch await mailbox.next() {
                 case .success(let loser):
                     await loser.disconnect()
-                case .failure(let error):
+                case .failure(let candidate):
+                    let error = candidate.underlyingError
                     appendMismatch(from: error, to: &lateMismatches)
+                    // Losing candidates are cancelled deliberately. A concrete
+                    // late pin rejection still matters; generic cancellation
+                    // fallout does not represent another connection failure.
+                    if hasWinner, let error = error as? WebSocketTransportError, error.isCertificateMismatch {
+                        diagnostics.record(candidate.diagnosticEvent(outcome: .recovered))
+                    }
                     AppLog.connection.debug("[ConnectionManager] Host racing: \(error.localizedDescription)")
                 }
             }

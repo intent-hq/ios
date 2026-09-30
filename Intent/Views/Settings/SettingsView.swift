@@ -1,123 +1,148 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
-    @Environment(AppCoordinator.self) var coordinator
-    @Environment(BackendSession.self) var session
-    @Environment(\.colorScheme) var colorScheme
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @AppStorage("appThemePreference") private var themePreference: String = "system"
-    @State private var showLogOffConfirmation = false
+    @Environment(\.colorScheme) private var colorScheme
+    var presentedAsSheet = false
+    var contentColorScheme: ColorScheme?
 
     var body: some View {
         NavigationStack {
-            settingsForm
-                .navigationTitle("Settings")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { coordinator.onSettingsBack() }
-                    }
+            SettingsContent(presentedAsSheet: presentedAsSheet)
+                .environment(\.colorScheme, contentColorScheme ?? colorScheme)
+        }
+        #if os(iOS)
+        .background {
+            if presentedAsSheet {
+                SettingsStatusBarCapture()
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+            }
+        }
+        #endif
+    }
+}
+
+#if os(iOS)
+private struct SettingsStatusBarCapture: UIViewControllerRepresentable {
+    func makeUIViewController(context _: Context) -> Controller { Controller() }
+
+    func updateUIViewController(_ controller: Controller, context _: Context) {
+        controller.captureStatusBar()
+    }
+
+    final class Controller: UIViewController {
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            captureStatusBar()
+        }
+
+        func captureStatusBar() {
+            var presentation: UIViewController = self
+            while let parent = presentation.parent { presentation = parent }
+            guard presentation.presentingViewController != nil else { return }
+            // Non-fullscreen presentations otherwise keep the presenting screen's status-bar style.
+            presentation.modalPresentationCapturesStatusBarAppearance = true
+            presentation.setNeedsStatusBarAppearanceUpdate()
+        }
+    }
+}
+#endif
+
+private struct SettingsContent: View {
+    @Environment(AppCoordinator.self) var coordinator
+    @Environment(BackendSession.self) var session
+    @Environment(\.colorScheme) var colorScheme
+    @AppStorage("appThemePreference") private var themePreference: String = "system"
+    @State private var showLogOffConfirmation = false
+    @ScaledMetric(relativeTo: .callout) private var iconSize = SettingsStyle.iconWidth
+    var presentedAsSheet = false
+
+    var body: some View {
+        settingsSurface
+            .onAppear { coordinator.refreshSyncedBackends() }
+            .refreshable { coordinator.refreshSyncedBackends() }
+            .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showLogOffConfirmation) {
+                LogOffConfirmationSheet { coordinator.onLogOff() }
+                    .environment(\.colorScheme, colorScheme)
+            }
+    }
+
+    private var settingsSurface: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SettingsStyle.sectionSpacing) {
+                SettingsHeader(onClose: coordinator.onSettingsBack)
+                    .padding(.bottom, SettingsStyle.headingSpacing - SettingsStyle.sectionSpacing)
+                SettingsSection(title: "APPEARANCE") {
+                    SettingsAppearanceSelector(selection: $themePreference)
                 }
-                .alert("Log Off?", isPresented: $showLogOffConfirmation) {
-                    Button("Cancel", role: .cancel) {}
-                    Button("Log Off", role: .destructive) { coordinator.onLogOff() }
-                } message: {
-                    Text("Are you sure? You'll need to pair again to reconnect.")
-                }
-        }
-    }
-
-    private var settingsForm: some View {
-        Form {
-            appearanceSection
-            connectionSection
-            accountSection
-            aboutSection
-        }
-        .scrollContentBackground(.hidden)
-        .background(Theme.background(for: colorScheme))
-    }
-
-    private var appearanceSection: some View {
-        Section("Appearance") {
-            Picker("Theme", selection: $themePreference) {
-                Text("Light").tag("light")
-                Text("Dark").tag("dark")
-                Text("System").tag("system")
+                .padding(.bottom, SettingsStyle.appearanceBottomSpacing)
+                SettingsConnectionsSection(
+                    connections: coordinator.savedConnections,
+                    windowConnectionID: coordinator.windowConnectionID,
+                    status: session.connection.connectionState,
+                    mismatches: session.connection.certMismatches,
+                    onSelect: selectConnection
+                )
+                SettingsPairingSection()
+                SettingsSupportSection()
+                logOffButton
             }
-            .pickerStyle(.segmented)
+            .padding(SettingsStyle.contentMargin)
+            .frame(maxWidth: SettingsStyle.maximumContentWidth)
+            .frame(maxWidth: .infinity)
         }
+        .accessibilityIdentifier("settings.scroll")
+        .buttonStyle(.plain)
+        .foregroundStyle(SettingsStyle.foreground(for: colorScheme))
+        .clipShape(UnevenRoundedRectangle(
+            topLeadingRadius: SettingsStyle.surfaceRadius,
+            topTrailingRadius: SettingsStyle.surfaceRadius
+        ))
+        .background {
+            UnevenRoundedRectangle(
+                topLeadingRadius: SettingsStyle.surfaceRadius,
+                topTrailingRadius: SettingsStyle.surfaceRadius
+            )
+            .fill(SettingsStyle.surface(for: colorScheme))
+            .ignoresSafeArea(edges: .bottom)
+        }
+        // Keep the real system status bar and its light/dark contrast. Do not
+        // draw the status bar or force the rest of Settings into dark mode.
+        .background(outerBackground.ignoresSafeArea())
     }
 
-    @ViewBuilder
-    private var connectionSection: some View {
-        if let connection = coordinator.windowConnection {
-            Section("Connected To") {
-                connectionSummaryLayout {
-                    connectionIdentity(connection)
-                    HStack(spacing: Constants.Settings.statusSpacing) {
-                        Circle()
-                            .fill(.green)
-                            .frame(
-                                width: Constants.Settings.statusDotSize,
-                                height: Constants.Settings.statusDotSize
-                            )
-                        Text("Connected").font(.caption)
-                    }
-                }
-                if !session.connection.certMismatches.isEmpty {
-                    CertMismatchListView(mismatches: session.connection.certMismatches)
-                }
-            }
-        }
+    private var outerBackground: Color {
+        presentedAsSheet ? .clear : (colorScheme == .dark ? SettingsStyle.charcoal : SettingsStyle.lightChrome)
     }
 
-    private func connectionIdentity(_ connection: StoredConnection) -> some View {
-        HStack(spacing: Constants.Settings.connectionRowSpacing) {
-            Image(systemName: "desktopcomputer")
-                .font(.title2)
-                .foregroundStyle(Theme.primary(for: colorScheme))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Constants.Settings.connectionTextSpacing) {
-                Text(connection.displayName).font(.body.weight(.medium))
-                Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(
-                        for: colorScheme,
-                        contrast: colorSchemeContrast
-                    ))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var accountSection: some View {
-        Section("Account") {
-            Button(role: .destructive) { showLogOffConfirmation = true } label: {
-                Label("Log Off", systemImage: "rectangle.portrait.and.arrow.right")
-            }
-        }
-    }
-
-    private var aboutSection: some View {
-        Section("About") {
-            NavigationLink { AcknowledgementsView() } label: {
-                Label("Acknowledgements", systemImage: "doc.text")
-            }
-        }
-    }
-
-    private var connectionSummaryLayout: AnyLayout {
-        if Self.stacksConnectionSummary(for: dynamicTypeSize) {
-            AnyLayout(VStackLayout(alignment: .leading, spacing: Constants.Settings.connectionRowSpacing))
+    private func selectConnection(_ id: UUID) {
+        if id == coordinator.windowConnectionID {
+            coordinator.onSettingsBack()
         } else {
-            AnyLayout(HStackLayout(spacing: Constants.Settings.connectionRowSpacing))
+            coordinator.onSwitchConnection(id: id)
         }
     }
 
-    static func stacksConnectionSummary(for dynamicTypeSize: DynamicTypeSize) -> Bool {
-        dynamicTypeSize.isAccessibilitySize
+    private var logOffButton: some View {
+        Button { showLogOffConfirmation = true } label: {
+            Label {
+                Text("Log Off").interFont(Constants.Typography.bodySEmphasized)
+            } icon: {
+                Image(.logout)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+            }
+                .font(.callout.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, SettingsStyle.rowVerticalPadding)
+                .frame(maxWidth: .infinity, minHeight: SettingsStyle.rowHeight)
+                .foregroundStyle(SettingsStyle.lightForeground)
+                .background(SettingsStyle.accent, in: .rect(cornerRadius: SettingsStyle.cardRadius))
+                .contentShape(.rect(cornerRadius: SettingsStyle.cardRadius))
+        }
     }
 }
 

@@ -40,26 +40,34 @@ extension MessageInputView {
                     height: Constants.Conversation.Composer.pendingImageSide
                 )
                 .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.pendingImageCornerRadius))
-            Button {
-                viewModel.removeImage(at: index)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .background(Circle().fill(.black.opacity(0.5)))
-                    .frame(
-                        minWidth: Constants.Conversation.Composer.controlTarget,
-                        minHeight: Constants.Conversation.Composer.controlTarget,
-                        alignment: .topTrailing
-                    )
-                    .contentShape(Rectangle())
-            }
-            .offset(
-                x: Constants.Conversation.Composer.pendingImageRemoveButtonHorizontalOffset,
-                y: Constants.Conversation.Composer.pendingImageRemoveButtonVerticalOffset
-            )
-            .accessibilityLabel("Remove image \(index + 1)")
+            removeImageButton(index: index)
+                .offset(
+                    x: Constants.Conversation.Composer.pendingImageRemoveButtonHorizontalOffset,
+                    y: Constants.Conversation.Composer.pendingImageRemoveButtonVerticalOffset
+                )
         }
+    }
+
+    private func removeImageButton(index: Int) -> some View {
+        Button {
+            viewModel.removeImage(at: index)
+        } label: {
+            Image(.closeCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: attachmentIconSide, height: attachmentIconSide)
+                .foregroundStyle(.white)
+                .background(Circle().fill(.black.opacity(
+                    Constants.Conversation.Composer.imageRemoveButtonBackgroundOpacity
+                )))
+                .frame(
+                    minWidth: Constants.Conversation.Composer.controlTarget,
+                    minHeight: Constants.Conversation.Composer.controlTarget,
+                    alignment: .topTrailing
+                )
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Remove image \(index + 1)")
     }
 
     private func pendingFile(_ file: PendingFile, index: Int) -> some View {
@@ -71,8 +79,10 @@ extension MessageInputView {
                 Button {
                     viewModel.removePendingFile(at: index)
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.caption)
+                    Image(.closeCircle)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: attachmentIconSide, height: attachmentIconSide)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .contentShape(Rectangle().inset(
                             by: -Constants.Conversation.Composer.controlTarget / 2
@@ -84,7 +94,7 @@ extension MessageInputView {
         .padding(.horizontal, Constants.Conversation.Composer.pendingFileHorizontalPadding)
         .padding(.vertical, Constants.Conversation.Composer.pendingFileVerticalPadding)
         .frame(maxWidth: Constants.Conversation.Composer.pendingFileMaximumWidth)
-        .background(Theme.muted(for: colorScheme).opacity(0.5))
+        .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.Composer.pendingFileBackgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.pendingFileCornerRadius))
     }
 
@@ -94,29 +104,31 @@ extension MessageInputView {
             .controlSize(.small)
         VStack(alignment: .leading, spacing: 0) {
             Text(file.displayName)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .lineLimit(1)
             Text(progress > 0 && progress < 1
                  ? "Uploading… \(Int(progress * 100))%"
                  : "Uploading…")
-                .font(.caption2)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
     }
 
     @ViewBuilder
     private func pendingFileContent(_ file: PendingFile) -> some View {
-        Image(systemName: "doc.fill")
-            .font(.caption)
+        Image(.file)
+            .resizable()
+            .scaledToFit()
+            .frame(width: attachmentIconSide, height: attachmentIconSide)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 0) {
             Text(file.displayName)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .lineLimit(1)
             if let formattedSize = file.formattedSize {
                 Text(formattedSize)
-                    .font(.caption2)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
         }

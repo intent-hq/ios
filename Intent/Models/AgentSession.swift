@@ -55,6 +55,9 @@ struct AgentSession: Identifiable, Equatable {
     /// daemons) means unmuted. Defaulted so existing memberwise construction
     /// sites keep compiling.
     var notificationsMuted = false
+    /// Canonical direct parent; creator attribution is a separate concept.
+    var parentAgentId: String?
+    var retiredAt: String?
 
     private static let activeStatuses: Set<String> = [
         "active",
@@ -198,8 +201,14 @@ struct AgentSession: Identifiable, Equatable {
             attentionRequestTimestamp: attentionRequestTimestamp,
             pendingQuestionsMessageId: pendingQuestionsMessageId,
             dismissedQuestionsMessageId: dismissedQuestionsMessageId,
-            notificationsMuted: notificationsMuted
+            notificationsMuted: notificationsMuted,
+            parentAgentId: parentAgentId,
+            retiredAt: retiredAt
         )
+    }
+
+    static func displayName(for name: String) -> String {
+        name.caseInsensitiveCompare("Chief of Staff") == .orderedSame ? "Assistant" : name
     }
 
     static func parseAgent(_ dict: [String: Any]) -> Self? {
@@ -209,7 +218,7 @@ struct AgentSession: Identifiable, Equatable {
         let attentionSurface = attentionRequestSurface(dict)
         return Self(
             id: id,
-            name: name,
+            name: displayName(for: name),
             status: dict["status"] as? String ?? "Idle",
             isBackground: metadata?["isBackground"] as? Bool ?? false,
             isStreaming: dict["isStreaming"] as? Bool ?? false,
@@ -233,7 +242,9 @@ struct AgentSession: Identifiable, Equatable {
             dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String,
             notificationsMuted: dict["notificationsMuted"] as? Bool
                 ?? metadata?["notificationsMuted"] as? Bool
-                ?? false
+                ?? false,
+            parentAgentId: dict["parentAgentId"] as? String,
+            retiredAt: dict["retiredAt"] as? String
         )
     }
 
@@ -249,18 +260,6 @@ struct AgentSession: Identifiable, Equatable {
             return surface
         }
         return nil
-    }
-
-    /// Extracts the pending attention request straight from a raw agent dict,
-    /// without requiring the full session parse (which needs id/name), so
-    /// attention state can still raise/clear on a partial payload.
-    static func parsePendingAttentionRequest(_ dict: [String: Any]) -> PendingAttentionRequest? {
-        guard let surface = attentionRequestSurface(dict) else { return nil }
-        return PendingAttentionRequest(
-            kind: AgentAttentionKind(wire: surface.kind),
-            reason: oneLiner(surface.reason),
-            raisedAt: ISO8601DateFormatter.lenientDate(from: surface.timestamp)
-        )
     }
 }
 

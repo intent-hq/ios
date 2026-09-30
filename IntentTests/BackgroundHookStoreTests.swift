@@ -225,7 +225,7 @@ extension BackgroundHookStoreTests {
         let subscribeParams = try #require(fake.paramsForMethod("events.subscribe").first)
         #expect(subscribeParams["eventTypes"] as? [String] == ["hook:*"])
         #expect(subscribeParams["workspaceId"] as? String == "ws-1")
-        #expect(subscribeParams["replaceGroup"] as? String == "ios-hooks-ws-1-agent-1")
+        #expect(subscribeParams["replaceGroup"] as? String == "ios-hooks-ws-1")
         #expect(fake.paramsForMethod("hook.list").first?["workspaceId"] as? String == "ws-1")
         #expect(store.hooks.count == 1)
         #expect(store.activeHooks.count == 1)
@@ -344,6 +344,30 @@ extension BackgroundHookStoreTests {
         #expect(fake.eventHandlerCount == 0)
     }
 
+    @Test func lateSubscribeAckCannotReplaceReappearedSubscription() async throws {
+        let fake = FakeConnectionManager()
+        fake.pendingMethods = ["events.subscribe"]
+        fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["hook.list"] = ["hooks": [] as [[String: Any]]]
+        let store = BackgroundHookStore(connectionManager: fake)
+        let first = Task { await store.subscribe(workspaceId: "ws-1", agentId: "agent-1") }
+        try await fake.waitForPendingRequests("events.subscribe")
+
+        store.deactivate()
+        fake.pendingMethods = []
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-new"]
+        await store.subscribe(workspaceId: "ws-1", agentId: "agent-1")
+        fake.resolvePending("events.subscribe", with: ["subscriptionId": "sub-old"])
+        await first.value
+
+        try await fake.waitForRequests("events.unsubscribe")
+        #expect(fake.eventHandlerCount == 1)
+        #expect(fake.paramsForMethod("hook.list").count == 1)
+        #expect(
+            fake.paramsForMethod("events.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-old"]
+        )
+    }
+
     @Test func staleListResponseAfterCancelledFoldIsDiscarded() async throws {
         let fake = FakeConnectionManager()
         let store = await makeSubscribedStore(fake, hooks: [makeHookDict()])
@@ -364,21 +388,12 @@ extension BackgroundHookStoreTests {
         ] as [String: Any])
         try await waitUntil("hook:cancelled fold") { store.hooks.isEmpty }
 
-        // Resolve the in-flight request with the STALE payload — it still
-        // lists the cancelled hook. The queued follow-up stays suspended, so
-        // a wrongly applied stale response cannot be masked by convergence.
+        // Replay the complete cancellation over the stale seed. No recovery
+        // read is needed, and the removed row must never reappear.
         fake.resolvePending("hook.list", with: ["hooks": [makeHookDict()]])
-        // The discarded response queues exactly one follow-up fetch to converge.
-        try await fake.waitForRequests("hook.list", count: 2)
-        #expect(fake.paramsForMethod("hook.list").count == 2)
-
-        // The stale response must not restore the cancelled hook.
-        #expect(store.hooks.isEmpty)
-
-        // Fresh server state (post-cancel) for the queued follow-up fetch.
-        fake.resolvePending("hook.list", with: ["hooks": [] as [[String: Any]]])
         await refetchTask.value
         #expect(store.hooks.isEmpty)
+        #expect(fake.paramsForMethod("hook.list").count == 1)
     }
 
     @Test func staleListResponseAfterUnsubscribeIsDiscarded() async throws {

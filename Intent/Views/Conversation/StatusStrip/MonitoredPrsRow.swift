@@ -14,21 +14,46 @@ import SwiftUI
 struct MonitoredPrsRow: View {
     let viewModel: ConversationViewModel
     private let monitoredPrStore: MonitoredPrStore
+    private let usesWorkspaceDesign: Bool
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 
-    private static let pendingIndicatorOpacity = 0.8
-    private static let pendingIndicatorSide: CGFloat = 6
-    private static let chipVerticalPadding: CGFloat = 5
-    private static let chipBackgroundOpacity = 0.3
+    private typealias Layout = Constants.Conversation.StatusStrip.MonitoredPrs
 
-    init(viewModel: ConversationViewModel, monitoredPrStore: MonitoredPrStore) {
+    init(viewModel: ConversationViewModel, monitoredPrStore: MonitoredPrStore, usesWorkspaceDesign: Bool = false) {
         self.viewModel = viewModel
         self.monitoredPrStore = monitoredPrStore
+        self.usesWorkspaceDesign = usesWorkspaceDesign
+    }
+
+    private var activeMonitors: [MonitoredPr] {
+        monitoredPrStore.activeMonitors.filter { $0.agentId == viewModel.agentId }
     }
 
     var body: some View {
+        if usesWorkspaceDesign {
+            VStack(alignment: .leading, spacing: Constants.Conversation.Design.Status.composerSpacing) {
+                if monitoredPrStore.error != nil { retryButton }
+                if activeMonitors.count == 1, let monitor = activeMonitors.first {
+                    monitorChip(monitor)
+                } else if !activeMonitors.isEmpty {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: Constants.Conversation.Design.Status.composerSpacing) {
+                            ForEach(activeMonitors) { monitor in
+                                monitorChip(monitor)
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                }
+            }
+        } else {
+            legacyRow
+        }
+    }
+
+    private var legacyRow: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Constants.Conversation.StatusStrip.contentSpacing) {
                 Image(systemName: "arrow.triangle.pull")
@@ -36,9 +61,10 @@ struct MonitoredPrsRow: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("Monitored PRs")
-                    .font(.caption)
-                    .fontWeight(.medium)
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+
+                if monitoredPrStore.error != nil { retryButton }
 
                 ForEach(monitoredPrStore.activeMonitors.filter { $0.agentId == viewModel.agentId }) { monitor in
                     monitorChip(monitor)
@@ -50,6 +76,17 @@ struct MonitoredPrsRow: View {
         .scrollIndicators(.hidden)
         .background(Theme.card(for: colorScheme).opacity(Constants.Conversation.StatusStrip.backgroundOpacity))
         .opacity(Constants.Conversation.StatusStrip.contentOpacity)
+    }
+
+    private var retryButton: some View {
+        Button {
+            Task { await monitoredPrStore.refetch() }
+        } label: {
+            Label("Status unavailable · Retry", systemImage: "exclamationmark.triangle")
+        }
+        .font(.caption2)
+        .accessibilityLabel("PR monitors may be out of date. Retry refresh")
+        .accessibilityIdentifier("monitoredPr.retry")
     }
 
     // MARK: - Chip
@@ -87,27 +124,42 @@ struct MonitoredPrsRow: View {
                 Label("Cancel monitor", systemImage: "xmark")
             }
         } label: {
-            chipLabel(monitor)
+            if usesWorkspaceDesign {
+                WorkspaceMonitoringLabel(
+                    pullRequest: Self.chipLabel(monitor, workspaceRepo: workspaceRepo),
+                    hasPendingChanges: monitor.hasPendingChanges
+                )
+            } else {
+                chipLabel(monitor)
+            }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("monitoredPr.\(monitor.monitorId)")
+        .accessibilityLabel(
+            usesWorkspaceDesign
+                ? Text("Monitoring PR \(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))")
+                : Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))
+        )
+        .accessibilityValue(Text(Self.pendingSummary(monitor)))
     }
 
     @ViewBuilder
     private func chipLabel(_ monitor: MonitoredPr) -> some View {
         HStack(spacing: Constants.Conversation.StatusStrip.chipSpacing) {
             Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))
-                .font(.caption2)
+                .interFont(Constants.Typography.subtextXXS)
                 .lineLimit(1)
             if monitor.hasPendingChanges {
                 Circle()
-                    .fill(Color.orange.opacity(Self.pendingIndicatorOpacity))
-                    .frame(width: Self.pendingIndicatorSide, height: Self.pendingIndicatorSide)
+                    .fill(Color.orange.opacity(Layout.pendingIndicatorOpacity))
+                    .frame(width: Layout.pendingIndicatorSide, height: Layout.pendingIndicatorSide)
+                    .accessibilityHidden(true)
             }
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         .padding(.horizontal, Constants.Conversation.StatusStrip.chipHorizontalPadding)
-        .padding(.vertical, Self.chipVerticalPadding)
-        .background(Theme.muted(for: colorScheme).opacity(Self.chipBackgroundOpacity))
+        .padding(.vertical, Layout.chipVerticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Layout.chipBackgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius)
@@ -224,8 +276,47 @@ struct MonitoredPrsRow: View {
     /// Pending-emit status line for the detail header.
     static func pendingSummary(_ monitor: MonitoredPr) -> String {
         guard monitor.hasPendingChanges else { return "No pending changes" }
+        guard !monitor.pendingChanges.isEmpty else { return "Pending changes" }
         return monitor.pendingChanges.count == 1
             ? "1 pending change"
             : "\(monitor.pendingChanges.count) pending changes"
+    }
+}
+
+private struct WorkspaceMonitoringLabel: View {
+    let pullRequest: String
+    let hasPendingChanges: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    private typealias Design = Constants.Conversation.Design
+
+    var body: some View {
+        HStack(spacing: Design.Status.iconSpacing) {
+            Image(.infoCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Design.smallIconSize, height: Design.smallIconSize)
+                .accessibilityHidden(true)
+            Text("Monitoring PR \(pullRequest)")
+                .interFont(Design.Typography.status)
+                .fixedSize(horizontal: false, vertical: true)
+            if hasPendingChanges {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(
+                        width: Constants.Conversation.StatusStrip.MonitoredPrs.pendingIndicatorSide,
+                        height: Constants.Conversation.StatusStrip.MonitoredPrs.pendingIndicatorSide
+                    )
+                    .accessibilityHidden(true)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Design.Palette.foreground(for: colorScheme))
+        .padding(.leading, Design.Status.leadingPadding)
+        .padding(.trailing, Design.Status.trailingPadding)
+        .frame(minHeight: Design.Status.minimumHeight)
+        .background(Design.Palette.surface(for: colorScheme), in: Capsule())
+        .frame(minHeight: Design.minimumTapTarget)
+        .contentShape(Rectangle())
     }
 }

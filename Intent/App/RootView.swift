@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct RootView: View {
-    private static let reconnectPanelMaximumWidth: CGFloat = 320
-
+    var networkAvailability: NetworkAvailability = .shared
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.horizontalSizeClass) var sizeClass
@@ -15,6 +14,12 @@ struct RootView: View {
     /// Token of this window's selection-handler registration, so disappear
     /// removes only this window's registration — never a successor's.
     @State private var selectionHandlerToken: UUID?
+    @State private var statusConsumer = UUID()
+    @State private var statusWorkspaceId: String?
+    @State private var isSearchingWorkspaces = false
+    @State private var showingCreateWorkspace = false
+    @State private var showingConnections = false
+    @State private var conversationIsPopping = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
@@ -55,6 +60,11 @@ struct RootView: View {
             ),
             session: session
         )
+        .background {
+            if sizeClass == .regular {
+                NavigationPopObserver(isPopping: $conversationIsPopping)
+            }
+        }
     }
 
     private var isWorkspaceFlow: Bool {
@@ -67,7 +77,7 @@ struct RootView: View {
     }
 
     /// True during the launch splash phases (loading and connecting), which
-    /// share a single SplashArtView so GIF playback doesn't reset between them.
+    /// share a single SplashArtView so animation playback doesn't reset between them.
     private var isLaunchSplash: Bool {
         switch coordinator.currentScreen {
         case .loading, .connecting:
@@ -104,8 +114,11 @@ struct RootView: View {
     #endif
 
     @ViewBuilder private var rootContent: some View {
-        Group {
-            if isWorkspaceFlow {
+        // A real container keeps one presenter across the animated branch
+        // change. Group distributes its modifiers to both outgoing and
+        // incoming content, briefly giving each its own overlay window.
+        ZStack {
+            if isWorkspaceFlow || showsSettingsSheet {
                 workspaceFlowContent
             } else {
                 launchContent
@@ -113,30 +126,58 @@ struct RootView: View {
         }
     }
 
-    @ViewBuilder private var workspaceFlowContent: some View {
+    private var assistantPresented: Binding<Bool> {
+        Binding(
+            get: { coordinator.selectedSection == .assistant },
+            set: { if !$0 { coordinator.selectedSection = .workspaces } }
+        )
+    }
+
+    @ViewBuilder private var workspaceNavigationContent: some View {
         if sizeClass == .compact {
             // iPhone: standard NavigationStack with push/pop
             compactNavigationView
         } else {
             // iPad: NavigationSplitView with sidebar selection
             NavigationSplitView {
-                WorkspaceListSidebar(workspaceStore: session.workspaceStore)
-                    .navigationSplitViewColumnWidth(
-                        min: Constants.Root.sidebarMinimumWidth,
-                        ideal: Constants.Root.sidebarIdealWidth,
-                        max: Constants.Root.sidebarMaximumWidth
-                    )
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: $isSearchingWorkspaces
+                )
+                .navigationSplitViewColumnWidth(
+                    min: Constants.Root.sidebarMinimumWidth,
+                    ideal: Constants.Root.sidebarIdealWidth,
+                    max: Constants.Root.sidebarMaximumWidth
+                )
             } detail: {
                 detailContent
             }
             .navigationSplitViewStyle(.automatic)
+            .modifier(WorkspaceActionLauncher(
+                isSearching: isSearchingWorkspaces,
+                alignment: .trailing,
+                avoidsConversationInput: !conversationIsPopping,
+                onCreateWorkspace: { if coordinator.canCreateWorkspace { showingCreateWorkspace = true } },
+                onConnections: { showingConnections = true }
+            ))
+            .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
+                if shouldDismiss { showingCreateWorkspace = false }
+            }
+            .sheet(isPresented: $showingCreateWorkspace) {
+                CreateWorkspaceView(session: session)
+                    .environment(coordinator)
+            }
+            .sheet(isPresented: $showingConnections) {
+                ConnectionsView()
+                    .environment(coordinator)
+            }
         }
     }
 
     private var launchContent: some View {
         ZStack {
             // One SplashArtView spans loading and connecting. Keeping
-            // it in this stable position preserves GIF playback across
+            // it in this stable position preserves animation playback across
             // the phase transition; the phase views render on top.
             if isLaunchSplash {
                 SplashArtView()
@@ -147,12 +188,13 @@ struct RootView: View {
             case .pairing:
                 PairingView()
             case .connecting:
-                ConnectingView()
+                ConnectingView(networkStatus: networkAvailability.status)
             case .connectionFailed(let error):
                 ConnectionFailureView(
                     errorMessage: error,
                     isCertMismatch: ConnectionFailureView.isCertificateMismatchMessage(error),
-                    retryPolicy: coordinator.connectionFailureRetryPolicy
+                    retryPolicy: coordinator.connectionFailureRetryPolicy,
+                    networkStatus: networkAvailability.status
                 )
             case .settings:
                 SettingsView()
@@ -164,62 +206,10 @@ struct RootView: View {
         }
     }
 
-    @ViewBuilder private var reconnectOverlay: some View {
-        if coordinator.isDisconnected {
-            ZStack {
-                // Light tinted backdrop — lets blurred content show through
-                Color.black.opacity(Constants.Root.reconnectBackdropOpacity)
-                    .ignoresSafeArea()
-                    .background(.ultraThinMaterial)
-                reconnectPanel
-            }
-            .transition(.opacity)
-            .animation(
-                .easeInOut(duration: Constants.Root.screenAnimationDuration),
-                value: coordinator.isDisconnected
-            )
-        }
-    }
-
-    private var reconnectPanel: some View {
-        VStack(spacing: Constants.Root.reconnectPanelSpacing) {
-            ProgressView()
-                .scaleEffect(Constants.Root.reconnectProgressScale)
-                .tint(.primary)
-
-            Text("Reconnecting...")
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            Text("Connection to desktop app was lost")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            // Passive per-host cert-mismatch list: hosts that
-            // presented a wrong certificate during the reconnect
-            // race, while retries continue on the remaining hosts.
-            if !session.connection.certMismatches.isEmpty {
-                CertMismatchListView(mismatches: session.connection.certMismatches)
-                    .frame(maxWidth: Self.reconnectPanelMaximumWidth)
-            }
-
-            Button("Log Off") {
-                coordinator.onLogOff()
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-            .padding(.top, Constants.Root.reconnectButtonTopPadding)
-        }
-        .padding(Constants.Root.reconnectPanelPadding)
-        .background(.regularMaterial, in: RoundedRectangle(
-            cornerRadius: Constants.Root.reconnectPanelCornerRadius
-        ))
-    }
-
     var body: some View {
         @Bindable var coordinator = coordinator
         rootContent
+        .modifier(ConnectionSceneBackdrop())
         .animation(
             .easeInOut(duration: Constants.Root.screenAnimationDuration),
             value: String(describing: coordinator.currentScreen)
@@ -265,10 +255,12 @@ struct RootView: View {
                         .foregroundStyle(.orange)
                         .accessibilityHidden(true)
                     Text("Live updates unavailable")
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyXS)
                     Spacer(minLength: 0)
-                    Button("Retry") {
+                    Button {
                         session.connection.retryGlobalSubscription()
+                    } label: {
+                        Text("Retry").interFont(Constants.Typography.bodyXS)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -290,15 +282,33 @@ struct RootView: View {
             // platforms, which keep the global sounds.
             windowFeedbackEmitter
         }
-        .overlay {
-            reconnectOverlay
+        .background {
+            ConnectionLossPresenter(
+                isPresented: coordinator.showsConnectionLossOverlay,
+                mismatches: session.connection.certMismatches,
+                networkStatus: networkAvailability.status,
+                onHome: coordinator.onReturnToSavedMachines
+            )
         }
+        .safeAreaInset(edge: .bottom) {
+            if isWorkspaceFlow, !coordinator.lifecycleState.hasEnteredRemoteUI,
+               session.workspaceStore.lastUpdated == nil,
+               ConnectionNetworkMessage(status: networkAvailability.status).isUnavailable {
+                ConnectionNetworkStatusView(status: networkAvailability.status)
+                    .padding()
+            }
+        }
+        .onChange(of: isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil, initial: true) { _, workspaceId in
+            updateWorkspaceStatusLease(workspaceId)
+        }
+        .task { await DemoConnectionLoss.run(connection: session.connection, coordinator: coordinator) }
         // intent://pair deep-link confirmation — presented over whichever
         // screen is current (first-run pairing or an existing connection).
         .sheet(item: $coordinator.pendingDeepLinkPairing) { request in
             DeepLinkPairingView(payload: request.payload)
         }
         .onAppear {
+            updateWorkspaceStatusLease(isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil)
             let supportsMultipleWindows = supportsMultipleWindows
             let openWindow = openWindow
             notificationManager.supportsMultipleWindows = supportsMultipleWindows
@@ -324,10 +334,67 @@ struct RootView: View {
             }
         }
         .onDisappear {
+            updateWorkspaceStatusLease(nil)
             guard let backendID = session.backendID,
                   let token = selectionHandlerToken else { return }
             notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
         }
+    }
+
+    private func updateWorkspaceStatusLease(_ workspaceId: String?) {
+        guard statusWorkspaceId != workspaceId else { return }
+        if let workspaceId {
+            session.retainWorkspaceStatus(workspaceId: workspaceId, consumer: statusConsumer)
+        }
+        if let previous = statusWorkspaceId {
+            session.releaseWorkspaceStatus(workspaceId: previous, consumer: statusConsumer)
+        }
+        statusWorkspaceId = workspaceId
+    }
+}
+
+private extension RootView {
+    var showsSettingsSheet: Bool {
+        #if os(iOS)
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return false }
+        if case .settings = coordinator.currentScreen { return true }
+        #endif
+        return false
+    }
+
+    var settingsPresented: Binding<Bool> {
+        Binding(
+            get: { showsSettingsSheet },
+            set: { presented in
+                if !presented, case .settings = coordinator.currentScreen {
+                    coordinator.onSettingsBack()
+                }
+            }
+        )
+    }
+
+    @ViewBuilder var workspaceFlowContent: some View {
+        workspaceNavigationContent
+            .sheet(isPresented: assistantPresented) {
+                AssistantView(session: session)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: settingsPresented) {
+                SettingsView(presentedAsSheet: true, contentColorScheme: colorScheme)
+                    // The system status bar sits over the dark backdrop; content retains the selected theme.
+                    .preferredColorScheme(.dark)
+                    .presentationBackground(SettingsStyle.surface(for: colorScheme))
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+                    .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
+            }
+            .background {
+                Color.clear.preference(
+                    key: ConnectionBackdropPreference.self,
+                    value: showsSettingsSheet ? ConnectionBackdropPreference.manualOpacity : 0
+                )
+            }
     }
 }
 

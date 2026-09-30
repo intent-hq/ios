@@ -6,16 +6,18 @@ struct QuestionWizardView: View {
     let questions: [Question]
     @Binding var collapsed: Bool
     let containerHeight: CGFloat
+    /// Opt in only for workspace conversations. Supply the actual space left
+    /// after reserving the composer and transcript; nil keeps shared behavior.
+    let workspaceAvailableHeight: CGFloat?
     let onComplete: ([QuestionAnswer]) -> Void
     var onDismiss: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let backgroundIncreasedOpacity = 0.7
-    private static let backgroundOpacity = 0.4
-    private static let cornerRadius: CGFloat = 12
-    private static let standardBorderOpacity = 0.3
+    private typealias Layout = Constants.Conversation.QuestionWizard.Surface
+    private typealias Design = Constants.Conversation.Design
 
     private struct DraftAnswer {
         var sel: [Int] = []
@@ -34,12 +36,14 @@ struct QuestionWizardView: View {
         questions: [Question],
         collapsed: Binding<Bool>,
         containerHeight: CGFloat = 0,
+        workspaceAvailableHeight: CGFloat? = nil,
         onComplete: @escaping ([QuestionAnswer]) -> Void,
         onDismiss: (() -> Void)? = nil
     ) {
         self.questions = questions
         self._collapsed = collapsed
         self.containerHeight = containerHeight
+        self.workspaceAvailableHeight = workspaceAvailableHeight
         self.onComplete = onComplete
         self.onDismiss = onDismiss
         _drafts = State(initialValue: questions.map { _ in DraftAnswer() })
@@ -71,22 +75,18 @@ struct QuestionWizardView: View {
         VStack(alignment: .leading, spacing: 0) {
             wizardContent
         }
-        .background(Theme.muted(for: colorScheme).opacity(
-            colorSchemeContrast == .increased ? Self.backgroundIncreasedOpacity : Self.backgroundOpacity
-        ))
-        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
+        .background(surfaceColor)
+        .clipShape(RoundedRectangle(cornerRadius: surfaceCornerRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: Self.cornerRadius)
+            RoundedRectangle(cornerRadius: surfaceCornerRadius)
                 .strokeBorder(
-                    Theme.border(for: colorScheme, contrast: colorSchemeContrast).opacity(
-                        colorSchemeContrast == .increased ? 1 : Self.standardBorderOpacity
-                    ),
-                    lineWidth: colorSchemeContrast == .increased ? 2 : 1
+                    surfaceBorder,
+                    lineWidth: colorSchemeContrast == .increased ? Layout.increasedBorderWidth : Layout.borderWidth
                 )
         )
         .frame(maxWidth: .infinity)
-        .animation(.easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration), value: idx)
-        .animation(.easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration), value: collapsed)
+        .animation(wizardAnimation, value: idx)
+        .animation(wizardAnimation, value: collapsed)
         .confirmationDialog(
             "Dismiss questions?",
             isPresented: $confirmingDismiss,
@@ -117,8 +117,26 @@ struct QuestionWizardView: View {
                 showsDismiss: onDismiss != nil,
                 dismissed: dismissed,
                 onExpand: { collapsed = false },
-                onDismiss: { confirmingDismiss = true }
+                onDismiss: { confirmingDismiss = true },
+                usesWorkspaceDesign: workspaceAvailableHeight != nil
             )
+        } else if let workspaceAvailableHeight {
+            WorkspaceQuestionStepView(
+                question: current,
+                index: idx,
+                questionCount: questions.count,
+                selectedIndices: drafts[idx].sel,
+                freeText: $drafts[idx].text,
+                availableHeight: workspaceAvailableHeight,
+                onSelect: selectOption,
+                onSubmit: handleNext,
+                onTextChange: markCurrentDraftUnskipped,
+                onCollapse: { collapsed = true },
+                onDismiss: onDismiss == nil ? nil : { confirmingDismiss = true },
+                footer: workspaceFooter
+            )
+            .id(idx)
+            .disabled(submitted || dismissed)
         } else {
             QuestionWizardHeaderRow(
                 questionCount: questions.count,
@@ -160,6 +178,23 @@ struct QuestionWizardView: View {
                 onNext: handleNext
             )
         }
+    }
+
+    private var workspaceFooter: some View {
+        QuestionWizardFooterRow(
+            index: idx,
+            multiStep: multiStep,
+            isMulti: isMulti,
+            isLast: isLast,
+            showNext: showNext,
+            nextDisabled: nextDisabled,
+            submitted: submitted,
+            dismissed: dismissed,
+            onBack: handleBack,
+            onSkip: handleSkip,
+            onNext: handleNext,
+            usesWorkspaceDesign: true
+        )
     }
 
     private func buildAnswers() -> [QuestionAnswer] {
@@ -223,5 +258,32 @@ struct QuestionWizardView: View {
         containerHeight > 0
             ? containerHeight * Constants.Conversation.QuestionWizard.bodyHeightFraction
             : Constants.Conversation.QuestionWizard.fallbackBodyMaximumHeight
+    }
+
+    private var surfaceColor: Color {
+        workspaceAvailableHeight != nil
+            ? Design.Palette.surface(for: colorScheme)
+            : Theme.muted(for: colorScheme).opacity(
+                colorSchemeContrast == .increased ? Layout.backgroundIncreasedOpacity : Layout.backgroundOpacity
+            )
+    }
+
+    private var surfaceCornerRadius: CGFloat {
+        workspaceAvailableHeight != nil ? Design.cornerRadius : Layout.cornerRadius
+    }
+
+    private var surfaceBorder: Color {
+        if workspaceAvailableHeight != nil {
+            return colorSchemeContrast == .increased
+                ? Design.Palette.border(for: colorScheme, contrast: colorSchemeContrast) : .clear
+        }
+        return Theme.border(for: colorScheme, contrast: colorSchemeContrast).opacity(
+            colorSchemeContrast == .increased ? 1 : Layout.standardBorderOpacity
+        )
+    }
+
+    private var wizardAnimation: Animation? {
+        reduceMotion && workspaceAvailableHeight != nil
+            ? nil : .easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration)
     }
 }

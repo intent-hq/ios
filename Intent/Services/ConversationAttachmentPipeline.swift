@@ -59,7 +59,10 @@ enum ComposerImageRecovery {
         }
     }
 
-    var pendingImages: [UIImage] = []
+    var pendingImages: [UIImage] = [] {
+        didSet { imageSelectionRevision &+= 1 }
+    }
+    @ObservationIgnored private(set) var imageSelectionRevision = 0
     var selectedPhotoItems: [PhotosPickerItem] = []
     var pendingFiles: [PendingFile] = []
     var fileUploadProgress: [UUID: Double] = [:]
@@ -133,6 +136,23 @@ enum ComposerImageRecovery {
         let urls = pendingFiles.map(\.url)
         pendingFiles.removeAll()
         for url in urls { stopSecurityScopedAccessIfOwed(for: url) }
+    }
+
+    /// Only consume this send's selection, not files added while awaiting RPCs.
+    func clearPendingFiles(ids: Set<UUID>) {
+        let urls = pendingFiles.filter { ids.contains($0.id) }.map(\.url)
+        pendingFiles.removeAll { ids.contains($0.id) }
+        for url in urls { stopSecurityScopedAccessIfOwed(for: url) }
+    }
+
+    /// Keep the captured selection readable even if it is removed from the
+    /// composer while another attachment is uploading. These are extra leases,
+    /// balanced independently of the composer's own security-scoped access.
+    func retainFileAccess(for files: [PendingFile]) -> ConversationSendFileAccess {
+        ConversationSendFileAccess(
+            urls: files.map(\.url).filter { startSecurityScopedAccess($0) },
+            stopAccess: stopSecurityScopedAccess
+        )
     }
 
     private func stopSecurityScopedAccessIfOwed(for url: URL) {

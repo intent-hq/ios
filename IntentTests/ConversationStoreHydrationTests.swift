@@ -22,41 +22,28 @@ extension ConversationStoreIntegrationTests {
         ]
     }
 
+    private func hydrationResponse(output: String) -> [String: Any] {
+        [
+            "block": [
+                "type": "tool_result",
+                "id": "b-1",
+                "toolUseId": "tc-1",
+                "output": output
+            ] as [String: Any]
+        ]
+    }
+
     private func seedLiveConversation(
         _ store: ConversationStore,
         through fake: FakeConnectionManager,
         snapshot: [[String: Any]]
     ) async throws {
-        fake.responseMap["agent.getConversation"] = ["messages": snapshot]
-        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
-        await store.subscribeLiveChat(agentId: "agent-1")
+        fake.stubChatSnapshot(messages: snapshot)
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         try await waitUntil("chat.subscribe handler registration") { fake.hasSubscriptionHandler(id: "sub-1") }
-        deliver(
-            SubscriptionPush(
-                subscriptionId: "sub-1",
-                kind: .snapshot,
-                seq: 0,
-                snapshot: snapshot,
-                delta: nil
-            ),
-            through: fake
-        )
     }
 
     // MARK: - Slim projection (PROTOCOL §5.5) + block hydration
-
-    @Test func fetchConversationRequestsSlimProjection() async {
-        let fake = FakeConnectionManager()
-        let store = ConversationStore(connectionManager: fake)
-        fake.responseMap["agent.getConversation"] = ["messages": []]
-
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
-
-        let params = fake.paramsForMethod("agent.getConversation")
-        #expect(params.count == 1)
-        #expect(params.first?["projection"] as? String == "slim")
-    }
 
     @Test func subscribeLiveChatRequestsSlimProjection() async {
         let fake = FakeConnectionManager()
@@ -75,27 +62,25 @@ extension ConversationStoreIntegrationTests {
         let store = ConversationStore(connectionManager: fake)
 
         // Seed a transcript with a slim-truncated tool_result block.
-        fake.responseMap["agent.getConversation"] = [
-            "messages": [
-                [
-                    "id": "msg-1",
-                    "role": "assistant",
-                    "timestamp": "2024-01-01T00:00:00Z",
-                    "contentBlocks": [
-                        ["type": "tool_use", "id": "b-1", "name": "read_file", "toolCallId": "tc-1"],
-                        [
-                            "type": "tool_result",
-                            "id": "b-2",
-                            "toolUseId": "tc-1",
-                            "output": "preview…",
-                            "outputTruncated": true,
-                            "outputBytes": 900_000
-                        ]
+        fake.stubChatSnapshot(messages: [
+            [
+                "id": "msg-1",
+                "role": "assistant",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": [
+                    ["type": "tool_use", "id": "b-1", "name": "read_file", "toolCallId": "tc-1"],
+                    [
+                        "type": "tool_result",
+                        "id": "b-2",
+                        "toolUseId": "tc-1",
+                        "output": "preview…",
+                        "outputTruncated": true,
+                        "outputBytes": 900_000
                     ]
                 ]
             ]
-        ]
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        ])
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(store.messages.first?.contentBlocks[1].outputTruncation == .truncated)
 
         // Hydrate: the daemon returns the FULL block (no truncation flags).
@@ -122,48 +107,68 @@ extension ConversationStoreIntegrationTests {
         #expect(store.hydratingBlockKeys.isEmpty)
     }
 
-    @Test func hydrateBlockIsSingleFlightAndCached() async {
+    @Test func hydrateBlockIsSingleFlightAndCached() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        fake.responseMap["agent.getConversation"] = [
-            "messages": [
-                [
-                    "id": "msg-1",
-                    "role": "assistant",
-                    "timestamp": "2024-01-01T00:00:00Z",
-                    "contentBlocks": [
-                        [
-                            "type": "tool_result",
-                            "id": "b-1",
-                            "toolUseId": "tc-1",
-                            "output": "preview…",
-                            "outputTruncated": true
-                        ]
-                    ]
-                ]
-            ]
-        ]
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
-
-        fake.responseMap["agent.getMessageBlock"] = [
-            "block": [
+        fake.stubChatSnapshot(messages: [
+            slimMessage(containing: [
                 "type": "tool_result",
                 "id": "b-1",
                 "toolUseId": "tc-1",
-                "output": "full"
-            ] as [String: Any]
-        ]
-        // Two concurrent + one repeat hydration: only ONE wire fetch.
-        async let first: () = store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
-        async let second: () = store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
-        _ = await (first, second)
+                "output": "preview…",
+                "outputTruncated": true
+            ])
+        ])
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
+
+        // The first fetch stays suspended until the overlapping caller has
+        // returned. Completed caching cannot mask broken in-flight coalescing.
+        fake.pendingMethods.insert("agent.getMessageBlock")
+        var firstFinished = false
+        let first = Task {
+            await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+            firstFinished = true
+        }
+        defer { first.cancel() }
+        try await fake.waitForPendingRequests("agent.getMessageBlock")
+
+        var secondFinished = false
+        let second = Task {
+            await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+            secondFinished = true
+        }
+        defer { second.cancel() }
+        try await waitUntil("the overlapping hydration to return or issue a duplicate RPC") {
+            secondFinished || fake.pendingRequestCount("agent.getMessageBlock") > 1
+        }
+        #expect(fake.paramsForMethod("agent.getMessageBlock").count == 1)
+        try #require(secondFinished, "an in-flight duplicate must return without another fetch")
+        #expect(!firstFinished)
+        #expect(fake.pendingRequestCount("agent.getMessageBlock") == 1)
+        #expect(store.hydratingBlockIds(forMessage: "msg-1") == ["b-1"])
+        #expect(!store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
+        #expect(store.messages.first?.contentBlocks.first?.outputTruncation == .truncated)
+
+        fake.resolvePending("agent.getMessageBlock", with: hydrationResponse(output: "full"))
+        try await waitUntil("both hydration callers to finish") { firstFinished && secondFinished }
+        _ = await (first.value, second.value)
+        #expect((store.messages.first?.contentBlocks.first?.output?.value as? String) == "full")
+        #expect(store.messages.first?.contentBlocks.first?.outputTruncation == .unreported)
+        #expect(store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
+        #expect(store.hydratingBlockKeys.isEmpty)
+
+        // A later request must use completed cache, not fetch a different body.
+        fake.pendingMethods.remove("agent.getMessageBlock")
+        fake.responseMap["agent.getMessageBlock"] = hydrationResponse(output: "unexpected refetch")
         await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
 
         #expect(fake.paramsForMethod("agent.getMessageBlock").count == 1)
+        #expect((store.messages.first?.contentBlocks.first?.output?.value as? String) == "full")
+        #expect(store.hydratingBlockKeys.isEmpty)
     }
 
-    @Test func hydratedBlockSurvivesSlimRefetchAndSnapshot() async throws {
+    @Test func hydratedBlockSurvivesSlimResnapshot() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
@@ -181,9 +186,8 @@ extension ConversationStoreIntegrationTests {
                 ]
             ]
         ]
-        fake.responseMap["agent.getConversation"] = ["messages": [slimMessage]]
-        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        fake.stubChatSnapshot(messages: [slimMessage])
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
 
         fake.responseMap["agent.getMessageBlock"] = [
             "block": [
@@ -196,15 +200,13 @@ extension ConversationStoreIntegrationTests {
         await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
         #expect((store.messages.first?.contentBlocks.first?.output?.value as? String) == "full")
 
-        // A slim refetch serves the truncated preview again — the hydrated
-        // full block must survive the merge.
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        // A chat.subscribe (re)snapshot serving the truncated preview again
+        // re-seeds the transcript — the hydrated full block must survive it.
+        await store.subscribeLiveChat(agentId: "agent-1")
         #expect((store.messages.first?.contentBlocks.first?.output?.value as? String) == "full")
         #expect(store.messages.first?.contentBlocks.first?.outputTruncation == .unreported)
 
-        // Same for a chat.subscribe (re)snapshot that re-seeds the transcript.
-        await store.subscribeLiveChat(agentId: "agent-1")
-        try await waitUntil("chat.subscribe handler registration") { fake.hasSubscriptionHandler(id: "sub-1") }
+        // Same for a later snapshot on the live channel.
         deliver(
             SubscriptionPush(
                 subscriptionId: "sub-1",
@@ -222,25 +224,23 @@ extension ConversationStoreIntegrationTests {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        fake.responseMap["agent.getConversation"] = [
-            "messages": [
-                [
-                    "id": "msg-1",
-                    "role": "assistant",
-                    "timestamp": "2024-01-01T00:00:00Z",
-                    "contentBlocks": [
-                        [
-                            "type": "tool_result",
-                            "id": "b-1",
-                            "toolUseId": "tc-1",
-                            "output": "preview…",
-                            "outputTruncated": true
-                        ]
+        fake.stubChatSnapshot(messages: [
+            [
+                "id": "msg-1",
+                "role": "assistant",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": [
+                    [
+                        "type": "tool_result",
+                        "id": "b-1",
+                        "toolUseId": "tc-1",
+                        "output": "preview…",
+                        "outputTruncated": true
                     ]
                 ]
             ]
-        ]
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        ])
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
 
         fake.errorMap["agent.getMessageBlock"] = NSError(
             domain: "WebSocket",
@@ -273,25 +273,23 @@ extension ConversationStoreIntegrationTests {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        fake.responseMap["agent.getConversation"] = [
-            "messages": [
-                [
-                    "id": "msg-1",
-                    "role": "assistant",
-                    "timestamp": "2024-01-01T00:00:00Z",
-                    "contentBlocks": [
-                        [
-                            "type": "tool_result",
-                            "id": "b-1",
-                            "toolUseId": "tc-1",
-                            "output": "p",
-                            "outputTruncated": true
-                        ]
+        fake.stubChatSnapshot(messages: [
+            [
+                "id": "msg-1",
+                "role": "assistant",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": [
+                    [
+                        "type": "tool_result",
+                        "id": "b-1",
+                        "toolUseId": "tc-1",
+                        "output": "p",
+                        "outputTruncated": true
                     ]
                 ]
             ]
-        ]
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        ])
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         fake.responseMap["agent.getMessageBlock"] = [
             "block": [
                 "type": "tool_result",
@@ -376,17 +374,15 @@ extension ConversationStoreIntegrationTests {
                 "outputTruncated": true
             ]
         }
-        fake.responseMap["agent.getConversation"] = [
-            "messages": [
-                [
-                    "id": "msg-1",
-                    "role": "assistant",
-                    "timestamp": "2024-01-01T00:00:00Z",
-                    "contentBlocks": blocks
-                ]
+        fake.stubChatSnapshot(messages: [
+            [
+                "id": "msg-1",
+                "role": "assistant",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": blocks
             ]
-        ]
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        ])
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
 
         for i in 0..<31 {
             fake.responseMap["agent.getMessageBlock"] = [
@@ -427,25 +423,23 @@ extension ConversationStoreIntegrationTests {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        fake.responseMap["agent.getConversation"] = [
-            "messages": [
-                [
-                    "id": "msg-1",
-                    "role": "assistant",
-                    "timestamp": "2024-01-01T00:00:00Z",
-                    "contentBlocks": [
-                        [
-                            "type": "tool_result",
-                            "id": "b-1",
-                            "toolUseId": "tc-1",
-                            "output": "p",
-                            "outputTruncated": true
-                        ]
+        fake.stubChatSnapshot(messages: [
+            [
+                "id": "msg-1",
+                "role": "assistant",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": [
+                    [
+                        "type": "tool_result",
+                        "id": "b-1",
+                        "toolUseId": "tc-1",
+                        "output": "p",
+                        "outputTruncated": true
                     ]
                 ]
             ]
-        ]
-        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        ])
+        await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
 
         // Hold the fetch in flight, reset (agent switch) mid-flight, then let
         // it resume: the stale block must NOT be inserted into the fresh cache.

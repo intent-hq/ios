@@ -1,80 +1,41 @@
 import Foundation
-import ImageIO
+import Lottie
 
-/// Decoded frames and source timing for the bundled launch splash GIF.
+/// The supplied compositions, decoded without Lottie's process-wide cache so
+/// their lifetime remains bounded by the visible splash's lease (ios#256).
 struct SplashAnimation {
-    static let resourceName = "IntentSplash"
-    static var bundledURL: URL? {
-        Bundle.main.url(forResource: resourceName, withExtension: "gif")
-    }
+    let twist: LottieAnimation
+    let pulse: LottieAnimation
 
-    private static let fallbackFrameDuration: TimeInterval = 0.1
+    var minimumFrameDuration: TimeInterval { 1 / max(twist.framerate, pulse.framerate) }
 
-    let frames: [CGImage]
-    let frameDurations: [TimeInterval]
-    let duration: TimeInterval
-    let sourceLoopCount: Int?
-
-    var frameCount: Int { frames.count }
-    var frameSize: CGSize? { frames.first.map { CGSize(width: $0.width, height: $0.height) } }
-    var minimumFrameDuration: TimeInterval? { frameDurations.min() }
-
-    init?(url: URL) {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        let count = CGImageSourceGetCount(source)
-        guard count > 0 else { return nil }
-
-        var images: [CGImage] = []
-        var durations: [TimeInterval] = []
-        images.reserveCapacity(count)
-        durations.reserveCapacity(count)
-        for index in 0..<count {
-            guard let image = CGImageSourceCreateImageAtIndex(source, index, nil) else { return nil }
-            images.append(image)
-            durations.append(Self.frameDuration(in: source, at: index))
-        }
-
-        frames = images
-        frameDurations = durations
-        duration = durations.reduce(0, +)
-        sourceLoopCount = Self.loopCount(in: source)
-    }
-
-    func frameIndex(at elapsedTime: TimeInterval, animated: Bool) -> Int {
-        guard animated, frames.count > 1, duration > 0, elapsedTime.isFinite else { return 0 }
-        let playbackTime = max(0, elapsedTime).truncatingRemainder(dividingBy: duration)
-        var frameEndTime: TimeInterval = 0
-        for index in frames.indices {
-            frameEndTime += frameDurations[index]
-            if playbackTime < frameEndTime { return index }
-        }
-        return frames.index(before: frames.endIndex)
-    }
-
-    func image(at elapsedTime: TimeInterval, animated: Bool) -> CGImage {
-        frames[frameIndex(at: elapsedTime, animated: animated)]
-    }
-
-    private static func frameDuration(in source: CGImageSource, at index: Int) -> TimeInterval {
+    init?(bundle: Bundle = .main) {
         guard
-            let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil)
-                as? [CFString: Any],
-            let gif = properties[kCGImagePropertyGIFDictionary] as? [CFString: Any]
-        else { return fallbackFrameDuration }
-
-        let value = gif[kCGImagePropertyGIFUnclampedDelayTime] as? Double
-            ?? gif[kCGImagePropertyGIFDelayTime] as? Double
-        let duration = value ?? fallbackFrameDuration
-        return duration > 0 ? duration : fallbackFrameDuration
-    }
-
-    private static func loopCount(in source: CGImageSource) -> Int? {
-        guard
-            let properties = CGImageSourceCopyProperties(source, nil) as? [CFString: Any],
-            let gif = properties[kCGImagePropertyGIFDictionary] as? [CFString: Any],
-            let count = gif[kCGImagePropertyGIFLoopCount] as? Int
+            let twist = LottieAnimation.named(
+                "intent_mark_twist_256", bundle: bundle, animationCache: nil
+            ),
+            let pulse = LottieAnimation.named(
+                "intent_mark_pulse_256", bundle: bundle, animationCache: nil
+            ),
+            twist.duration > 0, pulse.duration > 0,
+            twist.framerate > 0, pulse.framerate > 0
         else { return nil }
-        return count
+        self.twist = twist
+        self.pulse = pulse
+    }
+
+    /// Play the entire twist once, then loop pulse using each JSON's own timing.
+    /// Pulse's first frame is a complete mark; twist's first frame is empty.
+    func frame(
+        at elapsedTime: TimeInterval, animated: Bool
+    ) -> (animation: LottieAnimation, frame: AnimationFrameTime) {
+        guard animated else { return (pulse, pulse.startFrame) }
+        let elapsed = elapsedTime.isFinite ? max(0, elapsedTime) : 0
+        if elapsed < twist.duration {
+            return (twist, twist.frameTime(forTime: elapsed))
+        }
+        let loopTime = (elapsed - twist.duration).truncatingRemainder(dividingBy: pulse.duration)
+        return (pulse, pulse.frameTime(forTime: loopTime))
     }
 }
 
@@ -87,13 +48,11 @@ final class SplashAnimationLease {
     }
 }
 
-/// Bounds the decoded frames' lifetime to their owners (ios#256): concurrent
-/// owners share one decode, and the frames are released with the last lease
+/// Bounds the decoded compositions' lifetime to their owners (ios#256): concurrent
+/// owners share one decode, and the compositions are released with the last lease
 /// instead of living for the whole process.
 final class SplashAnimationStore {
-    static let shared = SplashAnimationStore {
-        SplashAnimation.bundledURL.flatMap { SplashAnimation(url: $0) }
-    }
+    static let shared = SplashAnimationStore { SplashAnimation() }
 
     private let load: () -> SplashAnimation?
     private weak var current: SplashAnimationLease?
@@ -102,7 +61,7 @@ final class SplashAnimationStore {
         self.load = load
     }
 
-    var isRetainingFrames: Bool { current != nil }
+    var isRetainingAnimations: Bool { current != nil }
 
     func lease() -> SplashAnimationLease? {
         if let current { return current }

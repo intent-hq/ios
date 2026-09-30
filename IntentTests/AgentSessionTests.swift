@@ -75,6 +75,27 @@ struct AgentSessionTests {
         #expect(agent?.notificationsMuted == false)
     }
 
+    @Test(arguments: ["Chief of Staff", "Chief of staff", "chief of staff"])
+    func parsesLegacyAssistantName(name: String) {
+        let agent = AgentSession.parseAgent([
+            "id": "assistant",
+            "name": name,
+            "metadata": ["specialist": "chief-of-staff"]
+        ])
+        #expect(agent?.name == "Assistant")
+        #expect(agent?.specialist == "chief-of-staff")
+    }
+
+    @Test(arguments: ["Assistant", "Plan the release", "Ask the Chief of Staff"])
+    func preservesCustomAssistantNames(name: String) {
+        let agent = AgentSession.parseAgent([
+            "id": "assistant",
+            "name": name,
+            "metadata": ["specialist": "chief-of-staff"]
+        ])
+        #expect(agent?.name == name)
+    }
+
     // MARK: - notificationsMuted (PROTOCOL §5.5)
 
     @Test func parseNotificationsMutedTopLevel() {
@@ -167,57 +188,6 @@ struct AgentSessionTests {
         let agent = AgentSession.parseAgent(dict)
         #expect(agent?.attentionRequestKind == "blocker")
         #expect(agent?.attentionRequestReason == nil)
-    }
-
-    // MARK: - parsePendingAttentionRequest (partial payloads)
-
-    @Test func parsePendingAttentionRequestWithoutIdOrName() {
-        // Raise/clear must not depend on the full session parse (id/name).
-        let dict: [String: Any] = [
-            "attentionRequestKind": "blocker",
-            "attentionRequestReason": "sandbox is broken",
-            "attentionRequestTimestamp": "2026-07-30T10:00:00Z"
-        ]
-        let pending = AgentSession.parsePendingAttentionRequest(dict)
-        #expect(pending?.kind == .blocker)
-        #expect(pending?.reason == "sandbox is broken")
-        #expect(pending?.raisedAt == ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
-    }
-
-    @Test func parsePendingAttentionRequestTimestampWithFractionalSeconds() throws {
-        let dict: [String: Any] = [
-            "attentionRequestKind": "discussion",
-            "attentionRequestTimestamp": "2026-07-30T10:00:00.500Z"
-        ]
-        let pending = AgentSession.parsePendingAttentionRequest(dict)
-        let expected = try #require(ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
-        #expect(pending?.raisedAt == expected.addingTimeInterval(0.5))
-    }
-
-    @Test func parsePendingAttentionRequestNilRaisedAtWhenTimestampAbsentOrInvalid() {
-        let absent = AgentSession.parsePendingAttentionRequest([
-            "attentionRequestKind": "blocker"
-        ])
-        #expect(absent != nil)
-        #expect(absent?.raisedAt == nil)
-
-        let invalid = AgentSession.parsePendingAttentionRequest([
-            "attentionRequestKind": "blocker",
-            "attentionRequestTimestamp": "not-a-date"
-        ])
-        #expect(invalid != nil)
-        #expect(invalid?.raisedAt == nil)
-    }
-
-    @Test func parsePendingAttentionRequestFromMetadataSurface() {
-        let dict: [String: Any] = [
-            "metadata": ["attentionRequestKind": "discussion"] as [String: Any]
-        ]
-        #expect(AgentSession.parsePendingAttentionRequest(dict)?.kind == .discussion)
-    }
-
-    @Test func parsePendingAttentionRequestNilWhenAbsent() {
-        #expect(AgentSession.parsePendingAttentionRequest(["id": "agent-6c"]) == nil)
     }
 
     // MARK: - pendingAttentionRequest derivation
@@ -455,5 +425,22 @@ extension AgentSessionTests {
             pendingQuestionsMessageId: pendingQuestionsMessageId,
             dismissedQuestionsMessageId: dismissedQuestionsMessageId
         )
+    }
+}
+
+extension AgentSessionTests {
+    @Test func listParentAndRetirementSurvivePreviewUpdates() {
+        let row: [String: Any] = [
+            "id": "child", "name": "Child", "parentAgentId": "actual-parent",
+            "retiredAt": "2026-09-30T00:00:00Z",
+            "metadata": ["createdByAgentId": "creator", "isBackground": true]
+        ]
+        let agent = AgentSession.parseAgent(row)
+        #expect(agent?.parentAgentId == "actual-parent")
+        #expect(agent?.createdByAgentId == "creator")
+        #expect(agent?.retiredAt == "2026-09-30T00:00:00Z")
+        let preview = agent?.applyingPreview(lastAgentResponse: "New response", digest: nil)
+        #expect(preview?.parentAgentId == "actual-parent")
+        #expect(preview?.retiredAt == agent?.retiredAt)
     }
 }

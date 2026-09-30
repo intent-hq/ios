@@ -4,23 +4,19 @@ struct ConversationColumnView: View {
     let viewModel: ConversationViewModel
     let onNavigateToNote: (String, String, String) -> Void
     let onNavigateToAgent: (String, String, String) -> Void
+    var usesWorkspaceDesign = false
+    var onDemoCover: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var questionWizardCollapsed = false
     @State private var conversationHeight: CGFloat = 0
+    @State private var composerHeight: CGFloat = 0
+    @State private var accessoriesHeight: CGFloat = 0
+    @State private var composerFocused = false
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
 
-    private enum Layout {
-        static let questionBannerBackgroundOpacity: Double = 0.4
-        static let questionBannerCornerRadius: CGFloat = 12
-        static let questionBannerHorizontalPadding: CGFloat = 8
-        static let questionBannerVerticalPadding: CGFloat = 8
-        static let questionWizardHorizontalPadding: CGFloat = 8
-        static let questionWizardTopPadding: CGFloat = 8
-        static let collapsedQuestionWizardBottomPadding: CGFloat = 4
-        static let expandedQuestionWizardBottomPadding: CGFloat = 8
-        static let questionSheetPadding: CGFloat = 24
-    }
+    private typealias Layout = Constants.Conversation.Column
+    private typealias Design = Constants.Conversation.Design
 
     #if os(visionOS)
     // visionOS presents structured questions as a deliberate sheet instead
@@ -47,6 +43,10 @@ struct ConversationColumnView: View {
             questionSheetPresented = newId != nil
             #endif
         }
+        .onChange(of: viewModel.filteredMessages.map(\.id), initial: true) { _, messageIDs in
+            transcriptScrollState.rowHeightCache.retainMessages(withIDs: Set(messageIDs))
+            transcriptScrollState.retainViewportMessages(withIDs: Set(messageIDs))
+        }
         #if os(visionOS)
         .onAppear {
             questionSheetPresented = viewModel.pendingQuestions != nil
@@ -55,7 +55,7 @@ struct ConversationColumnView: View {
             questionSheet
         }
         #endif
-        .background(Theme.background(for: colorScheme).ignoresSafeArea())
+        .background((usesWorkspaceDesign ? Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme)).ignoresSafeArea())
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
             value: viewModel.store.isWaitingForAgents
@@ -72,11 +72,16 @@ struct ConversationColumnView: View {
 
     @ViewBuilder
     private var columnContent: some View {
-        if let attention = viewModel.attentionRequest {
-            AttentionRequestBanner(attention: attention)
-            Divider()
+        if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript {
+            Button("Open conversation cover", action: onDemoCover)
+                .accessibilityIdentifier("demo.conversation.cover")
+                .accessibilityValue(
+                    "metadata=\(viewModel.store.metadataReadyForEntry ? "ready" : "pending") "
+                        + "entry=\(viewModel.isEntryScrollReady ? "ready" : "pending") "
+                        + "positioned=\(transcriptScrollState.hasInitiallyScrolled) "
+                        + "anchor=\(viewModel.newMessagesDividerAnchorId ?? "none") consumer=\(viewModel.conversationConsumer)"
+                )
         }
-
         if viewModel.isLoading, viewModel.filteredMessages.isEmpty {
             ConversationLoadingView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -90,9 +95,79 @@ struct ConversationColumnView: View {
                 onNavigateToNote: onNavigateToNote,
                 onNavigateToAgent: onNavigateToAgent
             )
+            .environment(\.workspaceTranscriptDesign, usesWorkspaceDesign)
+            .overlay(alignment: .top) {
+                if usesWorkspaceDesign {
+                    LinearGradient(
+                        colors: [Design.Palette.background(for: colorScheme), Design.Palette.background(for: colorScheme).opacity(0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: Design.Header.fadeHeight)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+            }
         }
 
-        Divider()
+        VStack(spacing: 0) {
+            accessoryRows
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { accessoriesHeight = $0 }
+
+        questionRegion
+            .anchorPreference(key: WorkspaceActionMenuInputBounds.self, value: .bounds) { bounds in
+                composerVisible || usesWorkspaceDesign ? nil : bounds
+            }
+            // Offer the measured question budget before the flexible transcript
+            // takes its share; otherwise VStack halves the remaining height and
+            // ViewThatFits rejects stacks that fit within workspaceQuestionHeight.
+            .layoutPriority(usesWorkspaceDesign ? 1 : 0)
+
+        if composerVisible || usesWorkspaceDesign {
+            VStack(spacing: 0) {
+                if usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
+                    MonitoredPrsRow(
+                        viewModel: viewModel,
+                        monitoredPrStore: viewModel.monitoredPrStore,
+                        usesWorkspaceDesign: true
+                    )
+                    .padding(.horizontal, composerHorizontalInset)
+                    .padding(.top, Design.Composer.keyboardBottomSpacing)
+                    .padding(.bottom, workspaceQueueVisible ? Design.Status.composerSpacing : 0)
+                }
+                WorkspaceQueuePanel(viewModel: viewModel, isVisible: workspaceQueueVisible) {
+                    MessageInputView(
+                        viewModel: viewModel,
+                        store: viewModel.store,
+                        usesWorkspaceDesign: usesWorkspaceDesign,
+                        allowsSending: composerVisible
+                    ) { composerFocused = $0 }
+                    .padding(.horizontal, usesWorkspaceDesign ? composerHorizontalInset : 0)
+                    .padding(.top, usesWorkspaceDesign && !workspaceQueueVisible ? Design.Composer.keyboardBottomSpacing : 0)
+                    .padding(.bottom, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)
+                }
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
+            .anchorPreference(key: WorkspaceActionMenuInputBounds.self, value: .bounds) { $0 }
+        }
+    }
+
+    private var workspaceQueueVisible: Bool {
+        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
+    }
+
+    private var composerHorizontalInset: CGFloat {
+        composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
+    }
+
+    private var workspaceQuestionHeight: CGFloat {
+        max(0, conversationHeight * (1 - Design.Column.transcriptHeightFraction) - composerHeight - accessoriesHeight)
+    }
+
+    @ViewBuilder
+    private var accessoryRows: some View {
+        if !usesWorkspaceDesign { Divider() }
 
         if viewModel.store.isWaitingForAgents {
             VStack(spacing: 0) {
@@ -106,7 +181,7 @@ struct ConversationColumnView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
 
-        if !viewModel.activeAgentMonitors.isEmpty {
+        if !usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
             VStack(spacing: 0) {
                 MonitoredPrsRow(
                     viewModel: viewModel,
@@ -117,7 +192,7 @@ struct ConversationColumnView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
 
-        if !viewModel.activeAgentHooks.isEmpty {
+        if !viewModel.activeAgentHooks.isEmpty || viewModel.hookStore.error != nil {
             VStack(spacing: 0) {
                 BackgroundHooksRow(
                     viewModel: viewModel,
@@ -128,11 +203,14 @@ struct ConversationColumnView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
 
-        if !viewModel.queuedMessages.isEmpty {
+        if !usesWorkspaceDesign, !viewModel.queuedMessages.isEmpty {
             QueuedMessagesView(viewModel: viewModel)
             Divider()
         }
+    }
 
+    @ViewBuilder
+    private var questionRegion: some View {
         if let pendingSet = viewModel.pendingQuestions {
             #if os(visionOS)
             // Deliberate sheet presentation on visionOS: the inline slot is
@@ -153,6 +231,7 @@ struct ConversationColumnView: View {
                 questions: pendingSet.questions,
                 collapsed: $questionWizardCollapsed,
                 containerHeight: conversationHeight,
+                workspaceAvailableHeight: usesWorkspaceDesign ? workspaceQuestionHeight : nil,
                 onComplete: { answers in
                     let answeredId = pendingSet.messageId
                     Task {
@@ -170,11 +249,11 @@ struct ConversationColumnView: View {
                 }
             )
             .id(pendingSet.messageId)
-            .padding(.horizontal, Layout.questionWizardHorizontalPadding)
-            .padding(.top, Layout.questionWizardTopPadding)
+            .padding(.horizontal, usesWorkspaceDesign ? Design.horizontalInset : Layout.questionWizardHorizontalPadding)
+            .padding(.top, usesWorkspaceDesign ? 0 : Layout.questionWizardTopPadding)
             .padding(
                 .bottom,
-                questionWizardCollapsed
+                usesWorkspaceDesign ? 0 : questionWizardCollapsed
                     ? Layout.collapsedQuestionWizardBottomPadding
                     : Layout.expandedQuestionWizardBottomPadding
             )
@@ -188,10 +267,6 @@ struct ConversationColumnView: View {
         // composer, as with a rendered wizard.
         if viewModel.isPendingQuestionRecoveryLoading, !questionWizardCollapsed {
             PendingQuestionRecoveryPlaceholder()
-        }
-
-        if composerVisible {
-            MessageInputView(viewModel: viewModel, store: viewModel.store)
         }
     }
 
@@ -250,17 +325,14 @@ struct ConversationColumnView: View {
 private struct PendingQuestionRecoveryPlaceholder: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 8
-        static let verticalPadding: CGFloat = 12
-    }
+    private typealias Layout = Constants.Conversation.Column.PendingQuestionRecovery
 
     var body: some View {
         HStack(spacing: Layout.contentSpacing) {
             ProgressView()
                 .controlSize(.small)
             Text("Loading questions...")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .frame(maxWidth: .infinity)
@@ -272,15 +344,13 @@ private struct PendingQuestionRecoveryPlaceholder: View {
 private struct ConversationLoadingView: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 12
-    }
+    private typealias Layout = Constants.Conversation.Column.Loading
 
     var body: some View {
         VStack(spacing: Layout.contentSpacing) {
             ProgressView()
             Text("Loading conversation...")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
     }
@@ -290,12 +360,7 @@ private struct ConversationEmptyView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 12
-        static let descriptionHorizontalPadding: CGFloat = 32
-        static let modelCaptionOpacity: Double = 0.7
-        static let modelCaptionTopPadding: CGFloat = 4
-    }
+    private typealias Layout = Constants.Conversation.Column.Empty
 
     var body: some View {
         if let name = viewModel.specialistName {
@@ -305,18 +370,18 @@ private struct ConversationEmptyView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text(name)
-                    .font(.headline)
+                    .interFont(Constants.Typography.bodyM)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 if let description = viewModel.specialistDescription {
                     Text(description)
-                        .font(.subheadline)
+                        .interFont(Constants.Typography.bodyXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, Layout.descriptionHorizontalPadding)
                 }
                 if let displayName = viewModel.currentModelDisplayName {
                     Text("Using \(displayName)")
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.modelCaptionOpacity))
                         .padding(.top, Layout.modelCaptionTopPadding)
                 }
@@ -328,14 +393,14 @@ private struct ConversationEmptyView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("No messages yet")
-                    .font(.headline)
+                    .interFont(Constants.Typography.bodyM)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 Text("Messages will appear here as the agent works.")
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 if let displayName = viewModel.currentModelDisplayName {
                     Text("Using \(displayName)")
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.modelCaptionOpacity))
                         .padding(.top, Layout.modelCaptionTopPadding)
                 }

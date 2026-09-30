@@ -21,12 +21,22 @@ extension ConversationViewModel {
         store.queuedMessages.filter { $0.isUserMessage }
     }
 
-    /// Tears down the live-store subscriptions (background hooks + PR
-    /// monitors) when the conversation leaves the screen (`load()`
-    /// re-subscribes on the next appearance).
-    func teardownLiveStores() async {
-        await hookStore.unsubscribe()
-        await monitoredPrStore.unsubscribe()
+    /// Synchronously invalidates this screen activation and detaches every
+    /// local event handler before captured remote ids are released.
+    func teardownLiveStores() {
+        optionsStore.releaseCatalogs(consumer: conversationConsumer)
+        liveStoreActivationGeneration &+= 1
+        activeLiveStoreActivation = nil
+        loadTask?.cancel()
+        loadTask = nil
+        if let detailConsumer { agentDetails.release(agentId: agentId, consumer: detailConsumer) }
+        detailConsumer = nil
+        if let streamingObserverId { store.streamingObservers[streamingObserverId] = nil }
+        streamingObserverId = nil
+        store.entryObservers[conversationConsumer] = nil
+        store.releaseConversation(conversationConsumer)
+        hookStore.deactivate()
+        monitoredPrStore.deactivate()
     }
 
     func cancelWait() async {
@@ -127,35 +137,49 @@ extension ConversationViewModel {
     }
 
     func loadModelCatalogIfNeeded() async {
+        let activation = liveStoreActivationGeneration
         let generation = optionsStore.loadGeneration
         if let readUnder = modelMetadataGeneration, readUnder != generation {
-            await fetchCurrentModel()
-            guard generation == optionsStore.loadGeneration else { return }
+            // Reconnect already expires shared detail. A delayed catalog task
+            // must reuse that bootstrap even after its reply has settled.
+            await fetchCurrentModel(refresh: modelMetadataEpoch == agentDetails.connectionEpoch)
+            guard generation == optionsStore.loadGeneration, activation == liveStoreActivationGeneration,
+                  !Task.isCancelled else { return }
             guard modelMetadataGeneration == generation else {
                 currentModelId = nil
                 currentProviderId = nil
+                optionsStore.selectModelProvider(nil, consumer: conversationConsumer)
                 return
             }
         }
-        guard let providerId = currentProviderId,
-              optionsStore.models(for: providerId) == nil else { return }
-        await loadProviderCatalog(providerId)
+        guard activation == liveStoreActivationGeneration, !Task.isCancelled else { return }
+        optionsStore.selectModelProvider(currentProviderId, consumer: conversationConsumer)
+        guard let providerId = currentProviderId else { return }
+        await loadProviderCatalog(providerId, refresh: false)
     }
 
     func refreshSelectableModels() async {
+        guard !Task.isCancelled else { return }
         if let providerId = currentProviderId {
-            await loadProviderCatalog(providerId)
+            optionsStore.selectModelProvider(providerId, consumer: conversationConsumer)
+            await loadProviderCatalog(providerId, refresh: true)
         } else {
             await fetchModels()
         }
     }
 
-    private func loadProviderCatalog(_ providerId: String) async {
+    private func loadProviderCatalog(_ providerId: String, refresh: Bool) async {
         modelCatalogLoadFailed = false
+        let activation = liveStoreActivationGeneration
         let generation = optionsStore.loadGeneration
-        await optionsStore.loadModelsIfNeeded(providerId: providerId)
-        guard generation == optionsStore.loadGeneration else { return }
-        modelCatalogLoadFailed = optionsStore.models(for: providerId) == nil
+        if refresh {
+            await optionsStore.loadModelsIfNeeded(providerId: providerId, force: true, consumer: conversationConsumer)
+        } else {
+            await optionsStore.ensureModels(providerId: providerId, consumer: conversationConsumer)
+        }
+        guard generation == optionsStore.loadGeneration, activation == liveStoreActivationGeneration,
+              currentProviderId == providerId, !Task.isCancelled else { return }
+        modelCatalogLoadFailed = optionsStore.modelCatalog(for: providerId).loadFailed
     }
 
     func fetchModels() async {

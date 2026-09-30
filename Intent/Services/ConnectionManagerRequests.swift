@@ -13,6 +13,7 @@ extension ConnectionManager {
     /// known to outlast this bound (e.g. `workspace.create`).
     static let defaultRequestTimeout: TimeInterval = 10
 
+    // swiftlint:disable cyclomatic_complexity function_body_length
     /// Sends a JSON-RPC request and awaits its response.
     ///
     /// - Parameter timeout: Per-call timeout override in seconds (defaults to
@@ -20,23 +21,38 @@ extension ConnectionManager {
     ///   bound above the daemon's own budget so the daemon's structured result
     ///   (success or error) wins over a client-side transport timeout —
     ///   mirrors the per-call `timeoutMs` override in cloudlands-fe.
+    /// Preserves the request flow while classifying each local boundary.
     func request(
         _ method: String,
         params: [String: Any] = [:],
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
-        if DemoMode.isEnabled {
+        if DemoMode.isEnabled || servesDemoFixtures {
             if let gate = DemoFixtures.responseGate(for: method, params: params) {
                 try await DemoFixtures.wait(for: gate)
             }
-            return DemoFixtures.response(for: method, params: params)
+            let response = DemoFixtures.response(for: method, params: params)
+            // Routed ahead of the ack: the router buffers it until the caller
+            // registers its handler, the same order a live daemon can produce.
+            if let push = DemoFixtures.subscriptionPush(for: method, params: params) {
+                subscriptionRouter.route(push)
+            }
+            if let event = DemoFixtures.designScenario?.event(for: method, params: params) {
+                for handler in Array(eventHandlers.values) { handler("event", event) }
+            }
+            return response
         }
         guard let currentSocket = socket else {
-            throw NSError(
-                domain: Self.webSocketErrorDomain,
-                code: Self.notConnectedErrorCode,
-                userInfo: [NSLocalizedDescriptionKey: "Not connected"]
+            let error = DiagnosticErrorOwnership.attaching(
+                to: NSError(
+                    domain: Self.webSocketErrorDomain,
+                    code: Self.notConnectedErrorCode,
+                    userInfo: [NSLocalizedDescriptionKey: "Not connected"]
+                ),
+                failure: DiagnosticFailure(origin: .localRequest, classification: .notConnected)
             )
+            recordRequestFailure(error)
+            throw error
         }
 
         let id = takeNextRequestId()
@@ -45,7 +61,17 @@ extension ConnectionManager {
         if !params.isEmpty {
             rpcDict["params"] = params
         }
-        let data = try JSONSerialization.data(withJSONObject: rpcDict)
+        let data: Data
+        do {
+            data = try JSONSerialization.data(withJSONObject: rpcDict)
+        } catch {
+            let owned = DiagnosticErrorOwnership.attaching(
+                to: error as NSError,
+                failure: DiagnosticFailure(origin: .localRequest, classification: .encodingFailed)
+            )
+            recordRequestFailure(owned)
+            throw owned
+        }
         guard let requestText = String(data: data, encoding: .utf8) else {
             throw WebSocketTransportError.failed(
                 host: currentSocket.host,
@@ -64,12 +90,13 @@ extension ConnectionManager {
                     guard !Task.isCancelled else { return }
                     AppLog.connection.debug("[ConnectionManager] Write failed for request id=\(id) method=\(method): \(error.localizedDescription)")
                     guard self?.socket === currentSocket else { return }
-                    self?.handleDisconnection()
+                    self?.handleDisconnection(cause: .socketFailure, failure: TransportDiagnosticFailure.classify(error))
                 }
             }
         }
     }
 
+    // swiftlint:enable cyclomatic_complexity function_body_length
     /// Registers a pending continuation for `id`, performs `write`, and races
     /// the response against `timeout`. Internal for test visibility (lets tests
     /// exercise the timeout race without a live socket).
@@ -90,10 +117,13 @@ extension ConnectionManager {
             try? await Task.sleep(for: .seconds(max(0, timeout)))
             guard !Task.isCancelled else { return }
             if let continuation = self?.pendingRequests.removeValue(forKey: id) {
-                continuation.resume(throwing: NSError(
-                    domain: Self.webSocketErrorDomain,
-                    code: Self.requestTimedOutErrorCode,
-                    userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
+                continuation.resume(throwing: DiagnosticErrorOwnership.attaching(
+                    to: NSError(
+                        domain: Self.webSocketErrorDomain,
+                        code: Self.requestTimedOutErrorCode,
+                        userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
+                    ),
+                    failure: DiagnosticFailure(origin: .localRequest, classification: .requestTimeout)
                 ))
             }
         }
@@ -102,22 +132,47 @@ extension ConnectionManager {
             timeoutTask.cancel()
             writeTask?.cancel()
         }
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Any, Error>) in
-                guard !Task.isCancelled else {
-                    continuation.resume(throwing: CancellationError())
-                    return
+        do {
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Any, Error>) in
+                    guard !Task.isCancelled else {
+                        continuation.resume(throwing: CancellationError())
+                        return
+                    }
+                    pendingRequests[id] = continuation
+                    writeTask = write()
                 }
-                pendingRequests[id] = continuation
-                writeTask = write()
-            }
-        } onCancel: {
-            Task { @MainActor [weak self] in
-                if let continuation = self?.pendingRequests.removeValue(forKey: id) {
-                    continuation.resume(throwing: CancellationError())
+            } onCancel: {
+                Task { @MainActor [weak self] in
+                    if let continuation = self?.pendingRequests.removeValue(forKey: id) {
+                        continuation.resume(throwing: CancellationError())
+                    }
                 }
             }
+        } catch {
+            recordRequestFailure(error)
+            throw error
         }
+    }
+
+    func recordRequestFailure(_ error: any Error) {
+        let owner = DiagnosticRequestContext.owner ?? .init(operation: .otherRequest, site: .connectionManager)
+        guard owner.recording == .immediate, !Task.isCancelled else { return }
+        let failure = DiagnosticErrorOwnership.failure(for: error)
+        DiagnosticErrorOwnership.record(
+            error,
+            event: DiagnosticEvent(
+                kind: owner.kind,
+                operation: owner.operation,
+                site: owner.site,
+                stage: .request,
+                outcome: owner.outcome,
+                failure: failure,
+                effect: failure.origin == .remoteRPC ? .remoteRejected :
+                    (failure.classification == .notConnected || failure.classification == .encodingFailed ? .notSent : .unknown)
+            ),
+            store: diagnostics
+        )
     }
 
     nonisolated static func parseInboundFrame(_ text: String) -> InboundFrame? {
@@ -141,7 +196,10 @@ extension ConnectionManager {
             }
             return .error(
                 id: id,
-                error: NSError(domain: Self.webSocketErrorDomain, code: code, userInfo: userInfo)
+                error: DiagnosticErrorOwnership.attaching(
+                    to: NSError(domain: Self.webSocketErrorDomain, code: code, userInfo: userInfo),
+                    failure: .remoteRPC(code: code)
+                )
             )
         }
         if let method = json["method"] as? String {
@@ -156,7 +214,10 @@ extension ConnectionManager {
 
     func handleTextMessage(_ text: String) {
         let parseStart = CFAbsoluteTimeGetCurrent()
-        guard let frame = Self.parseInboundFrame(text) else { return }
+        guard let frame = Self.parseInboundFrame(text) else {
+            recordMalformedFrame()
+            return
+        }
         let parseElapsed = CFAbsoluteTimeGetCurrent() - parseStart
         dispatchInboundFrame(
             frame,
@@ -181,6 +242,7 @@ extension ConnectionManager {
         case .subscriptionPush(let push):
             subscriptionRouter.route(push)
         case let .notification(method, params):
+            invalidatePrincipalIfNeeded(method: method, params: params.value)
             if !subscriptionRouter.route(method: method, params: params.value) {
                 for handler in eventHandlers.values {
                     handler(method, params.value)
@@ -261,7 +323,9 @@ extension ConnectionManager {
         handleTextMessage(text)
     }
 
-    nonisolated static let globalEventTypes = ["workspace:*", "note:*", "agent:*", "task:*"]
+    nonisolated static let globalEventTypes = [
+        "workspace:*", "note:*", "agent:*", "task:*", "specialists:changed", "settings:changed", "host:members-changed"
+    ]
     nonisolated static let globalSubscriptionMaxAttempts = 5
     nonisolated static let globalSubscriptionBackoffMaximumSeconds = 8
     nonisolated static let globalSubscriptionBackoffMaximumExponent = 3
@@ -285,6 +349,8 @@ extension ConnectionManager {
         connectionGeneration == generation && socket === currentSocket
     }
 
+    // Keep retry ordering unchanged; owner context is scoped to each request.
+    // swiftlint:disable:next function_body_length
     private func runGlobalSubscription(
         socket currentSocket: WebSocketConnection,
         generation: Int,
@@ -296,17 +362,32 @@ extension ConnectionManager {
                   isCurrentGlobalSubscription(socket: currentSocket, generation: generation)
             else { return }
             do {
-                _ = try await request(
-                    "events.subscribe",
-                    params: [
-                        "eventTypes": Self.globalEventTypes,
-                        "replaceGroup": "global"
-                    ]
+                let owner = DiagnosticRequestContext.Owner(
+                    operation: .subscriptionGlobal,
+                    site: .connectionManager,
+                    outcome: attempt >= Self.globalSubscriptionMaxAttempts ? .exhausted : .retrying,
+                    kind: .subscriptionRecovery
                 )
+                _ = try await DiagnosticRequestContext.$owner.withValue(owner) {
+                    try await request(
+                        "events.subscribe",
+                        params: [
+                            "eventTypes": Self.globalEventTypes,
+                            "replaceGroup": "global"
+                        ]
+                    )
+                }
                 guard !Task.isCancelled,
                       isCurrentGlobalSubscription(socket: currentSocket, generation: generation)
                 else { return }
                 globalSubscriptionState = .subscribed
+                diagnostics.record(DiagnosticEvent(
+                    kind: .subscriptionRecovery,
+                    operation: .subscriptionGlobal,
+                    site: .connectionManager,
+                    stage: .response,
+                    outcome: attempt == 1 ? .succeeded : .recovered
+                ))
                 AppLog.connection.debug("[ConnectionManager] Subscribed to all events (attempt \(attempt))")
                 return
             } catch {
@@ -366,10 +447,14 @@ extension ConnectionManager {
         let pending = pendingRequests
         pendingRequests.removeAll()
         for (_, continuation) in pending {
-            continuation.resume(throwing: NSError(
-                domain: Self.webSocketErrorDomain,
-                code: Self.connectionClosedErrorCode,
-                userInfo: [NSLocalizedDescriptionKey: message]
+            continuation.resume(throwing: DiagnosticErrorOwnership.attaching(
+                to: NSError(
+                    domain: Self.webSocketErrorDomain,
+                    code: Self.connectionClosedErrorCode,
+                    userInfo: [NSLocalizedDescriptionKey: message]
+                ),
+                failure: DiagnosticFailure(origin: .localRequest, classification: .connectionClosed),
+                suppressed: true
             ))
         }
     }

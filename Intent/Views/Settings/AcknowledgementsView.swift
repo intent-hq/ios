@@ -4,13 +4,7 @@ import SwiftUI
 /// reproduces the dependency's license text in full, as its terms
 /// require for binary distribution.
 struct AcknowledgementsView: View {
-    private enum Layout {
-        static let pageSpacing: CGFloat = 20
-        static let entrySpacing: CGFloat = 12
-        static let licenseSpacing: CGFloat = 8
-        static let cardPadding: CGFloat = 16
-        static let cardCornerRadius: CGFloat = 12
-    }
+    private typealias Layout = Constants.Settings.Acknowledgements
 
     @Environment(\.colorScheme) var colorScheme
 
@@ -64,10 +58,10 @@ struct AcknowledgementsView: View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
             ScrollView {
-                VStack(alignment: .leading, spacing: Layout.pageSpacing) {
+                VStack(alignment: .leading, spacing: Constants.Settings.contentSpacing) {
                     ForEach(Self.entries) { acknowledgementCard($0) }
                 }
-                .padding(Layout.pageSpacing)
+                .padding(Constants.Settings.contentPadding)
             }
         }
         .navigationTitle("Acknowledgements")
@@ -77,28 +71,28 @@ struct AcknowledgementsView: View {
     private func acknowledgementCard(_ entry: Entry) -> some View {
         VStack(alignment: .leading, spacing: Layout.entrySpacing) {
             Text(entry.name)
-                .font(.caption.weight(.medium))
+                .interFont(Constants.Typography.eyebrow.withFace(.medium))
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .textCase(.uppercase)
             VStack(alignment: .leading, spacing: Layout.licenseSpacing) {
                 Text(entry.licenseTitle)
-                    .font(.body.weight(.medium))
+                    .interFont(Constants.Typography.bodySEmphasized)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 Text(entry.url)
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 Text(entry.licenseText)
-                    .font(.caption.monospaced())
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .textSelection(.enabled)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Layout.cardPadding)
+            .padding(Constants.Settings.cardPadding)
             .background(Theme.card(for: colorScheme))
-            .clipShape(.rect(cornerRadius: Layout.cardCornerRadius))
+            .clipShape(.rect(cornerRadius: Constants.Settings.cardCornerRadius))
             .overlay(
-                RoundedRectangle(cornerRadius: Layout.cardCornerRadius)
-                    .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+                RoundedRectangle(cornerRadius: Constants.Settings.cardCornerRadius)
+                    .stroke(Theme.border(for: colorScheme), lineWidth: Constants.Settings.cardBorderWidth)
             )
         }
     }

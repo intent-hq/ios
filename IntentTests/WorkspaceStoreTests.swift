@@ -174,20 +174,6 @@ struct WorkspaceStoreAgentParsingTests {
         #expect(decoded.specialist == nil)
         #expect(decoded.lastActivity == nil)
     }
-
-    // MARK: - WorkspaceAgentInfo Equatable
-
-    @Test func agentInfoEquality() async {
-        let first = WorkspaceAgentInfo(id: "x", name: "X", status: "idle", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
-        let second = WorkspaceAgentInfo(id: "x", name: "X", status: "idle", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
-        #expect(first == second)
-    }
-
-    @Test func agentInfoInequalityDifferentStatus() async {
-        let idle = WorkspaceAgentInfo(id: "x", name: "X", status: "idle", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
-        let responding = WorkspaceAgentInfo(id: "x", name: "X", status: "responding", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
-        #expect(idle != responding)
-    }
 }
 
 // MARK: - lastActivity mirrors intentd (no client-side bumping)
@@ -449,5 +435,57 @@ struct WorkspaceStoreChiefFilterTests {
         // Not seeded into the reconciler either: the next delta keeps it out.
         store.handleEvent("subscription.push", params: deltaPush(seq: 1, updated: [realRow]))
         #expect(store.workspaces.map(\.id) == ["ws-1"])
+    }
+}
+
+@MainActor
+struct WorkspaceFetchCompletionTests {
+    @Test func concurrentFetchesShareOnlyThePendingOperation() async throws {
+        let connection = FakeConnectionManager()
+        connection.pendingMethods = ["workspace.list"]
+        let store = WorkspaceStore(connectionManager: connection)
+        let first = Task { await store.fetchAll() }
+        defer {
+            while connection.pendingRequestCount("workspace.list") > 0 {
+                connection.failPending("workspace.list", with: CancellationError())
+            }
+        }
+        try await connection.waitForPendingRequests("workspace.list")
+        let second = Task { await store.fetchAll() }
+        try await expectNever("duplicate workspace request during the shared fetch") {
+            connection.paramsForMethod("workspace.list").count > 1
+        }
+        connection.resolvePending("workspace.list", with: ["workspaces": []])
+        await first.value
+        await second.value
+        #expect(store.lastUpdated != nil)
+        connection.pendingMethods = []
+        connection.responseMap["workspace.list"] = ["workspaces": []]
+        await store.fetchAll()
+        #expect(connection.paramsForMethod("workspace.list").count == 2)
+    }
+
+    @Test func retryAtLoadingCompletionStartsANewRead() async throws {
+        let connection = FakeConnectionManager()
+        connection.pendingMethods = ["workspace.list"]
+        let store = WorkspaceStore(connectionManager: connection)
+        let first = Task { await store.fetchAll() }
+        try await waitUntil("initial fetch pending") { connection.pendingRequestCount("workspace.list") == 1 }
+        var retry: Task<Void, Never>?
+        withObservationTracking {
+            _ = store.isLoading
+        } onChange: {
+            MainActor.assumeIsolated {
+                retry = Task(priority: .high) { await store.fetchAll() }
+            }
+        }
+        connection.pendingMethods = []
+        connection.responseMap["workspace.list"] = ["workspaces": [["id": "fresh", "title": "Fresh"]]]
+        connection.failPending("workspace.list", with: NSError(domain: "scripted", code: 1))
+        await first.value
+        await retry?.value
+        #expect(connection.requestLog.filter { $0.method == "workspace.list" }.count == 2)
+        #expect(store.workspaces.map(\.id) == ["fresh"])
+        #expect(store.lastUpdated != nil)
     }
 }

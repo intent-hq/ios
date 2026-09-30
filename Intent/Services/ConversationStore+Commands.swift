@@ -12,60 +12,14 @@ extension ConversationStore {
         filePayload: OutgoingFilePayload = .none,
         messageMetadata: MessageSendMetadata = .none
     ) async throws {
-        let messageId: String
-        if let failed = lastFailedSend, failed.content == content {
-            messageId = failed.messageId
-            messages.removeAll { $0.id == failed.messageId }
-        } else {
-            messageId = UUID().uuidString
-        }
-        let userMessage = ConversationMessage(
-            id: messageId,
-            role: .user,
-            contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)],
-            metadata: messageMetadata.optimisticFields,
-            metadataWasProvided: messageMetadata.wasProvided
+        let messageId = beginSendAttempt(
+            agentId: agentId,
+            content: content,
+            workspaceId: workspaceId,
+            messageMetadata: messageMetadata
         )
-        withAnimation(.spring(
-            response: Constants.Conversation.Sending.messageAppendSpringResponse,
-            dampingFraction: Constants.Conversation.Sending.messageAppendSpringDamping
-        )) {
-            messages.append(userMessage)
-        }
-
-        withAnimation(.easeOut(
-            duration: Constants.Conversation.Sending.stateTransitionAnimationDuration
-        )) {
-            isStreaming = true
-        }
-
-        let queued: Bool
-        do {
-            queued = try await commands.sendMessage(.init(
-                agentId: agentId,
-                content: content,
-                workspaceId: workspaceId,
-                messageId: messageId,
-                imagePayload: imagePayload,
-                filePayload: filePayload,
-                messageMetadata: messageMetadata
-            ))
-        } catch {
-            lastFailedSend = (messageId: messageId, content: content)
-            throw error
-        }
-
-        lastFailedSend = nil
-        attentionRequest = nil
-
-        if queued {
-            isStreaming = false
-            withAnimation(.easeOut(
-                duration: Constants.Conversation.Sending.stateTransitionAnimationDuration
-            )) {
-                messages.removeAll { $0.id == userMessage.id }
-            }
-        }
+        prepareSendAttempt(messageId, imagePayload: imagePayload, filePayload: filePayload)
+        try await sendPreparedAttempt(messageId)
     }
 
     func rollbackFailedSend() {
@@ -73,8 +27,8 @@ extension ConversationStore {
         withAnimation(.easeOut(
             duration: Constants.Conversation.Sending.stateTransitionAnimationDuration
         )) {
-            messages.removeAll { $0.id == failed.messageId }
-            isStreaming = false
+            messages.removeAll { $0.id == failed.id }
+            sendThinkingMessageIds.remove(failed.id)
         }
     }
 
@@ -120,12 +74,40 @@ extension ConversationStore {
         }
     }
 
-    func fetchQueue(agentId: String) async {
-        do {
-            try await commands.fetchQueue(agentId: agentId)
-        } catch {
-            AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
+    func refreshQueue() {
+        commands.invalidateQueueReads()
+        queueReadPending = true
+        guard queueReadTask == nil, !queueRefreshQueued, let agentId else { return }
+        queueRefreshQueued = true
+        let activation = eventRegistrationGeneration
+        let epoch = bootstrapGeneration
+        Task { [weak self] in
+            guard let self, ownsStreamingRegistration(activation), bootstrapGeneration == epoch else { return }
+            await fetchQueue(agentId: agentId)
+            if bootstrapGeneration == epoch { queueRefreshQueued = false }
         }
+    }
+
+    func fetchQueue(agentId: String) async {
+        guard !Task.isCancelled else { return }
+        if let queueReadTask { await queueReadTask.value; return }
+        let generation = bootstrapGeneration
+        let task = Task { [weak self] in
+            guard let self else { return }
+            // One trailing read per owner. Further incomplete events leave the
+            // queue dirty for the next explicit read/event/reconnect, not a loop.
+            for _ in 0..<2 {
+                guard !Task.isCancelled, generation == bootstrapGeneration else { return }
+                queueReadPending = false
+                do { try await commands.fetchQueue(agentId: agentId) } catch {
+                    AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
+                }
+                if !queueReadPending { return }
+            }
+        }
+        queueReadTask = task
+        await task.value
+        if generation == bootstrapGeneration { queueReadTask = nil }
     }
 
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {
@@ -164,11 +146,44 @@ extension ConversationStore {
 
     // MARK: - Agent subscriptions
 
+    func invalidateSubscriptions() {
+        subscriptionRevision &+= 1
+        guard subscriptionReadTask == nil, !subscriptionRefreshQueued,
+              let agentId, let workspaceId = workspaceId ?? bootstrapWorkspaceHint else { return }
+        subscriptionRefreshQueued = true
+        let activation = eventRegistrationGeneration
+        let epoch = bootstrapGeneration
+        Task { [weak self] in
+            guard let self, ownsStreamingRegistration(activation), bootstrapGeneration == epoch else { return }
+            await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
+            if bootstrapGeneration == epoch { subscriptionRefreshQueued = false }
+        }
+    }
+
     func fetchSubscriptions(agentId: String, workspaceId: String) async {
-        await watchedAgentCoordinator.fetchSubscriptions(
-            agentId: agentId,
-            workspaceId: workspaceId
-        )
+        guard !Task.isCancelled else { return }
+        if let subscriptionReadTask { await subscriptionReadTask.value; return }
+        let generation = bootstrapGeneration
+        let task = Task { [weak self] in
+            guard let self else { return }
+            // Match metadata/queue reconciliation: retain the invalidation
+            // revision after the trailing read, without scheduling a third.
+            for _ in 0..<2 {
+                guard !Task.isCancelled, generation == bootstrapGeneration else { return }
+                let revision = subscriptionRevision
+                let workspace = self.workspaceId ?? workspaceId
+                await watchedAgentCoordinator.fetchSubscriptions(
+                    agentId: agentId,
+                    workspaceId: workspace,
+                    awaitAuthority: { await self.awaitWorkspaceAuthority() },
+                    isCurrent: { generation == self.bootstrapGeneration && revision == self.subscriptionRevision }
+                )
+                if revision == subscriptionRevision { return }
+            }
+        }
+        subscriptionReadTask = task
+        await task.value
+        if generation == bootstrapGeneration { subscriptionReadTask = nil }
     }
 
     func cancelSubscriptions(agentId: String, workspaceId: String) async {
@@ -189,17 +204,14 @@ extension ConversationStore {
     // MARK: - Cleanup
 
     func reset() {
+        deactivateStreaming()
         liveTranscript.reset()
         commands.reset()
         watchedAgentCoordinator.reset()
         bindAgent(nil)
         workspaceId = nil
-        subscriptionId = nil
-        currentStreamId = nil
-        isSubscribing = false
-        clearStreamEventBuffer()
-        lastFailedSend = nil
-        attentionRequest = nil
+        sendAttempts.removeAll()
+        sendThinkingMessageIds.removeAll()
         agentNotFound = false
         clearPendingQuestionRecovery()
     }

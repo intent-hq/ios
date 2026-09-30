@@ -28,7 +28,7 @@ struct SpecialistStepView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Next", action: onNext)
                     .disabled(selectedSpecialist == nil)
-                    .fontWeight(.semibold)
+                    .interFont(Constants.Typography.bodyS.withFace(.semibold))
             }
         }
     }
@@ -36,8 +36,10 @@ struct SpecialistStepView: View {
     @ViewBuilder
     private var specialistContent: some View {
         if isLoadingSpecialists {
-            ProgressView("Loading specialists...")
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            ProgressView {
+                Text("Loading specialists...").interFont(Constants.Typography.bodyS)
+            }
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         } else if specialists.isEmpty {
             VStack(spacing: Constants.ModalPicker.emptyStateSpacing) {
                 Image(systemName: "person.crop.rectangle.badge.plus")
@@ -45,7 +47,7 @@ struct SpecialistStepView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("No specialists available")
-                    .font(.headline)
+                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
             }
         } else {
@@ -55,9 +57,12 @@ struct SpecialistStepView: View {
 
     private var specialistList: some View {
         List {
-            Section("Name") {
+            Section {
                 TextField("Agent name", text: $agentName)
+                    .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
+            } header: {
+                Text("Name").interFont(Constants.Typography.eyebrow)
             }
             .listRowBackground(Theme.card(for: colorScheme))
             ForEach(specialists) { specialist in
@@ -84,10 +89,10 @@ struct SpecialistStepView: View {
 
             VStack(alignment: .leading, spacing: Constants.ModalPicker.rowTextSpacing) {
                 Text(specialist.name)
-                    .font(.headline)
+                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 Text(specialist.description)
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .lineLimit(Constants.ModalPicker.rowDescriptionLineLimit)
             }

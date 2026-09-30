@@ -1,37 +1,12 @@
 import Foundation
 import UIKit
 
-/// Launch-argument-driven demo mode for screenshot UI tests: with
-/// `--demo-data` the app skips pairing, serves fixture data from
-/// `DemoFixtures` instead of a live daemon connection, and runs
-/// `PersistenceManager.shared` over an ephemeral store (see
-/// `PersistenceManager.ephemeral()`). Zero-impact when the arguments are
-/// absent.
-enum DemoMode {
-    /// True when fixture data should be served (`--demo-data`).
-    static let isEnabled = demoDataRequested(by: ProcessInfo.processInfo.arguments)
-
-    /// True when the pairing flow should be skipped (`--pretend-paired`,
-    /// implied by `--demo-data`).
-    static let pretendPaired = pretendPairedRequested(by: ProcessInfo.processInfo.arguments)
-
-    static func demoDataRequested(by arguments: [String]) -> Bool {
-        arguments.contains("--demo-data")
-    }
-
-    static func pretendPairedRequested(by arguments: [String]) -> Bool {
-        arguments.contains("--pretend-paired") || demoDataRequested(by: arguments)
-    }
-}
-
 /// Static fixture responses for demo mode. Shapes mirror the daemon's
 /// JSON-RPC results exactly as the stores parse them (`workspace.list` →
 /// `WorkspaceStore.parseWorkspaces`, `note.list` → `Note.parseNote`,
 /// `agent.list` → `AgentSession.parseAgent`, ...).
 ///
-/// Subscribe methods intentionally fall through to the empty-dictionary
-/// default: a response without a `subscriptionId` makes every store fall
-/// back to its legacy fetch path, which is exactly right for static data.
+/// Chat subscriptions deliver a snapshot; event feeds acknowledge registrations.
 enum DemoFixtures {
     // Numeric values below are intentional status-image fixture geometry and color data.
     // swiftlint:disable no_magic_numbers number_separator
@@ -50,6 +25,8 @@ enum DemoFixtures {
     nonisolated private static let statusImageToggleCornerRadius: CGFloat = 12
     private static let bytesPerKilobyte = 1_024.0
     private static let secondsPerMinute: TimeInterval = 60
+    @TaskLocal static var transcriptTimestampAnchor = Date()
+    @TaskLocal private static var snapshotTimestampAnchor: Date?
     private static let defaultHookListDelaySeconds = 4
     private static let defaultBlockHydrationDelaySeconds = 4
     private static let triggerFilePollMilliseconds = 100
@@ -60,10 +37,17 @@ enum DemoFixtures {
     /// workspace, not part of App Store screenshots 02–04).
     static let longConversationWorkspaceId = "demo-ws-flaky-tests"
 
-    /// Agent whose `agent.getConversation` returns `longConversationMessages`
-    /// ("Test Stabilizer", idle). Every other agent keeps the 4-message
-    /// `conversationMessages` used by App Store screenshot 03.
+    /// Agent whose `chat.subscribe` snapshot (and `agent.getConversation`
+    /// seek) serves `longConversationMessages` ("Test Stabilizer", idle).
+    /// Every other agent keeps the 4-message `conversationMessages` used by
+    /// App Store screenshot 03.
     static let longConversationAgentId = "demo-agent-deflake"
+
+    /// `subscriptionId` a demo `chat.subscribe` acks with; the seq-0 snapshot
+    /// it owes is routed through `subscriptionPush(for:params:)`.
+    static func chatSubscriptionId(agentId: String?) -> String {
+        "demo-chat-\(agentId ?? "unknown")"
+    }
 
     /// Sub-agents delegated by `longConversationAgentId`, in the order they
     /// appear in the transcript's agent-to-agent rows. `agent.getSubscriptions`
@@ -141,17 +125,10 @@ enum DemoFixtures {
         }
     }
 
-    /// What `hook.list` for `longConversationWorkspaceId` waits on before
-    /// answering, so the hooks row appears under an already-settled
-    /// transcript — the container-resize path of #272 under `--demo-data`
-    /// (`ConversationTranscriptScrollUITests`). Every other fixture answers
-    /// immediately, apart from `agent.getMessageBlock` behind
-    /// `longConversationBlockHydrationGate`. The default delay suits the
-    /// screenshot flows; a UI test
-    /// that must observe the transcript before the row lands passes
-    /// `--demo-hook-list-trigger-file=<path>` and creates that file when it
-    /// is ready — a clock cannot be made robust against the render time of a
-    /// loaded CI simulator.
+    /// Delays the long transcript's hooks row for container-resize tests (#272).
+    /// UI tests release a trigger file after observing the transcript; a fixed
+    /// delay cannot account for a loaded simulator. Screenshot flows use the
+    /// default delay. Metadata/snapshot and hydration gates are independent.
     static let longConversationHookListGate = hookListGate(from: ProcessInfo.processInfo.arguments)
 
     static let defaultHookListDelay: Duration = .seconds(defaultHookListDelaySeconds)
@@ -317,7 +294,13 @@ enum DemoFixtures {
     /// Gate to wait on before serving `response(for:params:)`, or nil for an
     /// immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
+        if let gate = agentGroupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
+        if let gate = startupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         switch method {
+        case "settings.get" where params["path"] as? String == "providers.enabled":
+            return workspaceProviderGate(from: ProcessInfo.processInfo.arguments)
+        case "workspace.list":
+            return DemoConnectionLoss.initialDataGate
         case "hook.list" where params["workspaceId"] as? String == longConversationWorkspaceId:
             return longConversationHookListGate
         case "agent.getMessageBlock" where params["agentId"] as? String == longConversationAgentId:
@@ -325,6 +308,19 @@ enum DemoFixtures {
         default:
             return nil
         }
+    }
+
+    /// The loading UI test releases this response only after observing it.
+    static func agentGroupResponseGate(for method: String, params: [String: Any], arguments: [String]) -> ResponseGate? {
+        guard method == "agent.list", params["scope"] as? String == "background",
+              DemoDesignScenario.requested(by: arguments) == .agentGroupsRetry else { return nil }
+        return triggerFile(from: arguments, prefix: "--demo-agent-group-trigger-file=").map(ResponseGate.triggerFile)
+    }
+
+    /// Holds workspace policy validation until the UI test releases it (#446).
+    /// Without the argument, ordinary demo requests still answer immediately.
+    static func workspaceProviderGate(from arguments: [String]) -> ResponseGate? {
+        triggerFile(from: arguments, prefix: "--demo-workspace-provider-trigger-file=").map(ResponseGate.triggerFile)
     }
 
     /// Suspends until `gate` opens; cancellation propagates from `Task.sleep`.
@@ -338,15 +334,70 @@ enum DemoFixtures {
             }
         }
     }
+}
 
-    /// Fixture response for a JSON-RPC method. Unknown methods return an
-    /// empty dictionary, which every call site parses as "no data" safely.
-    static func response(for method: String, params: [String: Any]) -> Any {
+extension DemoFixtures {
+    /// Chat snapshots, plus opt-in design scenario updates after commands.
+    static func subscriptionPush(for method: String, params: [String: Any]) -> SubscriptionPush? {
+        if let push = designScenario?.subscriptionPush(for: method, params: params) { return push }
+        guard method == "chat.subscribe" else { return nil }
+        let agentId = params["agentId"] as? String
+        let messages = transcriptMessages(agentId: agentId)
+        return SubscriptionPush(
+            subscriptionId: chatSubscriptionId(agentId: agentId),
+            seq: 0,
+            conversationSnapshot: messages,
+            metadata: ["truncated": false, "totalMessages": messages.count]
+        )
+    }
+
+    static func transcriptMessages(agentId: String?) -> [[String: Any]] {
+        if agentId == "demo-agent-implementor", let messages = DemoBrowserFixtures.conversationMessages { return messages }
+        if usesStartupTranscript, agentId == longConversationAgentId { return startupTranscriptMessages }
+        if let designScenario, agentId == DemoDesignFixtures.agentId { return designScenario.messages }
+        if inlineImageConversationRequested(by: ProcessInfo.processInfo.arguments),
+           agentId == inlineImageAgentId {
+            return inlineImageConversationMessages
+        }
+        if agentId == assistantAgentId { return assistantMessages }
+        if assistantAgents.contains(where: { ($0["id"] as? String) == agentId }) { return [] }
+        return agentId == longConversationAgentId ? longConversationMessages : conversationMessages
+    }
+
+    /// JSON-RPC fixture response. Unknown methods return an empty dictionary.
+    static func response(
+        for method: String,
+        params: [String: Any],
+        snapshotAnchor: Date = Date()
+    ) -> Any {
+        if let response = DemoWorkspaceActionFixtures.response(for: method, params: params) { return response }
+        if let response = designScenario?.response(for: method, params: params)
+            ?? DemoTerminalFixtures.response(for: method, params: params)
+            ?? DemoBrowserFixtures.response(for: method, params: params) { return response }
+        if let changesResponse = DemoChangesFixtures.response(for: method, params: params) { return changesResponse }
+        return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
+            workspaceAndNoteResponse(for: method, params: params)
+        }
+    }
+
+    private static func workspaceAndNoteResponse(for method: String, params: [String: Any]) -> Any {
+        if let response = proposalResponse(for: method, params: params) { return response }
         switch method {
-        case "workspace.list":
-            return ["workspaces": workspaces]
-        case "note.list":
-            return ["notes": notes]
+        case "events.subscribe": return ["subscriptionId": "demo-events-\(params["replaceGroup"] as? String ?? "default")"]
+        case "prMonitor.list": return ["monitors": [[String: Any]]()]
+        case "workspace.list": return ["workspaces": workspaces]
+        case "workspace.transfer.plan":
+            return [
+                "plan": [
+                    "manifest": [
+                        "workspaceId": params["workspaceId"] ?? "demo-workspace",
+                        "creatingIntentdVersion": "demo"
+                    ],
+                    "totalSizeBytes": 0,
+                    "warnings": [[String: String]]()
+                ]
+            ]
+        case "note.list": return ["notes": notes]
         case "note.get":
             let noteId = params["noteId"] as? String
             let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]
@@ -374,29 +425,46 @@ enum DemoFixtures {
     // swiftlint:disable:next cyclomatic_complexity
     private static func agentAndTaskResponse(for method: String, params: [String: Any]) -> Any {
         switch method {
+        case "agent.create" where params["workspaceId"] as? String == Workspace.chiefWorkspaceId:
+            return createAssistantAgent()
         case "agent.list":
             let workspaceId = params["workspaceId"] as? String
-            return ["agents": workspaceId == longConversationWorkspaceId ? longConversationAgents : agents]
+            if workspaceId == Workspace.chiefWorkspaceId { return ["agents": assistantAgents] }
+            return DemoAgentListFixtures.response(rows: workspaceId == longConversationWorkspaceId ? longConversationAgents : agents, params: params)
         case "agent.get":
             let agentId = params["agentId"] as? String
-            let agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
+            if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) {
+                return ["agent": assistant]
+            }
+            var agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
+            if usesStartupTranscript, agentId == longConversationAgentId {
+                agent["metadata"] = ["lastSeenMessageId": startupSeenMessageId]
+            }
             return ["agent": agent]
         case "agent.getConversation":
-            let agentId = params["agentId"] as? String
-            let messages = agentId == longConversationAgentId ? longConversationMessages : conversationMessages
+            let messages = transcriptMessages(agentId: params["agentId"] as? String)
             return [
                 "messages": messages,
                 "truncated": false,
                 "totalMessages": messages.count
             ] as [String: Any]
+        case "chat.subscribe":
+            return ["subscriptionId": chatSubscriptionId(agentId: params["agentId"] as? String)]
         case "agent.getMessageBlock":
             let blockId = params["blockId"] as? String
             guard let block = longConversationFullBlock(id: blockId) else { return [String: Any]() }
             return ["block": block]
+        case "agent.sendMessage":
+            // Static transcripts have no replying agent; acknowledge the send
+            // without replacing its optimistic row or ending the Thinking state.
+            var response: [String: Any] = ["success": true, "queued": false]
+            response["messageId"] = params["messageId"] as? String
+            return response
         case "agent.getQueue":
             return ["queue": [[String: Any]]()]
         case "agent.getSubscriptions":
             let agentId = params["agentId"] as? String
+            if usesStartupTranscript, agentId == longConversationAgentId { return ["subscriptions": []] }
             return agentId == longConversationAgentId ? longConversationSubscriptions : [String: Any]()
         case "hook.list":
             let workspaceId = params["workspaceId"] as? String
@@ -406,15 +474,27 @@ enum DemoFixtures {
         case "specialist.list":
             return ["specialists": specialists]
         default:
-            return [String: Any]()
+            return workspaceCreationResponse(for: method, params: params)
         }
     }
+}
 
-    /// ISO 8601 timestamp relative to now, so relative-time labels
-    /// ("12m ago") always look fresh in screenshots.
+extension DemoFixtures {
+    /// Non-transcript timestamp relative to one response's snapshot time, so
+    /// relative-time labels and future events refresh together on each request.
     static func iso(minutesAgo: Double) -> String {
+        iso(minutesAgo: minutesAgo, relativeTo: snapshotTimestampAnchor ?? Date())
+    }
+
+    /// Transcript timestamp relative to the process-stable message anchor, so
+    /// independently rebuilt snapshots preserve immutable message identity.
+    static func transcriptIso(minutesAgo: Double) -> String {
+        iso(minutesAgo: minutesAgo, relativeTo: transcriptTimestampAnchor)
+    }
+
+    static func iso(minutesAgo: Double, relativeTo anchor: Date) -> String {
         ISO8601DateFormatter().string(
-            from: Date(timeIntervalSinceNow: -minutesAgo * secondsPerMinute)
+            from: anchor.addingTimeInterval(-minutesAgo * secondsPerMinute)
         )
     }
 }

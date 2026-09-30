@@ -445,6 +445,31 @@ final class LastScreenPersistenceTests {
         #expect(persistenceManager.loadLastScreen(for: secondConnection)?.workspaceId == "ws-b")
     }
 
+    @Test func malformedSiblingDoesNotEraseValidScreenDuringSaveOrClear() throws {
+        let preservedConnection = UUID()
+        let malformedConnection = UUID()
+        let newConnection = UUID()
+        persistenceManager.saveLastScreen(makeScreen(workspaceId: "ws-preserved"), for: preservedConnection)
+        var seededScreens = try #require(persistenceManager.defaults.dictionary(forKey: "lastScreens"))
+        seededScreens[malformedConnection.uuidString] = "not screen data"
+        persistenceManager.defaults.set(seededScreens, forKey: "lastScreens")
+
+        persistenceManager.saveLastScreen(makeScreen(workspaceId: "ws-new"), for: newConnection)
+
+        #expect(persistenceManager.loadLastScreen(for: preservedConnection)?.workspaceId == "ws-preserved")
+        #expect(persistenceManager.loadLastScreen(for: malformedConnection) == nil)
+        #expect(persistenceManager.loadLastScreen(for: newConnection)?.workspaceId == "ws-new")
+        var storedScreens = try #require(persistenceManager.defaults.dictionary(forKey: "lastScreens"))
+        #expect(storedScreens[malformedConnection.uuidString] as? String == "not screen data")
+
+        persistenceManager.clearLastScreen(for: newConnection)
+
+        #expect(persistenceManager.loadLastScreen(for: preservedConnection)?.workspaceId == "ws-preserved")
+        storedScreens = try #require(persistenceManager.defaults.dictionary(forKey: "lastScreens"))
+        #expect(storedScreens[malformedConnection.uuidString] as? String == "not screen data")
+        #expect(storedScreens[newConnection.uuidString] == nil)
+    }
+
     @Test func legacySingleSlotMigratesToTheActiveConnection() {
         let active = persistenceManager.upsertConnection(StoredConnection(
             server: PairedServer(hosts: ["10.0.0.1"], port: 1, name: "a", pairedAt: Date()),

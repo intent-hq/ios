@@ -24,13 +24,13 @@ struct DisconnectedView: View {
             Spacer()
             reconnectingIndicator
             Text("Connection Lost")
-                .font(.title2.bold())
+                .interFont(Constants.Typography.heading2.withFace(.bold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
             connectionDescription
             attemptDescription
             certificateMismatches
             Spacer()
-            logOffButton
+            homeButton
         }
     }
 
@@ -54,7 +54,7 @@ struct DisconnectedView: View {
     private var connectionDescription: some View {
         if let connection = coordinator.windowConnection {
             Text("Reconnecting to \(connection.server.name)...")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -66,7 +66,7 @@ struct DisconnectedView: View {
     private var attemptDescription: some View {
         if attemptNumber > 1 {
             Text("Attempt \(attemptNumber)")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
     }
@@ -79,19 +79,17 @@ struct DisconnectedView: View {
         }
     }
 
-    private var logOffButton: some View {
-        Button(action: {
-            session.connection.disconnect()
-            coordinator.onLogOff()
-        }, label: {
-            Text("Log Off")
-                .font(.body.weight(.medium))
-                .foregroundStyle(.red)
+    private var homeButton: some View {
+        Button(action: coordinator.onReturnToSavedMachines) {
+            Text("Back to Home")
+                .interFont(Constants.Typography.bodyM.withFace(.semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Constants.Disconnected.buttonVerticalPadding)
-                .background(Color.red.opacity(Constants.Disconnected.buttonBackgroundOpacity))
-                .clipShape(RoundedRectangle(cornerRadius: Constants.Disconnected.buttonCornerRadius))
-        })
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .accessibilityHint("Return to your saved machines without forgetting this connection.")
+        .accessibilityIdentifier("disconnected.home")
         .padding(.horizontal, Constants.Disconnected.horizontalPadding)
         .padding(.bottom, Constants.Disconnected.bottomPadding)
     }

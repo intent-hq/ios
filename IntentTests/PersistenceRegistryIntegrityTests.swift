@@ -78,7 +78,8 @@ struct PersistenceRegistryIntegrityTests {
 
     @Test func syncedMergeRefusesToOverwriteUndecodableBlob() {
         reset(); defer { reset() }; seed()
-        let staleActive = UUID(); manager.setActiveConnection(id: staleActive)
+        let staleActive = UUID()
+        manager.defaults.set(staleActive.uuidString, forKey: manager.activeConnectionIdKey)
         let outcome = manager.mergeSyncedBackends(records: [syncedRecord()])
         #expect(outcome.registryUndecodable)
         #expect(!outcome.changed)

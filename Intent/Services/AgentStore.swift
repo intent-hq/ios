@@ -62,8 +62,10 @@ extension SpecialistInfo {
               let description = item["description"] as? String else { return nil }
         self.init(
             id: id,
-            name: name,
-            description: description,
+            name: AgentSession.displayName(for: name),
+            description: id == "chief-of-staff"
+                ? description.replacingOccurrences(of: "Chief of Staff", with: "Assistant", options: .caseInsensitive)
+                : description,
             resolvedModel: item["resolvedModel"] as? String,
             resolvedProvider: item["resolvedProvider"] as? String,
             hidden: item["hidden"] as? Bool ?? false,
@@ -85,13 +87,23 @@ extension SpecialistInfo {
     var hasLoaded = false
 
     let connectionManager: ConnectionManagerRouting
-    private var workspaceId: String?
+    let summaries: AgentSummaryStore?
+    var workspaceId: String?
+    let list = AgentListState()
+    /// Opt in for workspace lists; name-resolution consumers still need all active rows.
+    let scopedLoading: Bool
     @ObservationIgnored private var eventHandlerId: UUID?
     private var fetchDebounceTask: Task<Void, Never>?
     private var connectionObserver: AnyCancellable?
 
-    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
+    init(
+        connectionManager: ConnectionManagerRouting = ConnectionManager.shared,
+        summaries: AgentSummaryStore? = nil,
+        scopedLoading: Bool = false
+    ) {
         self.connectionManager = connectionManager
+        self.summaries = summaries
+        self.scopedLoading = scopedLoading
         observeConnection()
     }
 
@@ -133,18 +145,17 @@ extension SpecialistInfo {
         // an in-flight response for the old workspace must already fail
         // the stale-response guard in _fetchAgents.
         self.workspaceId = workspaceId
+        fetchDebounceTask?.cancel()
+        list.reset()
         agents = []
         hasLoaded = false
+        isLoading = false
     }
 
     func fetchAgents(workspaceId: String) async {
         let workspaceChanged = self.workspaceId != workspaceId
         // If workspace changed, clear agents immediately to prevent stale data
-        if workspaceChanged {
-            agents = []
-            hasLoaded = false
-        }
-        self.workspaceId = workspaceId
+        prepareForWorkspaceChange(to: workspaceId)
 
         // Debounce: cancel any pending fetch and wait 300ms before actually fetching
         // Skip debounce on first load (when workspace changed or no agents yet) for instant display
@@ -171,46 +182,6 @@ extension SpecialistInfo {
             } onCancel: {
                 task.cancel()
             }
-        }
-    }
-
-    private func _fetchAgents(workspaceId: String) async {
-        // Only show loading indicator if we have no agents to display
-        if agents.isEmpty {
-            isLoading = true
-        }
-        do {
-            let result = try await connectionManager.request(
-                "agent.list",
-                params: ["workspaceId": workspaceId]
-            )
-            // Guard: a stale response for a previous workspace must not
-            // replace the current workspace's agents or flip hasLoaded. The
-            // current workspace's own fetch manages isLoading.
-            guard self.workspaceId == workspaceId else { return }
-            // A fetch cancelled while its request was in flight must not
-            // publish the late response either.
-            try Task.checkCancellation()
-            if let dict = result as? [String: Any],
-               let items = dict["agents"] as? [[String: Any]] {
-                // Only publish a changed list: an identical refetch (e.g. the
-                // deferred refresh after swiping back to the workspace) must
-                // not invalidate observers and rebuild the agent list.
-                let parsed = items.compactMap { AgentSession.parseAgent($0) }
-                if parsed != agents {
-                    agents = parsed
-                }
-            }
-            if !hasLoaded {
-                hasLoaded = true
-            }
-        } catch is CancellationError {
-            // Cancelled refresh: nothing to publish, nothing to log.
-        } catch {
-            AppLog.agents.error("[AgentStore] Failed to fetch agents: \(error)")
-        }
-        if isLoading {
-            isLoading = false
         }
     }
 
@@ -370,7 +341,10 @@ extension SpecialistInfo {
         switch Self.classify(type: eventType, data: event["data"] as? [String: Any]) {
         case .refetch:
             guard let workspaceId else { return }
-            Task { await fetchAgents(workspaceId: workspaceId) }
+            Task {
+                guard self.workspaceId == workspaceId else { return }
+                await fetchAgents(workspaceId: workspaceId)
+            }
         case .patchInPlace, .ignore, nil:
             break
         }

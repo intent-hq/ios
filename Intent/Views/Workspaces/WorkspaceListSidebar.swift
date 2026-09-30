@@ -2,36 +2,32 @@ import SwiftUI
 
 struct WorkspaceListSidebar: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
-    @State private var showingCreateWorkspace = false
-    @State private var showingConnections = false
+    @Binding private var isSearching: Bool
     @FocusState private var searchFocused: Bool
 
-    init(workspaceStore: WorkspaceStore) {
+    init(workspaceStore: WorkspaceStore, isSearching: Binding<Bool>) {
         self.workspaceStore = workspaceStore
         _viewModel = State(initialValue: WorkspaceListViewModel(workspaceStore: workspaceStore))
+        _isSearching = isSearching
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("View", selection: $viewModel.viewMode) {
-                ForEach(ViewMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
+            if !isSearching {
+                WorkspaceSearchBar(viewMode: $viewModel.viewMode, isSearching: $isSearching)
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, Constants.WorkspaceList.pickerHorizontalPadding)
-            .padding(.vertical, Constants.WorkspaceList.pickerVerticalPadding)
 
             ZStack {
                 Theme.sidebar(for: colorScheme).ignoresSafeArea()
 
                 if viewModel.isLoading, viewModel.workspaces.isEmpty {
-                    ProgressView("Loading workspaces...")
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    ProgressView {
+                        Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+                    }
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 } else if viewModel.filteredWorkspaces.isEmpty {
                     if viewModel.hasSearchQuery {
                         ContentUnavailableView.search
@@ -44,54 +40,32 @@ struct WorkspaceListSidebar: View {
             }
         }
         .background(Theme.sidebar(for: colorScheme))
-        .navigationTitle("Workspaces")
-        .workspaceSearch(text: $viewModel.searchText, isFocused: $searchFocused)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Menu {
-                    Button {
-                        showingCreateWorkspace = true
-                    } label: {
-                        Label("Create New Workspace", systemImage: "plus.rectangle")
-                    }
-                    Button {
-                        coordinator.onOpenSettings()
-                    } label: {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                    Divider()
-                    Button {
-                        showingConnections = true
-                    } label: {
-                        Label("Connect to…", systemImage: "desktopcomputer")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                }
-                .accessibilityLabel("Workspace options")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isSearching {
+                WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
             }
-        }
-        .sheet(isPresented: $showingCreateWorkspace) {
-            CreateWorkspaceView(session: session)
-                .environment(coordinator)
-        }
-        .sheet(isPresented: $showingConnections) {
-            ConnectionsView()
-                .environment(coordinator)
         }
         .refreshable {
             await workspaceStore.fetchAll()
+        }
+        .navigationTitle("Workspaces")
+        .onDisappear {
+            isSearching = false
+            viewModel.searchText = ""
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
     }
 
     private var emptyState: some View {
-        ContentUnavailableView(
-            "No Workspaces",
-            systemImage: "rectangle.stack.badge.plus",
-            description: Text("Create one in the desktop app.")
-        )
+        ContentUnavailableView {
+            Label {
+                Text("No Workspaces").interFont(Constants.Typography.bodyM.withFace(.semibold))
+            } icon: {
+                Image(systemName: "rectangle.stack.badge.plus")
+            }
+        } description: {
+            Text("Create one in the desktop app.").interFont(Constants.Typography.bodyS)
+        }
     }
 
     @ViewBuilder
@@ -120,6 +94,7 @@ struct WorkspaceListSidebar: View {
                             size: Constants.WorkspaceList.sidebarSectionAvatarSize
                         )
                         Text(repoName)
+                            .interFont(Constants.Typography.eyebrow)
                     }) {
                         ForEach(workspaces) { workspace in
                             sidebarRow(workspace, showRepo: false)
@@ -128,7 +103,7 @@ struct WorkspaceListSidebar: View {
                 }
             case .status:
                 ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
-                    Section(header: Text(statusLabel)) {
+                    Section(header: Text(statusLabel).interFont(Constants.Typography.eyebrow)) {
                         ForEach(workspaces) { workspace in
                             sidebarRow(workspace)
                         }
@@ -147,12 +122,23 @@ struct WorkspaceListSidebar: View {
         .focusEffectDisabled()
         #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
+        .contentMargins(.bottom, isSearching ? 0 : AssistantLaunchButton.scrollClearance, for: .scrollContent)
     }
 
     /// Shared row modifiers for every view mode. The explicit row background
     /// replaces the sidebar list's accent-tinted selection with a neutral grey.
+    /// On visionOS that custom background also replaces the system row
+    /// background that drew the gaze highlight (ios#339), so the hover effect
+    /// is reapplied to the row content in the selection's rounded shape.
     private func sidebarRow(_ workspace: Workspace, showRepo: Bool = true) -> some View {
         WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
+            #if os(visionOS)
+            .contentShape(
+                .hoverEffect,
+                .rect(cornerRadius: Constants.WorkspaceList.sidebarSelectionCornerRadius)
+            )
+            .hoverEffect()
+            #endif
             .tag(workspace.id)
             .listRowInsets(EdgeInsets(
                 top: Constants.WorkspaceList.sidebarRowInset,

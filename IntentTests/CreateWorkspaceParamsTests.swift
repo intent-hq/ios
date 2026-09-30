@@ -33,7 +33,8 @@ struct CreateWorkspaceParamsTests {
         specialist: SpecialistInfo? = nil,
         provider: ProviderInfo? = nil,
         model: ModelInfo? = nil,
-        message: String = ""
+        message: String = "",
+        reasoningEffort: String? = nil
     ) -> [String: Any] {
         CreateWorkspaceView.buildCreateWorkspaceParams(
             githubUrl: "https://github.com/intent-hq/intentd",
@@ -43,7 +44,8 @@ struct CreateWorkspaceParamsTests {
                 specialist: specialist,
                 provider: provider,
                 model: model,
-                message: message
+                message: message,
+                reasoningEffort: reasoningEffort
             )
         )
     }
@@ -210,9 +212,49 @@ struct CreateWorkspaceParamsTests {
         #expect(initialAgent["model"] as? String == "opus4.6")
     }
 
+    // MARK: - Reasoning contract (protocol §5.1 / §5.30)
+
+    @Test(arguments: [false, true])
+    func autoReasoningOmitsOverrideAndPreservesModelDefault(explicitModel: Bool) throws {
+        let params = buildParams(
+            specialist: makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie"),
+            provider: makeProvider(),
+            model: explicitModel ? makeModel() : nil
+        )
+        let agent = try #require(params["initialAgent"] as? [String: Any])
+        #expect(agent["reasoningEffort"] == nil) // Blank would clear, not inherit.
+        #expect(agent["model"] as? String == (explicitModel ? "sonnet4.5" : nil))
+    }
+
+    @Test func explicitReasoningIsSentWithoutChangingOtherCreationFields() throws {
+        let params = buildParams(
+            specialist: makeSpecialist(),
+            provider: makeProvider(),
+            model: makeModel(),
+            message: "  Plan the work  ",
+            reasoningEffort: "future-level"
+        )
+        let agent = try #require(params["initialAgent"] as? [String: Any])
+        #expect(agent as? [String: String] == [
+            "specialist": "implementor", "provider": "auggie", "model": "sonnet4.5",
+            "prompt": "Plan the work", "reasoningEffort": "future-level"
+        ])
+        #expect(params["idempotencyKey"] as? String == "key-123")
+    }
+
     // MARK: - Provider emission/omission
 
-    @Test func providerOmittedWhenAuggieOnDaemonDefault() throws {
+    @Test func enabledAuggieOverridesDifferentSpecialistProvider() throws {
+        let params = buildParams(
+            specialist: makeSpecialist(resolvedProvider: "codex"), provider: makeProvider(id: "auggie")
+        )
+        let initialAgent = try #require(params["initialAgent"] as? [String: Any])
+        #expect(initialAgent["provider"] as? String == "auggie")
+        let providerOnly = buildParams(provider: makeProvider(id: "auggie"))
+        #expect((providerOnly["initialAgent"] as? [String: Any])?["provider"] as? String == "auggie")
+    }
+
+    @Test func auggieSentExplicitlyWithDaemonDefaultModel() throws {
         let params = buildParams(
             specialist: makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie"),
             provider: makeProvider(id: "auggie"),
@@ -220,18 +262,18 @@ struct CreateWorkspaceParamsTests {
             message: "Do the thing"
         )
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
-        #expect(initialAgent["provider"] == nil)
+        #expect(initialAgent["provider"] as? String == "auggie")
         #expect(initialAgent["model"] == nil)
     }
 
-    @Test func providerOmittedWhenAuggieWithModelPick() throws {
+    @Test func auggieSentExplicitlyWithModelPick() throws {
         let params = buildParams(
             specialist: makeSpecialist(),
             provider: makeProvider(id: "auggie"),
             model: makeModel(id: "opus4.6")
         )
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
-        #expect(initialAgent["provider"] == nil)
+        #expect(initialAgent["provider"] as? String == "auggie")
         #expect(initialAgent["model"] as? String == "opus4.6")
     }
 

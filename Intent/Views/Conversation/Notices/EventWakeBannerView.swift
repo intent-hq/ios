@@ -17,7 +17,7 @@ struct EventWakeBannerView: View {
                 Image(systemName: "bell.fill")
                     .font(.caption2)
                 Text(label)
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .multilineTextAlignment(.center)
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))

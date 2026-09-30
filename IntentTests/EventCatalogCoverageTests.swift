@@ -103,11 +103,13 @@ struct EventCatalogCoverageTests {
             "defaultModel": .refetch,
             "isRemote": .refetch,
             "mcpServerToggled": .refetch,
+            "members": .refetch,
             "path": .refetch,
             "prNumber": .refetch,
             "prStatus": .refetch,
             "prUrl": .refetch,
             "pullRequests": .refetch,
+            "removedPrincipalId": .refetch,
             "repositoryName": .refetch,
             "repositoryOwner": .refetch,
             "repositoryPath": .refetch,
@@ -298,7 +300,7 @@ extension EventCatalogCoverageTests {
         for store in Self.stores {
             for channel in store.channels {
                 #expect(
-                    ConnectionManager.globalEventTypes.contains(channel + "*"),
+                    ConnectionManager.globalEventTypes.contains(channel.hasSuffix(":") ? channel + "*" : channel),
                     "\(store.name) handles \(channel) but ConnectionManager.globalEventTypes = \(ConnectionManager.globalEventTypes)"
                 )
             }
@@ -306,7 +308,7 @@ extension EventCatalogCoverageTests {
     }
 
     private static func catalogTypes(on channels: [String]) -> [String] {
-        golden.types.filter { type in channels.contains { type.hasPrefix($0) } }
+        golden.types.filter { type in channels.contains { $0.hasSuffix(":") ? type.hasPrefix($0) : type == $0 } }
     }
 
     /// Any type on a handled channel that no table names is a silent drop of
@@ -335,7 +337,7 @@ extension EventCatalogCoverageTests {
                     "\(store.name) classifies \(type), which is not in the catalog"
                 )
                 #expect(
-                    store.channels.contains { type.hasPrefix($0) },
+                    store.channels.contains { $0.hasSuffix(":") ? type.hasPrefix($0) : type == $0 },
                     "\(store.name) classifies \(type) outside its channels \(store.channels)"
                 )
             }

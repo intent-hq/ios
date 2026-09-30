@@ -35,12 +35,12 @@ struct NavigationTitleSubtitleView: View {
     private func titleStack(alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 0) {
             Text(title)
-                .font(.headline)
+                .interFont(Constants.Typography.bodyM.withFace(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .lineLimit(1)
                 .truncationMode(.tail)
             Text(subtitle)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -102,10 +102,7 @@ struct WorkspaceNavigationSubtitleModifier: ViewModifier {
 
     /// Cold start / deep link: the store may not have fetched yet.
     private func fetchWorkspacesIfNeeded() async {
-        let workspaceStore = session.workspaceStore
-        if workspaceStore.workspaces.isEmpty, !workspaceStore.isLoading {
-            await workspaceStore.fetchAll()
-        }
+        await session.workspaceStore.fetchIfNeeded()
     }
 }
 

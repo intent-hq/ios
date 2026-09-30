@@ -17,7 +17,9 @@
 #   build-ios               Build for the generic iOS Simulator destination
 #   build-visionos          Build for the generic visionOS Simulator destination
 #   build-for-testing       Build the iOS test bundle (CI split step)
-#   test-without-building   Run iOS unit tests against a prior build-for-testing
+#   test-without-building   Run iOS tests against a prior build-for-testing
+#   test-without-building-unit
+#                           test-without-building minus IntentUITests
 #   test-ios                build-for-testing then test-without-building
 #   test-ios-unit           test-ios minus the IntentUITests bundle (-skip-testing)
 #   pick-simulator          Print the chosen iPhone simulator UDID on stdout
@@ -30,9 +32,17 @@
 # platformFilter = ios only).
 #
 # Environment knobs (all optional; local runs need none):
+#   BUILD_CONFIGURATION   Debug or Release; unset/empty preserves the scheme's
+#                         existing defaults. Applied to every build/test call,
+#                         including enumeration and crash retries. Release test
+#                         commands enable @testable access (ENABLE_TESTABILITY=YES)
+#                         but never define DEBUG or change optimization. Plain
+#                         build-ios/build-visionos keep production testability.
 #   SIM_UDID              Simulator UDID for test destinations; when unset the
 #                         newest available iPhone simulator is picked automatically.
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
+#   DERIVED_DATA_DIR      Passed as -derivedDataPath to every build/test call.
+#                         CI uses a fresh directory per job and run attempt.
 #   RESULT_BUNDLE         Passed as -resultBundlePath to test-without-building;
 #                         an existing bundle at that path is removed first.
 #                         A filtered run (ONLY_TESTING set) with no RESULT_BUNDLE
@@ -41,8 +51,9 @@
 #                         kept and named (like the log) after a failing one.
 #   ONLY_TESTING          Whitespace-separated Target[/Class[/method]] identifiers;
 #                         each becomes one -only-testing: argument on the test
-#                         subcommands (test-without-building, test-ios,
-#                         test-ios-unit). Entries starting with '-' are refused;
+#                         subcommands (test-without-building and its unit
+#                         variant, test-ios, test-ios-unit). Entries starting
+#                         with '-' are refused;
 #                         duplicates are collapsed. Before the filtered run the
 #                         wrapper enumerates the built revision's tests
 #                         (xcodebuild -enumerate-tests, under the simulator
@@ -62,6 +73,11 @@
 #                         result on a green run exits 83 (see the exit codes
 #                         below). Unset/empty skips all of this and leaves the
 #                         command line untouched.
+#   ONLY_TESTING_IDENTITIES_PATH
+#                         Optional JSON evidence of the resolver's matched test
+#                         identities, used by the filtered iPad proof lane.
+#                         Unset leaves output and selection unchanged. A failed
+#                         requested export exits 83 before tests start.
 #   GITHUB_STEP_SUMMARY   When set (GitHub Actions does), the per-selector table
 #                         of a filtered run is also appended there as Markdown,
 #                         as is every test-process crash or restart (the crash
@@ -81,7 +97,24 @@
 #                         (with every process under it) gets to exit after
 #                         SIGTERM before the survivors are SIGKILLed; default 30.
 #
-# Simulator lock: test-without-building (and so test-ios / test-ios-unit) holds
+# Release verification (intent-hq/ios#468):
+#   BUILD_CONFIGURATION=Release scripts/xcodebuild.sh build-ios
+#     Production-configuration build proof only, not runtime failure coverage.
+#   BUILD_CONFIGURATION=Release ONLY_TESTING='IntentTests/ReleaseConfigurationTests' \
+#     scripts/xcodebuild.sh test-ios-unit
+#     Executes the Release branch checks. Add release-compatible diagnostic
+#     suites to ONLY_TESTING as implemented; this does not prove producers that
+#     do not exist yet. The full suite contains DEBUG-only plaintext fixtures:
+#     using those in Release deliberately fails, rather than enabling insecure
+#     app behavior or silently skipping coverage. NetworkCopyDiagnosticsTests
+#     is DEBUG-only and will not resolve in Release.
+#   For split runs use BUILD_CONFIGURATION=Release on BOTH build-for-testing
+#   and test-without-building[-unit], and rebuild after changing configuration
+#   (both use the scheme's generated xctestrun location). Do not reuse a Debug
+#   build as Release evidence. ReleaseConfigurationTests is absent in Debug,
+#   so selecting it there fails the existing selector gate.
+#
+# Simulator lock: test-without-building (and its unit/test-ios variants) holds
 # an exclusive lock on the chosen simulator for the duration of the xcodebuild
 # test run. Two runs driving one device concurrently (two agents in one
 # checkout, or two checkouts picking the same device) kill each other's test
@@ -99,17 +132,21 @@
 # holds the lock and polls once a second. CI runs one job per VM, so the lock
 # is never contended there.
 #
-# Software keyboard: IntentUITests' keyboard-resize test
-# (ConversationTranscriptScrollUITests/testKeyboardOpenKeepsTranscriptAtEnd)
-# needs the simulator to raise the software keyboard when the composer is
-# focused. Simulator.app's "Connect Hardware Keyboard" (I/O > Keyboard) is a
-# per-Mac user preference, not a device or xcodebuild setting, so this script
-# does not touch it; with it on, no software keyboard appears and the test
-# skips naming the setting (intent-hq/ios#385). To detach it without the
-# menu, quit Simulator.app and run
-#   defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
-# (a per-device override lives under the DevicePreferences key of the same
-# domain). Hosted CI runners have it off.
+# Keyboard-resize UI test prerequisite (intent-hq/ios#385): the transcript
+# test enters a draft and requires a hittable software keyboard. An absent
+# keyboard skips; an existing off-screen keyboard or a visible keyboard
+# without transcript shrink still fails. The separate quarantine requires
+# TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1 to exercise that test at all.
+#
+# Simulator.app's I/O > Keyboard > Connect Hardware Keyboard preference can
+# affect presentation, but its value does not establish effective keyboard
+# state. This wrapper leaves host and device preferences unchanged. The global
+# preference can be inspected with
+#   defaults read com.apple.iphonesimulator ConnectHardwareKeyboard
+# and a device override can exist under DevicePreferences in the same domain.
+# The supported menu can detach the hardware keyboard; simctl has no equivalent
+# keyboard toggle. The hosted preference-on runs in #385 still showed a software
+# keyboard, so an observed keyboard is required regardless of the setting.
 #
 # Exit codes: xcodebuild's own status is passed through (65 = build or test
 # failure) except for these wrapper-specific codes, chosen outside sysexits(3)
@@ -180,14 +217,20 @@ Usage: scripts/xcodebuild.sh <subcommand>
   build-ios               Build for the generic iOS Simulator destination
   build-visionos          Build for the generic visionOS Simulator destination
   build-for-testing       Build the iOS test bundle (CI split step)
-  test-without-building   Run iOS unit tests against a prior build-for-testing
+  test-without-building   Run iOS tests against a prior build-for-testing
+  test-without-building-unit
+                          test-without-building minus IntentUITests
   test-ios                build-for-testing then test-without-building
   test-ios-unit           test-ios minus the IntentUITests bundle (-skip-testing)
   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 
-Optional env knobs: SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING,
+Optional env knobs: BUILD_CONFIGURATION (Debug or Release; unset keeps defaults),
+SIM_UDID, SPM_CLONE_DIR, DERIVED_DATA_DIR, RESULT_BUNDLE, ONLY_TESTING,
 TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see
 script header).
+Release tests enable @testable access, not DEBUG. Use focused release-compatible
+suites; DEBUG-only plaintext fixtures fail in Release. See the script header
+for production build proof and executable ReleaseConfigurationTests commands.
 ONLY_TESTING selectors (Target[/Suite[/test]], not file names) are gated: each
 is resolved against the enumerated tests before the run and checked against
 the result bundle after it, with a per-selector table printed at the end.
@@ -262,8 +305,20 @@ Not building it automatically: $reason"
 
 # Shared optional args appended to every xcodebuild invocation.
 common_args() {
+  if [ -n "${BUILD_CONFIGURATION:-}" ]; then
+    printf '%s\n' -configuration "$BUILD_CONFIGURATION"
+    if [ "$BUILD_CONFIGURATION" = Release ]; then
+      case "$subcommand" in
+        build-for-testing|test-without-building|test-without-building-unit|test-ios|test-ios-unit)
+          printf '%s\n' ENABLE_TESTABILITY=YES ;;
+      esac
+    fi
+  fi
   if [ -n "${SPM_CLONE_DIR:-}" ]; then
     printf '%s\n' -clonedSourcePackagesDirPath "$SPM_CLONE_DIR"
+  fi
+  if [ -n "${DERIVED_DATA_DIR:-}" ]; then
+    printf '%s\n' -derivedDataPath "$DERIVED_DATA_DIR"
   fi
 }
 
@@ -809,7 +864,7 @@ def matches(selector_parts, identifier):
 def excluded_by(selector, skips):
     return [skip for skip in skips if matches(skip.split("/"), selector)]
 def excluded_message(selector, skip):
-    return "ONLY_TESTING selector %r is excluded by -skip-testing:%s on this subcommand (test-ios-unit skips the IntentUITests bundle; use test-ios or test-without-building for it)." % (selector, skip)
+    return "ONLY_TESTING selector %r is excluded by -skip-testing:%s on this subcommand (unit-only subcommands skip the IntentUITests bundle; use test-ios or test-without-building for it)." % (selector, skip)
 '
 
 # Resolves the ONLY_TESTING selectors against the enumerated test catalog.
@@ -824,7 +879,7 @@ def excluded_message(selector, skip):
 # look-alike targets/suites), 2 when the catalog is unreadable or lists no
 # tests at all.
 ONLY_TESTING_RESOLVER_PY='
-import difflib, json
+import difflib, json, os
 catalog_path = sys.argv[1]
 skips, selectors = split_skips(sys.argv[2:])
 def unverified(reason):
@@ -871,6 +926,7 @@ def suggest(selector):
             scored.append((-score, candidate))
     return [candidate for _, candidate in sorted(scored)[:5]]
 unmatched = 0
+resolved_identities = {}
 for selector in selectors:
     parts = selector.split("/")
     excluded = excluded_by(selector, skips)
@@ -880,6 +936,7 @@ for selector in selectors:
         continue
     hits = [i for i in enabled if matches(parts, i)]
     if hits:
+        resolved_identities[selector] = hits
         sys.stderr.write("ONLY_TESTING: %s -> %d test(s)\n" % (selector, len(hits)))
         sys.stdout.write("%d\t%s\n" % (len(hits), selector))
         continue
@@ -895,6 +952,14 @@ if unmatched:
     sys.stderr.write("error: %d ONLY_TESTING selector(s) matched nothing; the test run was not started.\n" % unmatched)
     sys.stderr.write("A selector is Target/Suite or Target/Suite/test as enumerated by xcodebuild, not a file name (IntentTests/FooTests.swift never matches).\n")
     sys.exit(1)
+evidence_path = os.environ.get("ONLY_TESTING_IDENTITIES_PATH")
+if evidence_path:
+    try:
+        with open(evidence_path, "w") as evidence:
+            json.dump({"version": 1, "selectors": resolved_identities}, evidence, indent=2)
+            evidence.write("\n")
+    except OSError as error:
+        unverified("the requested resolved identity export could not be written (%s)" % error)
 '
 
 # Enumerates the tests of the built revision and resolves every ONLY_TESTING
@@ -1158,7 +1223,8 @@ summarize_only_testing() {
 # directory, so the path is free) that the post-run summary reads; it is
 # removed after a passing run and kept, and named, after a failing one.
 # Positional arguments are test-selection flags supplied by the subcommand
-# dispatch below (test-ios-unit passes -skip-testing:IntentUITests); they are
+# dispatch below (the two unit-only variants pass
+# -skip-testing:IntentUITests); they are
 # appended after the unconditional flags, as are the ONLY_TESTING arguments.
 #
 # The simulator lock is taken before the device is touched (boot, defaults,
@@ -1216,12 +1282,18 @@ for arg in "$@"; do
   esac
 done
 
+case "${BUILD_CONFIGURATION:-}" in
+  ''|Debug|Release) ;;
+  *) die "BUILD_CONFIGURATION must be Debug or Release (or unset to preserve scheme defaults)" ;;
+esac
+
 case "$subcommand" in
   resolve)               cmd_resolve ;;
   build-ios)             cmd_build_ios ;;
   build-visionos)        cmd_build_visionos ;;
   build-for-testing)     cmd_build_for_testing ;;
   test-without-building) cmd_test_without_building ;;
+  test-without-building-unit) cmd_test_without_building -skip-testing:IntentUITests ;;
   test-ios)              parse_only_testing && cmd_build_for_testing && cmd_test_without_building ;;
   test-ios-unit)         parse_only_testing && cmd_build_for_testing && cmd_test_without_building -skip-testing:IntentUITests ;;
   pick-simulator)        pick_simulator ;;

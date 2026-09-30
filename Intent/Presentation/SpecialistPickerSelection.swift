@@ -5,16 +5,26 @@ extension SpecialistPickerView {
         provider.isSelectable
     }
 
+    static func selectableModels(
+        provider: ProviderInfo?, providers: [ProviderInfo], models: [ModelInfo]
+    ) -> [ModelInfo] {
+        guard let provider,
+              providers.contains(where: { $0.id == provider.id && $0.isSelectable }) else { return [] }
+        return models.filter { $0.provider == provider.id }
+    }
+
     /// The Create action is unavailable while required selections are absent,
     /// loading is active, or no provider can be selected (monorepo#1003).
     static func isCreateDisabled(
         hasSpecialist: Bool,
         isCreating: Bool,
-        isLoadingProviders: Bool,
-        isLoadingModels: Bool,
-        providers: [ProviderInfo]
+        isLoadingOptions: Bool,
+        providers: [ProviderInfo],
+        selectedProvider: ProviderInfo?
     ) -> Bool {
-        !hasSpecialist || isCreating || isLoadingProviders || isLoadingModels || providers.noneSelectable
+        guard let selectedProvider,
+              providers.contains(where: { $0.id == selectedProvider.id && $0.isSelectable }) else { return true }
+        return !hasSpecialist || isCreating || isLoadingOptions
     }
 
     /// Keeps the selection while `current`'s id is still pickable in the
@@ -80,7 +90,8 @@ extension SpecialistPickerView {
         provider: ProviderInfo?,
         model: ModelInfo?
     ) -> (provider: String?, model: String?) {
-        let providerId = provider?.id
-        return (providerId == "auggie" ? nil : providerId, model?.id)
+        guard let provider, provider.isSelectable else { return (nil, nil) }
+        let providerId = provider.id
+        return (providerId == "auggie" ? nil : providerId, model?.provider == providerId ? model?.id : nil)
     }
 }

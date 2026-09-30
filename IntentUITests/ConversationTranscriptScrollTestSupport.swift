@@ -3,12 +3,17 @@ import XCTest
 // Shared diagnostics stay together so every failure reports the same state.
 // swiftlint:disable file_length
 
+@MainActor
+func transcriptScreenshot(in app: XCUIApplication, named name: String) -> XCTAttachment {
+    let attachment = XCTAttachment(screenshot: app.screenshot())
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    return attachment
+}
+
 enum Fixture {
     static let workspaceTitle = "Deflake payment integration tests"
-    // WorkspaceListView's navigation title: the list is the only screen
-    // that shows it, whereas `workspaceTitle` is also the overview's
-    // navigation title and the conversation's back-button label.
-    static let workspaceListTitle = "Workspaces"
+    static let workspaceListIdentifier = "workspaces.search.open"
     // DemoFixtures.longConversationAgents' top-level agent name: the row
     // tapped on the workspace overview to reach the transcript.
     static let agentName = "Test Stabilizer"
@@ -25,7 +30,9 @@ enum Fixture {
     // DemoFixtures.longConversationSuggestedPrompts[0] — the text of the
     // optimistic user row the tap appends.
     static let firstSuggestedPromptIdentifier = "transcript.suggestedPrompt.0"
-    static let firstSuggestedPrompt = "Open a PR for the deflake changes"
+    static let firstSuggestedPrompt =
+        "Open a [**PR**](https://github.com/intent-hq/ios) for the `deflake` changes"
+    static let firstSuggestedPromptLabel = "Open a PR for the deflake changes"
     // The last of DemoFixtures.longConversationSuggestedPrompts (three
     // prompts): the transcript's final content row while no send is in
     // flight. A transcript resting with it inside its frame, `endRowGap`
@@ -41,7 +48,14 @@ enum Fixture {
     // frame's bottom edge is that much above the row's.
     static let thinkingIndicatorLabel = "Thinking..."
     static let thinkingIndicatorLabelInset: CGFloat = 4
-    static let endRowGap: CGFloat = 36
+    // Workspace iPhone: 32pt section gap plus the 8pt anchor and 12pt footer.
+    // The shared non-phone presentation retains the original 16pt section gap.
+    private static let workspaceEndRowGap: CGFloat = 52
+    private static let legacyEndRowGap: CGFloat = 36
+
+    @MainActor static var endRowGap: CGFloat {
+        UIDevice.current.userInterfaceIdiom == .phone ? workspaceEndRowGap : legacyEndRowGap
+    }
     // Slack on `endRowGap`: the follow lands within 1 pt
     // (Constants.Conversation.Transcript.followLandingTolerance) and
     // accessibility frames round to the pixel grid.
@@ -262,10 +276,11 @@ func launchDemoApp(
     hooksRowTriggerFile: URL,
     blockHydrationTriggerFile: URL? = nil,
     standaloneSlimToolRows: Bool = false,
-    endDerealization: EndDerealization? = nil
+    endDerealization: EndDerealization? = nil,
+    extraArguments: [String] = []
 ) -> XCUIApplication {
     let app = XCUIApplication()
-    app.launchArguments += ["--demo-data", Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path]
+    app.launchArguments += ["--demo-data", Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path] + extraArguments
     if let blockHydrationTriggerFile {
         app.launchArguments.append(
             Fixture.blockHydrationTriggerFileArgumentPrefix + blockHydrationTriggerFile.path
@@ -318,7 +333,8 @@ func openLongConversation(
 func enterLongConversation(
     in app: XCUIApplication,
     context: String,
-    evidence: RecoveryEvidenceArming? = nil
+    evidence: RecoveryEvidenceArming? = nil,
+    waitForTranscript: Bool = true
 ) -> OpenConversation {
     let opened = OpenConversation(
         lastMessage: message(in: app, containing: Fixture.lastMessageFragment),
@@ -360,10 +376,12 @@ func enterLongConversation(
     )
     agentRow.tap()
 
-    XCTAssertTrue(
-        opened.transcript.waitForExistence(timeout: Fixture.elementTimeout),
-        "\(context): transcript scroll view not found"
-    )
+    if waitForTranscript {
+        XCTAssertTrue(
+            opened.transcript.waitForExistence(timeout: Fixture.elementTimeout),
+            "\(context): transcript scroll view not found"
+        )
+    }
     return opened
 }
 
@@ -393,19 +411,40 @@ func rows(intersecting transcript: XCUIElement) -> [XCUIElement] {
     return []
 }
 
+/// Row enumeration uses live indices which can retarget when lazy descendants
+/// change. Startup fixture labels are unique; retain that identity for every
+/// geometry sample across metadata release and same-view reappearance.
+@MainActor
+func startupVisibleRow(_ opened: OpenConversation) throws -> XCUIElement {
+    var selected: XCUIElement?
+    XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
+        guard let candidate = rows(intersecting: opened.transcript).first(where: { row in
+            row.label.hasPrefix("Startup row") && isInside(row, opened.transcript)
+        }), let snapshot = try? candidate.snapshot(), snapshot.label.hasPrefix("Startup row") else { return false }
+        let matches = opened.transcript.staticTexts.matching(NSPredicate(format: "label == %@", snapshot.label))
+        guard matches.count == 1 else { return false }
+        let row = matches.firstMatch
+        guard isInside(row, opened.transcript) else { return false }
+        selected = row
+        return true
+    })
+    return try XCTUnwrap(selected)
+}
+
 /// Navigates back out of the transcript to the workspace list so the
 /// next `openLongConversation` is a fresh entry; relaunches when no back
 /// path leads there (a split view keeps the transcript in its detail column).
-/// Gates on the list's own navigation bar: the workspace title alone also
+/// Gates on the list's search button: the workspace title alone also
 /// exists on the overview (its navigation title) and on the transcript
 /// (its back button), where tapping it navigates nowhere.
 @MainActor
 func leaveConversation(in app: XCUIApplication) {
-    let workspaceList = app.navigationBars[Fixture.workspaceListTitle].firstMatch
+    let workspaceList = app.buttons[Fixture.workspaceListIdentifier].firstMatch
     let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
     var backTapsLeft = Fixture.backNavigationAttempts
     while backTapsLeft > 0, !workspaceList.waitForExistence(timeout: Fixture.backNavigationTimeout) {
-        let back = app.navigationBars.buttons.element(boundBy: 0)
+        let workspaceBack = app.buttons["conversation.back"]
+        let back = workspaceBack.exists ? workspaceBack : app.navigationBars.buttons.element(boundBy: 0)
         guard back.exists else { break }
         back.tap()
         backTapsLeft -= 1
@@ -433,6 +472,7 @@ func footerBaseline(
         named: "last assistant paragraph",
         in: opened,
         context: "before the hooks row",
+        allowPreservedEntry: true,
         alsoReporting: (endRow.element, endRow.name)
     ) else { return nil }
     assertAtEnd(endRow, in: opened, context: "before the hooks row")
@@ -460,13 +500,15 @@ func assertRestsAtBottom(
     named rowName: String,
     endRow: EndRow,
     in opened: OpenConversation,
-    context: String
+    context: String,
+    allowPreservedEntry: Bool = false
 ) {
     guard waitUntilSettled(
         on: lastRow,
         named: rowName,
         in: opened,
         context: context,
+        allowPreservedEntry: allowPreservedEntry,
         alsoReporting: (endRow.element, endRow.name)
     ) else { return }
     assertAtEnd(endRow, in: opened, context: context)
@@ -475,7 +517,8 @@ func assertRestsAtBottom(
 
 /// The one settlement wait. Polls until the transcript has come to rest
 /// with `lastRow` at its end: the last forced follow has reported an
-/// outcome (the accessibility value is no longer `pending`), the row's
+/// outcome, or entry deliberately preserved a visible viewport without ever
+/// requesting a forced follow. Both paths require an idle viewport; the row's
 /// frame lies inside the transcript's frame, and the row has held still
 /// across two consecutive polls. A row the lazy stack has not realized
 /// (viewport past the end) never satisfies this. Fails the test — with
@@ -489,12 +532,21 @@ func waitUntilSettled(
     named rowName: String,
     in opened: OpenConversation,
     context: String,
+    allowPreservedEntry: Bool = false,
+    forcedFollowAfter: Int? = nil,
+    recoveryAfter: Int? = nil,
     alsoReporting extra: (row: XCUIElement, name: String)? = nil
 ) -> Bool {
     let transcript = opened.transcript
     var previousMaxY: CGFloat = .nan
     let settled = waitUntil(timeout: Fixture.settleTimeout) {
-        guard followHasReported(in: opened), let rowFrame = frame(of: lastRow) else {
+        guard viewportHasReportedSettlement(
+            followReport(in: opened),
+            allowPreservedEntry: allowPreservedEntry,
+            forcedFollowAfter: forcedFollowAfter,
+            recoveryAfter: recoveryAfter
+        ),
+              let rowFrame = frame(of: lastRow) else {
             previousMaxY = .nan
             return false
         }
@@ -590,6 +642,7 @@ func settledRecoveryBaseline(
         named: "last assistant paragraph",
         in: opened,
         context: context,
+        allowPreservedEntry: true,
         alsoReporting: (endRow.element, endRow.name)
     ) else { return nil }
     assertAtEnd(endRow, in: opened, context: context)
@@ -745,12 +798,55 @@ func followReport(in opened: OpenConversation) -> String {
     (opened.transcript.value as? String) ?? "<no transcript value>"
 }
 
-/// True once the last forced follow has reported an outcome — not while
-/// one is in flight or before the entry follow has started.
+/// UIKit flags can change without another SwiftUI render. This startup-only
+/// probe samples them on each accessibility query and fails closed if absent.
 @MainActor
-func followHasReported(in opened: OpenConversation) -> Bool {
-    let report = followReport(in: opened)
-    return report.hasPrefix(Fixture.followReportPrefix) && report != Fixture.pendingFollowReport
+func waitUntilStartupGestureEnded(in app: XCUIApplication) -> Bool {
+    let probe = app.descendants(matching: .any).matching(identifier: "transcript.gestureState").firstMatch
+    var report = "<unavailable>"
+    let ended = waitUntil(timeout: Fixture.settleTimeout) {
+        guard probe.exists else { return false }
+        report = probe.value as? String ?? "<unavailable>"
+        return report.hasPrefix("phase=idle ")
+    }
+    XCTAssertTrue(ended, "release metadata only after the real gesture/deceleration has ended: \(report)")
+    return ended
+}
+
+/// No forced result is fabricated for late entry. Once a forced request has
+/// actually started, it must report a terminal outcome before any later settle.
+func viewportHasReportedSettlement(
+    _ report: String, allowPreservedEntry: Bool = false, forcedFollowAfter: Int? = nil, recoveryAfter: Int? = nil
+) -> Bool {
+    guard report.hasPrefix(Fixture.followReportPrefix),
+          report.contains("followActive=false"), report.contains("phase=idle") else { return false }
+    if let recovery = EndRecoveryReport(followReport: report), !recovery.isTerminal { return false }
+    if let forcedFollowAfter {
+        guard let count = forcedFollowRequestCount(report), count > forcedFollowAfter else { return false }
+    }
+    if let recoveryAfter {
+        guard let recovery = EndRecoveryReport(followReport: report) else { return false }
+        return recovery.isTerminal && recovery.reason == Fixture.recoveredReason
+            && recovery.episodes > recoveryAfter && recovery.corrections > 0 && recovery.endRealized
+    }
+    if !report.hasPrefix(Fixture.pendingFollowReport) { return true }
+    return allowPreservedEntry && report.contains("entry=preserved") && report.contains("metadataReady=true")
+        && report.contains("forcedRequested=false")
+}
+
+func forcedFollowRequestCount(_ report: String) -> Int? {
+    report.split(separator: " ")
+        .first { $0.hasPrefix("forcedRequests=") }
+        .flatMap { Int($0.dropFirst("forcedRequests=".count)) }
+}
+
+@MainActor
+func forcedFollowRequestCount(in opened: OpenConversation) -> Int {
+    guard let count = forcedFollowRequestCount(followReport(in: opened)) else {
+        XCTFail("The transcript did not report its forced-follow request count")
+        return .max
+    }
+    return count
 }
 
 /// The element's frame from a single snapshot; nil when the element is
@@ -873,4 +969,17 @@ func waitUntilSteady(
     } while Date() < deadline
     return nil
 }
+extension ConversationTranscriptScrollUITests {
+    @MainActor
+    func attachStartupViewport(_ app: XCUIApplication, opened: OpenConversation, report: String, row: XCUIElement, context: String) {
+        let snapshot = try? row.snapshot()
+        let probe = app.descendants(matching: .any).matching(identifier: "transcript.gestureState").firstMatch
+        let live = probe.exists ? probe.value : nil
+        let attachment = XCTAttachment(string: "\(context): row=\(snapshot?.label ?? "missing") frame=\(String(describing: snapshot?.frame))"
+            + " transcript=\(opened.transcript.frame) \(report) \(followReport(in: opened)) live=\(String(describing: live))")
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
 // swiftlint:enable file_length

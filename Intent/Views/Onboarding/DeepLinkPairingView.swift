@@ -16,6 +16,7 @@ struct DeepLinkPairingView: View {
     @State private var errorMessage: String?
     @State private var probedFingerprint: String?
     @State private var showFingerprintConfirmation = false
+    @ScaledMetric private var iconSize: CGFloat = 17
     /// In-flight probe/connect task, cancelled when the sheet goes away so a
     /// dismissed pairing can't complete (and persist + navigate) afterwards.
     @State private var pairingTask: Task<Void, Never>?
@@ -28,6 +29,7 @@ struct DeepLinkPairingView: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { coordinator.pendingDeepLinkPairing = nil }
+                            .interFont(Constants.Typography.bodyS)
                     }
                 }
                 .onDisappear { pairingTask?.cancel() }
@@ -45,29 +47,40 @@ struct DeepLinkPairingView: View {
             serverSection
             connectSection
             if let errorMessage {
-                Section { Text(errorMessage).foregroundStyle(.red) }
+                Section {
+                    Text(errorMessage)
+                        .interFont(Constants.Typography.bodyS)
+                        .foregroundStyle(.red)
+                }
             }
         }
     }
 
     private var serverSection: some View {
-        Section("Server") {
+        Section {
             ForEach(payload.hosts, id: \.self) { host in
                 Label {
                     Text(verbatim: "\(host):\(payload.port)")
+                        .interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "desktopcomputer")
+                    Image(.connectionLaptop)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: iconSize, height: iconSize)
                 }
             }
             if let tcAddress = payload.tcAddress {
                 Label {
                     Text(TcAddressDisplay.truncated(tcAddress))
+                        .interFont(Constants.Typography.bodyS)
                         .lineLimit(1)
                         .accessibilityLabel(tcAddress)
                 } icon: {
                     Image(systemName: "point.3.connected.trianglepath.dotted")
                 }
             }
+        } header: {
+            Text("Server").interFont(Constants.Typography.eyebrow)
         }
     }
 
@@ -78,14 +91,17 @@ struct DeepLinkPairingView: View {
                     HStack {
                         ProgressView()
                         Text("Connecting...")
+                            .interFont(Constants.Typography.bodyS)
                     }
                 } else {
                     Text("Connect")
+                        .interFont(Constants.Typography.bodyS)
                 }
             }
             .disabled(isValidating)
         } footer: {
             Text("Only connect if you opened this link yourself, e.g. from your Intent desktop app.")
+                .interFont(Constants.Typography.subtextXXS)
         }
     }
 

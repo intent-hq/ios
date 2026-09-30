@@ -65,9 +65,17 @@ struct PairingPayloadTests {
 
     /// An empty fingerprint value is normalized to nil so the caller takes
     /// the probe path instead of pinning an empty string.
-    @Test func emptyFingerprintValuesNormalizeToNil() {
-        #expect(PairingPayload.parse("intent://pair?host=h&port=1&token=t&fp=")?.certFingerprint == nil)
-        #expect(PairingPayload.parse("intent://pair?host=h&port=1&token=t&certFingerprint=")?.certFingerprint == nil)
+    @Test func emptyFingerprintValuesNormalizeToNil() throws {
+        let canonicalPayload = try #require(
+            PairingPayload.parse("intent://pair?host=h&port=1&token=t&fp="),
+            "An empty canonical fingerprint must not reject the pairing payload"
+        )
+        #expect(canonicalPayload.certFingerprint == nil)
+        let legacyPayload = try #require(
+            PairingPayload.parse("intent://pair?host=h&port=1&token=t&certFingerprint="),
+            "An empty legacy fingerprint must not reject the pairing payload"
+        )
+        #expect(legacyPayload.certFingerprint == nil)
     }
 
     /// Precedence is "first non-empty wins, canonical fp= first": an empty
@@ -109,9 +117,12 @@ struct PairingPayloadTests {
         #expect(payload?.tcAddress == nil)
     }
 
-    @Test func emptyTcParamNormalizesToNil() {
-        #expect(
-            PairingPayload.parse("intent://pair?host=h&port=1&token=t&tc=")?.tcAddress == nil)
+    @Test func emptyTcParamNormalizesToNil() throws {
+        let payload = try #require(
+            PairingPayload.parse("intent://pair?host=h&port=1&token=t&tc="),
+            "An empty tunnel address must not reject the pairing payload"
+        )
+        #expect(payload.tcAddress == nil)
     }
 
     // MARK: - Multi-host list
@@ -166,5 +177,10 @@ struct PairingPayloadTests {
 
     @Test func truncatesElevenCharTcAddress() {
         #expect(TcAddressDisplay.truncated("tc-abcdefgh") == "tc-abcdefg\u{2026}")
+    }
+
+    @Test(arguments: ["token=", "token=t&token=other", "token=t&v=2", "token=t&port=0"])
+    func rejectsAmbiguousPersonalCredentials(query: String) {
+        #expect(PairingPayload.parse("intent://pair?host=test.invalid&port=443&\(query)") == nil)
     }
 }

@@ -42,9 +42,10 @@ final class NoteDetailViewLifecycleTests {
         weak var weakStore: NoteStore?
         var host: Host? = Host(connection: fake, persistence: persistence) { weakStore = $0 }
 
-        // The view's `.task` ran through to event observation: the agent
-        // store's handler, then the note store's (which installs the refresh).
-        try await Self.waitUntil("both stores observe events") { fake.eventHandlerCount == 2 }
+        // Wait for this view's refresh stream, independent of other session observers.
+        try await Self.waitUntil("note detail observes changes") {
+            weakStore?.noteChangeContinuations.count == 1
+        }
         #expect(weakStore != nil)
         let loads = fake.requestLog.filter { $0.method == "note.get" }.count
         #expect(loads == 1, "the initial load fetched the note once")

@@ -7,15 +7,24 @@ import Testing
 
 extension ConnectionManagerTests {
     static func enablePlaintextLoopback() -> Bool {
+        #if DEBUG
         WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { state in
             let previous = state
             state = true
             return previous
         }
+        #else
+        // Keep Release tests buildable without enabling a production escape
+        // hatch. These fixtures are not evidence of Release transport coverage.
+        Issue.record("Plaintext loopback fixtures require DEBUG; run this test with the default configuration")
+        return false
+        #endif
     }
 
     static func restorePlaintextLoopback(_ previous: Bool) {
+        #if DEBUG
         WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { $0 = previous }
+        #endif
     }
 
     @Test func webSocketURLRefusesMissingOrBlankFingerprint() {
@@ -104,7 +113,6 @@ extension ConnectionManagerTests {
     }
 
     @Test func certificateFingerprintIsColonSeparatedLowercaseSha256() {
-        // SHA-256 of the empty input is a fixed, well-known vector.
         let expected = "e3:b0:c4:42:98:fc:1c:14:9a:fb:f4:c8:99:6f:b9:24:"
             + "27:ae:41:e4:64:9b:93:4c:a4:95:99:1b:78:52:b8:55"
 
@@ -112,9 +120,10 @@ extension ConnectionManagerTests {
     }
 
     @Test func fingerprintMatchIsCaseInsensitive() {
-        #expect(WebSocketConnection.fingerprintMatches("AA:BB:CC", pinned: "aa:bb:cc"))
-        #expect(WebSocketConnection.fingerprintMatches("aa:bb:cc", pinned: "AA:bb:Cc"))
-        #expect(!WebSocketConnection.fingerprintMatches("aa:bb:cc", pinned: "aa:bb:cd"))
+        let pin = ManualTokenEntryViewTests.fixtureIdentityFingerprint
+        #expect(WebSocketConnection.fingerprintMatches(pin.uppercased(), pinned: pin))
+        #expect(WebSocketConnection.fingerprintMatches(pin, pinned: pin.uppercased()))
+        #expect(!WebSocketConnection.fingerprintMatches(pin, pinned: InvitedSessionFixtures.pin))
     }
 
     // URLSessionWebSocketTask.Message is not Equatable; extract payloads for asserting.

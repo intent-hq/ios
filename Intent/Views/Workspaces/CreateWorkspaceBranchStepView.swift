@@ -15,109 +15,134 @@ struct CreateWorkspaceBranchStepView: View {
     let onBranchChanged: () -> Void
     let onSearchTextChanged: (String) -> Void
 
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
-
-            if isLoading {
-                ProgressView("Loading branches...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            } else if let loadError {
-                VStack(spacing: Constants.CreateWorkspace.errorStateSpacing) {
-                    Text("Couldn't load branches")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                    Text(loadError)
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .multilineTextAlignment(.center)
-                    Button("Retry", action: onRetry)
-                }
-                .padding(Constants.CreateWorkspace.errorStatePadding)
-            } else {
-                branchList
+        VStack(spacing: 0) {
+            CreateWorkspaceSelectionHeader(
+                leadingControl: .back,
+                isNextDisabled: selectedBranch == nil,
+                onLeadingAction: { dismiss() },
+                onNext: onNext
+            )
+            CreateWorkspaceSelectionPage(title: "Select Branch", titleIdentifier: "creation.branchTitle") {
+                content
             }
         }
-        .navigationTitle("Select Branch")
-        .toolbarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Next", action: onNext)
-                    .disabled(selectedBranch == nil)
-            }
-        }
+        .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
         .task { await onLoad() }
         .onChange(of: selectedBranch) { _, _ in onBranchChanged() }
         .onChange(of: searchText) { _, newValue in onSearchTextChanged(newValue) }
     }
 
-    private var branchList: some View {
-        List {
-            Section("Source") {
-                ForEach(CreateWorkspaceView.creationContextRows(
-                    repositoryFullName: repositoryFullName
-                )) { row in
-                    contextRow(row)
-                }
+    @ViewBuilder
+    private var content: some View {
+        if isLoading {
+            ProgressView {
+                Text("Loading branches...").interFont(Constants.Typography.bodyS)
             }
-            Section("Branches") {
-                if displayedBranches.isEmpty {
-                    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    Text(query.isEmpty ? "No branches found." : "No branches match \"\(query)\".")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .listRowBackground(Theme.card(for: colorScheme))
-                }
-                ForEach(displayedBranches, id: \.self) { branch in
+            .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+        } else if let loadError {
+            VStack(spacing: Constants.CreateWorkspace.errorStateSpacing) {
+                Text("Couldn't load branches")
+                    .interFont(Constants.Typography.bodyXSEmphasized)
+                Text(loadError)
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+                    .multilineTextAlignment(.center)
+                Button("Retry", action: onRetry)
+                    .interFont(Constants.Typography.bodyS)
+            }
+            .padding(Constants.CreateWorkspace.errorStatePadding)
+        } else {
+            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
+                CreateWorkspaceSelectionSearchField(text: $searchText, placeholder: "Search branches", identifier: "creation.branchSearch")
+                sourceSection
+                branchList
+            }
+        }
+    }
+
+    private var sourceSection: some View {
+        VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
+            sectionHeading("Source")
+            ForEach(CreateWorkspaceView.creationContextRows(repositoryFullName: repositoryFullName)) { row in
+                contextRow(row)
+                    .padding(CreateWorkspaceFormStyle.pagePadding)
+                    .frame(maxWidth: .infinity, minHeight: CreateWorkspaceRepoStyle.rowMinimumHeight, alignment: .leading)
+                    .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(cornerRadius: CreateWorkspaceFormStyle.cornerRadius))
+            }
+        }
+    }
+
+    private var branchList: some View {
+        VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
+            sectionHeading("Branches")
+            if displayedBranches.isEmpty {
+                let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                Text(query.isEmpty ? "No branches found." : "No branches match \"\(query)\".")
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+            }
+            LazyVStack(spacing: 0) {
+                ForEach(Array(displayedBranches.enumerated()), id: \.element) { index, branch in
                     branchRow(branch)
+                        .overlay(alignment: .bottom) {
+                            if index + 1 < displayedBranches.count,
+                               selectedBranch != branch,
+                               selectedBranch != displayedBranches[index + 1] {
+                                CreateWorkspaceRepoStyle.divider(for: colorScheme)
+                                    .frame(height: CreateWorkspaceRepoStyle.dividerHeight)
+                                    .accessibilityHidden(true)
+                            }
+                        }
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .searchable(
-            text: $searchText,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Search branches"
-        )
+    }
+
+    private func sectionHeading(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .interFont(Constants.Typography.eyebrow)
+            .textCase(.uppercase)
+            .tracking(CreateWorkspaceRepoStyle.sectionTracking)
+            .foregroundStyle(CreateWorkspaceRepoStyle.sectionForeground(for: colorScheme, contrast: contrast))
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func branchRow(_ branch: String) -> some View {
         Button {
             selectedBranch = branch
         } label: {
-            HStack(alignment: .firstTextBaseline) {
-                Text(branch)
-                    .font(.body)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .layoutPriority(1)
-                Spacer()
-                if branch == defaultBranch {
-                    Text("Default")
-                        .font(.caption)
-                        .padding(.horizontal, Constants.CreateWorkspace.branchBadgeHorizontalPadding)
-                        .padding(.vertical, Constants.CreateWorkspace.branchBadgeVerticalPadding)
-                        .background(Theme.primary(for: colorScheme).opacity(
-                            Constants.CreateWorkspace.branchBadgeOpacity
-                        ))
-                        .foregroundStyle(Theme.primary(for: colorScheme))
-                        .clipShape(Capsule())
+            HStack(alignment: .top, spacing: CreateWorkspaceRepoStyle.rowSpacing) {
+                VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.rowTextSpacing) {
+                    Text(branch)
+                        .interFont(Constants.Typography.bodySEmphasized)
+                        .tracking(CreateWorkspaceRepoStyle.nameTracking)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.CreateWorkspace.branchNameLineLimit)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if branch == defaultBranch {
+                        Text("Default")
+                            .interFont(Constants.Typography.subtextXXS)
+                            .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if selectedBranch == branch {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Theme.primary(for: colorScheme))
-                        .bold()
-                        .accessibilityLabel("Selected")
+                    CreateWorkspaceSelectionMark()
                 }
             }
-            .padding(.vertical, Constants.CreateWorkspace.branchRowVerticalPadding)
+            .padding(CreateWorkspaceFormStyle.pagePadding)
+            .frame(minHeight: CreateWorkspaceRepoStyle.rowMinimumHeight)
+            .background(selectedBranch == branch ? CreateWorkspaceRepoStyle.card(for: colorScheme) : .clear, in: .rect(cornerRadius: CreateWorkspaceFormStyle.cornerRadius))
+            .contentShape(.rect)
         }
+        .buttonStyle(.plain)
         .accessibilityAddTraits(selectedBranch == branch ? .isSelected : [])
-        .listRowBackground(Theme.card(for: colorScheme))
+        .accessibilityIdentifier("creation.branch.\(branch)")
     }
 
     @ViewBuilder
@@ -125,19 +150,25 @@ struct CreateWorkspaceBranchStepView: View {
         if CreateWorkspaceView.usesExpandedFormLayout(for: dynamicTypeSize) {
             VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
                 Text(row.label)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
                 Text(row.value)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else {
-            LabeledContent(row.label) {
+            LabeledContent {
                 Text(row.value)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
                     .multilineTextAlignment(.trailing)
-                    .lineLimit(2)
+                    .lineLimit(Constants.CreateWorkspace.contextValueLineLimit)
                     .truncationMode(.middle)
+            } label: {
+                Text(row.label)
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
             }
         }
     }

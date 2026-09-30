@@ -5,9 +5,9 @@ import Testing
 /// Tests for the SpecialistPickerView selection helpers: specialist
 /// reconciliation against the cached catalog, the loading states derived
 /// from `CreationOptionsStore` (cached and cold paths), and the
-/// provider/model params sent on agent.create. Provider defaulting and
-/// model reconciliation reuse `CreateWorkspaceView`'s helpers (covered in
-/// `CreateWorkspaceParamsTests`).
+/// provider/model params sent on agent.create. Shared provider defaulting and
+/// model reconciliation use `CreationSelectionPolicy` (covered in this suite's
+/// loading tests and `CreateWorkspaceParamsTests`).
 struct SpecialistPickerSelectionTests {
     func makeSpecialist(resolvedModel: String? = nil, resolvedProvider: String? = nil) -> SpecialistInfo {
         SpecialistInfo(
@@ -183,9 +183,9 @@ struct SpecialistPickerSelectionTests {
         SpecialistPickerView.isCreateDisabled(
             hasSpecialist: hasSpecialist,
             isCreating: isCreating,
-            isLoadingProviders: isLoadingProviders,
-            isLoadingModels: isLoadingModels,
-            providers: providers
+            isLoadingOptions: isLoadingProviders || isLoadingModels,
+            providers: providers,
+            selectedProvider: providers.first(where: \.isSelectable)
         )
     }
 
@@ -203,9 +203,21 @@ struct SpecialistPickerSelectionTests {
         #expect(!isCreateDisabled(providers: [ProviderInfo(id: "grok", authenticated: .unknown)]))
     }
 
-    @Test func createEnabledWhenProviderListEmpty() {
-        // Empty list is not the guidance state: the daemon default is used
-        #expect(!isCreateDisabled(providers: []))
+    @Test func createDisabledWhenProviderListEmpty() {
+        #expect(isCreateDisabled(providers: []))
+    }
+
+    @Test func createDisabledForMissingRemovedOrSignedOutSelection() {
+        let providers = [ProviderInfo(id: "codex", authenticated: true), ProviderInfo(id: "auggie", authenticated: false)]
+        for selection in [nil, ProviderInfo(id: "removed"), ProviderInfo(id: "auggie", authenticated: true)] {
+            #expect(SpecialistPickerView.isCreateDisabled(
+                hasSpecialist: true,
+                isCreating: false,
+                isLoadingOptions: false,
+                providers: providers,
+                selectedProvider: selection
+            ))
+        }
     }
 
     @Test func createDisabledWhileLoadingCreatingOrWithoutSpecialist() {
@@ -281,5 +293,76 @@ struct SpecialistPickerSelectionTests {
         let selection = SpecialistPickerView.buildCreateAgentSelection(provider: nil, model: nil)
         #expect(selection.provider == nil)
         #expect(selection.model == nil)
+    }
+
+    @Test func omitsStaleModelAfterProviderChanges() {
+        let selection = SpecialistPickerView.buildCreateAgentSelection(
+            provider: ProviderInfo(id: "codex", authenticated: true),
+            model: makeModel("shared-id", provider: "auggie")
+        )
+        #expect(selection.provider == "codex")
+        #expect(selection.model == nil)
+    }
+
+    @Test func omitsModelWithoutSelectableProvider() {
+        for provider in [nil, ProviderInfo(id: "auggie", authenticated: false)] {
+            let selection = SpecialistPickerView.buildCreateAgentSelection(provider: provider, model: makeModel("opus4.7"))
+            #expect(selection.provider == nil)
+            #expect(selection.model == nil)
+        }
+    }
+}
+
+extension SpecialistPickerSelectionTests {
+    @Test func modelsAreScopedToTheSelectedAvailableProvider() {
+        let provider = ProviderInfo(id: "codex", authenticated: true)
+        let model = makeModel("shared-id", provider: "codex")
+        let catalog = [makeModel("shared-id"), model, makeModel("other", provider: "hidden")]
+        #expect(SpecialistPickerView.selectableModels(provider: provider, providers: [provider], models: catalog) == [model])
+        for providers in [[], [ProviderInfo(id: "auggie")], [ProviderInfo(id: "codex", authenticated: false)]] {
+            #expect(SpecialistPickerView.selectableModels(provider: provider, providers: providers, models: catalog).isEmpty)
+        }
+        #expect(SpecialistPickerView.selectableModels(provider: nil, providers: [provider], models: catalog).isEmpty)
+    }
+
+    @Test func workspaceReasoningRequiresExplicitModelAndCurrentProviderEvidence() {
+        let provider = ProviderInfo(id: "provider-a")
+        let selected = ModelInfo(id: "shared-id", name: "Model", provider: provider.id, effortLevels: ["old"])
+        let refreshed = ModelInfo(
+            id: selected.id,
+            name: "Model",
+            provider: provider.id,
+            effortLevels: ["future-level", "", "  \n", "future-level", "high"]
+        )
+        let levels = CreationSelectionPolicy.workspaceReasoningLevels(
+            provider: provider, model: selected, models: [refreshed]
+        )
+        #expect(levels == ["future-level", "high"])
+        #expect(CreationSelectionPolicy.reconciledReasoningEffort(current: "old", effortLevels: levels) == nil)
+        #expect(CreationSelectionPolicy.reconciledReasoningEffort(current: "future-level", effortLevels: levels) == "future-level")
+        #expect(CreationSelectionPolicy.reconciledReasoningEffort(current: nil, effortLevels: levels) == nil)
+
+        // An unresolved default never borrows capabilities from the first or default row.
+        #expect(CreationSelectionPolicy.workspaceReasoningLevels(provider: provider, model: nil, models: [refreshed]).isEmpty)
+        let otherProviderModel = ModelInfo(
+            id: selected.id, name: "Model", provider: "provider-b", effortLevels: ["future-level"]
+        )
+        #expect(CreationSelectionPolicy.workspaceReasoningLevels(
+            provider: ProviderInfo(id: "provider-b"), model: selected, models: [otherProviderModel]
+        ).isEmpty)
+    }
+
+    @Test func workspaceReasoningReturnsToAutoWhenModelCapabilityDisappears() {
+        let provider = ProviderInfo(id: "provider-a")
+        let selected = ModelInfo(id: "model", name: "Model", provider: provider.id, effortLevels: ["high"])
+        let noMetadata = ModelInfo(id: selected.id, name: "Model", provider: provider.id)
+        let changedModel = ModelInfo(id: "other", name: "Other", provider: provider.id, effortLevels: ["low"])
+        for catalog in [[], [noMetadata], [changedModel]] {
+            let levels = CreationSelectionPolicy.workspaceReasoningLevels(provider: provider, model: selected, models: catalog)
+            #expect(CreationSelectionPolicy.reconciledReasoningEffort(current: "high", effortLevels: levels) == nil)
+        }
+        let signedOut = ProviderInfo(id: provider.id, authenticated: .signedOut)
+        #expect(CreationSelectionPolicy.workspaceReasoningLevels(provider: signedOut, model: selected, models: [selected]).isEmpty)
+        #expect(CreationSelectionPolicy.workspaceReasoningLevels(provider: nil, model: selected, models: [selected]).isEmpty)
     }
 }

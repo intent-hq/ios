@@ -6,22 +6,56 @@ struct QuestionWizardCollapsedBanner: View {
     let dismissed: Bool
     let onExpand: () -> Void
     let onDismiss: () -> Void
+    var usesWorkspaceDesign = false
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private static let countBadgeHorizontalPadding: CGFloat = 7
-    private static let badgeFillOpacity = 0.12
-    private static let countBadgeBorderOpacity = 0.35
-    private static let minimumContentSpacing: CGFloat = 8
-    private static let verticalPadding: CGFloat = 9
-    private static let dismissButtonTrailingPadding: CGFloat = 8
+    private typealias Layout = Constants.Conversation.QuestionWizard.CollapsedBanner
+    private typealias Design = Constants.Conversation.Design
 
     var body: some View {
+        if usesWorkspaceDesign {
+            workspaceBanner
+        } else {
+            legacyBanner
+        }
+    }
+
+    private var workspaceBanner: some View {
+        VStack(alignment: .leading, spacing: Design.Question.notificationSpacing) {
+            Text("Agent has \(questionCount) questions")
+                .interFont(Constants.Typography.bodySEmphasized)
+                .tracking(Design.Typography.compactBodyTracking)
+                .foregroundStyle(Design.Palette.foreground(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: Design.Question.buttonSpacing))
+                : AnyLayout(HStackLayout(spacing: Design.Question.buttonSpacing))
+            layout {
+                if showsDismiss {
+                    Button("Dismiss", action: onDismiss)
+                        .buttonStyle(WorkspaceQuestionButtonStyle(fillsWidth: true))
+                        .accessibilityIdentifier("question.dismiss")
+                }
+                Button("Answer", action: onExpand)
+                    .buttonStyle(WorkspaceQuestionButtonStyle(primary: true, fillsWidth: true))
+                    .accessibilityIdentifier("question.answer")
+            }
+            .disabled(dismissed)
+        }
+        .padding(.horizontal, Design.Question.horizontalPadding)
+        .padding(.top, Design.Question.topPadding)
+        .padding(.bottom, Design.Question.bottomPadding)
+    }
+
+    private var legacyBanner: some View {
         HStack(spacing: 0) {
             expandButton
             if showsDismiss {
                 QuestionWizardDismissButton(dismissed: dismissed, action: onDismiss)
-                    .padding(.trailing, Self.dismissButtonTrailingPadding)
+                    .padding(.trailing, Layout.dismissButtonTrailingPadding)
             }
         }
     }
@@ -33,27 +67,27 @@ struct QuestionWizardCollapsedBanner: View {
                     .font(.caption)
                     .foregroundStyle(Theme.primary(for: colorScheme))
                 Text("Questions")
-                    .font(.caption.weight(.medium))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 Text("\(questionCount)")
-                    .font(.caption.weight(.medium))
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
-                    .padding(.horizontal, Self.countBadgeHorizontalPadding)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(Theme.primary(for: colorScheme).opacity(Self.badgeFillOpacity)))
+                    .padding(.horizontal, Layout.countBadgeHorizontalPadding)
+                    .padding(.vertical, Layout.countBadgeVerticalPadding)
+                    .background(Capsule().fill(Theme.primary(for: colorScheme).opacity(Layout.badgeFillOpacity)))
                     .overlay(
                         Capsule().strokeBorder(
-                            Theme.primary(for: colorScheme).opacity(Self.countBadgeBorderOpacity),
-                            lineWidth: 1
+                            Theme.primary(for: colorScheme).opacity(Layout.countBadgeBorderOpacity),
+                            lineWidth: Layout.countBadgeBorderWidth
                         )
                     )
-                Spacer(minLength: Self.minimumContentSpacing)
+                Spacer(minLength: Layout.minimumContentSpacing)
                 Text("Tap to expand")
-                    .font(.caption)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
             .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
-            .padding(.vertical, Self.verticalPadding)
+            .padding(.vertical, Layout.verticalPadding)
             .frame(minHeight: Constants.Accessibility.minimumTapTarget)
             .contentShape(Rectangle())
         }
@@ -69,16 +103,15 @@ struct QuestionWizardDismissButton: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
-    private static let horizontalPadding: CGFloat = 6
-    private static let verticalPadding: CGFloat = 4
+    private typealias Layout = Constants.Conversation.QuestionWizard.DismissButton
 
     var body: some View {
         Button(action: action) {
             Text("Dismiss")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
-                .padding(.horizontal, Self.horizontalPadding)
-                .padding(.vertical, Self.verticalPadding)
+                .padding(.horizontal, Layout.horizontalPadding)
+                .padding(.vertical, Layout.verticalPadding)
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
                     minHeight: Constants.Accessibility.minimumTapTarget
@@ -87,6 +120,6 @@ struct QuestionWizardDismissButton: View {
         }
         .buttonStyle(.plain)
         .disabled(dismissed)
-        .opacity(dismissed ? 0.5 : 1)
+        .opacity(dismissed ? Layout.disabledOpacity : 1)
     }
 }

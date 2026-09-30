@@ -38,11 +38,15 @@ struct CreateWorkspaceView: View {
     @State private var selectedSpecialist: SpecialistInfo?
     @State private var selectedProvider: ProviderInfo?
     @State private var selectedModel: ModelInfo?
+    @State private var selectedReasoningEffort: String?
     @State private var messageText = ""
+    @State private var images = WorkspaceCreationImages()
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var idempotencyKey = UUID().uuidString
+    @State private var catalogConsumer = UUID()
+    @State private var catalogIsVisible = true
 
     init(session: BackendSession) {
         self.session = session
@@ -58,13 +62,24 @@ struct CreateWorkspaceView: View {
     /// Specialists offered by the picker: the modal-pickable set with the
     /// orchestrator pinned first, then by name.
     private var specialists: [SpecialistInfo] {
-        Self.pickerSpecialists(optionsStore.specialists)
+        CreationSelectionPolicy.workspacePickerSpecialists(optionsStore.specialists)
     }
-    private var providers: [ProviderInfo] { optionsStore.providers }
+    private var providerOptions: WorkspaceProviderOptions { optionsStore.workspaceProviderOptions }
+    private var providers: [ProviderInfo] { providerOptions.providers }
     /// The selected provider's cached catalog; empty until loaded, which
     /// hides the model row (the daemon default applies).
     private var models: [ModelInfo] {
         selectedProvider.flatMap { optionsStore.models(for: $0.id) } ?? []
+    }
+    private var reasoningLevels: [String] {
+        CreationSelectionPolicy.workspaceReasoningLevels(
+            provider: selectedProvider, model: selectedModel, models: models
+        )
+    }
+    private var validatedReasoningEffort: String? {
+        CreationSelectionPolicy.reconciledReasoningEffort(
+            current: selectedReasoningEffort, effortLevels: reasoningLevels
+        )
     }
     /// Derived from the store, never a local snapshot: a cache that warms
     /// between construction and the step's load (another sheet, a reconnect
@@ -106,6 +121,12 @@ struct CreateWorkspaceView: View {
 
     var body: some View {
         navigationContent
+        .onAppear { catalogIsVisible = true }
+        .onDisappear {
+            catalogIsVisible = false
+            optionsStore.releaseCatalogs(consumer: catalogConsumer)
+            images.cancelImport()
+        }
         // The cached-first paint, the authoritative listing replacing it and
         // a background revalidation all land here: keep the selection if the
         // new listing still has it, else fall back to default → first.
@@ -143,11 +164,16 @@ struct CreateWorkspaceView: View {
         .onChange(of: optionsStore.specialists) { _, _ in
             reconcileSpecialistSelection()
         }
-        .onChange(of: optionsStore.providers) { _, _ in
+        // Loading, loaded-empty and failed all project to an empty list;
+        // observe the policy state so completed validation still reconciles.
+        .onChange(of: providerOptions.state) { _, _ in
             Task { await reconcileProviderSelection() }
         }
         .onChange(of: models) { _, models in
-            selectedModel = Self.reconciledModel(current: selectedModel, models: models)
+            selectedModel = CreationSelectionPolicy.reconciledModel(current: selectedModel, models: models)
+        }
+        .onChange(of: reasoningLevels) { _, _ in
+            selectedReasoningEffort = validatedReasoningEffort
         }
     }
 
@@ -199,20 +225,29 @@ struct CreateWorkspaceView: View {
                 isLoadingSpecialists: isLoadingOptions,
                 selectedSpecialist: $selectedSpecialist,
                 providers: providers,
-                isLoadingProviders: isLoadingOptions || isLoadingSelectedModelCatalog,
+                isLoadingProviders: isLoadingOptions || providerOptions.isLoading || isLoadingSelectedModelCatalog,
+                providerGuidance: providerOptions.guidance,
                 selectedProvider: $selectedProvider,
                 models: models,
                 selectedModel: $selectedModel,
+                reasoningLevels: reasoningLevels,
+                selectedReasoningEffort: $selectedReasoningEffort,
                 messageText: $messageText,
+                images: images,
                 isCreating: isCreating,
+                allowsCreation: coordinator.canCreateWorkspace,
                 errorMessage: errorMessage,
                 showError: $showError,
                 colorScheme: colorScheme,
                 onSelectProvider: selectProvider,
-                onCreate: createWorkspace
-            ) {
-                await fetchCreationOptions()
-            }
+                onRetryProviders: { Task { await fetchCreationOptions() } },
+                onBack: {
+                    guard !isCreating, navigationPath.last == .create else { return }
+                    navigationPath.removeLast()
+                },
+                onCreate: createWorkspace,
+                onLoad: fetchCreationOptions
+            )
         }
     }
 
@@ -297,8 +332,12 @@ struct CreateWorkspaceView: View {
     /// superseded by a reconnect clear publishes nothing: the
     /// `loadGeneration` change starts a fresh load that settles and reconciles.
     private func fetchCreationOptions() async {
+        guard catalogIsVisible, !Task.isCancelled else { return }
+        optionsStore.retainCreationOptions(consumer: catalogConsumer)
         let generation = optionsStore.loadGeneration
-        await optionsStore.loadIfNeeded()
+        async let providerLoad: Void = providerOptions.load()
+        await optionsStore.loadIfNeeded(consumer: catalogConsumer)
+        await providerLoad
         guard settledLoads.settleOptions(startedAt: generation, current: optionsStore.loadGeneration) else {
             return
         }
@@ -310,7 +349,7 @@ struct CreateWorkspaceView: View {
     /// re-defaults or clears it when the selected specialist left the
     /// pickable set.
     private func reconcileSpecialistSelection() {
-        selectedSpecialist = Self.preselectedSpecialist(
+        selectedSpecialist = CreationSelectionPolicy.preselectedWorkspaceSpecialist(
             current: selectedSpecialist,
             catalog: optionsStore.specialists
         )
@@ -322,21 +361,19 @@ struct CreateWorkspaceView: View {
     /// provider switch (the daemon default applies), even when the new
     /// provider's catalog shares a bare model id with the old one.
     private func reconcileProviderSelection() async {
-        let previousProviderId = selectedProvider?.id
-        selectedProvider = Self.preselectedProvider(
-            current: selectedProvider,
-            providers: providers
+        guard catalogIsVisible else { return }
+        CreationSelectionPolicy.reconcileWorkspaceProvider(
+            provider: &selectedProvider,
+            model: &selectedModel,
+            state: providerOptions.state
         )
-        guard let provider = selectedProvider else {
-            selectedModel = nil
-            return
-        }
-        if provider.id != previousProviderId { selectedModel = nil }
+        optionsStore.selectModelProvider(selectedProvider?.id, consumer: catalogConsumer)
+        guard !providerOptions.isLoading, let provider = selectedProvider else { return }
         await loadModels(for: provider)
     }
 
     private func selectProvider(_ provider: ProviderInfo) {
-        guard provider.authenticated != false, provider.id != selectedProvider?.id else { return }
+        guard providers.contains(provider), provider.isSelectable, provider.id != selectedProvider?.id else { return }
         selectedProvider = provider
         selectedModel = nil
         Task { await loadModels(for: provider) }
@@ -346,8 +383,10 @@ struct CreateWorkspaceView: View {
     /// Create gate only when the load returned in the generation it started
     /// in — a completion from before a reconnect clear settles nothing.
     private func loadModels(for provider: ProviderInfo) async {
+        guard catalogIsVisible, selectedProvider?.id == provider.id, !Task.isCancelled else { return }
+        optionsStore.selectModelProvider(provider.id, consumer: catalogConsumer)
         let generation = optionsStore.loadGeneration
-        await optionsStore.loadModelsIfNeeded(providerId: provider.id)
+        await optionsStore.loadModelsIfNeeded(providerId: provider.id, consumer: catalogConsumer)
         settledLoads.settleModels(
             for: provider.id,
             startedAt: generation,
@@ -357,38 +396,6 @@ struct CreateWorkspaceView: View {
 }
 
 extension CreateWorkspaceView {
-    /// The picker's specialist list: the modal-pickable set (no hidden or
-    /// internal specialists) with the orchestrator pinned first, then by
-    /// name.
-    static func pickerSpecialists(_ specialists: [SpecialistInfo]) -> [SpecialistInfo] {
-        let pickable = specialists.modalPickable
-        let orchestratorId = pickable.orchestrator?.id
-        return pickable.sorted { firstSpecialist, secondSpecialist in
-            let firstIsOrchestrator = firstSpecialist.id == orchestratorId
-            let secondIsOrchestrator = secondSpecialist.id == orchestratorId
-            if firstIsOrchestrator != secondIsOrchestrator { return firstIsOrchestrator }
-            return firstSpecialist.name < secondSpecialist.name
-        }
-    }
-
-    /// Keeps the selection while `current`'s id is still pickable in the
-    /// unfiltered `catalog`, rebound to the fresh entry so refreshed
-    /// metadata (default-model preview) is what the picker shows; otherwise
-    /// the orchestrator, else the first pickable specialist, else nil when
-    /// the catalog lists nothing pickable (a hidden id must never be
-    /// submitted). An empty catalog (cold load or reconnect clear) keeps
-    /// `current` so the selection survives the reload.
-    static func preselectedSpecialist(
-        current: SpecialistInfo?, catalog: [SpecialistInfo]
-    ) -> SpecialistInfo? {
-        guard !catalog.isEmpty else { return current }
-        let specialists = pickerSpecialists(catalog)
-        if let current, let fresh = specialists.first(where: { $0.id == current.id }) {
-            return fresh
-        }
-        return specialists.orchestrator ?? specialists.first
-    }
-
     /// The pickers' loading state: shown while the store runs a cold load
     /// (first load or reconnect reload) and before this sheet's first load
     /// has settled on an empty cache; never for a warm cache revalidating,
@@ -411,31 +418,6 @@ extension CreateWorkspaceView {
     }
     // swiftlint:enable discouraged_optional_boolean
 
-    /// Keeps the selection while `current`'s id is still selectable, rebound
-    /// to the fresh entry; otherwise auggie when selectable, else the first
-    /// selectable provider, else nil (nothing selectable — the picker shows
-    /// setup guidance). An empty list keeps `current` so the selection
-    /// survives a reconnect reload.
-    static func preselectedProvider(
-        current: ProviderInfo?, providers: [ProviderInfo]
-    ) -> ProviderInfo? {
-        guard !providers.isEmpty else { return current }
-        let selectable = providers.filter(\.isSelectable)
-        if let current, let fresh = selectable.first(where: { $0.id == current.id }) {
-            return fresh
-        }
-        return selectable.first { $0.id == "auggie" } ?? selectable.first
-    }
-
-    /// Keeps an explicit model only while the displayed catalog still lists
-    /// it for the same provider (rebound to the fresh entry); anything else
-    /// — the model retired, the catalog cleared, or a provider switch whose
-    /// catalog reuses the bare id — falls back to the daemon default (nil).
-    static func reconciledModel(current: ModelInfo?, models: [ModelInfo]) -> ModelInfo? {
-        guard let current else { return nil }
-        return models.first { $0.id == current.id && $0.provider == current.provider }
-    }
-
     static let createRequestTimeout: TimeInterval = 120
 
     static func creationContextRows(
@@ -454,13 +436,19 @@ extension CreateWorkspaceView {
     }
 
     private func createWorkspace() {
-        guard !isCreating, let repo = selectedRepo, let branch = selectedBranch else { return }
+        guard !isCreating, !images.isImporting, canSubmitProvider,
+              let repo = selectedRepo, let branch = selectedBranch else { return }
         isCreating = true
 
         Task { await performCreateWorkspace(repo: repo, branch: branch) }
     }
 
     private func performCreateWorkspace(repo: GitHubRepo, branch: String) async {
+        // Recheck at the request boundary: a refresh may have removed the selection after the tap but before this task ran.
+        guard canSubmitProvider, !images.isImporting else {
+            isCreating = false
+            return
+        }
         do {
             let params = Self.buildCreateWorkspaceParams(
                 githubUrl: "https://github.com/\(repo.owner)/\(repo.name)",
@@ -470,9 +458,12 @@ extension CreateWorkspaceView {
                     specialist: selectedSpecialist,
                     provider: selectedProvider,
                     model: selectedModel,
-                    message: messageText
+                    message: messageText,
+                    reasoningEffort: validatedReasoningEffort,
+                    imageBlocks: images.images.map(\.block)
                 )
             )
+            try WorkspaceCreationImages.validateRequest(params)
             let result = try await session.connection.request(
                 "workspace.create",
                 params: params,
@@ -495,5 +486,15 @@ extension CreateWorkspaceView {
             showError = true
         }
         isCreating = false
+    }
+
+    private var canSubmitProvider: Bool {
+        !Self.isCreateDisabled(
+            isCreating: false,
+            isLoadingProviders: isLoadingOptions || providerOptions.isLoading || isLoadingSelectedModelCatalog,
+            providers: providers,
+            selectedProvider: selectedProvider,
+            allowsCreation: coordinator.canCreateWorkspace
+        )
     }
 }

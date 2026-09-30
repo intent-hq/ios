@@ -3,6 +3,7 @@ import SwiftUI
 struct ProviderModelStepView: View {
     let providers: [ProviderInfo]
     let isLoadingProviders: Bool
+    let providerGuidance: String?
     @Binding var selectedProvider: ProviderInfo?
     let models: [ModelInfo]
     let isLoadingModels: Bool
@@ -11,6 +12,7 @@ struct ProviderModelStepView: View {
     let isCreating: Bool
     let isCreateDisabled: Bool
     let colorScheme: ColorScheme
+    let onRetryProviders: () -> Void
     let onCreate: () -> Void
 
     var body: some View {
@@ -26,7 +28,7 @@ struct ProviderModelStepView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Create", action: onCreate)
                     .disabled(isCreateDisabled)
-                    .fontWeight(.semibold)
+                    .interFont(Constants.Typography.bodyS.withFace(.semibold))
             }
         }
     }
@@ -34,8 +36,23 @@ struct ProviderModelStepView: View {
     @ViewBuilder
     private var providerContent: some View {
         if isLoadingProviders {
-            ProgressView("Loading providers...")
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            ProgressView {
+                Text("Loading providers...").interFont(Constants.Typography.bodyS)
+            }
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        } else if let providerGuidance {
+            List {
+                Section {
+                    Text(providerGuidance)
+                        .interFont(Constants.Typography.bodyXS)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    Button("Retry", action: onRetryProviders)
+                        .interFont(Constants.Typography.bodyS)
+                }
+                .listRowBackground(Theme.card(for: colorScheme))
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
         } else if providers.noneSelectable {
             noSelectableProvidersList
         } else {
@@ -45,9 +62,11 @@ struct ProviderModelStepView: View {
 
     private var noSelectableProvidersList: some View {
         List {
-            Section("Provider") {
+            Section {
                 noProvidersSignedInPlaceholder
                     .listRowBackground(Theme.card(for: colorScheme))
+            } header: {
+                Text("Provider").interFont(Constants.Typography.eyebrow)
             }
         }
         .listStyle(.insetGrouped)
@@ -65,54 +84,44 @@ struct ProviderModelStepView: View {
 
     @ViewBuilder
     private var providerSection: some View {
-        Section("Provider") {
-            if providers.isEmpty {
-                Text("No providers found — the default provider will be used.")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .listRowBackground(Theme.card(for: colorScheme))
-            } else {
-                providerPicker
-            }
+        Section {
+            providerPicker
+        } header: {
+            Text("Provider").interFont(Constants.Typography.eyebrow)
         }
     }
 
     private var providerPicker: some View {
-        Picker("Provider", selection: Binding(
-            get: { selectedProvider?.id ?? "" },
-            set: { newId in selectProvider(newId) }
-        )) {
-            ForEach(providers) { provider in
-                Text(provider.authenticated == false
-                    ? "\(provider.displayName) (not signed in)"
-                    : provider.displayName)
-                    .tag(provider.id)
-            }
-        }
-        .pickerStyle(.menu)
+        ProviderPicker(
+            providers: providers,
+            selectedProvider: selectedProvider,
+            onSelect: selectProvider
+        )
         .disabled(isCreating)
         .listRowBackground(Theme.card(for: colorScheme))
     }
 
-    private func selectProvider(_ newId: String) {
-        guard let provider = providers.first(where: { $0.id == newId }),
-              SpecialistPickerView.isSelectable(provider) else { return }
+    private func selectProvider(_ provider: ProviderInfo) {
+        guard providers.contains(provider), provider.isSelectable, provider.id != selectedProvider?.id else { return }
+        selectedModel = nil
         selectedProvider = provider
     }
 
     @ViewBuilder
     private var modelSection: some View {
-        Section("Model") {
+        Section {
             if isLoadingModels {
                 modelLoadingIndicator
             } else if models.isEmpty {
                 Text("The provider's default model will be used.")
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .listRowBackground(Theme.card(for: colorScheme))
             } else {
                 modelPicker
             }
+        } header: {
+            Text("Model").interFont(Constants.Typography.eyebrow)
         }
     }
 
@@ -120,26 +129,21 @@ struct ProviderModelStepView: View {
         HStack(spacing: Constants.ModalPicker.modelLoadingSpacing) {
             ProgressView().controlSize(.small)
             Text("Loading models...")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .listRowBackground(Theme.card(for: colorScheme))
     }
 
     private var modelPicker: some View {
-        Picker("Model", selection: Binding(
-            get: { selectedModel?.id ?? "" },
-            set: { newId in selectedModel = models.first { $0.id == newId } }
-        )) {
-            Text(SpecialistInfo.daemonDefaultLabel(
+        ModelPicker(
+            models: models,
+            selectedModel: $selectedModel,
+            daemonDefaultLabel: SpecialistInfo.daemonDefaultLabel(
                 for: selectedSpecialist,
                 providerId: selectedProvider?.id
-            )).tag("")
-            ForEach(models) { model in
-                Text(model.name).tag(model.id)
-            }
-        }
-        .pickerStyle(.menu)
+            )
+        )
         .listRowBackground(Theme.card(for: colorScheme))
     }
 
@@ -150,7 +154,7 @@ struct ProviderModelStepView: View {
             VStack(spacing: Constants.ModalPicker.loadingOverlaySpacing) {
                 ProgressView()
                 Text("Creating agent...")
-                    .font(.subheadline)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
             }
             .padding(Constants.ModalPicker.loadingOverlayPadding)
@@ -164,10 +168,10 @@ struct ProviderModelStepView: View {
     private var noProvidersSignedInPlaceholder: some View {
         VStack(alignment: .leading, spacing: Constants.ModalPicker.placeholderSpacing) {
             Text("No providers are signed in")
-                .font(.subheadline.weight(.semibold))
+                .interFont(Constants.Typography.bodyXS.withFace(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
             Text("Set up a provider in the Intent desktop app, then come back and try again.")
-                .font(.subheadline)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .padding(.vertical, Constants.ModalPicker.rowVerticalPadding)

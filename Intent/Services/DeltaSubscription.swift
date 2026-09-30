@@ -48,7 +48,11 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
     /// decoded into a `ContentBlock`.
     struct ChatBlockEntity {
         let messageId: String
+        let appMessageId: String?
         let block: ContentBlock
+        /// Append-only text/thinking fragment, kept outside the full block
+        /// model. The reducer uses it only after a snapshot echoes incremental.
+        let textDelta: String?
         /// Role of the owning message; defaults to `.assistant` when absent.
         let role: MessageRole
         let timestamp: String?
@@ -66,7 +70,9 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
 
         private init(shaped: ShapedChatBlockEntity, block: ContentBlock) {
             messageId = shaped.messageId
+            appMessageId = shaped.entity["appMessageId"] as? String
             self.block = block
+            textDelta = shaped.textDelta
             role = MessageRole(rawValue: shaped.entity["role"] as? String ?? "assistant") ?? .system
             timestamp = shaped.entity["timestamp"] as? String
             streamingComplete = shaped.entity["streamingComplete"] as? Bool ?? false
@@ -94,12 +100,28 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         let entity: [String: Any]
         let messageId: String
         let block: [String: Any]
+        let textDelta: String?
 
         var fallbackIdentity: ContentBlock.FallbackIdentity { .fingerprint(messageId: messageId) }
 
         init?(entity: [String: Any]) {
             guard let messageId = entity["messageId"] as? String,
                   let block = entity["block"] as? [String: Any] else { return nil }
+            let type = block["type"] as? String
+            if type == "text" || type == "thinking", block["textDelta"] != nil {
+                // Full text is authoritative. Reject malformed mixed payloads;
+                // fragment-only blocks need a stable wire id to append safely.
+                if let text = block["text"] ?? block["content"] {
+                    guard text is String else { return nil }
+                    textDelta = nil
+                } else {
+                    guard let fragment = block["textDelta"] as? String,
+                          let id = block["id"] as? String, !id.isEmpty else { return nil }
+                    textDelta = fragment
+                }
+            } else {
+                textDelta = nil
+            }
             self.entity = entity
             self.messageId = messageId
             self.block = block

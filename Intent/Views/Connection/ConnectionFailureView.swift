@@ -7,15 +7,21 @@ struct ConnectionFailureView: View {
     let errorMessage: String
     var isCertMismatch: Bool = false
     var retryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
+    var networkStatus: NetworkAvailability.Status = .unknown
     @State private var isRetrying = false
     @State private var attemptNumber = 0
     @State private var retryTask: Task<Void, Never>?
     @State private var savedConnections: [StoredConnection] = []
+    @State private var showingDiagnosticLogs = false
 
     var body: some View {
         ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
+            Constants.Connections.background(for: colorScheme).ignoresSafeArea()
             failureContent
+        }
+        .safeAreaInset(edge: .top, alignment: .leading, spacing: 0) {
+            homeButton
+                .padding(.horizontal, Constants.ConnectionSheet.inset)
         }
         .onAppear {
             savedConnections = Self.alternativeConnections(
@@ -29,58 +35,45 @@ struct ConnectionFailureView: View {
         .onDisappear {
             stopAutoRetry()
         }
+        .sheet(isPresented: $showingDiagnosticLogs) {
+            DiagnosticExportView()
+        }
     }
 
     private var failureContent: some View {
-        VStack(spacing: Constants.ConnectionFailure.contentSpacing) {
-            Spacer()
-            failureIcon
-            failureTitle
-            failureControls
-            Spacer()
-            helpText
+        // A minimum viewport height centers short content without capping scrollable Dynamic Type content.
+        // swiftlint:disable:next geometry_reader_usage
+        GeometryReader { geometry in
+            ScrollView {
+                FailurePageLayout {
+                    VStack(spacing: Constants.ConnectionFailure.contentSpacing) {
+                        VStack(spacing: Constants.ConnectionFailure.titleToControlsSpacing) {
+                            failureTitle
+                            failureControls
+                        }
+                        savedConnectionsSection
+                    }
+                    helpText
+                }
+                .padding(.horizontal, Constants.ConnectionFailure.pagePadding)
+                .padding(.top, Constants.ConnectionFailure.pagePadding)
+                .padding(.bottom, Constants.ConnectionFailure.footerBottomPadding)
+                .frame(minHeight: geometry.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
         }
-    }
-
-    private var failureIcon: some View {
-        ZStack {
-            Circle()
-                .fill(Theme.destructive(for: colorScheme).opacity(
-                    Constants.ConnectionFailure.destructiveBackgroundOpacity
-                ))
-                .frame(
-                    width: Constants.ConnectionFailure.iconBackgroundSize,
-                    height: Constants.ConnectionFailure.iconBackgroundSize
-                )
-            Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: Constants.ConnectionFailure.iconSize))
-                .foregroundStyle(Theme.destructive(for: colorScheme))
-                .accessibilityHidden(true)
-        }
-    }
-
-    private var failureTitle: some View {
-        VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
-            Text(retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can't Connect")
-                .font(.title2.bold())
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-            Text(errorMessage)
-                .font(.subheadline)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)
-        }
+        // The 48pt export hit target includes space below its text, leaving the
+        // visible label above the home indicator while matching the mock's inset.
+        .ignoresSafeArea(.container, edges: .bottom)
     }
 
     private var failureControls: some View {
         VStack(spacing: Constants.ConnectionFailure.controlSpacing) {
-            certificateMismatches
             retryProgress
             manualLogOffButton
             reconnectButton
-            savedConnectionsSection
         }
-        .padding(.horizontal, Constants.ConnectionFailure.controlsHorizontalPadding)
+        .buttonStyle(IntentButtonStyle(variant: .primary))
     }
 
     @ViewBuilder
@@ -93,20 +86,15 @@ struct ConnectionFailureView: View {
     @ViewBuilder
     private var retryProgress: some View {
         if isRetrying {
-            HStack(spacing: Constants.ConnectionFailure.progressSpacing) {
-                ProgressView()
-                if attemptNumber > 1 {
-                    Text("Attempt \(attemptNumber)")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, Constants.ConnectionFailure.controlVerticalPadding)
-            .background(Theme.muted(for: colorScheme).opacity(
-                Constants.ConnectionFailure.controlBackgroundOpacity
-            ))
-            .clipShape(RoundedRectangle(cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
+            ProgressView()
+                .tint(Constants.Connections.mutedForeground(for: colorScheme))
+                .frame(maxWidth: .infinity, minHeight: Constants.ConnectionFailure.controlHeight)
+                .background(
+                    Constants.Connections.surface(for: colorScheme),
+                    in: .rect(cornerRadius: Constants.ConnectionFailure.controlCornerRadius)
+                )
+                .accessibilityLabel("Reconnecting")
+                .accessibilityValue(Text("Attempt \(attemptNumber)"))
         }
     }
 
@@ -117,11 +105,8 @@ struct ConnectionFailureView: View {
                 stopAutoRetry()
                 coordinator.onLogOff()
             } label: {
-                Label("Retry Log Off", systemImage: "rectangle.portrait.and.arrow.forward")
-                    .frame(maxWidth: .infinity)
+                primaryButtonLabel("Retry Log Off")
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.primary(for: colorScheme))
         }
     }
 
@@ -130,48 +115,66 @@ struct ConnectionFailureView: View {
             stopAutoRetry()
             coordinator.onReconnect()
         } label: {
-            Label(
-                isCertMismatch ? "Re-pair Device" : "Connect to Different Server",
-                systemImage: isCertMismatch ? "arrow.triangle.2.circlepath" : "link.badge.plus"
-            )
-            .frame(maxWidth: .infinity)
+            primaryButtonLabel(isCertMismatch ? "Re-pair Device" : "Connect to different server")
         }
-        .buttonStyle(.bordered)
-        .tint(Theme.primary(for: colorScheme))
+    }
+
+    private func primaryButtonLabel(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .interFont(Constants.Typography.bodySEmphasized)
+            .tracking(Constants.Connections.nameTracking)
+            .foregroundStyle(Constants.Pairing.foreground(for: .light))
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            // IntentButtonStyle adds 12pt above and below the label.
+            .frame(maxWidth: .infinity, minHeight: Constants.ConnectionFailure.controlLabelHeight)
     }
 
     @ViewBuilder
     private var savedConnectionsSection: some View {
         if !savedConnections.isEmpty {
             VStack(alignment: .leading, spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
-                Text("Saved Connections")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                ScrollView {
-                    VStack(spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
-                        ForEach(savedConnections) { savedConnectionRow($0) }
-                    }
+                ConnectionSheetText(
+                    "SAVED CONNECTIONS",
+                    style: Constants.Typography.eyebrow,
+                    tracking: Constants.ConnectionFailure.eyebrowTracking
+                )
+                .foregroundStyle(Constants.Connections.mutedForeground(for: colorScheme))
+                VStack(spacing: Constants.Connections.cardSpacing) {
+                    ForEach(savedConnections) { savedConnectionRow($0) }
                 }
-                .frame(maxHeight: Constants.ConnectionFailure.savedConnectionsMaximumHeight)
             }
-            .padding(.top, Constants.ConnectionFailure.savedConnectionsSpacing)
         }
     }
 
     private var helpText: some View {
-        VStack(spacing: Constants.ConnectionFailure.helpSpacing) {
-            Text(retryPolicy == .manualLogOff ? "Connection Kept" : "Troubleshooting")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.foreground(for: colorScheme))
+        VStack(alignment: .leading, spacing: Constants.ConnectionFailure.helpSpacing) {
+            ConnectionSheetText(
+                retryPolicy == .manualLogOff ? "Connection Kept" : "TROUBLESHOOTING",
+                style: Constants.Typography.eyebrow,
+                tracking: Constants.ConnectionFailure.eyebrowTracking
+            )
+                .padding(.bottom, Constants.ConnectionFailure.helpHeadingExtraSpacing)
             Text(retryPolicy == .manualLogOff
                  ? "Your saved connection and settings were kept so you can retry logging off."
                  : "• Make sure Intent is running on your Mac\n• Check that both devices are on the same network\n• Verify the WebSocket API is enabled in Settings")
-                .font(.caption)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .interFont(Constants.Typography.subtextXXS)
+                .tracking(Constants.Connections.infoTracking)
                 .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                showingDiagnosticLogs = true
+            } label: {
+                Text("Export logs")
+                    .interFont(Constants.Typography.subtextXXS)
+                    .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
+                    .frame(maxWidth: .infinity, minHeight: Constants.ConnectionFailure.controlHeight, alignment: .leading)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
         }
-        .padding(.horizontal, Constants.ConnectionFailure.helpHorizontalPadding)
-        .padding(.bottom, Constants.ConnectionFailure.helpBottomPadding)
+        .foregroundStyle(Constants.Connections.mutedForeground(for: colorScheme))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// True when a connection-failure message describes a certificate
@@ -208,43 +211,6 @@ struct ConnectionFailureView: View {
         connections
             .filter { $0.id != activeId }
             .sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
-    }
-
-    private func savedConnectionRow(_ connection: StoredConnection) -> some View {
-        Button {
-            stopAutoRetry()
-            coordinator.onSwitchConnection(id: connection.id)
-        } label: {
-            HStack(spacing: Constants.ConnectionFailure.savedConnectionRowSpacing) {
-                Image(systemName: "desktopcomputer")
-                    .font(.body)
-                    .foregroundStyle(Theme.primary(for: colorScheme))
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: Constants.ConnectionFailure.savedConnectionTextSpacing) {
-                    Text(connection.displayName)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                    Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .accessibilityHidden(true)
-            }
-            .padding(.vertical, Constants.ConnectionFailure.savedConnectionVerticalPadding)
-            .padding(.horizontal, Constants.ConnectionFailure.savedConnectionHorizontalPadding)
-            .background(Theme.muted(for: colorScheme).opacity(
-                Constants.ConnectionFailure.controlBackgroundOpacity
-            ))
-            .clipShape(RoundedRectangle(cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
-        }
-        .buttonStyle(.plain)
     }
 
     /// Whether the failure screen may dial the saved record on its own. A
@@ -292,6 +258,9 @@ struct ConnectionFailureView: View {
 
             try? await Task.sleep(for: backoff(attempt))
             if Task.isCancelled { break }
+            // Home retires the coordinator synchronously, before SwiftUI
+            // delivers onDisappear and cancels this view-owned retry task.
+            guard !coordinator.lifecycleState.hasReturnedToSavedMachines else { return }
 
             // Dial this window's own bound record (re-read each
             // attempt so rotated tokens synced mid-retry are used);
@@ -306,13 +275,15 @@ struct ConnectionFailureView: View {
             }
 
             do {
-                try await connection.connect(
-                    hosts: record.server.hosts,
-                    port: record.server.port,
-                    token: record.token,
-                    certFingerprint: record.server.certFingerprint,
-                    tcAddress: record.server.tcAddress
-                )
+                try await DiagnosticConnectContext.$origin.withValue(.failureScreenRetry) {
+                    try await connection.connect(
+                        hosts: record.server.hosts,
+                        port: record.server.port,
+                        token: record.token,
+                        certFingerprint: record.server.certFingerprint,
+                        tcAddress: record.server.tcAddress
+                    )
+                }
                 // A cancelled retry must never route: the user may have
                 // switched to another saved connection while this connect
                 // was in flight, and a stale success would restore the
@@ -360,6 +331,80 @@ struct ConnectionFailureView: View {
                 }
             )
         }
+    }
+}
+
+extension ConnectionFailureView {
+    private var homeButton: some View {
+        Button {
+            stopAutoRetry()
+            coordinator.onReturnToSavedMachines()
+        } label: {
+            Label("Back", systemImage: "chevron.backward")
+                .interFont(Constants.Typography.bodyS)
+                .frame(minHeight: Constants.ConnectionSheet.minimumTouchTarget)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.primary(for: colorScheme))
+        .accessibilityLabel("Back to Home")
+        .accessibilityHint("Return to your saved machines without forgetting this connection.")
+        .accessibilityIdentifier("connection-failure.home")
+    }
+
+    private func savedConnectionRow(_ connection: StoredConnection) -> some View {
+        Button {
+            stopAutoRetry()
+            coordinator.onSwitchConnection(id: connection.id)
+        } label: {
+            SavedConnectionCard(
+                name: connection.displayName,
+                address: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)",
+                isCurrentWindow: false
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var failureTitle: some View {
+        VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
+            ConnectionSheetText(
+                retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can’t Connect",
+                style: Constants.Typography.heading2,
+                tracking: Constants.Connections.headingTracking
+            )
+                .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
+            ConnectionSheetText("\(errorMessage)", style: Constants.Typography.bodyS)
+                .foregroundStyle(Constants.Connections.mutedForeground(for: colorScheme))
+            certificateMismatches
+            ConnectionNetworkStatusView(status: networkStatus, showsReconnecting: false)
+        }
+        .multilineTextAlignment(.center)
+    }
+}
+
+/// Center the main group when space permits, keeping help at the bottom without
+/// overlap. In the scroll view a taller intrinsic size makes every section reachable.
+private struct FailurePageLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let content = subviews[0].sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        let help = subviews[1].sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(
+            width: proposal.width ?? max(content.width, help.width),
+            height: max(proposal.height ?? 0, content.height + Constants.ConnectionFailure.helpTopSpacing + help.height)
+        )
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        let proposal = ProposedViewSize(width: bounds.width, height: nil)
+        let content = subviews[0].sizeThatFits(proposal)
+        let help = subviews[1].sizeThatFits(proposal)
+        let helpY = bounds.maxY - help.height
+        let contentY = min(
+            bounds.midY - content.height / 2,
+            helpY - Constants.ConnectionFailure.helpTopSpacing - content.height
+        )
+        subviews[0].place(at: CGPoint(x: bounds.minX, y: contentY), proposal: proposal)
+        subviews[1].place(at: CGPoint(x: bounds.minX, y: helpY), proposal: proposal)
     }
 }
 

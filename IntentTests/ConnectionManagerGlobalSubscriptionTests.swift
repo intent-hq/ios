@@ -1,8 +1,30 @@
+import Combine
 import Foundation
 @testable import Intent
 import Testing
 
 extension ConnectionManagerTests {
+    @Test func globalFeedIncludesCatalogInvalidationOnce() throws {
+        for event in ["specialists:changed", "settings:changed", "host:members-changed"] {
+            #expect(ConnectionManager.globalEventTypes.filter { $0 == event }.count == 1)
+        }
+        let request = try RPCFixtureJSON.request(
+            method: "events.subscribe",
+            params: ["eventTypes": ConnectionManager.globalEventTypes, "replaceGroup": "global"]
+        )
+        // Keep the catalog-only byte accounting; the required membership event
+        // adds exactly 23 bytes to the shared subscription request.
+        let catalogRequest = try RPCFixtureJSON.request(
+            method: "events.subscribe",
+            params: [
+                "eventTypes": ConnectionManager.globalEventTypes.filter { $0 != "host:members-changed" },
+                "replaceGroup": "global"
+            ]
+        )
+        #expect(catalogRequest.count == 185)
+        #expect(request.count == 208)
+    }
+
     static let subscribeMethod = "events.subscribe"
 
     static func isSubscriptionFailed(_ state: ConnectionManager.GlobalSubscriptionState) -> Bool {
@@ -22,7 +44,8 @@ extension ConnectionManagerTests {
     @Test @MainActor func globalSubscriptionRetriesUntilTheDaemonAccepts() async throws {
         let previous = Self.enablePlaintextLoopback()
         defer { Self.restorePlaintextLoopback(previous) }
-        let manager = ConnectionManager.shared
+        let diagnostics = DiagnosticStore(storage: DiagnosticTestStorage())
+        let manager = ConnectionManager(diagnostics: diagnostics)
         let clock = ManualHeartbeatClock()
         let server = try await RecoveryWebSocketServer.start()
         server.failNextRequests(2, method: Self.subscribeMethod)
@@ -49,12 +72,17 @@ extension ConnectionManagerTests {
         #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
         #expect(disconnects.count == .zero)
         #expect(manager.connectionState == .connected)
+        let records = try DiagnosticFixtures.records(await diagnostics.snapshot())
+            .filter { $0.event.operation == .subscriptionGlobal }
+        #expect(records.map(\.event.outcome) == [.retrying, .recovered])
+        #expect(records.map(\.count) == [2, 1])
     }
 
     @Test @MainActor func globalSubscriptionExhaustionSurfacesFailureAndRetriesOnRequest() async throws {
         let previous = Self.enablePlaintextLoopback()
         defer { Self.restorePlaintextLoopback(previous) }
-        let manager = ConnectionManager.shared
+        let diagnostics = DiagnosticStore(storage: DiagnosticTestStorage())
+        let manager = ConnectionManager(diagnostics: diagnostics)
         let clock = ManualHeartbeatClock()
         let server = try await RecoveryWebSocketServer.start()
         let maxAttempts = ConnectionManager.globalSubscriptionMaxAttempts
@@ -90,10 +118,19 @@ extension ConnectionManagerTests {
         }
 
         let sessionConnection: any SessionConnectionManaging = manager
-        #expect(Self.isSubscriptionFailed(sessionConnection.globalSubscriptionState))
+        var readiness: [ConnectionManager.GlobalSubscriptionState] = []
+        let observer = sessionConnection.globalSubscriptionPublisher.sink { readiness.append($0) }
+        defer { observer.cancel() }
+        #expect(readiness == [manager.globalSubscriptionState], "routing replays actual failed-feed readiness")
         sessionConnection.retryGlobalSubscription()
         try await Self.settle { manager.globalSubscriptionState == .subscribed }
         #expect(server.requestCount(method: Self.subscribeMethod) == maxAttempts + 1)
+        #expect(readiness.last == .subscribed)
+        #expect(readiness.contains(.subscribing(attempt: 1)))
+        let records = try DiagnosticFixtures.records(await diagnostics.snapshot())
+            .filter { $0.event.operation == .subscriptionGlobal }
+        #expect(records.map(\.event.outcome) == [.retrying, .exhausted, .succeeded])
+        #expect(records.map(\.count) == [UInt64(maxAttempts - 1), 1, 1])
     }
 }
 

@@ -134,7 +134,7 @@ struct WorkspaceDetailViewTests {
     /// A backend-bound session composed over a fake backend connection; the
     /// coordinator factory is never invoked by these tests.
     @MainActor
-    private func makePinnedSession(connection: FakeConnectionManager) -> BackendSession {
+    func makePinnedSession(connection: FakeConnectionManager) -> BackendSession {
         let fileLoader = WorkspaceFileImageLoader(connection: connection)
         return BackendSession(
             backendID: BackendID(UUID()),
@@ -166,8 +166,10 @@ struct WorkspaceDetailViewTests {
 
         #expect(view.agentStoreConnectionID == ObjectIdentifier(fake))
         #expect(view.noteStoreConnectionID == ObjectIdentifier(fake))
+        #expect(view.changesStoreConnectionID == ObjectIdentifier(fake))
         #expect(view.agentStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
         #expect(view.noteStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
+        #expect(view.changesStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
     }
 
     /// Same contract for the note detail: its note/agent stores are bound

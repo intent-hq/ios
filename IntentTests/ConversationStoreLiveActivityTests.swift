@@ -38,7 +38,7 @@ extension ConversationStoreLiveStateTests {
         #expect(block.metadata["toolKind"]?.value as? String == "read")
 
         var display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
-        #expect(display.icon == "📄")
+        #expect(display.icon == .file)
         #expect(display.verb == "Read")
         #expect(display.subject == "main.rs")
 
@@ -125,7 +125,7 @@ extension ConversationStoreLiveStateTests {
     /// block id) must upsert onto it, not duplicate the message or the block.
     @Test func userRowDeltaDoesNotDuplicateOptimisticLocalAppend() async throws {
         let (store, fake) = makeStore()
-        fake.responseMap["agent.sendMessage"] = ["success": true]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         try await store.sendMessage(agentId: "agent-1", content: "Hello", workspaceId: "ws-1")
@@ -156,7 +156,7 @@ extension ConversationStoreLiveStateTests {
     /// the attachment blocks alongside, without duplicating anything.
     @Test func multiBlockUserRowDeltaUpsertsOverOptimisticAppend() async throws {
         let (store, fake) = makeStore()
-        fake.responseMap["agent.sendMessage"] = ["success": true]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         try await store.sendMessage(
@@ -206,7 +206,7 @@ extension ConversationStoreLiveStateTests {
 extension ConversationStoreLiveStateTests {
     @Test func userRowTerminalDeltaDoesNotClearTurnStreaming() async throws {
         let (store, fake) = makeStore()
-        fake.responseMap["agent.sendMessage"] = ["success": true]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         try await store.sendMessage(agentId: "agent-1", content: "Hello", workspaceId: "ws-1")
@@ -264,8 +264,8 @@ extension ConversationStoreLiveStateTests {
     private func makeParentStore(watching childId: String) async -> (ConversationStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        fake.responseMap["agent.getConversation"] = ["messages": []]
-        await store.fetchConversation(agentId: "agent-parent", workspaceId: "ws-1")
+        fake.stubChatSnapshot()
+        await store.subscribeLiveChat(agentId: "agent-parent", workspaceId: "ws-1")
         store.watchedAgentIds = [childId]
         store.watchedAgents = [makeWatchedAgent(id: childId, lastAgentResponse: "Old preview")]
         store.isWaitingForAgents = true
@@ -421,12 +421,11 @@ extension ConversationStoreLiveStateTests {
         #expect(watched.digest == nil)
     }
 
-    /// An enriched ping for a watched agent whose details haven't loaded yet
-    /// (not in watchedAgents) falls back to the refetch so the row can appear.
+    /// Missing rows remain placeholders until visible; activity is not discovery.
 }
 
 extension ConversationStoreLiveStateTests {
-    @Test func enrichedActivityForUnloadedWatchedAgentFallsBackToRefetch() async throws {
+    @Test func enrichedActivityForOffscreenWatchedAgentDoesNotRefetch() async throws {
         let (store, fake) = await makeParentStore(watching: "agent-child")
         store.watchedAgents = []
         fake.responseMap["agent.get"] = [
@@ -449,10 +448,10 @@ extension ConversationStoreLiveStateTests {
                 ]
             ]
         ])
-        try await waitFor { store.watchedAgents.first?.id == "agent-child" }
-
-        #expect(fake.paramsForMethod("agent.get").count == 1)
+        try await expectNever("offscreen activity detail read") { fake.didCallMethod("agent.get") }
+        #expect(fake.paramsForMethod("agent.get").isEmpty)
         #expect(store.watchedAgents.first?.id == "agent-child")
+        #expect(store.watchedAgents.first?.status == "unknown")
     }
 
     /// Events from agents that are neither ours nor watched are still dropped

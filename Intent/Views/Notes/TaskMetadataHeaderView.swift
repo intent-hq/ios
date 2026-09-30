@@ -104,7 +104,7 @@ struct TaskMetadataHeaderView: View {
     private func row(_ label: String, @ViewBuilder content: () -> some View) -> some View {
         HStack(alignment: .top, spacing: Constants.Notes.Metadata.rowSpacing) {
             Text(label)
-                .font(.footnote)
+                .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(width: Constants.Notes.Metadata.labelWidth, alignment: .leading)
                 .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
@@ -129,7 +129,7 @@ struct TaskMetadataHeaderView: View {
                     size: Constants.Notes.Metadata.statusIconSize
                 )
                 Text((note.taskDisplayStatus ?? .unknown).label)
-                    .font(.footnote.weight(.medium))
+                    .interFont(Constants.Typography.bodyXSEmphasized)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
             }
             .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
@@ -146,7 +146,7 @@ struct TaskMetadataHeaderView: View {
                 id: \.self
             ) { agentId in
                 Text(resolveAgentName(agentId) ?? Self.truncatedId(agentId))
-                    .font(.footnote.weight(.medium))
+                    .interFont(Constants.Typography.bodyXSEmphasized)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .lineLimit(1)
                     .padding(.horizontal, Constants.Notes.Metadata.chipHorizontalPadding)
@@ -238,7 +238,7 @@ private struct TaskRelationChip: View {
         HStack(spacing: Constants.Notes.Metadata.relationSpacing) {
             relationIcon
             Text(title)
-                .font(.footnote.weight(.medium))
+                .interFont(Constants.Typography.bodyXSEmphasized)
                 .italic(relatedNote == nil)
                 .foregroundStyle(
                     variant == .conflict ? Self.warning : Theme.mutedForeground(for: colorScheme)

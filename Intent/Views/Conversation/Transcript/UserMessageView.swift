@@ -1,23 +1,9 @@
+import CoreText
 import SwiftUI
 
 struct UserMessageView: View {
-    private enum Layout {
-        static let contentSpacing: CGFloat = 4
-        static let attachmentGridSpacing: CGFloat = 6
-        static let attachmentSectionTopPadding: CGFloat = 4
-        static let fileAttachmentListSpacing: CGFloat = 4
-        static let containerPadding: CGFloat = 12
-        static let backgroundOpacity: Double = 0.4
-        static let cornerRadius: CGFloat = 8
-        static let textRowSpacing: CGFloat = 6
-        static let mentionChipSpacing: CGFloat = 6
-        static let textOpacity: Double = 0.85
-        static let fileChipSpacing: CGFloat = 6
-        static let fileChipHorizontalPadding: CGFloat = 8
-        static let fileChipVerticalPadding: CGFloat = 5
-        static let fileChipBackgroundOpacity: Double = 0.6
-        static let fileChipCornerRadius: CGFloat = 8
-    }
+    private typealias Layout = Constants.Conversation.UserMessage
+    private typealias Design = Constants.Conversation.Design
 
     let message: ConversationMessage
     let workspaceId: String
@@ -25,6 +11,11 @@ struct UserMessageView: View {
     @Binding var isAgentMessageExpanded: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(BackendSession.self) private var session
+    @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.legibilityWeight) private var legibilityWeight
+    @ScaledMetric(relativeTo: .body) private var workspaceFontSize = Constants.Typography.bodyS.size
 
     /// Derived once per message value in `init` rather than on every `body`
     /// evaluation (the body also re-runs on the expansion toggle): the wake /
@@ -62,16 +53,28 @@ struct UserMessageView: View {
     }
 
     var body: some View {
+        if workspaceDesign {
+            WorkspaceUserBubbleLayout(usesFullWidth: dynamicTypeSize.isAccessibilitySize, layoutDirection: layoutDirection) {
+                bubble
+            }
+        } else {
+            bubble
+        }
+    }
+
+    private var bubble: some View {
         VStack(alignment: .leading, spacing: Layout.contentSpacing) {
             attributionHeader
             if agentMessage == nil || isAgentMessageExpanded {
                 messageContents
             }
         }
-        .padding(Layout.containerPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.muted(for: colorScheme).opacity(Layout.backgroundOpacity))
-        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+        .padding(workspaceDesign ? Design.Transcript.bubblePadding : Layout.containerPadding)
+        .frame(maxWidth: workspaceDesign ? nil : .infinity, alignment: .leading)
+        .background(workspaceDesign
+            ? Design.Palette.surface(for: colorScheme)
+            : Theme.muted(for: colorScheme).opacity(Layout.backgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: workspaceDesign ? Design.cornerRadius : Layout.cornerRadius))
         .modifier(MessageCopyContextMenu(
             text: copyText,
             userStyled: true,
@@ -94,9 +97,9 @@ struct UserMessageView: View {
                     { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.rawName) }
                 }
             )
-        } else {
+        } else if !workspaceDesign {
             Text("You")
-                .font(.caption.weight(.semibold))
+                .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
     }
@@ -186,15 +189,44 @@ struct UserMessageView: View {
                     }
                 }
             } else {
-                userText(display)
+                userText(display, trimsBounds: usesTrimmedMessageText)
             }
         }
     }
 
-    private func userText(_ text: String) -> some View {
+    /// Keep native bounds between attributed headers, chips, attachments and multiple blocks.
+    /// A plain bubble measures its existing padding from the cap top to the final baseline.
+    private var usesTrimmedMessageText: Bool {
+        workspaceDesign && hookWake == nil && prWake == nil && agentMessage == nil
+            && partitioned.text.count == 1 && partitioned.images.isEmpty && partitioned.files.isEmpty
+    }
+
+    private var workspaceTextCapHeight: CGFloat {
+        let style = Constants.Typography.bodyS
+        let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
+        let font = CTFontCreateWithName(face.rawValue as CFString, workspaceFontSize, nil)
+        return CTFontGetCapHeight(font)
+    }
+
+    @ViewBuilder
+    private func userText(_ text: String, trimsBounds: Bool = false) -> some View {
+        if trimsBounds, !text.isEmpty {
+            WorkspaceTextTrimLayout(capHeight: workspaceTextCapHeight) {
+                userTextContent(text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            userTextContent(text)
+        }
+    }
+
+    private func userTextContent(_ text: String) -> some View {
         Text(text)
-            .font(.subheadline)
-            .foregroundStyle(Theme.foreground(for: colorScheme).opacity(Layout.textOpacity))
+            .interFont(workspaceDesign ? Constants.Typography.bodyS : Constants.Typography.bodyXS)
+            .tracking(workspaceDesign ? Design.Typography.bodyTracking : 0)
+            .foregroundStyle(workspaceDesign
+                ? Design.Palette.foreground(for: colorScheme)
+                : Theme.foreground(for: colorScheme).opacity(Layout.textOpacity))
             .textSelection(.enabled)
     }
 
@@ -205,11 +237,11 @@ struct UserMessageView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .accessibilityHidden(true)
             Text(block.fileName ?? "Attachment")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .lineLimit(1)
             if let size = block.size {
                 Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
-                    .font(.caption2)
+                    .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
         }

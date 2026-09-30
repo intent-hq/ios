@@ -24,7 +24,14 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     /// with a retry action routed to `retryGlobalSubscription()` (ios#254).
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
 
+    var currentPrincipal: ConnectionPrincipal? { get }
+    var admission: ConnectionAdmission? { get }
+    var pairingAttemptID: UUID? { get }
+
+    func confirmedPrincipal() async throws -> ConnectionPrincipal
+
     func retryGlobalSubscription()
+    func makeBrowserProxy() async throws -> any BrowserProxySession
 
     func connect(
         hosts: [String],
@@ -41,7 +48,14 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
         tcAddress: String?
     )
     func refreshHostRoutes() async
+    func connectDemo(serveFixtures: Bool)
     func disconnect()
+}
+
+extension SessionConnectionManaging {
+    func makeBrowserProxy() async throws -> any BrowserProxySession {
+        throw BrowserTunnelError.unavailable
+    }
 }
 
 extension ConnectionManager: SessionConnectionManaging {}
@@ -67,13 +81,21 @@ final class BackendSession {
     let backendID: BackendID?
     let connection: any SessionConnectionManaging
     let workspaceStore: WorkspaceStore
+    let assistantStore: AssistantStore
+    /// Authoritative detail state shared by routes, conversations and proposal cards.
+    let agentDetails: AgentDetailStore
+    var agentSummaries: AgentSummaryStore { agentDetails.summaries }
+    let conversations: ConversationStorePool
     /// Session-lifetime GitHub repo cache for the New Workspace repo step;
     /// outlives the sheet so a reopen renders the cached list instantly.
     let githubRepoStore: GitHubRepoStore
     /// Session-lifetime specialist / provider / model cache for the New
     /// Workspace final step; same reopen-instantly contract as the repo cache.
     let creationOptionsStore: CreationOptionsStore
+    let hooksStore: WorkspaceStatusStore<BackgroundHook>
     let prMonitorsStore: WorkspacePrMonitorsStore
+    let mobileTerminalStore: MobileTerminalStore
+    let browserStore: WorkspaceBrowserStore
     let attachmentUploadService: AttachmentUploadService
     let workspaceFileImageLoader: WorkspaceFileImageLoader
     let attachmentImageLoader: AttachmentImageLoader
@@ -98,10 +120,21 @@ final class BackendSession {
         self.backendID = backendID
         self.connection = connection
         self.workspaceStore = workspaceStore
+        let details = AgentDetailStore(connection: connection)
+        self.agentDetails = details
+        workspaceStore.agentSummaries = details.summaries
+        self.assistantStore = AssistantStore(connection: connection, summaries: details.summaries)
+        self.conversations = ConversationStorePool(connection: connection, details: details)
         self.coordinatorFactory = coordinatorFactory
         self.githubRepoStore = githubRepoStore
         self.creationOptionsStore = creationOptionsStore
+        self.hooksStore = BackgroundHookStore.makeWorkspaceStore(connection: connection)
         self.prMonitorsStore = prMonitorsStore
+        mobileTerminalStore = MobileTerminalStore(
+            connection: connection,
+            persistence: MobileTerminalPersistence(backendID: backendID)
+        )
+        browserStore = WorkspaceBrowserStore(connection: connection, backendID: backendID)
         self.attachmentUploadService = attachmentUploadService
         self.workspaceFileImageLoader = workspaceFileImageLoader
         self.attachmentImageLoader = attachmentImageLoader
@@ -112,10 +145,18 @@ final class BackendSession {
     /// the session share connection + stores but navigate independently
     /// (spec "State split"); the coordinator claims last-screen restoration
     /// lazily via `claimScreenRestoration()`.
-    func makeCoordinator() -> AppCoordinator {
-        coordinatorFactory { [weak self] in
+    /// `startingAtSavedMachines` skips the launch splash after an explicit
+    /// return Home, including in demo mode. No connection attempt is started.
+    func makeCoordinator(startingAtSavedMachines: Bool = false) -> AppCoordinator {
+        let coordinator = coordinatorFactory { [weak self] in
             self?.claimScreenRestoration() ?? false
         }
+        coordinator.agentDetails = agentDetails
+        if startingAtSavedMachines {
+            coordinator.routingState.hasLoadCompleted = true
+            coordinator.onReconnect()
+        }
+        return coordinator
     }
 
     /// Grants last-screen restoration to this session's first claimant only:
@@ -128,9 +169,32 @@ final class BackendSession {
         return true
     }
 
+    /// The window keeps these leases across conversation switches in its
+    /// selected workspace. Conversation/row leases share the exact same caches.
+    func retainWorkspaceStatus(workspaceId: String, consumer: UUID) {
+        hooksStore.retain(workspaceId: workspaceId, consumer: consumer)
+        prMonitorsStore.retain(workspaceId: workspaceId, consumer: consumer)
+        Task {
+            guard hooksStore.buckets[workspaceId]?.consumers.contains(consumer) == true else { return }
+            async let hooks: () = hooksStore.load(workspaceId: workspaceId)
+            async let monitors: () = prMonitorsStore.seed(workspaceId: workspaceId)
+            _ = await (hooks, monitors)
+        }
+    }
+
+    func releaseWorkspaceStatus(workspaceId: String, consumer: UUID) {
+        hooksStore.release(workspaceId: workspaceId, consumer: consumer)
+        prMonitorsStore.release(workspaceId: workspaceId, consumer: consumer)
+    }
+
     /// Disconnects the backend connection. Called by the registry when the
     /// last window detaches from the session.
     func teardown() {
+        creationOptionsStore.reset()
+        hooksStore.reset()
+        prMonitorsStore.reset()
+        conversations.reset()
+        agentDetails.reset()
         connection.disconnect()
     }
 }

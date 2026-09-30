@@ -1,3 +1,4 @@
+import SwiftUI
 import Testing
 import Textual
 import UIKit
@@ -100,8 +101,36 @@ struct MarkdownTextViewTests {
         #expect(MarkdownTextView.lightboxImage(for: attachment) === image)
     }
 
-    @Test func tappedFailureAttachmentIsIgnored() {
-        let attachment = AnyAttachment(IntentFileFailureAttachment(altText: "alt"))
-        #expect(MarkdownTextView.lightboxImage(for: attachment) == nil)
+    @MainActor
+    @Test func renderedMarkdownKeepsCodeMonospacedAndProseScalable() async throws {
+        let narrow = "iiiiiiii"
+        let wide = "WWWWWWWW"
+        let prose = try await renderedSize(narrow)
+        let wideProse = try await renderedSize(wide)
+        // Negative control: these glyphs must differ in the proportional body face.
+        #expect(wideProse.width > prose.width)
+        for fence in ["`", "```\n"] {
+            let closing = fence == "`" ? "`" : "\n```"
+            let narrowCode = try await renderedSize(fence + narrow + closing)
+            let wideCode = try await renderedSize(fence + wide + closing)
+            #expect(abs(narrowCode.width - wideCode.width) < 1)
+        }
+        let accessible = try await renderedSize(narrow, category: .accessibility5)
+        #expect(accessible.width > prose.width)
+        #expect(accessible.height > prose.height)
+    }
+
+    @MainActor
+    private func renderedSize(_ text: String, category: DynamicTypeSize = .large) async throws -> CGSize {
+        var measured = CGSize.zero
+        let view = MarkdownTextView(text: text)
+            .fixedSize()
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { measured = $0 }
+            .environment(\.dynamicTypeSize, category)
+        return try await SyntheticBadgeHost.render(view, width: 900, height: 500) { _, _ in
+            #expect(measured.width > 0)
+            #expect(measured.height > 0)
+            return measured
+        }
     }
 }

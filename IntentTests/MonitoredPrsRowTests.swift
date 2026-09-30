@@ -1,29 +1,37 @@
 import Foundation
 @testable import Intent
+import SwiftUI
 import Testing
+import UIKit
 
-/// Display-helper tests for the monitored-PRs chip row (the pure static
-/// funcs on `MonitoredPrsRow`; the SwiftUI body itself is not under test).
+/// Display-helper and hosted accessibility tests for the monitored-PRs chip row.
 @MainActor
 struct MonitoredPrsRowTests {
+    private static let hostWidth: CGFloat = 600
+    private static let hostHeight: CGFloat = 80
+    private static let accessibilityObservationDeadline: TimeInterval = 3
+    private static let accessibilityObservationInterval: TimeInterval = 0.02
+
     private func makeMonitor(
+        monitorId: String = "prm-1",
         repo: String = "octo/repo",
         prNumber: Int = 12,
         title: String? = "Add review wire surface",
         url: String? = "https://github.com/octo/repo/pull/12",
         pendingChanges: [String] = [],
+        hasPendingChanges: Bool = false,
         lastChangeAt: String? = nil,
         snapshot: MonitoredPr.Snapshot? = nil
     ) -> MonitoredPr {
         MonitoredPr(
-            monitorId: "prm-1",
+            monitorId: monitorId,
             workspaceId: "ws-abc",
             agentId: "agent-1",
             repo: repo,
             prNumber: prNumber,
             state: .active,
             pendingChanges: pendingChanges,
-            hasPendingChanges: !pendingChanges.isEmpty,
+            hasPendingChanges: hasPendingChanges,
             createdAt: nil,
             updatedAt: nil,
             pendingSince: nil,
@@ -34,6 +42,233 @@ struct MonitoredPrsRowTests {
             url: url,
             lastSnapshot: snapshot
         )
+    }
+}
+
+extension MonitoredPrsRowTests {
+    final class MixedAccessibilityContainer: NSObject {
+        var indexedCount = 0
+        var indexedElements: [NSObject] = []
+
+        override func accessibilityElementCount() -> Int { indexedCount }
+
+        override func accessibilityElement(at index: Int) -> Any? {
+            indexedElements.indices.contains(index) ? indexedElements[index] : nil
+        }
+    }
+
+    @Test(arguments: [0, 1, NSNotFound, -1])
+    func accessibilityTraversalCombinesExplicitAndIndexedChildren(indexedCount: Int) {
+        let host = UIView()
+        let container = MixedAccessibilityContainer()
+        container.indexedCount = indexedCount
+        let explicitChip = UIAccessibilityElement(accessibilityContainer: container)
+        explicitChip.accessibilityLabel = "#12"
+        explicitChip.accessibilityValue = "Pending changes"
+        explicitChip.accessibilityTraits = .button
+        let indexedChip = UIAccessibilityElement(accessibilityContainer: container)
+        container.indexedElements = [indexedChip]
+        container.accessibilityElements = [explicitChip, host]
+        host.accessibilityElements = [container, explicitChip]
+        defer { container.accessibilityElements = nil; host.accessibilityElements = nil }
+
+        let elements = SyntheticBadgeHost.accessibilityElements(in: host)
+        #expect(elements.filter { $0 === explicitChip }.count == 1)
+        #expect(elements.contains { $0 === indexedChip } == (indexedCount == 1))
+        #expect(elements.first { $0 === explicitChip }?.accessibilityLabel == "#12")
+        #expect(elements.first { $0 === explicitChip }?.accessibilityValue == "Pending changes")
+        #expect(elements.first { $0 === explicitChip }?.accessibilityTraits.contains(.button) == true)
+    }
+
+    @Test func accessibilityTraversalReachesChipsInsideNonViewScrollContainers() {
+        let host = UIView()
+        let scrollContainer = NSObject()
+        let chip = UIAccessibilityElement(accessibilityContainer: scrollContainer)
+        chip.accessibilityIdentifier = "monitoredPr.nested"
+        chip.accessibilityLabel = "#12"
+        chip.accessibilityValue = "Pending changes"
+        chip.accessibilityTraits = .button
+        scrollContainer.accessibilityElements = [chip]
+        host.accessibilityElements = [scrollContainer]
+        let elements = SyntheticBadgeHost.accessibilityElements(in: host)
+        #expect(elements.contains { $0 === chip })
+        #expect(elements.first { $0 === chip }?.accessibilityTraits.contains(.button) == true)
+    }
+
+    @Test func accessibilityTraversalDeduplicatesContainersAndStopsCycles() {
+        let host = UIView()
+        let container = NSObject()
+        let chip = UIAccessibilityElement(accessibilityContainer: container)
+        chip.accessibilityIdentifier = "monitoredPr.once"
+        host.accessibilityElements = [container, chip]
+        container.accessibilityElements = [host, chip]
+        defer { container.accessibilityElements = nil; host.accessibilityElements = nil }
+        #expect(SyntheticBadgeHost.accessibilityElements(in: host).filter { $0 === chip }.count == 1)
+    }
+
+    private func makeRow(
+        monitors: [MonitoredPr],
+        usesWorkspaceDesign: Bool = false,
+        error: String? = nil
+    ) -> some View {
+        let connection = FakeConnectionManager()
+        let workspaceStore = WorkspaceStore(forTesting: true)
+        workspaceStore.workspaces = [
+            Workspace(
+                id: "ws-abc",
+                title: "Test",
+                branch: nil,
+                baseRef: nil,
+                status: nil,
+                activity: nil,
+                displayStatus: nil,
+                repositoryOwner: "octo",
+                repositoryName: "repo"
+            )
+        ]
+        let viewModel = ConversationViewModel(
+            agentId: "agent-1",
+            workspaceId: "ws-abc",
+            agentName: "Test",
+            connection: connection,
+            uploadService: AttachmentUploadService(connection: connection),
+            optionsStore: CreationOptionsStore(connectionManager: connection)
+        )
+        let monitoredPrStore = MonitoredPrStore(connectionManager: connection)
+        monitoredPrStore.activate(workspaceId: "ws-abc")
+        monitoredPrStore.source.cache.buckets["ws-abc"]?.rows = monitors
+        monitoredPrStore.source.cache.buckets["ws-abc"]?.error = error
+        let session = makeSession(connection: connection, workspaceStore: workspaceStore)
+        return MonitoredPrsRow(
+            viewModel: viewModel,
+            monitoredPrStore: monitoredPrStore,
+            usesWorkspaceDesign: usesWorkspaceDesign
+        )
+            .environment(session)
+    }
+
+    private func makeSession(
+        connection: FakeConnectionManager,
+        workspaceStore: WorkspaceStore
+    ) -> BackendSession {
+        let fileLoader = WorkspaceFileImageLoader(connection: connection)
+        return BackendSession(
+            backendID: BackendID(UUID()),
+            connection: connection,
+            workspaceStore: workspaceStore,
+            coordinatorFactory: { _ in fatalError("coordinator is not built in these tests") },
+            githubRepoStore: GitHubRepoStore(connectionManager: connection),
+            creationOptionsStore: CreationOptionsStore(connectionManager: connection),
+            prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
+            attachmentUploadService: AttachmentUploadService(connection: connection),
+            workspaceFileImageLoader: fileLoader,
+            attachmentImageLoader: AttachmentImageLoader(
+                connection: connection,
+                fileLoader: fileLoader
+            ),
+            attentionCueCenter: WorkspaceAttentionCueCenter {}
+        )
+    }
+
+    private static func accessibilityElements(
+        identifiedBy identifiers: [String],
+        in hostView: UIView
+    ) throws -> [NSObject] {
+        let deadline = Date(timeIntervalSinceNow: accessibilityObservationDeadline)
+        var elements: [NSObject] = []
+        while Date() < deadline {
+            let renderedElements = SyntheticBadgeHost.accessibilityElements(in: hostView)
+            elements = identifiers.compactMap { identifier in
+                renderedElements.first { element in
+                    SyntheticBadgeHost.accessibilityIdentifier(of: element) == identifier
+                }
+            }
+            if elements.count == identifiers.count { return elements }
+            _ = RunLoop.current.run(
+                mode: .default,
+                before: Date(timeIntervalSinceNow: accessibilityObservationInterval)
+            )
+            hostView.layoutIfNeeded()
+        }
+        let renderedIdentifiers = SyntheticBadgeHost.accessibilityElements(in: hostView)
+            .compactMap(SyntheticBadgeHost.accessibilityIdentifier(of:))
+        throw ConditionWaitFailure(
+            description: "Timed out waiting for \(identifiers); rendered \(renderedIdentifiers)"
+        )
+    }
+
+    @Test(
+        .enabled(
+            Comment(
+                rawValue:
+                    "SwiftUI publishes its accessibility tree only when accessibility is enabled "
+                    + "for the process (scripts/xcodebuild.sh enables it on the simulator)"
+            )
+        ) {
+            await SyntheticBadgeHost.publishesAccessibilityTree()
+        },
+        arguments: [false, true]
+    )
+    func renderedChipsExposePendingStateAndPreserveMenuRole(usesWorkspaceDesign: Bool) async throws {
+        let row = makeRow(monitors: [
+            makeMonitor(
+                monitorId: "prm-pending",
+                pendingChanges: ["checks changed"],
+                hasPendingChanges: true
+            ),
+            makeMonitor(
+                monitorId: "prm-pending-without-details",
+                prNumber: 23,
+                hasPendingChanges: true
+            ),
+            makeMonitor(monitorId: "prm-current", repo: "other/repo", prNumber: 34)
+        ], usesWorkspaceDesign: usesWorkspaceDesign)
+        let identifiers = [
+            "monitoredPr.prm-pending",
+            "monitoredPr.prm-pending-without-details",
+            "monitoredPr.prm-current"
+        ]
+
+        try await SyntheticBadgeHost.render(
+            row,
+            width: Self.hostWidth,
+            height: Self.hostHeight
+        ) { hostView, _ in
+            let elements = try Self.accessibilityElements(
+                identifiedBy: identifiers,
+                in: hostView
+            )
+            let labels = ["#12", "#23", "other/repo: #34"].map { label in
+                usesWorkspaceDesign ? "Monitoring PR \(label)" : label
+            }
+            #expect(elements.map(\.accessibilityLabel) == labels)
+            #expect(
+                elements.map(\.accessibilityValue)
+                    == ["1 pending change", "Pending changes", "No pending changes"]
+            )
+            #expect(elements.allSatisfy { $0.accessibilityTraits.contains(.button) })
+        }
+    }
+
+    @Test(
+        .enabled("Requires the hosted SwiftUI accessibility tree") {
+            await SyntheticBadgeHost.publishesAccessibilityTree()
+        },
+        arguments: [0, 1]
+    )
+    func workspaceDesignPreservesRetryWithEmptyOrRetainedMonitors(monitorCount: Int) async throws {
+        let monitors = monitorCount == 0 ? [] : [makeMonitor(hasPendingChanges: true)]
+        let row = makeRow(monitors: monitors, usesWorkspaceDesign: true, error: "Refresh failed")
+        try await SyntheticBadgeHost.render(row, width: Self.hostWidth, height: Self.hostHeight) { hostView, _ in
+            let identifiers = ["monitoredPr.retry"] + monitors.map { "monitoredPr.\($0.monitorId)" }
+            let elements = try Self.accessibilityElements(identifiedBy: identifiers, in: hostView)
+            #expect(elements.first?.accessibilityLabel == "PR monitors may be out of date. Retry refresh")
+            #expect(elements.allSatisfy { $0.accessibilityTraits.contains(.button) })
+            if monitorCount == 1 {
+                #expect(elements.last?.accessibilityLabel == "Monitoring PR #12")
+                #expect(elements.last?.accessibilityValue == "Pending changes")
+            }
+        }
     }
 
     private func makeSnapshot(
@@ -146,15 +381,24 @@ struct MonitoredPrsRowTests {
 
     @Test func pendingSummaryPluralizes() {
         #expect(MonitoredPrsRow.pendingSummary(makeMonitor()) == "No pending changes")
-        #expect(MonitoredPrsRow.pendingSummary(makeMonitor(pendingChanges: ["a"]))
+        #expect(MonitoredPrsRow.pendingSummary(makeMonitor(hasPendingChanges: true))
+            == "Pending changes")
+        #expect(MonitoredPrsRow.pendingSummary(makeMonitor(
+            pendingChanges: ["a"],
+            hasPendingChanges: true
+        ))
             == "1 pending change")
-        #expect(MonitoredPrsRow.pendingSummary(makeMonitor(pendingChanges: ["a", "b"]))
+        #expect(MonitoredPrsRow.pendingSummary(makeMonitor(
+            pendingChanges: ["a", "b"],
+            hasPendingChanges: true
+        ))
             == "2 pending changes")
     }
 
     @Test func detailLinesWithFullSnapshot() {
         let monitor = makeMonitor(
             pendingChanges: ["check ci: pending → failed"],
+            hasPendingChanges: true,
             snapshot: makeSnapshot(
                 checks: .init(total: 3, passed: 2, failed: 1, pending: 0),
                 approvals: .init(decision: "approved", have: 1, needed: 1, changesRequested: 0),

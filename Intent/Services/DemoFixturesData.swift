@@ -8,6 +8,18 @@ extension DemoFixtures {
     // swiftlint:disable no_magic_numbers
 
     static var workspaces: [[String: Any]] {
+        guard ProcessInfo.processInfo.arguments.contains("--demo-long-workspace-list") else { return baseWorkspaces }
+        let extra = (0 ..< 20).map { index in
+            var workspace = baseWorkspaces[index % baseWorkspaces.count]
+            workspace["id"] = "demo-scroll-\(index)"
+            workspace["title"] = "Workspace scroll fixture \(index)"
+            workspace["lastActivity"] = iso(minutesAgo: Double(200 + index))
+            return workspace
+        }
+        return baseWorkspaces + extra
+    }
+
+    private static var baseWorkspaces: [[String: Any]] {
         [
             [
                 "id": "demo-ws-dashboard",
@@ -100,7 +112,8 @@ extension DemoFixtures {
                 "diffSummary": ["totalFiles": 9],
                 "taskStats": ["total": 4, "completed": 4, "inProgress": 0],
                 "agentSummary": ["count": 0, "agents": [[String: Any]]()] as [String: Any],
-                "statusImageAssetId": statusImageAssetId
+                "statusImageAssetId": statusImageAssetId,
+                "statusMessage": "Dark mode is ready for review across settings screens."
             ],
             [
                 "id": "demo-ws-flaky-tests",
@@ -226,17 +239,19 @@ extension DemoFixtures {
             [
                 "id": "demo-agent-implementor",
                 "name": "Dashboard Implementor",
+                "workspaceId": "demo-ws-dashboard",
                 "status": "idle",
                 "createdAt": iso(minutesAgo: 260),
                 "updatedAt": iso(minutesAgo: 12),
                 "lastActivity": iso(minutesAgo: 12),
                 "lastMessageRole": "assistant",
-                "digest": "CSV export endpoint is streaming; adding the 90-day cap test next.",
+                "digest": "[Review **CSV export**](https://github.com/intent-hq/ios)",
                 "metadata": ["specialist": "implementor"]
             ],
             [
                 "id": "demo-agent-reviewer",
                 "name": "PR Reviewer",
+                "workspaceId": "demo-ws-dashboard",
                 "status": "running",
                 "isResponding": true,
                 "createdAt": iso(minutesAgo: 40),
@@ -264,6 +279,7 @@ extension DemoFixtures {
         let delegates: [[String: Any]] = longConversationDelegateIds.indices.map { index in
             [
                 "id": longConversationDelegateIds[index],
+                "workspaceId": longConversationWorkspaceId,
                 "name": longConversationDelegateNames[index],
                 "status": delegateStatuses[index],
                 "isStreaming": index == 2,
@@ -283,6 +299,7 @@ extension DemoFixtures {
             [
                 "id": longConversationAgentId,
                 "name": "Test Stabilizer",
+                "workspaceId": longConversationWorkspaceId,
                 "status": "idle",
                 "isWaitingForOtherAgents": true,
                 "waitingForAgentIds": Array(longConversationDelegateIds.dropFirst()),
@@ -350,7 +367,7 @@ extension DemoFixtures {
             [
                 "id": "demo-msg-1",
                 "role": "user",
-                "timestamp": iso(minutesAgo: 65),
+                "timestamp": transcriptIso(minutesAgo: 65),
                 "contentBlocks": [
                     [
                         "type": "text",
@@ -361,7 +378,7 @@ extension DemoFixtures {
             [
                 "id": "demo-msg-2",
                 "role": "assistant",
-                "timestamp": iso(minutesAgo: 62),
+                "timestamp": transcriptIso(minutesAgo: 62),
                 "contentBlocks": [
                     [
                         "type": "text",
@@ -381,7 +398,7 @@ extension DemoFixtures {
             [
                 "id": "demo-msg-3",
                 "role": "user",
-                "timestamp": iso(minutesAgo: 30),
+                "timestamp": transcriptIso(minutesAgo: 30),
                 "contentBlocks": [
                     [
                         "type": "text",
@@ -392,7 +409,7 @@ extension DemoFixtures {
             [
                 "id": "demo-msg-4",
                 "role": "assistant",
-                "timestamp": iso(minutesAgo: 12),
+                "timestamp": transcriptIso(minutesAgo: 12),
                 "contentBlocks": [
                     [
                         "type": "text",

@@ -3,6 +3,16 @@ import Foundation
 import os
 
 extension WebSocketConnection {
+    nonisolated enum Endpoint: Sendable {
+        case rpc
+        case tunnel
+
+        var path: String { self == .rpc ? "/ws" : "/tunnel" }
+        var maximumMessageSize: Int {
+            self == .rpc ? WebSocketConnection.maximumMessageSize : BrowserTunnelFrame.maximumMessageSize
+        }
+    }
+
     #if DEBUG
     /// Plaintext escape hatch for loopback-only test servers; app code never enables it.
     nonisolated static let allowsPlaintextLoopbackForTesting =
@@ -41,10 +51,21 @@ extension WebSocketConnection {
     nonisolated static func makeURL(
         host: String,
         port: Int,
-        certFingerprint: String?
+        certFingerprint: String?,
+        endpoint: Endpoint = .rpc
     ) throws -> URL {
         let scheme = try transportScheme(host: host, certFingerprint: certFingerprint)
-        guard let url = URL(string: "\(scheme)://\(host):\(port)/ws") else {
+        guard (1...Int(UInt16.max)).contains(port), !host.isEmpty,
+              host.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\?#@")
+                .union(.whitespacesAndNewlines)) == nil else {
+            throw WebSocketTransportError.invalidURL(host: host)
+        }
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
+        components.port = port
+        components.path = endpoint.path
+        guard let url = components.url else {
             throw WebSocketTransportError.invalidURL(host: host)
         }
         return url
@@ -62,9 +83,10 @@ extension WebSocketConnection {
             .joined(separator: ":")
     }
 
-    /// Case-insensitive fingerprint comparison — the sole trust decision for
-    /// pinned connections.
+    /// Compare validated SHA-256 bytes, accepting both supported spellings.
     nonisolated static func fingerprintMatches(_ received: String, pinned: String) -> Bool {
-        received.lowercased() == pinned.lowercased()
+        guard let received = try? InvitedSyncKey.fingerprint(received),
+              let pinned = try? InvitedSyncKey.fingerprint(pinned) else { return false }
+        return received == pinned
     }
 }

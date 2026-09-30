@@ -77,6 +77,7 @@ struct ManualTokenEntryView: View {
     @State private var host = ""
     @State private var port = "5180"
     @State private var token = ""
+    @State private var isTokenVisible = false
     @State private var isValidating = false
     @State private var errorMessage: String?
     @State private var probedFingerprint: String?
@@ -87,20 +88,18 @@ struct ManualTokenEntryView: View {
     @State private var probedInput: ManualConnectionInput?
     @State private var showFingerprintConfirmation = false
     @State private var connectTask: Task<Void, Never>?
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case host, port, token }
 
     var body: some View {
-        NavigationStack { navigationContent }
-    }
-
-    private var navigationContent: some View {
-        entryContent
-            .navigationTitle("Manual Connection")
-            .toolbarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
+        ConnectionSheet(
+            initialHeight: Constants.ManualTokenEntry.initialSheetHeight,
+            backgroundColor: Constants.Pairing.background(for: colorScheme),
+            closeForeground: Constants.Pairing.foreground(for: colorScheme)
+        ) {
+            entryForm
+        }
             .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
                 Button("Cancel", role: .cancel) { isValidating = false }
                 Button("Trust & Connect") { connectWithFingerprint() }
@@ -109,34 +108,15 @@ struct ManualTokenEntryView: View {
             }
     }
 
-    private var entryContent: some View {
-        ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
-            ScrollView { entryForm }
-        }
-    }
-
     private var entryForm: some View {
         VStack(spacing: Constants.ManualTokenEntry.contentSpacing) {
-            entryHeader
-            connectionFields
-            validationError
-            connectButton
-            Spacer()
+            ManualConnectionHeader()
+            VStack(spacing: Constants.ManualTokenEntry.buttonSpacing) {
+                connectionFields
+                validationError
+                connectButton
+            }
         }
-    }
-
-    private var entryHeader: some View {
-        VStack(spacing: Constants.ManualTokenEntry.headerSpacing) {
-            Image(systemName: "keyboard")
-                .font(.largeTitle)
-                .foregroundStyle(Theme.primary(for: colorScheme))
-                .accessibilityHidden(true)
-            Text("Manual Connection")
-                .font(.title3.bold())
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-        }
-        .padding(.top, Constants.ManualTokenEntry.headerTopPadding)
     }
 
     private var connectionFields: some View {
@@ -146,93 +126,167 @@ struct ManualTokenEntryView: View {
             tokenField
         }
         .disabled(isValidating)
-        .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
     }
 
     private var hostField: some View {
         VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
+            ManualConnectionField(label: hostLabel) {
+                TextField("192.168.1.42", text: $host, prompt: placeholder("192.168.1.42"))
+                    .interFont(Constants.Typography.bodySEmphasized)
+                    .accessibilityLabel("Host / Tailcat Address")
+                    .accessibilityIdentifier("manual.host")
+                    .focused($focusedField, equals: .host)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .port }
+            }
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
             #if os(visionOS)
-            Text("Host")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            TextField("192.168.1.42", text: $host)
-                .textFieldStyle(.roundedBorder)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
             Text("Tailcat addresses aren't supported on visionOS yet — pair over your local network.")
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            #else
-            Text("Host / Tailcat Address")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            TextField("192.168.1.42 or tc…", text: $host)
-                .textFieldStyle(.roundedBorder)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
             #endif
         }
     }
 
+    private var hostLabel: LocalizedStringKey {
+        #if os(visionOS)
+        "HOST"
+        #else
+        "HOST / TAILCAT ADDRESS"
+        #endif
+    }
+
     private var portField: some View {
-        VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
-            Text("Port")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            TextField("5180", text: $port)
-                .textFieldStyle(.roundedBorder)
+        ManualConnectionField(label: "PORT") {
+            TextField("5180", text: $port, prompt: placeholder("5180"))
+                .interFont(Constants.Typography.bodySEmphasized)
+                .accessibilityLabel("Port")
+                .accessibilityIdentifier("manual.port")
+                .focused($focusedField, equals: .port)
                 .keyboardType(.numberPad)
         }
     }
 
     private var tokenField: some View {
-        VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
-            Text("API Token")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            HStack {
-                TextField("Paste token here", text: $token)
-                    .font(.system(.body, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                Button(action: pasteToken) {
-                    Image(systemName: "doc.on.clipboard")
-                        .foregroundStyle(Theme.primary(for: colorScheme))
+        ManualConnectionField(label: "API TOKEN", verticalPadding: Constants.ManualTokenEntry.pasteVerticalPadding) {
+            HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
+                tokenEditor
+                if token.isEmpty {
+                    pasteTokenButton
                 }
-                .accessibilityLabel("Paste API token")
+                tokenVisibilityButton
             }
         }
+    }
+
+    private var tokenEditor: some View {
+        Group {
+            if isTokenVisible {
+                TextField("Paste token", text: $token, prompt: placeholder("Paste token"))
+            } else {
+                SecureField("Paste token", text: $token, prompt: placeholder("Paste token"))
+            }
+        }
+            .interFont(Constants.Typography.bodySEmphasized)
+            .accessibilityLabel("API Token")
+            .accessibilityIdentifier("manual.token")
+            .focused($focusedField, equals: .token)
+            .submitLabel(.done)
+            .onSubmit { focusedField = nil }
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+    }
+
+    private var pasteTokenButton: some View {
+        Button(action: pasteToken) {
+            Image(.connectionClipboard)
+                // The exact export already has 30% white strokes.
+                .renderingMode(colorScheme == .dark ? .original : .template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                .frame(
+                    width: Constants.ConnectionSheet.minimumTouchTarget,
+                    height: Constants.ConnectionSheet.minimumTouchTarget
+                )
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        // Preserve the visible light paste affordance rather than Figma's white-on-white export.
+        .foregroundStyle(Theme.foreground(for: colorScheme))
+        .accessibilityLabel("Paste API token")
+    }
+
+    private var tokenVisibilityButton: some View {
+        Button {
+            isTokenVisible.toggle()
+            focusedField = .token
+        } label: {
+            Image(systemName: isTokenVisible ? "eye.slash" : "eye")
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                .frame(
+                    width: Constants.ConnectionSheet.minimumTouchTarget,
+                    height: Constants.ConnectionSheet.minimumTouchTarget
+                )
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.foreground(for: colorScheme)
+            .opacity(colorScheme == .dark ? Constants.ConnectionSheet.placeholderOpacity : 1))
+        .accessibilityLabel(isTokenVisible ? "Hide API token" : "Show API token")
+        // Expand the trailing hit region inward, retaining the reference's 24pt glyph inset.
+        .padding(.trailing, -Constants.ManualTokenEntry.pasteHitExpansion)
+    }
+
+    private func placeholder(_ text: LocalizedStringKey) -> Text {
+        Text(text).foregroundStyle(Constants.Pairing.foreground(for: colorScheme)
+            .opacity(Constants.ConnectionSheet.placeholderOpacity))
     }
 
     @ViewBuilder
     private var validationError: some View {
         if let error = errorMessage {
             Text(error)
-                .font(.caption)
+                .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
-                .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
+                .accessibilityIdentifier("manual.error")
         }
     }
 
     private var connectButton: some View {
         Button(action: toggleConnectionValidation) {
-            if isValidating {
-                HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
-                    ProgressView().tint(.white)
-                    Text("Cancel")
+            Group {
+                if isValidating {
+                    HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
+                        ProgressView().tint(Constants.Pairing.onAccent)
+                        Text("Cancel")
+                            .interFont(Constants.Typography.bodySEmphasized)
+                    }
+                } else {
+                    Text("Connect")
+                        .interFont(Constants.Typography.bodySEmphasized)
                 }
-                .frame(maxWidth: .infinity)
-            } else {
-                Text("Connect").frame(maxWidth: .infinity)
             }
+            .tracking(Constants.Pairing.optionTitleTracking)
+            .foregroundStyle(
+                !isValidating && (host.isEmpty || token.isEmpty)
+                    ? Constants.ConnectionSheet.disabledForeground(for: colorScheme) : Constants.Pairing.onAccent
+            )
+            .padding(.vertical, Constants.ConnectionSheet.fieldVerticalPadding)
+            .frame(maxWidth: .infinity, minHeight: Constants.ConnectionSheet.fieldHeight)
+            .background(
+                !isValidating && (host.isEmpty || token.isEmpty)
+                    ? Constants.ConnectionSheet.disabledBackground(for: colorScheme) : Constants.Pairing.accent,
+                in: .rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius)
+            )
         }
-        .buttonStyle(.borderedProminent)
-        .tint(Theme.primary(for: colorScheme))
+        .buttonStyle(ConnectionSheetButtonStyle())
         .disabled(!isValidating && (host.isEmpty || token.isEmpty))
-        .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
+        .accessibilityIdentifier("manual.connect")
     }
 
     private func pasteToken() {
@@ -251,6 +305,7 @@ struct ManualTokenEntryView: View {
 
     private func validateAndConnect() {
         guard let portNum = Int(port) else {
+            PairingDiagnostics.invalidInput()
             errorMessage = "Invalid port number"
             return
         }
@@ -259,6 +314,7 @@ struct ManualTokenEntryView: View {
         // Belt-and-braces behind the field explanation above: a pasted tc
         // address fails fast here instead of spinning through the dialer.
         if case .tailcat = input {
+            PairingDiagnostics.phase(.input, .failed, failure: DiagnosticFailure(origin: .localOperation, classification: .unavailable))
             errorMessage = "Tailcat addresses aren't supported on visionOS yet — pair over your local network."
             return
         }
@@ -267,6 +323,7 @@ struct ManualTokenEntryView: View {
         isValidating = true
         errorMessage = nil
 
+        PairingDiagnostics.phase(.probe, .started)
         connectTask = Task {
             let probed: CertFingerprintProbe.ProbeResult
             switch input {
@@ -285,6 +342,7 @@ struct ManualTokenEntryView: View {
                     // validates decoded fields, and the dial reports invalid
                     // or unreachable addresses.
                     guard !Task.isCancelled else { return }
+                    PairingDiagnostics.phase(.probe, .failed, failure: TransportDiagnosticFailure.classify(error))
                     errorMessage = "Could not reach the Tailcat address: \(error.localizedDescription)"
                     isValidating = false
                     return
@@ -298,6 +356,7 @@ struct ManualTokenEntryView: View {
             // clobber the state of a newer attempt). Drop the result instead.
             guard !Task.isCancelled else { return }
 
+            PairingDiagnostics.probeResult(probed)
             switch CertFingerprintProbe.outcome(forProbe: probed) {
             case .confirmFingerprint(let fingerprint):
                 probedFingerprint = fingerprint
@@ -322,32 +381,13 @@ struct ManualTokenEntryView: View {
 
     private func connect(input: ManualConnectionInput, port: Int, fingerprint: String) async {
         do {
-            try await session.connection.connect(
-                hosts: input.hosts,
+            let stored = try await Self.connectAndSave(
+                input: input,
                 port: port,
+                fingerprint: fingerprint,
                 token: token,
-                certFingerprint: fingerprint,
-                tcAddress: input.tcAddress
+                connection: session.connection
             )
-            let server = PairedServer(
-                hosts: input.hosts,
-                port: port,
-                name: "Intent",
-                pairedAt: Date(),
-                certFingerprint: fingerprint,
-                tcAddress: input.tcAddress
-            )
-            let stored: StoredConnection
-            do {
-                stored = try await ConnectionPairing.finalize(
-                    server: server,
-                    token: token,
-                    connection: session.connection
-                )
-            } catch {
-                session.connection.disconnect()
-                throw error
-            }
             dismiss()
             if let onPaired {
                 onPaired(stored)
@@ -357,6 +397,67 @@ struct ManualTokenEntryView: View {
         } catch {
             errorMessage = "Connection failed: \(error.localizedDescription)"
             isValidating = false
+        }
+    }
+}
+
+extension ManualTokenEntryView {
+    /// Each phase owns only its own errors; the view handles presentation for either failure.
+    @MainActor static func connectAndSave(
+        input: ManualConnectionInput,
+        port: Int,
+        fingerprint: String,
+        token: String,
+        connection: any SessionConnectionManaging,
+        persistence: PersistenceManager = .shared,
+        diagnostics: DiagnosticStore = .shared
+    ) async throws -> StoredConnection {
+        let attemptID = UUID()
+        var persisted = false
+        defer { if !persisted { connection.disconnectPairingAttempt(attemptID) } }
+        PairingDiagnostics.phase(.connect, .started, store: diagnostics)
+        do {
+            try await PairingConnectionContext.$attemptID.withValue(attemptID) {
+                try await DiagnosticConnectContext.$origin.withValue(.pairing) {
+                    try await connection.connect(
+                        hosts: input.hosts,
+                        port: port,
+                        token: token,
+                        certFingerprint: fingerprint,
+                        tcAddress: input.tcAddress
+                    )
+                }
+            }
+        } catch {
+            PairingDiagnostics.phase(.connect, error is CancellationError ? .cancelled : .failed, store: diagnostics)
+            throw error
+        }
+        if Task.isCancelled || connection.pairingAttemptID != attemptID {
+            PairingDiagnostics.phase(.connect, .cancelled, store: diagnostics)
+            throw CancellationError()
+        }
+        let server = PairedServer(
+            hosts: input.hosts,
+            port: port,
+            name: "Intent",
+            pairedAt: Date(),
+            certFingerprint: fingerprint,
+            tcAddress: input.tcAddress
+        )
+        do {
+            PairingDiagnostics.phase(.save, .started, store: diagnostics)
+            let stored = try await ConnectionPairing.finalize(
+                server: server,
+                token: token,
+                connection: connection,
+                persistence: persistence
+            )
+            persisted = true
+            PairingDiagnostics.phase(.save, .succeeded, store: diagnostics)
+            return stored
+        } catch {
+            PairingDiagnostics.phase(.save, error is CancellationError ? .cancelled : .failed, store: diagnostics)
+            throw error
         }
     }
 }

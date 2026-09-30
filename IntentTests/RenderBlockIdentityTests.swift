@@ -116,3 +116,208 @@ struct RenderBlockIdentityTests {
         #expect(after.count == 2)
     }
 }
+
+/// `ContentBlockView` / `ResponseGroupView` gate their bodies with
+/// `.equatable()`: the manual `==` of `ContentBlockBody` and
+/// `ResponseGroupBody` compares only the value inputs and ignores the
+/// closures the message rebuilds on every evaluation, so a streaming delta
+/// on one row never invalidates its siblings.
+@MainActor
+struct BlockBodyEquatableTests {
+    private func textBlock(_ id: String, _ text: String) -> ContentBlock {
+        ContentBlock(id: id, type: .text, text: text)
+    }
+
+    private func toolUse(_ id: String, callId: String = "call-1") -> ContentBlock {
+        ContentBlock(id: id, type: .toolUse, name: "read_file", toolUseId: callId)
+    }
+
+    private func toolResult(_ id: String, callId: String = "call-1", output: String = "ok") -> ContentBlock {
+        ContentBlock(id: id, type: .toolResult, toolUseId: callId, output: AnyCodable(output))
+    }
+
+    /// Every call hands the body fresh closure instances, as the message does.
+    private func blockBody(
+        _ block: ContentBlock,
+        toolResult: ContentBlock? = nil,
+        workspaceId: String = "ws-1",
+        isHydrating: Bool = false
+    ) -> ContentBlockBody {
+        let navigate: (String, String, String) -> Void = { _, _, _ in }
+        let hydrate: (String) -> Void = { _ in }
+        return ContentBlockBody(
+            block: block,
+            toolResult: toolResult,
+            workspaceId: workspaceId,
+            onNavigateToNote: navigate,
+            isHydrating: isHydrating,
+            onHydrateBlock: hydrate
+        )
+    }
+
+    private func groupBody(
+        _ group: ResponseGroup,
+        isLast: Bool = true,
+        workspaceId: String = "ws-1",
+        toolResults: [String: ContentBlock] = [:],
+        hydratingBlockIds: Set<String> = []
+    ) -> ResponseGroupBody {
+        let navigate: (String, String, String) -> Void = { _, _, _ in }
+        let hydrate: (String) -> Void = { _ in }
+        return ResponseGroupBody(
+            group: group,
+            isLast: isLast,
+            workspaceId: workspaceId,
+            onNavigateToNote: navigate,
+            toolResults: toolResults,
+            hydratingBlockIds: hydratingBlockIds,
+            onHydrateBlock: hydrate
+        )
+    }
+
+    private func bodiesEqual(_ lhs: RenderBlock, _ rhs: RenderBlock) -> Bool {
+        switch (lhs, rhs) {
+        case let (.contentBlock(left), .contentBlock(right)):
+            return blockBody(left) == blockBody(right)
+        case let (.group(left), .group(right)):
+            return groupBody(left) == groupBody(right)
+        default:
+            return false
+        }
+    }
+
+    // MARK: ContentBlockBody
+
+    @Test func blockBodyIgnoresClosureIdentity() {
+        let block = textBlock("b1", "Hello")
+        let first = blockBody(block)
+        let second = blockBody(block)
+        #expect(first == second)
+        let withoutClosures = ContentBlockBody(
+            block: block,
+            toolResult: nil,
+            workspaceId: "ws-1",
+            onNavigateToNote: nil,
+            isHydrating: false,
+            onHydrateBlock: nil
+        )
+        #expect(first == withoutClosures)
+    }
+
+    @Test func blockBodyTracksBlockText() {
+        #expect(blockBody(textBlock("b1", "Hello")) != blockBody(textBlock("b1", "Hello, world")))
+    }
+
+    @Test func blockBodyTracksPairedToolResult() {
+        let use = toolUse("u1")
+        let answered = blockBody(use, toolResult: toolResult("r1"))
+        let answeredAgain = blockBody(use, toolResult: toolResult("r1"))
+        #expect(answered == answeredAgain)
+        #expect(blockBody(use) != answered)
+        #expect(
+            blockBody(use, toolResult: toolResult("r1", output: "partial"))
+                != blockBody(use, toolResult: toolResult("r1", output: "done"))
+        )
+    }
+
+    @Test func blockBodyTracksWorkspaceId() {
+        let block = textBlock("b1", "Hello")
+        #expect(blockBody(block, workspaceId: "ws-1") != blockBody(block, workspaceId: "ws-2"))
+    }
+
+    @Test func blockBodyTracksHydrationFlag() {
+        let block = toolUse("u1")
+        #expect(blockBody(block, isHydrating: false) != blockBody(block, isHydrating: true))
+    }
+
+    @Test func imageBlockBodyTracksPayloadAndHydrationChanges() {
+        let preview = ContentBlock(
+            id: "image-1",
+            type: .image,
+            data: "preview",
+            mimeType: "image/png",
+            dataTruncation: .truncated,
+            dataRepresentation: .thumbnail
+        )
+        let previewBody = blockBody(preview)
+        #expect(previewBody == blockBody(preview))
+        #expect(previewBody != blockBody(preview, isHydrating: true))
+
+        var changedPayload = preview
+        changedPayload.data = "full image"
+        #expect(previewBody != blockBody(changedPayload))
+
+        var clearedTruncation = preview
+        clearedTruncation.dataTruncation = .full
+        #expect(previewBody != blockBody(clearedTruncation))
+    }
+
+    @Test func attachmentBlockBodyTracksAttachmentAndWorkspaceIdentity() {
+        let block = ContentBlock(id: "image-1", type: .image, attachmentId: "attachment-1")
+        let body = blockBody(block)
+        #expect(body == blockBody(block))
+        #expect(blockBody(block, workspaceId: "ws-1") != blockBody(block, workspaceId: "ws-2"))
+
+        var changedAttachment = block
+        changedAttachment.attachmentId = "attachment-2"
+        #expect(body != blockBody(changedAttachment))
+    }
+
+    // MARK: ResponseGroupBody
+
+    @Test func groupBodyIgnoresClosureIdentity() {
+        let group = ResponseGroup(id: "g", name: "Setup", children: [textBlock("b1", "reading"), toolUse("u1")])
+        let first = groupBody(group)
+        let second = groupBody(group)
+        #expect(first == second)
+        let withoutClosures = ResponseGroupBody(group: group, isLast: true, workspaceId: "ws-1")
+        #expect(first == withoutClosures)
+    }
+
+    @Test func groupBodyTracksChildChanges() {
+        let before = ResponseGroup(id: "g", name: "Setup", children: [textBlock("b1", "reading")])
+        let grown = ResponseGroup(id: "g", name: "Setup", children: [textBlock("b1", "reading files")])
+        let appended = ResponseGroup(id: "g", name: "Setup", children: [textBlock("b1", "reading"), toolUse("u1")])
+        #expect(groupBody(before) != groupBody(grown))
+        #expect(groupBody(before) != groupBody(appended))
+    }
+
+    @Test func groupBodyTracksIsLastAndWorkspace() {
+        let group = ResponseGroup(id: "g", name: "Setup", children: [textBlock("b1", "reading")])
+        #expect(groupBody(group, isLast: true) != groupBody(group, isLast: false))
+        #expect(groupBody(group, workspaceId: "ws-1") != groupBody(group, workspaceId: "ws-2"))
+    }
+
+    @Test func groupBodyTracksScopedToolResultsAndHydration() {
+        let group = ResponseGroup(id: "g", name: "Setup", children: [toolUse("u1")])
+        let answered = ["u1": toolResult("r1")]
+        let reanswered = ["u1": toolResult("r1", output: "done")]
+        let answeredBody = groupBody(group, toolResults: answered)
+        let answeredBodyAgain = groupBody(group, toolResults: answered)
+        #expect(answeredBody == answeredBodyAgain)
+        #expect(groupBody(group) != answeredBody)
+        #expect(answeredBody != groupBody(group, toolResults: reanswered))
+        #expect(groupBody(group) != groupBody(group, hydratingBlockIds: ["u1"]))
+        #expect(groupBody(group, hydratingBlockIds: ["u1"]) != groupBody(group, hydratingBlockIds: ["r1"]))
+    }
+
+    // MARK: Tail-only streaming delta
+
+    @Test func tailOnlyStreamingDeltaLeavesEarlierBodiesEqual() {
+        // Two parses of one streaming message where only the last text block
+        // grew: the group and the finished text row compare equal (their
+        // bodies are not re-rendered), only the tail row does not.
+        let before = [
+            textBlock("b1", "<group:Setup>\nreading\n</group>\nfirst"),
+            textBlock("b2", "second")
+        ]
+        var after = before
+        after[1].text = "second, and more"
+        let beforeRows = MessageView.groupContentBlocks(before, isStreaming: true)
+        let afterRows = MessageView.groupContentBlocks(after, isStreaming: true)
+        #expect(beforeRows.map(\.id) == afterRows.map(\.id))
+        #expect(beforeRows.count == 3)
+        let equalByRow = zip(beforeRows, afterRows).map { bodiesEqual($0, $1) }
+        #expect(equalByRow == [true, true, false])
+    }
+}

@@ -4,13 +4,9 @@ struct QueuedMessagesView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) var colorScheme
 
-    private static let headerHorizontalPadding: CGFloat = 16
-    private static let headerTopPadding: CGFloat = 8
-    private static let headerBottomPadding: CGFloat = 4
-    private static let backgroundOpacity = 0.8
-    private static let rowSpacing: CGFloat = 8
-    private static let rowHorizontalPadding: CGFloat = 16
-    private static let rowVerticalPadding: CGFloat = 6
+    @ScaledMetric(relativeTo: .body) private var actionIconSide: CGFloat = 17
+
+    private typealias Layout = Constants.Conversation.QueuedMessage
 
     @State private var editingId: String?
     @State private var editText = ""
@@ -22,40 +18,39 @@ struct QueuedMessagesView: View {
                     .font(.caption)
                     .accessibilityHidden(true)
                 Text("Queued Messages (\(viewModel.queuedMessages.count))")
-                    .font(.caption)
-                    .fontWeight(.medium)
+                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                 Spacer()
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .padding(.horizontal, Self.headerHorizontalPadding)
-            .padding(.top, Self.headerTopPadding)
-            .padding(.bottom, Self.headerBottomPadding)
+            .padding(.horizontal, Layout.headerHorizontalPadding)
+            .padding(.top, Layout.headerTopPadding)
+            .padding(.bottom, Layout.headerBottomPadding)
 
             ForEach(viewModel.queuedMessages) { message in
                 queuedMessageRow(message)
             }
         }
-        .background(Theme.card(for: colorScheme).opacity(Self.backgroundOpacity))
+        .background(Theme.card(for: colorScheme).opacity(Layout.backgroundOpacity))
     }
 
     @ViewBuilder
     private func queuedMessageRow(_ message: QueuedMessage) -> some View {
-        HStack(spacing: Self.rowSpacing) {
+        HStack(spacing: Layout.rowSpacing) {
             if editingId == message.id {
                 editingRow(message)
             } else {
                 displayRow(message)
             }
         }
-        .padding(.horizontal, Self.rowHorizontalPadding)
-        .padding(.vertical, Self.rowVerticalPadding)
+        .padding(.horizontal, Layout.rowHorizontalPadding)
+        .padding(.vertical, Layout.rowVerticalPadding)
     }
 
     @ViewBuilder
     private func editingRow(_ message: QueuedMessage) -> some View {
         TextField("Edit message", text: $editText)
             .textFieldStyle(.plain)
-            .font(.subheadline)
+            .interFont(Constants.Typography.bodyXS)
             .onSubmit { saveEdit(messageId: message.id) }
         saveEditButton(message)
         cancelEditButton
@@ -64,9 +59,9 @@ struct QueuedMessagesView: View {
     @ViewBuilder
     private func displayRow(_ message: QueuedMessage) -> some View {
         Text(message.content)
-            .font(.subheadline)
+            .interFont(Constants.Typography.bodyXS)
             .foregroundStyle(Theme.foreground(for: colorScheme))
-            .lineLimit(2)
+            .lineLimit(Layout.contentLineLimit)
             .frame(maxWidth: .infinity, alignment: .leading)
         sendNowButton(message)
         editButton(message)
@@ -77,8 +72,10 @@ struct QueuedMessagesView: View {
         Button {
             saveEdit(messageId: message.id)
         } label: {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.body)
+            Image(.checkCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(Theme.primary(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,
@@ -93,8 +90,10 @@ struct QueuedMessagesView: View {
         Button {
             editingId = nil
         } label: {
-            Image(systemName: "xmark.circle")
-                .font(.body)
+            Image(.closeCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,
@@ -110,8 +109,10 @@ struct QueuedMessagesView: View {
             editingId = message.id
             editText = message.content
         } label: {
-            Image(systemName: "pencil")
-                .font(.body)
+            Image(.edit)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,
@@ -142,8 +143,10 @@ struct QueuedMessagesView: View {
         Button {
             Task { await viewModel.removeQueuedMessage(messageId: message.id) }
         } label: {
-            Image(systemName: "xmark")
-                .font(.body)
+            Image(.close)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,

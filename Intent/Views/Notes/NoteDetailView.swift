@@ -29,7 +29,7 @@ struct NoteDetailView: View {
         self.noteTitle = noteTitle
         self.onNavigateToNote = onNavigateToNote
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
-        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection))
+        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection, summaries: session.agentSummaries))
     }
 
     var agentStoreConnectionID: ObjectIdentifier {
@@ -50,6 +50,7 @@ struct NoteDetailView: View {
             noteContentState
         }
         .navigationTitle(noteTitle)
+        .toolbar(.visible, for: .navigationBar)
         .toolbarTitleDisplayMode(.inline)
         .workspaceNavigationSubtitle(title: noteTitle, workspaceId: workspaceId)
         .task {
@@ -100,7 +101,9 @@ struct NoteDetailView: View {
     @ViewBuilder
     private var noteContentState: some View {
         if isLoading {
-            ProgressView("Loading note...")
+            ProgressView {
+                Text("Loading note...").interFont(Constants.Typography.bodyS)
+            }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         } else if let note = displayNote, !note.content.isEmpty || showsTaskHeader(note) {
             ScrollView { noteStack(note) }
@@ -111,7 +114,7 @@ struct NoteDetailView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("Note content unavailable")
-                    .font(.headline)
+                    .interFont(Constants.Typography.bodyM)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
             }
         }
@@ -132,7 +135,7 @@ struct NoteDetailView: View {
             HStack(spacing: Constants.Notes.Detail.tagSpacing) {
                 ForEach(note.tags, id: \.self) { tag in
                     Text(tag)
-                        .font(.caption)
+                        .interFont(Constants.Typography.subtextXXS)
                         .padding(.horizontal, Constants.Notes.Detail.tagHorizontalPadding)
                         .padding(.vertical, Constants.Notes.Detail.tagVerticalPadding)
                         .background(Theme.muted(for: colorScheme))
@@ -174,6 +177,7 @@ struct NoteDetailView: View {
         if !note.content.isEmpty {
             NoteContentView(
                 content: note.content,
+                workspaceId: workspaceId,
                 resolveNote: { noteStore.note(byId: $0) },
                 onOpenURL: { url in
                     if let link = Self.parseIntentNoteLink(url) {

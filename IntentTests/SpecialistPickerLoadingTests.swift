@@ -59,7 +59,7 @@ extension SpecialistPickerSelectionTests {
                 catalog: store.specialists
             )?.id == "coordinator"
         )
-        let provider = CreateWorkspaceView.preselectedProvider(current: nil, providers: store.providers)
+        let provider = CreationSelectionPolicy.preselectedProvider(current: nil, providers: store.providers)
         #expect(provider?.id == "auggie")
         #expect(!SpecialistPickerView.showsModelsLoading(catalog: store.models(for: "auggie"), settled: false))
         #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
@@ -67,9 +67,9 @@ extension SpecialistPickerSelectionTests {
             !SpecialistPickerView.isCreateDisabled(
                 hasSpecialist: true,
                 isCreating: false,
-                isLoadingProviders: false,
-                isLoadingModels: false,
-                providers: store.providers
+                isLoadingOptions: false,
+                providers: store.providers,
+                selectedProvider: provider
             )
         )
         // Nothing was fetched to render the cached lists.
@@ -97,9 +97,9 @@ extension SpecialistPickerSelectionTests {
             SpecialistPickerView.isCreateDisabled(
                 hasSpecialist: false,
                 isCreating: false,
-                isLoadingProviders: true,
-                isLoadingModels: true,
-                providers: store.providers
+                isLoadingOptions: true,
+                providers: store.providers,
+                selectedProvider: nil
             )
         )
 
@@ -141,9 +141,9 @@ extension SpecialistPickerSelectionTests {
             !SpecialistPickerView.isCreateDisabled(
                 hasSpecialist: true,
                 isCreating: false,
-                isLoadingProviders: false,
-                isLoadingModels: false,
-                providers: store.providers
+                isLoadingOptions: false,
+                providers: store.providers,
+                selectedProvider: store.providers.first
             )
         )
     }
@@ -185,7 +185,7 @@ extension SpecialistPickerSelectionTests {
         // An explicit grok pick does not survive the switch to auggie even
         // if a bare id were shared: reconciliation matches id and provider.
         let stalePick = makeModel("grok-4", provider: "grok")
-        #expect(CreateWorkspaceView.reconciledModel(current: stalePick, models: auggieModels) == nil)
+        #expect(CreationSelectionPolicy.reconciledModel(current: stalePick, models: auggieModels) == nil)
     }
 
     /// Holds the sheet's auggie load, reconnects (hard clear), starts the
@@ -229,13 +229,14 @@ extension SpecialistPickerSelectionTests {
             settled: settled.modelProviders.contains("auggie")
         )
         #expect(loadingAfterOld)
+        let provider = ProviderInfo(id: "auggie", authenticated: true)
         #expect(
             SpecialistPickerView.isCreateDisabled(
                 hasSpecialist: true,
                 isCreating: false,
-                isLoadingProviders: false,
-                isLoadingModels: loadingAfterOld,
-                providers: store.providers
+                isLoadingOptions: loadingAfterOld,
+                providers: [provider],
+                selectedProvider: provider
             )
         )
     }

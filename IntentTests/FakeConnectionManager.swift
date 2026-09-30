@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Combine
 import Foundation
 @testable import Intent
@@ -152,6 +153,21 @@ class FakeConnectionManager: SessionConnectionManaging {
         _connectionState.eraseToAnyPublisher()
     }
 
+    var currentPrincipal: ConnectionPrincipal? = .demoOwner
+    var admission: ConnectionAdmission?
+    var pairingAttemptID: UUID?
+
+    func confirmedPrincipal() async throws -> ConnectionPrincipal {
+        let hello = try await request("client.hello")
+        let value = try await request("principal.me")
+        let principal = try ConnectionPrincipal.parse(value, hello: hello)
+        currentPrincipal = principal
+        if let previous = admission {
+            admission = ConnectionAdmission(id: previous.id, token: previous.token, fingerprint: previous.fingerprint, principal: principal)
+        }
+        return principal
+    }
+
     // MARK: - Session Connection Surface
 
     private let _certMismatchDetected = CurrentValueSubject<Bool, Never>(false)
@@ -167,8 +183,21 @@ class FakeConnectionManager: SessionConnectionManaging {
     var certMismatches: [HostCertMismatch] = []
 
     var tunnelDialer: any TunnelDialing = UnavailableTunnelDialer()
+    var browserProxyFactory: (@MainActor () async throws -> any BrowserProxySession)?
 
-    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState = .idle
+    func makeBrowserProxy() async throws -> any BrowserProxySession {
+        guard let browserProxyFactory else { throw BrowserTunnelError.unavailable }
+        return try await browserProxyFactory()
+    }
+
+    private let globalSubscriptionSubject = CurrentValueSubject<ConnectionManager.GlobalSubscriptionState, Never>(.subscribed)
+    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState {
+        get { globalSubscriptionSubject.value }
+        set { globalSubscriptionSubject.send(newValue) }
+    }
+    var globalSubscriptionPublisher: AnyPublisher<ConnectionManager.GlobalSubscriptionState, Never> {
+        globalSubscriptionSubject.eraseToAnyPublisher()
+    }
     private(set) var retryGlobalSubscriptionCallCount = 0
 
     func retryGlobalSubscription() {
@@ -185,6 +214,11 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     private(set) var disconnectCallCount = 0
     private(set) var refreshHostRoutesCallCount = 0
+
+    func connectDemo(serveFixtures _: Bool) {
+        globalSubscriptionState = .subscribed
+        connectionState = .connected
+    }
 
     func connect(
         hosts: [String],
@@ -203,6 +237,8 @@ class FakeConnectionManager: SessionConnectionManaging {
             )
         )
         if let connectError { throw connectError }
+        pairingAttemptID = PairingConnectionContext.attemptID
+        admission = ConnectionAdmission(id: UUID(), token: token, fingerprint: certFingerprint, principal: currentPrincipal ?? .demoOwner)
         connectionState = .connected
     }
 
@@ -236,7 +272,10 @@ class FakeConnectionManager: SessionConnectionManaging {
     // MARK: - Request/Response Mocking
 
     /// Map of method names to response values. If a method is not in this map, request() throws.
-    var responseMap: [String: Any] = [:]
+    var responseMap: [String: Any] = [
+        "client.hello": ["server": ["capabilities": [String: Int]()]],
+        "principal.me": ["id": "test-owner", "isAdministrator": true]
+    ]
 
     /// Per-method FIFO response queues. When non-empty for a method, each request()
     /// pops the next response — takes precedence over responseMap. Useful for
@@ -370,8 +409,40 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     private var subscriptionHandlers: [String: @MainActor (SubscriptionPush) -> Void] = [:]
 
+    /// Seq-0 conversation snapshot rows (and optional `snapshotMeta`) pushed
+    /// to a handler the moment it registers for that subscriptionId — the
+    /// fake's stand-in for the snapshot a live `chat.subscribe` owes after
+    /// its ack. Persistent like `responseMap`: every registration for the id
+    /// receives it. See `stubChatSnapshot`.
+    var chatSnapshotMap: [String: [[String: Any]]] = [:]
+    var chatSnapshotMetaMap: [String: [String: Any]] = [:]
+
+    /// Stubs `chat.subscribe` to ack with `subscriptionId` and push `messages`
+    /// as its seq-0 snapshot as soon as the store registers its handler.
+    func stubChatSnapshot(
+        subscriptionId: String = "sub-1",
+        messages: [[String: Any]] = [],
+        meta: [String: Any] = [:]
+    ) {
+        responseMap["chat.subscribe"] = ["subscriptionId": subscriptionId]
+        chatSnapshotMap[subscriptionId] = messages
+        if meta.isEmpty {
+            chatSnapshotMetaMap.removeValue(forKey: subscriptionId)
+        } else {
+            chatSnapshotMetaMap[subscriptionId] = meta
+        }
+    }
+
     func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
         subscriptionHandlers[id] = handler
+        if let rows = chatSnapshotMap[id] {
+            handler(SubscriptionPush(
+                subscriptionId: id,
+                seq: 0,
+                conversationSnapshot: rows,
+                metadata: chatSnapshotMetaMap[id] ?? ["truncated": false, "totalMessages": rows.count]
+            ))
+        }
     }
 
     func unregisterSubscriptionHandler(id: String) {
@@ -395,6 +466,8 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     /// Simulate a disconnection event (transition to .disconnected).
     func simulateDisconnect() {
+        pairingAttemptID = nil
+        admission = nil
         connectionState = .disconnected
     }
 
@@ -455,6 +528,8 @@ class FakeConnectionManager: SessionConnectionManaging {
     func hasSubscriptionHandler(id: String) -> Bool {
         subscriptionHandlers[id] != nil
     }
+
+    var eventHandlerIDs: Set<UUID> { Set(eventHandlers.keys) }
 
     /// Count of registered event handlers.
     var eventHandlerCount: Int {

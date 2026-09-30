@@ -5,9 +5,22 @@ import UIKit
 
 // Protocol fixtures use exact wire literals and long end-to-end assertions.
 // swiftlint:disable file_length function_body_length multiline_arguments_brackets number_separator trailing_comma
+// swiftlint:disable type_body_length
 
 @MainActor
 struct DemoFixturesTests {
+    @Test func statusFeedFixturesReturnRegistrationIDsForEachOwner() throws {
+        let groups = ["global", "ios-pr-monitors-rows", "ios-hooks-demo"]
+        let ids = try groups.map { group in
+            let result = try #require(DemoFixtures.response(for: "events.subscribe", params: ["replaceGroup": group]) as? [String: Any])
+            return try #require(result["subscriptionId"] as? String)
+        }
+        #expect(Set(ids).count == groups.count)
+        #expect(ids.allSatisfy { !$0.isEmpty })
+        let monitors = try #require(DemoFixtures.response(for: "prMonitor.list", params: [:]) as? [String: Any])
+        #expect((monitors["monitors"] as? [[String: Any]])?.isEmpty == true)
+    }
+
     // MARK: - Launch-argument gating
 
     @Test func demoModeInactiveWithoutArguments() {
@@ -19,14 +32,6 @@ struct DemoFixturesTests {
     @Test func demoModeIgnoresSimilarArguments() {
         #expect(!DemoMode.demoDataRequested(by: ["--demo-data-extra", "demo-data", "--demo"]))
         #expect(!DemoMode.pretendPairedRequested(by: ["pretend-paired", "--pretend"]))
-    }
-
-    @Test func demoDataArgumentEnablesDemoMode() {
-        #expect(DemoMode.demoDataRequested(by: ["/path/to/Intent", "--demo-data"]))
-    }
-
-    @Test func demoDataImpliesPretendPaired() {
-        #expect(DemoMode.pretendPairedRequested(by: ["--demo-data"]))
     }
 
     @Test func pretendPairedAloneDoesNotEnableFixtures() {
@@ -42,6 +47,34 @@ struct DemoFixturesTests {
     }
 
     // MARK: - Fixture shape: parses through the real store parsers
+
+    @Test func demoSendAcknowledgementKeepsOptimisticMessageAndThinking() async throws {
+        let connection = FakeConnectionManager()
+        connection.pendingMethods.insert("agent.sendMessage")
+        let store = ConversationStore(connectionManager: connection)
+        let send = Task {
+            try await store.sendMessage(
+                agentId: DemoFixtures.longConversationAgentId,
+                content: "Suggested prompt",
+                workspaceId: DemoFixtures.longConversationWorkspaceId
+            )
+        }
+        defer { send.cancel() }
+        try await connection.waitForPendingRequests("agent.sendMessage")
+        let params = try #require(connection.paramsForMethod("agent.sendMessage").first)
+        let messageId = try #require(params["messageId"] as? String)
+        #expect(store.isStreaming)
+        connection.resolvePending("agent.sendMessage", with: DemoFixtures.response(for: "agent.sendMessage", params: params))
+        try await send.value
+
+        #expect(store.sendAttempts.first?.status == .accepted)
+        #expect(store.sendAttempts.first?.confirmedMessageId == messageId)
+        #expect(store.lastFailedSend == nil)
+        #expect(store.messages.map(\.id) == [messageId])
+        #expect(store.sendThinkingMessageIds == [messageId])
+        #expect(store.isStreaming, "The accepted demo send must keep Thinking until agent activity arrives")
+        #expect(connection.paramsForMethod("agent.sendMessage").count == 1)
+    }
 
     @Test func workspaceListFixtureParses() {
         let result = DemoFixtures.response(for: "workspace.list", params: [:])
@@ -111,9 +144,7 @@ struct DemoFixturesTests {
     }
 
     @Test func conversationFixtureParses() throws {
-        let result = DemoFixtures.response(for: "agent.getConversation", params: [:])
-        let dict = try #require(result as? [String: Any])
-        let items = try #require(dict["messages"] as? [[String: Any]])
+        let items = try conversationMessages(agentId: nil).items
         let messages = items.compactMap { ConversationMessage.parseMessage($0) }
         #expect(messages.count == items.count)
         #expect(messages.contains { $0.role == .user })
@@ -126,15 +157,16 @@ struct DemoFixturesTests {
 
     // MARK: - Per-agent conversation routing
 
+    /// The transcript as the app loads it: the `chat.subscribe` seq-0
+    /// snapshot push routed by `agentId`.
     private func conversationMessages(agentId: String?) throws -> (items: [[String: Any]], total: Int) {
         var params: [String: Any] = [:]
         if let agentId {
             params["agentId"] = agentId
         }
-        let result = DemoFixtures.response(for: "agent.getConversation", params: params)
-        let dict = try #require(result as? [String: Any])
-        let items = try #require(dict["messages"] as? [[String: Any]])
-        let total = try #require(dict["totalMessages"] as? Int)
+        let push = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: params))
+        let items = try #require(push.snapshot)
+        let total = try #require(push.snapshotMeta?["totalMessages"] as? Int)
         return (items, total)
     }
 
@@ -185,6 +217,150 @@ struct DemoFixturesTests {
         // The anchors the transcript UI tests match on stay unique.
         #expect(long.items.filter { text(of: $0).contains(DemoFixtures.longConversationFirstSentence) }.count == 1)
         #expect(long.items.filter { text(of: $0).contains(DemoFixtures.longConversationLastSentence) }.count == 1)
+    }
+
+    /// The transcript is loaded from the `chat.subscribe` seq-0 snapshot, so
+    /// the long transcript the scroll UI tests run against must ride that
+    /// push — the same rows the `agent.getConversation` recovery seek serves.
+    @Test func chatSubscribeSnapshotCarriesTheRoutedTranscript() throws {
+        let long = ["agentId": DemoFixtures.longConversationAgentId]
+        let push = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: long))
+        let ack = try #require(DemoFixtures.response(for: "chat.subscribe", params: long) as? [String: Any])
+        #expect(push.kind == .snapshot)
+        #expect(push.seq == 0)
+        #expect(push.subscriptionId == DemoFixtures.chatSubscriptionId(agentId: DemoFixtures.longConversationAgentId))
+        #expect(ack["subscriptionId"] as? String == push.subscriptionId)
+
+        let expectedIds = DemoFixtures.longConversationMessages.compactMap { $0["id"] as? String }
+        let rows = try #require(push.snapshot)
+        let rowIds = rows.compactMap { $0["id"] as? String }
+        #expect(rowIds == expectedIds)
+        #expect(push.snapshotMeta?["totalMessages"] as? Int == expectedIds.count)
+        #expect(push.snapshotMeta?["truncated"] as? Bool == false)
+        #expect(push.snapshotMessages?.count == rows.count, "every long-transcript row decodes")
+
+        // The recovery seek resolves the sought row to the same row the push
+        // carries (the fixture serves the seek from the same transcript).
+        let soughtId = try #require(rowIds.first)
+        let seek: [String: Any] = ["agentId": DemoFixtures.longConversationAgentId, "aroundMessageId": soughtId, "limit": 1]
+        let served = DemoFixtures.response(for: "agent.getConversation", params: seek) as? [String: Any]
+        let seekRows = try #require(served?["messages"] as? [[String: Any]])
+        let sought = try #require(seekRows.first { ($0["id"] as? String) == soughtId })
+        let pushed = try #require(rows.first { ($0["id"] as? String) == soughtId })
+        #expect(text(of: sought) == text(of: pushed))
+        #expect(sought["timestamp"] as? String == pushed["timestamp"] as? String)
+        #expect(sought["role"] as? String == pushed["role"] as? String)
+
+        let screenshot = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: [:]))
+        #expect(screenshot.snapshot?.count == 4)
+        #expect(DemoFixtures.subscriptionPush(for: "agent.getConversation", params: long) == nil)
+        #expect(DemoFixtures.subscriptionPush(for: "agent.get", params: long) == nil)
+    }
+
+    @Test func routedTimestampAnchorIsStableAcrossASecondBoundary() throws {
+        let formatter = ISO8601DateFormatter()
+        let boundary = try #require(formatter.date(from: "2026-09-21T15:26:16Z"))
+        let before = boundary.addingTimeInterval(-0.5)
+        let after = boundary.addingTimeInterval(0.5)
+        let params = ["agentId": DemoFixtures.longConversationAgentId]
+        let push = try DemoFixtures.$transcriptTimestampAnchor.withValue(before) {
+            try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: params))
+        }
+        let rows = try #require(push.snapshot)
+        let pushed = try #require(rows.first)
+        let soughtId = try #require(pushed["id"] as? String)
+        let seek: [String: Any] = ["agentId": DemoFixtures.longConversationAgentId, "aroundMessageId": soughtId]
+        let served = DemoFixtures.$transcriptTimestampAnchor.withValue(before) {
+            DemoFixtures.response(for: "agent.getConversation", params: seek) as? [String: Any]
+        }
+        let seekRows = try #require(served?["messages"] as? [[String: Any]])
+        let sought = try #require(seekRows.first { ($0["id"] as? String) == soughtId })
+        let expected = DemoFixtures.iso(minutesAgo: 240, relativeTo: before)
+        let independentlySampledAfter = DemoFixtures.iso(minutesAgo: 240, relativeTo: after)
+
+        #expect(expected == "2026-09-21T11:26:15Z")
+        #expect(independentlySampledAfter == "2026-09-21T11:26:16Z")
+        #expect(pushed["timestamp"] as? String == expected)
+        #expect(sought["id"] as? String == pushed["id"] as? String)
+        #expect(text(of: sought) == text(of: pushed))
+        #expect(sought["role"] as? String == pushed["role"] as? String)
+        #expect(sought["timestamp"] as? String == pushed["timestamp"] as? String)
+    }
+
+    @Test func laterRequestsRefreshSnapshotsWithoutChangingTranscript() throws {
+        let formatter = ISO8601DateFormatter()
+        let firstAnchor = try #require(formatter.date(from: "2026-09-21T15:26:15Z"))
+        let laterAnchor = firstAnchor.addingTimeInterval(9 * 60)
+        let transcriptParams = ["agentId": DemoFixtures.longConversationAgentId]
+        let push = try DemoFixtures.$transcriptTimestampAnchor.withValue(firstAnchor) {
+            try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: transcriptParams))
+        }
+        let pushed = try #require(push.snapshot?.first)
+        let soughtId = try #require(pushed["id"] as? String)
+        let seekParams: [String: Any] = ["agentId": DemoFixtures.longConversationAgentId, "aroundMessageId": soughtId]
+        let served = DemoFixtures.$transcriptTimestampAnchor.withValue(firstAnchor) {
+            DemoFixtures.response(
+                for: "agent.getConversation",
+                params: seekParams,
+                snapshotAnchor: laterAnchor
+            ) as? [String: Any]
+        }
+        let seekRows = try #require(served?["messages"] as? [[String: Any]])
+        let sought = try #require(seekRows.first { ($0["id"] as? String) == soughtId })
+
+        let firstWorkspaces = try #require(DemoFixtures.response(
+            for: "workspace.list",
+            params: [:],
+            snapshotAnchor: firstAnchor
+        ) as? [String: Any])
+        let laterWorkspaces = try #require(DemoFixtures.response(
+            for: "workspace.list",
+            params: [:],
+            snapshotAnchor: laterAnchor
+        ) as? [String: Any])
+        let firstWorkspace = try #require((firstWorkspaces["workspaces"] as? [[String: Any]])?.first)
+        let laterWorkspace = try #require((laterWorkspaces["workspaces"] as? [[String: Any]])?.first)
+
+        let agentParams = ["workspaceId": DemoFixtures.longConversationWorkspaceId]
+        let firstAgents = try #require(DemoFixtures.response(
+            for: "agent.list",
+            params: agentParams,
+            snapshotAnchor: firstAnchor
+        ) as? [String: Any])
+        let laterAgents = try #require(DemoFixtures.response(
+            for: "agent.list",
+            params: agentParams,
+            snapshotAnchor: laterAnchor
+        ) as? [String: Any])
+        let firstAgent = try #require((firstAgents["agents"] as? [[String: Any]])?.first)
+        let laterAgent = try #require((laterAgents["agents"] as? [[String: Any]])?.first)
+
+        let firstHooks = try #require(DemoFixtures.response(
+            for: "hook.list",
+            params: agentParams,
+            snapshotAnchor: firstAnchor
+        ) as? [String: Any])
+        let laterHooks = try #require(DemoFixtures.response(
+            for: "hook.list",
+            params: agentParams,
+            snapshotAnchor: laterAnchor
+        ) as? [String: Any])
+        let firstHook = try #require((firstHooks["hooks"] as? [[String: Any]])?.first)
+        let laterHook = try #require((laterHooks["hooks"] as? [[String: Any]])?.first)
+        let laterNextRunString = try #require(laterHook["nextRunAt"] as? String)
+        let laterNextRun = try #require(formatter.date(from: laterNextRunString))
+
+        #expect(sought["id"] as? String == pushed["id"] as? String)
+        #expect(text(of: sought) == text(of: pushed))
+        #expect(sought["role"] as? String == pushed["role"] as? String)
+        #expect(sought["timestamp"] as? String == pushed["timestamp"] as? String)
+        #expect(firstWorkspace["updatedAt"] as? String == DemoFixtures.iso(minutesAgo: 12, relativeTo: firstAnchor))
+        #expect(laterWorkspace["updatedAt"] as? String == DemoFixtures.iso(minutesAgo: 12, relativeTo: laterAnchor))
+        #expect(firstAgent["updatedAt"] as? String == DemoFixtures.iso(minutesAgo: 42, relativeTo: firstAnchor))
+        #expect(laterAgent["updatedAt"] as? String == DemoFixtures.iso(minutesAgo: 42, relativeTo: laterAnchor))
+        #expect(firstHook["nextRunAt"] as? String == DemoFixtures.iso(minutesAgo: -8, relativeTo: firstAnchor))
+        #expect(laterHook["nextRunAt"] as? String == DemoFixtures.iso(minutesAgo: -8, relativeTo: laterAnchor))
+        #expect(laterNextRun > laterAnchor)
     }
 
     /// The long transcript is coordinator-shaped (intent-hq/ios#304, #305):
@@ -531,10 +707,10 @@ extension DemoFixturesTests {
             "--demo-long-slim-tool-rows=",
         ]) == .standalone)
         #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-long-slim-tool-rows=sideways"]) == .leading)
-        // `agent.getConversation` serves the process default.
-        let served = DemoFixtures.response(
-            for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId])
-        let items = (served as? [String: Any])?["messages"] as? [[String: Any]]
+        // The `chat.subscribe` snapshot serves the process default.
+        let push = DemoFixtures.subscriptionPush(
+            for: "chat.subscribe", params: ["agentId": DemoFixtures.longConversationAgentId])
+        let items = push?.snapshot
         let expected = DemoFixtures.longConversationMessages(slimToolRows: DemoFixtures.longConversationSlimToolRowLayout)
         #expect(items?.compactMap { $0["id"] as? String } == expected.compactMap { $0["id"] as? String })
         #expect(items?.count == expected.count)
@@ -591,7 +767,7 @@ extension DemoFixturesTests {
             #expect(toolUse.type == .toolUse)
             #expect(!toolUse.inputTruncation.isTruncated)
             #expect(toolUse.input["path"]?.value as? String == call.file)
-            let slimResult = try #require(blocks.first { $0.resolvedToolUseId == call.id })
+            let slimResult = try #require(MessageBlockPartitioning.pairToolResults(blocks)[toolUse.id])
             #expect(slimResult.type == .toolResult)
             #expect(slimResult.outputTruncation.isTruncated)
             let preview = try #require(slimResult.output?.value as? String)
@@ -657,11 +833,11 @@ extension DemoFixturesTests {
                 for: "agent.list",
                 params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]
             ),
-            DemoFixtures.response(for: "agent.getConversation", params: [:]),
-            DemoFixtures.response(
-                for: "agent.getConversation",
+            try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: [:])?.snapshot),
+            try #require(DemoFixtures.subscriptionPush(
+                for: "chat.subscribe",
                 params: ["agentId": DemoFixtures.longConversationAgentId]
-            ),
+            )?.snapshot),
             DemoFixtures.response(
                 for: "hook.list",
                 params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]
@@ -675,4 +851,5 @@ extension DemoFixturesTests {
         #expect(!text.contains("bearer"))
     }
 }
+// swiftlint:enable type_body_length
 // swiftlint:enable file_length function_body_length multiline_arguments_brackets number_separator trailing_comma

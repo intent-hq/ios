@@ -168,9 +168,9 @@ extension ConversationViewModelTests {
         #expect(viewModel.isPendingQuestionRecoveryLoading, "marker authority fails closed even before the seek starts")
     }
 
-    @Test func recoveryLoadingFalseWhileInitialFetchInFlight() {
+    @Test func recoveryLoadingFalseWhileInitialSnapshotInFlight() {
         // The row may simply not have loaded yet: no fail-closed gate (and no
-        // placeholder) until the initial transcript fetch has settled.
+        // placeholder) until the initial transcript snapshot has settled.
         let viewModel = makeVM()
         viewModel.store.messages = []
         viewModel.store.isLoading = true
@@ -179,7 +179,7 @@ extension ConversationViewModelTests {
         #expect(viewModel.isPendingQuestionRecoveryLoading == false)
 
         viewModel.store.isLoading = false
-        #expect(viewModel.isPendingQuestionRecoveryLoading, "settled fetch without the row fails closed")
+        #expect(viewModel.isPendingQuestionRecoveryLoading, "settled snapshot without the row fails closed")
     }
 
     @Test func recoveryLoadingFalseWhenMarkedRowIsResident() {
@@ -291,12 +291,10 @@ extension ConversationViewModelTests {
             "timestamp": "2024-01-01T00:00:00Z",
             "contentBlocks": [resourceBlock]
         ]
-        fake.responseQueueMap["agent.getConversation"] = [
-            ["messages": [pageRow]] as [String: Any],
-            ["messages": [markedRow]] as [String: Any]
-        ]
+        fake.stubChatSnapshot(messages: [pageRow])
+        fake.responseMap["agent.getConversation"] = ["messages": [markedRow]] as [String: Any]
         viewModel.store = ConversationStore(connectionManager: fake)
-        await viewModel.store.fetchConversation(agentId: "test-agent", workspaceId: "test-ws")
+        await viewModel.store.subscribeLiveChat(agentId: "test-agent", workspaceId: "test-ws")
         #expect(viewModel.isPendingQuestionRecoveryLoading == false)
 
         viewModel.store.handleStreamEvent("events.event", params: [
@@ -319,6 +317,18 @@ extension ConversationViewModelTests {
     }
 
     // MARK: - Suggested-prompt send (draft retention)
+
+    @Test func imageResponsePromptsSendExactDisplayedText() async throws {
+        for expected in DemoFixtures.inlineImageSuggestedPrompts {
+            let (viewModel, fake) = makeFakeBackedVM()
+            viewModel.store.messages = [textMessage(role: .assistant, text: DemoFixtures.inlineImageResponseText)]
+            let prompt = try #require(viewModel.suggestedPrompts.first { $0 == expected })
+            await viewModel.sendSuggestedPrompt(prompt)
+            let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+            #expect(sent.params["content"] as? String == expected)
+            #expect(sent.params["imageBlocks"] == nil)
+        }
+    }
 
     @Test func sendSuggestedPromptDoesNotAttachPendingImages() async throws {
         // Regression: draft attachments must not silently ride a suggested

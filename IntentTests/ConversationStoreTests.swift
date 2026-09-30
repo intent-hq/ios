@@ -1,8 +1,9 @@
 import Foundation
 @testable import Intent
+import Synchronization
 import Testing
 
-/// Tests for ConversationStore – covers reset behavior and lastFailedSend tracking.
+/// Tests for ConversationStore – reset behavior and retained send ownership.
 @MainActor
 struct ConversationStoreTests {
     // MARK: - Helpers
@@ -54,88 +55,123 @@ struct ConversationStoreTests {
         #expect(store.messages.isEmpty)
     }
 
-    // MARK: - lastFailedSend tracking (duplicate message prevention)
+    // MARK: - Retained attempts (ordinary sends are not idempotent)
 
     @Test func lastFailedSendStartsNil() {
         let store = ConversationStore()
         #expect(store.lastFailedSend == nil)
     }
 
-    @Test func retryWithSameContentReusesMessageId() {
-        let store = ConversationStore()
-        // Simulate a previous failed send
-        store.lastFailedSend = (messageId: "failed-id-123", content: "Hello")
-        // Add a stale optimistic message from the failed attempt
-        let staleMessage = ConversationMessage(
-            id: "failed-id-123",
-            role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: "Hello")]
+    @Test func newSendWithSameContentDoesNotReplayUnconfirmedIdentity() async throws {
+        let fake = FakeConnectionManager()
+        fake.errorQueueMap["agent.sendMessage"] = [NSError(domain: "WebSocket", code: -32_000)]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
+        let store = ConversationStore(connectionManager: fake)
+
+        await #expect(throws: (any Error).self) {
+            try await store.sendMessage(agentId: "a", content: "Hello", workspaceId: "w")
+        }
+        let failedRequest = try #require(fake.requestLog.first)
+        let failedMessageId = try #require(failedRequest.params["messageId"] as? String)
+        #expect(store.lastFailedSend?.id == failedMessageId)
+
+        try await store.sendMessage(agentId: "a", content: "Hello", workspaceId: "w")
+
+        let retryRequest = try #require(fake.requestLog.last)
+        #expect(retryRequest.params["messageId"] as? String != failedMessageId)
+        #expect(fake.requestLog.count == 2, "these are two explicitly requested operations, not a replay")
+        #expect(store.lastFailedSend?.id == failedMessageId, "another send cannot discard unresolved recovery")
+    }
+
+    @Test func retryWithDifferentContentGeneratesNewId() async throws {
+        let fake = FakeConnectionManager()
+        fake.errorQueueMap["agent.sendMessage"] = [NSError(domain: "WebSocket", code: -32_000)]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
+        let store = ConversationStore(connectionManager: fake)
+
+        await #expect(throws: (any Error).self) {
+            try await store.sendMessage(agentId: "a", content: "Hello", workspaceId: "w")
+        }
+        let failedRequest = try #require(fake.requestLog.first)
+        let failedMessageId = try #require(failedRequest.params["messageId"] as? String)
+        let otherMessage = ConversationMessage(
+            id: "other-msg",
+            role: .assistant,
+            contentBlocks: [ContentBlock(type: .text, text: "Response")]
         )
-        store.messages.append(staleMessage)
-        #expect(store.messages.count == 1)
+        store.messages.append(otherMessage)
 
-        // Simulate what sendMessage does: check lastFailedSend and reuse messageId
-        let content = "Hello"
-        let messageId: String
-        if let failed = store.lastFailedSend, failed.content == content {
-            messageId = failed.messageId
-            store.messages.removeAll { $0.id == failed.messageId }
-        } else {
-            messageId = UUID().uuidString
-        }
+        try await store.sendMessage(agentId: "a", content: "Goodbye", workspaceId: "w")
 
-        #expect(messageId == "failed-id-123", "Should reuse the failed messageId")
-        #expect(store.messages.isEmpty, "Stale optimistic message should be removed")
+        let retryRequest = try #require(fake.requestLog.last)
+        let retryMessageId = try #require(retryRequest.params["messageId"] as? String)
+        #expect(retryMessageId != failedMessageId, "different content must not reuse the failed send's identity")
+        #expect(
+            store.messages.map(\.id) == [failedMessageId, otherMessage.id, retryMessageId],
+            "a different send preserves the failed row and unrelated transcript rows"
+        )
+        #expect(store.lastFailedSend?.id == failedMessageId, "the different send preserves failure tracking")
     }
 
-    @Test func retryWithDifferentContentGeneratesNewId() {
-        let store = ConversationStore()
-        store.lastFailedSend = (messageId: "failed-id-123", content: "Hello")
-
-        let content = "Goodbye"
-        let messageId: String
-        if let failed = store.lastFailedSend, failed.content == content {
-            messageId = failed.messageId
-        } else {
-            messageId = UUID().uuidString
-        }
-
-        #expect(messageId != "failed-id-123", "Should generate a new messageId for different content")
-    }
-
-    @Test func resetClearsLastFailedSend() {
-        let store = ConversationStore()
-        store.lastFailedSend = (messageId: "failed-id-123", content: "Hello")
+    @Test func resetClearsLastFailedSend() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -2)
+        let store = ConversationStore(connectionManager: fake)
+        try? await store.sendMessage(agentId: "a", content: "Hello", workspaceId: "w")
         #expect(store.lastFailedSend != nil)
         store.reset()
         #expect(store.lastFailedSend == nil, "reset() should clear lastFailedSend")
     }
 
-    @Test func staleOptimisticMessageCleanedUpOnRetry() {
-        let store = ConversationStore()
-        // Simulate failed send left an optimistic message
-        store.lastFailedSend = (messageId: "msg-abc", content: "Test message")
-        let staleMsg = ConversationMessage(
-            id: "msg-abc",
-            role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: "Test message")]
-        )
-        let otherMsg = ConversationMessage(
+    @Test func knownNotSentRetryReusesOriginalPayloadAndReplacesOnlyItsRow() async throws {
+        let fake = FakeConnectionManager()
+        fake.errorQueueMap["agent.sendMessage"] = [
+            DiagnosticErrorOwnership.attaching(
+                to: NSError(domain: "WebSocket", code: -4),
+                failure: DiagnosticFailure(origin: .localRequest, classification: .notConnected)
+            )
+        ]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
+        let store = ConversationStore(connectionManager: fake)
+
+        await #expect(throws: (any Error).self) {
+            try await store.sendMessage(
+                agentId: "a",
+                content: "Test message",
+                workspaceId: "w",
+                imagePayload: .attachments([["type": "image", "attachmentId": "image-1"]]),
+                filePayload: .attachments([["type": "file", "attachmentId": "file-1"]]),
+                messageMetadata: .fields(["selection": "original"])
+            )
+        }
+        let failedRequest = try #require(fake.requestLog.first)
+        let failedMessageId = try #require(failedRequest.params["messageId"] as? String)
+        #expect(store.messages.map(\.id) == [failedMessageId], "the failed send leaves its optimistic row")
+        #expect(store.lastFailedSend?.status == .notSent)
+        #expect(store.lastFailedSend?.canRetry == true)
+        let otherMessage = ConversationMessage(
             id: "other-msg",
             role: .assistant,
             contentBlocks: [ContentBlock(type: .text, text: "Response")]
         )
-        store.messages = [staleMsg, otherMsg]
-        #expect(store.messages.count == 2)
+        store.messages.append(otherMessage)
 
-        // Simulate retry logic from sendMessage
-        let content = "Test message"
-        if let failed = store.lastFailedSend, failed.content == content {
-            store.messages.removeAll { $0.id == failed.messageId }
-        }
+        try await store.sendPreparedAttempt(failedMessageId)
 
-        #expect(store.messages.count == 1, "Only the stale optimistic message should be removed")
-        #expect(store.messages[0].id == "other-msg", "Other messages should be preserved")
+        #expect(
+            store.messages.map(\.id) == [otherMessage.id, failedMessageId],
+            "the retry replaces only the stale failed row and preserves unrelated rows"
+        )
+        #expect(
+            store.messages.count { $0.id == failedMessageId } == 1,
+            "the replacement retry row must not coexist with its stale predecessor"
+        )
+        #expect(store.lastFailedSend == nil)
+        #expect(fake.requestLog.last?.params["messageId"] as? String == failedMessageId)
+        let retriedRequest = try #require(fake.requestLog.last)
+        let originalPayload = try JSONSerialization.data(withJSONObject: failedRequest.params, options: .sortedKeys)
+        let retriedPayload = try JSONSerialization.data(withJSONObject: retriedRequest.params, options: .sortedKeys)
+        #expect(originalPayload == retriedPayload)
     }
 
     // MARK: - rollbackFailedSend (failed send must not supersede pending questions)
@@ -149,13 +185,13 @@ struct ConversationStoreTests {
             try await store.sendMessage(agentId: "a", content: "Q: x\nA: y", workspaceId: "w")
         }
         #expect(store.messages.count == 1, "failed send leaves the optimistic message")
-        #expect(store.isStreaming, "failed send leaves the optimistic thinking state")
+        #expect(!store.isStreaming, "failed send settles only its optimistic thinking state")
 
         store.rollbackFailedSend()
 
         #expect(store.messages.isEmpty, "rollback removes the optimistic message")
         #expect(store.isStreaming == false, "rollback resets the thinking state")
-        #expect(store.lastFailedSend != nil, "retry dedup tracking is preserved")
+        #expect(store.lastFailedSend != nil, "full recovery remains independent of the optimistic row")
     }
 
     @Test func rollbackFailedSendIsNoopWithoutTrackedFailure() {
@@ -175,78 +211,13 @@ struct ConversationStoreTests {
         #expect(store.isStreaming)
     }
 
-    // MARK: - attention request raise/retire (PROTOCOL §5.5)
-
-    @Test func fetchAgentStreamingStateRaisesAttentionRequest() async {
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.get"] = [
-            "agent": [
-                "id": "a",
-                "name": "A",
-                "attentionRequestKind": "blocker",
-                "attentionRequestReason": "sandbox is broken",
-                "attentionRequestTimestamp": "2026-07-30T10:00:00Z"
-            ] as [String: Any]
-        ] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-
-        await store.fetchAgentStreamingState(agentId: "a")
-
-        #expect(store.attentionRequest?.kind == .blocker)
-        #expect(store.attentionRequest?.reason == "sandbox is broken")
-        #expect(store.attentionRequest?.raisedAt == ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
-    }
-
-    @Test func fetchAgentStreamingStateClearsWhenServerHasNone() async {
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.get"] = [
-            "agent": ["id": "a", "name": "A"] as [String: Any]
-        ] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-        store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "stale")
-
-        // Attention state is server-authoritative even with raiseOnly (which
-        // only guards isStreaming).
-        await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true)
-
-        #expect(store.attentionRequest == nil)
-    }
-
-    @Test func fetchAgentStreamingStateUpdatesAttentionOnPartialPayload() async {
-        // Attention state must raise/clear even when the payload lacks the
-        // name required by the full session parse.
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.get"] = [
-            "agent": [
-                "id": "a",
-                "attentionRequestKind": "blocker"
-            ] as [String: Any]
-        ] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-
-        await store.fetchAgentStreamingState(agentId: "a")
-
-        #expect(store.attentionRequest?.kind == .blocker)
-    }
-
-    @Test func sendMessageRetiresAttentionRequest() async throws {
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-        store.attentionRequest = PendingAttentionRequest(kind: .blocker, reason: "why")
-
-        try await store.sendMessage(agentId: "a", content: "unblocking you", workspaceId: "w")
-
-        #expect(store.attentionRequest == nil, "sending a message retires the indicator immediately")
-    }
-
     // MARK: - sendMessage messageMetadata threading (intent-hq/monorepo#1789)
 }
 
 extension ConversationStoreTests {
     @Test func sendMessageThreadsMessageMetadataToWire() async throws {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
 
         try await store.sendMessage(
@@ -267,7 +238,7 @@ extension ConversationStoreTests {
 
     @Test func sendMessageOmitsMessageMetadataWhenAbsent() async throws {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
 
         try await store.sendMessage(agentId: "a", content: "hi", workspaceId: "w")
@@ -276,33 +247,13 @@ extension ConversationStoreTests {
         #expect(sent.params["messageMetadata"] == nil, "plain sends stay untagged")
     }
 
-    @Test func failedSendKeepsAttentionRequest() async {
-        let fake = FakeConnectionManager()
-        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
-        let store = ConversationStore(connectionManager: fake)
-        store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "input needed")
-
-        await #expect(throws: (any Error).self) {
-            try await store.sendMessage(agentId: "a", content: "hi", workspaceId: "w")
-        }
-
-        #expect(store.attentionRequest != nil, "a failed send must not retire the indicator")
-    }
-
-    @Test func resetClearsAttentionRequest() {
-        let store = ConversationStore()
-        store.attentionRequest = PendingAttentionRequest(kind: .blocker, reason: "why")
-        store.reset()
-        #expect(store.attentionRequest == nil)
-    }
-
     // MARK: - agentNotFound (missing-agent fallback)
 
-    @Test func fetchConversationNotFoundRaisesAgentNotFound() async {
+    @Test func subscribeLiveChatNotFoundRaisesAgentNotFound() async {
         let fake = FakeConnectionManager()
-        // agent.getConversation answers -32602 with data.code == "not-found" for a
+        // chat.subscribe answers -32602 with data.code == "not-found" for a
         // nonexistent agent (docs/PROTOCOL.md §3.3/§9)
-        fake.errorMap["agent.getConversation"] = NSError(
+        fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -32_602,
             userInfo: [
@@ -312,30 +263,30 @@ extension ConversationStoreTests {
         )
         let store = ConversationStore(connectionManager: fake)
 
-        await store.fetchConversation(agentId: "gone", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "gone", workspaceId: "w")
 
         #expect(store.agentNotFound, "a definitive not-found must raise agentNotFound")
     }
 
-    @Test func fetchConversationBare32602DoesNotRaiseAgentNotFound() async {
+    @Test func subscribeLiveChatBare32602DoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
         // -32602 without data.code == "not-found" (invalid-params or a legacy
         // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
-        fake.errorMap["agent.getConversation"] = NSError(
+        fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -32_602,
             userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"]
         )
         let store = ConversationStore(connectionManager: fake)
 
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         #expect(!store.agentNotFound, "a -32602 without data.code == \"not-found\" must not raise agentNotFound")
     }
 
-    @Test func fetchConversationInvalidParams32602DoesNotRaiseAgentNotFound() async {
+    @Test func subscribeLiveChatInvalidParams32602DoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
-        fake.errorMap["agent.getConversation"] = NSError(
+        fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -32_602,
             userInfo: [
@@ -345,22 +296,22 @@ extension ConversationStoreTests {
         )
         let store = ConversationStore(connectionManager: fake)
 
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         #expect(!store.agentNotFound, "data.code == \"invalid-params\" must not raise agentNotFound")
     }
 
-    @Test func fetchConversationTransientErrorDoesNotRaiseAgentNotFound() async {
+    @Test func subscribeLiveChatTransientErrorDoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
         // Transport-level timeout must not read as deletion
-        fake.errorMap["agent.getConversation"] = NSError(
+        fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -2,
             userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
         )
         let store = ConversationStore(connectionManager: fake)
 
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         #expect(!store.agentNotFound, "a transient transport error must not raise agentNotFound")
     }
@@ -384,9 +335,9 @@ extension ConversationStoreTests {
 
     @Test func agentDeletedEventForOpenAgentRaisesAgentNotFound() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
         #expect(!store.agentNotFound)
 
         store.handleStreamEvent("events.event", params: [
@@ -398,9 +349,9 @@ extension ConversationStoreTests {
 
     @Test func agentDeletedEventForOtherAgentDoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.stubChatSnapshot()
         let store = ConversationStore(connectionManager: fake)
-        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
             "event": ["type": "agent:deleted", "data": ["agentId": "someone-else"]] as [String: Any]
@@ -415,23 +366,114 @@ extension ConversationStoreTests {
         store.reset()
         #expect(!store.agentNotFound)
     }
+}
 
-    // MARK: - dismissQuestions (agent.dismissQuestions, PROTOCOL §5.5)
+extension ConversationStoreTests {
+    func bindRecoveryStore(_ store: ConversationStore, fake: FakeConnectionManager, source: String) async {
+        store.bindAgent("a")
+        if source == "delta" {
+            fake.stubChatSnapshot()
+            await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
+        }
+    }
 
-    @Test func dismissQuestionsCallsRpcAndRaisesMarker() async throws {
+    func deliverRecoveryDelta(
+        _ rowId: String,
+        store: ConversationStore,
+        correlation: String? = nil,
+        seq: Int = 1,
+        updated: Bool = false
+    ) {
+        var entity: [String: Any] = [
+            "messageId": rowId, "role": "user", "streamingComplete": true,
+            "block": ["id": "\(rowId):0", "type": "text", "text": "hello"]
+        ]
+        if let correlation { entity["appMessageId"] = correlation }
+        store.handleStreamEvent("subscription.push", params: [
+            "subscriptionId": "sub-1", "kind": "delta", "seq": seq,
+            "delta": [
+                "added": updated ? [] : [entity], "updated": updated ? [entity] : [], "removedIds": []
+            ]
+        ])
+    }
+
+    @Test(arguments: [false, true])
+    func acceptedRPCThenCorrelatedLiveDeltaReconcilesOnce(existingRow: Bool) async throws {
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.dismissQuestions"] = [
-            "success": true,
-            "dismissedQuestionsMessageId": "a1"
-        ] as [String: Any]
+        fake.pendingMethods.insert("agent.sendMessage")
+        fake.stubChatSnapshot()
         let store = ConversationStore(connectionManager: fake)
+        await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
+        let send = Task { try await store.sendMessage(agentId: "a", content: "hello", workspaceId: "w") }
+        defer { send.cancel() }
+        try await fake.waitForPendingRequests("agent.sendMessage")
+        let id = try #require(store.sendAttempts.first?.id)
+        fake.resolvePending("agent.sendMessage", with: ["success": true, "queued": false, "messageId": id])
+        try await send.value
+        #expect(store.sendAttempts.first?.status == .accepted)
+        #expect(store.messages.map(\.id) == [id])
+        if existingRow {
+            deliverRecoveryDelta("server-row", store: store)
+            #expect(store.messages.map(\.id) == [id, "server-row"], "absent correlation cannot guess the owner")
+        }
+        let seq = existingRow ? 2 : 1
+        deliverRecoveryDelta("server-row", store: store, correlation: id, seq: seq, updated: existingRow)
+        #expect(store.messages.map(\.id) == ["server-row"])
+        #expect(store.messages.last?.appMessageId == id)
+        #expect(store.sendAttempts.first?.confirmedMessageId == "server-row")
+        // Duplicate sequence, then a fresh update omitting optional correlation.
+        deliverRecoveryDelta("server-row", store: store, correlation: id, seq: seq)
+        deliverRecoveryDelta("server-row", store: store, seq: seq + 1, updated: true)
+        await deliverRecoveryRow("late-queue", source: "queue", store: store, fake: fake, correlation: id)
+        #expect(store.messages.map(\.id) == ["server-row"])
+        #expect(store.messages.last?.appMessageId == id)
+        #expect(store.messages.last?.contentBlocks.count == 1)
+        #expect(store.sendAttempts.first?.status == .accepted)
+        #expect(store.sendAttempts.first?.confirmedMessageId == "server-row")
+        #expect(fake.paramsForMethod("agent.sendMessage").count == 1)
+    }
 
-        try await store.dismissQuestions(agentId: "a", messageId: "a1", workspaceId: "w")
-
-        let sent = try #require(fake.requestLog.last { $0.method == "agent.dismissQuestions" })
-        #expect(sent.params["agentId"] as? String == "a")
-        #expect(sent.params["messageId"] as? String == "a1")
-        #expect(sent.params["workspaceId"] as? String == "w")
-        #expect(store.dismissedQuestionsMessageId == "a1")
+    @Test(arguments: ["topLevel", "queue", "delta"], ["direct", "confirmed", "same", "ambiguous", "sharedConfirmed"])
+    func recoveryWithoutCorrelationRequiresOneDistinctAttempt(source: String, identity: String) async {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        await bindRecoveryStore(store, fake: fake, source: source)
+        let stopped = Mutex<[URL]>([])
+        let url = URL(fileURLWithPath: "/tmp/fallback.txt")
+        let id = store.beginSendAttempt(
+            agentId: "a",
+            content: "original",
+            workspaceId: "w",
+            files: [PendingFile(url: url, displayName: "fallback.txt", size: 0)],
+            fileAccess: ConversationSendFileAccess(urls: [url]) { url in
+                stopped.withLock { $0.append(url) }
+            }
+        )
+        store.prepareSendAttempt(id, imagePayload: .none, filePayload: .attachments([["type": "file", "attachmentId": "file-1"]]))
+        let rowId = identity == "confirmed" || identity == "sharedConfirmed" ? "server-row" : id
+        let initiallyQueued = ["confirmed", "same", "sharedConfirmed"].contains(identity)
+        let ambiguous = identity == "ambiguous" || identity == "sharedConfirmed"
+        let queuedReply: [String: Any] = ["success": true, "queued": true, "queuedMessage": queuedSend(rowId)]
+        fake.responseMap["agent.sendMessage"] = queuedReply
+        if !initiallyQueued { fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -2) }
+        try? await store.sendPreparedAttempt(id)
+        fake.errorMap["agent.sendMessage"] = ambiguous ? nil : NSError(domain: "WebSocket", code: -2)
+        try? await store.sendMessage(agentId: "a", content: "other", workspaceId: "w")
+        let initialStatus: ConversationSendAttempt.Status = initiallyQueued ? .queued : .unconfirmed
+        #expect(store.sendAttempts[0].status == initialStatus)
+        #expect(stopped.withLock { $0 } == (initiallyQueued ? [url] : []))
+        await deliverRecoveryRow(rowId, source: source, store: store, fake: fake)
+        let confirmed: ConversationSendAttempt.Status = source == "queue" ? .queued : .accepted
+        #expect(store.sendAttempts[0].status == (ambiguous ? initialStatus : confirmed))
+        #expect(store.sendAttempts[0].confirmedMessageId == (initiallyQueued || !ambiguous ? rowId : nil))
+        #expect(store.sendAttempts[1].status == (ambiguous ? .queued : .unconfirmed))
+        let retainsResources = ambiguous && !initiallyQueued
+        #expect(store.sendAttempts[0].files.count == (retainsResources ? 1 : 0))
+        #expect((store.sendAttempts[0].fileAccess != nil) == retainsResources)
+        #expect(stopped.withLock { $0 } == (retainsResources ? [] : [url]))
+        var payload: [String: Any] = [:]
+        store.sendAttempts[0].filePayload.apply(to: &payload)
+        #expect((payload["fileBlocks"] != nil) == retainsResources)
+        #expect(fake.paramsForMethod("agent.sendMessage").count == 2)
     }
 }

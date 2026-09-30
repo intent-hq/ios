@@ -77,7 +77,7 @@ extension ConversationViewModelTests {
         if let sendError {
             fake.errorMap["agent.sendMessage"] = sendError
         } else {
-            fake.responseMap["agent.sendMessage"] = ["messageId": "srv-1"]
+            fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         }
         let attachmentSize = 3
         fake.responseMap["file.placeAttachment"] = [
@@ -218,16 +218,6 @@ extension ConversationViewModelTests {
         #expect(sent.params["messageId"] as? String == "a1")
         #expect(sent.params["workspaceId"] as? String == "test-ws")
         #expect(viewModel.pendingQuestions == nil, "the dismissed set never re-pends")
-    }
-
-    @Test func failedDismissKeepsQuestionsPending() async {
-        let (viewModel, fake) = makeFakeBackedVM()
-        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32_000)
-        viewModel.store.messages = [questionMessage(id: "a1")]
-
-        await viewModel.dismissQuestions(messageId: "a1")
-
-        #expect(viewModel.pendingQuestions != nil, "a failed dismiss must leave the wizard pending")
     }
 
     @Test func failedDismissSurfacesVisibleError() async {

@@ -21,6 +21,27 @@
 			</array>
 		</dict>
 	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Inter-Thin.ttf</string>
+		<string>Inter-ThinItalic.ttf</string>
+		<string>Inter-ExtraLight.ttf</string>
+		<string>Inter-ExtraLightItalic.ttf</string>
+		<string>Inter-Light.ttf</string>
+		<string>Inter-LightItalic.ttf</string>
+		<string>Inter-Regular.ttf</string>
+		<string>Inter-Italic.ttf</string>
+		<string>Inter-Medium.ttf</string>
+		<string>Inter-MediumItalic.ttf</string>
+		<string>Inter-SemiBold.ttf</string>
+		<string>Inter-SemiBoldItalic.ttf</string>
+		<string>Inter-Bold.ttf</string>
+		<string>Inter-BoldItalic.ttf</string>
+		<string>Inter-ExtraBold.ttf</string>
+		<string>Inter-ExtraBoldItalic.ttf</string>
+		<string>Inter-Black.ttf</string>
+		<string>Inter-BlackItalic.ttf</string>
+	</array>
 	<!-- Multi-scene support for the pinned-backend windows
 	     (WindowGroup(for: BackendID.self)) on visionOS and iPad. iPhone
 	     never offers multiple scenes, so its behaviour is unchanged. -->
@@ -36,6 +57,11 @@
 	</dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>ThemeBackground</string>
+	</dict>
 	<!-- Add-only photo library access for the chat image "Save Image" action. -->
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Intent saves images from your conversations to your photo library when you choose Save Image.</string>

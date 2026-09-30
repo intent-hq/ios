@@ -8,13 +8,6 @@ struct MessageCopyContextMenu: ViewModifier {
     let isStreaming: Bool
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let userTextOpacity: Double = 0.85
-        static let assistantTextOpacity: Double = 1
-        static let previewPadding: CGFloat = 12
-        static let userBackgroundOpacity: Double = 0.4
-    }
-
     static func shouldEnableCopyInteraction(text: String, isStreaming: Bool) -> Bool {
         !text.isEmpty && !isStreaming
     }
@@ -34,18 +27,20 @@ struct MessageCopyContextMenu: ViewModifier {
 
     private var preview: some View {
         Text(text)
-            .font(.subheadline)
+            .interFont(Constants.Typography.bodyXS)
             .foregroundStyle(Theme.foreground(for: colorScheme).opacity(
-                userStyled ? Layout.userTextOpacity : Layout.assistantTextOpacity
+                userStyled ? Constants.Conversation.UserMessage.textOpacity : 1
             ))
             .lineLimit(Constants.Conversation.Message.contextPreviewLineLimit)
-            .padding(Layout.previewPadding)
+            .padding(Constants.Conversation.CopyContextMenu.previewPadding)
             .frame(
                 maxWidth: Constants.Conversation.Message.contextPreviewMaximumWidth,
                 alignment: .leading
             )
             .background(
-                userStyled ? Theme.muted(for: colorScheme).opacity(Layout.userBackgroundOpacity) : .clear
+                userStyled
+                    ? Theme.muted(for: colorScheme).opacity(Constants.Conversation.UserMessage.backgroundOpacity)
+                    : .clear
             )
             .background(Theme.background(for: colorScheme))
     }

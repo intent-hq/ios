@@ -49,26 +49,15 @@ enum SyncedBackendConnectionMerge {
                 // written before the user re-paired this machine must not
                 // delete the fresh pairing.
                 let localClock =
-                    existing.syncUpdatedAt
+                    existing.pendingSyncUpdatedAt ?? existing.syncUpdatedAt
                     ?? existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond
                 if localClock > record.updatedAt { continue }
                 result.removedIds.append(existing.id)
                 result.connections.remove(at: index)
             } else if let index {
                 let existing = result.connections[index]
-                // Only a strictly newer remote copy overwrites. A local that
-                // never synced adopts the registry copy (gaining its
-                // fingerprint/token), but its pairing time stands in as the
-                // clock — same guard as the tombstone path — so a stale
-                // registry copy lagging behind a token rotation cannot
-                // clobber a fresh direct re-pairing.
-                if let applied = existing.syncUpdatedAt {
-                    if record.updatedAt <= applied { continue }
-                } else if record.updatedAt
-                    < existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond {
-                    continue
-                }
-                result.connections[index] = apply(record, to: existing)
+                guard let updated = mergeLive(record, into: existing) else { continue }
+                result.connections[index] = updated
                 result.updatedIds.append(existing.id)
             } else {
                 // Never auto-add a fingerprint-less record: without a pinned
@@ -78,7 +67,7 @@ enum SyncedBackendConnectionMerge {
                 // locals were paired by the user on this device; the
                 // host:port fallback above can still update them.)
                 guard !normalizeFingerprint(record.fingerprint).isEmpty,
-                    !candidateHosts(of: record).isEmpty
+                    !candidateHosts(of: record).isEmpty || record.tcAddress != nil
                 else { continue }
                 let added = makeConnection(from: record, now: now)
                 result.connections.append(added)
@@ -86,6 +75,40 @@ enum SyncedBackendConnectionMerge {
             }
         }
         return result
+    }
+
+    /// A pending direct re-pair protects its new credentials even before
+    /// publication. Otherwise only newer shared clocks replace local fields,
+    /// except for the missing-route upgrade on already-imported records.
+    private static func mergeLive(_ record: SyncedBackendRecord, into existing: StoredConnection) -> StoredConnection? {
+        if let pending = existing.pendingSyncUpdatedAt {
+            if record.updatedAt < pending { return nil }
+        } else if let applied = existing.syncUpdatedAt {
+            if applied != 0, record.updatedAt == applied,
+               SyncedBackendPayload.tunnelAddress(existing.server.tcAddress) == nil,
+               let route = record.tcAddress { return addingRoute(route, to: existing) }
+            if record.updatedAt <= applied { return nil }
+        } else if record.updatedAt < existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond {
+            return nil
+        }
+        return apply(record, to: existing)
+    }
+
+    /// Additive-field upgrade for records imported before iOS read tcAddress.
+    /// Equal clocks authorize learning the missing route only, not replacing
+    /// credentials, metadata, or the shared clock.
+    private static func addingRoute(_ route: String, to connection: StoredConnection) -> StoredConnection {
+        var updated = connection
+        let server = connection.server
+        updated.server = PairedServer(
+            hosts: server.hosts,
+            port: server.port,
+            name: server.name,
+            pairedAt: server.pairedAt,
+            certFingerprint: server.certFingerprint,
+            tcAddress: route
+        )
+        return updated
     }
 
     /// Index of the local connection a record refers to: cert fingerprint
@@ -101,13 +124,13 @@ enum SyncedBackendConnectionMerge {
         let fingerprint = normalizeFingerprint(record.fingerprint)
         if !fingerprint.isEmpty,
             let index = connections.firstIndex(where: { connection in
-                normalizeFingerprint(connection.server.certFingerprint) == fingerprint
+                connection.invitedPersonKey == nil && normalizeFingerprint(connection.server.certFingerprint) == fingerprint
             }) {
             return index
         }
         let hosts = Set(candidateHosts(of: record).map(normalizeHost))
         return connections.firstIndex { connection in
-            normalizeFingerprint(connection.server.certFingerprint).isEmpty
+            connection.invitedPersonKey == nil && normalizeFingerprint(connection.server.certFingerprint).isEmpty
                 && connection.server.port == record.port
                 && !hosts.isDisjoint(with: connection.server.hosts.map(normalizeHost))
         }
@@ -132,8 +155,10 @@ enum SyncedBackendConnectionMerge {
     /// so a malformed host must never survive the merge.
     static func candidateHosts(of record: SyncedBackendRecord) -> [String] {
         PersistenceManager.mergeHostLists(
-            existing: [record.host].compactMap(usableHost),
-            incoming: record.hosts.compactMap(usableHost)
+            // A tunnel-only publisher uses its opaque route as the required
+            // v1 host identity. That blob must not become a DNS candidate.
+            existing: record.host == record.tcAddress ? [] : [record.host].compactMap(usableHost),
+            incoming: record.hosts.filter { $0 != record.tcAddress }.compactMap(usableHost)
         )
     }
 
@@ -221,7 +246,7 @@ enum SyncedBackendConnectionMerge {
         _ record: SyncedBackendRecord,
         to existing: StoredConnection
     ) -> StoredConnection {
-        StoredConnection(
+        var updated = StoredConnection(
             id: existing.id,
             server: PairedServer(
                 hosts: PersistenceManager.mergeHostLists(
@@ -232,15 +257,20 @@ enum SyncedBackendConnectionMerge {
                 name: existing.server.name,
                 pairedAt: existing.server.pairedAt,
                 certFingerprint: fingerprintOrNil(record) ?? existing.server.certFingerprint,
-                // Registry records don't carry the tunnel address; keep the
-                // locally learned one.
-                tcAddress: existing.server.tcAddress
+                tcAddress: record.tcAddress ?? existing.server.tcAddress
             ),
             token: record.token,
             displayName: displayName(for: record),
             lastConnectedAt: existing.lastConnectedAt,
             syncUpdatedAt: record.updatedAt
         )
+        // The shared owner row supplies no identity. Retain only the
+        // classification previously verified on this device; live authority
+        // still comes from admission of the current socket.
+        updated.principal = existing.principal
+        updated.localPairingSyncClock = existing.localPairingSyncClock
+        updated.pendingRoutePublication = existing.pendingRoutePublication
+        return updated
     }
 
     private static func makeConnection(from record: SyncedBackendRecord, now: Date)
@@ -252,7 +282,8 @@ enum SyncedBackendConnectionMerge {
                 port: record.port,
                 name: name,
                 pairedAt: now,
-                certFingerprint: fingerprintOrNil(record)
+                certFingerprint: fingerprintOrNil(record),
+                tcAddress: record.tcAddress
             ),
             token: record.token,
             displayName: name,
@@ -275,9 +306,11 @@ struct SyncedBackendMergeOutcome: Equatable {
     /// True when a tombstone removed the connection that was active — the
     /// caller must disconnect and route away from it.
     var removedActiveConnection: Bool
+    /// A prerequisite read/migration failed; no merge or removal was committed.
+    var registryReadError: ConnectionRegistryReadError?
     /// True when the merge was skipped because the saved-connections blob
     /// exists but could not be decoded; nothing was written so the original
     /// blob is preserved (intent-hq/ios#265).
-    var registryUndecodable: Bool = false
+    var registryUndecodable: Bool { registryReadError == .malformed }
     var changed: Bool { !(addedIds.isEmpty && updatedIds.isEmpty && removedIds.isEmpty) }
 }

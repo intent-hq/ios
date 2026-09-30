@@ -6,8 +6,9 @@ import SwiftUI
 /// avatar treatment in the desktop `RepoSelector`.
 struct RepoOwnerAvatarView: View {
     let owner: String?
-    var size: CGFloat = 28
+    var size: CGFloat = Constants.RepoOwnerAvatar.defaultSize
     var fallbackSymbol: String = "folder.fill"
+    var cornerRadius: CGFloat?
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -34,15 +35,19 @@ struct RepoOwnerAvatarView: View {
             }
         }
         .frame(width: size, height: size)
-        .clipShape(Circle())
+        .clipShape(avatarShape)
         .overlay(
-            Circle()
+            avatarShape
                 .stroke(
                     Color.white.opacity(Constants.RepoOwnerAvatar.borderOpacity),
                     lineWidth: Constants.RepoOwnerAvatar.borderWidth
                 )
         )
         .accessibilityHidden(true)
+    }
+
+    private var avatarShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cornerRadius ?? size / 2, style: .circular)
     }
 
     private var fallbackIcon: some View {

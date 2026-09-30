@@ -183,12 +183,12 @@ struct CopyContextMenuOverlayHitTestTests {
     }
 }
 
-/// End-to-end hit-testing of a hosted `AssistantMessageView` (ios#344): a
+/// Window hit-testing and accessibility activation of `AssistantMessageView` (ios#344): a
 /// settled message carrying text AND a tool_use block enables the copy
-/// overlay over the whole row, and a tap on the tool row's header must still
-/// reach the header `Button` (expand / hydrate) instead of being claimed for
-/// the copy interaction. The text region keeps the copy long-press, and a
-/// tool-only message (no copy text, overlay inert) keeps expanding too.
+/// overlay over the whole row, but a header-center hit must not be claimed
+/// by it. Accessibility activation must expand/hydrate the real Button.
+/// The text region keeps copy behavior, and a tool-only message keeps an
+/// inert overlay. Physical tap delivery remains required at the integration UI gate.
 @MainActor
 struct AssistantMessageToolRowHitTestTests {
     private static let hostWidth: CGFloat = 390
@@ -203,7 +203,9 @@ struct AssistantMessageToolRowHitTestTests {
         if includeText {
             blocks.append(ContentBlock(id: "b-text", type: .text, text: bodyText))
         }
-        blocks.append(ContentBlock(id: "b-tool", type: .toolUse, name: "view", input: toolInput))
+        blocks.append(ContentBlock(
+            id: "b-tool", type: .toolUse, name: "view", input: toolInput, inputTruncation: .truncated
+        ))
         return ConversationMessage(
             id: "m-344",
             role: .assistant,
@@ -334,48 +336,52 @@ struct AssistantMessageToolRowHitTestTests {
         return hit
     }
 
-    /// Asserts a tap at the centre of the tool row's header lands on a view
-    /// SwiftUI routes to the header `Button`: the header's own pass-through
-    /// marker (sitting inside the header's accessibility frame, so not some
-    /// other marker in the row) or — only where `allowingHostingView` —
-    /// the hosting view itself, which is how plain SwiftUI content receives
-    /// taps when no overlay competes for them. Never the copy overlay.
-    private static func expectHeaderTapReachesButton(
+    /// Check overlay exclusion separately from the observable accessibility
+    /// action; a private SwiftUI drawing-view class is not a routing contract.
+    /// Activation does not synthesize a physical touch.
+    private static func expectHeaderPassThroughAndActivation(
         subject: String,
         in hostView: UIView,
         window: UIWindow,
-        allowingHostingView: Bool = false
+        workspaceDesign: Bool
     ) throws {
         let headerFrame = try frame(ofElementContaining: subject, in: hostView, window: window)
+        // Compare window-space edges: subtracting fractional endpoints can make 44pt appear one ULP short.
+        if workspaceDesign { #expect(headerFrame.maxY >= headerFrame.minY + 44) }
         let point = CGPoint(x: headerFrame.midX, y: headerFrame.midY)
         let hit = try requireHit(at: point, in: hostView, window: window)
         #expect(!(hit is CopyContextMenuOverlay.OverlayView), "copy overlay swallowed the header tap")
-        if allowingHostingView, hit === hostView { return }
-        let marker = try #require(
-            hit as? CopyContextMenuPassthroughMarker.MarkerView,
-            "header tap resolved to \(hit) instead of the header's pass-through marker"
-        )
-        let markerFrame = window.convert(marker.bounds, from: marker)
-        #expect(
-            headerFrame.insetBy(dx: -1, dy: -1).contains(markerFrame),
-            "marker \(markerFrame) is not the header's own (header \(headerFrame))"
-        )
+        let header = try #require(labelledElement(containing: subject, under: hostView).element)
+        #expect(header.accessibilityTraits.contains(.button))
+        #expect(header.accessibilityValue == "Collapsed")
+        #expect(header.accessibilityActivate(), "the real header Button must accept accessibility activation")
+        let deadline = Date(timeIntervalSinceNow: accessibilityObservationDeadline)
+        while labelledElement(containing: subject, under: hostView).element?.accessibilityValue != "Expanded",
+              Date() < deadline {
+            _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: accessibilityObservationInterval))
+            hostView.layoutIfNeeded()
+        }
+        #expect(labelledElement(containing: subject, under: hostView).element?.accessibilityValue == "Expanded")
     }
 
     private func hitTest(
         includeText: Bool,
+        workspaceDesign: Bool,
+        expectExpansion: Bool = false,
         probe: (_ hostView: UIView, _ window: UIWindow) throws -> Void
-    ) throws {
+    ) async throws {
         let coordinator = try Self.makeCoordinator()
+        var hydratedBlockIDs: [String] = []
+        defer { #expect(hydratedBlockIDs == (expectExpansion ? ["b-tool"] : [])) }
         let view = AssistantMessageView(
             message: Self.makeMessage(includeText: includeText),
             workspaceId: "ws-1",
             onNavigateToNote: nil,
-            hydratingBlockIds: [],
-            onHydrateBlock: nil
-        )
+            hydratingBlockIds: []
+        ) { hydratedBlockIDs.append($0) }
         .environment(coordinator)
-        try SyntheticBadgeHost.render(view, width: Self.hostWidth, height: Self.hostHeight, inspect: probe)
+        .environment(\.workspaceTranscriptDesign, workspaceDesign)
+        try await SyntheticBadgeHost.render(view, width: Self.hostWidth, height: Self.hostHeight, inspect: probe)
     }
 
     private var toolSubject: String {
@@ -393,17 +399,19 @@ struct AssistantMessageToolRowHitTestTests {
 
     // Gated like the rendered badge tests: always true on the simulator, so a
     // missing header element there is a real failure, not a skip.
-    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() })
-    func toolRowHeaderTapReachesButtonInTextBearingMessage() throws {
+    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() }, arguments: [false, true])
+    func toolRowHeaderPassesHitTestAndActivatesInTextBearingMessage(workspaceDesign: Bool) async throws {
         let subject = try toolSubject
-        try hitTest(includeText: true) { hostView, window in
+        try await hitTest(includeText: true, workspaceDesign: workspaceDesign, expectExpansion: true) { hostView, window in
             // The copy interaction is live and spans the header: the overlay
             // is what would otherwise claim the tap.
             let overlay = try Self.copyOverlay(in: hostView, window: window)
             #expect(overlay.view.interactions.contains { $0 is UIContextMenuInteraction })
             let headerFrame = try Self.frame(ofElementContaining: subject, in: hostView, window: window)
             #expect(overlay.frame.contains(CGPoint(x: headerFrame.midX, y: headerFrame.midY)))
-            try Self.expectHeaderTapReachesButton(subject: subject, in: hostView, window: window)
+            try Self.expectHeaderPassThroughAndActivation(
+                subject: subject, in: hostView, window: window, workspaceDesign: workspaceDesign
+            )
         }
     }
 
@@ -411,10 +419,10 @@ struct AssistantMessageToolRowHitTestTests {
     /// to be unambiguously inside the text block rather than on its edge.
     private static let minimumTextBandHeight: CGFloat = 12
 
-    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() })
-    func textRegionKeepsCopyMenuInTextBearingMessage() throws {
+    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() }, arguments: [false, true])
+    func textRegionKeepsCopyMenuInTextBearingMessage(workspaceDesign: Bool) async throws {
         let subject = try toolSubject
-        try hitTest(includeText: true) { hostView, window in
+        try await hitTest(includeText: true, workspaceDesign: workspaceDesign) { hostView, window in
             let overlay = try Self.copyOverlay(in: hostView, window: window)
             #expect(
                 overlay.view.interactions.contains { $0 is UIContextMenuInteraction },
@@ -445,23 +453,21 @@ struct AssistantMessageToolRowHitTestTests {
         }
     }
 
-    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() })
-    func toolRowHeaderTapReachesButtonInToolOnlyMessage() throws {
+    @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() }, arguments: [false, true])
+    func toolRowHeaderPassesHitTestAndActivatesInToolOnlyMessage(workspaceDesign: Bool) async throws {
         let subject = try toolSubject
-        try hitTest(includeText: false) { hostView, window in
-            // No copy text: the overlay is present but inert, so the tap
-            // reaches the header with or without the marker (this case
-            // already worked before ios#344 was fixed).
+        try await hitTest(includeText: false, workspaceDesign: workspaceDesign, expectExpansion: true) { hostView, window in
+            // No copy text: the overlay remains present but inert.
             let overlay = try Self.copyOverlay(in: hostView, window: window)
             #expect(
                 !overlay.view.interactions.contains { $0 is UIContextMenuInteraction },
                 "copy interaction attached to a message without copy text"
             )
-            try Self.expectHeaderTapReachesButton(
+            try Self.expectHeaderPassThroughAndActivation(
                 subject: subject,
                 in: hostView,
                 window: window,
-                allowingHostingView: true
+                workspaceDesign: workspaceDesign
             )
         }
     }

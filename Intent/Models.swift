@@ -29,6 +29,18 @@ struct PairedServer: Codable, Equatable {
     }
 }
 
+/// A route observation may patch an existing live shared row, never recreate
+/// one or replace its credentials. The baseline detects competing rotations.
+struct PendingBackendRoutePublication: Codable, Equatable {
+    var updatedAt: Double
+    var hosts: [String]
+    var tcAddress: String?
+    /// Time of the actual tunnel observation, unchanged by host-only edits.
+    /// Legacy pending intents fall back to their original updatedAt.
+    var tcUpdatedAt: Double?
+    var previousTcAddress: String?
+}
+
 /// A saved daemon connection: pairing info plus its API token and metadata.
 struct StoredConnection: Codable, Identifiable, Equatable {
     let id: UUID
@@ -38,10 +50,24 @@ struct StoredConnection: Codable, Identifiable, Equatable {
     var displayName: String
     var lastConnectedAt: Date?
     /// `updatedAt` (ms since epoch) of the last iCloud-synced registry record
-    /// applied to this connection — the last-writer-wins clock for
+    /// applied or successfully published — the last-writer-wins clock for
     /// `SyncedBackendConnectionMerge`. `nil` on connections that predate sync
     /// or were paired locally and never matched a registry record.
     var syncUpdatedAt: Double?
+    /// Durable local edit awaiting shared publication. Kept in the same
+    /// device-local Keychain blob as the credentials; retries never restamp it.
+    var pendingSyncUpdatedAt: Double?
+    /// Provenance for automatic route publication. Ordinary imports have none;
+    /// only an explicit pairing newer than a remembered removal can resume it.
+    var localPairingSyncClock: Double?
+    var pendingRoutePublication: PendingBackendRoutePublication?
+    var principal: ConnectionPrincipal?
+    /// Exact invited-v2 payload, protected by the existing local Keychain blob.
+    var invitedSyncPayload: Data?
+    var invitedPersonKey: String? {
+        guard let principal, !principal.isOwner, let pin = server.certFingerprint else { return nil }
+        return try? InvitedSyncKey.session(fingerprint: pin, principalId: principal.id)
+    }
 
     init(
         id: UUID,
@@ -174,6 +200,7 @@ struct Workspace: Codable, Identifiable, Equatable {
     let pullRequestsWereReported: Bool
     let activePullRequest: WorkspacePullRequest?  // single active PR (§5.1); nil when absent
     let statusImageAssetId: String?
+    let statusMessage: String?
 
     private enum CodingKeys: String, CodingKey {
         case activePullRequest
@@ -195,6 +222,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         case repositoryOwner
         case status
         case statusImageAssetId
+        case statusMessage
         case taskStatsCompleted
         case taskStatsInProgress
         case taskStatsTotal
@@ -233,7 +261,8 @@ struct Workspace: Codable, Identifiable, Equatable {
         agentSummaryWasReported: Bool = false,
         pullRequestsWereReported: Bool = false,
         activePullRequest: WorkspacePullRequest? = nil,
-        statusImageAssetId: String? = nil
+        statusImageAssetId: String? = nil,
+        statusMessage: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -262,6 +291,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.pullRequestsWereReported = pullRequestsWereReported || !pullRequests.isEmpty
         self.activePullRequest = activePullRequest
         self.statusImageAssetId = WorkspaceStatusImageLayout.normalizedAssetId(statusImageAssetId)
+        self.statusMessage = statusMessage
     }
 
     /// Custom decode so `waiting` honors the wire contract (PROTOCOL §5.1:
@@ -308,6 +338,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         statusImageAssetId = WorkspaceStatusImageLayout.normalizedAssetId(
             try container.decodeIfPresent(String.self, forKey: .statusImageAssetId)
         )
+        statusMessage = try container.decodeIfPresent(String.self, forKey: .statusMessage)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -337,6 +368,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         if pullRequestsWereReported { try container.encode(pullRequests, forKey: .pullRequests) }
         try container.encodeIfPresent(activePullRequest, forKey: .activePullRequest)
         try container.encodeIfPresent(statusImageAssetId, forKey: .statusImageAssetId)
+        try container.encodeIfPresent(statusMessage, forKey: .statusMessage)
     }
 }
 
@@ -346,6 +378,7 @@ struct ModelInfo: Identifiable, Equatable {
     let name: String     // display name (e.g. "sonnet4.5 (balanced)")
     let provider: String // provider id (e.g. "auggie")
     var isDefault: Bool = false // provider-reported default model (models.list)
+    var effortLevels: [String] = [] // provider-reported reasoning vocabulary (models.list, protocol 5.30)
 }
 
 enum ProviderAuthentication: Equatable, ExpressibleByBooleanLiteral {
