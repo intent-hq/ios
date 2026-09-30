@@ -114,7 +114,12 @@ extension ConnectionManager {
         token: String,
         certFingerprint: String?
     ) async throws -> RacedConnection {
-        let tunnel = try await dialer.open(tcAddress: tcAddress, remotePort: remotePort)
+        let tunnel: any TunnelSession
+        do {
+            tunnel = try await dialer.open(tcAddress: tcAddress, remotePort: remotePort)
+        } catch {
+            throw TunnelEstablishmentFailure(underlyingError: error)
+        }
         do {
             try Task.checkCancellation()
             let socket = try await WebSocketConnection.connect(
@@ -137,16 +142,11 @@ extension ConnectionManager {
             if let transportError = error as? WebSocketTransportError {
                 switch transportError {
                 case .certificateMismatch(_, let fingerprint):
-                    throw WebSocketTransportError.certificateMismatch(
-                        host: tunnelCandidateLabel,
-                        fingerprint: fingerprint
-                    )
+                    throw WebSocketTransportError.certificateMismatch(host: tunnelCandidateLabel, fingerprint: fingerprint)
                 case .invalidURL:
                     throw WebSocketTransportError.invalidURL(host: tunnelCandidateLabel)
                 case .missingCertificatePin:
-                    throw WebSocketTransportError.missingCertificatePin(
-                        host: tunnelCandidateLabel
-                    )
+                    throw WebSocketTransportError.missingCertificatePin(host: tunnelCandidateLabel)
                 case .timedOut:
                     throw WebSocketTransportError.timedOut(host: tunnelCandidateLabel)
                 case let .failed(_, message, failure):

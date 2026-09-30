@@ -322,6 +322,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["connection-network.status"].waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         XCTAssertTrue(app.buttons["Re-pair Device"].isHittable)
+        assertFailureBackReturnsHome(in: app, timeout: Fixture.timeout)
     }
 }
 
@@ -400,7 +401,7 @@ extension ConnectionLossUITests {
     }
 
     @MainActor
-    private func assertStartupState(_ state: String, in app: XCUIApplication) {
+    func assertStartupState(_ state: String, in app: XCUIApplication) {
         let status = app.staticTexts.matching(NSPredicate(
             format: "identifier == %@ AND label == %@", "demo-connection-startup", state
         )).firstMatch
@@ -410,7 +411,7 @@ extension ConnectionLossUITests {
     }
 
     @MainActor
-    private func launch(directory: URL, arguments: [String] = [], waitForStartup: Bool = true) -> XCUIApplication {
+    func launch(directory: URL, arguments: [String] = [], waitForStartup: Bool = true) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
@@ -455,7 +456,7 @@ extension ConnectionLossUITests {
         XCTAssertEqual(app.buttons.count, 1, "Only the overlay action should be exposed to accessibility")
     }
 
-    private func makeTriggerDirectory() throws -> URL {
+    func makeTriggerDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock { [weak self] in
@@ -470,7 +471,7 @@ extension ConnectionLossUITests {
         return directory
     }
 
-    private func trigger(_ name: String, in directory: URL) throws {
+    func trigger(_ name: String, in directory: URL) throws {
         try Data().write(to: directory.appendingPathComponent(name))
     }
 
