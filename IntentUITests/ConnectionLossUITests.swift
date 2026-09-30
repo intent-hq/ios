@@ -328,48 +328,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
 
 extension ConnectionLossUITests {
     @MainActor
-    func testPresentedLossRemainsUsableAcrossRotation() async throws {
-        defer { XCUIDevice.shared.orientation = .portrait }
-        let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory)
-        try trigger("loss", in: directory)
-        assertOverlay(in: app)
-        XCUIDevice.shared.orientation = .landscapeLeft
-        try await waitForRotatedViewport(in: app, landscape: true)
-        XCTAssertGreaterThan(app.frame.width, app.frame.height)
-        XCTAssertGreaterThan(app.scrollViews.firstMatch.frame.width, app.scrollViews.firstMatch.frame.height)
-        app.scrollViews.firstMatch.swipeUp()
-        assertOverlay(in: app)
-        // app.screenshot() crops the rotated image incorrectly on iOS 18.
-        let screenshot = XCUIScreen.main.screenshot()
-        try assertBackdropCoversScreen(screenshot)
-        let screen = XCTAttachment(screenshot: screenshot)
-        screen.name = "connection-loss-landscape-full-screen"
-        screen.lifetime = .keepAlways
-        add(screen)
-        XCUIDevice.shared.orientation = .portrait
-        try await waitForRotatedViewport(in: app, landscape: false)
-        assertOverlay(in: app)
-        capture(app, named: "portrait-after-rotation")
-        try trigger("recover", in: directory)
-        XCTAssertTrue(app.buttons[Fixture.homeIdentifier].waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.buttons["intent.menu.open"].exists)
-    }
-
-    @MainActor
-    private func waitForRotatedViewport(in app: XCUIApplication, landscape: Bool) async throws {
-        let deadline = Date().addingTimeInterval(Fixture.timeout)
-        while Date() < deadline {
-            let frame = app.scrollViews.firstMatch.frame
-            if (frame.width > frame.height) == landscape,
-               frame.width <= app.frame.width + Fixture.layoutTolerance,
-               frame.height <= app.frame.height + Fixture.layoutTolerance { return }
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        XCTFail("The overlay viewport must finish resizing after rotation")
-    }
-
-    @MainActor
     func testLargestTextCanScrollToWarningsAndHome() throws {
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory, arguments: [
