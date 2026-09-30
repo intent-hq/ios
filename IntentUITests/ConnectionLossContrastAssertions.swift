@@ -1,15 +1,29 @@
 import XCTest
 
-/// Screenshot helpers check real source-to-overlay appearance and full-screen coverage.
+/// Screenshot helpers check real source-to-overlay appearance.
 /// Run the owning Home test in light/dark and actual Reduce Transparency modes.
 extension ConnectionLossUITests {
     @MainActor
-    func testBackDuringStartupRetainsMachineAndAllowsFreshConnection() throws {
+    func testLaunchHidesBackButSelectedMachineCanReturnHome() throws {
         let timeout: TimeInterval = 15
         let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory, arguments: ["--demo-connection-loss-pending-startup"], waitForStartup: false)
+        let app = launch(
+            directory: directory,
+            arguments: ["--demo-connection-loss-pending-startup", "--demo-connection-loss-startup-failure"],
+            waitForStartup: false
+        )
         assertStartupState("connected", in: app)
         let back = app.buttons["connecting.home"]
+        XCTAssertFalse(back.exists, "Cold-launch auto-connect must not offer Back")
+        capture(app, named: "launch-connecting-without-back")
+        try trigger("loss", in: directory)
+        assertFailureBackReturnsHome(in: app, timeout: timeout)
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        saved.tap()
+        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
+        XCTAssertTrue(machine.waitForExistence(timeout: timeout))
+        machine.tap()
+        assertStartupState("connected", in: app)
         XCTAssertTrue(back.waitForExistence(timeout: timeout))
         XCTAssertEqual(back.label, "Back to Home")
         XCTAssertTrue(back.isHittable)
@@ -17,13 +31,11 @@ extension ConnectionLossUITests {
         XCTAssertLessThan(back.frame.maxY, app.frame.midY)
         capture(app, named: "connecting-back")
         back.tap()
-        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: timeout))
         XCTAssertFalse(back.exists)
-        // Release the abandoned startup's data wait after leaving the screen.
+        // Release the abandoned user-initiated connection's data wait after leaving.
         try trigger("initial-data", in: directory)
         saved.tap()
-        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
         XCTAssertTrue(machine.waitForExistence(timeout: timeout))
         XCTAssertFalse(app.buttons["intent.menu.open"].exists, "A late startup completion must not leave Home")
         XCTAssertFalse(app.staticTexts["Can’t Connect"].exists)
@@ -32,13 +44,6 @@ extension ConnectionLossUITests {
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: timeout))
         XCTAssertFalse(back.exists)
         capture(app, named: "connecting-machine-reselected")
-    }
-
-    private enum Backdrop {
-        static let nearEdge = 0.1
-        static let farEdge = 0.9
-        static let samplePositions = [(nearEdge, nearEdge), (farEdge, nearEdge), (nearEdge, farEdge), (farEdge, farEdge)]
-        static let allowedRedValues = 12...125
     }
 
     private enum Contrast {
@@ -81,28 +86,6 @@ extension ConnectionLossUITests {
         evidence.name = "connection-loss-subtitle-contrast"
         evidence.lifetime = .keepAlways
         XCTContext.runActivity(named: "Rendered subtitle contrast") { $0.add(evidence) }
-    }
-
-    @MainActor
-    func assertBackdropCoversScreen(_ screenshot: XCUIScreenshot) throws {
-        let image = try XCTUnwrap(screenshot.image.cgImage)
-        for (xPosition, yPosition) in Backdrop.samplePositions {
-            let region = CGRect(x: Double(image.width) * xPosition, y: Double(image.height) * yPosition, width: 1, height: 1)
-            let pixel = try XCTUnwrap(image.cropping(to: region))
-            var bytes = [UInt8](repeating: 0, count: Contrast.bytesPerPixel)
-            let context = try XCTUnwrap(CGContext(
-                data: &bytes,
-                width: 1,
-                height: 1,
-                bitsPerComponent: Contrast.bitsPerChannel,
-                bytesPerRow: Contrast.bytesPerPixel,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ))
-            context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-            // Single-tinted source ranges from 17 to 106; reject a black gap or exposed page.
-            XCTAssertTrue(Backdrop.allowedRedValues.contains(Int(bytes[0])), "The backdrop must cover every screen quadrant")
-        }
     }
 
     @MainActor

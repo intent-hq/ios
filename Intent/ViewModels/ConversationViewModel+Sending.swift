@@ -62,6 +62,9 @@ extension ConversationViewModel {
                 PersistenceManager.shared.clearDraft(workspaceId: workspaceId, agentId: agentId)
             }
             scheduleDebouncedMarkSeen()
+        } catch let error as OutgoingImagePayload.RequestError {
+            guard ownsSendPreparation(attemptId, in: sendingStore) else { return }
+            surfaceImagePreparationFailure(error, content: content, composer: composer)
         } catch {
             // Retained state owns recovery; raw foreign diagnostics are not UI.
             AppLog.conversation.error("[ConversationViewModel] Message delivery was not confirmed")
@@ -79,13 +82,7 @@ extension ConversationViewModel {
         } catch {
             sendingStore.failSendPreparation(attempt.id)
             guard ownsSendPreparation(attempt.id, in: sendingStore) else { return false }
-            attachmentPipeline.surfaceImagePlacementFailure(
-                error,
-                content: composerTextRevision == composer.textRevision ? attempt.content : "",
-                imageRecovery: attachmentPipeline.imageSelectionRevision == composer.imageRevision
-                    ? composer.imageRecovery : .preserveCurrentSelection,
-                messageText: &messageText
-            )
+            surfaceImagePreparationFailure(error, content: attempt.content, composer: composer)
             return false
         }
         guard ownsSendPreparation(attempt.id, in: sendingStore) else { return false }
@@ -109,6 +106,16 @@ extension ConversationViewModel {
         guard ownsSendPreparation(attempt.id, in: sendingStore) else { return false }
         sendingStore.prepareSendAttempt(attempt.id, imagePayload: imagePayload, filePayload: filePayload)
         return true
+    }
+
+    private func surfaceImagePreparationFailure(_ error: Error, content: String, composer: SendComposerState) {
+        attachmentPipeline.surfaceImagePlacementFailure(
+            error,
+            content: composerTextRevision == composer.textRevision ? content : "",
+            imageRecovery: attachmentPipeline.imageSelectionRevision == composer.imageRevision
+                ? composer.imageRecovery : .preserveCurrentSelection,
+            messageText: &messageText
+        )
     }
 
     private func ownsSendPreparation(_ messageId: String, in sendingStore: ConversationStore) -> Bool {
@@ -161,6 +168,13 @@ extension ConversationViewModel {
             )
             pendingImages.removeAll()
             clearPendingFiles()
+        } catch let error as OutgoingImagePayload.RequestError {
+            attachmentPipeline.surfaceImagePlacementFailure(
+                error,
+                content: content,
+                imageRecovery: .preserveCurrentSelection,
+                messageText: &messageText
+            )
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Queue failed: \(error)")
         }
@@ -181,6 +195,7 @@ extension ConversationViewModel {
     // MARK: - Attachments
 
     func addImage(_ image: UIImage) { attachmentPipeline.addImage(image) }
+    func pasteImages() { attachmentPipeline.pasteImages() }
     func removeImage(at index: Int) { attachmentPipeline.removeImage(at: index) }
     func loadSelectedPhotos() async { await attachmentPipeline.loadSelectedPhotos() }
 

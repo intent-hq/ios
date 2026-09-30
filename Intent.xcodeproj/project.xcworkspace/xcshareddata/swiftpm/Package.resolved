@@ -1,5 +1,5 @@
 {
-  "originHash" : "e906a6d0bf15d448c87337a23106f0156c45a849deb70cbc86921c5571cad7f9",
+  "originHash" : "d69c3c3728ceb008618b45fb06c1ac377f7b060cec627ec4f8c000234bc7a60b",
   "pins" : [
     {
       "identity" : "lottie-ios",
@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/intent-hq/textual",
       "state" : {
-        "revision" : "d03426b04499c40c49874779d78d754f6ba85a55",
-        "version" : "0.5.0-intent.2"
+        "revision" : "59f9f196ee9c0e855230d82b9124b24162fb9ddd",
+        "version" : "0.5.0-intent.3"
       }
     }
   ],

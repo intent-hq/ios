@@ -1,16 +1,14 @@
 import SwiftUI
 
 struct WorkspaceScriptRow: View {
+    private static let trailingIconInset: CGFloat = 12
+
     let script: WorkspaceScript
     let store: WorkspaceScriptStore
+    @Binding var revealedTarget: WorkspaceSwipeTarget?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .body) private var actionWidth: CGFloat = 88
-    @State private var translation: CGFloat = 0
-    @State private var isRevealed = false
 
-    private var actionsWidth: CGFloat { script.isActive ? actionWidth * 2 : actionWidth }
     private var canUpdate: Bool { store.isConnected && !store.isUpdating(script) }
 
     private var status: String {
@@ -27,26 +25,27 @@ struct WorkspaceScriptRow: View {
     }
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            scriptButton
-                .offset(x: max(-actionsWidth, min(0, (isRevealed ? -actionsWidth : 0) + translation)))
-            if isRevealed || translation < 0 { swipeActions }
+        WorkspaceSwipeContainer(
+            target: .script(script.id),
+            revealedTarget: $revealedTarget,
+            actionCount: script.isActive ? 2 : 1,
+            horizontalInset: WorkspaceDetailStyle.pageInset
+        ) { progress in
+            scriptButton(swipeProgress: progress)
+        } actions: {
+            swipeActions
         }
-        .clipShape(RoundedRectangle(cornerRadius: BrowserAppearance.cornerRadius))
-        .contentShape(Rectangle())
-        .modifier(WorkspaceScriptSwipeGesture(translation: $translation, isRevealed: $isRevealed))
-        .animation(reduceMotion ? nil : .snappy, value: isRevealed)
     }
 
-    private var scriptButton: some View {
+    private func scriptButton(swipeProgress: CGFloat) -> some View {
         Button {
-            if isRevealed {
-                isRevealed = false
+            if revealedTarget != nil {
+                revealedTarget = nil
             } else if !store.isLaunching(script) {
                 Task { await store.launch(script) }
             }
         } label: {
-            row
+            row(swipeProgress: swipeProgress)
         }
         .buttonStyle(ScriptRowButtonStyle())
         .visionListRowHitTarget()
@@ -57,21 +56,19 @@ struct WorkspaceScriptRow: View {
     }
 
     private var swipeActions: some View {
-        HStack(spacing: 0) {
+        Group {
             if script.isActive {
-                Button(action: stop) { actionLabel("Stop", color: .orange) }
+                Button("Stop", action: stop)
+                    .buttonStyle(WorkspaceSwipeButtonStyle(color: .orange))
                     .accessibilityLabel("Stop script")
                     .accessibilityIdentifier("workspace.script.stop.\(script.id)")
             }
-            Button(role: .destructive, action: remove) { actionLabel("Delete", color: .red) }
+            Button("Delete", role: .destructive, action: remove)
+                .buttonStyle(WorkspaceSwipeButtonStyle(color: .red))
                 .accessibilityLabel("Delete script")
                 .accessibilityIdentifier("workspace.script.delete.\(script.id)")
         }
-        .buttonStyle(.plain)
-        .frame(width: actionsWidth)
         .disabled(!canUpdate)
-        .allowsHitTesting(isRevealed)
-        .accessibilityHidden(!isRevealed)
     }
 
     @ViewBuilder private var menuActions: some View {
@@ -81,22 +78,13 @@ struct WorkspaceScriptRow: View {
         Button("Delete script", systemImage: "trash", role: .destructive, action: remove).disabled(!canUpdate)
     }
 
-    private func actionLabel(_ title: String, color: Color) -> some View {
-        Text(title)
-            .interFont(Constants.Typography.bodyXS)
-            .frame(width: actionWidth)
-            .frame(minHeight: Constants.Accessibility.minimumTapTarget, maxHeight: .infinity)
-            .foregroundStyle(.white)
-            .background(color)
-    }
-
     private func stop() {
-        isRevealed = false
+        revealedTarget = nil
         Task { await store.stop(script) }
     }
 
     private func remove() {
-        isRevealed = false
+        revealedTarget = nil
         Task { await store.remove(script) }
     }
 
@@ -109,7 +97,7 @@ struct WorkspaceScriptRow: View {
         }
     }
 
-    private var row: some View {
+    private func row(swipeProgress: CGFloat) -> some View {
         HStack(spacing: WorkspaceDetailStyle.avatarSpacing) {
             Image(.terminal)
                 .resizable()
@@ -132,9 +120,11 @@ struct WorkspaceScriptRow: View {
                 ProgressView()
             } else {
                 Image(systemName: script.detectedURL == nil ? "play" : "globe")
+                    .opacity(1 - Double(swipeProgress))
                     .accessibilityHidden(true)
             }
         }
+        .padding(.trailing, Self.trailingIconInset)
         .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
         .frame(minHeight: Constants.Accessibility.minimumTapTarget)
         .contentShape(Rectangle())

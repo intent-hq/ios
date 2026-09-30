@@ -80,6 +80,12 @@ extension ConversationStore {
             // An authoritative echo may beat a timeout/error response. Never
             // demote that positive acceptance evidence back to uncertainty.
             if sendAttempts[current].status.isConfirmed { return }
+            if error is OutgoingImagePayload.RequestError {
+                sendAttempts[current].status = .notSent
+                // The selection must be edited, not replayed at the same size.
+                sendAttempts[current].isPrepared = false
+                throw error
+            }
             // Only app-owned pre-dispatch provenance establishes non-delivery.
             // A remote RPC can reuse WebSocket/-4; its code alone is not proof.
             let failure = DiagnosticErrorOwnership.failure(for: error)

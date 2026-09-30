@@ -72,6 +72,7 @@ jobs:
     name: Select macOS runner
     runs-on: ubuntu-latest
     outputs:
+      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"macos-15"' }}
       runs-on: ${{ steps.select.outputs.runs-on || '"macos-15"' }}
     steps:
       - uses: actions/checkout@v7
@@ -79,6 +80,12 @@ jobs:
         id: select
         env:
           RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+        run: bash .github/scripts/select-macos-runner.sh
+      - name: Check build-only Mac status
+        id: select-build
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+          RUNNER_POOL_LABEL: intent-ios-build
         run: bash .github/scripts/select-macos-runner.sh
 
   go-test:
@@ -109,6 +116,9 @@ jobs:
 
       - name: Disposable iPad route tests
         run: python3 scripts/test_ci_simulator.py
+
+      - name: macOS runner pool selection tests
+        run: python3 scripts/test_select_macos_runner.py
 
       - name: Xcode Cloud post-clone tests
         run: scripts/test-ci-post-clone.sh
@@ -547,6 +557,24 @@ jobs:
           path: TerminalScreenshots
           if-no-files-found: warn
 
+      - name: Export workspace transfer screenshots
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'WorkspaceTransferUITests') }}
+        run: |
+          if [ -d TestResults ]; then
+            ln -s "$PWD/TestResults" "$RUNNER_TEMP/WorkspaceTransferResults.xcresult"
+            xcrun xcresulttool export attachments \
+              --path "$RUNNER_TEMP/WorkspaceTransferResults.xcresult" \
+              --output-path WorkspaceTransferScreenshots
+          fi
+
+      - name: Upload workspace transfer screenshots
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'WorkspaceTransferUITests') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: workspace-transfer-screenshots
+          path: WorkspaceTransferScreenshots
+          if-no-files-found: warn
+
       - name: Upload test results
         if: failure() || (github.event_name == 'workflow_dispatch' && contains(inputs.only_testing, 'WorkspaceChangesUITests'))
         uses: actions/upload-artifact@v7
@@ -847,7 +875,7 @@ jobs:
     # dispatch to save runner time.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"macos-15"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'

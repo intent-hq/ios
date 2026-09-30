@@ -370,6 +370,7 @@ extension DemoFixtures {
         params: [String: Any],
         snapshotAnchor: Date = Date()
     ) -> Any {
+        if let response = DemoWorkspaceActionFixtures.response(for: method, params: params) { return response }
         if let response = designScenario?.response(for: method, params: params)
             ?? DemoTerminalFixtures.response(for: method, params: params)
             ?? DemoBrowserFixtures.response(for: method, params: params) { return response }
@@ -384,10 +385,19 @@ extension DemoFixtures {
         switch method {
         case "events.subscribe": return ["subscriptionId": "demo-events-\(params["replaceGroup"] as? String ?? "default")"]
         case "prMonitor.list": return ["monitors": [[String: Any]]()]
-        case "workspace.list":
-            return ["workspaces": workspaces]
-        case "note.list":
-            return ["notes": notes]
+        case "workspace.list": return ["workspaces": workspaces]
+        case "workspace.transfer.plan":
+            return [
+                "plan": [
+                    "manifest": [
+                        "workspaceId": params["workspaceId"] ?? "demo-workspace",
+                        "creatingIntentdVersion": "demo"
+                    ],
+                    "totalSizeBytes": 0,
+                    "warnings": [[String: String]]()
+                ]
+            ]
+        case "note.list": return ["notes": notes]
         case "note.get":
             let noteId = params["noteId"] as? String
             let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]

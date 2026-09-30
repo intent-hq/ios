@@ -14,8 +14,10 @@ struct WorkspaceDetailView: View {
     @State private var selectedBrowser: WorkspaceBrowser?
     @State private var createdBrowser: WorkspaceBrowser?
     @State private var showNewBrowser = false
+    @State private var showTransferWorkspace = false
     @State private var terminalCreationRequest: UUID?
     @State private var selectedTab = WorkspaceTab.agents
+    @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var noteStore: NoteStore
     @State private var scriptStore: WorkspaceScriptStore
     @State private var changesStore: WorkspaceChangesStore
@@ -49,10 +51,7 @@ struct WorkspaceDetailView: View {
     private var workspace: Workspace? { workspaceStore.workspaces.first { $0.id == workspaceId } }
 
     private var workspaceTitle: String {
-        guard let title = workspace?.title,
-              !title.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return "<Untitled>"
-        }
+        guard let title = workspace?.title, !title.trimmingCharacters(in: .whitespaces).isEmpty else { return "<Untitled>" }
         return title
     }
 
@@ -94,6 +93,8 @@ struct WorkspaceDetailView: View {
             selectedBrowser = nil
             createdBrowser = nil
             showNewBrowser = false
+            showTransferWorkspace = false
+            revealedSwipeTarget = nil
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: oldId,
@@ -126,7 +127,7 @@ struct WorkspaceDetailView: View {
         }
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
             // After workspaces load, if ours is missing it was deleted/archived externally
-            if workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
+            if !showTransferWorkspace, workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
                 coordinator.handleMissingWorkspace()
             }
         }
@@ -184,6 +185,17 @@ struct WorkspaceDetailView: View {
             )
                 .environment(coordinator)
         }
+        .sheet(
+            isPresented: $showTransferWorkspace,
+            onDismiss: {
+                if workspaceStore.lastUpdated != nil, workspace == nil { coordinator.handleMissingWorkspace() }
+            },
+            content: {
+                WorkspaceTransferSheet(workspaceId: workspaceId, workspaceTitle: workspaceTitle, session: session)
+                    .environment(coordinator)
+                    .id(workspaceId)
+            }
+        )
         .sheet(
             isPresented: $showNewBrowser,
             onDismiss: {
@@ -278,6 +290,8 @@ private extension WorkspaceDetailView {
             onCreateAgent: { showSpecialistPicker = true },
             onCreateTerminal: createTerminal,
             onCreateBrowser: { showNewBrowser = true },
+            onTransfer: session.connection.currentPrincipal?.isOwner == true
+                && session.connection.connectionState == .connected ? { showTransferWorkspace = true } : nil,
             onArchive: { showArchiveConfirmation = true },
             onDelete: { showDeleteConfirmation = true }
         )
@@ -294,7 +308,7 @@ private extension WorkspaceDetailView {
     }
 
     func presentScriptBrowser() {
-        guard scenePhase == .active, selectedBrowser == nil, selectedTerminal == nil, !showNewBrowser else {
+        guard scenePhase == .active, selectedBrowser == nil, selectedTerminal == nil, !showNewBrowser, !showTransferWorkspace else {
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
             return
         }
@@ -379,44 +393,33 @@ private extension WorkspaceDetailView {
             agentSection(.background, title: "background agents")
             agentSection(.orphaned, title: "delegated agents")
             agentSection(.retired, title: "retired agents")
-            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) { terminal in
+            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore, revealedTarget: $revealedSwipeTarget) { terminal in
                 selectedTerminal = terminal
             }
-            WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore) { browser in
+            WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore, revealedTarget: $revealedSwipeTarget) { browser in
                 selectedBrowser = browser
             }
-            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore)
+            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore, revealedTarget: $revealedSwipeTarget)
         }
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.bottom, WorkspaceDetailStyle.pageInset)
     }
 
-    private func deleteWorkspace() {
-        Task {
-            do {
-                _ = try await session.connection.request(
-                    "workspace.delete",
-                    params: ["workspaceId": workspaceId]
-                )
-                coordinator.onBackToWorkspaceList()
-                await workspaceStore.fetchAll()
-            } catch {
-                AppLog.workspace.error("[WorkspaceDetail] Delete failed: \(error)")
-            }
-        }
-    }
+    private func deleteWorkspace() { changeWorkspace("workspace.delete") }
 
-    private func archiveWorkspace() {
+    private func archiveWorkspace() { changeWorkspace("workspace.archive") }
+
+    private func changeWorkspace(_ method: String) {
         Task {
             do {
                 _ = try await session.connection.request(
-                    "workspace.archive",
+                    method,
                     params: ["workspaceId": workspaceId]
                 )
                 coordinator.onBackToWorkspaceList()
                 await workspaceStore.fetchAll()
             } catch {
-                AppLog.workspace.error("[WorkspaceDetail] Archive failed: \(error)")
+                AppLog.workspace.error("[WorkspaceDetail] \(method) failed: \(error)")
             }
         }
     }
