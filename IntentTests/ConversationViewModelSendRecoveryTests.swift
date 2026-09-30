@@ -5,8 +5,9 @@ import Testing
 import UIKit
 
 extension ConversationViewModelTests {
-    @Test func sendFailureAfterPlacementRetainsImagesAndNewerDraft() async throws {
-        let (viewModel, fake) = makeFakeBackedVM()
+    @Test(arguments: [false, true])
+    func sendFailureAfterPlacementRetainsImagesAndNewerDraft(assistant: Bool) async throws {
+        let (viewModel, fake) = makeFakeBackedVM(workspaceId: assistant ? Workspace.chiefWorkspaceId : "test-ws")
         fake.pendingMethods.insert("agent.sendMessage")
         let image = try #require(UIImage(systemName: "star"))
         let nextImage = try #require(UIImage(systemName: "circle"))
@@ -26,10 +27,21 @@ extension ConversationViewModelTests {
         #expect(attempt.status == .unconfirmed)
         var payload: [String: Any] = [:]
         attempt.imagePayload.apply(to: &payload)
-        #expect((payload["imageBlocks"] as? [[String: Any]])?.first?["attachmentId"] as? String == "att-1")
+        let block = try #require((payload["imageBlocks"] as? [[String: Any]])?.first)
+        if assistant {
+            #expect(block["data"] as? String == image.jpegData(compressionQuality: Constants.Conversation.Composer.imageCompressionQuality)?.base64EncodedString())
+            #expect(!fake.didCallMethod("file.placeAttachment"))
+        } else {
+            #expect(block["attachmentId"] as? String == "att-1")
+        }
         #expect(viewModel.messageText == "new draft")
         #expect(viewModel.pendingImages.first === nextImage)
         #expect(viewModel.pendingFiles == [file])
+        #expect(!attempt.canRetry)
+        await #expect(throws: ConversationSendError.replayUnavailable) {
+            try await viewModel.store.sendPreparedAttempt(attempt.id)
+        }
+        #expect(fake.paramsForMethod("agent.sendMessage").count == 1)
     }
 
     @Test func placementFailureKeepsCapturedInputWhenNewSelectionPreventsRestoration() async throws {

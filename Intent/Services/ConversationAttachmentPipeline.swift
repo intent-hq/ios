@@ -180,6 +180,14 @@ enum ComposerImageRecovery {
             throw ImagePlacementError.imagesTooLarge
         }
 
+        // The Assistant has no filesystem root for attachment placement (#619).
+        // Inline image blocks are a supported protocol arm, not an error fallback.
+        if workspaceId == Workspace.chiefWorkspaceId {
+            return .inline(payloads.map { data in
+                ["type": "image", "data": data.base64EncodedString(), "mimeType": "image/jpeg"]
+            })
+        }
+
         var blocks: [[String: Any]] = []
         for (index, data) in payloads.enumerated() {
             let placed: AttachmentUploadService.PlacedAttachment

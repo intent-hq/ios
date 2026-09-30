@@ -123,7 +123,8 @@ struct ConversationStoreTests {
         #expect(store.lastFailedSend == nil, "reset() should clear lastFailedSend")
     }
 
-    @Test func knownNotSentRetryReusesOriginalPayloadAndReplacesOnlyItsRow() async throws {
+    @Test(arguments: [false, true])
+    func knownNotSentRetryReusesOriginalPayloadAndReplacesOnlyItsRow(inline: Bool) async throws {
         let fake = FakeConnectionManager()
         fake.errorQueueMap["agent.sendMessage"] = [
             DiagnosticErrorOwnership.attaching(
@@ -133,13 +134,16 @@ struct ConversationStoreTests {
         ]
         fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
+        let images: OutgoingImagePayload = inline
+            ? .inline([["type": "image", "mimeType": "image/jpeg", "data": "c3ludGhldGljLWltYWdl"]])
+            : .attachments([["type": "image", "attachmentId": "image-1"]])
 
         await #expect(throws: (any Error).self) {
             try await store.sendMessage(
                 agentId: "a",
                 content: "Test message",
                 workspaceId: "w",
-                imagePayload: .attachments([["type": "image", "attachmentId": "image-1"]]),
+                imagePayload: images,
                 filePayload: .attachments([["type": "file", "attachmentId": "file-1"]]),
                 messageMetadata: .fields(["selection": "original"])
             )
