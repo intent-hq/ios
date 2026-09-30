@@ -294,6 +294,8 @@ enum DemoFixtures {
     /// Gate to wait on before serving `response(for:params:)`, or nil for an
     /// immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
+        if method == "agent.list", designScenario?.scenario == .agentGroupsRetry,
+           params["scope"] as? String == "background" { return .delay(.seconds(1)) }
         if let gate = startupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         switch method {
         case "settings.get" where params["path"] as? String == "providers.enabled":
@@ -412,7 +414,7 @@ extension DemoFixtures {
         case "agent.list":
             let workspaceId = params["workspaceId"] as? String
             if workspaceId == Workspace.chiefWorkspaceId { return ["agents": assistantAgents] }
-            return ["agents": workspaceId == longConversationWorkspaceId ? longConversationAgents : agents]
+            return DemoAgentListFixtures.response(rows: workspaceId == longConversationWorkspaceId ? longConversationAgents : agents, params: params)
         case "agent.get":
             let agentId = params["agentId"] as? String
             if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) {

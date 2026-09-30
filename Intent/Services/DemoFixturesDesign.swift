@@ -8,6 +8,8 @@ extension DemoFixtures {
 /// Data scenarios only: appearance, keyboard, expansion and question layout
 /// are still controlled by the real screen and user interactions.
 enum DemoDesignScenario: String, CaseIterable {
+    case agentGroups = "agent-groups"
+    case agentGroupsRetry = "agent-groups-retry"
     case blocker
     case composer
     case context
@@ -46,6 +48,7 @@ final class DemoDesignFixtures {
     private(set) var monitorCancelled = false
     private var sentMessages: [[String: Any]] = []
     private var sequence = 0
+    private var failedBackgroundRead = false
 
     init(scenario: DemoDesignScenario) {
         self.scenario = scenario
@@ -70,7 +73,7 @@ final class DemoDesignFixtures {
         case "note.get" where ownsWorkspace && scenario == .context:
             return contextNotes.first { $0["id"] as? String == params["noteId"] as? String }.map { ["note": $0] }
         case "agent.list" where ownsWorkspace:
-            return ["agents": [agent]]
+            return agentListResponse(params: params)
         case "agent.get" where ownsAgent:
             return ["agent": agent]
         case "agent.getConversation" where ownsAgent:
@@ -111,6 +114,15 @@ final class DemoDesignFixtures {
         default:
             return nil
         }
+    }
+
+    private func agentListResponse(params: [String: Any]) -> [String: Any] {
+        if scenario == .agentGroupsRetry, params["scope"] as? String == "background", !failedBackgroundRead {
+            failedBackgroundRead = true
+            return ["error": "Temporary demo failure"]
+        }
+        let rows = scenario == .agentGroups || scenario == .agentGroupsRetry ? DemoAgentListFixtures.groupRows : [agent]
+        return DemoAgentListFixtures.response(rows: rows, params: params)
     }
 
     /// Called after response mutation and before its acknowledgement is

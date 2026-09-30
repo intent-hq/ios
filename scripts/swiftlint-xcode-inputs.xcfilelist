@@ -152,6 +152,7 @@ $(SRCROOT)/Intent/Services/CreationCatalog.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore+Events.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
+$(SRCROOT)/Intent/Services/DemoAgentListFixtures.swift
 $(SRCROOT)/Intent/Services/DemoBrowserFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesRootFixtures.swift
@@ -414,6 +415,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowsersView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+AgentGroups.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
@@ -430,6 +432,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusImageView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTab.swift
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
+$(SRCROOT)/IntentTests/AgentGroupingTests.swift
 $(SRCROOT)/IntentTests/AgentListViewModelTests.swift
 $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
 $(SRCROOT)/IntentTests/AgentSessionDisplayTests.swift
@@ -741,6 +744,7 @@ $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
+$(SRCROOT)/IntentTests/WorkspaceAgentLoadingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserFixture.swift
@@ -812,6 +816,7 @@ $(SRCROOT)/IntentUITests/PairingDesignUITests.swift
 $(SRCROOT)/IntentUITests/QuestionWizardUITests.swift
 $(SRCROOT)/IntentUITests/SettingsUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
+$(SRCROOT)/IntentUITests/WorkspaceAgentGroupsUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceBrowserUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceChangesUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceComposerUITests.swift
