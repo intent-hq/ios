@@ -102,13 +102,8 @@ struct WorkspaceTransferSheet: View {
         VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
             destinationField
             Toggle(isOn: $archiveSource) {
-                VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-                    Text("Archive on source machine")
-                        .interFont(Constants.Typography.bodyS)
-                    Text("Only after the transfer succeeds.")
-                        .interFont(Constants.Typography.bodyXS)
-                        .foregroundStyle(secondary)
-                }
+                Text("Archive on source machine")
+                    .interFont(Constants.Typography.bodyS)
             }
             .tint(CreateWorkspaceFormStyle.primary)
             .padding(CreateWorkspaceFormStyle.controlPadding)
@@ -119,7 +114,6 @@ struct WorkspaceTransferSheet: View {
             if let plan = store.plan {
                 VStack(alignment: .leading, spacing: Layout.textSpacing) {
                     Text("Estimated size: \(ByteCountFormatter.string(fromByteCount: plan.estimatedBytes, countStyle: .file))")
-                    Text("Running agents will stop during transfer. Keep Intent open until it finishes.")
                     ForEach(Array(plan.warnings.enumerated()), id: \.offset) { _, warning in
                         Text(warning)
                     }
