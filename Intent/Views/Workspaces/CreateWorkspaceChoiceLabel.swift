@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CreateWorkspaceChoiceLabel: View {
     let title: String
+    var surface: Color?
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .caption) private var chevronSize: CGFloat = 16
 
@@ -22,7 +23,7 @@ struct CreateWorkspaceChoiceLabel: View {
         .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
         .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
         .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
-        .background(CreateWorkspaceFormStyle.card(for: colorScheme), in: .rect(
+        .background(surface ?? CreateWorkspaceFormStyle.card(for: colorScheme), in: .rect(
             cornerRadius: CreateWorkspaceFormStyle.cornerRadius
         ))
         .contentShape(.rect)
