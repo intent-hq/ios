@@ -286,6 +286,7 @@ $(SRCROOT)/Intent/DesignSystem/WorkspacePageLayout.swift
 $(SRCROOT)/Intent/Models
 $(SRCROOT)/Intent/Models.swift
 $(SRCROOT)/Intent/Models/ActionProposal.swift
+$(SRCROOT)/Intent/Models/AgentListState.swift
 $(SRCROOT)/Intent/Models/AgentMessageAttribution.swift
 $(SRCROOT)/Intent/Models/AgentSession.swift
 $(SRCROOT)/Intent/Models/AnyCodable.swift
@@ -355,6 +356,7 @@ $(SRCROOT)/Intent/Resources/Fonts/Inter
 $(SRCROOT)/Intent/Services
 $(SRCROOT)/Intent/Services/AgentDetailRequestLimiter.swift
 $(SRCROOT)/Intent/Services/AgentDetailStore.swift
+$(SRCROOT)/Intent/Services/AgentStore+ScopedLoading.swift
 $(SRCROOT)/Intent/Services/AgentStore.swift
 $(SRCROOT)/Intent/Services/AgentSummaryStore.swift
 $(SRCROOT)/Intent/Services/AssistantStore.swift
@@ -702,6 +704,8 @@ $(SRCROOT)/IntentTests/AgentListViewModelTests.swift
 $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
 $(SRCROOT)/IntentTests/AgentSessionDisplayTests.swift
 $(SRCROOT)/IntentTests/AgentSessionTests.swift
+$(SRCROOT)/IntentTests/AgentStoreScopedLifecycleTests.swift
+$(SRCROOT)/IntentTests/AgentStoreScopedTests.swift
 $(SRCROOT)/IntentTests/AgentStoreTests.swift
 $(SRCROOT)/IntentTests/AgentWaitingViewTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorAssistantTests.swift
