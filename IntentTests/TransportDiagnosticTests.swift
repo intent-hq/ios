@@ -207,7 +207,7 @@ nonisolated private struct DiagnosticRaceConnection: HostRacingConnection {
 }
 
 extension ConnectionManagerTests {
-    enum CandidateFailureCase: CaseIterable {
+    nonisolated enum CandidateFailureCase: CaseIterable {
         case lan, tunnelEstablish, tunnelHandshake
     }
 
