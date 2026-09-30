@@ -19,8 +19,9 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
         ConnectionSwitcherDrag.offset(isOpen: isPresented, translation: translation, width: revealWidth)
     }
     private var isRevealed: Bool { isPresented || offset > 0 }
+    private var revealProgress: CGFloat { offset / max(revealWidth, 1) }
     private var animation: Animation? {
-        reduceMotion ? nil : .spring(
+        reduceMotion ? nil : .interactiveSpring(
             response: ConnectionSwitcherStyle.springResponse,
             dampingFraction: ConnectionSwitcherStyle.springDamping
         )
@@ -50,17 +51,13 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
         .modifier(ConnectionSwitcherGesture(
             isEnabled: isEnabled,
             isOpen: isPresented,
-            onChanged: { translation = $0 },
+            onChanged: drag,
             onEnded: finish,
             onCancelled: cancelDrag
         ))
         .accessibilityAction(.escape, close)
         .onChange(of: isRevealed) { _, revealed in
-            if revealed {
-                onReveal()
-                coordinator.refreshSyncedBackends()
-                coordinator.refreshSavedConnectionsPresentation()
-            }
+            if revealed { onReveal() }
         }
         .onChange(of: isEnabled) { _, enabled in
             if !enabled { close() }
@@ -88,16 +85,24 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Close connection switcher")
                     .accessibilityIdentifier("connection-switcher.close")
+                    .transition(.identity)
                 }
             }
             .background(Constants.WorkspaceList.canvas(for: colorScheme).ignoresSafeArea())
             .mask {
-                RoundedRectangle(cornerRadius: isRevealed ? ConnectionSwitcherStyle.pageCornerRadius : 0)
+                RoundedRectangle(cornerRadius: ConnectionSwitcherStyle.pageCornerRadius * revealProgress, style: .continuous)
                     .padding(.top, -safeArea.top)
                     .padding(.bottom, -safeArea.bottom)
             }
-            .shadow(color: .black.opacity(isRevealed ? ConnectionSwitcherStyle.shadowOpacity : 0), radius: ConnectionSwitcherStyle.shadowRadius)
+            .shadow(color: .black.opacity(ConnectionSwitcherStyle.shadowOpacity * Double(revealProgress)), radius: ConnectionSwitcherStyle.shadowRadius)
             .offset(x: offset)
+    }
+
+    private func drag(_ distance: CGFloat) {
+        var transaction = Transaction(animation: nil)
+        transaction.isContinuous = true
+        transaction.tracksVelocity = true
+        withTransaction(transaction) { translation = distance }
     }
 
     private func cancelDrag() {
