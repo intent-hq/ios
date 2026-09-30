@@ -126,4 +126,16 @@ struct AgentGroupingTests {
             #expect(model.delegatedAgents(for: "parent").map(\.id) == ["child"])
         }
     }
+    @Test func retiredCachedParentDoesNotHideServedOrphansOrCreateUnservedOrphans() throws {
+        let state = AgentListState()
+        state.scopeCounts = AgentScopeCounts(wire: ["topLevel": 0, "background": 0, "delegated": 2])
+        state.delegatedCounts = AgentDelegatedCounts(wire: ["running": 0, "byParent": [:], "orphaned": ["total": 1, "running": 0]])
+        state.orphanedAgentIds = ["served"]
+        let model = AgentListViewModel(list: state)
+        var retired = try row("retired")
+        retired.retiredAt = "2026-09-30T00:00:00Z"
+        model.agents = try [retired, row("served", parent: "retired"), row("unserved", parent: "missing")]
+        #expect(model.orphanedAgents.map(\.id) == ["served"])
+        #expect(model.foregroundAgents.isEmpty)
+    }
 }
