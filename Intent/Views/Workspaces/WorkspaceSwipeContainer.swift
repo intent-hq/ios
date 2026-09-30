@@ -15,16 +15,19 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
 
     private var revealWidth: CGFloat { CGFloat(actionCount) * (actionWidth + WorkspaceSwipeStyle.spacing) }
     private var restingOffset: CGFloat { isRevealed ? -revealWidth : 0 }
+    private var swipeProgress: CGFloat { min(1, max(0, -offset / max(revealWidth, 1))) }
 
     var body: some View {
-        content(min(1, max(0, -offset / max(revealWidth, 1))))
+        content(swipeProgress)
             .offset(x: offset)
             .overlay(alignment: .trailing) {
                 if actionsVisible {
                     HStack(spacing: WorkspaceSwipeStyle.spacing, content: actions)
                         .padding(.leading, WorkspaceSwipeStyle.spacing)
                         .fixedSize(horizontal: true, vertical: false)
-                        .offset(x: revealWidth + offset)
+                        .scaleEffect(reduceMotion ? 1 : swipeProgress, anchor: .trailing)
+                        .offset(x: reduceMotion ? revealWidth + offset : 0)
+                        .animation(reduceMotion ? nil : WorkspaceSwipeStyle.spring, value: swipeProgress)
                         .allowsHitTesting(isRevealed && dragOrigin == nil)
                         .accessibilityHidden(!isRevealed || dragOrigin != nil)
                         .transition(.identity)
@@ -52,9 +55,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
             dragOrigin = offset
             onSwipeBegan()
         }
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
+        withTransaction(Transaction(animation: nil)) {
             actionsVisible = true
             offset = max(-revealWidth, min(0, (dragOrigin ?? 0) + distance))
         }
@@ -74,7 +75,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
         animationRevision += 1
         let revision = animationRevision
         if isRevealed { actionsVisible = true }
-        withAnimation(reduceMotion ? nil : .smooth(duration: WorkspaceSwipeStyle.duration), completionCriteria: .removed) {
+        withAnimation(reduceMotion ? nil : WorkspaceSwipeStyle.spring, completionCriteria: .removed) {
             offset = restingOffset
         } completion: {
             if animationRevision == revision, !isRevealed, dragOrigin == nil {
@@ -107,7 +108,9 @@ private enum WorkspaceSwipeStyle {
     static let cornerRadius: CGFloat = 8
     static let verticalPadding: CGFloat = 12
     static let revealThreshold: CGFloat = 30
-    static let duration: TimeInterval = 0.22
+    static let springResponse = 0.28
+    static let springDamping = 0.82
+    static let spring = Animation.interactiveSpring(response: springResponse, dampingFraction: springDamping)
     static let pressedOpacity = 0.75
     static let disabledOpacity = 0.5
 }
