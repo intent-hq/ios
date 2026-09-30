@@ -102,7 +102,7 @@ nonisolated final class WorkspaceAgentGroupsUITests: XCTestCase {
     @MainActor
     private func capture(_ app: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
+        attachment.name = "agent-group-evidence-" + name + ".png"
         attachment.lifetime = .keepAlways
         add(attachment)
     }

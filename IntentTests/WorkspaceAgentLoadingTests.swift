@@ -104,6 +104,37 @@ struct WorkspaceAgentLoadingTests {
         #expect(host.view.agentStore.agents.contains { $0.id == "groups-background-child" })
     }
 
+    @Test(arguments: [false, true])
+    func failedOrphanRefreshDoesNotDuplicateChildrenAfterTheirParentIsRestored(background: Bool) async throws {
+        let fake = AgentGroupFixtureConnection()
+        fake.rows = [["id": "child", "name": "Child", "parentAgentId": "parent"]]
+        let host = Host(connection: fake)
+        defer { host.tearDown() }
+        try await waitUntil("view loads") { host.view.agentStore.hasLoaded }
+        await host.view.toggleAgentGroup(.orphaned)
+        #expect(host.view.agentStore.list.orphanedAgentIds == ["child"])
+        var parent: [String: Any] = ["id": "parent", "name": "Parent", "metadata": ["isBackground": background]]
+        if !background { parent["parentAgentId"] = "missing" }
+        fake.rows.append(parent)
+        fake.failOrphanReads = true
+        await host.view.agentStore.fetchAgents(workspaceId: "ws-1")
+        #expect(host.view.agentStore.list.errors[.orphaned] != nil)
+        if background {
+            await host.view.toggleAgentGroup(.background)
+        } else {
+            // A live orphan parent arrives through another already-expanded
+            // parent scope while the orphan membership remains stale.
+            await host.view.agentStore.loadAgentGroup(.delegated(parentId: "missing"), workspaceId: "ws-1")
+        }
+        await host.view.toggleAgentGroup(.delegated(parentId: "parent"))
+        try await waitUntil("restored parent reaches the actual view model") {
+            host.view.viewModel.agents.contains { $0.id == "parent" }
+        }
+        #expect(host.view.agentStore.list.orphanedAgentIds.contains("child"))
+        #expect(!host.view.viewModel.orphanedAgents.contains { $0.id == "child" })
+        #expect(host.view.viewModel.delegatedAgents(for: "parent").map(\.id) == ["child"])
+    }
+
     private final class Host {
         let view: WorkspaceDetailView
         private let session: BackendSession
@@ -160,6 +191,7 @@ struct WorkspaceAgentLoadingTests {
 private final class AgentGroupFixtureConnection: FakeConnectionManager {
     var omitOrphanCounts = false
     var legacyAllActive = false
+    var failOrphanReads = false
     var rows = DemoAgentListFixtures.groupRows
 
     override func request(_ method: String, params: [String: Any] = [:], timeout: TimeInterval = ConnectionManager.defaultRequestTimeout) async throws -> Any {
@@ -170,6 +202,7 @@ private final class AgentGroupFixtureConnection: FakeConnectionManager {
                 counts["orphaned"] = nil
                 response["delegatedCounts"] = counts
             }
+            if failOrphanReads, params["orphanedOnly"] as? Bool == true { response = ["error": "Refresh failed"] }
             responseMap[method] = response
         } else if method == "note.list" { responseMap[method] = ["notes": []] }
         return try await super.request(method, params: params, timeout: timeout)

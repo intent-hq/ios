@@ -55,8 +55,15 @@ import Observation
     var orphanedAgents: [AgentSession] {
         guard list.scopeCounts != nil else { return [] }
         if list.delegatedCounts?.orphaned != nil {
-            return activeAgents.filter { list.orphanedAgentIds.contains($0.id) }
-                .sorted(by: Self.byAttentionThenLastActivity)
+            let liveIds = Set(activeAgents.map(\.id))
+            return activeAgents.filter { agent in
+                guard list.orphanedAgentIds.contains(agent.id), let parent = Self.parent(of: agent) else { return false }
+                // A restored parent may arrive while the orphan refresh is
+                // pending or failed. Stale membership must not duplicate its
+                // children; cache absence alone still never adds an orphan.
+                return !liveIds.contains(parent)
+            }
+            .sorted(by: Self.byAttentionThenLastActivity)
         }
         // Old scoped daemons return the whole delegated bin. Its roots may
         // have unloaded parents, or background parents in a collapsed bin.

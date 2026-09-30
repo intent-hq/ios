@@ -109,4 +109,21 @@ struct AgentGroupingTests {
         #expect(model.agents.isEmpty)
         #expect(model.expandedGroups.isEmpty)
     }
+    @Test(arguments: [false, true])
+    func authoritativeOrphanMembershipDoesNotDuplicateAChildOfARestoredLiveParent(background: Bool) throws {
+        let state = AgentListState()
+        state.scopeCounts = AgentScopeCounts(wire: ["topLevel": 0, "background": 1, "delegated": 2])
+        state.delegatedCounts = AgentDelegatedCounts(wire: ["running": 0, "byParent": [:], "orphaned": ["total": 1, "running": 0]])
+        state.orphanedAgentIds = ["child", "parent", "unloaded-child"]
+        let model = AgentListViewModel(list: state)
+        let parent = try row("parent", parent: background ? nil : "missing", background: background)
+        model.agents = try [parent, row("child", parent: "parent"), row("unloaded-child", parent: "unloaded")]
+        for loading in [true, false] {
+            state.loadingGroups = loading ? [.orphaned] : []
+            state.errors = loading ? [:] : [.orphaned: "Refresh failed"]
+            #expect(!model.orphanedAgents.contains { $0.id == "child" })
+            #expect(model.orphanedAgents.contains { $0.id == "unloaded-child" })
+            #expect(model.delegatedAgents(for: "parent").map(\.id) == ["child"])
+        }
+    }
 }
