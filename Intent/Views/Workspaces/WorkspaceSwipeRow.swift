@@ -26,7 +26,6 @@ struct WorkspaceSwipeRow: View {
     var body: some View {
         WorkspaceSwipeContainer(isRevealed: revealBinding, actionCount: 2, onSwipeBegan: beginSwipe) { progress in
             workspaceButton(swipeProgress: progress)
-                .background(Constants.WorkspaceList.canvas(for: colorScheme))
         } actions: {
             actionButton(.archive, color: .orange)
             actionButton(.delete, color: .red)

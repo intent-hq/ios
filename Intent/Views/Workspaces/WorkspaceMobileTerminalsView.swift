@@ -60,7 +60,6 @@ private struct WorkspaceTerminalRow: View {
             }
         } label: {
             terminalRow
-                .background(WorkspaceDetailStyle.background(for: colorScheme))
         }
         .buttonStyle(TerminalRowButtonStyle())
         .visionListRowHitTarget()

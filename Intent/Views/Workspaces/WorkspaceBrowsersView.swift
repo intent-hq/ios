@@ -43,7 +43,12 @@ private struct WorkspaceBrowserRow: View {
     @State private var isRevealed = false
 
     var body: some View {
-        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: 1) { _ in
+        WorkspaceSwipeContainer(
+            isRevealed: $isRevealed,
+            actionCount: 1,
+            rowBackground: Theme.card(for: colorScheme),
+            restingCornerRadius: BrowserAppearance.cornerRadius
+        ) { _ in
             browserButton
         } actions: {
             deleteButton
@@ -114,7 +119,6 @@ private struct WorkspaceBrowserRow: View {
                 .accessibilityHidden(true)
         }
         .padding(BrowserAppearance.rowPadding)
-        .background(Theme.card(for: colorScheme), in: RoundedRectangle(cornerRadius: BrowserAppearance.cornerRadius))
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }

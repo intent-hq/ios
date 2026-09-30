@@ -3,10 +3,14 @@ import SwiftUI
 struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     @Binding var isRevealed: Bool
     let actionCount: Int
+    var rowBackground: Color = .clear
+    var restingCornerRadius: CGFloat = 0
     var onSwipeBegan: () -> Void = {}
     @ViewBuilder var content: (_ swipeProgress: CGFloat) -> Content
     @ViewBuilder var actions: () -> Actions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .body) private var actionWidth = WorkspaceSwipeStyle.buttonWidth
     @State private var offset: CGFloat = 0
     @State private var dragOrigin: CGFloat?
@@ -16,9 +20,22 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     private var revealWidth: CGFloat { CGFloat(actionCount) * (actionWidth + WorkspaceSwipeStyle.spacing) }
     private var restingOffset: CGFloat { isRevealed ? -revealWidth : 0 }
     private var swipeProgress: CGFloat { min(1, max(0, -offset / max(revealWidth, 1))) }
+    private var rowCornerRadius: CGFloat {
+        restingCornerRadius + (WorkspaceSwipeStyle.rowCornerRadius - restingCornerRadius) * swipeProgress
+    }
+    private var rowTintOpacity: Double {
+        let opacity = contrast == .increased ? WorkspaceSwipeStyle.increasedTintOpacity : WorkspaceSwipeStyle.tintOpacity
+        return Double(swipeProgress) * opacity
+    }
 
     var body: some View {
         content(swipeProgress)
+            .background {
+                rowBackground.overlay {
+                    (colorScheme == .dark ? Color.white : Color.black).opacity(rowTintOpacity)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: rowCornerRadius, style: .continuous))
             .offset(x: offset)
             .overlay(alignment: .trailing) {
                 if actionsVisible {
@@ -106,6 +123,9 @@ private enum WorkspaceSwipeStyle {
     static let buttonWidth: CGFloat = 88
     static let spacing: CGFloat = 8
     static let cornerRadius: CGFloat = 8
+    static let rowCornerRadius: CGFloat = 24
+    static let tintOpacity = 0.08
+    static let increasedTintOpacity = 0.14
     static let verticalPadding: CGFloat = 12
     static let revealThreshold: CGFloat = 30
     static let springResponse = 0.28
