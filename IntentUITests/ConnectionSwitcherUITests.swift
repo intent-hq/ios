@@ -102,8 +102,10 @@ nonisolated final class ConnectionSwitcherUITests: XCTestCase {
     @MainActor
     private func drag(_ app: XCUIApplication, from start: CGVector, to end: CGVector) {
         app.coordinate(withNormalizedOffset: start).press(
-            forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: end),
-            withVelocity: .slow, thenHoldForDuration: 0.5
+            forDuration: 0.05,
+            thenDragTo: app.coordinate(withNormalizedOffset: end),
+            withVelocity: .slow,
+            thenHoldForDuration: 0.5
         )
     }
 

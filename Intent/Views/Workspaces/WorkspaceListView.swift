@@ -35,10 +35,7 @@ struct WorkspaceListView: View {
         WorkspaceConnectionSwitcher(
             isPresented: $showingConnectionSwitcher,
             isEnabled: canSwitchConnections,
-            onReveal: {
-                searchFocused = false
-                isSearching = false
-            }
+            onReveal: dismissSearch
         ) {
             workspacePage
         }
@@ -120,6 +117,11 @@ struct WorkspaceListView: View {
         .refreshable {
             await workspaceStore.fetchAll()
         }
+    }
+
+    private func dismissSearch() {
+        searchFocused = false
+        isSearching = false
     }
 
     private var emptyState: some View {

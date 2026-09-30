@@ -12,7 +12,8 @@ struct ConnectionSwitcherList: View {
         ScrollView {
             VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.headingSpacing) {
                 ConnectionSheetText(
-                    "Connections", style: Constants.Typography.eyebrow,
+                    "Connections",
+                    style: Constants.Typography.eyebrow,
                     tracking: Constants.ManualTokenEntry.labelTracking
                 )
                 .textCase(.uppercase)
@@ -50,7 +51,8 @@ struct ConnectionSwitcherList: View {
                     .frame(width: iconSize, height: iconSize)
                     .accessibilityHidden(true)
                 ConnectionSheetText(
-                    "\(connection.displayName)", style: Constants.Typography.bodySEmphasized,
+                    "\(connection.displayName)",
+                    style: Constants.Typography.bodySEmphasized,
                     tracking: Constants.Connections.nameTracking
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)

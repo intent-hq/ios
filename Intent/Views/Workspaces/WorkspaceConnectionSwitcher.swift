@@ -38,28 +38,7 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
             .allowsHitTesting(isPresented)
             .accessibilityHidden(!isPresented)
 
-            content()
-                .scrollDisabled(isRevealed)
-                .allowsHitTesting(!isRevealed)
-                .accessibilityHidden(isRevealed)
-                .overlay {
-                    if isRevealed {
-                        Button { close() } label: {
-                            Color.clear.contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Close connection switcher")
-                        .accessibilityIdentifier("connection-switcher.close")
-                    }
-                }
-                .background(Constants.WorkspaceList.canvas(for: colorScheme).ignoresSafeArea())
-                .mask {
-                    RoundedRectangle(cornerRadius: isRevealed ? ConnectionSwitcherStyle.pageCornerRadius : 0)
-                        .padding(.top, -safeArea.top)
-                        .padding(.bottom, -safeArea.bottom)
-                }
-                .shadow(color: .black.opacity(isRevealed ? ConnectionSwitcherStyle.shadowOpacity : 0), radius: ConnectionSwitcherStyle.shadowRadius)
-                .offset(x: offset)
+            slidingPage
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safeArea = $0 }
@@ -73,7 +52,7 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
             isOpen: isPresented,
             onChanged: { translation = $0 },
             onEnded: finish,
-            onCancelled: { withAnimation(animation) { translation = 0 } }
+            onCancelled: cancelDrag
         ))
         .accessibilityAction(.escape, close)
         .onChange(of: isRevealed) { _, revealed in
@@ -94,6 +73,35 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
             translation = 0
         }
         .animation(animation, value: isPresented)
+    }
+
+    private var slidingPage: some View {
+        content()
+            .scrollDisabled(isRevealed)
+            .allowsHitTesting(!isRevealed)
+            .accessibilityHidden(isRevealed)
+            .overlay {
+                if isRevealed {
+                    Button { close() } label: {
+                        Color.clear.contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close connection switcher")
+                    .accessibilityIdentifier("connection-switcher.close")
+                }
+            }
+            .background(Constants.WorkspaceList.canvas(for: colorScheme).ignoresSafeArea())
+            .mask {
+                RoundedRectangle(cornerRadius: isRevealed ? ConnectionSwitcherStyle.pageCornerRadius : 0)
+                    .padding(.top, -safeArea.top)
+                    .padding(.bottom, -safeArea.bottom)
+            }
+            .shadow(color: .black.opacity(isRevealed ? ConnectionSwitcherStyle.shadowOpacity : 0), radius: ConnectionSwitcherStyle.shadowRadius)
+            .offset(x: offset)
+    }
+
+    private func cancelDrag() {
+        withAnimation(animation) { translation = 0 }
     }
 
     private func finish(_ distance: CGFloat, _ velocity: CGFloat) {
