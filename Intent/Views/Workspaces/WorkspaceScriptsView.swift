@@ -49,7 +49,7 @@ struct WorkspaceScriptsMenu: View {
                     .accessibilityIdentifier("workspace.script.menu.\(script.id)")
                 }
             } label: {
-                Label { Text("Scripts").interFont(Constants.Typography.bodyS) } icon: { Image(.terminal) }
+                Label { Text("Scripts").interFont(Constants.Typography.bodyS) } icon: { Image(.code) }
             }
             .accessibilityIdentifier("workspace.scripts.menu")
         }

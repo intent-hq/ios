@@ -227,6 +227,10 @@ $(SRCROOT)/Intent/Services/WorkspaceStatusStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusWaiters.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore+EventClassification.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferExport.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferModels.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferRelay.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceVideo.swift
 $(SRCROOT)/Intent/Utils/AppLog.swift
 $(SRCROOT)/Intent/Utils/BackgroundTaskManager.swift
@@ -435,6 +439,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusImageView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSwipeContainer.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSwipeRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTab.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceTransferSheet.swift
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
 $(SRCROOT)/IntentTests/AgentGroupingTests.swift
@@ -744,6 +749,7 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Recovery.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Sequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
+$(SRCROOT)/IntentTests/TransferDestinationPolicyTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
 $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
@@ -800,6 +806,9 @@ $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTabTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTranscriptDesignTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTransferFixture.swift
+$(SRCROOT)/IntentTests/WorkspaceTransferRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTransferStoreTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/AssistantNavigationUITests.swift
 $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
@@ -831,3 +840,4 @@ $(SRCROOT)/IntentUITests/WorkspaceScriptUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceSearchUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceSwipeUITests.swift
+$(SRCROOT)/IntentUITests/WorkspaceTransferUITests.swift

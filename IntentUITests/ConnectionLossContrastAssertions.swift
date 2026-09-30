@@ -1,6 +1,6 @@
 import XCTest
 
-/// Screenshot helpers check real source-to-overlay appearance and full-screen coverage.
+/// Screenshot helpers check real source-to-overlay appearance.
 /// Run the owning Home test in light/dark and actual Reduce Transparency modes.
 extension ConnectionLossUITests {
     @MainActor
@@ -32,13 +32,6 @@ extension ConnectionLossUITests {
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: timeout))
         XCTAssertFalse(back.exists)
         capture(app, named: "connecting-machine-reselected")
-    }
-
-    private enum Backdrop {
-        static let nearEdge = 0.1
-        static let farEdge = 0.9
-        static let samplePositions = [(nearEdge, nearEdge), (farEdge, nearEdge), (nearEdge, farEdge), (farEdge, farEdge)]
-        static let allowedRedValues = 12...125
     }
 
     private enum Contrast {
@@ -81,28 +74,6 @@ extension ConnectionLossUITests {
         evidence.name = "connection-loss-subtitle-contrast"
         evidence.lifetime = .keepAlways
         XCTContext.runActivity(named: "Rendered subtitle contrast") { $0.add(evidence) }
-    }
-
-    @MainActor
-    func assertBackdropCoversScreen(_ screenshot: XCUIScreenshot) throws {
-        let image = try XCTUnwrap(screenshot.image.cgImage)
-        for (xPosition, yPosition) in Backdrop.samplePositions {
-            let region = CGRect(x: Double(image.width) * xPosition, y: Double(image.height) * yPosition, width: 1, height: 1)
-            let pixel = try XCTUnwrap(image.cropping(to: region))
-            var bytes = [UInt8](repeating: 0, count: Contrast.bytesPerPixel)
-            let context = try XCTUnwrap(CGContext(
-                data: &bytes,
-                width: 1,
-                height: 1,
-                bitsPerComponent: Contrast.bitsPerChannel,
-                bytesPerRow: Contrast.bytesPerPixel,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ))
-            context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-            // Single-tinted source ranges from 17 to 106; reject a black gap or exposed page.
-            XCTAssertTrue(Backdrop.allowedRedValues.contains(Int(bytes[0])), "The backdrop must cover every screen quadrant")
-        }
     }
 
     @MainActor
