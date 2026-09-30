@@ -1,10 +1,38 @@
 import Foundation
 @testable import Intent
+import SwiftUI
 import Testing
+import UIKit
 
 /// Routing of connection-failure messages into the certificate-mismatch
 /// path (no auto-retry, "Re-pair Device" action, per-host mismatch list).
 struct ConnectionFailureViewTests {
+    /// Large text on a small phone must scroll instead of squeezing the failure
+    /// message and actions into a fixed-height stack. The host runs the real view.
+    @Test @MainActor func accessibilityTextKeepsFailureContentScrollable() async throws {
+        let fixtures = try BackendSessionRegistryTests()
+        let session = fixtures.makeRegistry().makePairingSession()
+        let view = ConnectionFailureView(
+            errorMessage: "Your saved connection and settings were kept so you can retry logging off.",
+            retryPolicy: .manualLogOff
+        )
+        .environment(session)
+        .environment(session.makeCoordinator())
+        .environment(\.dynamicTypeSize, .accessibility5)
+        try await SyntheticBadgeHost.render(view, width: 320, height: 568) { host, _ in
+            let scroll = try #require(Self.scrollView(in: host))
+            #expect(scroll.contentSize.height > scroll.bounds.height)
+            #expect(scroll.contentSize.width <= scroll.bounds.width)
+            scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentSize.height - scroll.bounds.height), animated: false)
+            #expect(scroll.contentOffset.y > 0)
+        }
+    }
+
+    @MainActor private static func scrollView(in view: UIView) -> UIScrollView? {
+        if let scroll = view as? UIScrollView { return scroll }
+        return view.subviews.lazy.compactMap { scrollView(in: $0) }.first
+    }
+
     @Test func aggregateRaceErrorRoutesToCertPath() {
         let error = WebSocketTransportError.certificateMismatches(mismatches: [
             HostCertMismatch(host: "h1", fingerprint: "aa:bb"),
