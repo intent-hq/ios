@@ -284,3 +284,33 @@ extension AgentStoreTests {
         #expect(Set(store.agents.map(\.id)) == ["parent", "unrelated"])
     }
 }
+
+extension AgentStoreTests {
+    @Test func childrenOfBackgroundAndOrphanedParentsStayOutsideOrphanMembership() async {
+        let (fake, store) = await scopedStore()
+        let orphan = scopedRow("orphan-parent", parent: "missing")
+        let background = scopedRow("background-parent", background: true)
+        let backgroundChild = scopedRow("background-child", parent: "background-parent", background: true)
+        let orphanChild = scopedRow("orphan-child", parent: "orphan-parent")
+        fake.responseMap["agent.list"] = scopedResponse([orphan])
+        await store.loadAgentGroup(.orphaned, workspaceId: "ws-1")
+        fake.responseMap["agent.list"] = scopedResponse([background])
+        await store.loadAgentGroup(.background, workspaceId: "ws-1")
+        fake.responseMap["agent.list"] = scopedResponse([backgroundChild])
+        await store.loadAgentGroup(.delegated(parentId: "background-parent"), workspaceId: "ws-1")
+        fake.responseMap["agent.list"] = scopedResponse([orphanChild])
+        await store.loadAgentGroup(.delegated(parentId: "orphan-parent"), workspaceId: "ws-1")
+        #expect(store.list.orphanedAgentIds == ["orphan-parent"])
+        #expect(store.agents.first { $0.id == "background-child" }?.parentAgentId == "background-parent")
+        #expect(store.agents.first { $0.id == "orphan-child" }?.parentAgentId == "orphan-parent")
+        fake.responseQueueMap["agent.list"] = [
+            scopedResponse([scopedRow("parent")]), scopedResponse([backgroundChild]),
+            scopedResponse([orphanChild]), scopedResponse([orphan]), scopedResponse([background])
+        ]
+        await store.fetchAgents(workspaceId: "ws-1")
+        #expect(store.list.orphanedAgentIds == ["orphan-parent"])
+        #expect(Set(store.agents.map(\.id)) == [
+            "parent", "orphan-parent", "background-parent", "orphan-child", "background-child"
+        ])
+    }
+}
