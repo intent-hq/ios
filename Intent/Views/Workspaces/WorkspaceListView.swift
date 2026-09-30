@@ -12,6 +12,7 @@ struct WorkspaceListView: View {
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @State private var revealedWorkspaceId: String?
+    @State private var swipingWorkspaceIDs: Set<String> = []
     @State private var pendingAction: PendingAction?
     @State private var actionError: String?
     @State private var isSearching = false
@@ -161,7 +162,6 @@ struct WorkspaceListView: View {
             }
         } else {
             workspaceSections
-                .padding(.horizontal, Constants.WorkspaceList.pageInset)
         }
     }
 
@@ -169,23 +169,28 @@ struct WorkspaceListView: View {
     private var workspaceSections: some View {
         switch viewModel.viewMode {
         case .recent:
-            ForEach(viewModel.filteredWorkspaces) { workspace in
-                workspaceButton(workspace)
-            }
+            workspaceRows(viewModel.filteredWorkspaces)
         case .repo:
             ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
                 groupHeading(repoName)
-                ForEach(workspaces) { workspace in
-                    workspaceButton(workspace, showRepo: false)
-                }
+                workspaceRows(workspaces, showRepo: false)
             }
         case .status:
             ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
                 groupHeading(statusLabel)
-                ForEach(workspaces) { workspace in
-                    workspaceButton(workspace, usesVisionHitTarget: false)
-                }
+                workspaceRows(workspaces, usesVisionHitTarget: false)
             }
+        }
+    }
+
+    private func workspaceRows(
+        _ workspaces: [Workspace],
+        showRepo: Bool = true,
+        usesVisionHitTarget: Bool = true
+    ) -> some View {
+        ForEach(Array(workspaces.enumerated()), id: \.element.id) { index, workspace in
+            let nextId = index + 1 < workspaces.count ? workspaces[index + 1].id : nil
+            workspaceButton(workspace, nextWorkspaceId: nextId, showRepo: showRepo, usesVisionHitTarget: usesVisionHitTarget)
         }
     }
 
@@ -196,29 +201,33 @@ struct WorkspaceListView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, Constants.WorkspaceList.groupTopSpacing)
             .padding(.bottom, Constants.WorkspaceList.groupBottomSpacing)
+            .padding(.horizontal, Constants.WorkspaceList.pageInset)
             .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder
     private func workspaceButton(
         _ workspace: Workspace,
+        nextWorkspaceId: String?,
         showRepo: Bool = true,
         usesVisionHitTarget: Bool = true
     ) -> some View {
         if usesVisionHitTarget {
-            workspaceButtonContent(workspace, showRepo: showRepo)
+            workspaceButtonContent(workspace, nextWorkspaceId: nextWorkspaceId, showRepo: showRepo)
                 .visionListRowHitTarget()
         } else {
-            workspaceButtonContent(workspace, showRepo: showRepo)
+            workspaceButtonContent(workspace, nextWorkspaceId: nextWorkspaceId, showRepo: showRepo)
         }
     }
 
-    private func workspaceButtonContent(_ workspace: Workspace, showRepo: Bool) -> some View {
+    private func workspaceButtonContent(_ workspace: Workspace, nextWorkspaceId: String?, showRepo: Bool) -> some View {
         WorkspaceSwipeRow(
             workspace: workspace,
             showRepo: showRepo,
             isUpdating: workspaceStore.updatingWorkspaceIDs.contains(workspace.id),
-            revealedWorkspaceId: $revealedWorkspaceId
+            revealedWorkspaceId: $revealedWorkspaceId,
+            swipingWorkspaceIDs: $swipingWorkspaceIDs,
+            nextWorkspaceId: nextWorkspaceId
         ) {
             searchFocused = false
             coordinator.onSelectWorkspace(workspace.id)
