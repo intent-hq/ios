@@ -558,6 +558,7 @@ $(SRCROOT)/Intent/Views/Conversation/Composer/ModelPickerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/QueuedMessagesView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/SubmittableTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/WorkspaceComposerRow.swift
+$(SRCROOT)/Intent/Views/Conversation/Composer/WorkspaceQueuedMessagesView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content
 $(SRCROOT)/Intent/Views/Conversation/Content/AttachmentReferenceImageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ChatImageActions.swift
