@@ -60,11 +60,15 @@ nonisolated final class WorkspaceAgentGroupsUITests: XCTestCase {
     }
 
     @MainActor
-    func testLoadingFailureCanRetryOnlyTheExpandedSection() {
-        let app = launch(scenario: "agent-groups-retry")
+    func testLoadingFailureCanRetryOnlyTheExpandedSection() throws {
+        let gate = FileManager.default.temporaryDirectory.appendingPathComponent("agent-groups-\(UUID().uuidString).trigger")
+        defer { try? FileManager.default.removeItem(at: gate) }
+        let app = launch(scenario: "agent-groups-retry", arguments: ["--demo-agent-group-trigger-file=" + gate.path])
         let background = reveal(app, id: "workspace.agents.background")
         background.tap()
-        XCTAssertTrue(app.progressIndicators["workspace.agents.background.loading"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["workspace.agents.background.loading"].firstMatch.waitForExistence(timeout: 15))
+        capture(app, name: "Background group loading")
+        try Data().write(to: gate)
         let retry = app.buttons["workspace.agents.background.retry"]
         XCTAssertTrue(retry.waitForExistence(timeout: 15))
         XCTAssertFalse(app.buttons["workspace.agent.groups-background"].exists)
@@ -78,9 +82,9 @@ nonisolated final class WorkspaceAgentGroupsUITests: XCTestCase {
     }
 
     @MainActor
-    private func launch(scenario: String) -> XCUIApplication {
+    private func launch(scenario: String, arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data", "--demo-design-scenario=" + scenario]
+        app.launchArguments += ["--demo-data", "--demo-design-scenario=" + scenario] + arguments
         app.launch()
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: 30))

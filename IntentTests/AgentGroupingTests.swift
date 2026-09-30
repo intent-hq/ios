@@ -138,4 +138,15 @@ struct AgentGroupingTests {
         #expect(model.orphanedAgents.map(\.id) == ["served"])
         #expect(model.foregroundAgents.isEmpty)
     }
+    @Test func loadingFixtureGateIsExplicitAndOnlyHoldsRequestedBackgroundRows() {
+        let arguments = ["--demo-data", "--demo-design-scenario=agent-groups-retry", "--demo-agent-group-trigger-file=/tmp/groups.trigger"]
+        #expect(DemoFixtures.agentGroupResponseGate(for: "agent.list", params: ["scope": "background"], arguments: arguments)
+            == .triggerFile(URL(fileURLWithPath: "/tmp/groups.trigger")))
+        for scope in ["topLevel", "delegated"] {
+            #expect(DemoFixtures.agentGroupResponseGate(for: "agent.list", params: ["scope": scope], arguments: arguments) == nil)
+        }
+        #expect(DemoFixtures.agentGroupResponseGate(for: "note.list", params: ["scope": "background"], arguments: arguments) == nil)
+        #expect(DemoFixtures.agentGroupResponseGate(for: "agent.list", params: ["scope": "background"], arguments: []) == nil)
+        #expect(DemoFixtures.agentGroupResponseGate(for: "agent.list", params: ["scope": "background"], arguments: Array(arguments.dropLast())) == nil)
+    }
 }

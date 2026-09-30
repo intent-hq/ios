@@ -294,8 +294,7 @@ enum DemoFixtures {
     /// Gate to wait on before serving `response(for:params:)`, or nil for an
     /// immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
-        if method == "agent.list", designScenario?.scenario == .agentGroupsRetry,
-           params["scope"] as? String == "background" { return .delay(.seconds(1)) }
+        if let gate = agentGroupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         if let gate = startupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         switch method {
         case "settings.get" where params["path"] as? String == "providers.enabled":
@@ -309,6 +308,13 @@ enum DemoFixtures {
         default:
             return nil
         }
+    }
+
+    /// The loading UI test releases this response only after observing it.
+    static func agentGroupResponseGate(for method: String, params: [String: Any], arguments: [String]) -> ResponseGate? {
+        guard method == "agent.list", params["scope"] as? String == "background",
+              DemoDesignScenario.requested(by: arguments) == .agentGroupsRetry else { return nil }
+        return triggerFile(from: arguments, prefix: "--demo-agent-group-trigger-file=").map(ResponseGate.triggerFile)
     }
 
     /// Holds workspace policy validation until the UI test releases it (#446).
