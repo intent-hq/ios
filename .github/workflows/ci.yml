@@ -110,6 +110,9 @@ jobs:
       - name: Disposable iPad route tests
         run: python3 scripts/test_ci_simulator.py
 
+      - name: Xcode Cloud post-clone tests
+        run: scripts/test-ci-post-clone.sh
+
       # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
       # override on both Darwin and Linux paths against a stubbed swiftlint.
       - name: swiftlint.sh self-tests
