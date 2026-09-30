@@ -7,7 +7,6 @@ struct WorkspaceListSidebar: View {
     @State private var viewModel: WorkspaceListViewModel
     @Binding private var isSearching: Bool
     @FocusState private var searchFocused: Bool
-    @Namespace private var searchAnimation
 
     init(workspaceStore: WorkspaceStore, isSearching: Binding<Bool>) {
         self.workspaceStore = workspaceStore
@@ -19,8 +18,7 @@ struct WorkspaceListSidebar: View {
         VStack(spacing: 0) {
             WorkspaceSearchBar(
                 viewMode: $viewModel.viewMode,
-                isSearching: $isSearching,
-                searchAnimation: searchAnimation
+                isSearching: $isSearching
             )
 
             ZStack {
@@ -43,17 +41,7 @@ struct WorkspaceListSidebar: View {
             }
         }
         .background(Theme.sidebar(for: colorScheme))
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isSearching {
-                WorkspaceSearchInput(
-                    text: $viewModel.searchText,
-                    isSearching: $isSearching,
-                    isFocused: $searchFocused,
-                    searchAnimation: searchAnimation
-                )
-                .transition(.identity)
-            }
-        }
+        .modifier(WorkspaceSearchPresentation(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused))
         .refreshable {
             await workspaceStore.fetchAll()
         }

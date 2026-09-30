@@ -19,7 +19,6 @@ struct WorkspaceListView: View {
     @State private var isFilterPinned = false
     @State private var pageHeaderHeight: CGFloat = 0
     @FocusState private var searchFocused: Bool
-    @Namespace private var searchAnimation
     @ScaledMetric(relativeTo: .largeTitle) private var headingTracking: CGFloat = -1.2
     @ScaledMetric(relativeTo: .title) private var compactHeadingTracking: CGFloat = -0.56
     @ScaledMetric(relativeTo: .largeTitle) private var headingSize = Constants.Typography.heading1.size
@@ -41,7 +40,6 @@ struct WorkspaceListView: View {
                     WorkspaceSearchBar(
                         viewMode: $viewModel.viewMode,
                         isSearching: $isSearching,
-                        searchAnimation: searchAnimation,
                         horizontalPadding: Constants.WorkspaceList.pageInset,
                         isCompact: isFilterPinned
                     )
@@ -66,17 +64,7 @@ struct WorkspaceListView: View {
                 .background(Constants.WorkspaceList.canvas(for: colorScheme), ignoresSafeAreaEdges: .top)
                 .allowsHitTesting(false)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isSearching {
-                WorkspaceSearchInput(
-                    text: $viewModel.searchText,
-                    isSearching: $isSearching,
-                    isFocused: $searchFocused,
-                    searchAnimation: searchAnimation
-                )
-                .transition(.identity)
-            }
-        }
+        .modifier(WorkspaceSearchPresentation(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused))
         .refreshable {
             await workspaceStore.fetchAll()
         }

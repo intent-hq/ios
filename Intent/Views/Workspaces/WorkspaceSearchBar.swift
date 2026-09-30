@@ -7,7 +7,6 @@ struct WorkspaceSearchBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var viewMode: ViewMode
     @Binding var isSearching: Bool
-    var searchAnimation: Namespace.ID
     var horizontalPadding: CGFloat = Constants.WorkspaceList.pickerHorizontalPadding
     var isCompact = false
     @Namespace private var selectionAnimation
@@ -29,23 +28,12 @@ struct WorkspaceSearchBar: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { switcherWidth = $0 }
                     .transition(reduceMotion ? .identity : .offset(x: -switcherWidth - horizontalPadding))
 
-                Button {
-                    withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
-                        isSearching = true
-                    }
-                } label: {
-                    Image(.search)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
-                        .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-                        .frame(width: controlHeight, height: controlHeight)
-                        .modifier(WorkspaceSearchMorph(animation: searchAnimation))
-                }
-                .buttonStyle(.plain)
-                .transition(.identity)
-                .accessibilityLabel("Search workspaces")
-                .accessibilityIdentifier("workspaces.search.open")
+                Color.clear
+                    .frame(width: controlHeight, height: controlHeight)
+                    .anchorPreference(key: WorkspaceSearchBounds.self, value: .bounds) { $0 }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .transition(.identity)
             }
         }
         .frame(maxWidth: .infinity)
@@ -90,45 +78,117 @@ struct WorkspaceSearchBar: View {
     }
 }
 
-struct WorkspaceSearchInput: View {
+struct WorkspaceSearchPresentation: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding var text: String
+    @Binding var isSearching: Bool
+    var isFocused: FocusState<Bool>.Binding
+    @ScaledMetric(relativeTo: .body) private var inputHeight = Constants.WorkspaceSearch.expandedHeight
+
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if isSearching {
+                    HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
+                        Color.clear
+                            .frame(height: max(inputHeight, Constants.WorkspaceSearch.expandedHeight))
+                            .anchorPreference(key: WorkspaceSearchBounds.self, value: .bounds) { $0 }
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                        closeButton
+                    }
+                    .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
+                    .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
+                    .transition(.identity)
+                }
+            }
+            .overlayPreferenceValue(WorkspaceSearchBounds.self) { anchor in
+                // Resolve both slots above the scroll view so one control owns the entire morph.
+                // swiftlint:disable:next geometry_reader_usage
+                GeometryReader { proxy in
+                    if let anchor {
+                        let frame = proxy[anchor]
+                        WorkspaceSearchControl(text: $text, isSearching: $isSearching, isFocused: isFocused)
+                            .frame(width: frame.width, height: frame.height)
+                            .position(x: frame.midX, y: frame.midY)
+                    }
+                }
+            }
+            .animation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration), value: isSearching)
+    }
+
+    private var closeButton: some View {
+        Button {
+            text = ""
+            isFocused.wrappedValue = false
+            withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
+                isSearching = false
+            }
+        } label: {
+            Image(.close)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
+                .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+                .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
+                .background(
+                    Constants.WorkspaceList.controlSurface(for: colorScheme),
+                    in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
+                )
+        }
+        .buttonStyle(.plain)
+        .transition(reduceMotion ? .identity : .offset(x: Constants.WorkspaceSearch.expandedHeight + Constants.WorkspaceSearch.contentSpacing).combined(with: .opacity))
+        .accessibilityLabel("Close search")
+        .accessibilityIdentifier("workspaces.search.cancel")
+    }
+}
+
+private struct WorkspaceSearchControl: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var text: String
     @Binding var isSearching: Bool
     var isFocused: FocusState<Bool>.Binding
-    var searchAnimation: Namespace.ID
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
     var body: some View {
-        HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
+        ZStack {
             searchField
-            Button {
-                text = ""
-                isFocused.wrappedValue = false
-                withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
-                    isSearching = false
-                }
-            } label: {
-                Image(.close)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
-                    .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-                    .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
-                    .background(
-                        Constants.WorkspaceList.controlSurface(for: colorScheme),
-                        in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-                    )
-            }
-            .buttonStyle(.plain)
-            .transition(reduceMotion ? .identity : .offset(x: Constants.WorkspaceSearch.expandedHeight + Constants.WorkspaceSearch.contentSpacing).combined(with: .opacity))
-            .accessibilityLabel("Close search")
-            .accessibilityIdentifier("workspaces.search.cancel")
+                .opacity(isSearching ? 1 : 0)
+                .allowsHitTesting(isSearching)
+                .accessibilityHidden(!isSearching)
+            searchButton
+                .opacity(isSearching ? 0 : 1)
+                .allowsHitTesting(!isSearching)
+                .accessibilityHidden(isSearching)
         }
-        .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
-        .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
-        .transition(.identity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Constants.WorkspaceList.controlSurface(for: colorScheme))
+        .clipShape(RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular))
+        .onChange(of: isSearching, initial: true) { _, searching in
+            isFocused.wrappedValue = searching
+        }
+    }
+
+    private var searchButton: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
+                isSearching = true
+            }
+        } label: {
+            Image(.search)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
+                .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Search workspaces")
+        .accessibilityIdentifier("workspaces.search.open")
     }
 
     private var searchField: some View {
@@ -141,7 +201,6 @@ struct WorkspaceSearchInput: View {
                 .submitLabel(.search)
                 .focused(isFocused)
                 .accessibilityIdentifier("workspaces.search.field")
-                .onAppear { isFocused.wrappedValue = true }
                 .onSubmit { isFocused.wrappedValue = false }
             if !text.isEmpty {
                 Button {
@@ -166,22 +225,13 @@ struct WorkspaceSearchInput: View {
         .padding(.leading, Constants.WorkspaceSearch.inputLeadingInset)
         .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
         .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
-        .frame(minHeight: Constants.WorkspaceSearch.expandedHeight)
-        .modifier(WorkspaceSearchMorph(animation: searchAnimation))
     }
 }
 
-private struct WorkspaceSearchMorph: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var animation: Namespace.ID
+private struct WorkspaceSearchBounds: PreferenceKey {
+    nonisolated static var defaultValue: Anchor<CGRect>? { nil }
 
-    func body(content: Content) -> some View {
-        content
-            .matchedGeometryEffect(id: "workspaceSearch", in: animation, properties: reduceMotion ? [] : .frame)
-            .background(
-                Constants.WorkspaceList.controlSurface(for: colorScheme),
-                in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-            )
+    nonisolated static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
     }
 }
