@@ -9,6 +9,7 @@ struct ConnectionSheet<Content: View>: View {
     let initialHeight: CGFloat
     var backgroundColor: Color?
     var closeForeground: Color?
+    var isDismissDisabled = false
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -39,6 +40,7 @@ struct ConnectionSheet<Content: View>: View {
         .presentationBackground(backgroundColor ?? Constants.ConnectionSheet.defaultBackground(for: colorScheme))
         .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
         .presentationDragIndicator(.hidden)
+        .interactiveDismissDisabled(isDismissDisabled)
         .presentationDetents([
             .height(contentHeight > 0
                 ? contentHeight + Constants.ConnectionSheet.closeSize + Constants.ConnectionSheet.inset
@@ -57,6 +59,7 @@ struct ConnectionSheet<Content: View>: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .disabled(isDismissDisabled)
         .foregroundStyle(closeForeground ?? Constants.ConnectionSheet.defaultForeground(for: colorScheme))
         .accessibilityLabel("Close")
         .accessibilityIdentifier("connection-sheet.close")

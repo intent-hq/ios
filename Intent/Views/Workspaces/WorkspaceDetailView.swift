@@ -16,6 +16,7 @@ struct WorkspaceDetailView: View {
     @State private var selectedBrowser: WorkspaceBrowser?
     @State private var createdBrowser: WorkspaceBrowser?
     @State private var showNewBrowser = false
+    @State private var showTransferWorkspace = false
     @State private var terminalCreationRequest: UUID?
     @State private var selectedTab = WorkspaceTab.agents
     @State private var noteStore: NoteStore
@@ -91,6 +92,7 @@ struct WorkspaceDetailView: View {
             selectedBrowser = nil
             createdBrowser = nil
             showNewBrowser = false
+            showTransferWorkspace = false
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: oldId,
@@ -126,7 +128,7 @@ struct WorkspaceDetailView: View {
         }
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
             // After workspaces load, if ours is missing it was deleted/archived externally
-            if workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
+            if !showTransferWorkspace, workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
                 coordinator.handleMissingWorkspace()
             }
         }
@@ -183,6 +185,13 @@ struct WorkspaceDetailView: View {
                 optionsStore: session.creationOptionsStore
             )
                 .environment(coordinator)
+        }
+        .sheet(isPresented: $showTransferWorkspace, onDismiss: {
+            if workspaceStore.lastUpdated != nil, workspace == nil { coordinator.handleMissingWorkspace() }
+        }) {
+            WorkspaceTransferSheet(workspaceId: workspaceId, workspaceTitle: workspaceTitle, session: session)
+                .environment(coordinator)
+                .id(workspaceId)
         }
         .sheet(
             isPresented: $showNewBrowser,
@@ -278,6 +287,8 @@ private extension WorkspaceDetailView {
             onCreateAgent: { showSpecialistPicker = true },
             onCreateTerminal: createTerminal,
             onCreateBrowser: { showNewBrowser = true },
+            onTransfer: session.connection.currentPrincipal?.isOwner == true
+                && session.connection.connectionState == .connected ? { showTransferWorkspace = true } : nil,
             onArchive: { showArchiveConfirmation = true },
             onDelete: { showDeleteConfirmation = true }
         )
@@ -294,7 +305,7 @@ private extension WorkspaceDetailView {
     }
 
     func presentScriptBrowser() {
-        guard scenePhase == .active, selectedBrowser == nil, selectedTerminal == nil, !showNewBrowser else {
+        guard scenePhase == .active, selectedBrowser == nil, selectedTerminal == nil, !showNewBrowser, !showTransferWorkspace else {
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
             return
         }
