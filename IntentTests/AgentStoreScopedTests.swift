@@ -103,10 +103,15 @@ extension AgentStoreTests {
     @Test func defaultStorePreservesAllActiveConsumerRequest() async {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake)
-        fake.responseMap["agent.list"] = scopedResponse([scopedRow("child", parent: "parent")])
+        var delegated = scopedRow("child", parent: "parent")
+        delegated["name"] = "Delegated assignee"
+        delegated["createdAt"] = "2026-09-30T00:00:00Z"
+        fake.responseMap["agent.list"] = scopedResponse([delegated])
         await store.fetchAgents(workspaceId: "ws-1")
         #expect(fake.paramsForMethod("agent.list").first?["scope"] == nil)
         #expect(store.agents.map(\.id) == ["child"])
+        #expect(store.agents.first?.name == "Delegated assignee")
+        #expect(store.agents.first?.createdAt == "2026-09-30T00:00:00Z")
     }
 
     @Test func duplicateExpansionIsDeduplicatedAndFailedLoadRetries() async throws {
