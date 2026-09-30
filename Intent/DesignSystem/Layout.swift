@@ -192,27 +192,20 @@ extension Constants.Disconnected {
 }
 
 extension Constants.ConnectionFailure {
-    static let contentSpacing: CGFloat = 24
-    static let destructiveBackgroundOpacity: Double = 0.1
-    static let iconBackgroundSize: CGFloat = 80
-    static let iconSize: CGFloat = 32
-    static let titleSpacing: CGFloat = 8
-    static let messageHorizontalPadding: CGFloat = 32
-    static let controlSpacing: CGFloat = 12
-    static let progressSpacing: CGFloat = 8
-    static let controlVerticalPadding: CGFloat = 14
-    static let controlBackgroundOpacity: Double = 0.3
-    static let controlCornerRadius: CGFloat = 12
-    static let savedConnectionsMaximumHeight: CGFloat = 220
-    static let savedConnectionsSpacing: CGFloat = 8
-    static let controlsHorizontalPadding: CGFloat = 24
-    static let helpSpacing: CGFloat = 4
-    static let helpHorizontalPadding: CGFloat = 32
-    static let helpBottomPadding: CGFloat = 32
-    static let savedConnectionRowSpacing: CGFloat = 12
-    static let savedConnectionTextSpacing: CGFloat = 2
-    static let savedConnectionVerticalPadding: CGFloat = 10
-    static let savedConnectionHorizontalPadding: CGFloat = 12
+    static let pagePadding: CGFloat = 24
+    static let footerBottomPadding: CGFloat = 12
+    static let contentSpacing: CGFloat = 40
+    static let titleSpacing: CGFloat = 16
+    static let titleToControlsSpacing: CGFloat = 56
+    static let controlSpacing: CGFloat = 10
+    static let controlHeight: CGFloat = 48
+    static let controlLabelHeight: CGFloat = 24
+    static let controlCornerRadius: CGFloat = 20
+    static let savedConnectionsSpacing: CGFloat = 24
+    static let eyebrowTracking: CGFloat = 0.24
+    nonisolated static let helpTopSpacing: CGFloat = 48
+    static let helpSpacing: CGFloat = 16
+    static let helpHeadingExtraSpacing: CGFloat = 8
 }
 
 extension Constants.AgentAvatar {

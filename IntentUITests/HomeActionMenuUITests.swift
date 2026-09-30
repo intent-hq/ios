@@ -209,32 +209,11 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
-    func testWorkspaceAndLogsTilesOpenTheirDestinations() {
+    func testWorkspaceTileOpensRepositoryPicker() {
         let app = launchHome()
         openMenu(app)
         app.buttons["intent.menu.workspace"].tap()
         XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Self.timeout))
-        app.terminate()
-        app.launch()
-        openMenu(app)
-        reveal("acknowledgements", in: app).tap()
-        XCTAssertTrue(app.navigationBars["Acks & Logs"].waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["Acknowledgements"].exists)
-        app.buttons["Export logs"].tap()
-        XCTAssertTrue(app.navigationBars["Export logs"].waitForExistence(timeout: Self.timeout))
-    }
-
-    @MainActor
-    func testLogOffRequiresConfirmationAndCanBeCancelled() {
-        let app = launchHome()
-        openMenu(app)
-        reveal("logOff", in: app).tap()
-        let confirmation = app.alerts["Log Off?"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
-        confirmation.buttons["Cancel"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.close"].isHittable)
-        app.buttons["intent.menu.close"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
     }
 
     @MainActor

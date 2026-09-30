@@ -133,7 +133,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         assertSelections(in: app)
 
         app.buttons["creation.back"].tap()
-        XCTAssertTrue(app.navigationBars["Select Branch"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
         try FileManager.default.removeItem(at: gate)
         app.buttons["Next"].tap()
         XCTAssertTrue(app.staticTexts["Loading providers..."].waitForExistence(timeout: Self.elementTimeout))
@@ -159,13 +159,23 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         prompt.tap()
         prompt.typeText(draft)
         app.buttons["creation.sourceCard"].tap()
-        XCTAssertTrue(app.navigationBars["Select Branch"].waitForExistence(timeout: Self.elementTimeout))
-        app.navigationBars["Select Branch"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
+        app.buttons["creation.branchBack"].tap()
         XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Self.elementTimeout))
         app.staticTexts["nova-labs/docs"].tap()
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.navigationBars["Select Branch"].waitForExistence(timeout: Self.elementTimeout))
-        app.buttons["feature/docs"].tap()
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
+        let search = app.textFields["creation.branchSearch"]
+        search.tap()
+        search.typeText("feature")
+        let main = app.buttons["creation.branch.main"]
+        let feature = app.buttons["creation.branch.feature/docs"]
+        XCTAssertTrue(feature.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(main.waitForNonExistence(timeout: Self.elementTimeout))
+        feature.tap()
+        app.buttons["Clear search"].tap()
+        XCTAssertTrue(main.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(feature.isSelected)
         app.buttons["Next"].tap()
         XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertEqual(prompt.value as? String, draft)
@@ -180,11 +190,14 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         let repository = app.staticTexts["nova-labs/console"]
         XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
         repository.tap()
+        attachEvidence(in: app, name: "selected-repository")
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.navigationBars["Select Branch"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
         let next = app.buttons["Next"]
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
+        app.buttons["creation.branch.main"].tap()
+        attachEvidence(in: app, name: "selected-branch")
         next.tap()
         let back = app.buttons["creation.back"]
         XCTAssertTrue(back.waitForExistence(timeout: Self.elementTimeout))

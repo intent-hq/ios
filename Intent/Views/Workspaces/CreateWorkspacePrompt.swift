@@ -22,8 +22,12 @@ struct CreateWorkspacePrompt: View {
                 }
             }
             HStack {
-                WorkspaceAttachmentMenu(onPhotos: { showsPhotos = true }, onFiles: { showsFiles = true })
-                    .disabled(attachments.isImporting || attachments.remainingCount == 0)
+                WorkspaceAttachmentMenu(
+                    onPhotos: { showsPhotos = true },
+                    onFiles: { showsFiles = true },
+                    glyphAlignment: .bottomLeading
+                )
+                .disabled(attachments.isImporting || attachments.remainingCount == 0)
                 if attachments.isImporting {
                     ProgressView("Preparing images…")
                         .interFont(Constants.Typography.bodyXS)
@@ -62,19 +66,30 @@ private struct WorkspaceCreationPromptEditor: View {
     let attachments: WorkspaceCreationImages
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @ScaledMetric(relativeTo: .body) private var bodyTracking = CreateWorkspaceFormStyle.bodyTracking
+
+    private var minimumEditorHeight: CGFloat {
+        CreateWorkspaceFormStyle.promptHeight - CreateWorkspaceFormStyle.pagePadding * 2
+            - CreateWorkspaceFormStyle.attachmentTarget - CreateWorkspaceFormStyle.rowSpacing
+    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            WorkspacePromptTextView(text: $text, allowsImagePaste: !attachments.isImporting, onPasteImages: attachments.addPaste)
+            WorkspacePromptTextView(
+                text: $text,
+                minimumHeight: minimumEditorHeight,
+                allowsImagePaste: !attachments.isImporting,
+                onPasteImages: attachments.addPaste
+            )
             if text.isEmpty {
                 Text("What should we work on?")
                     .interFont(Constants.Typography.bodyS)
+                    .tracking(bodyTracking)
                     .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
         }
-        .frame(minHeight: CreateWorkspaceFormStyle.promptHeight - CreateWorkspaceFormStyle.pagePadding * 2, alignment: .topLeading)
     }
 }
 

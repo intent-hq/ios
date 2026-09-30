@@ -65,11 +65,14 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         app.textFields["manual.host"].tap()
         app.textFields["manual.host"].typeText("192.0.2.42")
         XCTAssertFalse(app.buttons["manual.connect"].isEnabled)
-        app.textFields["manual.token"].tap()
-        app.textFields["manual.token"].typeText("SYNTHETIC-NOT-A-CREDENTIAL")
+        let token = app.secureTextFields["manual.token"]
+        let typed = "SYNTHETIC-NOT-A-CREDENTIAL"
+        token.tap()
+        token.typeText(typed)
         capture(app, named: "keyboard")
         app.buttons["Done"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertEqual(token.value as? String, String(repeating: "•", count: typed.count))
         XCTAssertTrue(app.buttons["manual.connect"].isEnabled)
         XCTAssertFalse(app.buttons["Paste API token"].exists)
         assertReference(in: app)
@@ -85,8 +88,8 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         app.textFields["manual.host"].typeText("draft.invalid")
         app.textFields["manual.port"].tap()
         app.textFields["manual.port"].typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
-        app.textFields["manual.token"].tap()
-        app.textFields["manual.token"].typeText("SYNTHETIC-NOT-A-CREDENTIAL")
+        app.secureTextFields["manual.token"].tap()
+        app.secureTextFields["manual.token"].typeText("SYNTHETIC-NOT-A-CREDENTIAL")
         app.buttons["Done"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
         // Existing semantics only gate host/token; malformed port is a submit error.
@@ -94,7 +97,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         app.buttons["manual.connect"].tap()
         XCTAssertTrue(app.staticTexts["Invalid port number"].waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.textFields["manual.host"].isEnabled)
-        XCTAssertTrue(app.textFields["manual.token"].isEnabled)
+        XCTAssertTrue(app.secureTextFields["manual.token"].isEnabled)
         capture(app, named: "invalid-port")
         app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
@@ -110,7 +113,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         scrollTo(host, in: app)
         host.tap()
         host.typeText("draft.invalid")
-        let token = app.textFields["manual.token"]
+        let token = app.secureTextFields["manual.token"]
         scrollTo(token, in: app)
         token.tap()
         token.typeText("SYNTHETIC-NOT-A-CREDENTIAL")
@@ -172,8 +175,12 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         XCTAssertEqual(close.minX, 24, accuracy: 0.5)
         XCTAssertEqual(referenceFrame(app.staticTexts["manual.title"]).midY, 325, accuracy: 1.5)
         XCTAssertEqual(referenceFrame(app.staticTexts["manual.subtitle"]).midY, 361, accuracy: 1.5)
-        for (field, center) in [("manual.host", 472.0), ("manual.port", 585.0), ("manual.token", 698.0)] {
-            let frame = referenceFrame(app.textFields[field])
+        for (field, center) in [
+            (app.textFields["manual.host"], 472.0),
+            (app.textFields["manual.port"], 585.0),
+            (app.secureTextFields["manual.token"], 698.0)
+        ] {
+            let frame = referenceFrame(field)
             XCTAssertEqual(frame.midY, center, accuracy: 1.5)
             XCTAssertEqual(frame.minX, 48, accuracy: 0.5)
         }

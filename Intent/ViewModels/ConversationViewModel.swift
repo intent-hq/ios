@@ -130,7 +130,7 @@ import SwiftUI
     ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
-        self.agentName = agentName
+        self.agentName = AgentSession.displayName(for: agentName)
         self.connection = connection
         self.optionsStore = optionsStore
         let sharedStore = conversations?.store(agentId: agentId)

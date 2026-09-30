@@ -50,6 +50,7 @@ struct NoteDetailView: View {
             noteContentState
         }
         .navigationTitle(noteTitle)
+        .toolbar(.visible, for: .navigationBar)
         .toolbarTitleDisplayMode(.inline)
         .workspaceNavigationSubtitle(title: noteTitle, workspaceId: workspaceId)
         .task {

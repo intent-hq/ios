@@ -28,6 +28,7 @@ final class WorkspacePromptUITextView: UITextView {
 
 struct WorkspacePromptTextView: UIViewRepresentable {
     @Binding var text: String
+    let minimumHeight: CGFloat
     let allowsImagePaste: Bool
     let onPasteImages: () -> Void
     @Environment(\.isEnabled) private var isEnabled
@@ -68,8 +69,10 @@ struct WorkspacePromptTextView: UIViewRepresentable {
         guard let width = proposal.width, let font = uiView.font else { return nil }
         let fitting = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
         let lines = CreateWorkspaceView.initialMessageLineCountRange
-        let height = min(max(fitting.height, font.lineHeight * CGFloat(lines.lowerBound)), font.lineHeight * CGFloat(lines.upperBound))
-        return CGSize(width: width, height: height)
+        let contentHeight = min(max(fitting.height, font.lineHeight * CGFloat(lines.lowerBound)), font.lineHeight * CGFloat(lines.upperBound))
+        // The native editor must fill the prompt's blank area so taps can focus it.
+        // A minimum frame on its SwiftUI container only adds non-editable space.
+        return CGSize(width: width, height: max(minimumHeight, contentHeight))
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {

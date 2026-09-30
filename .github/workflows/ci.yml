@@ -189,6 +189,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Persistent runners must not mix Swift objects from different branches.
+      - name: Use isolated build directory
+        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-unit" >> "$GITHUB_ENV"
+
       - name: Validate simulator request
         env:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
@@ -625,6 +629,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Use isolated build directory
+        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui" >> "$GITHUB_ENV"
+
       - name: Select Xcode
         run: |
           if [ '${{ runner.environment }}' = self-hosted ]; then
@@ -821,6 +828,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Use isolated build directory
+        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-visionos" >> "$GITHUB_ENV"
 
       - name: Select Xcode
         run: |

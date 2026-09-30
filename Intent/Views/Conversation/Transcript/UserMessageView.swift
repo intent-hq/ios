@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 struct UserMessageView: View {
@@ -13,6 +14,8 @@ struct UserMessageView: View {
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.legibilityWeight) private var legibilityWeight
+    @ScaledMetric(relativeTo: .body) private var workspaceFontSize = Constants.Typography.bodyS.size
 
     /// Derived once per message value in `init` rather than on every `body`
     /// evaluation (the body also re-runs on the expansion toggle): the wake /
@@ -186,12 +189,38 @@ struct UserMessageView: View {
                     }
                 }
             } else {
-                userText(display)
+                userText(display, trimsBounds: usesTrimmedMessageText)
             }
         }
     }
 
-    private func userText(_ text: String) -> some View {
+    /// Keep native bounds between attributed headers, chips, attachments and multiple blocks.
+    /// A plain bubble measures its existing padding from the cap top to the final baseline.
+    private var usesTrimmedMessageText: Bool {
+        workspaceDesign && hookWake == nil && prWake == nil && agentMessage == nil
+            && partitioned.text.count == 1 && partitioned.images.isEmpty && partitioned.files.isEmpty
+    }
+
+    private var workspaceTextCapHeight: CGFloat {
+        let style = Constants.Typography.bodyS
+        let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
+        let font = CTFontCreateWithName(face.rawValue as CFString, workspaceFontSize, nil)
+        return CTFontGetCapHeight(font)
+    }
+
+    @ViewBuilder
+    private func userText(_ text: String, trimsBounds: Bool = false) -> some View {
+        if trimsBounds, !text.isEmpty {
+            WorkspaceTextTrimLayout(capHeight: workspaceTextCapHeight) {
+                userTextContent(text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            userTextContent(text)
+        }
+    }
+
+    private func userTextContent(_ text: String) -> some View {
         Text(text)
             .interFont(workspaceDesign ? Constants.Typography.bodyS : Constants.Typography.bodyXS)
             .tracking(workspaceDesign ? Design.Typography.bodyTracking : 0)

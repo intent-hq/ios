@@ -93,6 +93,7 @@ enum ConnectionPairing {
 /// Saved daemon connections and direct actions to pair another daemon.
 struct ConnectionsView: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(BackendSession.self) private var session
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
     // False on iPhone, so the Open in New Window action never appears there.
@@ -118,8 +119,10 @@ struct ConnectionsView: View {
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("saved-connections.title")
-                connectionsList
-                ConnectionPairingActions(colorScheme: colorScheme, onPaired: handlePaired)
+                VStack(spacing: Constants.Connections.cardsToPairingSpacing) {
+                    connectionsList
+                    ConnectionPairingActions(colorScheme: colorScheme, onPaired: handlePaired)
+                }
             }
         }
         .sheet(item: $connectionShowingDetails) { connection in
@@ -188,7 +191,7 @@ struct ConnectionsView: View {
             SavedConnectionCard(
                 name: connection.displayName,
                 address: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)",
-                isCurrentWindow: connection.id == windowConnectionId
+                status: connection.id == windowConnectionId ? session.connection.connectionState : nil
             )
         }
         .buttonStyle(ConnectionSheetButtonStyle())
@@ -265,6 +268,7 @@ struct ConnectionsView: View {
 }
 
 private struct ConnectionPairingActions: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let colorScheme: ColorScheme
     let onPaired: (StoredConnection) -> Void
     @State private var showQRScanner = false
@@ -274,55 +278,18 @@ private struct ConnectionPairingActions: View {
         VStack(alignment: .leading, spacing: Constants.Connections.rowSpacing) {
             Text("Add Connection")
                 .interFont(Constants.Typography.eyebrow)
-                .foregroundStyle(Constants.Connections.mutedForeground(for: colorScheme))
+                .foregroundStyle(Constants.Connections.sectionForeground(for: colorScheme, contrast: contrast))
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
 
-            VStack(spacing: 0) {
-                let options = PairingOption.available(showsSavedConnections: false)
-                if options.contains(.qrScan) {
-                    pairingButton(icon: .connectQR, title: "Scan QR Code") { showQRScanner = true }
-                        .accessibilityIdentifier("saved-connections.scan")
-                }
-                if options.contains(.qrScan), options.contains(.manualEntry) {
-                    Rectangle()
-                        .fill(Constants.Connections.divider(for: colorScheme))
-                        .frame(height: Constants.Connections.dividerWidth)
-                        .accessibilityHidden(true)
-                }
-                if options.contains(.manualEntry) {
-                    pairingButton(icon: .connectManual, title: "Manual Connection") { showManualEntry = true }
-                        .accessibilityIdentifier("saved-connections.manual")
-                }
-            }
-            .background(Constants.Connections.surface(for: colorScheme))
-            .clipShape(.rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius))
+            ConnectionPairingButtons(
+                qrTitle: "Scan QR Code",
+                accessibilityPrefix: "saved-connections",
+                onScan: { showQRScanner = true },
+                onManualEntry: { showManualEntry = true }
+            )
         }
         .fullScreenCover(isPresented: $showQRScanner) { QRScannerView(onPaired: onPaired) }
         .sheet(isPresented: $showManualEntry) { ManualTokenEntryView(onPaired: onPaired) }
-    }
-
-    private func pairingButton(icon: ImageResource, title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: Constants.Connections.rowSpacing) {
-                Image(icon)
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
-                    .accessibilityHidden(true)
-                Text(title)
-                    .interFont(Constants.Typography.bodyS)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
-            .padding(.horizontal, Constants.ConnectionSheet.inset)
-            .padding(.vertical, Constants.ConnectionSheet.fieldVerticalPadding)
-            .frame(maxWidth: .infinity, minHeight: Constants.Connections.pairingRowMinimumHeight, alignment: .leading)
-            .contentShape(.rect)
-        }
-        .buttonStyle(ConnectionSheetButtonStyle())
     }
 }

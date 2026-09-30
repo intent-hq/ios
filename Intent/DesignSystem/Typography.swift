@@ -2,9 +2,8 @@ import SwiftUI
 
 extension Constants {
     /// Inter styles from the IOS Working Figma page. Sizes are the `.large` Dynamic Type baseline.
-    /// Static Regular 400 and Medium 500 intentionally approximate Figma's 450 and 550;
-    /// SemiBold 600 matches directly. Figma's “Bold” body styles use Medium, not Bold.
-    /// Tracking units remain unverified, and Figma line-height ratios are not imposed on text layout.
+    /// Regular/Medium are static 450/550 instances of Inter 4.1; SemiBold is 600.
+    /// Regenerate with scripts/generate-inter-instances.py. Tracking stays scoped to each design.
     /// Apply to text only; preserve native control, SF Symbol, and monospaced fonts.
     /// Use `interFont` on SwiftUI text for Bold Text support. Unsupported scripts and emoji
     /// use the platform's glyph fallback; Inter does not cover every Unicode character.

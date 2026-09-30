@@ -3,6 +3,14 @@ import XCTest
 // Shared diagnostics stay together so every failure reports the same state.
 // swiftlint:disable file_length
 
+@MainActor
+func transcriptScreenshot(in app: XCUIApplication, named name: String) -> XCTAttachment {
+    let attachment = XCTAttachment(screenshot: app.screenshot())
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    return attachment
+}
+
 enum Fixture {
     static let workspaceTitle = "Deflake payment integration tests"
     static let workspaceListIdentifier = "workspaces.search.open"

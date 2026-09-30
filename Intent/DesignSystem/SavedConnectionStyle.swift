@@ -5,6 +5,7 @@ extension Constants.Connections {
     // with measured content; neither the row count nor text height is capped.
     static let initialSheetHeight: CGFloat = 394
     static let headingToCardsSpacing: CGFloat = 56
+    static let cardsToPairingSpacing: CGFloat = 24
     static let cardSpacing: CGFloat = 4
     static let cardMinimumHeight: CGFloat = 96
     static let pairingRowMinimumHeight: CGFloat = 56
@@ -43,6 +44,10 @@ extension Constants.Connections {
 
     static func surface(for scheme: ColorScheme) -> Color {
         scheme == .dark ? Constants.Pairing.surface(for: scheme) : .white
+    }
+
+    static func sectionForeground(for scheme: ColorScheme, contrast: ColorSchemeContrast) -> Color {
+        contrast == .increased ? foreground(for: scheme) : Constants.ManualTokenEntry.labelForeground(for: scheme)
     }
 
     static func divider(for scheme: ColorScheme) -> Color {

@@ -54,24 +54,23 @@ enum SettingsStyle {
     }
 
     static func surface(for scheme: ColorScheme) -> Color {
-        scheme == .dark ? Theme.background(for: scheme) : lightSurface
+        Constants.Connections.background(for: scheme)
     }
 
     static func card(for scheme: ColorScheme) -> Color {
-        scheme == .dark ? Theme.card(for: scheme) : .white
+        Constants.Connections.surface(for: scheme)
     }
 
     static func foreground(for scheme: ColorScheme) -> Color {
-        scheme == .dark ? Theme.foreground(for: scheme) : lightForeground
+        Constants.Connections.foreground(for: scheme)
     }
 
     static func muted(for scheme: ColorScheme, contrast: ColorSchemeContrast) -> Color {
         if contrast == .increased { return foreground(for: scheme) }
-        return scheme == .dark ? Theme.mutedForeground(for: scheme) : lightMuted
+        return Constants.Connections.mutedForeground(for: scheme)
     }
 
     static func sectionForeground(for scheme: ColorScheme, contrast: ColorSchemeContrast) -> Color {
-        if contrast == .increased { return foreground(for: scheme) }
-        return scheme == .dark ? Theme.mutedForeground(for: scheme) : lightSection
+        Constants.Connections.sectionForeground(for: scheme, contrast: contrast)
     }
 }

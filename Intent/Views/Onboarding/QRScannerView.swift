@@ -230,7 +230,7 @@ private struct QRScannerOverlay: View {
                 .foregroundStyle(.black)
                 .padding(.horizontal, Constants.QRScanner.cancelHorizontalPadding)
                 .frame(minWidth: Constants.QRScanner.cancelWidth, minHeight: Constants.QRScanner.cancelHeight)
-                .background(.white, in: .capsule)
+                .background(.white, in: .rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius))
                 .buttonStyle(.plain)
                 .padding(.leading, Constants.QRScanner.horizontalInset)
                 .padding(.top, Constants.QRScanner.cancelTopPadding)
@@ -273,25 +273,32 @@ private struct QRScannerOverlay: View {
     }
 
     private var scannerStatus: some View {
-        HStack(spacing: Constants.QRScanner.statusSpacing) {
-            if isValidating {
-                ProgressView().tint(.white)
-                Text("Connecting…")
+        VStack(spacing: Constants.QRScanner.statusSpacing) {
+            HStack(spacing: Constants.QRScanner.statusSpacing) {
+                if isValidating {
+                    ProgressView().tint(.white)
+                    Text("Connecting…")
+                        .interFont(Constants.Typography.bodyXS)
+                } else if let error = errorMessage {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                    Text(error)
+                        .interFont(Constants.Typography.bodyXS)
+                } else {
+                    Image(.scanHint)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: Constants.QRScanner.hintIconSize, height: Constants.QRScanner.hintIconSize)
+                        .accessibilityHidden(true)
+                    Text("Point at the QR code in the Intent Settings")
+                        .interFont(Constants.Typography.bodyXS)
+                }
+            }
+            if !isValidating, errorMessage == nil {
+                Text("Hold your device steady")
                     .interFont(Constants.Typography.bodyXS)
-            } else if let error = errorMessage {
-                Image(systemName: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
-                    .accessibilityHidden(true)
-                Text(error)
-                    .interFont(Constants.Typography.bodyXS)
-            } else {
-                Image(.scanHint)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: Constants.QRScanner.hintIconSize, height: Constants.QRScanner.hintIconSize)
-                    .accessibilityHidden(true)
-                Text("Point at the QR code in the Intent Settings")
-                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(.white.opacity(0.5))
             }
         }
         .font(.subheadline)
@@ -332,6 +339,9 @@ struct QRCameraPreview: UIViewControllerRepresentable {
             recognizedDataTypes: [.barcode(symbologies: [.qr])],
             qualityLevel: .fast,
             recognizesMultipleItems: false,
+            // VisionKit cannot relocate its native guidance. Keep scan instructions
+            // in the SwiftUI overlay, below the description and outside the scan window.
+            isGuidanceEnabled: false,
             isHighlightingEnabled: true
         )
         scanner.delegate = context.coordinator
