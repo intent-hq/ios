@@ -24,8 +24,6 @@ extension ConversationTranscriptScrollUITests {
     /// text-interaction view becomes first responder and keeps the
     /// keyboard up.
     @MainActor
-    // Only the added quarantine guard exceeds the original body limit; revisit with its removal.
-    // swiftlint:disable:next function_body_length
     func testKeyboardOpenKeepsTranscriptAtEnd() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["INTENT_UITEST_FULL_GATE_REPRO"] == "1",

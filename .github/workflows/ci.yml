@@ -1,79 +1,526 @@
-name: Keyboard prerequisite proof (scratch)
-
-# Scratch branch only. Never merge this workflow override.
+name: CI
+# No push-to-main trigger: the repo ruleset requires PR branches to be up to
+# date with main before merging, so the squash commit that lands on main has
+# the identical tree the PR CI just tested. A post-merge re-run adds no signal.
+# Caches are seeded on main by warm-cache.yml instead: a PR can only restore
+# caches created on its own merge ref or on main, so without that seeding
+# every PR's first run started cold.
+# workflow_dispatch adds a filtered lane for iteration: `only_testing` narrows
+# the test step via ONLY_TESTING and renames the macOS job to
+# "iOS Filtered Tests (non-gating)", so a filtered green can never satisfy
+# the ruleset-required "iOS Build & Test" check. pull_request runs never
+# receive a filter.
+# UI tests come in two tiers. Pull requests and the merge queue run only the
+# smoke selectors in scripts/ui-smoke-tests.txt (a few minutes); the full
+# IntentUITests bundle (about an hour) runs on the schedule below, which
+# GitHub fires only on the default branch, and on a manual dispatch with
+# ui_suite=full. The scheduled run is the only push-independent run on main.
 on:
+  pull_request:
+  merge_group:
+  schedule:
+    - cron: '0 9 * * *'
+    - cron: '0 21 * * *'
   workflow_dispatch:
+    inputs:
+      ui_suite:
+        description: >-
+          UI tests to run in the iOS UI Tests job: smoke runs
+          scripts/ui-smoke-tests.txt, full runs the whole IntentUITests
+          bundle. Ignored when only_testing is set.
+        type: choice
+        options:
+          - smoke
+          - full
+        default: smoke
+      only_testing:
+        description: >-
+          Whitespace-separated Target[/Suite[/test]] identifiers passed to
+          ONLY_TESTING (e.g. 'IntentTests/DemoFixturesTests'; a file name is
+          not a selector). Each must resolve to enumerated tests or the job
+          fails with exit 82 (83 when the selection cannot be verified); the
+          per-selector table lands in the job summary. Empty runs the full
+          bundle.
+        type: string
+        required: false
+        default: ''
+      simulator_family:
+        description: >-
+          iPhone keeps the existing default. iPad creates one disposable
+          simulator for a non-gating run and requires 1–20 Target/Suite[/test]
+          selectors in only_testing; full bundles and skipped selections fail.
+        type: choice
+        options: [iphone, ipad]
+        required: false
+        default: iphone
 
 permissions:
   contents: read
+  pull-requests: read
+  # Lets the iOS job read the go-test and swiftlint jobs' conclusions
+  # (Require Go unit tests and SwiftLint).
+  actions: read
+
+# Cancel in progress workflows on pull_requests.
+# https://docs.github.com/en/actions/using-jobs/using-concurrency#example-using-a-fallback-value
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
-  local-checks:
-    name: Wrapper tests and SwiftLint
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+  select-macos-runner:
+    name: Select macOS runner
+    runs-on: ubuntu-latest
+    outputs:
+      runs-on: ${{ steps.select.outputs.runs-on || '"macos-15"' }}
     steps:
       - uses: actions/checkout@v7
-      - run: scripts/test_xcodebuild.sh
-      - run: scripts/check-swiftlint-inputs.sh
-      - run: scripts/setup-swiftlint.sh
-      - run: scripts/swiftlint.sh
+      - name: Check local Mac status
+        id: select
+        env:
+          RUNNER_STATUS_TOKEN: '' # Scratch proof: select hosted macos-15 without contacting the local pool.
+        run: bash .github/scripts/select-macos-runner.sh
 
-  keyboard:
-    name: Native keyboard prerequisite controls
-    runs-on: macos-15
-    timeout-minutes: 45
-    env:
-      GIT_TERMINAL_PROMPT: '0'
-      TEST_CRASH_RETRY: '0'
-      SIM_LOCK_TIMEOUT: '0'
-      TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO: '1'
-      SOURCE_SHA: 8ac22ada2b624d40d3d6d1733d18de81435419f9
-      ONLY_TESTING: >-
-        IntentUITests/ConversationTranscriptScrollUITests/testKeyboardOpenKeepsTranscriptAtEnd
-        IntentUITests/ConversationTranscriptScrollUITests/testSoftwareKeyboardPrerequisiteSkipsWhenKeyboardIsAbsent
-      RESULT_BUNDLE: KeyboardPrerequisite.xcresult
+  go-test:
+    name: Go unit tests (TailcatKit)
+    # TailcatKit is pure Go and cross-compiles for Linux, so its tests run
+    # here on a cheap, fast Linux runner instead of serialising 2-12 minutes
+    # of Tailscale compilation onto the 3-core macOS VM.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
         with:
           go-version-file: TailcatKit/go.mod
           cache-dependency-path: TailcatKit/go.sum
-      - name: Select the existing Xcode 26.3 installation
+
+      - name: Go unit tests
+        working-directory: TailcatKit
+        run: go test -timeout 300s ./...
+
+      # Exercises the simulator lock and crash classification in
+      # scripts/xcodebuild.sh against stubbed xcrun/xcodebuild; needs bash + python3.
+      - name: xcodebuild.sh self-tests
+        run: scripts/test_xcodebuild.sh
+
+      - name: Disposable iPad route tests
+        run: python3 scripts/test_ci_simulator.py
+
+      - name: macOS runner pool selection tests
+        run: python3 scripts/test_select_macos_runner.py
+
+      - name: Xcode Cloud post-clone tests
+        run: scripts/test-ci-post-clone.sh
+
+      # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
+      # override on both Darwin and Linux paths against a stubbed swiftlint.
+      - name: swiftlint.sh self-tests
+        run: scripts/test-swiftlint.sh
+
+      - name: SwiftLint prerequisite and setup tests
         run: |
-          test -d /Applications/Xcode_26.3.app
-          echo 'DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer' >> "$GITHUB_ENV"
-          echo "DERIVED_DATA_DIR=$RUNNER_TEMP/b58i-derived-data" >> "$GITHUB_ENV"
-      - name: Record source and simulator provenance
+          scripts/test-swiftlint-prerequisites.sh
+          scripts/test-setup-swiftlint.sh
+
+      # Exercises the xcfilelist drift check in scripts/check-swiftlint-inputs.sh
+      # against a fixture git repo (missing, stale, unsorted, pruned entries);
+      # pure bash + git.
+      - name: check-swiftlint-inputs.sh self-tests
+        run: scripts/test-check-swiftlint-inputs.sh
+
+      # Exercises source-input generation and validation on Linux; the script's
+      # sandbox-exec cases remain conditional and run only on macOS.
+      - name: generate-test-inputs.sh self-tests
+        run: scripts/test-generate-test-inputs.sh
+
+  swiftlint:
+    name: SwiftLint
+    # Runs unconditionally on both triggers so the "Require Go unit tests and
+    # SwiftLint" step in build-and-test never sees a skipped job. The official
+    # Linux release requires a compatible SourceKit runtime. Use the same
+    # supported native setup as developers; no Xcode or simulator work needed.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The Xcode lint phase only warns and skips diagnostics when
+      # scripts/swiftlint-xcode-inputs.xcfilelist drifts from the tracked Swift
+      # sources; this strict check keeps that drift merge-blocking (ios#384).
+      - name: Check SwiftLint Xcode input list
+        run: scripts/check-swiftlint-inputs.sh
+
+      # setup-swiftlint.sh retains the official 0.65.1 release checksum and
+      # reuses an installed runtime only after a real SourceKit lint probe.
+      - name: Set up SwiftLint 0.65.1 and SourceKit
         run: |
-          mkdir evidence
-          git fetch --no-tags --depth=1 origin "$SOURCE_SHA"
-          test "$(git diff --name-only "$SOURCE_SHA" HEAD)" = .github/workflows/ci.yml
+          scripts/setup-swiftlint.sh
+          scripts/setup-swiftlint.sh --check
+
+      - name: Real SwiftLint runtime smoke test
+        run: scripts/test-swiftlint-runtime.sh
+
+      # The wrapper passes --strict --no-cache and enforces the version pin;
+      # the reporter override renders violations as PR annotations.
+      - name: SwiftLint
+        env:
+          SWIFTLINT_REPORTER: github-actions-logging
+        run: scripts/swiftlint.sh
+
+  build-and-test:
+    name: ${{ github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad') && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
+    if: ${{ !cancelled() }}
+    # The repo ruleset requires only this job. A job skipped because a
+    # `needs` dependency failed counts as passing for required checks, so
+    # `needs: [go-test, swiftlint]` would not keep a Go or lint failure
+    # merge-blocking; instead the final "Require Go unit tests and SwiftLint"
+    # step below waits for those jobs and fails this one if either did not
+    # succeed. All three jobs still run in parallel.
+    needs: select-macos-runner
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    timeout-minutes: 45
+    env:
+      GIT_TERMINAL_PROMPT: '0'
+      # Knobs for scripts/xcodebuild.sh: pin SPM clones to the cached path
+      # and write the test result bundle where the artifact upload expects it.
+      SPM_CLONE_DIR: build/SourcePackages
+      RESULT_BUNDLE: TestResults
+      TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO: '1'
+      TEST_CRASH_RETRY: '0'
+      SIM_LOCK_TIMEOUT: '0'
+      KEYBOARD_PROOF_SOURCE_SHA: 8d160c1c84aae0e2997e0b6b07e7303fc1c13772
+      SIMULATOR_FAMILY: ${{ github.event_name == 'workflow_dispatch' && inputs.simulator_family || 'iphone' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Persistent runners must not mix Swift objects from different branches.
+      - name: Use isolated build directory
+        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-unit" >> "$GITHUB_ENV"
+
+      - name: Validate simulator request
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
+        run: |
+          export IPAD_EVIDENCE_DIR="$RUNNER_TEMP/ipad-evidence"
+          printf 'IPAD_EVIDENCE_DIR=%s\n' "$IPAD_EVIDENCE_DIR" >> "$GITHUB_ENV"
+          python3 scripts/ci_simulator.py validate
+
+      - name: SwiftLint wrapper tests on the native shell
+        run: scripts/test-swiftlint.sh
+
+      - name: Set up Node for Keychain fixture verification
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Read pinned Keychain fixture revision
+        id: keychain-fixtures
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const lock = JSON.parse(readFileSync('IntentTests/Fixtures/backend-keychain.lock.json', 'utf8'));
+          if (lock.sourceRepository !== 'intent-hq/intent' || !/^[0-9a-f]{40}$/.test(lock.sourceCommit)) {
+            throw new Error('Keychain fixture lock must pin a full intent-hq/intent commit');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `source-commit=${lock.sourceCommit}\n`);
+          NODE
+
+      - name: Checkout exact canonical Keychain fixture source
+        uses: actions/checkout@v7
+        with:
+          repository: intent-hq/intent
+          ref: ${{ steps.keychain-fixtures.outputs.source-commit }}
+          path: .keychain-contract-source
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/backend-keychain-contract.mjs
+            /docs/protocol/fixtures/backend-keychain/v1/
+
+      - name: Verify Keychain fixture provenance
+        env:
+          SOURCE_COMMIT: ${{ steps.keychain-fixtures.outputs.source-commit }}
+        run: |
+          set -euo pipefail
+          node .keychain-contract-source/scripts/backend-keychain-contract.mjs verify \
+            --source-root "$GITHUB_WORKSPACE/.keychain-contract-source" \
+            --source-commit "$SOURCE_COMMIT" --component ios --component-root "$GITHUB_WORKSPACE" \
+            | tee "$RUNNER_TEMP/keychain-fixture-provenance.txt"
+          cat "$RUNNER_TEMP/keychain-fixture-provenance.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Select Xcode
+        run: |
+          if [ '${{ runner.environment }}' = self-hosted ]; then
+            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
+            # local results agree with hosted ones; the Mac's default Xcode
+            # stays untouched (ios#588, ios#592).
+            xcode=/Applications/Xcode_26.3.app
+            if [ ! -d "$xcode" ]; then
+              echo "::error::$xcode is not installed on this runner" >&2
+              exit 1
+            fi
+          else
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          fi
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+
+      - name: Check Metal Toolchain on local Mac
+        if: runner.environment == 'self-hosted'
+        run: |
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun metal -v
+
+      # iPhone selection follows the runner's existing route. The optional iPad lane
+      # creates a fresh device and records its ownership before exporting the
+      # UDID used by the same pre-boot and test wrapper paths.
+      - name: Pick simulator device
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
+        run: |
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            python3 scripts/ci_simulator.py prepare
+          else
+            if [ '${{ runner.environment }}' = self-hosted ]; then
+              udid=$(.github/scripts/select-local-simulator.sh)
+            else
+              udid=$(scripts/xcodebuild.sh pick-simulator)
+            fi
+            echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+          fi
+
+      # Kick off the simulator boot early so it overlaps with package
+      # resolution and compilation instead of delaying the test step.
+      # Run in the background: simctl boot can block for minutes waiting for
+      # the device to reach the Booted state, but CoreSimulator completes the
+      # boot on its own and the test step waits on bootstatus before
+      # launching. Output goes to a log file that the "Simulator state" step
+      # prints later, so a failed or slow boot is visible instead of silent.
+      - name: Pre-boot simulator
+        run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
+
+      # The gomobile bind output (and the tcecho helper binary) are
+      # deterministic for a given wrapper source + module graph + Go
+      # toolchain, so cache them on a hash of those inputs. go.mod is
+      # included because it picks the toolchain (setup-go go-version-file)
+      # and module versions. On a hit the job never needs Go at all, which
+      # skips the multi-minute toolchain download and the 800 MB Go cache
+      # restore/save. warm-cache.yml seeds this cache on main.
+      - name: Cache TailcatKit.xcframework
+        id: tailcat-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            TailcatKit/build/TailcatKit.xcframework
+            TailcatKit/build/tcecho
+          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
+
+      - name: Set up Go
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache-dependency-path: TailcatKit/go.sum
+
+      - name: Build TailcatKit.xcframework
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        run: ./TailcatKit/build_xcframework.sh
+
+      - name: Build tailcat echo server
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        working-directory: TailcatKit
+        run: go build -o build/tcecho ./cmd/tcecho
+
+      # In-process tailcat echo server for the Swift smoke test; prints
+      # its connection token on the first line of stdout. The token
+      # reaches the simulator test process via the TEST_RUNNER_ prefix.
+      # Startup fetches the public DERP map (https://tailcat.dev/derpmap.json)
+      # under a 10 s deadline hard-coded inside tailcat; a single slow
+      # fetch used to fail the whole job (ios#388), so a start that exits
+      # early or produces no token within 30 s is retried with backoff
+      # (5 s, 15 s, 30 s) and the step fails only after the last attempt,
+      # naming the DERP-map fetch when tcecho's stderr blames it.
+      - name: Start tailcat echo server
+        working-directory: TailcatKit
+        env:
+          TCECHO_BIN: ./build/tcecho
+          TCECHO_BACKOFF: 5 15 30
+        run: |
+          derp_cause() {
+            grep -q 'fetching DERPMap' /tmp/tcecho-err.txt 2>/dev/null
+          }
+          start_once() {
+            : > /tmp/tcecho-token.txt
+            : > /tmp/tcecho-err.txt
+            "$TCECHO_BIN" > /tmp/tcecho-token.txt 2>/tmp/tcecho-err.txt &
+            pid=$!
+            for _ in $(seq 1 30); do
+              [ -s /tmp/tcecho-token.txt ] && return 0
+              if ! kill -0 "$pid" 2>/dev/null; then
+                wait "$pid" 2>/dev/null || true
+                echo "tcecho exited during startup:" >&2
+                sed 's/^/  /' /tmp/tcecho-err.txt >&2
+                return 1
+              fi
+              sleep 1
+            done
+            echo "tcecho produced no token within 30s; stopping it:" >&2
+            sed 's/^/  /' /tmp/tcecho-err.txt >&2
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            return 1
+          }
+          read -r -a backoff <<< "$TCECHO_BACKOFF"
+          attempts=$(( ${#backoff[@]} + 1 ))
+          derp_failures=0
+          for attempt in $(seq 1 "$attempts"); do
+            if start_once; then
+              break
+            fi
+            if derp_cause; then
+              derp_failures=$(( derp_failures + 1 ))
+              echo "attempt $attempt/$attempts failed: public DERP-map fetch timed out or failed (ios#388)" >&2
+            else
+              echo "attempt $attempt/$attempts failed" >&2
+            fi
+            if [ "$attempt" -eq "$attempts" ]; then
+              if [ "$derp_failures" -eq "$attempts" ]; then
+                echo "::error title=tcecho did not start::the public DERP-map fetch (https://tailcat.dev/derpmap.json) failed on all $attempts attempts; see ios#388"
+              elif [ "$derp_failures" -gt 0 ]; then
+                echo "::error title=tcecho did not start::tcecho failed to start after $attempts attempts; $derp_failures of them failed fetching the public DERP map (https://tailcat.dev/derpmap.json, ios#388), see the step log for the others"
+              else
+                echo "::error title=tcecho did not start::tcecho failed to start after $attempts attempts; see its stderr in the step log"
+              fi
+              exit 1
+            fi
+            delay=${backoff[attempt - 1]}
+            echo "retrying in ${delay}s" >&2
+            sleep "$delay"
+          done
+          token=$(head -n 1 /tmp/tcecho-token.txt)
+          if [ -z "$token" ]; then
+            echo "tcecho started but printed an empty token" >&2
+            cat /tmp/tcecho-err.txt >&2
+            exit 1
+          fi
+          [ "$attempt" -eq 1 ] || echo "tcecho started on attempt $attempt/$attempts"
+          echo "::add-mask::$token"
+          echo "TAILCAT_SMOKE_TOKEN=$token" >> "$GITHUB_ENV"
+
+      # Ephemeral runner: cache SPM checkouts across runs. SPM_CLONE_DIR
+      # (job env above) makes scripts/xcodebuild.sh pin
+      # -clonedSourcePackagesDirPath to the cached path so the cache key
+      # actually covers what gets written.
+      - name: Cache SPM packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
+
+      - name: Resolve SPM packages
+        run: scripts/xcodebuild.sh resolve
+
+      - name: Build for testing
+        run: scripts/xcodebuild.sh build-for-testing
+
+      # Diagnostics for the intermittent multi-minute stall before the test
+      # host launches: show what the background boot printed and whether
+      # the device is actually Booted before xcodebuild takes over.
+      - name: Simulator state
+        run: |
+          echo "--- simctl boot output:"
+          cat /tmp/simboot.log 2>/dev/null || echo "(no output)"
+          echo "--- device:"
+          xcrun simctl list devices | grep -F "$SIM_UDID" || true
+
+      - name: Note test filter
+        if: github.event_name == 'workflow_dispatch' && inputs.only_testing != ''
+        env:
+          ONLY_TESTING: ${{ inputs.only_testing }}
+        run: |
+          echo "Filtered test run (non-gating): ONLY_TESTING='$ONLY_TESTING'" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run Keychain conformance and existing registry/publisher tests
+        env:
+          RESULT_BUNDLE: TestResults-keychain
+          ONLY_TESTING: IntentTests/BackendKeychainConformanceTests IntentTests/BackendKeychainFixtureTests IntentTests/SyncedBackendRegistryTests IntentTests/SyncedBackendPublisherTests
+        run: |
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            set -o pipefail
+            scripts/xcodebuild.sh test-ios-unit 2>&1 | tee "$IPAD_EVIDENCE_DIR/keychain.log"
+          else
+            scripts/xcodebuild.sh test-ios-unit
+          fi
+
+      # The script removes any existing result bundle at RESULT_BUNDLE
+      # (xcodebuild refuses an existing path). xcodebuild forwards its
+      # TEST_RUNNER_-prefixed environment variables into the test process
+      # (minus the prefix), carrying the tcecho token to the TailcatKit
+      # smoke test. A pull_request (or unfiltered dispatch) uses the unit-only
+      # subcommand, which skips IntentUITests without selector enumeration. A
+      # filtered workflow_dispatch retains the regular verified-selector path:
+      # a selector that matches or executes nothing fails with exit 82, an
+      # unverifiable selection with 83, and the per-selector table is appended
+      # to the job summary (see the script header).
+      - name: Record keyboard proof provenance
+        run: |
+          mkdir keyboard-evidence
+          git fetch --no-tags --depth=1 origin "$KEYBOARD_PROOF_SOURCE_SHA"
+          test "$(git diff --name-only "$KEYBOARD_PROOF_SOURCE_SHA" HEAD)" = .github/workflows/ci.yml
           {
             date -u
             git show -s --format='%H%n%P%n%s' HEAD
-            echo "Source commit: $SOURCE_SHA"
-            git diff "$SOURCE_SHA" HEAD --stat
+            echo "Source commit: $KEYBOARD_PROOF_SOURCE_SHA"
+            git diff "$KEYBOARD_PROOF_SOURCE_SHA" HEAD --stat
             xcodebuild -version
             sw_vers
             uptime
+            echo "SIM_UDID=$SIM_UDID"
             xcrun simctl list runtimes
-          } > evidence/provenance.txt
-          udid=$(scripts/xcodebuild.sh pick-simulator)
-          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
-          echo "SIM_UDID=$udid" >> evidence/provenance.txt
-          defaults read com.apple.iphonesimulator > evidence/simulator-preferences.txt 2>&1 || true
-      - name: Run the two native controls once
+          } > keyboard-evidence/provenance.txt
+          defaults read com.apple.iphonesimulator > keyboard-evidence/simulator-preferences.txt 2>&1 || true
+
+      - name: Run unit tests
+        id: selected-tests
+        env:
+          TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
-          set -o pipefail
-          scripts/xcodebuild.sh test-ios 2>&1 | tee evidence/test.log
-      - name: Preserve results and require actual passes
-        if: always()
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            set -o pipefail
+            export ONLY_TESTING_IDENTITIES_PATH="$IPAD_EVIDENCE_DIR/resolved-tests.json"
+            scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/test.log"
+          elif [ -n "$ONLY_TESTING" ]; then
+            set -o pipefail
+            scripts/xcodebuild.sh test-without-building 2>&1 | tee keyboard-evidence/test.log
+          else
+            scripts/xcodebuild.sh test-without-building-unit
+          fi
+
+      - name: Preserve keyboard results and require two actual passes
+        if: always() && steps.selected-tests.outcome != 'skipped'
         run: |
-          test -d KeyboardPrerequisite.xcresult
-          xcrun xcresulttool get test-results tests --path KeyboardPrerequisite.xcresult > evidence/tests.json
-          xcrun xcresulttool export attachments --path KeyboardPrerequisite.xcresult --output-path evidence/attachments
-          python3 - <<'PY'
+          test -d TestResults
+          bundle="$RUNNER_TEMP/b58i-keyboard.xcresult"
+          ln -s "$PWD/TestResults" "$bundle"
+          xcrun xcresulttool get test-results tests --path "$bundle" > keyboard-evidence/tests.json
+          xcrun xcresulttool export attachments --path "$bundle" --output-path keyboard-evidence/attachments
+          python3 - <<'PYPROOF'
           import json
           from pathlib import Path
 
@@ -90,19 +537,476 @@ jobs:
                       rows.append((identity, node.get("result")))
                   walk(node.get("children", []))
 
-          walk(json.loads(Path("evidence/tests.json").read_text())["testNodes"])
+          walk(json.loads(Path("keyboard-evidence/tests.json").read_text())["testNodes"])
           print(rows)
           assert len(rows) == 2, "Expected exactly two executed controls"
           for test in expected:
               assert len([row for row in rows if row[0].endswith(test) and row[1] == "Passed"]) == 1, test
           print("Both controls passed; the unfocused absence control is not a post-focus issue #385 reproduction.")
-          PY
-      - uses: actions/upload-artifact@v7
-        if: always()
+          PYPROOF
+
+      - name: Require actual iPad execution
+        if: always() && env.SIMULATOR_FAMILY == 'ipad' && steps.selected-tests.outcome != 'skipped'
+        env:
+          ONLY_TESTING: ${{ inputs.only_testing }}
+        run: python3 scripts/ci_simulator.py verify
+
+      # InfoPlistSyncTests, PlatformGuardAllowlistTests,
+      # ObjCCallbackIsolationTests, ExternalLinkTests and
+      # PrivacyManifestDriftTests inspect repository files at runtime. They
+      # must read the copies packaged into IntentTests.xctest, never the
+      # checkout the bundle was compiled in: that path does not exist on a
+      # physical device (intent-hq/ios#320, intent-hq/ios#364,
+      # intent-hq/ios#373, intent-hq/ios#381). Re-run just
+      # those suites and the Keychain fixture suites against the same build
+      # with the source tree moved aside,
+      # so they can only pass by reading the bundled copies. Empty stand-in
+      # directories keep the project's synchronized folders resolvable for
+      # xcodebuild; a separate result bundle preserves the full run's for the
+      # artifact upload.
+      - name: Source-independence check (ios#320)
+        env:
+          RESULT_BUNDLE: TestResults-source-moved
+          ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests IntentTests/ObjCCallbackIsolationTests IntentTests/ExternalLinkTests IntentTests/PrivacyManifestDriftTests IntentTests/BackendKeychainConformanceTests IntentTests/BackendKeychainFixtureTests
+        run: |
+          moved="$RUNNER_TEMP/source-moved"
+          mkdir -p "$moved"
+          restore() {
+            for p in Intent IntentTests Info-visionOS.plist; do
+              [ -e "$moved/$p" ] || continue
+              if [ -d "$p" ]; then rmdir "$p"; fi
+              mv "$moved/$p" "$p"
+            done
+          }
+          trap restore EXIT
+          mv Intent IntentTests Info-visionOS.plist "$moved/"
+          mkdir Intent IntentTests
+          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+            set -o pipefail
+            scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/source-moved.log"
+          else
+            scripts/xcodebuild.sh test-without-building
+          fi
+
+      - name: Export terminal screenshots
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'MobileTerminalUITests') }}
+        run: |
+          if [ -d TestResults ]; then
+            ln -s "$PWD/TestResults" "$RUNNER_TEMP/TerminalResults.xcresult"
+            xcrun xcresulttool export attachments \
+              --path "$RUNNER_TEMP/TerminalResults.xcresult" \
+              --output-path TerminalScreenshots
+          fi
+
+      - name: Upload terminal screenshots
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'MobileTerminalUITests') }}
+        uses: actions/upload-artifact@v7
         with:
-          name: keyboard-prerequisite-evidence
-          path: |
-            evidence
-            KeyboardPrerequisite.xcresult
+          name: mobile-terminal-screenshots
+          path: TerminalScreenshots
+          if-no-files-found: warn
+
+      - name: Export workspace transfer screenshots
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'WorkspaceTransferUITests') }}
+        run: |
+          if [ -d TestResults ]; then
+            ln -s "$PWD/TestResults" "$RUNNER_TEMP/WorkspaceTransferResults.xcresult"
+            xcrun xcresulttool export attachments \
+              --path "$RUNNER_TEMP/WorkspaceTransferResults.xcresult" \
+              --output-path WorkspaceTransferScreenshots
+          fi
+
+      - name: Upload workspace transfer screenshots
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'WorkspaceTransferUITests') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: workspace-transfer-screenshots
+          path: WorkspaceTransferScreenshots
+          if-no-files-found: warn
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-unit-test-results
           retention-days: 14
-          if-no-files-found: error
+          path: |
+            keyboard-evidence
+            TestResults
+            TestResults-source-moved
+            TestResults-keychain
+
+      # See the job comment: turns a go-test or swiftlint failure into a
+      # failure of this (the only ruleset-required) job. Both normally finish
+      # minutes before this step runs, so the wait is usually zero. A failing
+      # `gh api` call (transient network/API error) is retried like an
+      # empty conclusion rather than aborting under `set -e`; the 20-minute
+      # timeout below is the only hard failure besides a failed required job.
+      - name: Require Go unit tests and SwiftLint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 80); do
+            if ! jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "Go unit tests (TailcatKit)" or .name == "SwiftLint") | "\(.name)\t\(.conclusion // "")"'); then
+              echo "gh api failed (attempt $i/80); retrying in 15s" >&2
+              sleep 15
+              continue
+            fi
+            pending=0
+            for name in "Go unit tests (TailcatKit)" "SwiftLint"; do
+              c=$(printf '%s\n' "$jobs" | awk -F'\t' -v n="$name" '$1 == n { print $2 }')
+              case "$c" in
+                success) ;;
+                "") pending=1 ;;
+                *) echo "$name job concluded: $c" >&2; exit 1 ;;
+              esac
+            done
+            if [ "$pending" -eq 0 ]; then
+              echo "Go unit tests and SwiftLint passed"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "timed out waiting for the Go unit tests / SwiftLint jobs" >&2
+          exit 1
+
+      - name: Clean up owned iPad simulator
+        if: always() && env.SIMULATOR_FAMILY == 'ipad'
+        run: python3 scripts/ci_simulator.py cleanup
+
+      - name: Upload iPad execution evidence
+        if: always() && env.SIMULATOR_FAMILY == 'ipad'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ipad-execution-evidence
+          path: |
+            ${{ env.IPAD_EVIDENCE_DIR }}
+            TestResults
+            TestResults-retry
+            TestResults-keychain
+            TestResults-keychain-retry
+            TestResults-source-moved
+            TestResults-source-moved-retry
+          if-no-files-found: warn
+
+  ios-ui-tests:
+    name: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && 'iOS UI Tests (full)' || 'iOS UI Tests' }}
+    # Pull requests, the merge queue and smoke dispatches run the selectors in
+    # scripts/ui-smoke-tests.txt; the schedule and ui_suite=full dispatches
+    # run the complete UI bundle. Filtered dispatches already run their
+    # requested selector in build-and-test.
+    # A human adds this check to the ruleset after merge; build-and-test does not
+    # wait for it; the macOS jobs queue on the dedicated Mac.
+    if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad')) }}
+    needs: select-macos-runner
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    # Allow setup, the full iPhone suite, iPad regressions, and cleanup (ios#429).
+    timeout-minutes: 90
+    env:
+      GIT_TERMINAL_PROMPT: '0'
+      SPM_CLONE_DIR: build/SourcePackages
+      RESULT_BUNDLE: UITestResults
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use isolated build directory
+        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui" >> "$GITHUB_ENV"
+
+      - name: Select Xcode
+        run: |
+          if [ '${{ runner.environment }}' = self-hosted ]; then
+            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
+            # local results agree with hosted ones; the Mac's default Xcode
+            # stays untouched (ios#588, ios#592).
+            xcode=/Applications/Xcode_26.3.app
+            if [ ! -d "$xcode" ]; then
+              echo "::error::$xcode is not installed on this runner" >&2
+              exit 1
+            fi
+          else
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          fi
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+
+      - name: Check Metal Toolchain on local Mac
+        if: runner.environment == 'self-hosted'
+        run: |
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun metal -v
+
+      - name: Pick simulator device
+        run: |
+          if [ '${{ runner.environment }}' = self-hosted ]; then
+            udid=$(.github/scripts/select-local-simulator.sh)
+          else
+            udid=$(scripts/xcodebuild.sh pick-simulator)
+          fi
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+
+      - name: Pre-boot simulator
+        run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
+
+      - name: Cache TailcatKit.xcframework
+        id: tailcat-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            TailcatKit/build/TailcatKit.xcframework
+            TailcatKit/build/tcecho
+          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
+
+      - name: Set up Go
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache-dependency-path: TailcatKit/go.sum
+
+      - name: Build TailcatKit.xcframework
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        run: ./TailcatKit/build_xcframework.sh
+
+      # Populate the shared cache identically to build-and-test. This job never
+      # starts tcecho because IntentUITests do not consume its smoke token.
+      - name: Build tailcat echo server
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        working-directory: TailcatKit
+        run: go build -o build/tcecho ./cmd/tcecho
+
+      - name: Cache SPM packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
+
+      - name: Resolve SPM packages
+        run: scripts/xcodebuild.sh resolve
+
+      - name: Build for testing
+        run: scripts/xcodebuild.sh build-for-testing
+
+      - name: Simulator state
+        run: |
+          echo "--- simctl boot output:"
+          cat /tmp/simboot.log 2>/dev/null || echo "(no output)"
+          echo "--- device:"
+          xcrun simctl list devices | grep -F "$SIM_UDID" || true
+
+      - name: Run UI tests
+        env:
+          FULL_UI_SUITE: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && '1' || '' }}
+        run: |
+          if [ -n "$FULL_UI_SUITE" ]; then
+            export ONLY_TESTING=IntentUITests
+            echo "UI tests: full IntentUITests bundle" >> "$GITHUB_STEP_SUMMARY"
+          else
+            ONLY_TESTING=$(sed -e 's/#.*//' scripts/ui-smoke-tests.txt | xargs)
+            export ONLY_TESTING
+            echo "UI tests: smoke list (scripts/ui-smoke-tests.txt)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          scripts/xcodebuild.sh test-without-building
+
+      - name: Run iPad menu regression tests
+        env:
+          RESULT_BUNDLE: IPadMenuTestResults
+          ONLY_TESTING: >-
+            IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsSendAndMenuAvailable
+            IntentUITests/HomeActionMenuUITests/testIPadQuestionsKeepNextAndSendAvailable
+        run: |
+          SIM_UDID=$(xcrun simctl list devices available --json | jq -er '
+            [.devices | to_entries[] | select(.key | contains("iOS"))
+              | .value[] | select(.name | startswith("iPad"))]
+            | last | .udid // error("No available iPad simulator")')
+          export SIM_UDID
+          scripts/xcodebuild.sh test-without-building
+
+      - name: Upload UI test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ui-test-results
+          path: |
+            UITestResults
+            UITestResults-retry
+            IPadMenuTestResults
+            IPadMenuTestResults-retry
+
+      # ConversationTranscriptScrollUITests attaches one content-free JSON
+      # record per launch proving the unrealized-end recovery ran. Export only
+      # those records and the agent-group fixture screenshots on every run;
+      # full result bundles remain failure-only.
+      - name: Export UI evidence
+        id: recovery-evidence
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/recovery-evidence"
+          mkdir -p "$out"
+          group_out="$RUNNER_TEMP/agent-group-evidence"
+          mkdir -p "$group_out"
+          count=0
+          group_count=0
+          for source in "$RESULT_BUNDLE" "$RESULT_BUNDLE-retry"; do
+            if [ ! -d "$source" ]; then
+              echo "No result bundle at $source; nothing to export"
+              continue
+            fi
+            dest="$out"
+            [ "$source" = "$RESULT_BUNDLE" ] || dest="$out/retry"
+            mkdir -p "$dest"
+            bundle="$RUNNER_TEMP/recovery-evidence-$(basename "$source").xcresult"
+            ln -s "$PWD/$source" "$bundle"
+            exported="$RUNNER_TEMP/recovery-evidence-export-$(basename "$source")"
+            mkdir -p "$exported"
+            if xcrun xcresulttool export attachments --path "$bundle" --output-path "$exported" \
+              && [ -f "$exported/manifest.json" ]; then
+              while IFS=$'\t' read -r src name; do
+                [ -n "$src" ] && [ -f "$exported/$src" ] || continue
+                filename=$(printf '%s' "$name" | tr -cs 'A-Za-z0-9._-' '_')
+                if [[ "$name" == agent-group-evidence-* ]]; then
+                  group_dest="$group_out/$(basename "$source")"
+                  mkdir -p "$group_dest"
+                  cp "$exported/$src" "$group_dest/$filename"
+                  group_count=$((group_count + 1))
+                else
+                  cp "$exported/$src" "$dest/$filename"
+                  count=$((count + 1))
+                fi
+              done < <(jq -r --arg prefix transcript-recovery-evidence- --arg groups agent-group-evidence- '
+                .[]? | .attachments[]?
+                | select(((.suggestedHumanReadableName // "") | startswith($prefix))
+                         or ((.exportedFileName // "") | startswith($prefix))
+                         or ((.suggestedHumanReadableName // "") | startswith($groups))
+                         or ((.exportedFileName // "") | startswith($groups)))
+                | [.exportedFileName, (.suggestedHumanReadableName // .exportedFileName)] | @tsv
+              ' "$exported/manifest.json")
+            else
+              echo "::warning::could not export attachments from $source"
+            fi
+          done
+          echo "Recovery evidence records: $count"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Agent group screenshots: $group_count"
+          echo "group_count=$group_count" >> "$GITHUB_OUTPUT"
+
+      - name: Upload agent group screenshots
+        if: always() && steps.recovery-evidence.outputs.group_count != '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-agent-group-evidence
+          path: ${{ runner.temp }}/agent-group-evidence
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload transcript recovery evidence
+        if: always() && steps.recovery-evidence.outputs.count != '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-transcript-recovery-evidence
+          path: ${{ runner.temp }}/recovery-evidence
+          retention-days: 14
+          if-no-files-found: ignore
+
+  visionos-build:
+    name: visionOS Build
+    # Build-only job (no tests) keeping the xros destination green.
+    # TailcatKit is linked with an iOS-only platform filter, so this job
+    # needs no Go toolchain and no xcframework build. Skipped on a filtered
+    # dispatch to save runner time.
+    if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
+    needs: select-macos-runner
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    timeout-minutes: 45
+    env:
+      GIT_TERMINAL_PROMPT: '0'
+      # Knob for scripts/xcodebuild.sh: pin SPM clones to the cached path.
+      SPM_CLONE_DIR: build/SourcePackages
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use isolated build directory
+        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-visionos" >> "$GITHUB_ENV"
+
+      - name: Select Xcode
+        run: |
+          if [ '${{ runner.environment }}' = self-hosted ]; then
+            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
+            # local results agree with hosted ones; the Mac's default Xcode
+            # stays untouched (ios#588, ios#592).
+            xcode=/Applications/Xcode_26.3.app
+            if [ ! -d "$xcode" ]; then
+              echo "::error::$xcode is not installed on this runner" >&2
+              exit 1
+            fi
+          else
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          fi
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+
+      - name: Check Metal Toolchain on local Mac
+        if: runner.environment == 'self-hosted'
+        run: |
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun metal -v
+
+      - name: Ensure hosted visionOS simulator runtime
+        if: runner.environment == 'github-hosted'
+        run: |
+          if ! xcrun simctl list runtimes | grep -q '^visionOS '; then
+            sudo xcodebuild -downloadPlatform visionOS
+          fi
+
+      - name: Cache SPM packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
+
+      - name: Resolve SPM packages
+        run: scripts/xcodebuild.sh resolve
+
+      # build-visionos uses the generic visionOS Simulator destination, so
+      # no concrete Vision Pro device pick is needed; the script fails fast
+      # if the visionOS platform is not installed.
+      - name: Build
+        run: scripts/xcodebuild.sh build-visionos
+
+  pr-title:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            chore
+            docs
+            refactor
+            test
+            ci
+            perf
