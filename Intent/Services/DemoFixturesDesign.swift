@@ -21,6 +21,7 @@ enum DemoDesignScenario: String, CaseIterable {
     case questions
     case queue
     case streaming
+    case tables
     case tools
 
     static func requested(by arguments: [String]) -> Self? {
