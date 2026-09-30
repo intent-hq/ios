@@ -26,7 +26,7 @@ extension ConnectionLossUITests {
         let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
         XCTAssertTrue(machine.waitForExistence(timeout: timeout))
         XCTAssertFalse(app.buttons["intent.menu.open"].exists, "A late startup completion must not leave Home")
-        XCTAssertFalse(app.staticTexts["Can't Connect"].exists)
+        XCTAssertFalse(app.staticTexts["Can’t Connect"].exists)
         capture(app, named: "connecting-returned-home")
         machine.tap()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: timeout))
@@ -112,13 +112,13 @@ extension ConnectionLossUITests {
         XCTAssertEqual(back.label, "Back to Home")
         XCTAssertTrue(back.isHittable)
         XCTAssertLessThan(back.frame.maxX, app.frame.midX)
-        XCTAssertLessThan(back.frame.maxY, app.staticTexts["Can't Connect"].frame.minY)
+        XCTAssertLessThan(back.frame.maxY, app.staticTexts["Can’t Connect"].frame.minY)
         capture(app, named: "connection-failure-back")
         back.tap()
         let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: timeout))
         XCTAssertFalse(back.exists)
-        XCTAssertFalse(app.staticTexts["Can't Connect"].exists)
+        XCTAssertFalse(app.staticTexts["Can’t Connect"].exists)
         capture(app, named: "connection-failure-returned-home")
     }
 
