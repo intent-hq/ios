@@ -12,15 +12,7 @@ struct WorkspaceCommitDiffView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
-            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.rowTextSpacing) {
-                Text(commit.message).interFont(Constants.Typography.bodyM).textSelection(.enabled)
-                Text("\(commit.author) · \(commit.hash.prefix(WorkspaceChangesLayout.shortHashLength))")
-                    .interFont(Constants.Typography.subtextXXS)
-                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
-            }
-            .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-            .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
-            .padding(.top, CreateWorkspaceFormStyle.pagePadding)
+            commitHeader
             if isLoading {
                 ProgressView("Loading commit…").frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let errorMessage {
@@ -34,25 +26,7 @@ struct WorkspaceCommitDiffView: View {
             } else if files.isEmpty {
                 ContentUnavailableView("No Changed Files", systemImage: "doc.text")
             } else {
-                VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-                    Text("File (\(files.count))")
-                        .interFont(Constants.Typography.bodyS)
-                    Menu {
-                        Picker("File", selection: $selectedPath) {
-                            ForEach(files) { file in
-                                Text("\(file.path) (+\(file.additions) −\(file.deletions))").tag(file.path)
-                            }
-                        }
-                        .pickerStyle(.inline)
-                    } label: {
-                        CreateWorkspaceChoiceLabel(title: selectedPath, surface: WorkspaceDetailStyle.surface(for: colorScheme))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("File")
-                    .accessibilityValue(selectedPath)
-                }
-                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
+                filePicker
                 WorkspaceFileDiffView(loader: loader, path: selectedPath, commitHash: commit.hash)
                     .id(selectedPath)
             }
@@ -61,6 +35,40 @@ struct WorkspaceCommitDiffView: View {
         .navigationTitle("Commit Changes")
         .toolbarTitleDisplayMode(.inline)
         .task { await load() }
+    }
+
+    private var commitHeader: some View {
+        VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.rowTextSpacing) {
+            Text(commit.message).interFont(Constants.Typography.bodyM).textSelection(.enabled)
+            Text("\(commit.author) · \(commit.hash.prefix(WorkspaceChangesLayout.shortHashLength))")
+                .interFont(Constants.Typography.subtextXXS)
+                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
+        }
+        .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+        .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
+        .padding(.top, CreateWorkspaceFormStyle.pagePadding)
+    }
+
+    private var filePicker: some View {
+        VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
+            Text("File (\(files.count))")
+                .interFont(Constants.Typography.bodyS)
+            Menu {
+                Picker("File", selection: $selectedPath) {
+                    ForEach(files) { file in
+                        Text("\(file.path) (+\(file.additions) −\(file.deletions))").tag(file.path)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                CreateWorkspaceChoiceLabel(title: selectedPath, surface: WorkspaceDetailStyle.surface(for: colorScheme))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("File")
+            .accessibilityValue(selectedPath)
+        }
+        .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+        .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
     }
 
     private func load() async {
