@@ -47,14 +47,33 @@ struct ConnectingView: View {
         }
     }
 
+    @ViewBuilder
     private var homeButton: some View {
+        #if os(visionOS)
+        homeButtonContent
+            .glassBackgroundEffect(in: Circle())
+        #else
+        if #available(iOS 26.0, *) {
+            homeButtonContent
+                .glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            homeButtonContent
+                .background(.regularMaterial, in: Circle())
+        }
+        #endif
+    }
+
+    private var homeButtonContent: some View {
         Button(action: coordinator.onReturnToSavedMachines) {
-            Label("Back", systemImage: "chevron.backward")
-                .interFont(Constants.Typography.bodyS)
-                .frame(minHeight: Constants.ConnectionSheet.minimumTouchTarget)
+            Image(.arrowLeft)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                .frame(width: Constants.Accessibility.minimumTapTarget, height: Constants.Accessibility.minimumTapTarget)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(Theme.primary(for: colorScheme))
+        .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
         .accessibilityLabel("Back to Home")
         .accessibilityHint("Return to your saved machines without forgetting this connection.")
         .accessibilityIdentifier("connecting.home")
