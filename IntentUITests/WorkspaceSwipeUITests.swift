@@ -46,6 +46,11 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         for mode in ["Recent", "Repo", "Status"] {
             app.buttons["workspaces.viewMode.\(mode)"].tap()
             let row = app.buttons["workspace.row.\(Self.workspaceId)"]
+            let visibleBottom = app.buttons["intent.menu.open"].frame.minY
+            for _ in 0..<4 where row.frame.maxY > visibleBottom {
+                app.scrollViews["workspaces.list"].swipeUp()
+            }
+            XCTAssertTrue(row.isHittable)
             revealActions(on: row)
             let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
             XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
