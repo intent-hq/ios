@@ -145,7 +145,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
-    func testConnectionsTileOpensScreenAndAppearanceTileCyclesTheme() {
+    func testConnectionsTileOpensScreenAndAppearanceTileCyclesTheme() throws {
         let app = launchHome()
         openMenu(app)
         reveal("connections", in: app).tap()
@@ -164,7 +164,8 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         openMenu(app)
         let appearance = reveal("appearance", in: app)
         XCTAssertEqual(appearance.value as? String, "System")
-        for mode in ["Light Mode", "Dark Mode", "System", "Light Mode"] {
+        let systemIsDark = try app.renderedHomeActionIsDark("appearance")
+        for mode in ["Light Mode", "Dark Mode", "System", "Light Mode", "Dark Mode", "System", "Light Mode"] {
             appearance.tap()
             let updated = XCTNSPredicateExpectation(
                 predicate: NSPredicate(format: "value == %@", mode), object: appearance
@@ -174,6 +175,11 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
             XCTAssertTrue(app.scrollViews["intent.menu.tiles"].exists)
             XCTAssertTrue(app.buttons["intent.menu.close"].isHittable)
             XCTAssertFalse(app.navigationBars["Appearance"].exists)
+            XCTAssertEqual(
+                try app.renderedHomeActionIsDark("appearance"),
+                mode == "System" ? systemIsDark : mode == "Dark Mode",
+                "The rendered app must follow \(mode) on every tap, not just update the tile label"
+            )
             let screenshot = XCTAttachment(screenshot: app.screenshot())
             screenshot.name = "Appearance tile - \(mode)"
             screenshot.lifetime = .keepAlways
@@ -183,6 +189,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         app.launch()
         openMenu(app)
         XCTAssertEqual(reveal("appearance", in: app).value as? String, "Light Mode")
+        XCTAssertFalse(try app.renderedHomeActionIsDark("appearance"))
     }
 
     @MainActor
