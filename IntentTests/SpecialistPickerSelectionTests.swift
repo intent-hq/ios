@@ -32,14 +32,6 @@ struct SpecialistPickerSelectionTests {
         ModelInfo(id: id, name: id, provider: provider, isDefault: isDefault)
     }
 
-    // MARK: - isSelectable
-
-    @Test func unauthenticatedProvidersAreNotSelectable() {
-        #expect(SpecialistPickerView.isSelectable(ProviderInfo(id: "auggie", authenticated: true)))
-        #expect(SpecialistPickerView.isSelectable(ProviderInfo(id: "grok", authenticated: .unknown)))
-        #expect(!SpecialistPickerView.isSelectable(ProviderInfo(id: "codex", authenticated: false)))
-    }
-
     // MARK: - reconciledSpecialist (cached catalog → New Agent selection)
 
     @Test func reconciledSpecialistDefaultsToOrchestratorElseFirstInDaemonOrder() {

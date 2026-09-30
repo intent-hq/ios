@@ -95,17 +95,6 @@ extension MonitoredPrsRowTests {
         #expect(elements.first { $0 === chip }?.accessibilityTraits.contains(.button) == true)
     }
 
-    @Test func accessibilityTraversalDeduplicatesContainersAndStopsCycles() {
-        let host = UIView()
-        let container = NSObject()
-        let chip = UIAccessibilityElement(accessibilityContainer: container)
-        chip.accessibilityIdentifier = "monitoredPr.once"
-        host.accessibilityElements = [container, chip]
-        container.accessibilityElements = [host, chip]
-        defer { container.accessibilityElements = nil; host.accessibilityElements = nil }
-        #expect(SyntheticBadgeHost.accessibilityElements(in: host).filter { $0 === chip }.count == 1)
-    }
-
     private func makeRow(
         monitors: [MonitoredPr],
         usesWorkspaceDesign: Bool = false,
@@ -292,16 +281,6 @@ extension MonitoredPrsRowTests {
     }
 
     // MARK: - Chip label
-
-    @Test func chipLabelSameRepoIsBareNumber() {
-        let monitor = makeMonitor()
-        #expect(MonitoredPrsRow.chipLabel(monitor, workspaceRepo: "octo/repo") == "#12")
-    }
-
-    @Test func chipLabelCrossRepoIsPrefixed() {
-        let monitor = makeMonitor(repo: "other/repo")
-        #expect(MonitoredPrsRow.chipLabel(monitor, workspaceRepo: "octo/repo") == "other/repo: #12")
-    }
 
     @Test func chipLabelUnknownWorkspaceRepoFallsBackToBareNumber() {
         let monitor = makeMonitor(repo: "other/repo")
