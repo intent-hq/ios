@@ -43,7 +43,7 @@ private struct WorkspaceBrowserRow: View {
     @State private var isRevealed = false
 
     var body: some View {
-        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: 1) {
+        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: 1) { _ in
             browserButton
         } actions: {
             deleteButton

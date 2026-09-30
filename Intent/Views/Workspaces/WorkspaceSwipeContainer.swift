@@ -4,7 +4,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     @Binding var isRevealed: Bool
     let actionCount: Int
     var onSwipeBegan: () -> Void = {}
-    @ViewBuilder var content: () -> Content
+    @ViewBuilder var content: (_ swipeProgress: CGFloat) -> Content
     @ViewBuilder var actions: () -> Actions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var actionWidth = WorkspaceSwipeStyle.buttonWidth
@@ -17,7 +17,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     private var restingOffset: CGFloat { isRevealed ? -revealWidth : 0 }
 
     var body: some View {
-        content()
+        content(min(1, max(0, -offset / max(revealWidth, 1))))
             .offset(x: offset)
             .overlay(alignment: .trailing) {
                 if actionsVisible {

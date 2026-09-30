@@ -36,7 +36,7 @@ private struct WorkspaceTerminalRow: View {
     @State private var isDeleting = false
 
     var body: some View {
-        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: 1) {
+        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: 1) { _ in
             terminalButton
         } actions: {
             deleteButton

@@ -24,8 +24,8 @@ struct WorkspaceSwipeRow: View {
     }
 
     var body: some View {
-        WorkspaceSwipeContainer(isRevealed: revealBinding, actionCount: 2, onSwipeBegan: beginSwipe) {
-            workspaceButton
+        WorkspaceSwipeContainer(isRevealed: revealBinding, actionCount: 2, onSwipeBegan: beginSwipe) { progress in
+            workspaceButton(swipeProgress: progress)
                 .background(Constants.WorkspaceList.canvas(for: colorScheme))
         } actions: {
             actionButton(.archive, color: .orange)
@@ -38,7 +38,7 @@ struct WorkspaceSwipeRow: View {
         if !isRevealed { revealedWorkspaceId = nil }
     }
 
-    private var workspaceButton: some View {
+    private func workspaceButton(swipeProgress: CGFloat) -> some View {
         Button {
             if revealedWorkspaceId != nil {
                 revealedWorkspaceId = nil
@@ -46,7 +46,13 @@ struct WorkspaceSwipeRow: View {
                 onSelect()
             }
         } label: {
-            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo, spacious: true)
+            WorkspaceRowView(
+                workspace: workspace,
+                colorScheme: colorScheme,
+                showRepo: showRepo,
+                spacious: true,
+                timestampOpacity: 1 - Double(swipeProgress)
+            )
                 .overlay(alignment: .trailing) {
                     if isUpdating { ProgressView().padding(.trailing) }
                 }

@@ -23,7 +23,7 @@ struct WorkspaceScriptRow: View {
     }
 
     var body: some View {
-        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: script.isActive ? 2 : 1) {
+        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: script.isActive ? 2 : 1) { _ in
             scriptButton
         } actions: {
             swipeActions

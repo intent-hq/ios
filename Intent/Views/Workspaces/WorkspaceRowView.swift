@@ -5,6 +5,7 @@ struct WorkspaceRowView: View {
     let colorScheme: ColorScheme
     var showRepo: Bool = true
     var spacious = false
+    var timestampOpacity: Double = 1
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Workspace-scoped PR monitors feeding the pill pool and the "+N"
@@ -318,6 +319,7 @@ struct WorkspaceRowView: View {
                 .lineLimit(1)
                 .fixedSize()
                 .accessibilityLabel("Updated \(value)")
+                .opacity(timestampOpacity)
         }
     }
 
