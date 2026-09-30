@@ -47,10 +47,7 @@ struct WorkspaceDetailView: View {
     private var workspace: Workspace? { workspaceStore.workspaces.first { $0.id == workspaceId } }
 
     private var workspaceTitle: String {
-        guard let title = workspace?.title,
-              !title.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return "<Untitled>"
-        }
+        guard let title = workspace?.title, !title.trimmingCharacters(in: .whitespaces).isEmpty else { return "<Untitled>" }
         return title
     }
 
@@ -186,13 +183,17 @@ struct WorkspaceDetailView: View {
             )
                 .environment(coordinator)
         }
-        .sheet(isPresented: $showTransferWorkspace, onDismiss: {
-            if workspaceStore.lastUpdated != nil, workspace == nil { coordinator.handleMissingWorkspace() }
-        }) {
-            WorkspaceTransferSheet(workspaceId: workspaceId, workspaceTitle: workspaceTitle, session: session)
-                .environment(coordinator)
-                .id(workspaceId)
-        }
+        .sheet(
+            isPresented: $showTransferWorkspace,
+            onDismiss: {
+                if workspaceStore.lastUpdated != nil, workspace == nil { coordinator.handleMissingWorkspace() }
+            },
+            content: {
+                WorkspaceTransferSheet(workspaceId: workspaceId, workspaceTitle: workspaceTitle, session: session)
+                    .environment(coordinator)
+                    .id(workspaceId)
+            }
+        )
         .sheet(
             isPresented: $showNewBrowser,
             onDismiss: {
@@ -478,32 +479,21 @@ private extension WorkspaceDetailView {
         }
     }
 
-    private func deleteWorkspace() {
-        Task {
-            do {
-                _ = try await session.connection.request(
-                    "workspace.delete",
-                    params: ["workspaceId": workspaceId]
-                )
-                coordinator.onBackToWorkspaceList()
-                await workspaceStore.fetchAll()
-            } catch {
-                AppLog.workspace.error("[WorkspaceDetail] Delete failed: \(error)")
-            }
-        }
-    }
+    private func deleteWorkspace() { changeWorkspace("workspace.delete") }
 
-    private func archiveWorkspace() {
+    private func archiveWorkspace() { changeWorkspace("workspace.archive") }
+
+    private func changeWorkspace(_ method: String) {
         Task {
             do {
                 _ = try await session.connection.request(
-                    "workspace.archive",
+                    method,
                     params: ["workspaceId": workspaceId]
                 )
                 coordinator.onBackToWorkspaceList()
                 await workspaceStore.fetchAll()
             } catch {
-                AppLog.workspace.error("[WorkspaceDetail] Archive failed: \(error)")
+                AppLog.workspace.error("[WorkspaceDetail] \(method) failed: \(error)")
             }
         }
     }

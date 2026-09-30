@@ -64,9 +64,10 @@ struct WorkspaceTransferRaceTests {
         try await fixture.target.waitForPendingRequests("workspace.import.commit")
         #expect(!fixture.store.canCancel)
         #expect(!fixture.source.didCallMethod("workspace.export.finalize"))
-        fixture.emit(type: "workspace:transfer:progress", data: [
-            "workspaceId": "workspace", "exportId": "export", "stage": "writing-archive"
-        ])
+        fixture.emit(
+            type: "workspace:transfer:progress",
+            data: ["workspaceId": "workspace", "exportId": "export", "stage": "writing-archive"]
+        )
         #expect(!fixture.store.canCancel)
         fixture.store.cancel()
         task.cancel()
@@ -99,9 +100,10 @@ struct WorkspaceTransferRaceTests {
         fixture.source.pendingMethods.insert("workspace.export.start")
         let task = await fixture.start()
         try await fixture.source.waitForPendingRequests("workspace.export.start")
-        fixture.emit(type: "workspace:transfer:failed", data: [
-            "workspaceId": "workspace", "exportId": "export", "reason": "Could not build archive"
-        ])
+        fixture.emit(
+            type: "workspace:transfer:failed",
+            data: ["workspaceId": "workspace", "exportId": "export", "reason": "Could not build archive"]
+        )
         fixture.source.resolvePending("workspace.export.start", with: fixture.startReply)
         await task.value
         #expect(fixture.store.errorMessage == "Could not build archive")

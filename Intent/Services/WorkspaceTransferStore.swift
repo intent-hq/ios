@@ -42,9 +42,11 @@ final class WorkspaceTransferStore {
                       try await self.source.confirmedPrincipal().isOwner else {
                     throw WorkspaceTransferError.message("Connect as the workspace owner to transfer this workspace.")
                 }
-                let response = try await self.source.request("workspace.transfer.plan", params: [
-                    "workspaceId": self.workspaceId
-                ], timeout: self.timing.request)
+                let response = try await self.source.request(
+                    "workspace.transfer.plan",
+                    params: ["workspaceId": self.workspaceId],
+                    timeout: self.timing.request
+                )
                 try Task.checkCancellation()
                 self.plan = try WorkspaceTransferPlan(response: response, workspaceId: self.workspaceId)
                 self.statusMessage = "Review the transfer before continuing."
@@ -66,7 +68,12 @@ final class WorkspaceTransferStore {
             return
         }
         begin(message: "Checking the destination…")
-        let relay = WorkspaceTransferRelay(workspaceId: workspaceId, source: source, target: makeDestination(), timing: timing) { [weak self] message, progress, canCancel in
+        let relay = WorkspaceTransferRelay(
+            workspaceId: workspaceId,
+            source: source,
+            target: makeDestination(),
+            timing: timing
+        ) { [weak self] message, progress, canCancel in
             self?.statusMessage = message
             self?.progress = progress
             self?.canCancel = canCancel

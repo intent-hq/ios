@@ -31,7 +31,9 @@ enum WorkspaceTransferError: LocalizedError {
 }
 
 enum WorkspaceTransferWire {
-    static let maximumChunkBytes = 16 * 1024 * 1024
+    static let bytesPerKiB = 1024
+    static let maximumChunkMiB = 16
+    static let maximumChunkBytes = maximumChunkMiB * bytesPerKiB * bytesPerKiB
     static let base64Quantum = 4
     static let decodedQuantum = 3
     static let sha256Length = 64

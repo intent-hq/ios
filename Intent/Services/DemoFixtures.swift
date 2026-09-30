@@ -379,14 +379,16 @@ extension DemoFixtures {
         case "workspace.list":
             return ["workspaces": workspaces]
         case "workspace.transfer.plan":
-            return ["plan": [
-                "manifest": [
-                    "workspaceId": params["workspaceId"] ?? "demo-workspace",
-                    "creatingIntentdVersion": "demo"
-                ],
-                "totalSizeBytes": 0,
-                "warnings": [[String: String]]()
-            ]]
+            return [
+                "plan": [
+                    "manifest": [
+                        "workspaceId": params["workspaceId"] ?? "demo-workspace",
+                        "creatingIntentdVersion": "demo"
+                    ],
+                    "totalSizeBytes": 0,
+                    "warnings": [[String: String]]()
+                ]
+            ]
         case "note.list":
             return ["notes": notes]
         case "note.get":

@@ -21,9 +21,10 @@ struct TransferDestinationPolicyTests {
     @Test func missingPinsDoNotHideOtherMachines() {
         let source = connection(pin: nil, role: .owner)
         let target = connection(pin: nil, role: .owner)
-        #expect(WorkspaceTransferDestinationPolicy.destinations(
+        let destinations = WorkspaceTransferDestinationPolicy.destinations(
             from: [source, target], sourceID: source.id
-        ).map(\.id) == [target.id])
+        )
+        #expect(destinations.map(\.id) == [target.id])
     }
 
     private func connection(pin: String?, role: ConnectionPrincipal.HostRole?) -> StoredConnection {
@@ -33,8 +34,8 @@ struct TransferDestinationPolicyTests {
             ),
             token: "test-token"
         )
-        connection.principal = role.map {
-            ConnectionPrincipal(id: "test-owner", hostRole: $0, revision: nil, login: nil, displayName: nil)
+        connection.principal = role.map { role in
+            ConnectionPrincipal(id: "test-owner", hostRole: role, revision: nil, login: nil, displayName: nil)
         }
         return connection
     }

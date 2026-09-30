@@ -40,9 +40,11 @@ final class WorkspaceTransferExport {
             }
         }
         try checkFailure()
-        let response = try await source.request("events.subscribe", params: [
-            "workspaceId": workspaceId, "eventTypes": Self.eventTypes
-        ], timeout: timing.request) as? [String: Any]
+        let response = try await source.request(
+            "events.subscribe",
+            params: ["workspaceId": workspaceId, "eventTypes": Self.eventTypes],
+            timeout: timing.request
+        ) as? [String: Any]
         subscriptionId = try WorkspaceTransferWire.identifier(response?["subscriptionId"])
         try checkFailure()
         didSendStart = true
@@ -73,9 +75,11 @@ final class WorkspaceTransferExport {
         eventHandlerId = nil
         connectionObserver = nil
         if let subscriptionId {
-            _ = try? await source.request("events.unsubscribe", params: [
-                "subscriptionId": subscriptionId, "workspaceId": workspaceId
-            ], timeout: timing.cleanup)
+            _ = try? await source.request(
+                "events.unsubscribe",
+                params: ["subscriptionId": subscriptionId, "workspaceId": workspaceId],
+                timeout: timing.cleanup
+            )
         }
         subscriptionId = nil
         terminalEvents.removeAll()

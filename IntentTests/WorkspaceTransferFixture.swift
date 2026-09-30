@@ -17,13 +17,20 @@ final class WorkspaceTransferConnection: FakeConnectionManager {
 final class WorkspaceTransferFixture {
     static let chunkBytes = 1024
     static let version = "1.2.3"
+    static let destinationPort = 7777
     let source = WorkspaceTransferConnection()
     let target = WorkspaceTransferConnection()
     let payload = Data("archive".utf8)
     let store: WorkspaceTransferStore
     var destination = StoredConnection(
-        server: PairedServer(hosts: ["target.local"], port: 7777, name: "Target", pairedAt: .distantPast,
-                             certFingerprint: "target-pin", tcAddress: "tc-target"),
+        server: PairedServer(
+            hosts: ["target.local"],
+            port: WorkspaceTransferFixture.destinationPort,
+            name: "Target",
+            pairedAt: .distantPast,
+            certFingerprint: "target-pin",
+            tcAddress: "tc-target"
+        ),
         token: "target-token"
     )
     var trace: [String] = []
@@ -50,10 +57,12 @@ final class WorkspaceTransferFixture {
         let target = self.target
         store = WorkspaceTransferStore(workspaceId: "workspace", source: source, makeDestination: { target }, timing: timing)
         source.connectionState = .connected
-        source.responseMap["workspace.transfer.plan"] = ["plan": [
-            "manifest": manifest, "totalSizeBytes": payload.count,
-            "warnings": [["code": "agents-running", "message": "Running agents will stop."]]
-        ]]
+        source.responseMap["workspace.transfer.plan"] = [
+            "plan": [
+                "manifest": manifest, "totalSizeBytes": payload.count,
+                "warnings": [["code": "agents-running", "message": "Running agents will stop."]]
+            ]
+        ]
         source.responseMap["events.subscribe"] = ["subscriptionId": "subscription"]
         source.responseMap["events.unsubscribe"] = ["unsubscribed": true]
         source.responseMap["workspace.export.start"] = startReply
@@ -75,9 +84,9 @@ final class WorkspaceTransferFixture {
         target.beforeRequest = { [weak self] method, _ in self?.trace.append("target:" + method) }
     }
 
-    func emitReady(_ data: [String: Any]? = nil) {
-        emit(type: "workspace:transfer:ready", data: data ?? ready)
-    }
+    func emitReady() { emitReady(ready) }
+
+    func emitReady(_ data: [String: Any]) { emit(type: "workspace:transfer:ready", data: data) }
 
     func emit(type: String, data: [String: Any]) {
         source.deliverEvent(method: "events.event", params: ["event": ["type": type, "data": data]])

@@ -32,11 +32,12 @@ struct WorkspaceTransferStoreTests {
         #expect(fixture.store.errorMessage == nil)
         #expect(fixture.store.progress == 1)
         let relevant = fixture.trace.filter { !$0.hasSuffix("client.hello") && !$0.hasSuffix("principal.me") && !$0.hasSuffix("workspace.transfer.plan") }
-        #expect(relevant == [
+        let expected = [
             "target:system.status", "target:workspace.list", "source:events.subscribe", "source:workspace.export.start",
             "target:workspace.import.begin", "source:workspace.export.read", "target:workspace.import.chunk",
             "target:workspace.import.commit", "source:workspace.export.finalize", "source:events.unsubscribe"
-        ])
+        ]
+        #expect(relevant == expected)
         let connection = try #require(fixture.target.connectLog.first)
         #expect(connection.hosts == fixture.destination.server.hosts)
         #expect(connection.token == fixture.destination.token)

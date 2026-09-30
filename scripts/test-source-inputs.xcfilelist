@@ -473,6 +473,10 @@ $(SRCROOT)/Intent/Services/WorkspaceStatusStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusWaiters.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore+EventClassification.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferExport.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferModels.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferRelay.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceVideo.swift
 $(SRCROOT)/Intent/Utils
 $(SRCROOT)/Intent/Utils/AppLog.swift
@@ -695,6 +699,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSearchBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusIconView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusImageView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTab.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceTransferSheet.swift
 $(SRCROOT)/IntentTests
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
@@ -1005,6 +1010,7 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Recovery.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Sequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
+$(SRCROOT)/IntentTests/TransferDestinationPolicyTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
 $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
@@ -1059,3 +1065,6 @@ $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTabTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTranscriptDesignTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTransferFixture.swift
+$(SRCROOT)/IntentTests/WorkspaceTransferRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTransferStoreTests.swift

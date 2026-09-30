@@ -55,8 +55,8 @@ final class WorkspaceTransferRelay {
             let plan = try await preflight(destination)
             try check()
             let export = WorkspaceTransferExport(workspaceId: workspaceId, source: source, timing: timing) { [weak self] message in
-                guard let self, !self.commitSent, self.failure == nil else { return }
-                self.update(message, nil, true)
+                guard let self, !commitSent, failure == nil else { return }
+                update(message, nil, true)
             }
             self.export = export
             update("Preparing the transfer…", nil, true)
@@ -99,7 +99,7 @@ final class WorkspaceTransferRelay {
     }
 
     private func preflight(_ destination: StoredConnection) async throws -> WorkspaceTransferPlan {
-        let task = Task { try await self.validate(destination) }
+        let task = Task { try await validate(destination) }
         preflightTask = task
         let timer = Task { [weak self, timing] in
             do {
@@ -125,8 +125,13 @@ final class WorkspaceTransferRelay {
         let plan = try WorkspaceTransferPlan(response: response, workspaceId: workspaceId)
         try check()
         let server = destination.server
-        try await target.connect(hosts: server.hosts, port: server.port, token: destination.token,
-                                 certFingerprint: server.certFingerprint, tcAddress: server.tcAddress)
+        try await target.connect(
+            hosts: server.hosts,
+            port: server.port,
+            token: destination.token,
+            certFingerprint: server.certFingerprint,
+            tcAddress: server.tcAddress
+        )
         try check()
         observe(target, name: "destination")
         let principal = try await target.confirmedPrincipal()
@@ -154,9 +159,11 @@ final class WorkspaceTransferRelay {
 
     private func stage(_ archive: WorkspaceTransferArchive) async throws {
         importBeginSent = true
-        let result = try await target.request("workspace.import.begin", params: [
-            "manifest": archive.manifest, "archiveSizeBytes": archive.size, "archiveSha256": archive.sha256
-        ], timeout: timing.request) as? [String: Any]
+        let result = try await target.request(
+            "workspace.import.begin",
+            params: ["manifest": archive.manifest, "archiveSizeBytes": archive.size, "archiveSha256": archive.sha256],
+            timeout: timing.request
+        ) as? [String: Any]
         importId = try WorkspaceTransferWire.identifier(result?["importId"])
         guard let limit = WorkspaceTransferWire.integer(result?["maxChunkBytes"]), limit >= archive.chunkBytes else {
             throw WorkspaceTransferError.message("The destination cannot receive this archive's transfer chunks. Update both hosts.")
@@ -165,14 +172,18 @@ final class WorkspaceTransferRelay {
         var received: Int64 = 0
         for sequence in 0..<archive.totalChunks {
             try check()
-            let response = try await source.request("workspace.export.read", params: [
-                "workspaceId": workspaceId, "exportId": archive.exportId, "seq": sequence
-            ], timeout: timing.chunk)
+            let response = try await source.request(
+                "workspace.export.read",
+                params: ["workspaceId": workspaceId, "exportId": archive.exportId, "seq": sequence],
+                timeout: timing.chunk
+            )
             let chunk = try validatedChunk(response, archive: archive, sequence: sequence, received: received)
             try check()
-            let receipt = try await target.request("workspace.import.chunk", params: [
-                "importId": importId, "seq": sequence, "data": chunk.encoded
-            ], timeout: timing.chunk) as? [String: Any]
+            let receipt = try await target.request(
+                "workspace.import.chunk",
+                params: ["importId": importId, "seq": sequence, "data": chunk.encoded],
+                timeout: timing.chunk
+            ) as? [String: Any]
             received += Int64(chunk.count)
             guard receipt?["importId"] as? String == importId,
                   WorkspaceTransferWire.integer(receipt?["seq"]) == Int64(sequence),
@@ -207,10 +218,11 @@ final class WorkspaceTransferRelay {
         update("Settling the source workspace…", 1, false)
         do {
             let exportId = try WorkspaceTransferWire.identifier(export?.exportId)
-            let result = try await source.request("workspace.export.finalize", params: [
-                "workspaceId": workspaceId, "exportId": exportId,
-                "archiveSource": archiveSource
-            ], timeout: timing.request) as? [String: Any]
+            let result = try await source.request(
+                "workspace.export.finalize",
+                params: ["workspaceId": workspaceId, "exportId": exportId, "archiveSource": archiveSource],
+                timeout: timing.request
+            ) as? [String: Any]
             guard result?["exportId"] as? String == exportId, ConnectionPrincipal.boolean(result?["finalized"]) == true else {
                 throw WorkspaceTransferError.message("The source did not confirm finalization.")
             }
@@ -231,9 +243,11 @@ final class WorkspaceTransferRelay {
         }
         if let exportId = export?.exportId {
             do {
-                _ = try await source.request("workspace.export.abort", params: [
-                    "workspaceId": workspaceId, "exportId": exportId
-                ], timeout: timing.cleanup)
+                _ = try await source.request(
+                    "workspace.export.abort",
+                    params: ["workspaceId": workspaceId, "exportId": exportId],
+                    timeout: timing.cleanup
+                )
             } catch { failures.append("source") }
         }
         if export?.didSendStart == true, export?.exportId == nil { failures.append("source") }
