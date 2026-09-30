@@ -30,6 +30,7 @@ struct WorkspaceSwipeRow: View {
             actionWidth: actionSize,
             actionLeadingSpacing: Constants.WorkspaceList.swipeActionsLeadingSpacing,
             horizontalInset: Constants.WorkspaceList.pageInset,
+            swipeBackground: Constants.WorkspaceList.controlSurface(for: colorScheme),
             onSwipeProgressChanged: updateSwipeProgress
         ) { progress in
             workspaceButton(swipeProgress: progress)

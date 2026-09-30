@@ -17,6 +17,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     var restingCornerRadius: CGFloat = 0
     var horizontalInset: CGFloat = 0
     var showsSwipeTint = true
+    var swipeBackground: Color?
     var onSwipeProgressChanged: (CGFloat) -> Void = { _ in }
     @ViewBuilder var content: (_ swipeProgress: CGFloat) -> Content
     @ViewBuilder var actions: () -> Actions
@@ -42,6 +43,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     }
     private var rowTintOpacity: Double {
         guard showsSwipeTint else { return 0 }
+        if swipeBackground != nil { return Double(swipeProgress) }
         let opacity = contrast == .increased ? WorkspaceSwipeStyle.increasedTintOpacity : WorkspaceSwipeStyle.tintOpacity
         return Double(swipeProgress) * opacity
     }
@@ -51,7 +53,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
             .background(rowBackground.opacity(1 - Double(swipeProgress)), in: .rect(cornerRadius: restingCornerRadius))
             .padding(.leading, horizontalInset)
             .background {
-                (colorScheme == .dark ? Color.white : Color.black).opacity(rowTintOpacity)
+                (swipeBackground ?? (colorScheme == .dark ? Color.white : Color.black)).opacity(rowTintOpacity)
             }
             .clipShape(RoundedRectangle(cornerRadius: rowCornerRadius, style: .continuous))
             .offset(x: offset)
