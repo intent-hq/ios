@@ -51,7 +51,6 @@ private struct SettingsStatusBarCapture: UIViewControllerRepresentable {
 
 private struct SettingsContent: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
     @State private var showLogOffConfirmation = false
     @ScaledMetric(relativeTo: .callout) private var iconSize = SettingsStyle.iconWidth
@@ -59,8 +58,6 @@ private struct SettingsContent: View {
 
     var body: some View {
         settingsSurface
-            .onAppear { coordinator.refreshSyncedBackends() }
-            .refreshable { coordinator.refreshSyncedBackends() }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showLogOffConfirmation) {
                 LogOffConfirmationSheet { coordinator.onLogOff() }
@@ -73,13 +70,6 @@ private struct SettingsContent: View {
             VStack(alignment: .leading, spacing: SettingsStyle.sectionSpacing) {
                 SettingsHeader(onClose: coordinator.onSettingsBack)
                     .padding(.bottom, SettingsStyle.headingSpacing - SettingsStyle.sectionSpacing)
-                SettingsConnectionsSection(
-                    connections: coordinator.savedConnections,
-                    windowConnectionID: coordinator.windowConnectionID,
-                    status: session.connection.connectionState,
-                    mismatches: session.connection.certMismatches,
-                    onSelect: selectConnection
-                )
                 SettingsPairingSection()
                 SettingsSupportSection()
                 logOffButton
@@ -110,14 +100,6 @@ private struct SettingsContent: View {
 
     private var outerBackground: Color {
         presentedAsSheet ? .clear : (colorScheme == .dark ? SettingsStyle.charcoal : SettingsStyle.lightChrome)
-    }
-
-    private func selectConnection(_ id: UUID) {
-        if id == coordinator.windowConnectionID {
-            coordinator.onSettingsBack()
-        } else {
-            coordinator.onSwitchConnection(id: id)
-        }
     }
 
     private var logOffButton: some View {
