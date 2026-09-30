@@ -149,12 +149,19 @@ extension AgentStore {
         let parsed = rows.compactMap { AgentSession.parseAgent($0) }
         let incomingIds = Set(parsed.map(\.id))
         let previousMembers = group.flatMap { list.members[$0] } ?? []
+        if let group {
+            list.members[group] = Set(incomingIds.filter { (list.rowSequences[$0] ?? 0) <= sequence })
+        }
+        // Parent and orphan snapshots can overlap across retire/restore.
+        // Dropping one membership must preserve rows still owned by another
+        // requested group; deletion converges once every owning scope drops it.
         var active = agents
         var retired = list.retiredAgents
         // A scope snapshot can remove its old rows, but cannot erase a row
         // obtained by a newer overlapping read (including retirement moves).
         let removed = (active + retired).filter { row in
-            !incomingIds.contains(row.id) && (list.rowSequences[row.id] ?? 0) <= sequence
+            !incomingIds.contains(row.id) && !retainedByAnotherGroup(row, excluding: group)
+                && (list.rowSequences[row.id] ?? 0) <= sequence
                 && belongsToRead(row, group: group, previousMembers: previousMembers, orphanOnly: orphanOnly)
         }
         let removedIds = Set(removed.map(\.id))
@@ -171,16 +178,27 @@ extension AgentStore {
                 upsert(row, into: &retired)
             }
         }
-        if let group {
-            list.members[group] = incomingIds
-            if group == .orphaned {
-                list.orphanedAgentIds = orphanOnly ? incomingIds : []
-            }
+        if group == .orphaned {
+            list.orphanedAgentIds = orphanOnly ? list.members[.orphaned] ?? [] : []
         }
         if active != agents { agents = active }
         if retired != list.retiredAgents { list.retiredAgents = retired }
         list.orphanedAgentIds.subtract(removedIds)
         list.orphanedAgentIds.subtract(retired.map(\.id))
+    }
+
+    private func retainedByAnotherGroup(_ row: AgentSession, excluding group: AgentListGroup?) -> Bool {
+        list.members.contains { other, ids in
+            guard other != group, ids.contains(row.id) else { return false }
+            if other == .retired { return row.retiredAt != nil }
+            guard row.retiredAt == nil else { return false }
+            switch other {
+            case .background: return row.parentAgentId == nil && row.isBackground
+            case let .delegated(parentId): return row.parentAgentId == parentId
+            case .orphaned: return row.parentAgentId != nil
+            case .retired: return false
+            }
+        }
     }
 
     private func belongsToRead(

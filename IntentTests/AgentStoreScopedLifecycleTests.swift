@@ -219,3 +219,32 @@ extension AgentStoreTests {
         #expect(store.list.errors[.background] == nil)
     }
 }
+
+extension AgentStoreTests {
+    @Test func restoredParentKeepsChildWhenOrphanMembershipIsRemoved() async {
+        let (fake, store) = await scopedStore()
+        let child = scopedRow("child", parent: "parent")
+        fake.responseMap["agent.list"] = scopedResponse([child])
+        await store.loadAgentGroup(.delegated(parentId: "parent"), workspaceId: "ws-1")
+        // The parent is retired; its active child is now an orphan.
+        fake.responseQueueMap["agent.list"] = [scopedResponse([]), scopedResponse([child])]
+        await store.fetchAgents(workspaceId: "ws-1")
+        fake.responseMap["agent.list"] = scopedResponse([child])
+        await store.loadAgentGroup(.orphaned, workspaceId: "ws-1")
+        #expect(store.list.orphanedAgentIds == ["child"])
+        // Restore the parent: its group refresh precedes the empty orphan read.
+        fake.responseQueueMap["agent.list"] = [
+            scopedResponse([scopedRow("parent")]), scopedResponse([child]), scopedResponse([])
+        ]
+        await store.fetchAgents(workspaceId: "ws-1")
+        #expect(Set(store.agents.map(\.id)) == ["parent", "child"])
+        #expect(store.list.orphanedAgentIds.isEmpty)
+        #expect(store.isAgentGroupLoaded(.delegated(parentId: "parent")))
+        // A subsequent deletion must still evict the child from both sections.
+        fake.responseQueueMap["agent.list"] = [
+            scopedResponse([scopedRow("parent")]), scopedResponse([]), scopedResponse([])
+        ]
+        await store.fetchAgents(workspaceId: "ws-1")
+        #expect(store.agents.map(\.id) == ["parent"])
+    }
+}
