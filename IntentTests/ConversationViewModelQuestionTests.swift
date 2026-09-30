@@ -70,9 +70,9 @@ extension ConversationViewModelTests {
     /// Wire the view model's store AND upload service to a
     /// FakeConnectionManager so the `agent.sendMessage` /
     /// `file.placeAttachment` outcomes are controlled per test.
-    func makeFakeBackedVM(sendError: Error? = nil)
+    func makeFakeBackedVM(sendError: Error? = nil, workspaceId: String = "test-ws")
         -> (viewModel: ConversationViewModel, fake: FakeConnectionManager) {
-        let viewModel = makeVM()
+        let viewModel = makeVM(workspaceId: workspaceId)
         let fake = FakeConnectionManager()
         if let sendError {
             fake.errorMap["agent.sendMessage"] = sendError
