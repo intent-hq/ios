@@ -397,8 +397,7 @@ extension DemoFixtures {
                     "warnings": [[String: String]]()
                 ]
             ]
-        case "note.list":
-            return ["notes": notes]
+        case "note.list": return ["notes": notes]
         case "note.get":
             let noteId = params["noteId"] as? String
             let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]
