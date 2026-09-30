@@ -286,6 +286,7 @@ $(SRCROOT)/Intent/DesignSystem/WorkspacePageLayout.swift
 $(SRCROOT)/Intent/Models
 $(SRCROOT)/Intent/Models.swift
 $(SRCROOT)/Intent/Models/ActionProposal.swift
+$(SRCROOT)/Intent/Models/AgentListState.swift
 $(SRCROOT)/Intent/Models/AgentMessageAttribution.swift
 $(SRCROOT)/Intent/Models/AgentSession.swift
 $(SRCROOT)/Intent/Models/AnyCodable.swift
@@ -355,6 +356,7 @@ $(SRCROOT)/Intent/Resources/Fonts/Inter
 $(SRCROOT)/Intent/Services
 $(SRCROOT)/Intent/Services/AgentDetailRequestLimiter.swift
 $(SRCROOT)/Intent/Services/AgentDetailStore.swift
+$(SRCROOT)/Intent/Services/AgentStore+ScopedLoading.swift
 $(SRCROOT)/Intent/Services/AgentStore.swift
 $(SRCROOT)/Intent/Services/AgentSummaryStore.swift
 $(SRCROOT)/Intent/Services/AssistantStore.swift
@@ -401,6 +403,7 @@ $(SRCROOT)/Intent/Services/CreationCatalog.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore+Events.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
+$(SRCROOT)/Intent/Services/DemoAgentListFixtures.swift
 $(SRCROOT)/Intent/Services/DemoBrowserFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesRootFixtures.swift
@@ -682,6 +685,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowsersView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+AgentGroups.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
@@ -699,10 +703,13 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTab.swift
 $(SRCROOT)/IntentTests
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
+$(SRCROOT)/IntentTests/AgentGroupingTests.swift
 $(SRCROOT)/IntentTests/AgentListViewModelTests.swift
 $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
 $(SRCROOT)/IntentTests/AgentSessionDisplayTests.swift
 $(SRCROOT)/IntentTests/AgentSessionTests.swift
+$(SRCROOT)/IntentTests/AgentStoreScopedLifecycleTests.swift
+$(SRCROOT)/IntentTests/AgentStoreScopedTests.swift
 $(SRCROOT)/IntentTests/AgentStoreTests.swift
 $(SRCROOT)/IntentTests/AgentWaitingViewTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorAssistantTests.swift
@@ -1011,6 +1018,7 @@ $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
+$(SRCROOT)/IntentTests/WorkspaceAgentLoadingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserFixture.swift

@@ -3,12 +3,10 @@ import SwiftUI
 struct WorkspaceDetailView: View {
     let workspaceId: String
     @Environment(AppCoordinator.self) var coordinator
-    @State private var agentStore: AgentStore
-    @State private var viewModel = AgentListViewModel()
+    @State private var storedAgentStore: AgentStore
+    @State private var storedViewModel: AgentListViewModel
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.scenePhase) private var scenePhase
-    @State private var showBackgroundAgents = false
-    @State private var expandedDelegates: Set<String> = []
     @State private var showDeleteConfirmation = false
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
@@ -25,11 +23,16 @@ struct WorkspaceDetailView: View {
 
     init(workspaceId: String, session: BackendSession) {
         self.workspaceId = workspaceId
-        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection, summaries: session.agentSummaries))
+        let store = AgentStore(connectionManager: session.connection, summaries: session.agentSummaries, scopedLoading: true)
+        _storedAgentStore = State(initialValue: store)
+        _storedViewModel = State(initialValue: AgentListViewModel(list: store.list))
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
         _scriptStore = State(initialValue: WorkspaceScriptStore(connection: session.connection))
         _changesStore = State(initialValue: WorkspaceChangesStore(connectionManager: session.connection))
     }
+
+    var agentStore: AgentStore { storedAgentStore }
+    var viewModel: AgentListViewModel { storedViewModel }
 
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
 
@@ -101,11 +104,8 @@ struct WorkspaceDetailView: View {
                     connectionId: connectionId
                 )
             }
-            viewModel.agents = []
-            agentStore.prepareForWorkspaceChange(to: newId)
+            resetAgentWorkspace(to: newId)
             noteStore.prepareForWorkspaceChange(to: newId)
-            showBackgroundAgents = false
-            expandedDelegates = []
             agentStore.startObservingEvents()  // Re-register with new workspaceId context
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: newId) }
@@ -356,7 +356,7 @@ private extension WorkspaceDetailView {
                 ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
-            } else if viewModel.agents.isEmpty, !hasWorkspaceResources {
+            } else if !viewModel.hasAgentSections, !hasWorkspaceResources {
                 ContentUnavailableView {
                     Label { Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold)) } icon: { Image(systemName: "person.2") }
                 } description: {
@@ -375,8 +375,10 @@ private extension WorkspaceDetailView {
 
     var agentListContent: some View {
         LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
-            foregroundAgents
-            backgroundAgents
+            agentTree(viewModel.foregroundAgents)
+            agentSection(.background, title: "background agents")
+            agentSection(.orphaned, title: "delegated agents")
+            agentSection(.retired, title: "retired agents")
             WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) { terminal in
                 selectedTerminal = terminal
             }
@@ -387,84 +389,6 @@ private extension WorkspaceDetailView {
         }
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.bottom, WorkspaceDetailStyle.pageInset)
-    }
-
-    var foregroundAgents: some View {
-        ForEach(viewModel.foregroundAgents) { agent in
-            foregroundAgent(agent)
-        }
-    }
-
-    @ViewBuilder
-    func foregroundAgent(_ agent: AgentSession) -> some View {
-        VStack(spacing: WorkspaceDetailStyle.stackTopSpacing) {
-            agentButton(agent)
-            let delegates = viewModel.delegatedAgents(for: agent.id)
-            if !delegates.isEmpty {
-                DelegatedAgentsRow(
-                    agents: delegates,
-                    isExpanded: expandedDelegates.contains(agent.id),
-                    colorScheme: colorScheme
-                ) { toggleDelegates(agent.id) }
-                if expandedDelegates.contains(agent.id) {
-                    ForEach(delegates) { delegate in
-                        agentButton(delegate, indented: true)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    var backgroundAgents: some View {
-        if !viewModel.standaloneBackgroundAgents.isEmpty {
-            BackgroundAgentsHeader(
-                agents: viewModel.standaloneBackgroundAgents,
-                isExpanded: showBackgroundAgents,
-                colorScheme: colorScheme
-            ) { showBackgroundAgents.toggle() }
-            if showBackgroundAgents {
-                ForEach(viewModel.standaloneBackgroundAgents) { agent in
-                    agentButton(agent)
-                }
-            }
-        }
-    }
-
-    func agentButton(_ agent: AgentSession, indented: Bool = false) -> some View {
-        Button {
-            coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
-        } label: {
-            AgentRowView(agent: agent, colorScheme: colorScheme, indented: indented)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("workspace.agent.\(agent.id)")
-        .visionListRowHitTarget()
-        .contextMenu {
-            AgentNotificationsMuteButton(agent: agent) { toggleNotificationsMuted(agent) }
-        }
-    }
-
-    private func toggleNotificationsMuted(_ agent: AgentSession) {
-        Task {
-            do {
-                try await agentStore.setNotificationsMuted(
-                    agentId: agent.id,
-                    workspaceId: workspaceId,
-                    muted: !agent.notificationsMuted
-                )
-            } catch {
-                AppLog.workspace.error("[WorkspaceDetail] Notification mute toggle failed: \(error)")
-            }
-        }
-    }
-
-    private func toggleDelegates(_ agentId: String) {
-        if expandedDelegates.contains(agentId) {
-            expandedDelegates.remove(agentId)
-        } else {
-            expandedDelegates.insert(agentId)
-        }
     }
 
     private func deleteWorkspace() {

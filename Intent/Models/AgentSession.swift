@@ -55,6 +55,9 @@ struct AgentSession: Identifiable, Equatable {
     /// daemons) means unmuted. Defaulted so existing memberwise construction
     /// sites keep compiling.
     var notificationsMuted = false
+    /// Canonical direct parent; creator attribution is a separate concept.
+    var parentAgentId: String?
+    var retiredAt: String?
 
     private static let activeStatuses: Set<String> = [
         "active",
@@ -198,7 +201,9 @@ struct AgentSession: Identifiable, Equatable {
             attentionRequestTimestamp: attentionRequestTimestamp,
             pendingQuestionsMessageId: pendingQuestionsMessageId,
             dismissedQuestionsMessageId: dismissedQuestionsMessageId,
-            notificationsMuted: notificationsMuted
+            notificationsMuted: notificationsMuted,
+            parentAgentId: parentAgentId,
+            retiredAt: retiredAt
         )
     }
 
@@ -237,7 +242,9 @@ struct AgentSession: Identifiable, Equatable {
             dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String,
             notificationsMuted: dict["notificationsMuted"] as? Bool
                 ?? metadata?["notificationsMuted"] as? Bool
-                ?? false
+                ?? false,
+            parentAgentId: dict["parentAgentId"] as? String,
+            retiredAt: dict["retiredAt"] as? String
         )
     }
 
