@@ -14,6 +14,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     var rowBackground: Color = .clear
     var restingCornerRadius: CGFloat = 0
     var horizontalInset: CGFloat = 0
+    var showsSwipeTint = true
     var onSwipeProgressChanged: (CGFloat) -> Void = { _ in }
     @ViewBuilder var content: (_ swipeProgress: CGFloat) -> Content
     @ViewBuilder var actions: () -> Actions
@@ -34,6 +35,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
         restingCornerRadius + (WorkspaceSwipeStyle.rowCornerRadius - restingCornerRadius) * swipeProgress
     }
     private var rowTintOpacity: Double {
+        guard showsSwipeTint else { return 0 }
         let opacity = contrast == .increased ? WorkspaceSwipeStyle.increasedTintOpacity : WorkspaceSwipeStyle.tintOpacity
         return Double(swipeProgress) * opacity
     }

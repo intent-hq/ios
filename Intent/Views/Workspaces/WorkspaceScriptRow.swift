@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct WorkspaceScriptRow: View {
+    private static let trailingIconInset: CGFloat = 12
+
     let script: WorkspaceScript
     let store: WorkspaceScriptStore
     @Binding var revealedTarget: WorkspaceSwipeTarget?
@@ -122,6 +124,7 @@ struct WorkspaceScriptRow: View {
                     .accessibilityHidden(true)
             }
         }
+        .padding(.trailing, Self.trailingIconInset)
         .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
         .frame(minHeight: Constants.Accessibility.minimumTapTarget)
         .contentShape(Rectangle())

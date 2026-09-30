@@ -42,7 +42,8 @@ private struct WorkspaceTerminalRow: View {
             target: .terminal(terminal.id),
             revealedTarget: $revealedTarget,
             actionCount: 1,
-            horizontalInset: WorkspaceDetailStyle.pageInset
+            horizontalInset: WorkspaceDetailStyle.pageInset,
+            showsSwipeTint: false
         ) { _ in
             terminalButton
         } actions: {
