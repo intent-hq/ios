@@ -19,6 +19,7 @@ extension Constants.WorkspaceList {
 }
 
 extension Constants.WorkspaceSearch {
+    static let morphAnimationDuration: Double = 0.35
     static let compactHeight: CGFloat = 48
     static let expandedHeight: CGFloat = 56
     static let iconSize: CGFloat = 24

@@ -7,9 +7,11 @@ struct WorkspaceSearchBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var viewMode: ViewMode
     @Binding var isSearching: Bool
+    var searchAnimation: Namespace.ID
     var horizontalPadding: CGFloat = Constants.WorkspaceList.pickerHorizontalPadding
     var isCompact = false
     @Namespace private var selectionAnimation
+    @State private var switcherWidth: CGFloat = 0
     @ScaledMetric(relativeTo: .body) private var segmentTracking: CGFloat = -0.32
 
     private var controlHeight: CGFloat {
@@ -21,12 +23,14 @@ struct WorkspaceSearchBar: View {
     }
 
     var body: some View {
-        VStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
-            HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
+        HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
+            if !isSearching {
                 viewModeSwitcher
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { switcherWidth = $0 }
+                    .transition(reduceMotion ? .identity : .offset(x: -switcherWidth - horizontalPadding))
 
                 Button {
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration)) {
+                    withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
                         isSearching = true
                     }
                 } label: {
@@ -36,16 +40,15 @@ struct WorkspaceSearchBar: View {
                         .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                         .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                         .frame(width: controlHeight, height: controlHeight)
-                        .background(
-                            Constants.WorkspaceList.controlSurface(for: colorScheme),
-                            in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-                        )
+                        .modifier(WorkspaceSearchMorph(animation: searchAnimation))
                 }
                 .buttonStyle(.plain)
+                .transition(.identity)
                 .accessibilityLabel("Search workspaces")
                 .accessibilityIdentifier("workspaces.search.open")
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, horizontalPadding)
     }
 
@@ -94,6 +97,7 @@ struct WorkspaceSearchInput: View {
     @Binding var text: String
     @Binding var isSearching: Bool
     var isFocused: FocusState<Bool>.Binding
+    var searchAnimation: Namespace.ID
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
     var body: some View {
@@ -102,7 +106,7 @@ struct WorkspaceSearchInput: View {
             Button {
                 text = ""
                 isFocused.wrappedValue = false
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration)) {
+                withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
                     isSearching = false
                 }
             } label: {
@@ -118,11 +122,13 @@ struct WorkspaceSearchInput: View {
                     )
             }
             .buttonStyle(.plain)
+            .transition(reduceMotion ? .identity : .offset(x: Constants.WorkspaceSearch.expandedHeight + Constants.WorkspaceSearch.contentSpacing).combined(with: .opacity))
             .accessibilityLabel("Close search")
             .accessibilityIdentifier("workspaces.search.cancel")
         }
         .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
         .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
+        .transition(.identity)
     }
 
     private var searchField: some View {
@@ -161,9 +167,21 @@ struct WorkspaceSearchInput: View {
         .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
         .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
         .frame(minHeight: Constants.WorkspaceSearch.expandedHeight)
-        .background(
-            Constants.WorkspaceList.controlSurface(for: colorScheme),
-            in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-        )
+        .modifier(WorkspaceSearchMorph(animation: searchAnimation))
+    }
+}
+
+private struct WorkspaceSearchMorph: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var animation: Namespace.ID
+
+    func body(content: Content) -> some View {
+        content
+            .matchedGeometryEffect(id: "workspaceSearch", in: animation, properties: reduceMotion ? [] : .frame)
+            .background(
+                Constants.WorkspaceList.controlSurface(for: colorScheme),
+                in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
+            )
     }
 }

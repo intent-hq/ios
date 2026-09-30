@@ -19,6 +19,7 @@ struct WorkspaceListView: View {
     @State private var isFilterPinned = false
     @State private var pageHeaderHeight: CGFloat = 0
     @FocusState private var searchFocused: Bool
+    @Namespace private var searchAnimation
     @ScaledMetric(relativeTo: .largeTitle) private var headingTracking: CGFloat = -1.2
     @ScaledMetric(relativeTo: .title) private var compactHeadingTracking: CGFloat = -0.56
     @ScaledMetric(relativeTo: .largeTitle) private var headingSize = Constants.Typography.heading1.size
@@ -37,17 +38,15 @@ struct WorkspaceListView: View {
                 Section {
                     workspaceContent
                 } header: {
-                    if !isSearching {
-                        WorkspaceSearchBar(
-                            viewMode: $viewModel.viewMode,
-                            isSearching: $isSearching,
-                            horizontalPadding: Constants.WorkspaceList.pageInset,
-                            isCompact: isFilterPinned
-                        )
-                        .background(Constants.WorkspaceList.canvas(for: colorScheme))
-                        .transition(.opacity)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration), value: isFilterPinned)
-                    }
+                    WorkspaceSearchBar(
+                        viewMode: $viewModel.viewMode,
+                        isSearching: $isSearching,
+                        searchAnimation: searchAnimation,
+                        horizontalPadding: Constants.WorkspaceList.pageInset,
+                        isCompact: isFilterPinned
+                    )
+                    .background(Constants.WorkspaceList.canvas(for: colorScheme))
+                    .animation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration), value: isFilterPinned)
                 }
             }
             .padding(.bottom, isSearching ? 0 : AssistantLaunchButton.scrollClearance)
@@ -69,8 +68,13 @@ struct WorkspaceListView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSearching {
-                WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
-                    .transition(reduceMotion ? .identity : .move(edge: .bottom).combined(with: .opacity))
+                WorkspaceSearchInput(
+                    text: $viewModel.searchText,
+                    isSearching: $isSearching,
+                    isFocused: $searchFocused,
+                    searchAnimation: searchAnimation
+                )
+                .transition(.identity)
             }
         }
         .refreshable {
