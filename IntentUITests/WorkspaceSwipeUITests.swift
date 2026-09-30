@@ -49,7 +49,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
             revealActions(on: row)
             let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
             XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
-            row.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)).tap()
+            visibleRowPoint(in: app, row: row, action: archive).tap()
             XCTAssertTrue(archive.waitForNonExistence(timeout: Self.timeout))
             XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
         }
@@ -61,7 +61,8 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         revealActions(on: row)
         let delete = app.buttons["workspace.delete.\(Self.workspaceId)"]
         XCTAssertTrue(delete.waitForExistence(timeout: Self.timeout))
-        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
+        let start = visibleRowPoint(in: app, row: row, action: archive)
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 100, dy: 0)))
         XCTAssertTrue(delete.waitForNonExistence(timeout: Self.timeout))
         row.tap()
@@ -119,5 +120,12 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
         let end = row.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
         start.press(forDuration: 0.05, thenDragTo: end)
+    }
+
+    @MainActor
+    private func visibleRowPoint(in app: XCUIApplication, row: XCUIElement, action: XCUIElement) -> XCUICoordinate {
+        let leadingEdge = max(app.frame.minX, row.frame.minX)
+        return app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: (leadingEdge + action.frame.minX) / 2, dy: row.frame.midY))
     }
 }

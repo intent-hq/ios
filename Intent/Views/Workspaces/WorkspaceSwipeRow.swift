@@ -32,7 +32,9 @@ struct WorkspaceSwipeRow: View {
         workspaceButton
             .background(Constants.WorkspaceList.canvas(for: colorScheme))
             .offset(x: offset)
-            .background(alignment: .trailing) { actionButtons }
+            .background(alignment: .trailing) {
+                if isRevealed || translation < 0 { actionButtons }
+            }
             .clipped()
             .contentShape(Rectangle())
             .modifier(WorkspaceRowSwipeGesture(translation: $translation, isRevealed: revealBinding))
@@ -59,7 +61,7 @@ struct WorkspaceSwipeRow: View {
                     if isUpdating { ProgressView().padding(.trailing) }
                 }
         }
-        .buttonStyle(SwipeRowButtonStyle())
+        .buttonStyle(.plain)
         .disabled(isUpdating)
         .accessibilityIdentifier("workspace.row.\(workspace.id)")
         .contextMenu { menuActions }
@@ -105,15 +107,5 @@ struct WorkspaceSwipeRow: View {
     private func select(_ action: WorkspaceAction) {
         revealedWorkspaceId = nil
         onAction(action)
-    }
-
-    private struct SwipeRowButtonStyle: PrimitiveButtonStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .contentShape(Rectangle())
-                .onTapGesture { configuration.trigger() }
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction { configuration.trigger() }
-        }
     }
 }
