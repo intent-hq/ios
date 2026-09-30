@@ -18,15 +18,15 @@ else
       -H "Authorization: Bearer $RUNNER_STATUS_TOKEN" \
       "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runners?per_page=100" \
       -o "$response"; then
-    if jq -e --arg name 'Sams-MacBook-Pro-2-intent-ios' '
-        .runners[]
-        | select(.name == $name and .status == "online")
-        | select([.labels[].name] | index("intent-ios"))
+    if jq -e --argjson required "$local_runner" '
+        any(.runners[];
+          .status == "online" and
+          (($required - [.labels[].name]) | length == 0))
       ' "$response" >/dev/null; then
       selected="$local_runner"
-      echo '::notice::Local Mac is online; using intent-ios runner'
+      echo '::notice::A matching Mac is online; using the intent-ios runner pool'
     else
-      echo '::notice::Local Mac is offline; using macos-15'
+      echo '::notice::No matching Mac is online; using macos-15'
     fi
   else
     echo '::warning::Could not check local Mac status; using macos-15'

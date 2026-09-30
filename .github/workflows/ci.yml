@@ -110,6 +110,9 @@ jobs:
       - name: Disposable iPad route tests
         run: python3 scripts/test_ci_simulator.py
 
+      - name: macOS runner pool selection tests
+        run: python3 scripts/test_select_macos_runner.py
+
       - name: Xcode Cloud post-clone tests
         run: scripts/test-ci-post-clone.sh
 
