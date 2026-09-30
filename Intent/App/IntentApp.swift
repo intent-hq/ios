@@ -3,8 +3,6 @@ import UIKit
 
 @main
 struct IntentApp: App {
-    @AppStorage("appThemePreference") private var themePreference: String = "system"
-
     init() {
         LifecycleDiagnostics.sessionStarted()
         DemoConnectionLoss.seedSavedMachineIfNeeded()
@@ -24,14 +22,6 @@ struct IntentApp: App {
         }
     }
 
-    private var resolvedColorScheme: ColorScheme? {
-        switch themePreference {
-        case "light": return .light
-        case "dark": return .dark
-        default: return nil
-        }
-    }
-
     var body: some Scene {
         // Window model v2: every window is bound to exactly one backend.
         // `openWindow(value:)` raises the existing window for a backend or
@@ -44,7 +34,6 @@ struct IntentApp: App {
                 backendID: $backendID,
                 networkAvailability: DemoConnectionLoss.networkAvailability ?? .shared
             )
-                .preferredColorScheme(resolvedColorScheme)
                 #if os(visionOS)
                 .frame(
                     minWidth: Constants.Root.visionMinimumWindowWidth,
@@ -162,6 +151,7 @@ struct SessionWindowRoot: View {
 struct BackendWindowRoot: View {
     private static let replacementConnectionPollLimit = 20
 
+    @AppStorage("appThemePreference") private var themePreference = "system"
     @Binding var backendID: BackendID?
     @State private var windowSession: BackendWindowSession
     @SceneStorage("backendWindowShowsSavedMachines") private var restoresSavedMachines = false
@@ -179,6 +169,14 @@ struct BackendWindowRoot: View {
         guard let backendID,
               !restoresSavedMachines, !windowSession.isShowingSavedMachines else { return false }
         return BackendSessionRegistry.shared.isBackendRemoved(backendID)
+    }
+
+    private var resolvedColorScheme: ColorScheme? {
+        switch themePreference {
+        case "light": .light
+        case "dark": .dark
+        default: nil
+        }
     }
 
     var body: some View {
@@ -201,6 +199,7 @@ struct BackendWindowRoot: View {
                 Color.clear
             }
         }
+        .preferredColorScheme(resolvedColorScheme)
         .background {
             #if os(iOS)
             if UIDevice.current.userInterfaceIdiom == .pad {

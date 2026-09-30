@@ -265,6 +265,8 @@ struct AgentRowView: View {
 
 struct DelegatedAgentsRow: View {
     let agents: [AgentSession]
+    var totalCount: Int?
+    var runningCount: Int?
     let isExpanded: Bool
     let colorScheme: ColorScheme
     let onToggle: () -> Void
@@ -293,7 +295,7 @@ struct DelegatedAgentsRow: View {
     }
 
     private var summaryLabel: some View {
-        Text("+\(agents.count) delegated")
+        Text("+\(totalCount ?? agents.count) delegated" + ((runningCount ?? 0) > 0 ? " · \(runningCount ?? 0) running" : ""))
             .interFont(Constants.Typography.subtextXXS)
             .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
             .fixedSize(horizontal: false, vertical: true)
@@ -320,10 +322,10 @@ struct DelegatedAgentsRow: View {
     }
 
     private var summaryTitle: String {
-        let runningCount = agents.count { AgentAvatarState.state(for: $0) == .running }
+        let runningCount = self.runningCount ?? agents.count { AgentAvatarState.state(for: $0) == .running }
         return AgentGroupSummary.delegatedRunningTitle(
             runningCount: runningCount,
-            totalCount: agents.count
+            totalCount: totalCount ?? agents.count
         )
     }
 }
@@ -340,6 +342,9 @@ enum AgentGroupSummary {
 
 struct BackgroundAgentsHeader: View {
     let agents: [AgentSession]
+    var totalCount: Int?
+    var title = "background agents"
+    var runningCount = 0
     let isExpanded: Bool
     let colorScheme: ColorScheme
     let onToggle: () -> Void
@@ -358,7 +363,7 @@ struct BackgroundAgentsHeader: View {
                     }
                 }
 
-                Text("\(agents.count) background agents")
+                Text("\(totalCount ?? agents.count) \(title)" + (runningCount > 0 ? " · \(runningCount) running" : ""))
                     .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
 

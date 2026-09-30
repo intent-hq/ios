@@ -110,6 +110,9 @@ jobs:
       - name: Disposable iPad route tests
         run: python3 scripts/test_ci_simulator.py
 
+      - name: Xcode Cloud post-clone tests
+        run: scripts/test-ci-post-clone.sh
+
       # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
       # override on both Darwin and Linux paths against a stubbed swiftlint.
       - name: swiftlint.sh self-tests
@@ -781,14 +784,18 @@ jobs:
 
       # ConversationTranscriptScrollUITests attaches one content-free JSON
       # record per launch proving the unrealized-end recovery ran. Export only
-      # those records on every run; full result bundles remain failure-only.
-      - name: Export transcript recovery evidence
+      # those records and the agent-group fixture screenshots on every run;
+      # full result bundles remain failure-only.
+      - name: Export UI evidence
         id: recovery-evidence
         if: always()
         run: |
           out="$RUNNER_TEMP/recovery-evidence"
           mkdir -p "$out"
+          group_out="$RUNNER_TEMP/agent-group-evidence"
+          mkdir -p "$group_out"
           count=0
+          group_count=0
           for source in "$RESULT_BUNDLE" "$RESULT_BUNDLE-retry"; do
             if [ ! -d "$source" ]; then
               echo "No result bundle at $source; nothing to export"
@@ -805,12 +812,22 @@ jobs:
               && [ -f "$exported/manifest.json" ]; then
               while IFS=$'\t' read -r src name; do
                 [ -n "$src" ] && [ -f "$exported/$src" ] || continue
-                cp "$exported/$src" "$dest/$(printf '%s' "$name" | tr -cs 'A-Za-z0-9._-' '_')"
-                count=$((count + 1))
-              done < <(jq -r --arg prefix transcript-recovery-evidence- '
+                filename=$(printf '%s' "$name" | tr -cs 'A-Za-z0-9._-' '_')
+                if [[ "$name" == agent-group-evidence-* ]]; then
+                  group_dest="$group_out/$(basename "$source")"
+                  mkdir -p "$group_dest"
+                  cp "$exported/$src" "$group_dest/$filename"
+                  group_count=$((group_count + 1))
+                else
+                  cp "$exported/$src" "$dest/$filename"
+                  count=$((count + 1))
+                fi
+              done < <(jq -r --arg prefix transcript-recovery-evidence- --arg groups agent-group-evidence- '
                 .[]? | .attachments[]?
                 | select(((.suggestedHumanReadableName // "") | startswith($prefix))
-                         or ((.exportedFileName // "") | startswith($prefix)))
+                         or ((.exportedFileName // "") | startswith($prefix))
+                         or ((.suggestedHumanReadableName // "") | startswith($groups))
+                         or ((.exportedFileName // "") | startswith($groups)))
                 | [.exportedFileName, (.suggestedHumanReadableName // .exportedFileName)] | @tsv
               ' "$exported/manifest.json")
             else
@@ -819,6 +836,17 @@ jobs:
           done
           echo "Recovery evidence records: $count"
           echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Agent group screenshots: $group_count"
+          echo "group_count=$group_count" >> "$GITHUB_OUTPUT"
+
+      - name: Upload agent group screenshots
+        if: always() && steps.recovery-evidence.outputs.group_count != '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-agent-group-evidence
+          path: ${{ runner.temp }}/agent-group-evidence
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Upload transcript recovery evidence
         if: always() && steps.recovery-evidence.outputs.count != '0'

@@ -125,26 +125,36 @@ struct ConversationColumnView: View {
             .layoutPriority(usesWorkspaceDesign ? 1 : 0)
 
         if composerVisible || usesWorkspaceDesign {
-            VStack(spacing: Design.Status.composerSpacing) {
+            VStack(spacing: 0) {
                 if usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
                     MonitoredPrsRow(
                         viewModel: viewModel,
                         monitoredPrStore: viewModel.monitoredPrStore,
                         usesWorkspaceDesign: true
                     )
+                    .padding(.horizontal, composerHorizontalInset)
+                    .padding(.top, Design.Composer.keyboardBottomSpacing)
+                    .padding(.bottom, workspaceQueueVisible ? Design.Status.composerSpacing : 0)
                 }
-                MessageInputView(
-                    viewModel: viewModel,
-                    store: viewModel.store,
-                    usesWorkspaceDesign: usesWorkspaceDesign,
-                    allowsSending: composerVisible
-                ) { composerFocused = $0 }
+                WorkspaceQueuePanel(viewModel: viewModel, isVisible: workspaceQueueVisible) {
+                    MessageInputView(
+                        viewModel: viewModel,
+                        store: viewModel.store,
+                        usesWorkspaceDesign: usesWorkspaceDesign,
+                        allowsSending: composerVisible
+                    ) { composerFocused = $0 }
+                    .padding(.horizontal, usesWorkspaceDesign ? composerHorizontalInset : 0)
+                    .padding(.top, usesWorkspaceDesign && !workspaceQueueVisible ? Design.Composer.keyboardBottomSpacing : 0)
+                    .padding(.bottom, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)
+                }
             }
-            .padding(.horizontal, usesWorkspaceDesign ? composerHorizontalInset : 0)
-            .padding(.vertical, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
             .anchorPreference(key: WorkspaceActionMenuInputBounds.self, value: .bounds) { $0 }
         }
+    }
+
+    private var workspaceQueueVisible: Bool {
+        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
     }
 
     private var composerHorizontalInset: CGFloat {
@@ -193,7 +203,7 @@ struct ConversationColumnView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
 
-        if !viewModel.queuedMessages.isEmpty {
+        if !usesWorkspaceDesign, !viewModel.queuedMessages.isEmpty {
             QueuedMessagesView(viewModel: viewModel)
             Divider()
         }

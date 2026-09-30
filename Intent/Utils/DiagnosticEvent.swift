@@ -20,6 +20,8 @@ nonisolated struct DiagnosticEvent: Codable, Equatable, Sendable {
         case active, cleanup, connect, decode, input, permission, placement, probe, read, request, response
         case save, scanner, start
         case trustConfirmation = "trust_confirmation"
+        case tunnelEstablish = "tunnel_establish"
+        case tunnelHandshake = "tunnel_handshake"
         case write
     }
 
@@ -49,7 +51,7 @@ nonisolated struct DiagnosticEvent: Codable, Equatable, Sendable {
         case explicitDisconnect = "explicit_disconnect"
         case failureScreenRetry = "failure_screen_retry"
         case heartbeatFailure = "heartbeat_failure"
-        case inactive
+        case inactive, lan
         case localNetworkDenied = "local_network_denied"
         case malformedPush = "malformed_push"
         case manualRetry = "manual_retry"

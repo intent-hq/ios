@@ -427,3 +427,20 @@ extension AgentSessionTests {
         )
     }
 }
+
+extension AgentSessionTests {
+    @Test func listParentAndRetirementSurvivePreviewUpdates() {
+        let row: [String: Any] = [
+            "id": "child", "name": "Child", "parentAgentId": "actual-parent",
+            "retiredAt": "2026-09-30T00:00:00Z",
+            "metadata": ["createdByAgentId": "creator", "isBackground": true]
+        ]
+        let agent = AgentSession.parseAgent(row)
+        #expect(agent?.parentAgentId == "actual-parent")
+        #expect(agent?.createdByAgentId == "creator")
+        #expect(agent?.retiredAt == "2026-09-30T00:00:00Z")
+        let preview = agent?.applyingPreview(lastAgentResponse: "New response", digest: nil)
+        #expect(preview?.parentAgentId == "actual-parent")
+        #expect(preview?.retiredAt == agent?.retiredAt)
+    }
+}

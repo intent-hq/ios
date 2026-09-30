@@ -134,7 +134,7 @@ struct WorkspaceDetailViewTests {
     /// A backend-bound session composed over a fake backend connection; the
     /// coordinator factory is never invoked by these tests.
     @MainActor
-    private func makePinnedSession(connection: FakeConnectionManager) -> BackendSession {
+    func makePinnedSession(connection: FakeConnectionManager) -> BackendSession {
         let fileLoader = WorkspaceFileImageLoader(connection: connection)
         return BackendSession(
             backendID: BackendID(UUID()),
