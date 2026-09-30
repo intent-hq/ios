@@ -11,24 +11,31 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     let target: WorkspaceSwipeTarget
     @Binding var revealedTarget: WorkspaceSwipeTarget?
     let actionCount: Int
+    var actionWidth: CGFloat?
+    var actionLeadingSpacing: CGFloat = WorkspaceSwipeStyle.spacing
     var rowBackground: Color = .clear
     var restingCornerRadius: CGFloat = 0
     var horizontalInset: CGFloat = 0
     var showsSwipeTint = true
+    var swipeBackground: Color?
     var onSwipeProgressChanged: (CGFloat) -> Void = { _ in }
     @ViewBuilder var content: (_ swipeProgress: CGFloat) -> Content
     @ViewBuilder var actions: () -> Actions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @ScaledMetric(relativeTo: .body) private var actionWidth = WorkspaceSwipeStyle.buttonWidth
+    @ScaledMetric(relativeTo: .body) private var defaultActionWidth = WorkspaceSwipeStyle.buttonWidth
     @State private var offset: CGFloat = 0
     @State private var dragOrigin: CGFloat?
     @State private var actionsVisible = false
     @State private var animationRevision = 0
 
     private var isRevealed: Bool { revealedTarget == target }
-    private var revealWidth: CGFloat { CGFloat(actionCount) * (actionWidth + WorkspaceSwipeStyle.spacing) }
+    private var revealWidth: CGFloat {
+        CGFloat(actionCount) * (actionWidth ?? defaultActionWidth)
+            + CGFloat(max(0, actionCount - 1)) * WorkspaceSwipeStyle.spacing
+            + actionLeadingSpacing
+    }
     private var restingOffset: CGFloat { isRevealed ? -revealWidth : 0 }
     private var swipeProgress: CGFloat { min(1, max(0, -offset / max(revealWidth, 1))) }
     private var rowCornerRadius: CGFloat {
@@ -36,6 +43,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     }
     private var rowTintOpacity: Double {
         guard showsSwipeTint else { return 0 }
+        if swipeBackground != nil { return Double(swipeProgress) }
         let opacity = contrast == .increased ? WorkspaceSwipeStyle.increasedTintOpacity : WorkspaceSwipeStyle.tintOpacity
         return Double(swipeProgress) * opacity
     }
@@ -45,7 +53,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
             .background(rowBackground.opacity(1 - Double(swipeProgress)), in: .rect(cornerRadius: restingCornerRadius))
             .padding(.leading, horizontalInset)
             .background {
-                (colorScheme == .dark ? Color.white : Color.black).opacity(rowTintOpacity)
+                (swipeBackground ?? (colorScheme == .dark ? Color.white : Color.black)).opacity(rowTintOpacity)
             }
             .clipShape(RoundedRectangle(cornerRadius: rowCornerRadius, style: .continuous))
             .offset(x: offset)
@@ -53,7 +61,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
             .overlay(alignment: .trailing) {
                 if actionsVisible {
                     HStack(spacing: WorkspaceSwipeStyle.spacing, content: actions)
-                        .padding(.leading, WorkspaceSwipeStyle.spacing)
+                        .padding(.leading, actionLeadingSpacing)
                         .fixedSize(horizontal: true, vertical: false)
                         .scaleEffect(reduceMotion ? 1 : swipeProgress, anchor: .trailing)
                         .offset(x: reduceMotion ? revealWidth + offset : 0)
@@ -116,6 +124,26 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
                 actionsVisible = false
             }
         }
+    }
+}
+
+struct WorkspaceSwipeIconButtonStyle: ButtonStyle {
+    let size: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: size, height: size)
+            .foregroundStyle(configuration.role == .destructive
+                ? Theme.destructive(for: colorScheme)
+                : Constants.Pairing.foreground(for: colorScheme))
+            .background(
+                Constants.WorkspaceList.controlSurface(for: colorScheme),
+                in: .rect(cornerRadius: Constants.WorkspaceList.swipeButtonCornerRadius)
+            )
+            .contentShape(.rect(cornerRadius: Constants.WorkspaceList.swipeButtonCornerRadius))
+            .opacity(isEnabled ? (configuration.isPressed ? WorkspaceSwipeStyle.pressedOpacity : 1) : WorkspaceSwipeStyle.disabledOpacity)
     }
 }
 
