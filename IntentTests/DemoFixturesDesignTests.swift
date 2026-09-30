@@ -35,7 +35,7 @@ extension DemoFixturesTests {
         let tools = try #require(viewModel.messages.first { $0.id == "demo-design-tools" })
         #expect(tools.contentBlocks.filter { $0.type == .toolUse }.count == 3)
         #expect(tools.contentBlocks.filter { $0.type == .toolResult }.count == 3)
-        #expect(viewModel.isStreaming == (scenario == .streaming))
+        #expect(viewModel.isStreaming == (scenario == .streaming || scenario == .queue))
         if scenario == .blocker {
             let notice = try #require(viewModel.messages.last?.attentionNotice)
             #expect(notice.kind == .blockerReport)

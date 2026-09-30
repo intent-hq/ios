@@ -17,6 +17,7 @@ enum DemoDesignScenario: String, CaseIterable {
     case questionCards = "question-cards"
     case questionFlow = "question-flow"
     case questions
+    case queue
     case streaming
     case tools
 
@@ -45,11 +46,17 @@ final class DemoDesignFixtures {
     private(set) var questionsDismissed = false
     private(set) var monitorCancelled = false
     private var sentMessages: [[String: Any]] = []
+    private var queuedMessages: [[String: Any]] = []
     private var sequence = 0
 
     init(scenario: DemoDesignScenario) {
         self.scenario = scenario
-        isStreaming = scenario == .streaming
+        isStreaming = scenario == .streaming || scenario == .queue
+        if scenario == .queue {
+            queuedMessages = ["Hmm all these graders seem to be", "Keep the existing composer unchanged"].enumerated().map { index, text in
+                ["id": "demo-queue-\(index)", "content": text, "queuedAt": Self.timestamp, "position": index]
+            }
+        }
     }
 
     var hasQuestions: Bool { scenario == .questions || scenario == .questionFlow || scenario == .questionCards }
@@ -63,6 +70,7 @@ final class DemoDesignFixtures {
     func response(for method: String, params: [String: Any]) -> Any? {
         let ownsAgent = params["agentId"] as? String == Self.agentId
         let ownsWorkspace = params["workspaceId"] as? String == Self.workspaceId
+        if ownsAgent, let response = queueResponse(for: method, params: params) { return response }
         switch method {
         case "workspace.list":
             return ["workspaces": [workspace]]
@@ -71,8 +79,7 @@ final class DemoDesignFixtures {
             return contextNotes.first { $0["id"] as? String == params["noteId"] as? String }.map { ["note": $0] }
         case "agent.list" where ownsWorkspace:
             return ["agents": [agent]]
-        case "agent.get" where ownsAgent:
-            return ["agent": agent]
+        case "agent.get" where ownsAgent: return ["agent": agent]
         case "agent.getConversation" where ownsAgent:
             return ["messages": messages, "truncated": historyIsTruncated, "totalMessages": totalMessageCount]
         case "chat.subscribe" where ownsAgent:
@@ -113,11 +120,31 @@ final class DemoDesignFixtures {
         }
     }
 
+    private func queueResponse(for method: String, params: [String: Any]) -> Any? {
+        switch method {
+        case "agent.getQueue":
+            return ["queue": queuedMessages]
+        case "agent.editQueuedMessage":
+            guard let index = queuedMessages.firstIndex(where: { $0["id"] as? String == params["messageId"] as? String }),
+                  let content = params["content"] as? String else { return nil }
+            queuedMessages[index]["content"] = content
+            return ["success": true]
+        case "agent.removeQueuedMessage", "agent.sendQueuedMessageNow":
+            guard let index = queuedMessages.firstIndex(where: { $0["id"] as? String == params["messageId"] as? String }) else { return nil }
+            let row = queuedMessages.remove(at: index)
+            if method == "agent.sendQueuedMessageNow", let messageId = row["id"] as? String, let content = row["content"] as? String {
+                sentMessages.append(Self.message(id: messageId, role: "user", blocks: [DemoFixtures.textBlock(content)]))
+            }
+            return ["success": true, "queued": false]
+        default: return nil
+        }
+    }
+
     /// Called after response mutation and before its acknowledgement is
     /// returned, exercising the live router's normal early-push buffering.
     func subscriptionPush(for method: String, params: [String: Any]) -> SubscriptionPush? {
         guard params["agentId"] as? String == Self.agentId,
-              ["chat.subscribe", "agent.sendMessage", "agent.stop"].contains(method) else { return nil }
+              ["chat.subscribe", "agent.sendMessage", "agent.sendQueuedMessageNow", "agent.stop"].contains(method) else { return nil }
         if method != "chat.subscribe" { sequence += 1 }
         return SubscriptionPush(
             subscriptionId: DemoFixtures.chatSubscriptionId(agentId: Self.agentId),
