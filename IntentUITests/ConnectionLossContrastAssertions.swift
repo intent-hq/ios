@@ -4,12 +4,26 @@ import XCTest
 /// Run the owning Home test in light/dark and actual Reduce Transparency modes.
 extension ConnectionLossUITests {
     @MainActor
-    func testBackDuringStartupRetainsMachineAndAllowsFreshConnection() throws {
+    func testLaunchHidesBackButSelectedMachineCanReturnHome() throws {
         let timeout: TimeInterval = 15
         let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory, arguments: ["--demo-connection-loss-pending-startup"], waitForStartup: false)
+        let app = launch(
+            directory: directory,
+            arguments: ["--demo-connection-loss-pending-startup", "--demo-connection-loss-startup-failure"],
+            waitForStartup: false
+        )
         assertStartupState("connected", in: app)
         let back = app.buttons["connecting.home"]
+        XCTAssertFalse(back.exists, "Cold-launch auto-connect must not offer Back")
+        capture(app, named: "launch-connecting-without-back")
+        try trigger("loss", in: directory)
+        assertFailureBackReturnsHome(in: app, timeout: timeout)
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        saved.tap()
+        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
+        XCTAssertTrue(machine.waitForExistence(timeout: timeout))
+        machine.tap()
+        assertStartupState("connected", in: app)
         XCTAssertTrue(back.waitForExistence(timeout: timeout))
         XCTAssertEqual(back.label, "Back to Home")
         XCTAssertTrue(back.isHittable)
@@ -17,13 +31,11 @@ extension ConnectionLossUITests {
         XCTAssertLessThan(back.frame.maxY, app.frame.midY)
         capture(app, named: "connecting-back")
         back.tap()
-        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: timeout))
         XCTAssertFalse(back.exists)
-        // Release the abandoned startup's data wait after leaving the screen.
+        // Release the abandoned user-initiated connection's data wait after leaving.
         try trigger("initial-data", in: directory)
         saved.tap()
-        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
         XCTAssertTrue(machine.waitForExistence(timeout: timeout))
         XCTAssertFalse(app.buttons["intent.menu.open"].exists, "A late startup completion must not leave Home")
         XCTAssertFalse(app.staticTexts["Can’t Connect"].exists)

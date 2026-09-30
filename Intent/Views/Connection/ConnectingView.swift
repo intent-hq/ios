@@ -36,8 +36,10 @@ struct ConnectingView: View {
         .padding(.bottom, Layout.contentBottomPadding)
         .frame(maxWidth: .infinity)
         .safeAreaInset(edge: .top, alignment: .leading, spacing: 0) {
-            homeButton
-                .padding(.horizontal, Constants.ConnectionSheet.inset)
+            if !coordinator.connectingStartedByLaunch {
+                homeButton
+                    .padding(.horizontal, Constants.ConnectionSheet.inset)
+            }
         }
         // Keyed on connectionAttemptId: a connection switch performed while
         // this view is already showing (same screen value) bumps the id to
