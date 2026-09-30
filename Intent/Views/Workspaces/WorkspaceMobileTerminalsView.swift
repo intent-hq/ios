@@ -31,28 +31,16 @@ private struct WorkspaceTerminalRow: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .body) private var actionWidth: CGFloat = 88
-    @GestureState private var translation: CGFloat = 0
     @State private var isRevealed = false
     @State private var confirmDelete = false
     @State private var isDeleting = false
 
-    private enum Layout {
-        static let minimumDrag: CGFloat = 20
-        static let revealThreshold: CGFloat = 30
-    }
-
     var body: some View {
-        ZStack(alignment: .trailing) {
+        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: 1) {
             terminalButton
-                .offset(x: max(-actionWidth, min(0, (isRevealed ? -actionWidth : 0) + translation)))
-            if isRevealed || translation < 0 { deleteButton }
+        } actions: {
+            deleteButton
         }
-        .clipped()
-        .contentShape(Rectangle())
-        .simultaneousGesture(swipeGesture)
-        .animation(reduceMotion ? nil : .snappy, value: isRevealed)
         .disabled(isDeleting)
         .alert("Delete terminal?", isPresented: $confirmDelete) {
             Button("Cancel", role: .cancel) {}
@@ -86,37 +74,11 @@ private struct WorkspaceTerminalRow: View {
     }
 
     private var deleteButton: some View {
-        Button(role: .destructive) { confirmDelete = true } label: {
-            Text("Delete")
-                .interFont(Constants.Typography.bodyXS)
-                .frame(width: actionWidth)
-                .frame(maxHeight: .infinity)
-                .foregroundStyle(.white)
-                .background(.red, in: .rect(cornerRadius: WorkspaceDetailStyle.checkboxCornerRadius))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Delete terminal")
-        .accessibilityIdentifier("terminal.delete.\(terminal.id)")
-        .disabled(!store.isConnected)
-        .allowsHitTesting(isRevealed)
-        .accessibilityHidden(!isRevealed)
-    }
-
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: Layout.minimumDrag)
-            .updating($translation) { value, translation, _ in
-                if abs(value.translation.width) > abs(value.translation.height) {
-                    translation = value.translation.width
-                }
-            }
-            .onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                if value.translation.width < -Layout.revealThreshold {
-                    isRevealed = true
-                } else if value.translation.width > Layout.revealThreshold {
-                    isRevealed = false
-                }
-            }
+        Button("Delete", role: .destructive) { confirmDelete = true }
+            .buttonStyle(WorkspaceSwipeButtonStyle(color: .red))
+            .accessibilityLabel("Delete terminal")
+            .accessibilityIdentifier("terminal.delete.\(terminal.id)")
+            .disabled(!store.isConnected)
     }
 
     private func deleteTerminal() {

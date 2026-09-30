@@ -111,6 +111,28 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
     }
 
     @MainActor
+    func testShortDragsPreserveOpenOrClosedStateWithoutInvokingActions() {
+        let app = launchWorkspaces()
+        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
+        let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: -24, dy: 0)))
+        XCTAssertTrue(archive.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
+
+        revealActions(on: row)
+        XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+        let openStart = visibleRowPoint(in: app, row: row, action: archive)
+        openStart.press(forDuration: 0.05, thenDragTo: openStart.withOffset(CGVector(dx: 24, dy: 0)))
+        XCTAssertTrue(archive.isHittable)
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+        openStart.press(forDuration: 0.05, thenDragTo: openStart.withOffset(CGVector(dx: 100, dy: 0)))
+        XCTAssertTrue(archive.waitForNonExistence(timeout: Self.timeout))
+        row.tap()
+        XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
     private func launchWorkspaces(arguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()

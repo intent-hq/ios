@@ -40,21 +40,14 @@ private struct WorkspaceBrowserRow: View {
     let store: WorkspaceBrowserStore
     let onSelect: (WorkspaceBrowser) -> Void
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .body) private var actionWidth: CGFloat = 88
-    @GestureState private var translation: CGFloat = 0
     @State private var isRevealed = false
 
     var body: some View {
-        ZStack(alignment: .trailing) {
+        WorkspaceSwipeContainer(isRevealed: $isRevealed, actionCount: 1) {
             browserButton
-                .offset(x: max(-actionWidth, min(0, (isRevealed ? -actionWidth : 0) + translation)))
-            if isRevealed || translation < 0 { deleteButton }
+        } actions: {
+            deleteButton
         }
-        .clipShape(RoundedRectangle(cornerRadius: BrowserAppearance.cornerRadius))
-        .contentShape(Rectangle())
-        .simultaneousGesture(swipeGesture)
-        .animation(reduceMotion ? nil : .snappy, value: isRevealed)
     }
 
     private var browserButton: some View {
@@ -77,36 +70,10 @@ private struct WorkspaceBrowserRow: View {
     }
 
     private var deleteButton: some View {
-        Button(role: .destructive) { store.remove(browser) } label: {
-            Text("Delete")
-                .interFont(Constants.Typography.bodyXS)
-                .frame(width: actionWidth)
-                .frame(maxHeight: .infinity)
-                .foregroundStyle(.white)
-                .background(.red, in: .rect(cornerRadius: BrowserAppearance.cornerRadius))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Delete browser")
-        .accessibilityIdentifier("browser.delete.\(browser.id)")
-        .allowsHitTesting(isRevealed)
-        .accessibilityHidden(!isRevealed)
-    }
-
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: BrowserAppearance.minimumDrag)
-            .updating($translation) { value, translation, _ in
-                if abs(value.translation.width) > abs(value.translation.height) {
-                    translation = value.translation.width
-                }
-            }
-            .onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                if value.translation.width < -BrowserAppearance.revealThreshold {
-                    isRevealed = true
-                } else if value.translation.width > BrowserAppearance.revealThreshold {
-                    isRevealed = false
-                }
-            }
+        Button("Delete", role: .destructive) { store.remove(browser) }
+            .buttonStyle(WorkspaceSwipeButtonStyle(color: .red))
+            .accessibilityLabel("Delete browser")
+            .accessibilityIdentifier("browser.delete.\(browser.id)")
     }
 
     private struct BrowserRowButtonStyle: PrimitiveButtonStyle {
@@ -160,5 +127,4 @@ enum BrowserAppearance {
     static let controlSize: CGFloat = 44
     static let cornerRadius: CGFloat = 18
     static let minimumDrag: CGFloat = 20
-    static let revealThreshold: CGFloat = 30
 }

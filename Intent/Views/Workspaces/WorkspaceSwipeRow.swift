@@ -8,13 +8,8 @@ struct WorkspaceSwipeRow: View {
     let onSelect: () -> Void
     let onAction: (WorkspaceAction) -> Void
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .body) private var actionWidth: CGFloat = 88
-    @State private var translation: CGFloat = 0
 
-    private var actionsWidth: CGFloat { actionWidth * 2 }
     private var isRevealed: Bool { revealedWorkspaceId == workspace.id }
-    private var offset: CGFloat { max(-actionsWidth, min(0, (isRevealed ? -actionsWidth : 0) + translation)) }
     private var revealBinding: Binding<Bool> {
         Binding(
             get: { isRevealed },
@@ -29,23 +24,16 @@ struct WorkspaceSwipeRow: View {
     }
 
     var body: some View {
-        workspaceButton
-            .background(Constants.WorkspaceList.canvas(for: colorScheme))
-            .offset(x: offset)
-            .background(alignment: .trailing) {
-                if isRevealed || translation < 0 { actionButtons }
-            }
-            .clipped()
-            .contentShape(Rectangle())
-            .modifier(WorkspaceRowSwipeGesture(translation: $translation, isRevealed: revealBinding))
-            .animation(reduceMotion ? nil : .snappy, value: isRevealed)
-            .onChange(of: translation) { previous, current in
-                if previous == 0, current != 0, !isRevealed { revealedWorkspaceId = nil }
-            }
-            .onDisappear {
-                if isRevealed { revealedWorkspaceId = nil }
-            }
-            .overlay(alignment: .bottom) { Divider() }
+        WorkspaceSwipeContainer(isRevealed: revealBinding, actionCount: 2, onSwipeBegan: {
+            if !isRevealed { revealedWorkspaceId = nil }
+        }) {
+            workspaceButton
+                .background(Constants.WorkspaceList.canvas(for: colorScheme))
+        } actions: {
+            actionButton(.archive, color: .orange)
+            actionButton(.delete, color: .red)
+        }
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     private var workspaceButton: some View {
@@ -68,32 +56,12 @@ struct WorkspaceSwipeRow: View {
         .accessibilityActions { menuActions }
     }
 
-    private var actionButtons: some View {
-        HStack(spacing: 0) {
-            actionButton(.archive, systemImage: "archivebox", color: .orange)
-            actionButton(.delete, systemImage: "trash", color: .red)
-        }
-        .frame(width: actionsWidth)
-        .buttonStyle(.plain)
-        .disabled(isUpdating)
-        .allowsHitTesting(isRevealed)
-        .accessibilityHidden(!isRevealed)
-    }
-
-    private func actionButton(_ action: WorkspaceAction, systemImage: String, color: Color) -> some View {
-        Button { select(action) } label: {
-            VStack {
-                Image(systemName: systemImage).accessibilityHidden(true)
-                Text(action.label).interFont(Constants.Typography.bodyXS)
-            }
-            .frame(width: actionWidth)
-            .frame(minHeight: Constants.Accessibility.minimumTapTarget, maxHeight: .infinity)
-            .foregroundStyle(.white)
-            .background(color)
-            .contentShape(Rectangle())
-        }
-        .accessibilityLabel("\(action.label) workspace")
-        .accessibilityIdentifier("workspace.\(action.rawValue).\(workspace.id)")
+    private func actionButton(_ action: WorkspaceAction, color: Color) -> some View {
+        Button(action.label) { select(action) }
+            .buttonStyle(WorkspaceSwipeButtonStyle(color: color))
+            .disabled(isUpdating)
+            .accessibilityLabel("\(action.label) workspace")
+            .accessibilityIdentifier("workspace.\(action.rawValue).\(workspace.id)")
     }
 
     private var menuActions: some View {
