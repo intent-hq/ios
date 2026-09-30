@@ -4,7 +4,7 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
     @Binding var isPresented: Bool
     let isEnabled: Bool
     let onReveal: () -> Void
-    @ViewBuilder let content: () -> Content
+    @ViewBuilder let content: Content
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.layoutDirection) private var layoutDirection
@@ -73,7 +73,7 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
     }
 
     private var slidingPage: some View {
-        content()
+        content
             .scrollDisabled(isRevealed)
             .allowsHitTesting(!isRevealed)
             .accessibilityHidden(isRevealed)
