@@ -100,6 +100,34 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
     }
 
     @MainActor
+    func testHorizontalSwipeLocksVerticalScrollingUntilFingerLifts() {
+        let app = launchWorkspaces(arguments: ["--demo-long-workspace-list"])
+        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
+        let origin = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        origin.press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: 0, dy: -80)))
+        XCTAssertTrue(row.isHittable)
+
+        let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
+        let verticalDrifts: [CGFloat] = [-60, 60]
+        for verticalDrift in verticalDrifts {
+            let startingY = row.frame.minY
+            let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+            let end = start.withOffset(CGVector(dx: -180, dy: verticalDrift))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+            XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+            XCTAssertEqual(row.frame.minY, startingY, accuracy: 2)
+            visibleRowPoint(in: app, row: row, action: archive).tap()
+            XCTAssertTrue(archive.waitForNonExistence(timeout: Self.timeout))
+        }
+
+        let startingY = row.frame.minY
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -80)))
+        XCTAssertLessThan(row.frame.minY, startingY - 20)
+        XCTAssertFalse(archive.exists)
+    }
+
+    @MainActor
     func testOpeningAnotherRowClosesPreviousActions() {
         let app = launchWorkspaces()
         revealActions(on: app.buttons["workspace.row.\(Self.workspaceId)"])
