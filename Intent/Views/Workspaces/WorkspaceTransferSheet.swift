@@ -54,10 +54,12 @@ struct WorkspaceTransferSheet: View {
                     transferProgress
                 } else {
                     transferForm
-                    Text(store.statusMessage)
-                        .interFont(Constants.Typography.bodyXS)
-                        .foregroundStyle(secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if !store.statusMessage.isEmpty {
+                        Text(store.statusMessage)
+                            .interFont(Constants.Typography.bodyXS)
+                            .foregroundStyle(secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if let error = store.errorMessage {
                     Text(error)

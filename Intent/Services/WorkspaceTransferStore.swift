@@ -8,7 +8,7 @@ final class WorkspaceTransferStore {
     private(set) var isComplete = false
     private(set) var canCancel = false
     private(set) var errorMessage: String?
-    private(set) var statusMessage = "Review the transfer before continuing."
+    private(set) var statusMessage = ""
     private(set) var progress: Double?
     private(set) var plan: WorkspaceTransferPlan?
 
@@ -49,7 +49,7 @@ final class WorkspaceTransferStore {
                 )
                 try Task.checkCancellation()
                 self.plan = try WorkspaceTransferPlan(response: response, workspaceId: self.workspaceId)
-                self.statusMessage = "Review the transfer before continuing."
+                self.statusMessage = ""
             } catch is CancellationError {
                 self.statusMessage = "Transfer preview cancelled."
             } catch {
