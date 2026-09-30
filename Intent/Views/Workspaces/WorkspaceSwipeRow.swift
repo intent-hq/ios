@@ -24,9 +24,7 @@ struct WorkspaceSwipeRow: View {
     }
 
     var body: some View {
-        WorkspaceSwipeContainer(isRevealed: revealBinding, actionCount: 2, onSwipeBegan: {
-            if !isRevealed { revealedWorkspaceId = nil }
-        }) {
+        WorkspaceSwipeContainer(isRevealed: revealBinding, actionCount: 2, onSwipeBegan: beginSwipe) {
             workspaceButton
                 .background(Constants.WorkspaceList.canvas(for: colorScheme))
         } actions: {
@@ -34,6 +32,10 @@ struct WorkspaceSwipeRow: View {
             actionButton(.delete, color: .red)
         }
         .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private func beginSwipe() {
+        if !isRevealed { revealedWorkspaceId = nil }
     }
 
     private var workspaceButton: some View {
