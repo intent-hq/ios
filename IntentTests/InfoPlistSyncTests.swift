@@ -10,6 +10,13 @@ import Testing
 /// Both plists are read from the copies packaged into the test bundle (see
 /// TestSourceInputs), not from the checkout.
 struct InfoPlistSyncTests {
+    @Test func builtAppSupportsOnlyUprightPortraitOnIPhone() {
+        #expect(
+            Bundle.main.infoDictionary?["UISupportedInterfaceOrientations~iphone"] as? [String]
+                == ["UIInterfaceOrientationPortrait"]
+        )
+    }
+
     private func loadPlist(_ relativePath: String) throws -> [String: Any] {
         let url = try TestSourceInputs.url(for: relativePath)
         let data = try Data(contentsOf: url)

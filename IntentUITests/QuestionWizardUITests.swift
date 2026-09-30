@@ -92,12 +92,6 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(first.waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(first.value as? String, "Selected")
 
-        defer { XCUIDevice.shared.orientation = .portrait }
-        XCUIDevice.shared.orientation = .landscapeLeft
-        waitForOrientation(landscape: true, in: app)
-        XCTAssertEqual(first.value as? String, "Selected")
-        XCUIDevice.shared.orientation = .portrait
-        waitForOrientation(landscape: false, in: app)
         let stacked = XCTNSPredicateExpectation(
             predicate: Self.stackedAnswersPredicate,
             object: [first, second]
@@ -123,12 +117,6 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         let editor = app.textViews["Type your own answer…"].firstMatch
         tap(editor)
         editor.typeText("Only after review")
-        defer { XCUIDevice.shared.orientation = .portrait }
-        XCUIDevice.shared.orientation = .landscapeLeft
-        waitForOrientation(landscape: true, in: app)
-        XCTAssertEqual(editor.value as? String, "Only after review")
-        XCUIDevice.shared.orientation = .portrait
-        waitForOrientation(landscape: false, in: app)
         XCTAssertEqual(editor.value as? String, "Only after review")
         if !app.buttons["question.next"].isHittable {
             app.scrollViews.containing(.textView, identifier: "Type your own answer…").firstMatch.swipeUp()
@@ -247,13 +235,6 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
             return answers[0].frame.maxY < answers[1].frame.minY
                 && answers[0].frame.minX == answers[1].frame.minX
         }
-    }
-
-    private func waitForOrientation(landscape: Bool, in app: XCUIApplication) {
-        let oriented = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            (app.frame.width > app.frame.height) == landscape
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [oriented], timeout: Self.timeout), .completed)
     }
 
     @MainActor
