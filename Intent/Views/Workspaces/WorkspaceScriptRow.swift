@@ -34,7 +34,7 @@ struct WorkspaceScriptRow: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: BrowserAppearance.cornerRadius))
         .contentShape(Rectangle())
-        .modifier(WorkspaceScriptSwipeGesture(translation: $translation, isRevealed: $isRevealed))
+        .modifier(WorkspaceRowSwipeGesture(translation: $translation, isRevealed: $isRevealed))
         .animation(reduceMotion ? nil : .snappy, value: isRevealed)
     }
 

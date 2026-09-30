@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-struct WorkspaceScriptSwipeGesture: ViewModifier {
+struct WorkspaceRowSwipeGesture: ViewModifier {
     @Binding var translation: CGFloat
     @Binding var isRevealed: Bool
     @GestureState private var fallbackTranslation: CGFloat = 0

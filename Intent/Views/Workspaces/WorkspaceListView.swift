@@ -11,6 +11,9 @@ struct WorkspaceListView: View {
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
+    @State private var revealedWorkspaceId: String?
+    @State private var pendingAction: PendingAction?
+    @State private var actionError: String?
     @State private var isSearching = false
     @State private var isFilterPinned = false
     @State private var pageHeaderHeight: CGFloat = 0
@@ -90,6 +93,21 @@ struct WorkspaceListView: View {
             ConnectionsView()
                 .environment(coordinator)
         }
+        .alert(pendingAction?.action.title ?? "Workspace", isPresented: confirmationPresented, presenting: pendingAction) { pending in
+            Button("Cancel", role: .cancel) {}
+            Button(pending.action.label, role: pending.action == .delete ? .destructive : nil) {
+                perform(pending)
+            }
+        } message: { pending in
+            Text(pending.action.message(workspaceTitle: pending.workspace.title))
+        }
+        .alert("Workspace action failed", isPresented: errorPresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(actionError ?? "Please try again.")
+        }
+        .onChange(of: viewModel.viewMode) { _, _ in revealedWorkspaceId = nil }
+        .onChange(of: viewModel.searchText) { _, _ in revealedWorkspaceId = nil }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
         .preference(
             key: ConnectionBackdropPreference.self,
@@ -196,16 +214,40 @@ struct WorkspaceListView: View {
     }
 
     private func workspaceButtonContent(_ workspace: Workspace, showRepo: Bool) -> some View {
-        Button {
+        WorkspaceSwipeRow(
+            workspace: workspace,
+            showRepo: showRepo,
+            isUpdating: workspaceStore.updatingWorkspaceIDs.contains(workspace.id),
+            revealedWorkspaceId: $revealedWorkspaceId
+        ) {
             searchFocused = false
             coordinator.onSelectWorkspace(workspace.id)
-        } label: {
-            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo, spacious: true)
+        } onAction: { action in
+            searchFocused = false
+            pendingAction = PendingAction(workspace: workspace, action: action)
         }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
-        .overlay(alignment: .bottom) {
-            Divider()
+    }
+
+    private var confirmationPresented: Binding<Bool> {
+        Binding(get: { pendingAction != nil }, set: { if !$0 { pendingAction = nil } })
+    }
+
+    private var errorPresented: Binding<Bool> {
+        Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })
+    }
+
+    private func perform(_ pending: PendingAction) {
+        Task {
+            do {
+                try await workspaceStore.perform(pending.action, workspaceId: pending.workspace.id)
+            } catch {
+                actionError = error.localizedDescription
+            }
         }
+    }
+
+    private struct PendingAction {
+        let workspace: Workspace
+        let action: WorkspaceAction
     }
 }
