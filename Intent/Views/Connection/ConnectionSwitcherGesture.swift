@@ -74,10 +74,10 @@ private struct ConnectionSwitcherPan: UIGestureRecognizerRepresentable {
 
         func gestureRecognizer(
             _: UIGestureRecognizer,
-            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+            shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            guard let scrollView = otherGestureRecognizer.view as? UIScrollView else { return false }
-            return otherGestureRecognizer === scrollView.panGestureRecognizer
+            // Row actions and scrolling wait for the direction/edge gate to reject this pan.
+            otherGestureRecognizer is UIPanGestureRecognizer
         }
     }
 }

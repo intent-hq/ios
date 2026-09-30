@@ -370,6 +370,7 @@ extension DemoFixtures {
         params: [String: Any],
         snapshotAnchor: Date = Date()
     ) -> Any {
+        if let response = DemoWorkspaceActionFixtures.response(for: method, params: params) { return response }
         if let response = designScenario?.response(for: method, params: params)
             ?? DemoTerminalFixtures.response(for: method, params: params)
             ?? DemoBrowserFixtures.response(for: method, params: params) { return response }
@@ -396,8 +397,7 @@ extension DemoFixtures {
                     "warnings": [[String: String]]()
                 ]
             ]
-        case "note.list":
-            return ["notes": notes]
+        case "note.list": return ["notes": notes]
         case "note.get":
             let noteId = params["noteId"] as? String
             let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]

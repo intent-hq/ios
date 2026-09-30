@@ -54,6 +54,32 @@ nonisolated final class ConnectionSwitcherUITests: XCTestCase {
     }
 
     @MainActor
+    func testEdgeRevealClosesRowActionsAndKeepsRowSwipesAvailable() throws {
+        let app = try launch()
+        let row = app.buttons["workspace.row.demo-ws-dashboard"]
+        let archive = app.buttons["workspace.archive.demo-ws-dashboard"]
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        let end = start.withOffset(CGVector(dx: -180, dy: 0))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
+        XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+
+        let edge = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 2, dy: row.frame.midY))
+        edge.press(forDuration: 0.05, thenDragTo: edge.withOffset(CGVector(dx: 300, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0.5)
+        XCTAssertTrue(app.buttons["connection-switcher.close"].waitForExistence(timeout: Self.timeout))
+        app.buttons["connection-switcher.close"].tap()
+        assertClosed(app)
+        XCTAssertFalse(archive.exists)
+
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
+        XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+        archive.tap()
+        let confirmation = app.alerts["Archive Workspace"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertTrue(row.exists)
+    }
+
+    @MainActor
     func testLargeTextAndLightAppearanceKeepConnectionsReachable() throws {
         let app = try launch(largeText: true)
         reveal(app)

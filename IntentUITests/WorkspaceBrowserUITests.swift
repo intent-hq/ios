@@ -105,6 +105,7 @@ nonisolated final class WorkspaceBrowserUITests: XCTestCase {
         let browser = app.buttons["browser.row.tab:demo-agent-browser"]
         for _ in 0..<3 where !browser.isHittable { app.swipeUp() }
         XCTAssertTrue(browser.waitForExistence(timeout: Self.timeout))
+        app.swipeUp()
         browser.swipeLeft()
         let deleteButton = app.buttons["browser.delete.tab:demo-agent-browser"]
         XCTAssertTrue(deleteButton.waitForExistence(timeout: Self.timeout))
