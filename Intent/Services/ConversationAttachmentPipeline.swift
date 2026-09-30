@@ -22,6 +22,13 @@ enum ComposerImageRecovery {
 @Observable final class ConversationAttachmentPipeline {
     // This named aggregate limit mirrors the daemon-facing image contract.
     static let maxImageReferenceBytes = 30 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    // Conservative client budgets leave room for base64 and provider context;
+    // they are not a guarantee against any provider's total request limit.
+    private static let maxOutgoingImageBytes = 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    private static let maxOutgoingImagesBytes = 5 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    private static let maxOutgoingPixelSize: CGFloat = 2048
+    private static let maximumResizePasses = 3
+    private static let compressionQualities: [CGFloat] = [Constants.Conversation.Composer.imageCompressionQuality, 0.6, 0.4] // swiftlint:disable:this no_magic_numbers
     // Date.timeIntervalSince1970 is expressed in seconds.
     private static let millisecondsPerSecond: TimeInterval = 1000
 
@@ -36,9 +43,9 @@ enum ComposerImageRecovery {
             case let .encodingFailed(index):
                 return "Image \(index) could not be encoded for sending."
             case let .imageTooLarge(index):
-                return "Image \(index) is too large to send (over 30 MiB as JPEG)."
+                return "Image \(index) is too large to send even after resizing (over 1 MiB as JPEG)."
             case .imagesTooLarge:
-                return "The attached images are too large to send together (over 30 MiB total as JPEG)."
+                return "The attached images are too large to send together (over 5 MiB total as JPEG)."
             case let .placementFailed(index, underlying):
                 return "Image \(index) could not be uploaded. \(underlying.localizedDescription)"
             }
@@ -98,6 +105,45 @@ enum ComposerImageRecovery {
     }
 
     func addImage(_ image: UIImage) { pendingImages.append(image) }
+
+    /// Called only by the native Paste action. Snapshot each image item before
+    /// returning to the run loop, while lazy clipboard providers are available.
+    func pasteImages() {
+        let pasteboard = UIPasteboard.general
+        let imageTypes = (pasteboard.types(forItemSet: nil) ?? []).enumerated().compactMap { index, types in
+            types.first { UTType($0)?.conforms(to: .image) == true }.map { (index, $0) }
+        }
+        let limit = Constants.Conversation.Composer.maximumImageSelectionCount
+        guard imageTypes.count <= limit - pendingImages.count else {
+            imagePlacementError = "You can attach up to \(limit) images. Remove an image before pasting more."
+            return
+        }
+        guard !imageTypes.isEmpty else {
+            imagePlacementError = "Could not read the pasted image. Copy it again or choose it from Photos."
+            return
+        }
+        var images: [UIImage] = []
+        var sourceBytes = 0
+        for (index, type) in imageTypes {
+            guard let data = pasteboard.data(forPasteboardType: type, inItemSet: IndexSet(integer: index))?.first else {
+                imagePlacementError = "Could not read the pasted image. Copy it again or choose it from Photos."
+                return
+            }
+            sourceBytes += data.count
+            guard sourceBytes <= Self.maxImageReferenceBytes else {
+                imagePlacementError = "The pasted images are too large. Copy smaller images or choose them from Photos."
+                return
+            }
+            guard let image = UIImage(data: data) else {
+                imagePlacementError = "Could not read the pasted image. Copy it again or choose it from Photos."
+                return
+            }
+            images.append(image)
+        }
+        // Commit the batch atomically; never silently drop an unreadable item.
+        pendingImages.append(contentsOf: images)
+        imagePlacementError = nil
+    }
 
     func removeImage(at index: Int) {
         guard pendingImages.indices.contains(index) else { return }
@@ -165,19 +211,17 @@ enum ComposerImageRecovery {
         -> OutgoingImagePayload {
         guard !images.isEmpty else { return .none }
         var payloads: [Data] = []
+        var totalBytes = 0
         for (index, image) in images.enumerated() {
-            guard let data = image.jpegData(
-                compressionQuality: Constants.Conversation.Composer.imageCompressionQuality
-            ) else {
+            guard let data = Self.outgoingJPEGData(for: image) else {
                 throw ImagePlacementError.encodingFailed(index: index + 1)
             }
-            guard data.count <= Self.maxImageReferenceBytes else {
+            guard data.count <= Self.maxOutgoingImageBytes else {
                 throw ImagePlacementError.imageTooLarge(index: index + 1)
             }
+            totalBytes += data.count
+            guard totalBytes <= Self.maxOutgoingImagesBytes else { throw ImagePlacementError.imagesTooLarge }
             payloads.append(data)
-        }
-        guard payloads.reduce(0, { $0 + $1.count }) <= Self.maxImageReferenceBytes else {
-            throw ImagePlacementError.imagesTooLarge
         }
 
         // The Assistant has no filesystem root for attachment placement (#619).
@@ -208,6 +252,42 @@ enum ComposerImageRecovery {
             ])
         }
         return .attachments(blocks)
+    }
+
+    /// Bake orientation into bounded pixel dimensions before JPEG encoding.
+    /// Never modify the original image retained by the draft/send attempt.
+    private static func outgoingJPEGData(for image: UIImage) -> Data? {
+        let pixels = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
+        guard pixels.width.isFinite, pixels.height.isFinite, pixels.width > 0, pixels.height > 0 else { return nil }
+        let ratio = min(1, maxOutgoingPixelSize / max(pixels.width, pixels.height))
+        if ratio == 1, image.imageOrientation == .up,
+           let data = image.jpegData(compressionQuality: Constants.Conversation.Composer.imageCompressionQuality),
+           data.count <= maxOutgoingImageBytes { return data }
+
+        var size = CGSize(width: max(1, floor(pixels.width * ratio)), height: max(1, floor(pixels.height * ratio)))
+        var lastData: Data?
+        for _ in 0..<maximumResizePasses {
+            let data: Data? = autoreleasepool {
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1
+                let upright = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                    image.draw(in: CGRect(origin: .zero, size: size))
+                }
+                var encoded: Data?
+                for quality in compressionQualities {
+                    guard let candidate = upright.jpegData(compressionQuality: quality) else { return nil }
+                    encoded = candidate
+                    if candidate.count <= maxOutgoingImageBytes { return candidate }
+                }
+                return encoded
+            }
+            guard let data else { return nil }
+            if data.count <= maxOutgoingImageBytes { return data }
+            lastData = data
+            size = CGSize(width: max(1, floor(size.width / 2)), height: max(1, floor(size.height / 2)))
+        }
+        // The caller rejects any remaining over-budget data before any RPC.
+        return lastData
     }
 
     func buildFileBlocks(from files: [PendingFile], workspaceId: String) async throws

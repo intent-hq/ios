@@ -16,6 +16,7 @@ struct WorkspaceComposerRow: View {
     let onStop: () -> Void
     let onPhotos: () -> Void
     let onFiles: () -> Void
+    var onPasteImages: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -28,7 +29,7 @@ struct WorkspaceComposerRow: View {
 
     var body: some View {
         HStack(spacing: Layout.controlSpacing - controlInset) {
-            WorkspaceComposerEditor(text: $text, isFocused: $isFocused, onSend: onSend)
+            WorkspaceComposerEditor(text: $text, isFocused: $isFocused, onSend: onSend, onPasteImages: onPasteImages)
             WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles)
             if hasDraft {
                 WorkspaceComposerAction(isStop: false, action: onSend)
@@ -60,6 +61,7 @@ private struct WorkspaceComposerEditor: View {
     @Binding var text: String
     @Binding var isFocused: Bool
     let onSend: () -> Void
+    let onPasteImages: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -73,6 +75,7 @@ private struct WorkspaceComposerEditor: View {
                 text: $text,
                 isFocused: $isFocused,
                 onSubmit: onSend,
+                onPasteImages: onPasteImages,
                 onHeightChange: { naturalHeight in
                     height = min(
                         max(naturalHeight, Constants.Conversation.Composer.minimumTextViewHeight),
