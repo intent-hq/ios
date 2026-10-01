@@ -72,14 +72,12 @@ jobs:
     name: Select macOS runner
     runs-on: ubuntu-latest
     outputs:
-      runs-on: ${{ steps.select.outputs.runs-on || '"macos-15"' }}
+      runs-on: ${{ steps.select.outputs.runs-on || '["self-hosted","macOS","ARM64","intent-ios"]' }}
     steps:
       - uses: actions/checkout@v7
-      - name: Check local Mac status
+      - name: Use allocated iOS runner pool
         id: select
-        env:
-          RUNNER_STATUS_TOKEN: '' # Scratch proof: select hosted macos-15 without contacting the local pool.
-        run: bash .github/scripts/select-macos-runner.sh
+        run: echo 'runs-on=["self-hosted","macOS","ARM64","intent-ios"]' >> "$GITHUB_OUTPUT"
 
   go-test:
     name: Go unit tests (TailcatKit)
@@ -182,7 +180,7 @@ jobs:
     # step below waits for those jobs and fails this one if either did not
     # succeed. All three jobs still run in parallel.
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '["self-hosted","macOS","ARM64","intent-ios"]') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -194,6 +192,7 @@ jobs:
       TEST_CRASH_RETRY: '0'
       SIM_LOCK_TIMEOUT: '0'
       RECOVERY_DIAGNOSTIC_BASE_SHA: 8d160c1c84aae0e2997e0b6b07e7303fc1c13772
+      RECOVERY_DIAGNOSTIC_RUNTIME: 26.3.1
       SIMULATOR_FAMILY: ${{ github.event_name == 'workflow_dispatch' && inputs.simulator_family || 'iphone' }}
     steps:
       - name: Checkout
@@ -257,9 +256,8 @@ jobs:
       - name: Select Xcode
         run: |
           if [ '${{ runner.environment }}' = self-hosted ]; then
-            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
-            # local results agree with hosted ones; the Mac's default Xcode
-            # stays untouched (ios#588, ios#592).
+            # Reuse installed Xcode 26.3 without changing the Mac's default.
+            # This diagnostic separately admits only an existing iOS 26.3.1 device.
             xcode=/Applications/Xcode_26.3.app
             if [ ! -d "$xcode" ]; then
               echo "::error::$xcode is not installed on this runner" >&2
@@ -274,8 +272,56 @@ jobs:
       - name: Check Metal Toolchain on local Mac
         if: runner.environment == 'self-hosted'
         run: |
-          xcodebuild -downloadComponent MetalToolchain
+          # This diagnostic may use only installed toolchains.
           xcrun metal -v
+
+      - name: Admit exact installed diagnostic runtime
+        run: |
+          mkdir -p recovery-evidence
+          python3 - <<'PYRUNTIME'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          def simctl(*args):
+              return json.loads(subprocess.check_output(["xcrun", "simctl", "list", *args, "-j"], text=True))
+
+          runtimes = simctl("runtimes")
+          devices = simctl("devices", "available")
+          Path("recovery-evidence/runtimes.json").write_text(json.dumps(runtimes, indent=2))
+          Path("recovery-evidence/devices.json").write_text(json.dumps(devices, indent=2))
+          receipt = {
+              "runner": os.environ["RUNNER_NAME"],
+              "head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+              "sourceBase": os.environ["RECOVERY_DIAGNOSTIC_BASE_SHA"],
+              "requiredRuntime": os.environ["RECOVERY_DIAGNOSTIC_RUNTIME"],
+          }
+          output = Path("recovery-evidence/runtime-admission.json")
+          output.write_text(json.dumps(receipt, indent=2))
+          candidates = []
+          for runtime in runtimes["runtimes"]:
+              if (runtime.get("platform") != "iOS" or not runtime.get("isAvailable")
+                      or runtime.get("version") != receipt["requiredRuntime"]):
+                  continue
+              for device in devices["devices"].get(runtime["identifier"], []):
+                  if device.get("isAvailable") and "iPhone" in (device.get("deviceTypeIdentifier") or device["name"]):
+                      candidates.append((runtime, device))
+          requested = os.environ.get("SIM_UDID")
+          if requested:
+              candidates = [pair for pair in candidates if pair[1]["udid"] == requested]
+          if not candidates:
+              raise SystemExit("No existing available iPhone on exact iOS 26.3.1; refusing creation or fallback")
+          runtime, device = min(candidates, key=lambda pair: (
+              pair[1]["name"] != "CI iPhone 16 (iOS 26.3.1)",
+              "iPhone 16" not in pair[1]["name"], pair[1]["udid"],
+          ))
+          receipt.update(runtime=runtime, device=device)
+          output.write_text(json.dumps(receipt, indent=2))
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"SIM_UDID={device['udid']}\n")
+          print(json.dumps(receipt, indent=2))
+          PYRUNTIME
 
       # iPhone selection follows the runner's existing route. The optional iPad lane
       # creates a fresh device and records its ownership before exporting the
@@ -284,7 +330,10 @@ jobs:
         env:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
-          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+          if [ -n "${RECOVERY_DIAGNOSTIC_RUNTIME:-}" ]; then
+            test -n "$SIM_UDID"
+            echo "Using admitted iOS $RECOVERY_DIAGNOSTIC_RUNTIME device $SIM_UDID"
+          elif [ "$SIMULATOR_FAMILY" = ipad ]; then
             python3 scripts/ci_simulator.py prepare
           else
             if [ '${{ runner.environment }}' = self-hosted ]; then
@@ -303,6 +352,8 @@ jobs:
       # launching. Output goes to a log file that the "Simulator state" step
       # prints later, so a failed or slow boot is visible instead of silent.
       - name: Pre-boot simulator
+        # The diagnostic lets the canonical test wrapper boot under its lock.
+        if: env.RECOVERY_DIAGNOSTIC_RUNTIME == ''
         run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
 
       # The gomobile bind output (and the tcecho helper binary) are
@@ -429,7 +480,8 @@ jobs:
       # DerivedData folder; start each self-hosted job from a clean build, as
       # hosted runners do (ios#592).
       - name: Clear DerivedData on local Mac
-        if: runner.environment == 'self-hosted'
+        # The diagnostic already has a unique DERIVED_DATA_DIR; leave other builds alone.
+        if: runner.environment == 'self-hosted' && env.RECOVERY_DIAGNOSTIC_RUNTIME == ''
         run: .github/scripts/clear-local-derived-data.sh
 
       - name: Resolve SPM packages
@@ -481,7 +533,7 @@ jobs:
         env:
           ONLY_TESTING: ${{ inputs.only_testing }}
         run: |
-          mkdir recovery-evidence
+          mkdir -p recovery-evidence
           git fetch --no-tags --depth=1 origin "$RECOVERY_DIAGNOSTIC_BASE_SHA"
           python3 - <<'PYSOURCE'
           import os
@@ -514,13 +566,14 @@ jobs:
             xcodebuild -version
             sw_vers
             uptime
-            echo "SIM_UDID=$SIM_UDID"
+            echo "RUNNER_NAME=$RUNNER_NAME RUNNER_OS=$RUNNER_OS RUNNER_ARCH=$RUNNER_ARCH"
+            echo "SIM_UDID=$SIM_UDID REQUIRED_RUNTIME=$RECOVERY_DIAGNOSTIC_RUNTIME"
+            cat recovery-evidence/runtime-admission.json
             echo "ONLY_TESTING=$ONLY_TESTING"
             echo "TEST_CRASH_RETRY=$TEST_CRASH_RETRY SIM_LOCK_TIMEOUT=$SIM_LOCK_TIMEOUT"
             shasum -a 256 recovery-evidence/instrumentation.patch
             xcrun simctl list runtimes
           } > recovery-evidence/provenance.txt
-          defaults read com.apple.iphonesimulator > recovery-evidence/simulator-preferences.txt 2>&1 || true
 
       - name: Run unit tests
         id: selected-tests
