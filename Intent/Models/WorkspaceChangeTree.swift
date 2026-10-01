@@ -53,7 +53,7 @@ struct WorkspaceChangeTree {
         var pending = roots.reversed().map { TreeRow(node: $0, depth: 0) }
         while let row = pending.popLast() {
             rows.append(row)
-            if case .directory(let path, let children) = row.node, !collapsedPaths.contains(path) {
+            if case let .directory(path, children) = row.node, !collapsedPaths.contains(path) {
                 pending.append(contentsOf: children.reversed().map { TreeRow(node: $0, depth: row.depth + 1) })
             }
         }

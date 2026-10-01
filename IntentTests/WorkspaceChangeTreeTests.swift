@@ -71,8 +71,14 @@ struct WorkspaceChangeTreeTests {
 
     private func file(_ path: String, stage: String = "unstaged") -> WorkspaceChange {
         WorkspaceChange(
-            id: "\(stage):\(path)", path: path, stage: stage, status: "modified",
-            additions: 1, deletions: 0, isBinary: false, agentName: nil
+            id: "\(stage):\(path)",
+            path: path,
+            stage: stage,
+            status: "modified",
+            additions: 1,
+            deletions: 0,
+            isBinary: false,
+            agentName: nil
         )
     }
 }

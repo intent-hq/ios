@@ -7,13 +7,14 @@ enum DemoChangesFixtures {
         if let response = DemoChangesRootFixtures.response(for: method, params: params) { return response }
         switch method {
         case "file-tracking.getChanges":
+            let changes = [
+                change(path: "Sources/Analytics.swift", stage: "unstaged"),
+                change(path: "Sources/Analytics/Events.swift", stage: "unstaged"),
+                change(path: "Tests/AnalyticsTests.swift", stage: "staged")
+            ]
             return [
-                "changes": [
-                    change(path: "Sources/Analytics.swift", stage: "unstaged"),
-                    change(path: "Sources/Analytics/Events.swift", stage: "unstaged"),
-                    change(path: "Tests/AnalyticsTests.swift", stage: "staged")
-                ],
-                "truncated": false, "totalCount": 3
+                "changes": changes,
+                "truncated": false, "totalCount": changes.count
             ]
         case "file-tracking.loadCommits":
             return [

@@ -135,9 +135,8 @@ struct WorkspaceChangesView: View {
             title: title,
             identifier: identifier,
             files: files,
-            scope: "\(workspaceId):\(store.selectedRootId ?? "")",
-            onSelect: { selectedFile = $0 }
-        )
+            scope: "\(workspaceId):\(store.selectedRootId ?? "")"
+        ) { selectedFile = $0 }
     }
 
     private var commitsSection: some View {
