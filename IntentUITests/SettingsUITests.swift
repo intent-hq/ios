@@ -6,51 +6,39 @@ nonisolated final class SettingsUITests: XCTestCase {
     private static let maximumSwipes = 12
 
     @MainActor
-    func testAppearancePersistsAcrossCloseAndLaunchWithLightDarkScreenshots() {
-        let app = launch()
-        openSettings(app)
-        let light = app.buttons["settings.appearance.light"]
-        light.tap()
-        XCTAssertTrue(light.isSelected)
-        capture(app, named: "Settings-Light")
-        assertScrollingLogOffAndRevealActions(app)
-        capture(app, named: "Settings-Light-Actions")
-        scrollToTop(app)
-        captureWorkspaceSurfaces(app, appearance: "Light")
-        let dark = app.buttons["settings.appearance.dark"]
-        dark.tap()
-        XCTAssertTrue(dark.isSelected)
-        capture(app, named: "Settings-Dark")
-        assertScrollingLogOffAndRevealActions(app)
-        capture(app, named: "Settings-Dark-Actions")
-        scrollToTop(app)
-        captureWorkspaceSurfaces(app, appearance: "Dark")
-        app.buttons["settings.close"].tap()
-        openSettings(app)
-        XCTAssertTrue(dark.isSelected)
-        app.terminate()
-        app.launch()
-        openSettings(app)
-        XCTAssertTrue(dark.isSelected, "Theme selection must survive a fresh process")
-        let system = app.buttons["settings.appearance.system"]
-        system.tap()
-        XCTAssertTrue(system.isSelected)
-        app.buttons["settings.close"].tap()
-        openSettings(app)
-        XCTAssertTrue(system.isSelected)
+    func testSettingsHasNoAppearanceControlsWithLightDarkScreenshots() {
+        for appearance in ["Light", "Dark"] {
+            let app = launch(themePreference: appearance.lowercased())
+            openSettings(app)
+            XCTAssertTrue(app.staticTexts["PAIR NEW"].exists)
+            XCTAssertFalse(app.staticTexts["CONNECTIONS"].exists)
+            for name in ["Studio Mac", "Travel Mac"] {
+                XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch.exists)
+            }
+            XCTAssertFalse(app.staticTexts["APPEARANCE"].exists)
+            for choice in ["Light", "Dark", "System"] {
+                XCTAssertFalse(app.buttons[choice].exists, "Theme controls belong only in the Home menu")
+            }
+            capture(app, named: "Settings-" + appearance)
+            assertScrollingLogOffAndRevealActions(app)
+            capture(app, named: "Settings-" + appearance + "-Actions")
+            scrollToTop(app)
+            captureWorkspaceSurfaces(app, appearance: appearance)
+            app.terminate()
+        }
     }
 
     @MainActor
     func testSavedConnectionSelectionUsesWindowRouting() {
         let app = launch()
-        openSettings(app)
+        openConnections(app)
         assertConnections(app, current: "Studio Mac", other: "Travel Mac")
         card(app, named: "Studio Mac").tap()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
-        openSettings(app)
+        openConnections(app)
         card(app, named: "Travel Mac").tap()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
-        openSettings(app)
+        openConnections(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
 
         // Resuming this process must keep the user's selection. Backgrounding
@@ -63,11 +51,11 @@ nonisolated final class SettingsUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: Self.timeout))
         app.terminate()
         app.launch()
-        openSettings(app)
+        openConnections(app)
         assertConnections(app, current: "Studio Mac", other: "Travel Mac")
         card(app, named: "Travel Mac").tap()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
-        openSettings(app)
+        openConnections(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
     }
 
@@ -96,15 +84,14 @@ nonisolated final class SettingsUITests: XCTestCase {
         acknowledgements.buttons.firstMatch.tap()
         XCTAssertTrue(acknowledgements.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        assertConnections(app, current: "Studio Mac", other: "Travel Mac")
+        XCTAssertTrue(app.staticTexts["PAIR NEW"].exists)
         XCTAssertTrue(app.buttons["settings.close"].isHittable)
     }
 
     @MainActor
     func testLargeTextKeepsPairingSupportAndLogOffCancellationReachable() {
-        let app = launch(largeText: true)
+        let app = launch(largeText: true, themePreference: "light")
         openSettings(app)
-        app.buttons["settings.appearance.light"].tap()
         capture(app, named: "Settings-LargeText-Top")
         assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-LargeText-Actions")
@@ -115,7 +102,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         app.buttons["log-off.cancel"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        assertConnections(app, current: "Studio Mac", other: "Travel Mac")
+        XCTAssertTrue(app.staticTexts["PAIR NEW"].exists)
     }
 
     @MainActor
@@ -135,14 +122,13 @@ nonisolated final class SettingsUITests: XCTestCase {
         app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        assertConnections(app, current: "Studio Mac", other: "Travel Mac")
+        XCTAssertTrue(app.staticTexts["PAIR NEW"].exists)
     }
 
     @MainActor
     func testConfirmedLogOffForgetsOnlyTheCurrentConnection() {
-        let app = launch()
+        let app = launch(themePreference: "dark")
         openSettings(app)
-        app.buttons["settings.appearance.dark"].tap()
         let logOff = app.buttons["Log Off"]
         reveal(logOff, in: app)
         logOff.tap()
@@ -186,10 +172,11 @@ nonisolated final class SettingsUITests: XCTestCase {
     }
 
     @MainActor
-    private func launch(largeText: Bool = false) -> XCUIApplication {
+    private func launch(largeText: Bool = false, themePreference: String = "system") -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-settings", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments += ["-appThemePreference", themePreference]
         if largeText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"]
         }
@@ -204,19 +191,23 @@ nonisolated final class SettingsUITests: XCTestCase {
     }
 
     @MainActor
+    private func openConnections(_ app: XCUIApplication) {
+        app.openHomeAction("connections")
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
     private func card(_ app: XCUIApplication, named name: String) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "settings.connection.", name)).firstMatch
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "saved-connection.", name)).firstMatch
     }
 
     @MainActor
     private func assertConnections(_ app: XCUIApplication, current: String, other: String) {
         let selected = card(app, named: current)
         XCTAssertTrue(selected.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(selected.isSelected)
         XCTAssertTrue(selected.label.contains("Connected"))
         let saved = card(app, named: other)
         XCTAssertTrue(saved.exists)
-        XCTAssertFalse(saved.isSelected)
         XCTAssertFalse(saved.label.contains("Connected"))
     }
 
