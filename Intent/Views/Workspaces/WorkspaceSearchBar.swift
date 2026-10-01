@@ -152,6 +152,10 @@ private struct WorkspaceSearchControl: View, Animatable {
 
     private var size: CGSize { frame.size }
 
+    private var showsCloseIcon: Bool {
+        isSearching || progress > Constants.WorkspaceSearch.compactTravelCompletion
+    }
+
     private var splitProgress: CGFloat {
         phase(from: Constants.WorkspaceSearch.compactTravelCompletion, to: Constants.WorkspaceSearch.splitCompletion)
     }
@@ -216,9 +220,9 @@ private struct WorkspaceSearchControl: View, Animatable {
                 isSearching.toggle()
             }
         } label: {
-            Image(isSearching || progress > 0 ? .close : .search)
+            Image(showsCloseIcon ? .close : .search)
                 .resizable()
-                .id(isSearching || progress > 0)
+                .id(showsCloseIcon)
                 .transition(.identity)
                 .scaledToFit()
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
