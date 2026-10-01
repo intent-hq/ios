@@ -73,6 +73,7 @@ extension ConversationTranscriptView {
         to newContainerHeight: CGFloat,
         proxy: ScrollViewProxy
     ) -> Bool {
+        recordDemoRecoveryResize(from: oldContainerHeight, to: newContainerHeight)
         if oldContainerHeight != newContainerHeight {
             AppLog.userInterface.debug(
                 "[SCROLL] diagnostic container=\(oldContainerHeight)->\(newContainerHeight) "

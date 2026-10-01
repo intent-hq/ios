@@ -490,6 +490,11 @@ jobs:
           expected = {
               ".github/workflows/ci.yml",
               "Intent/Utils/AppLog.swift",
+              "Intent/Presentation/ConversationTranscriptScrollState.swift",
+              "Intent/Views/Conversation/Transcript/ConversationTranscriptView+Demo.swift",
+              "Intent/Views/Conversation/Transcript/ConversationTranscriptView+DemoResize.swift",
+              "IntentUITests/ConversationTranscriptScrollUITests+RecoveryResize.swift",
+              "scripts/swiftlint-xcode-inputs.xcfilelist",
               "Intent/Views/Conversation/Transcript/ConversationScrollViewSupport.swift",
               "Intent/Views/Conversation/Transcript/ConversationTranscriptView+Follow.swift",
               "Intent/Views/Conversation/Transcript/ConversationTranscriptView+Geometry.swift",
@@ -500,7 +505,7 @@ jobs:
           ], text=True).splitlines()
           assert set(changed) == expected, changed
           PYSOURCE
-          git diff "$RECOVERY_DIAGNOSTIC_BASE_SHA" HEAD -- Intent > recovery-evidence/instrumentation.patch
+          git diff "$RECOVERY_DIAGNOSTIC_BASE_SHA" HEAD -- Intent IntentUITests scripts/swiftlint-xcode-inputs.xcfilelist > recovery-evidence/instrumentation.patch
           {
             date -u
             git show -s --format='%H%n%P%n%s' HEAD
@@ -548,7 +553,7 @@ jobs:
 
           expected = {
               "ConversationTranscriptScrollUITests/testTappingSuggestedPromptKeepsTranscriptAtBottomAndGoToEndHidden",
-              "ConversationTranscriptScrollUITests/testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath",
+              "ConversationTranscriptScrollUITests/testHooksRowResizeKeepsRecoveryPagedUpUntilFollowBack",
           }
           rows = []
 
