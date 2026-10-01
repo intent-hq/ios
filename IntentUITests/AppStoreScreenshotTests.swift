@@ -88,15 +88,13 @@ nonisolated final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertTrue(agentRow.waitForExistence(timeout: 15))
 
         // 04 — note with tasks (Context tab → "Spec" fixture note, which
-        // contains a checkbox task list).
+        // contains linked task cards).
         app.buttons["Context"].firstMatch.tap()
         let specRow = app.staticTexts["Spec"].firstMatch
         XCTAssertTrue(specRow.waitForExistence(timeout: 15))
         specRow.tap()
         XCTAssertTrue(app.navigationBars["Spec"].waitForExistence(timeout: 15))
-        let loadedNote = app.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS %@", "Per-team daily/weekly active seat counts")
-        ).firstMatch
+        let loadedNote = app.buttons["Open task CSV export with streamed download"]
         XCTAssertTrue(loadedNote.waitForExistence(timeout: 15))
         snapshot("04-note-tasks")
     }
