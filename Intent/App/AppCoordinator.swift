@@ -66,6 +66,7 @@ class AppCoordinator {
     var currentScreen: AppScreen = .loading {
         didSet {
             navigationState.recentWorkspaceAgentRequestId = nil
+            recordAgentVisit()
             if !currentScreen.supportsConnectionLossOverlay {
                 resetConnectionLossEligibility()
             }
@@ -169,6 +170,8 @@ class AppCoordinator {
     @ObservationIgnored var returnWindowToSavedMachines: (() -> Void)?
 
     var agentDetails: AgentDetailStore
+    /// Shared across windows and backends; tests get one over their own persistence.
+    @ObservationIgnored let agentHistory: AgentHistoryStore
 
     init(
         workspaceStore: WorkspaceStore,
@@ -180,9 +183,11 @@ class AppCoordinator {
         backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
         connectionLossPresentation: ConnectionLossPresentation = ConnectionLossPresentation(),
         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
-        claimScreenRestoration: @escaping @MainActor () -> Bool = { true }
+        claimScreenRestoration: @escaping @MainActor () -> Bool = { true },
+        agentHistory: AgentHistoryStore? = nil
     ) {
         agentDetails = AgentDetailStore(connection: connection)
+        self.agentHistory = agentHistory ?? AgentHistoryStore(persistence: persistence)
         dependencies = AppCoordinatorDependencies(
             workspaceStore: workspaceStore,
             connection: connection,

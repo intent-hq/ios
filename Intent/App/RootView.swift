@@ -20,6 +20,7 @@ struct RootView: View {
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @State private var conversationIsPopping = false
+    @State private var connectionSwitcherOpen = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
@@ -373,28 +374,35 @@ private extension RootView {
         )
     }
 
+    var agentHistoryEnabled: Bool {
+        isWorkspaceFlow && !connectionSwitcherOpen && coordinator.selectedSection == .workspaces
+    }
+
     @ViewBuilder var workspaceFlowContent: some View {
-        workspaceNavigationContent
-            .sheet(isPresented: assistantPresented) {
-                AssistantView(session: session)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
-            .sheet(isPresented: settingsPresented) {
-                SettingsView(presentedAsSheet: true, contentColorScheme: colorScheme)
-                    // The system status bar sits over the dark backdrop; content retains the selected theme.
-                    .preferredColorScheme(.dark)
-                    .presentationBackground(SettingsStyle.surface(for: colorScheme))
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.hidden)
-                    .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
-            }
-            .background {
-                Color.clear.preference(
-                    key: ConnectionBackdropPreference.self,
-                    value: showsSettingsSheet ? ConnectionBackdropPreference.manualOpacity : 0
-                )
-            }
+        AgentHistoryDrawer(isEnabled: agentHistoryEnabled) {
+            workspaceNavigationContent
+        }
+        .onPreferenceChange(ConnectionSwitcherOpenPreference.self) { connectionSwitcherOpen = $0 }
+        .sheet(isPresented: assistantPresented) {
+            AssistantView(session: session)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: settingsPresented) {
+            SettingsView(presentedAsSheet: true, contentColorScheme: colorScheme)
+                // The system status bar sits over the dark backdrop; content retains the selected theme.
+                .preferredColorScheme(.dark)
+                .presentationBackground(SettingsStyle.surface(for: colorScheme))
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+                .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
+        }
+        .background {
+            Color.clear.preference(
+                key: ConnectionBackdropPreference.self,
+                value: showsSettingsSheet ? ConnectionBackdropPreference.manualOpacity : 0
+            )
+        }
     }
 }
 

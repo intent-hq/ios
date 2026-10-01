@@ -160,7 +160,8 @@ final class BackendSessionRegistry {
                     connection: connection,
                     backendID: backendID,
                     syncedRegistry: DemoMode.isEnabled ? SyncedBackendRegistry(accessGroup: nil) : SyncedBackendRegistry(),
-                    claimScreenRestoration: claim
+                    claimScreenRestoration: claim,
+                    agentHistory: .shared
                 )
             },
             githubRepoStore: GitHubRepoStore(connectionManager: connection),

@@ -7,6 +7,7 @@ struct WorkspaceListView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.legibilityWeight) private var legibilityWeight
+    @Environment(\.isAgentHistoryOpen) private var isAgentHistoryOpen
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
@@ -33,6 +34,7 @@ struct WorkspaceListView: View {
     private var canSwitchConnections: Bool {
         guard case .workspaceList = coordinator.currentScreen else { return false }
         return !showingConnections && !showingCreateWorkspace && pendingAction == nil && actionError == nil
+            && !isAgentHistoryOpen
     }
 
     var body: some View {

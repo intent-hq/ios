@@ -8,6 +8,7 @@ enum ConnectionSwitcherStyle {
     static let rowInset: CGFloat = 16
     static let rowHeight: CGFloat = 56
     static let iconSize: CGFloat = 24
+    static let rowTextSpacing: CGFloat = 2
     static let cornerRadius: CGFloat = 20
     static let pageCornerRadius: CGFloat = 44
     static let shadowRadius: CGFloat = 20
