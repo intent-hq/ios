@@ -5,17 +5,18 @@ nonisolated final class ConversationMarkdownTableUITests: XCTestCase {
 
     @MainActor
     func testTableScrollsHorizontallyWithoutCapturingVerticalTranscriptSwipes() {
-        verifyTable(accessibleText: false, landscape: false)
+        verifyTable(accessibleText: false)
     }
 
     @MainActor
-    func testTableRemainsReachableWithAccessibilityTextAndInLandscape() {
-        verifyTable(accessibleText: true, landscape: true)
+    func testTableRemainsReachableWithAccessibilityTextInPortrait() {
+        verifyTable(accessibleText: true)
     }
 
     @MainActor
-    private func verifyTable(accessibleText: Bool, landscape: Bool) {
+    private func verifyTable(accessibleText: Bool) {
         continueAfterFailure = false
+        // iPhone supports portrait only, including the AX5 flow through Go to End.
         XCUIDevice.shared.orientation = .portrait
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = XCUIApplication()
@@ -52,16 +53,6 @@ nonisolated final class ConversationMarkdownTableUITests: XCTestCase {
         let before = setup.frame.minY
         swipeUpOverVisibleTable(table, in: transcript)
         XCTAssertLessThan(setup.frame.minY, before - 20, "A vertical swipe over the table must move the transcript")
-        if landscape {
-            XCUIDevice.shared.orientation = .landscapeLeft
-            XCTAssertTrue(waitUntil(timeout: 5) { transcript.frame.width > transcript.frame.height })
-            revealHeader(setup, in: transcript)
-            for _ in 0..<20 where !isInside(peak, transcript) {
-                table.swipeLeft()
-            }
-            XCTAssertTrue(isInside(peak, transcript))
-            capture(app, name: "table-accessibility-landscape")
-        }
         verifyGoToEnd(in: app, transcript: transcript)
     }
 
