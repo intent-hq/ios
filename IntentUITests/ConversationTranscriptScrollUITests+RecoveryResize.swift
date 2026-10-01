@@ -15,7 +15,7 @@ extension ConversationTranscriptScrollUITests {
         let endRow = EndRow.lastSuggestedPrompt(in: app)
         let opened = openLongConversation(in: app, context: context, evidence: recoveryEvidence(cycle: 1, endRow: endRow))
         guard let baseline = settledRecoveryBaseline(
-            lastRow: opened.lastMessage, endRow: endRow, in: opened, context: context
+            lastRow: opened.lastMessage, endRow: endRow, in: opened, context: context, allowRecoveredEntry: true
         ) else { return }
         XCTAssertFalse(app.staticTexts[Fixture.hooksRowLabel].firstMatch.exists)
         try Data().write(to: endDerealizationTriggerFile)
@@ -40,6 +40,30 @@ extension ConversationTranscriptScrollUITests {
         assertStaysAtBottom(
             lastRow: opened.lastMessage, named: "last assistant paragraph", endRow: endRow, in: opened, context: context
         )
+    }
+
+    func testRecoveryResizeBaselineAllowsOnlyACompletedEntryRecovery() throws {
+        let raw = "lastForcedFollow=landed corrections=0 "
+            + "endRecovery=recovered corrections=1 episodes=2 endRealized=true "
+            + "entry=positioned metadataReady=true forcedRequested=true followActive=false "
+            + "forcedRequests=1 phase=idle workspace=demo-ws-flaky-tests resizeProbe=pending"
+        let recovered = try XCTUnwrap(EndRecoveryReport(followReport: raw))
+        XCTAssertFalse(recovered.canBeBaseline(), "Legacy controls retain their stricter baseline")
+        XCTAssertTrue(recovered.canBeBaseline(allowRecoveredEntry: true))
+        for (valid, invalid) in [
+            ("corrections=1", "corrections=0"), ("endRealized=true", "endRealized=false"),
+            ("endRecovery=recovered", "endRecovery=recovering")
+        ] {
+            let report = try XCTUnwrap(EndRecoveryReport(
+                followReport: raw.replacingOccurrences(of: valid, with: invalid)
+            ))
+            XCTAssertFalse(report.canBeBaseline(allowRecoveredEntry: true), report.raw)
+        }
+        let untouched = try XCTUnwrap(EndRecoveryReport(
+            followReport: "endRecovery=notAttempted corrections=0 episodes=0 endRealized=true"
+        ))
+        XCTAssertTrue(untouched.canBeBaseline())
+        XCTAssertTrue(untouched.canBeBaseline(allowRecoveredEntry: true))
     }
 
     @MainActor
