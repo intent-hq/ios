@@ -17,7 +17,7 @@ struct WorkspaceSwipeRow: View {
     @ScaledMetric(relativeTo: .body) private var scaledActionSize = Constants.WorkspaceList.swipeButtonSize
     @ScaledMetric(relativeTo: .body) private var actionIconSize = Constants.WorkspaceList.swipeButtonIconSize
     @State private var swipeOffset: CGFloat = 0
-    @State private var badgeWidth: CGFloat = BadgeStyle.initialWidth
+    @State private var badgeSize = CGSize(width: BadgeStyle.initialWidth, height: Constants.WorkspaceList.swipeButtonSize)
     @State private var statusCenter: CGFloat = 0
     @State private var rowSize: CGSize = .zero
 
@@ -27,7 +27,7 @@ struct WorkspaceSwipeRow: View {
     private var leadingLayout: WorkspaceSwipePolicy.LeadingLayout {
         WorkspaceSwipePolicy.leadingLayout(
             rowWidth: rowSize.width,
-            badgeWidth: badgeWidth,
+            badgeWidth: badgeSize.width,
             leadingInset: statusInset,
             gap: Constants.WorkspaceList.swipeActionsLeadingSpacing
         )
@@ -67,7 +67,7 @@ struct WorkspaceSwipeRow: View {
                 workspace: workspace,
                 progress: leadingProgress,
                 availableWidth: leadingLayout.maximumBadgeWidth
-            ) { badgeWidth = $0 }
+            ) { badgeSize = $0 }
             .offset(
                 x: statusInset + min(0, swipeOffset),
                 y: statusCenter + (rowSize.height / 2 - statusCenter) * leadingProgress - Constants.WorkspaceRow.statusIconSize / 2
@@ -118,6 +118,7 @@ struct WorkspaceSwipeRow: View {
                 spacious: spacious,
                 timestampOpacity: 1 - Double(swipeProgress),
                 statusIconHidden: true,
+                minimumHeight: badgeSize.height,
                 leadingSwipeProgress: leadingProgress
             ) { statusCenter = $0 }
                 .overlay(alignment: .trailing) {

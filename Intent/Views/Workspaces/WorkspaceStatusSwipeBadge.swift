@@ -4,7 +4,7 @@ struct WorkspaceStatusSwipeBadge: View {
     let workspace: Workspace
     let progress: CGFloat
     let availableWidth: CGFloat
-    let onWidthChanged: (CGFloat) -> Void
+    let onSizeChanged: (CGSize) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -33,7 +33,7 @@ struct WorkspaceStatusSwipeBadge: View {
                 .fixedSize()
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { measured in
                     labelSize = measured
-                    onWidthChanged(measured.width)
+                    onSizeChanged(measured)
                 }
                 .opacity(Double(max(0, (expansion - Style.labelFadeStart) / (1 - Style.labelFadeStart))))
                 .mask(alignment: .leading) { shape.frame(width: size.width, height: size.height) }

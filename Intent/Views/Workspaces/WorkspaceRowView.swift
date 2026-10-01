@@ -7,6 +7,7 @@ struct WorkspaceRowView: View {
     var spacious = false
     var timestampOpacity: Double = 1
     var statusIconHidden = false
+    var minimumHeight: CGFloat = 0
     var leadingSwipeProgress: CGFloat = 0
     var onStatusCenterChanged: (CGFloat) -> Void = { _ in }
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -91,6 +92,7 @@ struct WorkspaceRowView: View {
         .contentShape(Rectangle())
         .padding(.vertical, spacious ? Constants.WorkspaceRow.spaciousPadding : Constants.WorkspaceRow.verticalPadding)
         .padding(.horizontal, spacious ? 0 : Constants.WorkspaceRow.horizontalPadding)
+        .frame(minHeight: minimumHeight)
         .coordinateSpace(name: workspace.id)
         .visionAttentionCue(workspaceNeedsInput(workspace))
         .task(id: workspace.id) {
