@@ -18,7 +18,6 @@ struct WorkspaceSwipeRow: View {
     @ScaledMetric(relativeTo: .body) private var actionIconSize = Constants.WorkspaceList.swipeButtonIconSize
     @State private var swipeOffset: CGFloat = 0
     @State private var badgeSize = CGSize(width: BadgeStyle.initialWidth, height: Constants.WorkspaceList.swipeButtonSize)
-    @State private var statusCenter: CGFloat = 0
     @State private var rowSize: CGSize = .zero
 
     private var actionSize: CGFloat { max(Constants.Accessibility.minimumTapTarget, scaledActionSize) }
@@ -42,6 +41,9 @@ struct WorkspaceSwipeRow: View {
     }
 
     var body: some View {
+        let titleCenter = WorkspaceRowView.titleCenter
+        let badgeProgress = leadingProgress
+
         WorkspaceSwipeContainer(
             target: .workspace(workspace.id),
             revealedTarget: $revealedTarget,
@@ -62,16 +64,17 @@ struct WorkspaceSwipeRow: View {
             actionButton(.delete)
         }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { rowSize = $0 }
-        .overlay(alignment: .topLeading) {
+        .alignmentGuide(titleCenter) { dimensions in
+            let statusCenter = dimensions[titleCenter]
+            return statusCenter + (dimensions.height / 2 - statusCenter) * badgeProgress
+        }
+        .overlay(alignment: Alignment(horizontal: .leading, vertical: titleCenter)) {
             WorkspaceStatusSwipeBadge(
                 workspace: workspace,
                 progress: leadingProgress,
                 availableWidth: leadingLayout.maximumBadgeWidth
             ) { badgeSize = $0 }
-            .offset(
-                x: statusInset + min(0, swipeOffset),
-                y: statusCenter + (rowSize.height / 2 - statusCenter) * leadingProgress - Constants.WorkspaceRow.statusIconSize / 2
-            )
+            .offset(x: statusInset + min(0, swipeOffset))
         }
         .clipped()
         .overlay(alignment: .bottom) {
@@ -120,7 +123,7 @@ struct WorkspaceSwipeRow: View {
                 statusIconHidden: true,
                 minimumHeight: badgeSize.height,
                 leadingSwipeProgress: leadingProgress
-            ) { statusCenter = $0 }
+            )
                 .overlay(alignment: .trailing) {
                     if isUpdating { ProgressView().padding(.trailing) }
                 }
