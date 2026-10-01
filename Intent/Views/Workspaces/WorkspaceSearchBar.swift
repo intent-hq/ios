@@ -80,7 +80,8 @@ struct WorkspaceSearchPresentation: ViewModifier {
     @Binding var text: String
     @Binding var isSearching: Bool
     var isFocused: FocusState<Bool>.Binding
-    @State private var placement: WorkspaceSearchPlacement?
+    @State private var motion = WorkspaceSearchMotion()
+    @State private var measuredPlacement: WorkspaceSearchPlacement?
     @State private var fieldContentWidth: CGFloat = 0
     @ScaledMetric(relativeTo: .body) private var inputHeight = Constants.WorkspaceSearch.expandedHeight
 
@@ -94,34 +95,36 @@ struct WorkspaceSearchPresentation: ViewModifier {
                         .transition(.identity)
                 }
             }
-            .overlayPreferenceValue(WorkspaceSearchBounds.self) { measuredPlacement in
-                let frame = placement?.frame ?? .zero
+            .overlay {
                 WorkspaceSearchControl(
                     text: $text,
                     isSearching: $isSearching,
                     isFocused: isFocused,
                     fieldContentWidth: fieldContentWidth,
-                    size: frame.size,
-                    progress: placement?.isSearching == true ? 1 : 0
+                    frame: motion.placement?.frame ?? .zero,
+                    progress: motion.placement?.isSearching == true ? 1 : 0
                 )
-                .position(x: frame.midX, y: frame.midY)
-                .opacity(placement == nil ? 0 : 1)
-                .allowsHitTesting(placement != nil)
-                .accessibilityHidden(placement == nil)
-                .onChange(of: measuredPlacement, initial: true) { _, next in updatePlacement(next) }
+                .opacity(motion.placement == nil ? 0 : 1)
+                .allowsHitTesting(motion.placement != nil)
+                .accessibilityHidden(motion.placement == nil)
             }
+            .onPreferenceChange(WorkspaceSearchBounds.self) { measuredPlacement = $0 }
+            .onChange(of: measuredPlacement) { _, next in updatePlacement(next) }
             .coordinateSpace(name: WorkspaceSearchBounds.coordinateSpace)
             .animation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration), value: isSearching)
     }
 
     private func updatePlacement(_ next: WorkspaceSearchPlacement?) {
-        guard let next, next.isSearching == isSearching else { return }
-        let animates = placement != nil && (isSearching || placement?.isSearching != next.isSearching)
-        withAnimation(animates && !reduceMotion ? .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration) : nil) {
+        var nextMotion = motion
+        guard let next, let update = nextMotion.update(next, isSearching: isSearching, reduceMotion: reduceMotion) else { return }
+        let animation: Animation? = update.animated ? .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration) : nil
+        withAnimation(animation, completionCriteria: .removed) {
             if next.isSearching {
                 fieldContentWidth = max(0, next.frame.width - next.frame.height - Constants.WorkspaceSearch.contentSpacing)
             }
-            placement = next
+            motion = nextMotion
+        } completion: {
+            motion.complete(revision: update.revision)
         }
     }
 }
@@ -134,18 +137,20 @@ private struct WorkspaceSearchControl: View, Animatable {
     @Binding var isSearching: Bool
     var isFocused: FocusState<Bool>.Binding
     var fieldContentWidth: CGFloat
-    nonisolated var size: CGSize
+    nonisolated var frame: CGRect
     nonisolated var progress: CGFloat
     @State private var closingText = ""
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
-    nonisolated var animatableData: AnimatablePair<CGSize.AnimatableData, CGFloat> {
-        get { AnimatablePair(size.animatableData, progress) }
+    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, CGFloat> {
+        get { AnimatablePair(frame.animatableData, progress) }
         set {
-            size.animatableData = newValue.first
+            frame.animatableData = newValue.first
             progress = newValue.second
         }
     }
+
+    private var size: CGSize { frame.size }
 
     private var splitProgress: CGFloat {
         phase(from: Constants.WorkspaceSearch.compactTravelCompletion, to: Constants.WorkspaceSearch.splitCompletion)
@@ -186,6 +191,7 @@ private struct WorkspaceSearchControl: View, Animatable {
                 .offset(x: max(0, size.width - size.height))
         }
         .frame(width: size.width, height: size.height, alignment: .leading)
+        .position(x: frame.midX, y: frame.midY)
         // Geometry and contents already use the same interpolated progress.
         .transaction { $0.animation = nil }
         .onChange(of: isSearching) { _, searching in
@@ -292,11 +298,6 @@ private struct WorkspaceSearchSlot: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
-}
-
-nonisolated private struct WorkspaceSearchPlacement: Equatable, Sendable {
-    var frame: CGRect
-    var isSearching: Bool
 }
 
 private struct WorkspaceSearchBounds: PreferenceKey {

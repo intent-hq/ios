@@ -486,6 +486,16 @@ jobs:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
+          if [[ "$ONLY_TESTING" == *"IntentUITests/WorkspaceSearchUITests"* ]]; then
+            mkdir -p WorkspaceSearchRecording
+            xcrun simctl io "$SIM_UDID" recordVideo --codec=h264 WorkspaceSearchRecording/search.mp4 > WorkspaceSearchRecording/capture.log 2>&1 &
+            search_recording_pid=$!
+            stop_search_recording() {
+              kill -INT "$search_recording_pid" 2>/dev/null || true
+              wait "$search_recording_pid" || true
+            }
+            trap stop_search_recording EXIT
+          fi
           if [ "$SIMULATOR_FAMILY" = ipad ]; then
             set -o pipefail
             export ONLY_TESTING_IDENTITIES_PATH="$IPAD_EVIDENCE_DIR/resolved-tests.json"
@@ -495,6 +505,15 @@ jobs:
           else
             scripts/xcodebuild.sh test-without-building-unit
           fi
+
+      - name: Upload workspace search recording
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'IntentUITests/WorkspaceSearchUITests') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: workspace-search-recording
+          path: WorkspaceSearchRecording
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Require actual iPad execution
         if: always() && env.SIMULATOR_FAMILY == 'ipad' && steps.selected-tests.outcome != 'skipped'
