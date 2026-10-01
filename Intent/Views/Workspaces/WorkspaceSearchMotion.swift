@@ -1,4 +1,4 @@
-import Foundation
+import CoreGraphics
 
 nonisolated struct WorkspaceSearchPlacement: Equatable, Sendable {
     var frame: CGRect
