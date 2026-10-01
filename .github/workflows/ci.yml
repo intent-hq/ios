@@ -218,7 +218,7 @@ jobs:
         run: scripts/test-swiftlint.sh
 
       - name: Set up Node for Keychain fixture verification
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
 
