@@ -8,7 +8,7 @@ struct WorkspaceChangesSection<Content: View>: View {
     @ViewBuilder let content: () -> Content
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
+    @ScaledMetric(relativeTo: .body) private var iconSize = WorkspaceChangesLayout.treeIconSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: isExpanded ? CreateWorkspaceRepoStyle.sectionHeaderSpacing : 0) {

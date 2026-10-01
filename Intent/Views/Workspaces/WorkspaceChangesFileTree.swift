@@ -11,7 +11,7 @@ struct WorkspaceChangesFileTree: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
+    @ScaledMetric(relativeTo: .body) private var iconSize = WorkspaceChangesLayout.treeIconSize
 
     private enum Layout {
         static let indentation: CGFloat = 16
@@ -48,15 +48,9 @@ struct WorkspaceChangesFileTree: View {
                     }
                 }
                 .padding(.leading, indentation(for: row.depth))
-                .overlay(alignment: .bottom) {
-                    if row.id != rows.last?.id {
-                        CreateWorkspaceRepoStyle.divider(for: colorScheme)
-                            .frame(height: CreateWorkspaceRepoStyle.dividerHeight)
-                            .accessibilityHidden(true)
-                    }
-                }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func directoryRow(_ row: WorkspaceChangeTree.TreeRow) -> some View {
@@ -76,6 +70,7 @@ struct WorkspaceChangesFileTree: View {
         HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
             Image(systemName: "folder")
                 .font(.system(size: iconSize))
+                .frame(width: iconSize)
                 .foregroundStyle(secondary)
                 .accessibilityHidden(true)
             Text(row.depth >= Layout.maximumIndentationDepth ? row.node.path : row.node.name)
@@ -94,31 +89,64 @@ struct WorkspaceChangesFileTree: View {
         }
         .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
         .multilineTextAlignment(.leading)
-        .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
         .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-        .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+        .frame(maxWidth: .infinity, minHeight: CreateWorkspaceFormStyle.controlHeight, alignment: .leading)
         .contentShape(.rect)
     }
 
     private func fileRow(_ file: WorkspaceChange, name: String) -> some View {
         Button { onSelect(file) } label: {
-            WorkspaceChangesRow(title: name, symbol: "doc.text") {
-                metadataLayout {
-                    Text([file.status.capitalized, file.agentName].compactMap { $0 }.joined(separator: " · "))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if file.isBinary {
-                        Text("Binary")
-                    } else if file.hasLineStats {
-                        WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
-                            .fixedSize()
-                    }
-                }
-            }
+            fileLabel(file, name: name)
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens the diff for \(file.path)")
         .accessibilityIdentifier("changes.file.\(identifier).\(file.path)")
+    }
+
+    private func fileLabel(_ file: WorkspaceChange, name: String) -> some View {
+        HStack(alignment: .top, spacing: CreateWorkspaceFormStyle.rowSpacing) {
+            Image(systemName: "doc.text")
+                .font(.system(size: iconSize))
+                .frame(width: iconSize)
+                .foregroundStyle(secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
+                Text(name)
+                    .interFont(Constants.Typography.bodySEmphasized)
+                    .tracking(CreateWorkspaceRepoStyle.nameTracking)
+                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+                fileMetadata(file)
+                    .font(Constants.Typography.subtextXXS.font)
+                    .foregroundStyle(secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .multilineTextAlignment(.leading)
+        .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
+        .frame(maxWidth: .infinity, minHeight: CreateWorkspaceFormStyle.controlHeight, alignment: .leading)
+        .contentShape(.rect)
+    }
+
+    @ViewBuilder
+    private func fileMetadata(_ file: WorkspaceChange) -> some View {
+        let status = file.status == "modified" ? nil : file.status.capitalized
+        let label = [status, file.agentName].compactMap { $0 }.joined(separator: " · ")
+        if !label.isEmpty || file.isBinary || file.hasLineStats {
+            metadataLayout {
+                if !label.isEmpty {
+                    Text(label)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if file.isBinary {
+                    Text("Binary")
+                } else if file.hasLineStats {
+                    WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
+                        .fixedSize()
+                }
+            }
+        }
     }
 
     private var metadataLayout: AnyLayout {

@@ -1,6 +1,7 @@
 import SwiftUI
 
 enum WorkspaceChangesLayout {
+    static let treeIconSize: CGFloat = 16
     static let sectionSpacing: CGFloat = 8
     static let statsSpacing: CGFloat = 6
     static let lineNumberWidth: CGFloat = 32
@@ -209,22 +210,15 @@ struct WorkspaceChangesView: View {
     }
 }
 
-struct WorkspaceChangesRow<Detail: View>: View {
+private struct WorkspaceChangesRow<Detail: View>: View {
     let title: String
-    var symbol: String?
     @ViewBuilder let detail: () -> Detail
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
 
     var body: some View {
-        HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.system(size: iconSize))
-                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
-                    .accessibilityHidden(true)
-            }
+        HStack(spacing: CreateWorkspaceRepoStyle.rowSpacing) {
             text
             Image(.chevronRight)
                 .resizable()
