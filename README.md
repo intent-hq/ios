@@ -232,6 +232,15 @@ A selector whose tests were all skipped at runtime exits 0 with a notice. Inspec
 the per-selector summary and confirm a nonzero executed count before claiming that
 a green focused run executed the intended tests.
 
+CI run **Artifacts** retain `ios-ui-review-evidence` for 14 days on success or
+failure, including filtered runs. Open its PNGs directly; `manifest.json` records
+the tested checkout revision, suite/test, source bundle and retry origin. Only
+allowlisted `WorkspaceChangesUITests` captures are included: an absent image is
+not evidence that a view was captured (there is no commit-list capture). Existing
+`ios-agent-group-evidence` and `ios-transcript-recovery-evidence` remain separate.
+The capture allowlist and exporter live in `scripts/export_ui_evidence.py`; run
+`python3 scripts/test_export_ui_evidence.py` to check the export contract.
+
 For repeated focused runs, build once and reuse that build:
 
 ```bash

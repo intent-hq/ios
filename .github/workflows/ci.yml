@@ -117,6 +117,9 @@ jobs:
       - name: Disposable iPad route tests
         run: python3 scripts/test_ci_simulator.py
 
+      - name: UI evidence export tests
+        run: python3 scripts/test_export_ui_evidence.py
+
       - name: macOS runner pool selection tests
         run: python3 scripts/test_select_macos_runner.py
 
@@ -575,6 +578,12 @@ jobs:
           path: WorkspaceTransferScreenshots
           if-no-files-found: warn
 
+      - name: Export filtered UI evidence
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.only_testing != ''
+        uses: ./.github/actions/export-ui-evidence
+        with:
+          bundles: TestResults
+
       - name: Upload test results
         if: failure() || (github.event_name == 'workflow_dispatch' && (contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests')))
         uses: actions/upload-artifact@v7
@@ -792,80 +801,13 @@ jobs:
             IPadMenuTestResults
             IPadMenuTestResults-retry
 
-      # ConversationTranscriptScrollUITests attaches one content-free JSON
-      # record per launch proving the unrealized-end recovery ran. Export only
-      # those records and the agent-group fixture screenshots on every run;
-      # full result bundles remain failure-only.
       - name: Export UI evidence
-        id: recovery-evidence
         if: always()
-        run: |
-          out="$RUNNER_TEMP/recovery-evidence"
-          mkdir -p "$out"
-          group_out="$RUNNER_TEMP/agent-group-evidence"
-          mkdir -p "$group_out"
-          count=0
-          group_count=0
-          for source in "$RESULT_BUNDLE" "$RESULT_BUNDLE-retry"; do
-            if [ ! -d "$source" ]; then
-              echo "No result bundle at $source; nothing to export"
-              continue
-            fi
-            dest="$out"
-            [ "$source" = "$RESULT_BUNDLE" ] || dest="$out/retry"
-            mkdir -p "$dest"
-            bundle="$RUNNER_TEMP/recovery-evidence-$(basename "$source").xcresult"
-            ln -s "$PWD/$source" "$bundle"
-            exported="$RUNNER_TEMP/recovery-evidence-export-$(basename "$source")"
-            mkdir -p "$exported"
-            if xcrun xcresulttool export attachments --path "$bundle" --output-path "$exported" \
-              && [ -f "$exported/manifest.json" ]; then
-              while IFS=$'\t' read -r src name; do
-                [ -n "$src" ] && [ -f "$exported/$src" ] || continue
-                filename=$(printf '%s' "$name" | tr -cs 'A-Za-z0-9._-' '_')
-                if [[ "$name" == agent-group-evidence-* ]]; then
-                  group_dest="$group_out/$(basename "$source")"
-                  mkdir -p "$group_dest"
-                  cp "$exported/$src" "$group_dest/$filename"
-                  group_count=$((group_count + 1))
-                else
-                  cp "$exported/$src" "$dest/$filename"
-                  count=$((count + 1))
-                fi
-              done < <(jq -r --arg prefix transcript-recovery-evidence- --arg groups agent-group-evidence- '
-                .[]? | .attachments[]?
-                | select(((.suggestedHumanReadableName // "") | startswith($prefix))
-                         or ((.exportedFileName // "") | startswith($prefix))
-                         or ((.suggestedHumanReadableName // "") | startswith($groups))
-                         or ((.exportedFileName // "") | startswith($groups)))
-                | [.exportedFileName, (.suggestedHumanReadableName // .exportedFileName)] | @tsv
-              ' "$exported/manifest.json")
-            else
-              echo "::warning::could not export attachments from $source"
-            fi
-          done
-          echo "Recovery evidence records: $count"
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "Agent group screenshots: $group_count"
-          echo "group_count=$group_count" >> "$GITHUB_OUTPUT"
-
-      - name: Upload agent group screenshots
-        if: always() && steps.recovery-evidence.outputs.group_count != '0'
-        uses: actions/upload-artifact@v7
+        uses: ./.github/actions/export-ui-evidence
         with:
-          name: ios-agent-group-evidence
-          path: ${{ runner.temp }}/agent-group-evidence
-          retention-days: 14
-          if-no-files-found: ignore
-
-      - name: Upload transcript recovery evidence
-        if: always() && steps.recovery-evidence.outputs.count != '0'
-        uses: actions/upload-artifact@v7
-        with:
-          name: ios-transcript-recovery-evidence
-          path: ${{ runner.temp }}/recovery-evidence
-          retention-days: 14
-          if-no-files-found: ignore
+          bundles: |
+            UITestResults
+            IPadMenuTestResults
 
   visionos-build:
     name: visionOS Build
