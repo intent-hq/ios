@@ -7,14 +7,13 @@ struct WorkspaceStatusSwipeBadge: View {
     let onSizeChanged: (CGSize) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var labelSize = CGSize(width: Style.initialWidth, height: Style.height)
 
     private var status: WorkspaceDisplayStatus { resolveDisplayStatus(for: workspace) }
     private var expansion: CGFloat { min(1, max(0, progress)) }
     private var dotSize: CGFloat { Constants.WorkspaceRow.statusIconSize }
-    private var shape: WorkspaceStatusBadgeShape {
-        WorkspaceStatusBadgeShape(progress: expansion, stretches: !reduceMotion)
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: min(size.height / 2, Style.cornerRadius), style: .continuous)
     }
     private var size: CGSize {
         CGSize(
@@ -67,6 +66,7 @@ struct WorkspaceStatusSwipeBadge: View {
     private enum Style {
         static let initialWidth: CGFloat = 136
         static let height: CGFloat = 48
+        static let cornerRadius: CGFloat = 20
         static let iconSize: CGFloat = 24
         static let spacing: CGFloat = 16
         static let leadingInset: CGFloat = 16
@@ -91,46 +91,5 @@ private extension WorkspaceDisplayStatus {
         case .prMerged: .gitMerge
         case .unknown: .questionCircle
         }
-    }
-}
-
-nonisolated private struct WorkspaceStatusBadgeShape: Shape {
-    var progress: CGFloat
-    let stretches: Bool
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        let radius = min(rect.height / 2, Style.cornerRadius)
-        let neck = stretches ? sin(min(1, max(0, progress)) * .pi) * rect.height * Style.neckDepth : 0
-        let shoulder = max(0, rect.width - 2 * radius) * Style.shoulder
-        var path = Path()
-        path.move(to: CGPoint(x: radius, y: 0))
-        path.addCurve(
-            to: CGPoint(x: rect.width - radius, y: 0),
-            control1: CGPoint(x: radius + shoulder, y: neck),
-            control2: CGPoint(x: rect.width - radius - shoulder, y: neck)
-        )
-        path.addQuadCurve(to: CGPoint(x: rect.width, y: radius), control: CGPoint(x: rect.width, y: 0))
-        path.addLine(to: CGPoint(x: rect.width, y: rect.height - radius))
-        path.addQuadCurve(to: CGPoint(x: rect.width - radius, y: rect.height), control: CGPoint(x: rect.width, y: rect.height))
-        path.addCurve(
-            to: CGPoint(x: radius, y: rect.height),
-            control1: CGPoint(x: rect.width - radius - shoulder, y: rect.height - neck),
-            control2: CGPoint(x: radius + shoulder, y: rect.height - neck)
-        )
-        path.addQuadCurve(to: CGPoint(x: 0, y: rect.height - radius), control: CGPoint(x: 0, y: rect.height))
-        path.addLine(to: CGPoint(x: 0, y: radius))
-        path.addQuadCurve(to: CGPoint(x: radius, y: 0), control: .zero)
-        path.closeSubpath()
-        return path
-    }
-
-    nonisolated private enum Style {
-        static let cornerRadius: CGFloat = 20
-        static let neckDepth: CGFloat = 0.3
-        static let shoulder: CGFloat = 0.4
     }
 }
