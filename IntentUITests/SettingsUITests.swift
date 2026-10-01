@@ -96,7 +96,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         capture(app, named: "Settings-LargeText-Top")
         assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-LargeText-Actions")
-        app.buttons["Log Off"].tap()
+        app.buttons["Disconnect"].tap()
         let confirmation = app.staticTexts["log-off.title"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
         capture(app, named: "Log-Off-Light-LargeText")
@@ -110,7 +110,7 @@ nonisolated final class SettingsUITests: XCTestCase {
     func testLogOffRequiresConfirmationAndCanBeCancelled() {
         let app = launch()
         openSettings(app)
-        let logOff = app.buttons["Log Off"]
+        let logOff = app.buttons["Disconnect"]
         reveal(logOff, in: app)
         logOff.tap()
         let confirmation = app.staticTexts["log-off.title"]
@@ -130,7 +130,7 @@ nonisolated final class SettingsUITests: XCTestCase {
     func testConfirmedLogOffForgetsOnlyTheCurrentConnection() {
         let app = launch(themePreference: "dark")
         openSettings(app)
-        let logOff = app.buttons["Log Off"]
+        let logOff = app.buttons["Disconnect"]
         reveal(logOff, in: app)
         logOff.tap()
         let confirmation = app.staticTexts["log-off.title"]
@@ -153,20 +153,20 @@ nonisolated final class SettingsUITests: XCTestCase {
             reveal(button, in: app)
             XCTAssertGreaterThanOrEqual(button.frame.height, 44)
         }
-        let logOff = app.buttons["Log Off"]
+        let logOff = app.buttons["Disconnect"]
         reveal(logOff, in: app)
         XCTAssertGreaterThanOrEqual(logOff.frame.height, 44)
         XCTAssertLessThanOrEqual(
             app.buttons["Export logs"].frame.maxY,
             logOff.frame.minY,
-            "Log Off must follow the support actions without overlap"
+            "Disconnect must follow the support actions without overlap"
         )
         if !close.isHittable || close.frame.minY < initialCloseY - 1 {
             let lowerFrame = logOff.frame
             scrollToTop(app)
             XCTAssertTrue(
                 !logOff.isHittable || logOff.frame.minY > lowerFrame.minY + 1,
-                "Log Off must move with Settings content, not stay pinned to the viewport"
+                "Disconnect must move with Settings content, not stay pinned to the viewport"
             )
             reveal(logOff, in: app)
         }

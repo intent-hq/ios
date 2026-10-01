@@ -127,7 +127,7 @@ extension ConversationTranscriptScrollPolicy {
     }
 
     enum ContainerRePinDecision: Equatable {
-        /// Following, but under the finger or decelerating; re-check on settle.
+        /// A gesture or recovery owns the viewport; re-check after it settles.
         case deferred
         /// Settled short of the bottom inside the at-bottom band while
         /// following: the ordinary automatic follow closes the gap.
@@ -152,18 +152,21 @@ extension ConversationTranscriptScrollPolicy {
     /// gesture has settled, as the #271 past-end clamp does; the edge the
     /// resize carries is applied meanwhile, so a row taller than the
     /// threshold shows Go to End as usual.
+    /// Recovery also defers the pin: its temporary page-up must survive
+    /// until recovery follows back. Ordinary follows still pin immediately.
     static func containerHeightChangeDecision(
         oldContainerHeight: CGFloat,
         newContainerHeight: CGFloat,
         isInteracting: Bool,
         hasInitiallyScrolled: Bool,
-        userIsScrolledAway: Bool
+        userIsScrolledAway: Bool,
+        recoveryOwnsViewport: Bool = false
     ) -> ContainerRePinDecision {
         guard oldContainerHeight != newContainerHeight, shouldFollowToBottom(
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         ) else { return .none }
-        return isInteracting ? .deferred : .rePin
+        return isInteracting || recoveryOwnsViewport ? .deferred : .rePin
     }
 
     /// The settle re-check after a container resize: of a re-pin deferred

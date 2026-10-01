@@ -587,7 +587,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload test results
-        if: failure() || (github.event_name == 'workflow_dispatch' && (contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests')))
+        if: failure() || (github.event_name == 'workflow_dispatch' && (contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests')))
         uses: actions/upload-artifact@v7
         with:
           name: ios-unit-test-results

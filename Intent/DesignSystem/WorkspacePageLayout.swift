@@ -5,6 +5,7 @@ extension Constants.WorkspaceList {
     static let titleTopSpacing: CGFloat = 64
     static let titleBottomSpacing: CGFloat = 64
     static let searchTitleSpacing: CGFloat = 16
+    static let recentTopSpacing: CGFloat = 12
     static let groupTopSpacing: CGFloat = 32
     static let groupBottomSpacing: CGFloat = 12
     static let emptyStateHeight: CGFloat = 240

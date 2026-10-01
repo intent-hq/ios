@@ -6,6 +6,12 @@ extension DemoDesignFixtures {
     static let timestamp = "2026-09-26T09:41:00Z"
     static let assistantText = "Worth adding tests? There is no test runner configured, so verification stayed on the build plus browser inspection."
     static let userText = "Error isn't using the correct icon, it should use attention circle not fill"
+    static let comparisonTable = """
+    | Setup | Filed | Theme accuracy | Sub-theme accuracy | Duplicate names | Time | Peak memory |
+    | :--- | ---: | ---: | ---: | :---: | ---: | ---: |
+    | Baseline with descriptive theme names and a separate validation pass for every incoming document | 120 | 62.2% | 58.4% | 12 | 4.9 min | 512 MB |
+    | Batched setup with shared context | 124 | 91.3% | 87.6% | 0 | 2.1 min | 384 MB |
+    """
     static let blockerText = """
     The sub-15-minute hosted CI measurement is held because current GitHub permissions cannot verify \
     macos-15-xlarge access (runner inventory returns 403). The user is checking with an organization admin. \
@@ -81,6 +87,20 @@ extension DemoDesignFixtures {
             Self.message(id: "demo-design-user", role: "user", blocks: [DemoFixtures.textBlock(Self.userText)]),
             Self.message(id: "demo-design-tools", role: "assistant", blocks: Self.toolBlocks)
         ]
+        if scenario == .tables {
+            let text = """
+            Comparison results before the table.
+
+            \(Self.comparisonTable)
+
+            Comparison complete after the table.
+
+            \(Array(repeating: "These results keep the original document order and include the validation pass.", count: 8).joined(separator: "\n\n"))
+
+            End of the table comparison.
+            """
+            rows.append(Self.message(id: "demo-design-table", role: "assistant", blocks: [DemoFixtures.textBlock(text)]))
+        }
         if scenario == .blocker {
             rows.append(Self.message(id: "demo-design-blocker", role: "system", blocks: [
                 ["type": "text", "text": Self.blockerText, "meta": ["kind": "blocker-report"]]

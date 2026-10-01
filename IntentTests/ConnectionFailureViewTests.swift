@@ -13,7 +13,7 @@ struct ConnectionFailureViewTests {
         let fixtures = try BackendSessionRegistryTests()
         let session = fixtures.makeRegistry().makePairingSession()
         let view = ConnectionFailureView(
-            errorMessage: "Your saved connection and settings were kept so you can retry logging off.",
+            errorMessage: "Your saved connection and settings were kept so you can retry disconnecting.",
             retryPolicy: .manualLogOff
         )
         .environment(session)

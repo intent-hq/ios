@@ -103,7 +103,7 @@ struct ConnectionFailureView: View {
                 stopAutoRetry()
                 coordinator.onLogOff()
             } label: {
-                primaryButtonLabel("Retry Log Off")
+                primaryButtonLabel("Retry Disconnect")
             }
         }
     }
@@ -154,7 +154,7 @@ struct ConnectionFailureView: View {
             )
                 .padding(.bottom, Constants.ConnectionFailure.helpHeadingExtraSpacing)
             Text(retryPolicy == .manualLogOff
-                 ? "Your saved connection and settings were kept so you can retry logging off."
+                 ? "Your saved connection and settings were kept so you can retry disconnecting."
                  : "• Make sure Intent is running on your Mac\n• Check that both devices are on the same network\n• Verify the WebSocket API is enabled in Settings")
                 .interFont(Constants.Typography.subtextXXS)
                 .tracking(Constants.Connections.infoTracking)
@@ -214,7 +214,7 @@ struct ConnectionFailureView: View {
     /// Whether the failure screen may dial the saved record on its own. A
     /// failed Log Off (`.manualLogOff`) never does: the user asked to
     /// disconnect, so re-establishing the session must be an explicit
-    /// action — "Retry Log Off" retries forgetting the record, it does not
+    /// action — "Retry Disconnect" retries forgetting the record, it does not
     /// reconnect (ios#235). Certificate failures route to re-pairing.
     static func shouldAutoRetry(
         retryPolicy: ConnectionFailureRetryPolicy,

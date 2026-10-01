@@ -139,6 +139,22 @@
 # holds the lock and polls once a second. CI runs one job per VM, so the lock
 # is never contended there.
 #
+# Keyboard-resize UI test prerequisite (intent-hq/ios#385): the transcript
+# test enters a draft and requires a hittable software keyboard. An absent
+# keyboard skips; an existing off-screen keyboard or a visible keyboard
+# without transcript shrink still fails. The separate quarantine requires
+# TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1 to exercise that test at all.
+#
+# Simulator.app's I/O > Keyboard > Connect Hardware Keyboard preference can
+# affect presentation, but its value does not establish effective keyboard
+# state. This wrapper leaves host and device preferences unchanged. The global
+# preference can be inspected with
+#   defaults read com.apple.iphonesimulator ConnectHardwareKeyboard
+# and a device override can exist under DevicePreferences in the same domain.
+# The supported menu can detach the hardware keyboard; simctl has no equivalent
+# keyboard toggle. The hosted preference-on runs in #385 still showed a software
+# keyboard, so an observed keyboard is required regardless of the setting.
+#
 # Exit codes: xcodebuild's own status is passed through (65 = build or test
 # failure) except for these wrapper-specific codes, chosen outside sysexits(3)
 # so they cannot be confused with xcodebuild's:

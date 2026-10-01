@@ -61,6 +61,8 @@ extension ConversationTranscriptView {
     /// at the old bottom. Under the finger or decelerating, the pin is
     /// deferred to a settle re-check and the edge is applied as usual (see
     /// `ConversationTranscriptScrollPolicy.containerHeightChangeDecision`).
+    /// Recovery owns its page-up until following back, so container pins
+    /// wait for that ownership to end instead of undoing the correction.
     /// A pin issued is re-checked on settle too: a resize animated over
     /// several frames (the keyboard) pins on each of them against a lazy
     /// stack still re-estimating its rows, and could leave the viewport far
@@ -73,12 +75,19 @@ extension ConversationTranscriptView {
         to newContainerHeight: CGFloat,
         proxy: ScrollViewProxy
     ) -> Bool {
+        recordDemoRecoveryResize(from: oldContainerHeight, to: newContainerHeight)
+        let recoveryOwnsViewport: Bool
+        switch lifecycle.owner {
+        case .recovery: recoveryOwnsViewport = true
+        case .idle, .follow: recoveryOwnsViewport = false
+        }
         switch ConversationTranscriptScrollPolicy.containerHeightChangeDecision(
             oldContainerHeight: oldContainerHeight,
             newContainerHeight: newContainerHeight,
             isInteracting: scrollMomentumProxy.isInteracting,
             hasInitiallyScrolled: hasInitiallyScrolled,
-            userIsScrolledAway: userIsScrolledAway
+            userIsScrolledAway: userIsScrolledAway,
+            recoveryOwnsViewport: recoveryOwnsViewport
         ) {
         case .none:
             return false

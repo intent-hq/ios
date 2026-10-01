@@ -200,6 +200,11 @@ struct WorkspaceListView: View {
     private var workspaceSections: some View {
         switch viewModel.viewMode {
         case .recent:
+            if !isSearching {
+                Color.clear
+                    .frame(height: Constants.WorkspaceList.recentTopSpacing)
+                    .accessibilityHidden(true)
+            }
             workspaceRows(viewModel.filteredWorkspaces)
         case .repo:
             ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
@@ -262,6 +267,9 @@ struct WorkspaceListView: View {
         ) {
             searchFocused = false
             coordinator.onSelectWorkspace(workspace.id)
+        } onOpenRecentAgent: {
+            searchFocused = false
+            coordinator.onOpenRecentWorkspaceAgent(workspace.id)
         } onAction: { action in
             searchFocused = false
             pendingAction = PendingAction(workspace: workspace, action: action)

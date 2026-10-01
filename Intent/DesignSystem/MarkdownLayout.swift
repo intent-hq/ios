@@ -57,7 +57,13 @@ extension Constants.Markdown {
         static let cornerRadius: CGFloat = 8
     }
 
+    enum Table {
+        static let bottomMargin: CGFloat = 16
+    }
+
     enum TableCell {
+        /// Bound descriptive text without squeezing columns to the viewport.
+        static let maximumWidth: CGFloat = 240
         static let horizontalPaddingScale: CGFloat = 0.72
         static let verticalPaddingScale: CGFloat = 0.35
     }

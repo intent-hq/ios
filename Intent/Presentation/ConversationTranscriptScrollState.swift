@@ -234,6 +234,8 @@ final class ConversationTranscriptScrollState {
     /// Set once the trigger has fired so a re-run of the poll does not
     /// withdraw the row again.
     @ObservationIgnored var demoEndDerealizationTriggered = false
+    /// Content-free receipt for the opt-in footer/recovery overlap control.
+    @ObservationIgnored var demoRecoveryResize: DemoRecoveryResize?
 
     /// Visible content and user gestures take priority over late entry metadata.
     /// Invalidate scheduled entry callbacks, but retain the authoritative divider.
