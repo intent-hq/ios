@@ -653,14 +653,6 @@ jobs:
             xcrun simctl list runtimes
           } > recovery-evidence/provenance.txt
 
-      - name: Run transcript policy and lifecycle regressions
-        env:
-          RESULT_BUNDLE: TestResults-recovery-policy
-          ONLY_TESTING: IntentTests/ConversationTranscriptScrollPolicyTests IntentTests/TranscriptRecoveryLifecycleTests
-        run: |
-          set -o pipefail
-          scripts/xcodebuild.sh test-without-building 2>&1 | tee recovery-evidence/policy-tests.log
-
       - name: Run unit tests
         id: selected-tests
         env:
@@ -804,7 +796,6 @@ jobs:
             TestResults
             TestResults-source-moved
             TestResults-keychain
-            TestResults-recovery-policy
 
       # See the job comment: turns a go-test or swiftlint failure into a
       # failure of this (the only ruleset-required) job. Both normally finish
