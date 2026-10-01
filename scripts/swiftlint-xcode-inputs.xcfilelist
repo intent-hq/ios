@@ -637,6 +637,7 @@ $(SRCROOT)/IntentTests/InvitedSessionRegistryTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionSyncTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionTLSTests.swift
 $(SRCROOT)/IntentTests/LaunchPhaseTimelineTests.swift
+$(SRCROOT)/IntentTests/LayoutPolicyTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift

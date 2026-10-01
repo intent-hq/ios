@@ -63,10 +63,17 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertFalse(launcher.frame.intersects(send.frame))
         XCTAssertLessThan(launcher.frame.maxY, composer.frame.minY)
         XCTAssertLessThan(app.frame.maxY - composer.frame.maxY, Self.composerBottomTolerance)
+        let launcherBottom = launcher.frame.maxY
+        openMenu(app)
+        XCTAssertEqual(app.buttons["intent.menu.close"].frame.maxY, launcherBottom, accuracy: Self.scrollTolerance)
+        app.buttons["intent.menu.close"].tap()
+        XCTAssertTrue(waitUntilHittable(composer))
 
         composer.tap()
-        let draft = "iPad composer regression"
+        let emptyHeight = composer.frame.height
+        let draft = Array(repeating: "iPad composer regression", count: 12).joined(separator: " ")
         composer.typeText(draft)
+        XCTAssertGreaterThan(composer.frame.height, emptyHeight)
         XCTAssertTrue(send.isEnabled)
         XCTAssertTrue(send.isHittable)
         XCTAssertFalse(launcher.frame.intersects(send.frame))
