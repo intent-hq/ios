@@ -10,14 +10,15 @@ nonisolated final class SettingsUITests: XCTestCase {
         for appearance in ["Light", "Dark"] {
             let app = launch(themePreference: appearance.lowercased())
             openSettings(app)
-            XCTAssertTrue(app.staticTexts["PAIR NEW"].exists)
-            XCTAssertFalse(app.staticTexts["CONNECTIONS"].exists)
+            let settings = app.scrollViews["settings.scroll"]
+            XCTAssertTrue(settings.staticTexts["PAIR NEW"].exists)
+            XCTAssertFalse(settings.staticTexts["CONNECTIONS"].exists)
             for name in ["Studio Mac", "Travel Mac"] {
-                XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch.exists)
+                XCTAssertFalse(settings.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch.exists)
             }
-            XCTAssertFalse(app.staticTexts["APPEARANCE"].exists)
+            XCTAssertFalse(settings.staticTexts["APPEARANCE"].exists)
             for choice in ["Light", "Dark", "System"] {
-                XCTAssertFalse(app.buttons[choice].exists, "Theme controls belong only in the Home menu")
+                XCTAssertFalse(settings.buttons[choice].exists, "Theme controls belong only in the Home menu")
             }
             capture(app, named: "Settings-" + appearance)
             assertScrollingLogOffAndRevealActions(app)

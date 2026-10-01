@@ -51,6 +51,7 @@ private struct SettingsStatusBarCapture: UIViewControllerRepresentable {
 
 private struct SettingsContent: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
     @State private var showLogOffConfirmation = false
     @ScaledMetric(relativeTo: .callout) private var iconSize = SettingsStyle.iconWidth
@@ -70,6 +71,9 @@ private struct SettingsContent: View {
             VStack(alignment: .leading, spacing: SettingsStyle.sectionSpacing) {
                 SettingsHeader(onClose: coordinator.onSettingsBack)
                     .padding(.bottom, SettingsStyle.headingSpacing - SettingsStyle.sectionSpacing)
+                if !session.connection.certMismatches.isEmpty {
+                    CertMismatchListView(mismatches: session.connection.certMismatches)
+                }
                 SettingsPairingSection()
                 SettingsSupportSection()
                 logOffButton

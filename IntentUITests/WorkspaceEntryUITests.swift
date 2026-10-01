@@ -68,6 +68,10 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: Fixture.elementTimeout))
 
         edgeSwipe(in: app)
+        let closeSwitcher = app.buttons["connection-switcher.close"]
+        XCTAssertTrue(closeSwitcher.waitForExistence(timeout: Fixture.elementTimeout))
+        closeSwitcher.tap()
+        XCTAssertTrue(closeSwitcher.waitForNonExistence(timeout: Fixture.elementTimeout))
         workspace.tap()
         XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
         agent.tap()

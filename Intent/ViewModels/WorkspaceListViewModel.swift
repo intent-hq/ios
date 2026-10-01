@@ -169,9 +169,17 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
 
     /// The window's workspace store, injected from its `BackendSession`.
     @ObservationIgnored private let workspaceStore: WorkspaceStore
+    @ObservationIgnored private let activityTime: @MainActor (Workspace) -> TimeInterval
+    @ObservationIgnored private var activityTimes: [String: ActivityTime] = [:]
+    @ObservationIgnored private var sortedCache: SortedWorkspaces?
+    @ObservationIgnored private var derivedCache: DerivedWorkspaces?
 
-    init(workspaceStore: WorkspaceStore) {
+    init(
+        workspaceStore: WorkspaceStore,
+        activityTime: @escaping @MainActor (Workspace) -> TimeInterval = workspaceActivityDisplayTime
+    ) {
         self.workspaceStore = workspaceStore
+        self.activityTime = activityTime
     }
 
     var workspaces: [Workspace] {
@@ -187,26 +195,74 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     }
 
     var filteredWorkspaces: [Workspace] {
-        let query = normalizedSearchText
-        let active = workspaces.filter { workspace in
-            let status = workspace.status?.lowercased() ?? ""
-            return status != "archived" && status != "deleted"
-        }
-        let filtered = query.isEmpty ? active : active.filter { workspace in
-            workspace.title.localizedCaseInsensitiveContains(query) ||
-            (workspace.branch?.localizedCaseInsensitiveContains(query) ?? false) ||
-            (workspace.repositoryName?.localizedCaseInsensitiveContains(query) ?? false)
-        }
-        return filtered.sorted(by: isWorkspaceActivityMoreRecent)
+        derivedWorkspaces.filtered
     }
 
     /// Groups keyed by repo, ordered by the activity time of each group's most
     /// recent member (its first, since `filteredWorkspaces` is already sorted)
     /// — the same rule as the FE sidebar's `groupedByRepo`.
     var groupedByRepo: [(String, [Workspace])] {
+        derivedWorkspaces.byRepo
+    }
+
+    var groupedByStatus: [(String, [Workspace])] {
+        derivedWorkspaces.byStatus
+    }
+
+    private var derivedWorkspaces: DerivedWorkspaces {
+        // Read both observable inputs even on a hit so SwiftUI remains subscribed.
+        // Cache storage itself must not publish changes during a view read.
+        let revision = workspaceStore.workspacesRevision
+        let query = normalizedSearchText
+        if let derivedCache, derivedCache.revision == revision, derivedCache.query == query {
+            return derivedCache
+        }
+        let sorted = sortedWorkspaces(revision: revision)
+        let filtered = query.isEmpty ? sorted : sorted.filter { workspace in
+            workspace.title.localizedCaseInsensitiveContains(query) ||
+            (workspace.branch?.localizedCaseInsensitiveContains(query) ?? false) ||
+            (workspace.repositoryName?.localizedCaseInsensitiveContains(query) ?? false)
+        }
+        let statuses = Dictionary(grouping: filtered) { resolveDisplayStatus(for: $0) }
+        let result = DerivedWorkspaces(
+            revision: revision,
+            query: query,
+            filtered: filtered,
+            byRepo: repoGroups(filtered),
+            byStatus: statuses.sorted { $0.key.sortOrder < $1.key.sortOrder }
+                .map { ($0.key.label, $0.value) }
+        )
+        derivedCache = result
+        return result
+    }
+
+    private func sortedWorkspaces(revision: UInt64) -> [Workspace] {
+        if let sortedCache, sortedCache.revision == revision { return sortedCache.workspaces }
+        var nextTimes: [String: ActivityTime] = [:]
+        let timed = workspaces.compactMap { workspace -> (workspace: Workspace, time: TimeInterval)? in
+            let status = workspace.status?.lowercased() ?? ""
+            guard status != "archived", status != "deleted" else { return nil }
+            let inputs = ActivityTimeInputs(workspace)
+            let entry: ActivityTime
+            if let cached = activityTimes[workspace.id], cached.inputs == inputs {
+                entry = cached
+            } else {
+                entry = ActivityTime(inputs: inputs, time: activityTime(workspace))
+            }
+            nextTimes[workspace.id] = entry
+            return (workspace, entry.time)
+        }
+        // Prune removed workspaces; metadata-only updates retain parsed keys.
+        activityTimes = nextTimes
+        let sorted = timed.sorted { $0.time > $1.time }.map(\.workspace)
+        sortedCache = SortedWorkspaces(revision: revision, workspaces: sorted)
+        return sorted
+    }
+
+    private func repoGroups(_ workspaces: [Workspace]) -> [(String, [Workspace])] {
         var keys: [String] = []
         var groups: [String: [Workspace]] = [:]
-        for workspace in filteredWorkspaces {
+        for workspace in workspaces {
             let key: String
             if let owner = workspace.repositoryOwner, let name = workspace.repositoryName {
                 key = "\(owner)/\(name)"
@@ -216,19 +272,39 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
             if groups[key] == nil { keys.append(key) }
             groups[key, default: []].append(workspace)
         }
-        return keys
-            .map { ($0, groups[$0] ?? []) }
-            .sorted { lhs, rhs in
-                guard let leftWorkspace = lhs.1.first,
-                      let rightWorkspace = rhs.1.first else { return false }
-                return isWorkspaceActivityMoreRecent(leftWorkspace, than: rightWorkspace)
-            }
+        // First-seen order already follows each group's most recent member,
+        // including stable ties; no second sort or timestamp parse is needed.
+        return keys.map { ($0, groups[$0] ?? []) }
     }
 
-    var groupedByStatus: [(String, [Workspace])] {
-        let dict = Dictionary(grouping: filteredWorkspaces) { resolveDisplayStatus(for: $0) }
-        return dict.sorted { $0.key.sortOrder < $1.key.sortOrder }
-            .map { ($0.key.label, $0.value) }
+    private struct ActivityTimeInputs: Equatable {
+        let lastActivity: String?
+        let createdAt: String?
+        let updatedAt: String?
+
+        init(_ workspace: Workspace) {
+            lastActivity = workspace.lastActivity
+            createdAt = workspace.createdAt
+            updatedAt = workspace.updatedAt
+        }
+    }
+
+    private struct ActivityTime {
+        let inputs: ActivityTimeInputs
+        let time: TimeInterval
+    }
+
+    private struct SortedWorkspaces {
+        let revision: UInt64
+        let workspaces: [Workspace]
+    }
+
+    private struct DerivedWorkspaces {
+        let revision: UInt64
+        let query: String
+        let filtered: [Workspace]
+        let byRepo: [(String, [Workspace])]
+        let byStatus: [(String, [Workspace])]
     }
 
     private var normalizedSearchText: String {
