@@ -109,7 +109,7 @@ private struct SettingsContent: View {
     private var logOffButton: some View {
         Button { showLogOffConfirmation = true } label: {
             Label {
-                Text("Log Off").interFont(Constants.Typography.bodySEmphasized)
+                Text("Disconnect").interFont(Constants.Typography.bodySEmphasized)
             } icon: {
                 Image(.logout)
                     .resizable()
