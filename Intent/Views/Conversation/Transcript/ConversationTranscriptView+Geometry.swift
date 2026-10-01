@@ -85,9 +85,9 @@ extension ConversationTranscriptView {
             oldContainerHeight: oldContainerHeight,
             newContainerHeight: newContainerHeight,
             isInteracting: scrollMomentumProxy.isInteracting,
-            recoveryOwnsViewport: recoveryOwnsViewport,
             hasInitiallyScrolled: hasInitiallyScrolled,
-            userIsScrolledAway: userIsScrolledAway
+            userIsScrolledAway: userIsScrolledAway,
+            recoveryOwnsViewport: recoveryOwnsViewport
         ) {
         case .none:
             return false

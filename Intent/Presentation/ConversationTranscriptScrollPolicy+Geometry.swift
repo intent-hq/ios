@@ -127,7 +127,7 @@ extension ConversationTranscriptScrollPolicy {
     }
 
     enum ContainerRePinDecision: Equatable {
-        /// Following, but under the finger or decelerating; re-check on settle.
+        /// A gesture or recovery owns the viewport; re-check after it settles.
         case deferred
         /// Settled short of the bottom inside the at-bottom band while
         /// following: the ordinary automatic follow closes the gap.
@@ -158,9 +158,9 @@ extension ConversationTranscriptScrollPolicy {
         oldContainerHeight: CGFloat,
         newContainerHeight: CGFloat,
         isInteracting: Bool,
-        recoveryOwnsViewport: Bool = false,
         hasInitiallyScrolled: Bool,
-        userIsScrolledAway: Bool
+        userIsScrolledAway: Bool,
+        recoveryOwnsViewport: Bool = false
     ) -> ContainerRePinDecision {
         guard oldContainerHeight != newContainerHeight, shouldFollowToBottom(
             hasInitiallyScrolled: hasInitiallyScrolled,

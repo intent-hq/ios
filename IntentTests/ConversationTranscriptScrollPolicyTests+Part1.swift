@@ -18,9 +18,9 @@ extension ConversationTranscriptScrollPolicyTests {
             oldContainerHeight: oldHeight,
             newContainerHeight: newHeight,
             isInteracting: isInteracting,
-            recoveryOwnsViewport: recoveryOwnsViewport,
             hasInitiallyScrolled: hasInitiallyScrolled,
-            userIsScrolledAway: userIsScrolledAway
+            userIsScrolledAway: userIsScrolledAway,
+            recoveryOwnsViewport: recoveryOwnsViewport
         )
     }
 
