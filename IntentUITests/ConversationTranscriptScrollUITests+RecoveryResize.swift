@@ -28,8 +28,12 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertGreaterThan(terminal.episodes, baseline.episodes, terminal.raw)
         XCTAssertTrue(terminal.endRealized, terminal.raw)
         guard waitUntilSettled(
-            on: opened.lastMessage, named: "last assistant paragraph", in: opened, context: context,
-            recoveryAfter: baseline.episodes, alsoReporting: (endRow.element, endRow.name)
+            on: opened.lastMessage,
+            named: "last assistant paragraph",
+            in: opened,
+            context: context,
+            recoveryAfter: baseline.episodes,
+            alsoReporting: (endRow.element, endRow.name)
         ) else { return }
         XCTAssertFalse(opened.goToEnd.exists, terminal.raw)
         assertAtEnd(endRow, in: opened, context: context)
@@ -44,7 +48,7 @@ extension ConversationTranscriptScrollUITests {
         let fields = Dictionary(report.split(separator: " ").compactMap { token -> (String, String)? in
             let pair = token.split(separator: "=", maxSplits: 1)
             return pair.count == 2 ? (String(pair[0]), String(pair[1])) : nil
-        }, uniquingKeysWith: { _, latest in latest })
+        }) { _, latest in latest }
         XCTAssertEqual(fields["resizeOverlap"], "true", "The footer missed the recovery-owned page-up: \(report)")
         XCTAssertEqual(fields["followBackOwned"], "true", "Recovery lost ownership before follow-back: \(report)")
         guard let pageHeight = fields["pageUpHeight"].flatMap(Double.init),
@@ -59,7 +63,8 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertLessThan(resizedHeight, pageHeight, report)
         XCTAssertGreaterThanOrEqual(pageDistance, pageHeight / 2, "Recovery did not page up: \(report)")
         XCTAssertGreaterThanOrEqual(
-            preFollowDistance, preFollowHeight / 2,
+            preFollowDistance,
+            preFollowHeight / 2,
             "The footer displaced the paged-up viewport before recovery followed back: \(report)"
         )
     }
