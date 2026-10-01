@@ -145,15 +145,9 @@ struct ConversationTranscriptViewportAnchor {
         if restorationEvents.count > Self.maximumRestorationEvents {
             // Retain the saved position and application receipt even when
             // later layout produces more samples than the bounded history.
-            let isApplication = restorationEvents[1].hasPrefix("write ") || restorationEvents[1].hasPrefix("align ")
+            let isApplication = restorationEvents[1].hasPrefix("align ")
             restorationEvents.remove(at: isApplication ? 2 : 1)
         }
-    }
-
-    mutating func recordRestorationWrite(before: CGFloat, requested: CGFloat, actual: CGFloat?, accepted: Bool) {
-        guard restorationTarget != nil else { return }
-        restorationEvents.removeAll { $0.hasPrefix("write ") }
-        recordRestorationEvent("write before=\(before) requested=\(requested) actual=\(String(describing: actual)) accepted=\(accepted)")
     }
 
     mutating func recordRestorationAlignment(anchorY: CGFloat, rowY: CGFloat, before: CGFloat, immediate: CGFloat?) {

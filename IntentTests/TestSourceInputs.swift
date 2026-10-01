@@ -2,11 +2,11 @@ import Foundation
 import Testing
 
 /// Repository files that the source-backed suites (InfoPlistSyncTests,
-/// PlatformGuardAllowlistTests) inspect at runtime.
+/// PlatformGuardAllowlistTests, LayoutPolicyTests) inspect at runtime.
 ///
 /// The IntentTests target packages them into IntentTests.xctest through its
 /// "Copy Test Source Inputs" Copy Files phase — folder references for
-/// `Intent/` and `IntentTests/` plus `Info-visionOS.plist`, grouped as "Test
+/// `Intent/`, `IntentTests/`, and `IntentUITests/` plus `Info-visionOS.plist`, grouped as "Test
 /// Source Inputs" in the project, copied under `TestSourceInputs/` so the
 /// `IntentTests/` folder does not collide with the test binary of the same
 /// name at the bundle root — so every build carries a verbatim copy of the

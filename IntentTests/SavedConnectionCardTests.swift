@@ -5,6 +5,29 @@ import UIKit
 
 @MainActor
 struct SavedConnectionCardTests {
+    @Test(arguments: [CGFloat(272), CGFloat(552)])
+    func cardGrowsForLargeTextAndLongAddresses(width: CGFloat) {
+        let card = SavedConnectionCard(name: "Work computer", address: "work.local:5181", status: .connected)
+        let standard = size(of: card.environment(\.dynamicTypeSize, .large), width: width)
+        let accessible = size(of: card.environment(\.dynamicTypeSize, .accessibility5), width: width)
+        let longCard = SavedConnectionCard(
+            name: "Work computer with a long descriptive name",
+            address: "primary-work-computer.local, backup-work-computer.local:5181",
+            status: .connected
+        )
+        let longSize = size(of: longCard.environment(\.dynamicTypeSize, .accessibility5), width: width)
+        #expect(standard.width <= width)
+        #expect(accessible.width <= width)
+        #expect(longSize.width <= width)
+        #expect(accessible.height > standard.height)
+        #expect(longSize.height > accessible.height)
+    }
+
+    private func size(of view: some View, width: CGFloat) -> CGSize {
+        let controller = UIHostingController(rootView: view)
+        return controller.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+    }
+
     @Test(arguments: [ColorScheme.light, .dark])
     func renderedCardUsesSavedPalette(scheme: ColorScheme) throws {
         let card = SavedConnectionCard(name: "Demo Mac", address: "demo.invalid:8080", isCurrentWindow: true)

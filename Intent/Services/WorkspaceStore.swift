@@ -6,7 +6,11 @@ import Observation
 @Observable class WorkspaceStore {
     static let shared = WorkspaceStore()
 
-    var workspaces: [Workspace] = []
+    var workspaces: [Workspace] = [] {
+        didSet { workspacesRevision &+= 1 }
+    }
+    /// Invalidates derived lists for replacements and in-place array mutations.
+    private(set) var workspacesRevision: UInt64 = 0
     var lastUpdated: Date?
     var isLoading = false
     private(set) var updatingWorkspaceIDs: Set<String> = []
