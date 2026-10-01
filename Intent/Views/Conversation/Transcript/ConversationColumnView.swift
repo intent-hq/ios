@@ -12,6 +12,8 @@ struct ConversationColumnView: View {
     @State private var conversationHeight: CGFloat = 0
     @State private var composerHeight: CGFloat = 0
     @State private var accessoriesHeight: CGFloat = 0
+    @State private var questionInputTop: CGFloat?
+    @State private var composerInputTop: CGFloat?
     @State private var composerFocused = false
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
 
@@ -116,35 +118,45 @@ struct ConversationColumnView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { accessoriesHeight = $0 }
 
         questionRegion
-            .anchorPreference(key: WorkspaceActionMenuInputBounds.self, value: .bounds) { bounds in
-                composerVisible || usesWorkspaceDesign ? nil : bounds
-            }
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { questionInputTop = $0 }
+            .preference(key: WorkspaceActionMenuInputTop.self, value: composerVisible || usesWorkspaceDesign ? nil : questionInputTop)
             // Offer the measured question budget before the flexible transcript
             // takes its share; otherwise VStack halves the remaining height and
             // ViewThatFits rejects stacks that fit within workspaceQuestionHeight.
             .layoutPriority(usesWorkspaceDesign ? 1 : 0)
 
         if composerVisible || usesWorkspaceDesign {
-            VStack(spacing: Design.Status.composerSpacing) {
+            VStack(spacing: 0) {
                 if usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
                     MonitoredPrsRow(
                         viewModel: viewModel,
                         monitoredPrStore: viewModel.monitoredPrStore,
                         usesWorkspaceDesign: true
                     )
+                    .padding(.horizontal, composerHorizontalInset)
+                    .padding(.top, Design.Composer.keyboardBottomSpacing)
+                    .padding(.bottom, workspaceQueueVisible ? Design.Status.composerSpacing : 0)
                 }
-                MessageInputView(
-                    viewModel: viewModel,
-                    store: viewModel.store,
-                    usesWorkspaceDesign: usesWorkspaceDesign,
-                    allowsSending: composerVisible
-                ) { composerFocused = $0 }
+                WorkspaceQueuePanel(viewModel: viewModel, isVisible: workspaceQueueVisible) {
+                    MessageInputView(
+                        viewModel: viewModel,
+                        store: viewModel.store,
+                        usesWorkspaceDesign: usesWorkspaceDesign,
+                        allowsSending: composerVisible
+                    ) { composerFocused = $0 }
+                    .padding(.horizontal, usesWorkspaceDesign ? composerHorizontalInset : 0)
+                    .padding(.top, usesWorkspaceDesign && !workspaceQueueVisible ? Design.Composer.keyboardBottomSpacing : 0)
+                    .padding(.bottom, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)
+                }
             }
-            .padding(.horizontal, usesWorkspaceDesign ? composerHorizontalInset : 0)
-            .padding(.vertical, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
-            .anchorPreference(key: WorkspaceActionMenuInputBounds.self, value: .bounds) { $0 }
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerInputTop = $0 }
+            .preference(key: WorkspaceActionMenuInputTop.self, value: composerInputTop)
         }
+    }
+
+    private var workspaceQueueVisible: Bool {
+        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
     }
 
     private var composerHorizontalInset: CGFloat {
@@ -193,7 +205,7 @@ struct ConversationColumnView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
 
-        if !viewModel.queuedMessages.isEmpty {
+        if !usesWorkspaceDesign, !viewModel.queuedMessages.isEmpty {
             QueuedMessagesView(viewModel: viewModel)
             Divider()
         }

@@ -285,7 +285,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         try trigger("initial-timeout", in: directory)
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
-        XCTAssertFalse(app.staticTexts["Can't Connect"].exists, "Data timeout must not add a second retry owner")
+        XCTAssertFalse(app.staticTexts["Can’t Connect"].exists, "Data timeout must not add a second retry owner")
         assertNetworkTitle("No network connection", identifier: "connection-network.status", in: app)
         capture(app, named: "startup-timeout-fallback")
         app.openHomeAction("connections")
@@ -313,7 +313,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         assertNetworkTitle("No network connection", identifier: "connection-network.status", in: app)
         XCTAssertTrue(app.staticTexts["Allow Local Network access for Intent in Settings, then try again."].exists)
         try trigger("loss", in: directory)
-        XCTAssertTrue(app.staticTexts["Can't Connect"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["Can’t Connect"].waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         XCTAssertTrue(app.buttons["Re-pair Device"].exists)
         XCTAssertTrue(app.staticTexts["Allow Local Network access for Intent in Settings, then try again."].exists)
@@ -322,52 +322,11 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["connection-network.status"].waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         XCTAssertTrue(app.buttons["Re-pair Device"].isHittable)
+        assertFailureBackReturnsHome(in: app, timeout: Fixture.timeout)
     }
 }
 
 extension ConnectionLossUITests {
-    @MainActor
-    func testPresentedLossRemainsUsableAcrossRotation() async throws {
-        defer { XCUIDevice.shared.orientation = .portrait }
-        let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory)
-        try trigger("loss", in: directory)
-        assertOverlay(in: app)
-        XCUIDevice.shared.orientation = .landscapeLeft
-        try await waitForRotatedViewport(in: app, landscape: true)
-        XCTAssertGreaterThan(app.frame.width, app.frame.height)
-        XCTAssertGreaterThan(app.scrollViews.firstMatch.frame.width, app.scrollViews.firstMatch.frame.height)
-        app.scrollViews.firstMatch.swipeUp()
-        assertOverlay(in: app)
-        // app.screenshot() crops the rotated image incorrectly on iOS 18.
-        let screenshot = XCUIScreen.main.screenshot()
-        try assertBackdropCoversScreen(screenshot)
-        let screen = XCTAttachment(screenshot: screenshot)
-        screen.name = "connection-loss-landscape-full-screen"
-        screen.lifetime = .keepAlways
-        add(screen)
-        XCUIDevice.shared.orientation = .portrait
-        try await waitForRotatedViewport(in: app, landscape: false)
-        assertOverlay(in: app)
-        capture(app, named: "portrait-after-rotation")
-        try trigger("recover", in: directory)
-        XCTAssertTrue(app.buttons[Fixture.homeIdentifier].waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.buttons["intent.menu.open"].exists)
-    }
-
-    @MainActor
-    private func waitForRotatedViewport(in app: XCUIApplication, landscape: Bool) async throws {
-        let deadline = Date().addingTimeInterval(Fixture.timeout)
-        while Date() < deadline {
-            let frame = app.scrollViews.firstMatch.frame
-            if (frame.width > frame.height) == landscape,
-               frame.width <= app.frame.width + Fixture.layoutTolerance,
-               frame.height <= app.frame.height + Fixture.layoutTolerance { return }
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        XCTFail("The overlay viewport must finish resizing after rotation")
-    }
-
     @MainActor
     func testLargestTextCanScrollToWarningsAndHome() throws {
         let directory = try makeTriggerDirectory()
@@ -400,7 +359,7 @@ extension ConnectionLossUITests {
     }
 
     @MainActor
-    private func assertStartupState(_ state: String, in app: XCUIApplication) {
+    func assertStartupState(_ state: String, in app: XCUIApplication) {
         let status = app.staticTexts.matching(NSPredicate(
             format: "identifier == %@ AND label == %@", "demo-connection-startup", state
         )).firstMatch
@@ -410,7 +369,7 @@ extension ConnectionLossUITests {
     }
 
     @MainActor
-    private func launch(directory: URL, arguments: [String] = [], waitForStartup: Bool = true) -> XCUIApplication {
+    func launch(directory: URL, arguments: [String] = [], waitForStartup: Bool = true) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
@@ -455,7 +414,7 @@ extension ConnectionLossUITests {
         XCTAssertEqual(app.buttons.count, 1, "Only the overlay action should be exposed to accessibility")
     }
 
-    private func makeTriggerDirectory() throws -> URL {
+    func makeTriggerDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock { [weak self] in
@@ -470,7 +429,7 @@ extension ConnectionLossUITests {
         return directory
     }
 
-    private func trigger(_ name: String, in directory: URL) throws {
+    func trigger(_ name: String, in directory: URL) throws {
         try Data().write(to: directory.appendingPathComponent(name))
     }
 

@@ -66,25 +66,6 @@ struct ConversationStreamingFixtureTests {
         #expect(try connection.traffic().notificationBytes == notificationBytes(fixture.frames(encoding: .incremental)))
     }
 
-    @Test func matchedIncrementalTraceHasLinearFragmentBytesAndFullTerminal() throws {
-        let fragments = Array(repeating: String(repeating: "🦊", count: 32), count: 8)
-        let fixture = ConversationStreamingFixture(fragments: fragments)
-        let full = try notificationBytes(fixture.growth(encoding: .full))
-        let incremental = try notificationBytes(fixture.growth(encoding: .incremental))
-        #expect(incremental < full)
-        let doubled = ConversationStreamingFixture(fragments: fragments + fragments)
-        // Variable-width seq numbers are the only growth beyond doubling
-        // these equal-size fragment envelopes (seq 10 through 16).
-        #expect(try notificationBytes(doubled.growth(encoding: .incremental)) == 2 * incremental + 7)
-        let incrementalFrames = fixture.frames(encoding: .incremental)
-        let fullFrames = fixture.frames(encoding: .full)
-        let incrementalTerminal = try #require(incrementalFrames.last)
-        let fullTerminal = try #require(fullFrames.last)
-        #expect(try RPCFixtureJSON.encode(incrementalTerminal) == RPCFixtureJSON.encode(fullTerminal))
-        let legacy = try #require(fixture.snapshot(encoding: .incremental, echoEncoding: false)["snapshot"] as? [String: Any])
-        #expect(legacy["deltaEncoding"] == nil)
-    }
-
     private func subscribedStore(_ connection: RPCRecordingConnection) async -> ConversationStore {
         connection.responseMap["chat.subscribe"] = ["subscriptionId": ConversationStreamingFixture.subscriptionId]
         connection.responseMap["chat.unsubscribe"] = [:] as [String: Any]

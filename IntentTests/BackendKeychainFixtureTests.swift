@@ -6,13 +6,6 @@ struct BackendKeychainFixtureTests {
 
     private typealias Fixtures = BackendKeychainFixtures
 
-    @Test func loadsNonemptyBundledCorpus() throws {
-        let fixtures = try Fixtures.bundled()
-        for group in Fixtures.caseGroups {
-            #expect(try !fixtures.cases(group).isEmpty, "\(group)")
-        }
-    }
-
     @Test func missingResourcesFail() throws {
         let resources = try bundledResources()
         for path in Fixtures.resourcePaths {

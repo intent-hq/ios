@@ -14,6 +14,7 @@
 		AC000011AAAA000000000011 /* Intent in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000001AAAA000000000001 /* Intent */; };
 		AC000012AAAA000000000012 /* IntentTests in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000002AAAA000000000002 /* IntentTests */; };
 		AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000003AAAA000000000003 /* Info-visionOS.plist */; };
+		AC000014AAAA000000000014 /* IntentUITests in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000005AAAA000000000005 /* IntentUITests */; };
 		EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* Textual */; };
 /* End PBXBuildFile section */
 
@@ -44,6 +45,7 @@
 				AC000011AAAA000000000011 /* Intent in Copy Test Source Inputs */,
 				AC000012AAAA000000000012 /* IntentTests in Copy Test Source Inputs */,
 				AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */,
+				AC000014AAAA000000000014 /* IntentUITests in Copy Test Source Inputs */,
 			);
 			name = "Copy Test Source Inputs";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -55,6 +57,7 @@
 		AC000001AAAA000000000001 /* Intent */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Intent; sourceTree = SOURCE_ROOT; };
 		AC000002AAAA000000000002 /* IntentTests */ = {isa = PBXFileReference; lastKnownFileType = folder; path = IntentTests; sourceTree = SOURCE_ROOT; };
 		AC000003AAAA000000000003 /* Info-visionOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-visionOS.plist"; sourceTree = SOURCE_ROOT; };
+		AC000005AAAA000000000005 /* IntentUITests */ = {isa = PBXFileReference; lastKnownFileType = folder; path = IntentUITests; sourceTree = SOURCE_ROOT; };
 		EB655EC92F669E6B00176730 /* Intent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EDA2F669E6C00176730 /* IntentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EE42F669E6C00176730 /* IntentUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -131,6 +134,7 @@
 				AC000001AAAA000000000001 /* Intent */,
 				AC000002AAAA000000000002 /* IntentTests */,
 				AC000003AAAA000000000003 /* Info-visionOS.plist */,
+				AC000005AAAA000000000005 /* IntentUITests */,
 			);
 			name = "Test Source Inputs";
 			sourceTree = "<group>";
@@ -421,7 +425,7 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -469,7 +473,7 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -777,7 +781,7 @@
 			repositoryURL = "https://github.com/intent-hq/textual";
 			requirement = {
 				kind = exactVersion;
-				version = "0.5.0-intent.2";
+				version = "0.5.0-intent.3";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

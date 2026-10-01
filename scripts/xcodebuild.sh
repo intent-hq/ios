@@ -768,7 +768,7 @@ cmd_build_for_testing() {
   ensure_tailcatkit
   udid=$(pick_simulator)
   run_xcodebuild build-for-testing "${PROJECT_ARGS[@]}" \
-    -destination "platform=iOS Simulator,id=$udid" "${SIGNING_ARGS[@]}" "$@"
+    -destination "platform=iOS Simulator,id=$udid" "${SIGNING_ARGS[@]}"
 }
 
 # SwiftUI hosting views only publish their accessibility tree when the

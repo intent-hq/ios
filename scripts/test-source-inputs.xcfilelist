@@ -264,6 +264,7 @@ $(SRCROOT)/Intent/DesignSystem/Colors.swift
 $(SRCROOT)/Intent/DesignSystem/ComponentLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ComposerLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ConnectionSheetStyle.swift
+$(SRCROOT)/Intent/DesignSystem/ConnectionSwitcherStyle.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationDesign.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationDesignColors.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationMediaLayout.swift
@@ -286,6 +287,7 @@ $(SRCROOT)/Intent/DesignSystem/WorkspacePageLayout.swift
 $(SRCROOT)/Intent/Models
 $(SRCROOT)/Intent/Models.swift
 $(SRCROOT)/Intent/Models/ActionProposal.swift
+$(SRCROOT)/Intent/Models/AgentListState.swift
 $(SRCROOT)/Intent/Models/AgentMessageAttribution.swift
 $(SRCROOT)/Intent/Models/AgentSession.swift
 $(SRCROOT)/Intent/Models/AnyCodable.swift
@@ -311,6 +313,7 @@ $(SRCROOT)/Intent/Models/PrMonitorWakeAttribution.swift
 $(SRCROOT)/Intent/Models/Question.swift
 $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
 $(SRCROOT)/Intent/Models/WatchedAgentRow.swift
+$(SRCROOT)/Intent/Models/WorkspaceAction.swift
 $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
 $(SRCROOT)/Intent/Models/WorkspaceChanges.swift
 $(SRCROOT)/Intent/Models/WorkspaceDiff.swift
@@ -326,6 +329,7 @@ $(SRCROOT)/Intent/PersistenceManager+InvitedSessions.swift
 $(SRCROOT)/Intent/PersistenceManager+Screens.swift
 $(SRCROOT)/Intent/PersistenceManager.swift
 $(SRCROOT)/Intent/Presentation
+$(SRCROOT)/Intent/Presentation/ConnectionSwitcherDrag.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Geometry.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Landing.swift
@@ -355,6 +359,7 @@ $(SRCROOT)/Intent/Resources/Fonts/Inter
 $(SRCROOT)/Intent/Services
 $(SRCROOT)/Intent/Services/AgentDetailRequestLimiter.swift
 $(SRCROOT)/Intent/Services/AgentDetailStore.swift
+$(SRCROOT)/Intent/Services/AgentStore+ScopedLoading.swift
 $(SRCROOT)/Intent/Services/AgentStore.swift
 $(SRCROOT)/Intent/Services/AgentSummaryStore.swift
 $(SRCROOT)/Intent/Services/AssistantStore.swift
@@ -401,6 +406,7 @@ $(SRCROOT)/Intent/Services/CreationCatalog.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore+Events.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
+$(SRCROOT)/Intent/Services/DemoAgentListFixtures.swift
 $(SRCROOT)/Intent/Services/DemoBrowserFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesRootFixtures.swift
@@ -421,6 +427,7 @@ $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/DemoRepositoryScriptFixtures.swift
 $(SRCROOT)/Intent/Services/DemoSettings.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
+$(SRCROOT)/Intent/Services/DemoWorkspaceActionFixtures.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
 $(SRCROOT)/Intent/Services/InvitedImportOutcome.swift
 $(SRCROOT)/Intent/Services/InvitedLegacyMigration.swift
@@ -439,6 +446,7 @@ $(SRCROOT)/Intent/Services/NetworkPathMonitoring.swift
 $(SRCROOT)/Intent/Services/NoteStore+Events.swift
 $(SRCROOT)/Intent/Services/NoteStore.swift
 $(SRCROOT)/Intent/Services/NoteStoreCollections.swift
+$(SRCROOT)/Intent/Services/OutgoingImagePayload.swift
 $(SRCROOT)/Intent/Services/PairingDiagnostics.swift
 $(SRCROOT)/Intent/Services/PairingFlow.swift
 $(SRCROOT)/Intent/Services/ProposalActionStore.swift
@@ -473,6 +481,10 @@ $(SRCROOT)/Intent/Services/WorkspaceStatusStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusWaiters.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore+EventClassification.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferExport.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferModels.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferRelay.swift
+$(SRCROOT)/Intent/Services/WorkspaceTransferStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceVideo.swift
 $(SRCROOT)/Intent/Utils
 $(SRCROOT)/Intent/Utils/AppLog.swift
@@ -541,6 +553,8 @@ $(SRCROOT)/Intent/Views/Connection/ConnectionPairingButtons.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSheet.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSheetButtonStyle.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSheetText.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionSwitcherGesture.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionSwitcherList.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionsView.swift
 $(SRCROOT)/Intent/Views/Connection/DisconnectedView.swift
 $(SRCROOT)/Intent/Views/Connection/LoadingView.swift
@@ -555,6 +569,7 @@ $(SRCROOT)/Intent/Views/Conversation/Composer/ModelPickerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/QueuedMessagesView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/SubmittableTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/WorkspaceComposerRow.swift
+$(SRCROOT)/Intent/Views/Conversation/Composer/WorkspaceQueuedMessagesView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content
 $(SRCROOT)/Intent/Views/Conversation/Content/AttachmentReferenceImageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ChatImageActions.swift
@@ -642,9 +657,6 @@ $(SRCROOT)/Intent/Views/Settings/DiagnosticPreviewSection.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticShareSheet.swift
 $(SRCROOT)/Intent/Views/Settings/LogOffConfirmationSheet.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsActionLabel.swift
-$(SRCROOT)/Intent/Views/Settings/SettingsAppearanceSelector.swift
-$(SRCROOT)/Intent/Views/Settings/SettingsConnectionCard.swift
-$(SRCROOT)/Intent/Views/Settings/SettingsConnectionsSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsHeader.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsPairingSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsSection.swift
@@ -680,28 +692,36 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowsersView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDiffView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceConnectionSwitcher.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+AgentGroups.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspacePromptTextView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowSwipeGesture.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptRow.swift
-$(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptSwipeGesture.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSearchBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusIconView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusImageView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceSwipeContainer.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceSwipeRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTab.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceTransferSheet.swift
 $(SRCROOT)/IntentTests
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
+$(SRCROOT)/IntentTests/AgentGroupingTests.swift
 $(SRCROOT)/IntentTests/AgentListViewModelTests.swift
 $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
 $(SRCROOT)/IntentTests/AgentSessionDisplayTests.swift
 $(SRCROOT)/IntentTests/AgentSessionTests.swift
+$(SRCROOT)/IntentTests/AgentStoreScopedLifecycleTests.swift
+$(SRCROOT)/IntentTests/AgentStoreScopedTests.swift
 $(SRCROOT)/IntentTests/AgentStoreTests.swift
 $(SRCROOT)/IntentTests/AgentWaitingViewTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorAssistantTests.swift
@@ -766,6 +786,7 @@ $(SRCROOT)/IntentTests/ConnectionPairingTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceMigrationTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ConnectionPrincipalTests.swift
+$(SRCROOT)/IntentTests/ConnectionSwitcherDragTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
 $(SRCROOT)/IntentTests/ConversationBudgetEvidence.swift
 $(SRCROOT)/IntentTests/ConversationBudgetFixture.swift
@@ -895,6 +916,7 @@ $(SRCROOT)/IntentTests/InvitedSessionRegistryTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionSyncTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionTLSTests.swift
 $(SRCROOT)/IntentTests/LaunchPhaseTimelineTests.swift
+$(SRCROOT)/IntentTests/LayoutPolicyTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
@@ -1005,11 +1027,14 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Recovery.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Sequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
+$(SRCROOT)/IntentTests/TransferDestinationPolicyTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
 $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
+$(SRCROOT)/IntentTests/WorkspaceActionTests.swift
+$(SRCROOT)/IntentTests/WorkspaceAgentLoadingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserFixture.swift
@@ -1030,6 +1055,7 @@ $(SRCROOT)/IntentTests/WorkspaceDiffTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFallbackRefreshTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift
 $(SRCROOT)/IntentTests/WorkspaceLinksTests.swift
+$(SRCROOT)/IntentTests/WorkspaceListCacheTests.swift
 $(SRCROOT)/IntentTests/WorkspaceListViewModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceParsingTests.swift
 $(SRCROOT)/IntentTests/WorkspacePrMonitorsStoreTests.swift
@@ -1059,3 +1085,6 @@ $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTabTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTranscriptDesignTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTransferFixture.swift
+$(SRCROOT)/IntentTests/WorkspaceTransferRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTransferStoreTests.swift

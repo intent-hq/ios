@@ -6,9 +6,14 @@ import Observation
 @Observable class WorkspaceStore {
     static let shared = WorkspaceStore()
 
-    var workspaces: [Workspace] = []
+    var workspaces: [Workspace] = [] {
+        didSet { workspacesRevision &+= 1 }
+    }
+    /// Invalidates derived lists for replacements and in-place array mutations.
+    private(set) var workspacesRevision: UInt64 = 0
     var lastUpdated: Date?
     var isLoading = false
+    private(set) var updatingWorkspaceIDs: Set<String> = []
     var agentSummaries: AgentSummaryStore? {
         didSet {
             if let agentSummaries { agentSummaries.seedWorkspaces(workspaces, since: agentSummaries.beginRead()) }
@@ -87,6 +92,30 @@ import Observation
 
     func fetchAll() async {
         await startFetch().value
+    }
+
+    func perform(_ action: WorkspaceAction, workspaceId: String) async throws {
+        guard updatingWorkspaceIDs.insert(workspaceId).inserted else { return }
+        defer { updatingWorkspaceIDs.remove(workspaceId) }
+        let result = try await connectionManager.request(action.method, params: ["workspaceId": workspaceId])
+        let response = result as? [String: Any]
+        let succeeded: Bool
+        switch action {
+        case .archive:
+            let workspace = response?["workspace"] as? [String: Any]
+            succeeded = workspace?["id"] as? String == workspaceId
+                && (workspace?["status"] as? String)?.lowercased() == "archived"
+        case .delete:
+            succeeded = response?["success"] as? Bool == true
+        }
+        guard succeeded else {
+            throw NSError(domain: "WorkspaceAction", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "The server did not confirm the workspace \(action.rawValue). Please try again."
+            ])
+        }
+        workspaces.removeAll { $0.id == workspaceId }
+        invalidateFetchForEvent()
+        await fetchAll()
     }
 
     private func startFetch() -> Task<Void, Never> {

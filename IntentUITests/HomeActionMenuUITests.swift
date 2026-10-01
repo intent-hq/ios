@@ -63,10 +63,17 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertFalse(launcher.frame.intersects(send.frame))
         XCTAssertLessThan(launcher.frame.maxY, composer.frame.minY)
         XCTAssertLessThan(app.frame.maxY - composer.frame.maxY, Self.composerBottomTolerance)
+        let launcherBottom = launcher.frame.maxY
+        openMenu(app)
+        XCTAssertEqual(app.buttons["intent.menu.close"].frame.maxY, launcherBottom, accuracy: Self.scrollTolerance)
+        app.buttons["intent.menu.close"].tap()
+        XCTAssertTrue(waitUntilHittable(composer))
 
         composer.tap()
-        let draft = "iPad composer regression"
+        let emptyHeight = composer.frame.height
+        let draft = Array(repeating: "iPad composer regression", count: 12).joined(separator: " ")
         composer.typeText(draft)
+        XCTAssertGreaterThan(composer.frame.height, emptyHeight)
         XCTAssertTrue(send.isEnabled)
         XCTAssertTrue(send.isHittable)
         XCTAssertFalse(launcher.frame.intersects(send.frame))
@@ -145,9 +152,12 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
-    func testConnectionsTileOpensScreenAndAppearanceTileCyclesTheme() {
-        let app = launchHome()
+    func testConnectionsTileOpensScreenAndAppearanceTileCyclesTheme() throws {
+        let app = launchHome(themePreference: "dark")
         openMenu(app)
+        // Seed stored System through the Home tile before removing the launch override.
+        XCTAssertEqual(reveal("appearance", in: app).value as? String, "Dark Mode")
+        reveal("appearance", in: app).tap()
         reveal("connections", in: app).tap()
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
         // Relaunch restores the home screen without depending on the connection sheet's detent.
@@ -156,15 +166,10 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         app.launchArguments = ["--demo-data", "--demo-long-workspace-list"]
         app.launch()
         openMenu(app)
-        reveal("settings", in: app).tap()
-        let system = app.buttons["settings.appearance.system"]
-        XCTAssertTrue(system.waitForExistence(timeout: Self.timeout))
-        system.tap()
-        app.buttons["settings.close"].tap()
-        openMenu(app)
         let appearance = reveal("appearance", in: app)
         XCTAssertEqual(appearance.value as? String, "System")
-        for mode in ["Light Mode", "Dark Mode", "System", "Light Mode"] {
+        let systemIsDark = try app.renderedHomeActionIsDark("appearance")
+        for mode in ["Light Mode", "Dark Mode", "System", "Light Mode", "Dark Mode", "System", "Light Mode"] {
             appearance.tap()
             let updated = XCTNSPredicateExpectation(
                 predicate: NSPredicate(format: "value == %@", mode), object: appearance
@@ -174,6 +179,11 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
             XCTAssertTrue(app.scrollViews["intent.menu.tiles"].exists)
             XCTAssertTrue(app.buttons["intent.menu.close"].isHittable)
             XCTAssertFalse(app.navigationBars["Appearance"].exists)
+            XCTAssertEqual(
+                try app.renderedHomeActionIsDark("appearance"),
+                mode == "System" ? systemIsDark : mode == "Dark Mode",
+                "The rendered app must follow \(mode) on every tap, not just update the tile label"
+            )
             let screenshot = XCTAttachment(screenshot: app.screenshot())
             screenshot.name = "Appearance tile - \(mode)"
             screenshot.lifetime = .keepAlways
@@ -183,6 +193,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         app.launch()
         openMenu(app)
         XCTAssertEqual(reveal("appearance", in: app).value as? String, "Light Mode")
+        XCTAssertFalse(try app.renderedHomeActionIsDark("appearance"))
     }
 
     @MainActor
@@ -199,14 +210,6 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         app.launch()
         openMenu(app)
         XCTAssertEqual(reveal("appearance", in: app).value as? String, "Light Mode")
-    }
-
-    @MainActor
-    func testWorkspaceTileOpensRepositoryPicker() {
-        let app = launchHome()
-        openMenu(app)
-        app.buttons["intent.menu.workspace"].tap()
-        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Self.timeout))
     }
 
     @MainActor

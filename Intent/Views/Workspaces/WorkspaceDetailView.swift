@@ -3,12 +3,10 @@ import SwiftUI
 struct WorkspaceDetailView: View {
     let workspaceId: String
     @Environment(AppCoordinator.self) var coordinator
-    @State private var agentStore: AgentStore
-    @State private var viewModel = AgentListViewModel()
+    @State private var storedAgentStore: AgentStore
+    @State private var storedViewModel: AgentListViewModel
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.scenePhase) private var scenePhase
-    @State private var showBackgroundAgents = false
-    @State private var expandedDelegates: Set<String> = []
     @State private var showDeleteConfirmation = false
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
@@ -16,8 +14,10 @@ struct WorkspaceDetailView: View {
     @State private var selectedBrowser: WorkspaceBrowser?
     @State private var createdBrowser: WorkspaceBrowser?
     @State private var showNewBrowser = false
+    @State private var showTransferWorkspace = false
     @State private var terminalCreationRequest: UUID?
     @State private var selectedTab = WorkspaceTab.agents
+    @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var noteStore: NoteStore
     @State private var scriptStore: WorkspaceScriptStore
     @State private var changesStore: WorkspaceChangesStore
@@ -25,11 +25,16 @@ struct WorkspaceDetailView: View {
 
     init(workspaceId: String, session: BackendSession) {
         self.workspaceId = workspaceId
-        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection, summaries: session.agentSummaries))
+        let store = AgentStore(connectionManager: session.connection, summaries: session.agentSummaries, scopedLoading: true)
+        _storedAgentStore = State(initialValue: store)
+        _storedViewModel = State(initialValue: AgentListViewModel(list: store.list))
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
         _scriptStore = State(initialValue: WorkspaceScriptStore(connection: session.connection))
         _changesStore = State(initialValue: WorkspaceChangesStore(connectionManager: session.connection))
     }
+
+    var agentStore: AgentStore { storedAgentStore }
+    var viewModel: AgentListViewModel { storedViewModel }
 
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
 
@@ -46,10 +51,7 @@ struct WorkspaceDetailView: View {
     private var workspace: Workspace? { workspaceStore.workspaces.first { $0.id == workspaceId } }
 
     private var workspaceTitle: String {
-        guard let title = workspace?.title,
-              !title.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return "<Untitled>"
-        }
+        guard let title = workspace?.title, !title.trimmingCharacters(in: .whitespaces).isEmpty else { return "<Untitled>" }
         return title
     }
 
@@ -91,6 +93,8 @@ struct WorkspaceDetailView: View {
             selectedBrowser = nil
             createdBrowser = nil
             showNewBrowser = false
+            showTransferWorkspace = false
+            revealedSwipeTarget = nil
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: oldId,
@@ -101,11 +105,8 @@ struct WorkspaceDetailView: View {
                     connectionId: connectionId
                 )
             }
-            viewModel.agents = []
-            agentStore.prepareForWorkspaceChange(to: newId)
+            resetAgentWorkspace(to: newId)
             noteStore.prepareForWorkspaceChange(to: newId)
-            showBackgroundAgents = false
-            expandedDelegates = []
             agentStore.startObservingEvents()  // Re-register with new workspaceId context
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: newId) }
@@ -126,7 +127,7 @@ struct WorkspaceDetailView: View {
         }
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
             // After workspaces load, if ours is missing it was deleted/archived externally
-            if workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
+            if !showTransferWorkspace, workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
                 coordinator.handleMissingWorkspace()
             }
         }
@@ -184,6 +185,17 @@ struct WorkspaceDetailView: View {
             )
                 .environment(coordinator)
         }
+        .sheet(
+            isPresented: $showTransferWorkspace,
+            onDismiss: {
+                if workspaceStore.lastUpdated != nil, workspace == nil { coordinator.handleMissingWorkspace() }
+            },
+            content: {
+                WorkspaceTransferSheet(workspaceId: workspaceId, workspaceTitle: workspaceTitle, session: session)
+                    .environment(coordinator)
+                    .id(workspaceId)
+            }
+        )
         .sheet(
             isPresented: $showNewBrowser,
             onDismiss: {
@@ -278,6 +290,8 @@ private extension WorkspaceDetailView {
             onCreateAgent: { showSpecialistPicker = true },
             onCreateTerminal: createTerminal,
             onCreateBrowser: { showNewBrowser = true },
+            onTransfer: session.connection.currentPrincipal?.isOwner == true
+                && session.connection.connectionState == .connected ? { showTransferWorkspace = true } : nil,
             onArchive: { showArchiveConfirmation = true },
             onDelete: { showDeleteConfirmation = true }
         )
@@ -294,7 +308,7 @@ private extension WorkspaceDetailView {
     }
 
     func presentScriptBrowser() {
-        guard scenePhase == .active, selectedBrowser == nil, selectedTerminal == nil, !showNewBrowser else {
+        guard scenePhase == .active, selectedBrowser == nil, selectedTerminal == nil, !showNewBrowser, !showTransferWorkspace else {
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
             return
         }
@@ -356,7 +370,7 @@ private extension WorkspaceDetailView {
                 ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
-            } else if viewModel.agents.isEmpty, !hasWorkspaceResources {
+            } else if !viewModel.hasAgentSections, !hasWorkspaceResources {
                 ContentUnavailableView {
                     Label { Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold)) } icon: { Image(systemName: "person.2") }
                 } description: {
@@ -375,124 +389,37 @@ private extension WorkspaceDetailView {
 
     var agentListContent: some View {
         LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
-            foregroundAgents
-            backgroundAgents
-            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) { terminal in
+            agentTree(viewModel.foregroundAgents)
+            agentSection(.background, title: "background agents")
+            agentSection(.orphaned, title: "delegated agents")
+            agentSection(.retired, title: "retired agents")
+            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore, revealedTarget: $revealedSwipeTarget) { terminal in
                 selectedTerminal = terminal
             }
-            WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore) { browser in
+            WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore, revealedTarget: $revealedSwipeTarget) { browser in
                 selectedBrowser = browser
             }
-            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore)
+            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore, revealedTarget: $revealedSwipeTarget)
         }
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.bottom, WorkspaceDetailStyle.pageInset)
     }
 
-    var foregroundAgents: some View {
-        ForEach(viewModel.foregroundAgents) { agent in
-            foregroundAgent(agent)
-        }
-    }
+    private func deleteWorkspace() { changeWorkspace("workspace.delete") }
 
-    @ViewBuilder
-    func foregroundAgent(_ agent: AgentSession) -> some View {
-        VStack(spacing: WorkspaceDetailStyle.stackTopSpacing) {
-            agentButton(agent)
-            let delegates = viewModel.delegatedAgents(for: agent.id)
-            if !delegates.isEmpty {
-                DelegatedAgentsRow(
-                    agents: delegates,
-                    isExpanded: expandedDelegates.contains(agent.id),
-                    colorScheme: colorScheme
-                ) { toggleDelegates(agent.id) }
-                if expandedDelegates.contains(agent.id) {
-                    ForEach(delegates) { delegate in
-                        agentButton(delegate, indented: true)
-                    }
-                }
-            }
-        }
-    }
+    private func archiveWorkspace() { changeWorkspace("workspace.archive") }
 
-    @ViewBuilder
-    var backgroundAgents: some View {
-        if !viewModel.standaloneBackgroundAgents.isEmpty {
-            BackgroundAgentsHeader(
-                agents: viewModel.standaloneBackgroundAgents,
-                isExpanded: showBackgroundAgents,
-                colorScheme: colorScheme
-            ) { showBackgroundAgents.toggle() }
-            if showBackgroundAgents {
-                ForEach(viewModel.standaloneBackgroundAgents) { agent in
-                    agentButton(agent)
-                }
-            }
-        }
-    }
-
-    func agentButton(_ agent: AgentSession, indented: Bool = false) -> some View {
-        Button {
-            coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
-        } label: {
-            AgentRowView(agent: agent, colorScheme: colorScheme, indented: indented)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("workspace.agent.\(agent.id)")
-        .visionListRowHitTarget()
-        .contextMenu {
-            AgentNotificationsMuteButton(agent: agent) { toggleNotificationsMuted(agent) }
-        }
-    }
-
-    private func toggleNotificationsMuted(_ agent: AgentSession) {
-        Task {
-            do {
-                try await agentStore.setNotificationsMuted(
-                    agentId: agent.id,
-                    workspaceId: workspaceId,
-                    muted: !agent.notificationsMuted
-                )
-            } catch {
-                AppLog.workspace.error("[WorkspaceDetail] Notification mute toggle failed: \(error)")
-            }
-        }
-    }
-
-    private func toggleDelegates(_ agentId: String) {
-        if expandedDelegates.contains(agentId) {
-            expandedDelegates.remove(agentId)
-        } else {
-            expandedDelegates.insert(agentId)
-        }
-    }
-
-    private func deleteWorkspace() {
+    private func changeWorkspace(_ method: String) {
         Task {
             do {
                 _ = try await session.connection.request(
-                    "workspace.delete",
+                    method,
                     params: ["workspaceId": workspaceId]
                 )
                 coordinator.onBackToWorkspaceList()
                 await workspaceStore.fetchAll()
             } catch {
-                AppLog.workspace.error("[WorkspaceDetail] Delete failed: \(error)")
-            }
-        }
-    }
-
-    private func archiveWorkspace() {
-        Task {
-            do {
-                _ = try await session.connection.request(
-                    "workspace.archive",
-                    params: ["workspaceId": workspaceId]
-                )
-                coordinator.onBackToWorkspaceList()
-                await workspaceStore.fetchAll()
-            } catch {
-                AppLog.workspace.error("[WorkspaceDetail] Archive failed: \(error)")
+                AppLog.workspace.error("[WorkspaceDetail] \(method) failed: \(error)")
             }
         }
     }

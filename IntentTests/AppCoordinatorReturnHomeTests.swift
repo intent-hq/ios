@@ -21,7 +21,8 @@ extension AppCoordinatorTests {
         #expect(!source.contains("Log Off"))
     }
 
-    @Test @MainActor func returnHomeKeepsSavedConnectionsAndCredentials() {
+    @Test(arguments: [nil, .automaticConnection, .manualLogOff] as [ConnectionFailureRetryPolicy?])
+    @MainActor func returnHomeKeepsSavedConnectionsAndCredentials(failurePolicy: ConnectionFailureRetryPolicy?) {
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let other = persistence.upsertConnection(Self.makeConnection(port: 5252))
         persistence.setActiveConnection(id: stored.id)
@@ -40,6 +41,9 @@ extension AppCoordinatorTests {
         )
         coordinator.selectedWorkspaceId = "workspace"
         coordinator.isDisconnected = true
+        if let failurePolicy {
+            coordinator.routeToConnectionFailure(error: "Connection unavailable", retryPolicy: failurePolicy)
+        }
 
         coordinator.onReturnToSavedMachines()
         coordinator.onReturnToSavedMachines()
@@ -69,6 +73,8 @@ extension AppCoordinatorTests {
         coordinator.handleNotificationSelection(
             agentId: "old-agent", workspaceId: "old-workspace", agentName: "Old", connectionId: stored.id
         )
+        coordinator.currentScreen = .connecting
+        let abandonedAttempt = coordinator.connectionAttemptId
         fake.simulateConnect()
         fake.certMismatchDetected = true
         // Both publishers have queued deliveries on the main queue.
@@ -77,6 +83,7 @@ extension AppCoordinatorTests {
         fake.simulateConnect()
         fake.connectionState = .reconnecting(attempt: 1)
         fake.certMismatchDetected = true
+        coordinator.onInitialWorkspaceLoadComplete(attemptID: abandonedAttempt)
         coordinator.onConnectionSuccess()
         coordinator.onConnectionFailed(error: "Late failure")
         coordinator.onRetryConnection()

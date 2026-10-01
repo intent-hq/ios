@@ -6,39 +6,39 @@ struct ConnectionSheet<Content: View>: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var contentHeight: CGFloat = 0
+    @State private var bottomSafeAreaInset: CGFloat = 0
     let initialHeight: CGFloat
     var backgroundColor: Color?
     var closeForeground: Color?
+    var isDismissDisabled = false
     @ViewBuilder let content: Content
 
     var body: some View {
-        // Safe-area-aware bottom breathing room, including on home-button devices.
-        // swiftlint:disable:next geometry_reader_usage
-        GeometryReader { geometry in
-            VStack(alignment: .leading, spacing: 0) {
-                closeButton
+        VStack(alignment: .leading, spacing: 0) {
+            closeButton
 
-                ScrollView {
-                    content
-                        .padding(.top, Constants.ConnectionSheet.headerGap)
-                        .padding(.horizontal, Constants.ConnectionSheet.inset)
-                        .padding(.bottom, max(
-                            Constants.ConnectionSheet.minimumBottomPadding,
-                            Constants.ConnectionSheet.bottomSpacing - geometry.safeAreaInsets.bottom
-                        ))
-                        .frame(maxWidth: .infinity)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
-                }
-                .scrollBounceBehavior(.basedOnSize)
-                #if !os(visionOS)
-                .scrollDismissesKeyboard(.interactively)
-                #endif
+            ScrollView {
+                content
+                    .padding(.top, Constants.ConnectionSheet.headerGap)
+                    .padding(.horizontal, Constants.ConnectionSheet.inset)
+                    .padding(.bottom, max(
+                        Constants.ConnectionSheet.minimumBottomPadding,
+                        Constants.ConnectionSheet.bottomSpacing - bottomSafeAreaInset
+                    ))
+                    .frame(maxWidth: .infinity)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
+            .scrollBounceBehavior(.basedOnSize)
+            #if !os(visionOS)
+            .scrollDismissesKeyboard(.interactively)
+            #endif
         }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { bottomSafeAreaInset = $0 }
         .background(backgroundColor ?? Constants.ConnectionSheet.defaultBackground(for: colorScheme))
         .presentationBackground(backgroundColor ?? Constants.ConnectionSheet.defaultBackground(for: colorScheme))
         .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
         .presentationDragIndicator(.hidden)
+        .interactiveDismissDisabled(isDismissDisabled)
         .presentationDetents([
             .height(contentHeight > 0
                 ? contentHeight + Constants.ConnectionSheet.closeSize + Constants.ConnectionSheet.inset
@@ -57,6 +57,7 @@ struct ConnectionSheet<Content: View>: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .disabled(isDismissDisabled)
         .foregroundStyle(closeForeground ?? Constants.ConnectionSheet.defaultForeground(for: colorScheme))
         .accessibilityLabel("Close")
         .accessibilityIdentifier("connection-sheet.close")

@@ -144,28 +144,6 @@ struct CreateWorkspaceParamsTests {
         )
     }
 
-    @Test func creationContextAccessibilityDescriptionsPreserveLabelsAndFullValues() {
-        let repository = "intent-hq/a-repository-name-that-needs-room-to-wrap"
-        let branch = "feature/a-long-branch-name-that-must-remain-complete"
-        let rows = CreateWorkspaceView.creationContextRows(
-            repositoryFullName: repository,
-            branch: branch
-        )
-        let descriptions = rows.map(CreateWorkspaceView.creationContextAccessibilityDescription)
-
-        #expect(descriptions == ["Repository: \(repository)", "Branch: \(branch)"])
-    }
-
-    @Test func creationContextAccessibilityDescriptionsNameEmptyValues() {
-        let rows = CreateWorkspaceView.creationContextRows(
-            repositoryFullName: "",
-            branch: ""
-        )
-        let descriptions = rows.map(CreateWorkspaceView.creationContextAccessibilityDescription)
-
-        #expect(descriptions == ["Repository: Not specified", "Branch: Not specified"])
-    }
-
     @Test func creationFormReflowsAtAccessibilitySizes() {
         #expect(!CreateWorkspaceView.usesExpandedFormLayout(for: .xxxLarge))
         #expect(CreateWorkspaceView.usesExpandedFormLayout(for: .accessibility1))

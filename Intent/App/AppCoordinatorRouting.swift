@@ -19,6 +19,7 @@ extension AppCoordinator {
         routingState.hasLoadCompleted = true
         refreshSyncedBackends()
         if DemoMode.pretendPaired || backendID != nil {
+            connectingStartedByLaunch = !dependencies.sessionRegistry.consumeConnectionSelection(for: backendID)
             currentScreen = .connecting
         } else {
             // Synced connections merged from the registry (or connections
@@ -89,6 +90,20 @@ extension AppCoordinator {
     /// previews) the pairing session's live connection is used in place.
     func onPaired(_ connection: StoredConnection) {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        if backendID?.connectionID == connection.id, !currentScreen.supportsConnectionLossOverlay {
+            // Retargeting to the same backend does not change the window's
+            // binding. Restart initial routing explicitly, including its
+            // workspace-data wait, instead of leaving the failure screen up.
+            dependencies.connection.updateCachedCredentials(
+                hosts: connection.server.hosts,
+                port: connection.server.port,
+                token: connection.token,
+                certFingerprint: connection.server.certFingerprint,
+                tcAddress: connection.server.tcAddress
+            )
+            restartConnectionAttempt()
+            return
+        }
         if let retargetWindow {
             let target = BackendID(connection.id)
             retargetWindow(target)
@@ -330,6 +345,7 @@ extension AppCoordinator {
 
     func onRetryConnection() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        connectingStartedByLaunch = false
         currentScreen = .connecting
     }
 
@@ -343,6 +359,7 @@ extension AppCoordinator {
     func onReturnToSavedMachines() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
         stopConnectionLifecycleForReturnHome()
+        connectingStartedByLaunch = false
         isDisconnected = false
         selectedWorkspaceId = nil
         pendingDeepLinkPairing = nil

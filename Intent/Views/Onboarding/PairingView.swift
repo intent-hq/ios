@@ -40,6 +40,7 @@ struct PairingView: View {
     @State private var showQRScanner = false
     @State private var showManualEntry = false
     @State private var showConnections = false
+    @State private var verticalSafeAreaDifference: CGFloat = 0
     @ScaledMetric(relativeTo: .title) private var headingCapHeight = PairingTextMetrics.headingCapHeight
     @ScaledMetric(relativeTo: .body) private var bodyCapHeight = PairingTextMetrics.bodyCapHeight
     @ScaledMetric(relativeTo: .body) private var bodyLineSpacing = PairingTextMetrics.bodyLineSpacing
@@ -62,20 +63,19 @@ struct PairingView: View {
     private var pairingContent: some View {
         ZStack {
             Constants.Pairing.background(for: colorScheme).ignoresSafeArea()
-            // Safe insets are required synchronously for the first layout, without a state feedback pass.
-            // swiftlint:disable:next geometry_reader_usage
-            GeometryReader { geometry in
-                // Equal outer safe margins center on the full container, not the
-                // asymmetric safe area. The same protected region gates scrolling.
-                ViewThatFits(in: .vertical) {
-                    pairingLayout
-                    ScrollView { pairingLayout }
-                }
-                .padding(.vertical, Constants.Pairing.optionsHorizontalPadding)
-                .padding(.top, max(0, geometry.safeAreaInsets.bottom - geometry.safeAreaInsets.top))
-                .padding(.bottom, max(0, geometry.safeAreaInsets.top - geometry.safeAreaInsets.bottom))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Equal outer safe margins center on the full container, not the
+            // asymmetric safe area. The same protected region gates scrolling.
+            ViewThatFits(in: .vertical) {
+                pairingLayout
+                ScrollView { pairingLayout }
             }
+            .padding(.vertical, Constants.Pairing.optionsHorizontalPadding)
+            .padding(.top, max(0, -verticalSafeAreaDifference))
+            .padding(.bottom, max(0, verticalSafeAreaDifference))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                geometry.safeAreaInsets.top - geometry.safeAreaInsets.bottom
+            } action: { verticalSafeAreaDifference = $0 }
         }
     }
 

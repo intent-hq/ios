@@ -72,6 +72,7 @@ jobs:
     name: Select macOS runner
     runs-on: ubuntu-latest
     outputs:
+      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"macos-15"' }}
       runs-on: ${{ steps.select.outputs.runs-on || '"macos-15"' }}
     steps:
       - uses: actions/checkout@v7
@@ -79,6 +80,12 @@ jobs:
         id: select
         env:
           RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+        run: bash .github/scripts/select-macos-runner.sh
+      - name: Check build-only Mac status
+        id: select-build
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+          RUNNER_POOL_LABEL: intent-ios-build
         run: bash .github/scripts/select-macos-runner.sh
 
   go-test:
@@ -109,6 +116,12 @@ jobs:
 
       - name: Disposable iPad route tests
         run: python3 scripts/test_ci_simulator.py
+
+      - name: macOS runner pool selection tests
+        run: python3 scripts/test_select_macos_runner.py
+
+      - name: Xcode Cloud post-clone tests
+        run: scripts/test-ci-post-clone.sh
 
       # Exercises the version pin, argument contract and SWIFTLINT_REPORTER
       # override on both Darwin and Linux paths against a stubbed swiftlint.
@@ -555,8 +568,26 @@ jobs:
           path: TerminalScreenshots
           if-no-files-found: warn
 
+      - name: Export workspace transfer screenshots
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'WorkspaceTransferUITests') }}
+        run: |
+          if [ -d TestResults ]; then
+            ln -s "$PWD/TestResults" "$RUNNER_TEMP/WorkspaceTransferResults.xcresult"
+            xcrun xcresulttool export attachments \
+              --path "$RUNNER_TEMP/WorkspaceTransferResults.xcresult" \
+              --output-path WorkspaceTransferScreenshots
+          fi
+
+      - name: Upload workspace transfer screenshots
+        if: ${{ !cancelled() && contains(inputs.only_testing, 'WorkspaceTransferUITests') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: workspace-transfer-screenshots
+          path: WorkspaceTransferScreenshots
+          if-no-files-found: warn
+
       - name: Upload test results
-        if: failure() || (github.event_name == 'workflow_dispatch' && contains(inputs.only_testing, 'WorkspaceChangesUITests'))
+        if: failure() || (github.event_name == 'workflow_dispatch' && (contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests')))
         uses: actions/upload-artifact@v7
         with:
           name: ios-unit-test-results
@@ -774,14 +805,18 @@ jobs:
 
       # ConversationTranscriptScrollUITests attaches one content-free JSON
       # record per launch proving the unrealized-end recovery ran. Export only
-      # those records on every run; full result bundles remain failure-only.
-      - name: Export transcript recovery evidence
+      # those records and the agent-group fixture screenshots on every run;
+      # full result bundles remain failure-only.
+      - name: Export UI evidence
         id: recovery-evidence
         if: always()
         run: |
           out="$RUNNER_TEMP/recovery-evidence"
           mkdir -p "$out"
+          group_out="$RUNNER_TEMP/agent-group-evidence"
+          mkdir -p "$group_out"
           count=0
+          group_count=0
           for source in "$RESULT_BUNDLE" "$RESULT_BUNDLE-retry"; do
             if [ ! -d "$source" ]; then
               echo "No result bundle at $source; nothing to export"
@@ -798,12 +833,22 @@ jobs:
               && [ -f "$exported/manifest.json" ]; then
               while IFS=$'\t' read -r src name; do
                 [ -n "$src" ] && [ -f "$exported/$src" ] || continue
-                cp "$exported/$src" "$dest/$(printf '%s' "$name" | tr -cs 'A-Za-z0-9._-' '_')"
-                count=$((count + 1))
-              done < <(jq -r --arg prefix transcript-recovery-evidence- '
+                filename=$(printf '%s' "$name" | tr -cs 'A-Za-z0-9._-' '_')
+                if [[ "$name" == agent-group-evidence-* ]]; then
+                  group_dest="$group_out/$(basename "$source")"
+                  mkdir -p "$group_dest"
+                  cp "$exported/$src" "$group_dest/$filename"
+                  group_count=$((group_count + 1))
+                else
+                  cp "$exported/$src" "$dest/$filename"
+                  count=$((count + 1))
+                fi
+              done < <(jq -r --arg prefix transcript-recovery-evidence- --arg groups agent-group-evidence- '
                 .[]? | .attachments[]?
                 | select(((.suggestedHumanReadableName // "") | startswith($prefix))
-                         or ((.exportedFileName // "") | startswith($prefix)))
+                         or ((.exportedFileName // "") | startswith($prefix))
+                         or ((.suggestedHumanReadableName // "") | startswith($groups))
+                         or ((.exportedFileName // "") | startswith($groups)))
                 | [.exportedFileName, (.suggestedHumanReadableName // .exportedFileName)] | @tsv
               ' "$exported/manifest.json")
             else
@@ -812,6 +857,17 @@ jobs:
           done
           echo "Recovery evidence records: $count"
           echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Agent group screenshots: $group_count"
+          echo "group_count=$group_count" >> "$GITHUB_OUTPUT"
+
+      - name: Upload agent group screenshots
+        if: always() && steps.recovery-evidence.outputs.group_count != '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-agent-group-evidence
+          path: ${{ runner.temp }}/agent-group-evidence
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Upload transcript recovery evidence
         if: always() && steps.recovery-evidence.outputs.count != '0'
@@ -830,7 +886,7 @@ jobs:
     # dispatch to save runner time.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"macos-15"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'

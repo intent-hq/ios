@@ -5,6 +5,14 @@ tracked as `packages/ios` in [intent-hq/intent](https://github.com/intent-hq/int
 see the monorepo-root `AGENTS.md` for the cross-package workflow (submodule PR →
 monorepo bump, conventional commits).
 
+## SwiftUI layout
+
+`GeometryReader` is banned in `Intent/`, `IntentTests/`, and `IntentUITests/`.
+Use `onGeometryChange`, `containerRelativeFrame`, `Shape.path(in:)`, or a custom
+`Layout` instead. The `geometry_reader_usage` SwiftLint error and
+`IntentTests/LayoutPolicyTests.swift` enforce this rule. Do not add disable comments
+for the lint rule; the test also rejects them using packaged source inputs.
+
 ## Platform guards
 
 visionOS is a destination of the single `Intent` target. `#if os(visionOS)` and

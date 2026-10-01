@@ -34,12 +34,51 @@ struct ConnectingView: View {
             }
         }
         .padding(.bottom, Layout.contentBottomPadding)
+        .frame(maxWidth: .infinity)
+        .safeAreaInset(edge: .top, alignment: .leading, spacing: 0) {
+            if !coordinator.connectingStartedByLaunch {
+                homeButton
+                    .padding(.horizontal, Constants.ConnectionSheet.inset)
+            }
+        }
         // Keyed on connectionAttemptId: a connection switch performed while
         // this view is already showing (same screen value) bumps the id to
         // restart the attempt, which a plain one-shot .task would not.
         .task(id: coordinator.connectionAttemptId) {
             await attemptConnection()
         }
+    }
+
+    @ViewBuilder
+    private var homeButton: some View {
+        #if os(visionOS)
+        homeButtonContent
+            .glassBackgroundEffect(in: Circle())
+        #else
+        if #available(iOS 26.0, *) {
+            homeButtonContent
+                .glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            homeButtonContent
+                .background(.regularMaterial, in: Circle())
+        }
+        #endif
+    }
+
+    private var homeButtonContent: some View {
+        Button(action: coordinator.onReturnToSavedMachines) {
+            Image(.arrowLeft)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
+                .frame(width: Constants.Accessibility.minimumTapTarget, height: Constants.Accessibility.minimumTapTarget)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+        .accessibilityLabel("Back to Home")
+        .accessibilityHint("Return to your saved machines without forgetting this connection.")
+        .accessibilityIdentifier("connecting.home")
     }
 
     private func attemptConnection() async {

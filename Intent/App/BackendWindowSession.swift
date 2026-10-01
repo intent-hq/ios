@@ -90,6 +90,20 @@ final class BackendWindowSession {
         bind(to: nil)
     }
 
+    /// Hand the explicit selection to a new coordinator, but not an existing
+    /// window that is only being raised or left on the same backend.
+    func prepareForSelection(to target: BackendID, route: WindowRetargetRoute) {
+        switch route {
+        case .rebindInPlace:
+            guard session?.backendID != target else { return }
+        case .openTargetWindow, .replaceWindow:
+            // Raising an attached window creates no coordinator to consume a
+            // token. Do not let that selection leak into later restoration.
+            guard registry.attachmentCount(for: target) == 0 else { return }
+        }
+        registry.markConnectionSelected(target)
+    }
+
     /// Also used for an unchanged scene value: writing the same BackendID
     /// cannot trigger SwiftUI's onChange after returning Home.
     func rebind(to backendID: BackendID?) {

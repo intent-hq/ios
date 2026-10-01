@@ -113,6 +113,35 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     }
 
     @MainActor
+    func testSwipingBetweenResourceTypesClosesPreviousMenuAndTapDismissesWithoutOpening() {
+        let app = launchWorkspace()
+        openScriptsMenu(in: app)
+        app.buttons["workspace.script.menu.demo-server"].tap()
+        assertServerBrowser(in: app)
+        app.buttons["Done"].tap()
+        let script = app.buttons["workspace.script.demo-server"]
+        for _ in 0..<5 where !script.isHittable { app.swipeUp() }
+        XCTAssertTrue(script.waitForExistence(timeout: Self.timeout))
+        app.swipeUp()
+        let browser = app.buttons["browser.row.tab:demo-agent-browser"]
+        XCTAssertTrue(browser.isHittable)
+        XCTAssertTrue(script.isHittable)
+        browser.swipeLeft()
+        let browserDelete = app.buttons["browser.delete.tab:demo-agent-browser"]
+        XCTAssertTrue(browserDelete.waitForExistence(timeout: Self.timeout))
+        script.swipeLeft()
+        let stop = app.buttons["workspace.script.stop.demo-server"]
+        XCTAssertTrue(stop.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(browserDelete.waitForNonExistence(timeout: Self.timeout))
+        browser.tap()
+        XCTAssertTrue(stop.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.textFields["Browser URL"].exists)
+        browser.tap()
+        XCTAssertTrue(app.textFields["Browser URL"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Done"].exists)
+    }
+
+    @MainActor
     func testDeleteRunningRepositoryScriptAllowsFreshLaunchFromMenu() {
         let app = launchWorkspace(repositoryScripts: true)
         openScriptsMenu(in: app)

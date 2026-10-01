@@ -187,14 +187,6 @@ enum DemoFixtures {
         )
     }
 
-    static func blockHydrationDelay(from arguments: [String]) -> Duration {
-        delay(
-            from: arguments,
-            prefix: blockHydrationDelayArgumentPrefix,
-            defaultDelay: defaultBlockHydrationDelay
-        )
-    }
-
     private static func gate(
         from arguments: [String],
         triggerFilePrefix: String,
@@ -294,6 +286,7 @@ enum DemoFixtures {
     /// Gate to wait on before serving `response(for:params:)`, or nil for an
     /// immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
+        if let gate = agentGroupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         if let gate = startupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         switch method {
         case "settings.get" where params["path"] as? String == "providers.enabled":
@@ -307,6 +300,13 @@ enum DemoFixtures {
         default:
             return nil
         }
+    }
+
+    /// The loading UI test releases this response only after observing it.
+    static func agentGroupResponseGate(for method: String, params: [String: Any], arguments: [String]) -> ResponseGate? {
+        guard method == "agent.list", params["scope"] as? String == "background",
+              DemoDesignScenario.requested(by: arguments) == .agentGroupsRetry else { return nil }
+        return triggerFile(from: arguments, prefix: "--demo-agent-group-trigger-file=").map(ResponseGate.triggerFile)
     }
 
     /// Holds workspace policy validation until the UI test releases it (#446).
@@ -362,6 +362,7 @@ extension DemoFixtures {
         params: [String: Any],
         snapshotAnchor: Date = Date()
     ) -> Any {
+        if let response = DemoWorkspaceActionFixtures.response(for: method, params: params) { return response }
         if let response = designScenario?.response(for: method, params: params)
             ?? DemoTerminalFixtures.response(for: method, params: params)
             ?? DemoBrowserFixtures.response(for: method, params: params) { return response }
@@ -376,10 +377,19 @@ extension DemoFixtures {
         switch method {
         case "events.subscribe": return ["subscriptionId": "demo-events-\(params["replaceGroup"] as? String ?? "default")"]
         case "prMonitor.list": return ["monitors": [[String: Any]]()]
-        case "workspace.list":
-            return ["workspaces": workspaces]
-        case "note.list":
-            return ["notes": notes]
+        case "workspace.list": return ["workspaces": workspaces]
+        case "workspace.transfer.plan":
+            return [
+                "plan": [
+                    "manifest": [
+                        "workspaceId": params["workspaceId"] ?? "demo-workspace",
+                        "creatingIntentdVersion": "demo"
+                    ],
+                    "totalSizeBytes": 0,
+                    "warnings": [[String: String]]()
+                ]
+            ]
+        case "note.list": return ["notes": notes]
         case "note.get":
             let noteId = params["noteId"] as? String
             let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]
@@ -412,7 +422,7 @@ extension DemoFixtures {
         case "agent.list":
             let workspaceId = params["workspaceId"] as? String
             if workspaceId == Workspace.chiefWorkspaceId { return ["agents": assistantAgents] }
-            return ["agents": workspaceId == longConversationWorkspaceId ? longConversationAgents : agents]
+            return DemoAgentListFixtures.response(rows: workspaceId == longConversationWorkspaceId ? longConversationAgents : agents, params: params)
         case "agent.get":
             let agentId = params["agentId"] as? String
             if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) {
