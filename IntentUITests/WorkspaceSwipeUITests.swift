@@ -19,7 +19,12 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         if UIDevice.current.userInterfaceIdiom == .phone {
             app.buttons["conversation.back"].tap()
         } else {
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            let conversationBar = app.navigationBars["PR Reviewer"]
+            XCTAssertTrue(conversationBar.waitForExistence(timeout: Self.timeout))
+            let backButtons = conversationBar.buttons.matching(NSPredicate(
+                format: "label != %@ AND label != %@", "Show Sidebar", "Hide Sidebar"
+            ))
+            backButtons.firstMatch.tap()
         }
         XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(transcript.exists)
@@ -214,7 +219,13 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-workspace-actions"] + arguments
         app.launch()
-        XCTAssertTrue(app.buttons["workspace.row.\(Self.workspaceId)"].waitForExistence(timeout: Self.timeout))
+        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
+        if UIDevice.current.userInterfaceIdiom == .pad, !row.waitForExistence(timeout: 2) {
+            let showSidebar = app.buttons["Show Sidebar"]
+            XCTAssertTrue(showSidebar.waitForExistence(timeout: Self.timeout))
+            showSidebar.tap()
+        }
+        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
         return app
     }
 
