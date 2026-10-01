@@ -76,7 +76,6 @@ struct WorkspaceSearchBar: View {
 }
 
 struct WorkspaceSearchPresentation: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var text: String
     @Binding var isSearching: Bool
@@ -88,24 +87,26 @@ struct WorkspaceSearchPresentation: ViewModifier {
         content
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isSearching {
-                    HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
-                        WorkspaceSearchSlot(height: max(inputHeight, Constants.WorkspaceSearch.expandedHeight), isSearching: true)
-                        closeButton
-                    }
-                    .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
-                    .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
-                    .transition(.identity)
+                    WorkspaceSearchSlot(height: max(inputHeight, Constants.WorkspaceSearch.expandedHeight), isSearching: true)
+                        .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
+                        .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
+                        .transition(.identity)
                 }
             }
             .overlayPreferenceValue(WorkspaceSearchBounds.self) { measuredPlacement in
                 let frame = placement?.frame ?? .zero
-                WorkspaceSearchControl(text: $text, isSearching: $isSearching, isFocused: isFocused)
-                    .frame(width: frame.width, height: frame.height)
-                    .position(x: frame.midX, y: frame.midY)
-                    .opacity(placement == nil ? 0 : 1)
-                    .allowsHitTesting(placement != nil)
-                    .accessibilityHidden(placement == nil)
-                    .onChange(of: measuredPlacement, initial: true) { _, next in updatePlacement(next) }
+                WorkspaceSearchControl(
+                    text: $text,
+                    isSearching: $isSearching,
+                    isFocused: isFocused,
+                    size: frame.size,
+                    progress: placement?.isSearching == true ? 1 : 0
+                )
+                .position(x: frame.midX, y: frame.midY)
+                .opacity(placement == nil ? 0 : 1)
+                .allowsHitTesting(placement != nil)
+                .accessibilityHidden(placement == nil)
+                .onChange(of: measuredPlacement, initial: true) { _, next in updatePlacement(next) }
             }
             .coordinateSpace(name: WorkspaceSearchBounds.coordinateSpace)
             .animation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration), value: isSearching)
@@ -118,9 +119,110 @@ struct WorkspaceSearchPresentation: ViewModifier {
             placement = next
         }
     }
+}
+
+private struct WorkspaceSearchControl: View, Animatable {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding var text: String
+    @Binding var isSearching: Bool
+    var isFocused: FocusState<Bool>.Binding
+    nonisolated var size: CGSize
+    nonisolated var progress: CGFloat
+    @State private var closingText = ""
+    @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
+
+    nonisolated var animatableData: AnimatablePair<CGSize.AnimatableData, CGFloat> {
+        get { AnimatablePair(size.animatableData, progress) }
+        set {
+            size.animatableData = newValue.first
+            progress = newValue.second
+        }
+    }
+
+    private var splitProgress: CGFloat {
+        min(1, max(0, progress / Constants.WorkspaceSearch.splitCompletion))
+    }
+
+    private var iconVisibility: CGFloat {
+        1 - phase(from: Constants.WorkspaceSearch.iconFadeStart, to: Constants.WorkspaceSearch.iconFadeEnd)
+    }
+
+    private var fieldVisibility: CGFloat {
+        phase(from: Constants.WorkspaceSearch.fieldFadeStart, to: Constants.WorkspaceSearch.fieldFadeEnd)
+    }
+
+    private var fieldWidth: CGFloat {
+        max(size.height, size.width - (size.height + Constants.WorkspaceSearch.contentSpacing) * splitProgress)
+    }
+
+    private var controlShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            closeButton
+                .frame(width: size.height, height: size.height)
+                .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: controlShape)
+                .offset(x: max(0, size.width - size.height))
+                .allowsHitTesting(isSearching)
+                .accessibilityHidden(!isSearching)
+
+            ZStack(alignment: .leading) {
+                searchField
+                    .opacity(fieldVisibility)
+                    .allowsHitTesting(isSearching)
+                    .accessibilityHidden(!isSearching)
+                searchIcon
+                if !isSearching {
+                    searchButton
+                        .transition(.identity)
+                }
+            }
+            .frame(width: fieldWidth, height: size.height)
+            .background(Constants.WorkspaceList.controlSurface(for: colorScheme))
+            .clipShape(controlShape)
+        }
+        .frame(width: size.width, height: size.height, alignment: .leading)
+        // Geometry and contents already use the same interpolated progress.
+        .transaction { $0.animation = nil }
+        .onChange(of: isSearching) { _, searching in
+            if !searching { isFocused.wrappedValue = false }
+        }
+    }
+
+    private var searchIcon: some View {
+        let centeredInset = (size.height - Constants.WorkspaceSearch.iconSize) / 2
+        return Image(.search)
+            .resizable()
+            .scaledToFit()
+            .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
+            .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+            .padding(.leading, centeredInset + (Constants.WorkspaceSearch.inputLeadingInset - centeredInset) * progress)
+            .opacity(iconVisibility)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private var searchButton: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
+                isSearching = true
+            }
+        } label: {
+            Color.clear
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Search workspaces")
+        .accessibilityIdentifier("workspaces.search.open")
+    }
 
     private var closeButton: some View {
         Button {
+            closingText = text
             text = ""
             isFocused.wrappedValue = false
             withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
@@ -132,100 +234,68 @@ struct WorkspaceSearchPresentation: ViewModifier {
                 .scaledToFit()
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                 .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-                .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
-                .background(
-                    Constants.WorkspaceList.controlSurface(for: colorScheme),
-                    in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-                )
-        }
-        .buttonStyle(.plain)
-        .transition(reduceMotion ? .identity : .offset(x: Constants.WorkspaceSearch.expandedHeight + Constants.WorkspaceSearch.contentSpacing).combined(with: .opacity))
-        .accessibilityLabel("Close search")
-        .accessibilityIdentifier("workspaces.search.cancel")
-    }
-}
-
-private struct WorkspaceSearchControl: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Binding var text: String
-    @Binding var isSearching: Bool
-    var isFocused: FocusState<Bool>.Binding
-    @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
-
-    var body: some View {
-        ZStack {
-            if isSearching {
-                searchField
-                    .transition(.opacity)
-            } else {
-                searchButton
-                    .transition(.opacity)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Constants.WorkspaceList.controlSurface(for: colorScheme))
-        .clipShape(RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular))
-        .onChange(of: isSearching) { _, searching in
-            if !searching { isFocused.wrappedValue = false }
-        }
-    }
-
-    private var searchButton: some View {
-        Button {
-            withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
-                isSearching = true
-            }
-        } label: {
-            Image(.search)
-                .resizable()
-                .scaledToFit()
-                .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
-                .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+                .accessibilityHidden(true)
+                .opacity(splitProgress)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Search workspaces")
-        .accessibilityIdentifier("workspaces.search.open")
+        .accessibilityLabel("Close search")
+        .accessibilityIdentifier("workspaces.search.cancel")
     }
 
     private var searchField: some View {
         HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
-            TextField("Search workspaces", text: $text)
-                .interFont(Constants.Typography.bodyS)
-                .tracking(inputTracking)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .focused(isFocused)
-                .accessibilityIdentifier("workspaces.search.field")
-                .onAppear { isFocused.wrappedValue = true }
-                .onSubmit { isFocused.wrappedValue = false }
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                    isFocused.wrappedValue = true
-                } label: {
-                    Image(.closeCircle)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
-                        .foregroundStyle(contrast == .increased
-                            ? Theme.mutedForeground(for: colorScheme, contrast: contrast)
-                            : Constants.Pairing.mutedForeground(for: colorScheme))
-                        .accessibilityHidden(true)
-                        .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-                .accessibilityIdentifier("workspaces.search.clear")
+            if isSearching {
+                TextField("Search workspaces", text: $text)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                    .focused(isFocused)
+                    .accessibilityIdentifier("workspaces.search.field")
+                    .onAppear { isFocused.wrappedValue = true }
+                    .onSubmit { isFocused.wrappedValue = false }
+                    .transition(.identity)
+            } else {
+                Text(closingText.isEmpty ? "Search workspaces" : closingText)
+                    .foregroundStyle(closingText.isEmpty ? Constants.Pairing.mutedForeground(for: colorScheme) : Constants.Pairing.foreground(for: colorScheme))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(1)
+                    .accessibilityHidden(true)
+            }
+            if isSearching, !text.isEmpty {
+                clearButton
             }
         }
-        .padding(.leading, Constants.WorkspaceSearch.inputLeadingInset)
+        .interFont(Constants.Typography.bodyS)
+        .tracking(inputTracking)
+        .padding(.leading, Constants.WorkspaceSearch.inputLeadingInset + (Constants.WorkspaceSearch.iconSize + Constants.WorkspaceSearch.contentSpacing) * iconVisibility)
         .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
         .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
+    }
+
+    private var clearButton: some View {
+        Button {
+            text = ""
+            isFocused.wrappedValue = true
+        } label: {
+            Image(.closeCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
+                .foregroundStyle(contrast == .increased
+                    ? Theme.mutedForeground(for: colorScheme, contrast: contrast)
+                    : Constants.Pairing.mutedForeground(for: colorScheme))
+                .accessibilityHidden(true)
+                .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Clear search")
+        .accessibilityIdentifier("workspaces.search.clear")
+    }
+
+    private func phase(from start: CGFloat, to end: CGFloat) -> CGFloat {
+        min(1, max(0, (progress - start) / (end - start)))
     }
 }
 
