@@ -12,6 +12,10 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 280, dy: 0)))
         let transcript = app.scrollViews["transcript.scrollView"]
         XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let hideSidebar = app.navigationBars["Workspaces"].buttons["Hide Sidebar"]
+            if hideSidebar.exists { hideSidebar.tap() }
+        }
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "workspace-right-swipe-recent-agent"
         screenshot.lifetime = .keepAlways
@@ -21,10 +25,10 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         } else {
             let conversationBar = app.navigationBars["PR Reviewer"]
             XCTAssertTrue(conversationBar.waitForExistence(timeout: Self.timeout))
-            let backButtons = conversationBar.buttons.matching(NSPredicate(
-                format: "label != %@ AND label != %@", "Show Sidebar", "Hide Sidebar"
-            ))
-            backButtons.firstMatch.tap()
+            let backButton = conversationBar.buttons["BackButton"]
+            XCTAssertTrue(backButton.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(backButton.isHittable)
+            backButton.tap()
         }
         XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(transcript.exists)
