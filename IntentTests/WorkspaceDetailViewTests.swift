@@ -4,6 +4,25 @@ import Foundation
 import Testing
 
 struct WorkspaceDetailViewTests {
+    @MainActor
+    @Test(arguments: [WorkspaceTab.agents, .context, .changes, .unsupportedPersistedValue(42)])
+    func savedTabIsSelectedBeforeWorkspaceAppears(tab: WorkspaceTab) throws {
+        let suiteName = "WorkspaceDetailViewTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let persistence = PersistenceManager(defaults: defaults)
+        persistence.saveWorkspaceTab(workspaceId: "saved-workspace", tab: tab.persistedValue)
+        let session = makePinnedSession(connection: FakeConnectionManager())
+
+        let saved = WorkspaceDetailView(workspaceId: "saved-workspace", session: session, persistence: persistence)
+        let unsaved = WorkspaceDetailView(workspaceId: "new-workspace", session: session, persistence: persistence)
+
+        #expect(saved.selectedTab == tab)
+        #expect(unsaved.selectedTab == .agents)
+        #expect(persistence.loadWorkspaceTab(workspaceId: "saved-workspace") == tab.persistedValue)
+        #expect(persistence.loadWorkspaceTab(workspaceId: "new-workspace") == nil)
+    }
+
     @Test func delegatedAgentCountUsesLegibleSingularAndPluralLabels() {
         #expect(AgentGroupSummary.delegatedTitle(count: 1) == "1 delegated agent")
         #expect(AgentGroupSummary.delegatedTitle(count: 34) == "34 delegated agents")

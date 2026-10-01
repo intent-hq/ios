@@ -81,6 +81,32 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     }
 
     @MainActor
+    func testSelectedPanelSurvivesCancelledSwipeAndWorkspaceReentry() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .phone, "Compact navigation gesture")
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
+        workspace.tap()
+
+        for title in ["Changes", "Context", "Agents"] {
+            let tab = app.buttons[title].firstMatch
+            XCTAssertTrue(tab.waitForExistence(timeout: Fixture.elementTimeout))
+            tab.tap()
+            XCTAssertTrue(tab.isSelected)
+
+            edgeSwipe(in: app, progress: 0.15)
+            XCTAssertTrue(tab.isSelected, "Cancelling navigation must retain the \(title) panel")
+            edgeSwipe(in: app)
+            XCTAssertTrue(app.buttons[Fixture.workspaceListIdentifier].waitForExistence(timeout: Fixture.elementTimeout))
+            workspace.tap()
+            XCTAssertTrue(tab.waitForExistence(timeout: Fixture.elementTimeout))
+            XCTAssertTrue(tab.isSelected, "Re-entering the workspace must restore the \(title) panel")
+        }
+    }
+
+    @MainActor
     private func edgeSwipe(in app: XCUIApplication, progress: CGFloat = 0.85) {
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.5))
         let end = app.coordinate(withNormalizedOffset: CGVector(dx: progress, dy: 0.5))
