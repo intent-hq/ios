@@ -13,7 +13,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         let transcript = app.scrollViews["transcript.scrollView"]
         XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
         if UIDevice.current.userInterfaceIdiom == .pad {
-            let hideSidebar = app.buttons["Hide Sidebar"]
+            let hideSidebar = app.navigationBars["Workspaces"].buttons["Hide Sidebar"]
             if hideSidebar.exists { hideSidebar.tap() }
         }
         let screenshot = XCTAttachment(screenshot: app.screenshot())
