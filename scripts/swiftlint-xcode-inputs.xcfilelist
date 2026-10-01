@@ -356,6 +356,7 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationScrollViewSupport.sw
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptGestureProbe.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptRowHeightFrame.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Demo.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+DemoResize.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+EntryScroll.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Follow.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Geometry.swift
@@ -828,6 +829,7 @@ $(SRCROOT)/IntentUITests/ConversationTranscriptFullGateUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Keyboard.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
+$(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+RecoveryResize.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
 $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
