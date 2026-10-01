@@ -71,15 +71,70 @@ jobs:
   select-macos-runner:
     name: Select macOS runner
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
-      runs-on: ${{ steps.select.outputs.runs-on || '"macos-15"' }}
+      runs-on: ${{ steps.select.outputs.runs-on }}
+      preflight-head: ${{ steps.preflight.outputs.head }}
+      preflight-result: ${{ steps.preflight.outcome }}
     steps:
       - uses: actions/checkout@v7
-      - name: Check local Mac status
+      - name: Validate diagnostic source inputs
+        id: preflight
+        run: |
+          python3 - <<'PYPREFLIGHT'
+          import datetime
+          import json
+          import os
+          import subprocess
+          import time
+          from pathlib import Path
+
+          directory = Path("source-input-preflight")
+          directory.mkdir()
+          head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          receipt = {
+              "head": head, "expectedHead": os.environ["GITHUB_SHA"],
+              "runner": os.environ["RUNNER_NAME"], "platform": "Linux",
+              "macOSSandboxCoverage": False, "checks": [],
+          }
+          output = directory / "receipt.json"
+          output.write_text(json.dumps(receipt, indent=2))
+          if head != receipt["expectedHead"]:
+              raise SystemExit("Checkout does not match the dispatched source")
+          for script in ("scripts/check-swiftlint-inputs.sh", "scripts/test-generate-test-inputs.sh"):
+              command = ["bash", script]
+              log = directory / (Path(script).stem + ".log")
+              started = time.monotonic()
+              check = {
+                  "command": command, "timeoutSeconds": 20,
+                  "startedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  "log": log.name,
+              }
+              with log.open("w") as stream:
+                  result = subprocess.run(["timeout", "20s", *command], stdout=stream, stderr=subprocess.STDOUT)
+              check.update(exitCode=result.returncode, durationSeconds=time.monotonic() - started)
+              receipt["checks"].append(check)
+              output.write_text(json.dumps(receipt, indent=2))
+              print(json.dumps(check), flush=True)
+              print(log.read_text(), flush=True)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
+              stream.write(f"head={head}\n")
+          failed = next((check["exitCode"] for check in receipt["checks"] if check["exitCode"] != 0), 0)
+          raise SystemExit(failed if failed >= 0 else 128 - failed)
+          PYPREFLIGHT
+
+      - name: Use allocated iOS runner pool
         id: select
-        env:
-          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
-        run: bash .github/scripts/select-macos-runner.sh
+        run: echo 'runs-on=["self-hosted","macOS","ARM64","intent-ios"]' >> "$GITHUB_OUTPUT"
+
+      - name: Retain source-input preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: source-input-preflight
+          path: source-input-preflight
+          retention-days: 14
+          if-no-files-found: error
 
   go-test:
     name: Go unit tests (TailcatKit)
@@ -182,7 +237,9 @@ jobs:
     # step below waits for those jobs and fails this one if either did not
     # succeed. All three jobs still run in parallel.
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    # An unsuccessful preflight gets an explicit refusal on Ubuntu, without
+    # reserving a Mac or running any build/simulator step.
+    runs-on: ${{ fromJSON(needs.select-macos-runner.result == 'success' && needs.select-macos-runner.outputs.runs-on || '["ubuntu-latest"]') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -190,10 +247,45 @@ jobs:
       # and write the test result bundle where the artifact upload expects it.
       SPM_CLONE_DIR: build/SourcePackages
       RESULT_BUNDLE: TestResults
+      TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO: '1'
+      TEST_CRASH_RETRY: '0'
+      SIM_LOCK_TIMEOUT: '0'
+      RECOVERY_DIAGNOSTIC_BASE_SHA: b3bb82f691a801551db2b832d7c109a3cc309485
+      RECOVERY_DIAGNOSTIC_RUNTIME: 26.3.1
       SIMULATOR_FAMILY: ${{ github.event_name == 'workflow_dispatch' && inputs.simulator_family || 'iphone' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Require successful source-input preflight
+        env:
+          PREFLIGHT_JOB_RESULT: ${{ needs.select-macos-runner.result }}
+          PREFLIGHT_STEP_RESULT: ${{ needs.select-macos-runner.outputs.preflight-result }}
+          PREFLIGHT_HEAD: ${{ needs.select-macos-runner.outputs.preflight-head }}
+          PREFLIGHT_RUNS_ON: ${{ needs.select-macos-runner.outputs.runs-on }}
+        run: |
+          python3 - <<'PYREQUIRE'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          receipt = {key: os.environ.get(key, "") for key in (
+              "PREFLIGHT_JOB_RESULT", "PREFLIGHT_STEP_RESULT", "PREFLIGHT_HEAD", "PREFLIGHT_RUNS_ON",
+          )}
+          receipt["expectedHead"] = os.environ["GITHUB_SHA"]
+          receipt["checkedOutHead"] = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          directory = Path("recovery-evidence")
+          directory.mkdir(exist_ok=True)
+          (directory / "source-input-preflight-gate.json").write_text(json.dumps(receipt, indent=2))
+          print(json.dumps(receipt, indent=2))
+          if (receipt["PREFLIGHT_JOB_RESULT"] != "success"
+                  or receipt["PREFLIGHT_STEP_RESULT"] != "success"
+                  or receipt["PREFLIGHT_HEAD"] != receipt["expectedHead"]
+                  or receipt["checkedOutHead"] != receipt["expectedHead"]
+                  or receipt["PREFLIGHT_RUNS_ON"] != '["self-hosted","macOS","ARM64","intent-ios"]'):
+              raise SystemExit("Source-input preflight did not pass for this exact source; refusing native work")
+          PYREQUIRE
 
       # Persistent runners must not mix Swift objects from different branches.
       - name: Use isolated build directory
@@ -253,9 +345,8 @@ jobs:
       - name: Select Xcode
         run: |
           if [ '${{ runner.environment }}' = self-hosted ]; then
-            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
-            # local results agree with hosted ones; the Mac's default Xcode
-            # stays untouched (ios#588, ios#592).
+            # Reuse installed Xcode 26.3 without changing the Mac's default.
+            # This diagnostic separately admits only an existing iOS 26.3.1 device.
             xcode=/Applications/Xcode_26.3.app
             if [ ! -d "$xcode" ]; then
               echo "::error::$xcode is not installed on this runner" >&2
@@ -270,8 +361,56 @@ jobs:
       - name: Check Metal Toolchain on local Mac
         if: runner.environment == 'self-hosted'
         run: |
-          xcodebuild -downloadComponent MetalToolchain
+          # This diagnostic may use only installed toolchains.
           xcrun metal -v
+
+      - name: Admit exact installed diagnostic runtime
+        run: |
+          mkdir -p recovery-evidence
+          python3 - <<'PYRUNTIME'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          def simctl(*args):
+              return json.loads(subprocess.check_output(["xcrun", "simctl", "list", *args, "-j"], text=True))
+
+          runtimes = simctl("runtimes")
+          devices = simctl("devices", "available")
+          Path("recovery-evidence/runtimes.json").write_text(json.dumps(runtimes, indent=2))
+          Path("recovery-evidence/devices.json").write_text(json.dumps(devices, indent=2))
+          receipt = {
+              "runner": os.environ["RUNNER_NAME"],
+              "head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+              "sourceBase": os.environ["RECOVERY_DIAGNOSTIC_BASE_SHA"],
+              "requiredRuntime": os.environ["RECOVERY_DIAGNOSTIC_RUNTIME"],
+          }
+          output = Path("recovery-evidence/runtime-admission.json")
+          output.write_text(json.dumps(receipt, indent=2))
+          candidates = []
+          for runtime in runtimes["runtimes"]:
+              if (runtime.get("platform") != "iOS" or not runtime.get("isAvailable")
+                      or runtime.get("version") != receipt["requiredRuntime"]):
+                  continue
+              for device in devices["devices"].get(runtime["identifier"], []):
+                  if device.get("isAvailable") and "iPhone" in (device.get("deviceTypeIdentifier") or device["name"]):
+                      candidates.append((runtime, device))
+          requested = os.environ.get("SIM_UDID")
+          if requested:
+              candidates = [pair for pair in candidates if pair[1]["udid"] == requested]
+          if not candidates:
+              raise SystemExit("No existing available iPhone on exact iOS 26.3.1; refusing creation or fallback")
+          runtime, device = min(candidates, key=lambda pair: (
+              pair[1]["name"] != "CI iPhone 16 (iOS 26.3.1)",
+              "iPhone 16" not in pair[1]["name"], pair[1]["udid"],
+          ))
+          receipt.update(runtime=runtime, device=device)
+          output.write_text(json.dumps(receipt, indent=2))
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"SIM_UDID={device['udid']}\n")
+          print(json.dumps(receipt, indent=2))
+          PYRUNTIME
 
       # iPhone selection follows the runner's existing route. The optional iPad lane
       # creates a fresh device and records its ownership before exporting the
@@ -280,7 +419,10 @@ jobs:
         env:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
-          if [ "$SIMULATOR_FAMILY" = ipad ]; then
+          if [ -n "${RECOVERY_DIAGNOSTIC_RUNTIME:-}" ]; then
+            test -n "$SIM_UDID"
+            echo "Using admitted iOS $RECOVERY_DIAGNOSTIC_RUNTIME device $SIM_UDID"
+          elif [ "$SIMULATOR_FAMILY" = ipad ]; then
             python3 scripts/ci_simulator.py prepare
           else
             if [ '${{ runner.environment }}' = self-hosted ]; then
@@ -299,6 +441,8 @@ jobs:
       # launching. Output goes to a log file that the "Simulator state" step
       # prints later, so a failed or slow boot is visible instead of silent.
       - name: Pre-boot simulator
+        # The diagnostic lets the canonical test wrapper boot under its lock.
+        if: env.RECOVERY_DIAGNOSTIC_RUNTIME == ''
         run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
 
       # The gomobile bind output (and the tcecho helper binary) are
@@ -425,7 +569,8 @@ jobs:
       # DerivedData folder; start each self-hosted job from a clean build, as
       # hosted runners do (ios#592).
       - name: Clear DerivedData on local Mac
-        if: runner.environment == 'self-hosted'
+        # The diagnostic already has a unique DERIVED_DATA_DIR; leave other builds alone.
+        if: runner.environment == 'self-hosted' && env.RECOVERY_DIAGNOSTIC_RUNTIME == ''
         run: .github/scripts/clear-local-derived-data.sh
 
       - name: Resolve SPM packages
@@ -473,6 +618,49 @@ jobs:
       # a selector that matches or executes nothing fails with exit 82, an
       # unverifiable selection with 83, and the per-selector table is appended
       # to the job summary (see the script header).
+      - name: Record recovery candidate provenance
+        env:
+          ONLY_TESTING: ${{ inputs.only_testing }}
+        run: |
+          mkdir -p recovery-evidence
+          git fetch --no-tags --depth=1 origin "$RECOVERY_DIAGNOSTIC_BASE_SHA"
+          python3 - <<'PYSOURCE'
+          import os
+          import subprocess
+
+          expected = {".github/workflows/ci.yml"}
+          changed = subprocess.check_output([
+              "git", "diff", "--name-only", os.environ["RECOVERY_DIAGNOSTIC_BASE_SHA"], "HEAD",
+          ], text=True).splitlines()
+          assert set(changed) == expected, changed
+          PYSOURCE
+          git diff "$RECOVERY_DIAGNOSTIC_BASE_SHA" HEAD -- .github/workflows/ci.yml > recovery-evidence/workflow.patch
+          {
+            date -u
+            git show -s --format='%H%n%P%n%s' HEAD
+            echo "Uninstrumented source commit: $RECOVERY_DIAGNOSTIC_BASE_SHA"
+            git diff "$RECOVERY_DIAGNOSTIC_BASE_SHA" HEAD --stat
+            xcodebuild -version
+            sw_vers
+            uptime
+            echo "RUNNER_NAME=$RUNNER_NAME RUNNER_OS=$RUNNER_OS RUNNER_ARCH=$RUNNER_ARCH"
+            echo "SIM_UDID=$SIM_UDID REQUIRED_RUNTIME=$RECOVERY_DIAGNOSTIC_RUNTIME"
+            cat recovery-evidence/source-input-preflight-gate.json
+            cat recovery-evidence/runtime-admission.json
+            echo "ONLY_TESTING=$ONLY_TESTING"
+            echo "TEST_CRASH_RETRY=$TEST_CRASH_RETRY SIM_LOCK_TIMEOUT=$SIM_LOCK_TIMEOUT"
+            shasum -a 256 recovery-evidence/workflow.patch
+            xcrun simctl list runtimes
+          } > recovery-evidence/provenance.txt
+
+      - name: Run transcript policy and lifecycle regressions
+        env:
+          RESULT_BUNDLE: TestResults-recovery-policy
+          ONLY_TESTING: IntentTests/ConversationTranscriptScrollPolicyTests IntentTests/TranscriptRecoveryLifecycleTests
+        run: |
+          set -o pipefail
+          scripts/xcodebuild.sh test-without-building 2>&1 | tee recovery-evidence/policy-tests.log
+
       - name: Run unit tests
         id: selected-tests
         env:
@@ -484,10 +672,46 @@ jobs:
             export ONLY_TESTING_IDENTITIES_PATH="$IPAD_EVIDENCE_DIR/resolved-tests.json"
             scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/test.log"
           elif [ -n "$ONLY_TESTING" ]; then
-            scripts/xcodebuild.sh test-without-building
+            set -o pipefail
+            scripts/xcodebuild.sh test-without-building 2>&1 | tee recovery-evidence/test.log
           else
             scripts/xcodebuild.sh test-without-building-unit
           fi
+
+      - name: Preserve recovery validation and require four actual passes
+        if: always() && steps.selected-tests.outcome != 'skipped'
+        run: |
+          test -d TestResults
+          bundle="$RUNNER_TEMP/b58i-recovery.xcresult"
+          ln -s "$PWD/TestResults" "$bundle"
+          xcrun xcresulttool get test-results tests --path "$bundle" > recovery-evidence/tests.json
+          xcrun xcresulttool export attachments --path "$bundle" --output-path recovery-evidence/attachments
+          python3 - <<'PYPROOF'
+          import json
+          from pathlib import Path
+
+          expected = {
+              "ConversationTranscriptScrollUITests/testTappingSuggestedPromptKeepsTranscriptAtBottomAndGoToEndHidden",
+              "ConversationTranscriptScrollUITests/testHooksRowResizeKeepsRecoveryPagedUpUntilFollowBack",
+              "ConversationTranscriptScrollUITests/testKeyboardOpenKeepsTranscriptAtEnd",
+              "ConversationTranscriptScrollUITests/testSoftwareKeyboardPrerequisiteSkipsWhenKeyboardIsAbsent",
+          }
+          rows = []
+
+          def walk(nodes):
+              for node in nodes:
+                  if node.get("nodeType") == "Test Case":
+                      identity = str(node.get("nodeIdentifier") or node.get("name") or "").removesuffix("()")
+                      rows.append((identity, node.get("result")))
+                  walk(node.get("children", []))
+
+          walk(json.loads(Path("recovery-evidence/tests.json").read_text())["testNodes"])
+          print(rows)
+          assert len(rows) == 2, "Expected exactly two executed controls"
+          for test in expected:
+              assert len([row for row in rows if row[0].endswith(test) and row[1] == "Passed"]) == 1, test
+          print("Both diagnostic cases passed; inspect the retained recovery trace before claiming a cause or correction.")
+          PYPROOF
 
       - name: Require actual iPad execution
         if: always() && env.SIMULATOR_FAMILY == 'ipad' && steps.selected-tests.outcome != 'skipped'
@@ -569,14 +793,17 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload test results
-        if: failure() || (github.event_name == 'workflow_dispatch' && contains(inputs.only_testing, 'WorkspaceChangesUITests'))
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: ios-unit-test-results
+          retention-days: 14
           path: |
+            recovery-evidence
             TestResults
             TestResults-source-moved
             TestResults-keychain
+            TestResults-recovery-policy
 
       # See the job comment: turns a go-test or swiftlint failure into a
       # failure of this (the only ruleset-required) job. Both normally finish
