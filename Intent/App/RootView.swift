@@ -18,7 +18,6 @@ struct RootView: View {
     @State private var statusWorkspaceId: String?
     @State private var isSearchingWorkspaces = false
     @State private var showingCreateWorkspace = false
-    @State private var showingConnections = false
     @State private var conversationIsPopping = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
@@ -157,18 +156,13 @@ struct RootView: View {
                 isSearching: isSearchingWorkspaces,
                 alignment: .trailing,
                 avoidsConversationInput: !conversationIsPopping,
-                onCreateWorkspace: { if coordinator.canCreateWorkspace { showingCreateWorkspace = true } },
-                onConnections: { showingConnections = true }
+                onCreateWorkspace: { if coordinator.canCreateWorkspace { showingCreateWorkspace = true } }
             ))
             .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
                 if shouldDismiss { showingCreateWorkspace = false }
             }
             .sheet(isPresented: $showingCreateWorkspace) {
                 CreateWorkspaceView(session: session)
-                    .environment(coordinator)
-            }
-            .sheet(isPresented: $showingConnections) {
-                ConnectionsView()
                     .environment(coordinator)
             }
         }

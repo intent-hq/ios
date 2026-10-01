@@ -13,6 +13,9 @@ struct HomeActionTiles: View {
     let connectionCount: Int
     let appearance: String
     let themePreference: String
+    /// The tile currently expanded into its destination panel; its surface morphs out of the row.
+    let expandedAction: Action?
+    let morphNamespace: Namespace.ID
     let onSelect: (Action) -> Void
     var allowsWorkspaceCreation = true
     var allowsAssistant = true
@@ -35,6 +38,8 @@ struct HomeActionTiles: View {
         static let badgeClearance: CGFloat = 2
     }
 
+    static let cornerRadius = Layout.cornerRadius
+
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Layout.spacing) {
@@ -50,12 +55,17 @@ struct HomeActionTiles: View {
         .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         .scrollTargetBehavior(.viewAligned)
         .contentMargins(.horizontal, Layout.inset, for: .scrollContent)
+        // A morphing surface grows past the row; clipping it would cut the expanding panel.
+        .scrollClipDisabled()
         .fixedSize(horizontal: false, vertical: true)
+        .allowsHitTesting(expandedAction == nil)
+        .accessibilityHidden(expandedAction != nil)
         .accessibilityIdentifier("intent.menu.tiles")
     }
 
     private func tile(_ action: Action) -> some View {
-        Button { onSelect(action) } label: {
+        let isExpanded = expandedAction == action
+        return Button { onSelect(action) } label: {
             VStack(alignment: .leading) {
                 icon(action)
                     .frame(width: Layout.iconSize, height: Layout.iconSize)
@@ -63,17 +73,40 @@ struct HomeActionTiles: View {
                 Spacer(minLength: Layout.inset)
                 tileTitle(action)
             }
+            .opacity(isExpanded ? 0 : 1)
             .padding(Layout.inset)
             .frame(maxWidth: .infinity, minHeight: max(Layout.minimumHeight, tileHeight), alignment: .leading)
             .containerRelativeFrame(.horizontal, count: dynamicTypeSize.isAccessibilitySize ? 1 : 2, spacing: Layout.spacing)
-            .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
+            .background {
+                // Removing the surface while the panel inserts its own pairs them for the morph.
+                if !isExpanded {
+                    surface(action)
+                }
+            }
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
         }
         .buttonStyle(HomeActionTileStyle())
+        .opacity(expandedAction == nil || isExpanded ? 1 : 0)
         .accessibilityLabel(action == .appearance ? "Appearance" : title(action))
         .accessibilityValue(action == .appearance ? appearance : "")
         .accessibilityHint(action == .appearance ? "Changes appearance" : "")
         .accessibilityIdentifier("intent.menu.\(action.rawValue)")
+    }
+
+    private func surface(_ action: Action) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular)
+                .fill(Constants.WorkspaceList.controlSurface(for: colorScheme))
+                .matchedGeometryEffect(id: HomeActionMorph.surface(action), in: morphNamespace)
+            Color.clear
+                .matchedGeometryEffect(
+                    id: HomeActionMorph.content(action),
+                    in: morphNamespace,
+                    properties: .position,
+                    anchor: .topLeading
+                )
+        }
+        .transition(HomeActionMorph.surfaceTransition)
     }
 
     private func tileTitle(_ action: Action) -> some View {
@@ -136,10 +169,14 @@ struct HomeActionTiles: View {
         switch action {
         case .assistant: "Chat With\nAssistant"
         case .workspace: "New\nWorkspace"
-        case .connections: "Connections:\n\(connectionCount) \(connectionCount == 1 ? "Device" : "Devices")"
+        case .connections: Self.connectionsTitle(count: connectionCount)
         case .appearance: "Appearance:\n\(appearance)"
         case .settings: "Settings"
         }
+    }
+
+    static func connectionsTitle(count: Int) -> String {
+        "Connections:\n\(count) \(count == 1 ? "Device" : "Devices")"
     }
 
     private func asset(_ action: Action) -> ImageResource {

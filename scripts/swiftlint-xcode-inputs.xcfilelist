@@ -398,6 +398,7 @@ $(SRCROOT)/Intent/Views/Settings/SettingsSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsStyle.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsSupportSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsView.swift
+$(SRCROOT)/Intent/Views/Workspaces/ConnectionsMenuPanel.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift

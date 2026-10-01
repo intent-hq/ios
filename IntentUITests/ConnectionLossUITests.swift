@@ -172,7 +172,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"
         ])
         app.openHomeAction("connections")
-        // Wait for the parent sheet and its action before presenting a nested sheet.
+        // Wait for the saved-connections panel and its action before presenting a nested sheet.
         let machine = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Demo Mac")).firstMatch
         XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(machine.isHittable)
@@ -184,7 +184,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         let detailsTitle = app.staticTexts["saved-connection.details-title"]
         XCTAssertTrue(detailsTitle.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
-        // Both sheets own a Close button; only the presented Details action is hittable.
+        // Only the presented Details sheet owns a hittable Close button.
         let closeButtons = app.buttons.matching(identifier: "connection-sheet.close")
             .allElementsBoundByIndex.filter { $0.isHittable }
         XCTAssertEqual(closeButtons.count, 1)

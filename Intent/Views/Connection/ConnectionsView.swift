@@ -92,10 +92,38 @@ enum ConnectionPairing {
 
 /// Saved daemon connections and direct actions to pair another daemon.
 struct ConnectionsView: View {
-    @Environment(AppCoordinator.self) var coordinator
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ConnectionSheet(
+            initialHeight: Constants.Connections.initialSheetHeight,
+            backgroundColor: Constants.Connections.background(for: colorScheme),
+            closeForeground: Constants.Connections.foreground(for: colorScheme)
+        ) {
+            SavedConnectionsContent(
+                headerAlignment: .center,
+                headerSpacing: Constants.Connections.headingToCardsSpacing,
+                onDismiss: { dismiss() }
+            ) { _ in
+                ConnectionSheetText(
+                    "Saved Connections", style: Constants.Typography.heading2, tracking: Constants.Connections.headingTracking
+                )
+                .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("saved-connections.title")
+            }
+        }
+    }
+}
+
+/// The saved-connection list, its management actions, and the direct pairing actions.
+/// Each presenter supplies the heading (given the saved count) and decides what dismissal means.
+struct SavedConnectionsContent<Header: View>: View {
+    @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session
-    @Environment(\.dismiss) var dismiss
-    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.colorScheme) private var colorScheme
     // False on iPhone, so the Open in New Window action never appears there.
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @Environment(\.openWindow) private var openWindow
@@ -104,25 +132,29 @@ struct ConnectionsView: View {
     @State private var connectionPendingDelete: StoredConnection?
     @State private var showDeleteError = false
     @ScaledMetric private var menuIconSize: CGFloat = 17
+    private let headerAlignment: HorizontalAlignment
+    private let headerSpacing: CGFloat
+    private let onDismiss: () -> Void
+    private let header: (Int) -> Header
+
+    init(
+        headerAlignment: HorizontalAlignment,
+        headerSpacing: CGFloat,
+        onDismiss: @escaping () -> Void,
+        @ViewBuilder header: @escaping (Int) -> Header
+    ) {
+        self.headerAlignment = headerAlignment
+        self.headerSpacing = headerSpacing
+        self.onDismiss = onDismiss
+        self.header = header
+    }
 
     var body: some View {
-        ConnectionSheet(
-            initialHeight: Constants.Connections.initialSheetHeight,
-            backgroundColor: Constants.Connections.background(for: colorScheme),
-            closeForeground: Constants.Connections.foreground(for: colorScheme)
-        ) {
-            VStack(spacing: Constants.Connections.headingToCardsSpacing) {
-                ConnectionSheetText(
-                    "Saved Connections", style: Constants.Typography.heading2, tracking: Constants.Connections.headingTracking
-                )
-                .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
-                .multilineTextAlignment(.center)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("saved-connections.title")
-                VStack(spacing: Constants.Connections.cardsToPairingSpacing) {
-                    connectionsList
-                    ConnectionPairingActions(colorScheme: colorScheme, onPaired: handlePaired)
-                }
+        VStack(alignment: headerAlignment, spacing: headerSpacing) {
+            header(connections.count)
+            VStack(spacing: Constants.Connections.cardsToPairingSpacing) {
+                connectionsList
+                ConnectionPairingActions(colorScheme: colorScheme, onPaired: handlePaired)
             }
         }
         .sheet(item: $connectionShowingDetails) { connection in
@@ -150,7 +182,7 @@ struct ConnectionsView: View {
         }
         .onAppear {
             // Pull in registry changes synced from other devices while
-            // the sheet was closed, then show the merged list.
+            // the list was closed, then show the merged list.
             coordinator.refreshSyncedBackends()
             reload()
         }
@@ -186,7 +218,7 @@ struct ConnectionsView: View {
             if connection.id != windowConnectionId {
                 coordinator.onSwitchConnection(id: connection.id)
             }
-            dismiss()
+            onDismiss()
         } label: {
             SavedConnectionCard(
                 name: connection.displayName,
@@ -236,7 +268,7 @@ struct ConnectionsView: View {
     private func openInNewWindowButton(_ connection: StoredConnection) -> some View {
         Button {
             openWindow(value: BackendID(connection: connection))
-            dismiss()
+            onDismiss()
         } label: {
             Label {
                 Text("Open in New Window").interFont(Constants.Typography.bodyS)
@@ -247,7 +279,7 @@ struct ConnectionsView: View {
     }
 
     private func handlePaired(_ connection: StoredConnection) {
-        dismiss()
+        onDismiss()
         coordinator.onPaired(connection)
     }
 
@@ -258,7 +290,7 @@ struct ConnectionsView: View {
             return
         }
         reload()
-        if wasBound { dismiss() }
+        if wasBound { onDismiss() }
     }
 
     private func reload() {

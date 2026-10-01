@@ -10,7 +10,6 @@ struct WorkspaceListView: View {
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
-    @State private var showingConnections = false
     @State private var showingConnectionSwitcher = false
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var workspaceSwipeProgress: [String: CGFloat] = [:]
@@ -32,7 +31,7 @@ struct WorkspaceListView: View {
 
     private var canSwitchConnections: Bool {
         guard case .workspaceList = coordinator.currentScreen else { return false }
-        return !showingConnections && !showingCreateWorkspace && pendingAction == nil && actionError == nil
+        return !showingCreateWorkspace && pendingAction == nil && actionError == nil
     }
 
     var body: some View {
@@ -49,10 +48,7 @@ struct WorkspaceListView: View {
                 showingConnectionSwitcher = false
                 if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
             },
-            onConnections: {
-                showingConnectionSwitcher = false
-                showingConnections = true
-            }
+            onConnections: { showingConnectionSwitcher = false }
         ))
         .navigationTitle("Workspaces")
         .toolbar(.hidden, for: .navigationBar)
@@ -61,10 +57,6 @@ struct WorkspaceListView: View {
         }
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView(session: session)
-                .environment(coordinator)
-        }
-        .sheet(isPresented: $showingConnections) {
-            ConnectionsView()
                 .environment(coordinator)
         }
         .alert(pendingAction?.action.title ?? "Workspace", isPresented: confirmationPresented, presenting: pendingAction) { pending in
@@ -83,10 +75,6 @@ struct WorkspaceListView: View {
         .onChange(of: viewModel.viewMode) { _, _ in revealedSwipeTarget = nil }
         .onChange(of: viewModel.searchText) { _, _ in revealedSwipeTarget = nil }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
-        .preference(
-            key: ConnectionBackdropPreference.self,
-            value: showingConnections ? ConnectionBackdropPreference.savedOpacity : 0
-        )
     }
 
     private var workspacePage: some View {

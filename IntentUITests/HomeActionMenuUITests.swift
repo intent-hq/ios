@@ -159,8 +159,16 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertEqual(reveal("appearance", in: app).value as? String, "Dark Mode")
         reveal("appearance", in: app).tap()
         reveal("connections", in: app).tap()
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
-        // Relaunch restores the home screen without depending on the connection sheet's detent.
+        let connectionsTitle = app.staticTexts["saved-connections.title"]
+        XCTAssertTrue(connectionsTitle.waitForExistence(timeout: Self.timeout))
+        // The tile expands in place: the panel's Back replaces the menu's Close and returns to the tiles.
+        XCTAssertFalse(app.buttons["intent.menu.close"].exists)
+        let back = app.buttons["intent.menu.connections.back"]
+        XCTAssertTrue(waitUntilHittable(back))
+        back.tap()
+        XCTAssertTrue(connectionsTitle.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(waitUntilHittable(app.buttons["intent.menu.close"]))
+        XCTAssertTrue(reveal("connections", in: app).isHittable)
         app.terminate()
         // Argument-domain overrides mask later writes, so remove it before exercising live changes.
         app.launchArguments = ["--demo-data", "--demo-long-workspace-list"]

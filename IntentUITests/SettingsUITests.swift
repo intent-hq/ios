@@ -242,8 +242,9 @@ nonisolated final class SettingsUITests: XCTestCase {
         let title = app.staticTexts["saved-connections.title"]
         XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
         capture(app, named: "Connections-" + appearance)
-        app.buttons["connection-sheet.close"].tap()
+        app.buttons["intent.menu.connections.back"].tap()
         XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
+        app.buttons["intent.menu.close"].tap()
         openSettings(app)
     }
 

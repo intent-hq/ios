@@ -6,7 +6,8 @@ struct WorkspaceActionLauncher: ViewModifier {
     var alignment: HorizontalAlignment = .trailing
     var avoidsConversationInput = true
     let onCreateWorkspace: () -> Void
-    let onConnections: () -> Void
+    /// Runs as the connections tile starts expanding into its panel.
+    var onConnections: () -> Void = {}
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -14,6 +15,8 @@ struct WorkspaceActionLauncher: ViewModifier {
     @State private var isOpen = false
     @State private var connectionCount = 0
     @State private var overlayBottom: CGFloat = 0
+    @State private var expandedAction: HomeActionTiles.Action?
+    @Namespace private var morphNamespace
 
     private enum Layout {
         static let blurRadius: CGFloat = 15
@@ -27,6 +30,9 @@ struct WorkspaceActionLauncher: ViewModifier {
         static let menuBottomInset: CGFloat = 24
         static let launcherBottomInset: CGFloat = 12
         static let tileEntranceOffset: CGFloat = 20
+        static let morphResponse = 0.45
+        static let morphDamping = 0.82
+        static let panelMaxWidth: CGFloat = 480
     }
 
     func body(content: Content) -> some View {
@@ -50,6 +56,9 @@ struct WorkspaceActionLauncher: ViewModifier {
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
             }
+            .onChange(of: isOpen) { _, open in
+                if !open { expandedAction = nil }
+            }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
             .onDisappear { isOpen = false }
     }
@@ -61,7 +70,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                     .opacity(backdropOpacity)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
-                    .onTapGesture { isOpen = false }
+                    .onTapGesture { stepBack() }
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
@@ -74,10 +83,20 @@ struct WorkspaceActionLauncher: ViewModifier {
                         value: bottomInset
                     )
             }
+            if isOpen, expandedAction == .connections {
+                ConnectionsMenuPanel(namespace: morphNamespace, onBack: collapse) { isOpen = false }
+                    .frame(maxWidth: Layout.panelMaxWidth)
+                    // Like the open menu, the panel meets the screen edge unless it must clear an input.
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, bottomInset == 0 ? 0 : bottomInset + Layout.launcherBottomInset)
+                    .ignoresSafeArea(.container, edges: bottomInset == 0 ? .bottom : [])
+                    .transition(HomeActionMorph.surfaceTransition)
+                    .zIndex(1)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOpen ? .isModal : [])
-        .accessibilityAction(.escape) { isOpen = false }
+        .accessibilityAction(.escape) { stepBack() }
     }
 
     private var backdropOpacity: Double {
@@ -93,6 +112,8 @@ struct WorkspaceActionLauncher: ViewModifier {
                     connectionCount: connectionCount,
                     appearance: appearanceTitle,
                     themePreference: themePreference,
+                    expandedAction: expandedAction,
+                    morphNamespace: morphNamespace,
                     onSelect: select,
                     allowsWorkspaceCreation: coordinator.canCreateWorkspace,
                     allowsAssistant: coordinator.canUseAssistant
@@ -103,6 +124,9 @@ struct WorkspaceActionLauncher: ViewModifier {
                 if !isOpen { connectionCount = PersistenceManager.shared.loadConnections().count }
                 isOpen.toggle()
             }
+            .opacity(expandedAction == nil ? 1 : 0)
+            .allowsHitTesting(expandedAction == nil)
+            .accessibilityHidden(expandedAction != nil)
         }
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .bottom))
     }
@@ -115,18 +139,41 @@ struct WorkspaceActionLauncher: ViewModifier {
         }
     }
 
+    private var morphAnimation: Animation? {
+        reduceMotion ? nil : .spring(response: Layout.morphResponse, dampingFraction: Layout.morphDamping)
+    }
+
     private func select(_ action: HomeActionTiles.Action) {
-        if action == .appearance {
-            themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"
-            return
-        }
-        isOpen = false
         switch action {
-        case .assistant: coordinator.onSelectAssistant()
-        case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
-        case .connections: onConnections()
-        case .settings: coordinator.onOpenSettings()
-        case .appearance: break
+        case .appearance:
+            themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"
+        case .connections:
+            onConnections()
+            withAnimation(morphAnimation) { expandedAction = .connections }
+        case .assistant:
+            isOpen = false
+            coordinator.onSelectAssistant()
+        case .workspace:
+            isOpen = false
+            if coordinator.canCreateWorkspace { onCreateWorkspace() }
+        case .settings:
+            isOpen = false
+            coordinator.onOpenSettings()
+        }
+    }
+
+    private func collapse() {
+        // The panel may have added or removed connections; keep the tile's count honest.
+        connectionCount = PersistenceManager.shared.loadConnections().count
+        withAnimation(morphAnimation) { expandedAction = nil }
+    }
+
+    /// Backdrop taps and the escape gesture leave an expanded panel for the menu, then close the menu.
+    private func stepBack() {
+        if expandedAction == nil {
+            isOpen = false
+        } else {
+            collapse()
         }
     }
 }

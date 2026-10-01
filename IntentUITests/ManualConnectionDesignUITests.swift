@@ -14,32 +14,24 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
         let backgroundPoint = app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: search.frame.midX, dy: search.frame.midY))
+        let title = app.staticTexts["saved-connections.title"]
+        let close = app.buttons["intent.menu.close"]
         openSaved(in: app)
+        // The menu shade takes the tap: it steps back to the tiles and never reaches search.
         backgroundPoint.tap()
-        XCTAssertFalse(app.textFields["workspaces.search.field"].exists, "The native modal shield must block search")
+        XCTAssertFalse(app.textFields["workspaces.search.field"].exists, "The menu shade must block search")
+        XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
         capture(app, named: "saved-background-blocked")
-        // The system may dismiss a short detent on a dimmer tap. It must not
-        // deliver that same tap to search underneath, whether it dismisses or not.
-        if !app.staticTexts["saved-connections.title"].exists { openSaved(in: app) }
+        close.tap()
 
-        app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
-        capture(app, named: "saved-close-cleanup")
         openSaved(in: app)
-        let close = app.buttons["connection-sheet.close"].frame
-        let origin = app.coordinate(withNormalizedOffset: .zero)
-        let start = origin.withOffset(CGVector(dx: app.frame.midX, dy: close.minY))
-        // A short, slow pull cancels rather than finishing interactive dismissal.
-        let shortPull = origin.withOffset(CGVector(dx: app.frame.midX, dy: close.minY + 20))
-        start.press(forDuration: 0.1, thenDragTo: shortPull, withVelocity: .slow, thenHoldForDuration: 0.5)
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].exists)
+        app.buttons["intent.menu.connections.back"].tap()
+        XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
         XCTAssertFalse(app.textFields["workspaces.search.field"].exists)
-        capture(app, named: "saved-cancelled-swipe")
-        start.press(forDuration: 0.1, thenDragTo: origin.withOffset(
-            CGVector(dx: app.frame.midX, dy: app.frame.maxY - 10)
-        ))
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
-        capture(app, named: "saved-swipe-cleanup")
+        capture(app, named: "saved-back-cleanup")
+        close.tap()
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         search.tap()
         XCTAssertTrue(app.textFields["workspaces.search.field"].waitForExistence(timeout: Self.timeout))
     }
