@@ -83,7 +83,9 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
             .clipped()
             .contentShape(Rectangle())
             .modifier(WorkspaceRowSwipeGesture(onChanged: drag, onEnded: finish, onCancelled: settle))
-            .sensoryFeedback(.impact(weight: .light), trigger: leadingSwipeArmed) { _, armed in armed }
+            .onChange(of: leadingSwipeArmed) { _, armed in
+                if armed { HapticManager.impact(.light) }
+            }
             .onChange(of: isRevealed) { _, _ in
                 if offset != restingOffset { settle() }
             }
