@@ -218,6 +218,8 @@ private struct WorkspaceSearchControl: View, Animatable {
         } label: {
             Image(isSearching || progress > 0 ? .close : .search)
                 .resizable()
+                .id(isSearching || progress > 0)
+                .transition(.identity)
                 .scaledToFit()
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                 .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
