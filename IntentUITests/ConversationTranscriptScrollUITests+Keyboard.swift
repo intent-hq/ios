@@ -71,13 +71,35 @@ extension ConversationTranscriptScrollUITests {
         geometry.name = "keyboard-resize-geometry"
         geometry.lifetime = .keepAlways
         add(geometry)
+        // A resize can pin the preserved entry without requesting a forced
+        // follow. Still require idle settlement, the end gap and quiet window.
         assertRestsAtBottom(
             lastRow: endRow.element,
             named: endRow.name,
             endRow: endRow,
             in: opened,
-            context: "after the keyboard opened"
+            context: "after the keyboard opened",
+            allowPreservedEntry: true
         )
+    }
+
+    func testKeyboardResizeSettlementAcceptsPreservedEntryWithoutForcedFollow() {
+        let report = "lastForcedFollow=pending endRecovery=recovered corrections=1 episodes=3 endRealized=true "
+            + "entry=preserved metadataReady=true forcedRequested=false followActive=false forcedRequests=0 phase=idle"
+        XCTAssertTrue(viewportHasReportedSettlement(report, allowPreservedEntry: true))
+        XCTAssertFalse(viewportHasReportedSettlement(report), "Explicit forced actions keep their stricter settlement")
+        for (settled, unsettled) in [
+            ("followActive=false", "followActive=true"), ("phase=idle", "phase=gesture"),
+            ("endRecovery=recovered", "endRecovery=recovering"), ("forcedRequested=false", "forcedRequested=true"),
+            ("metadataReady=true", "metadataReady=false"), ("entry=preserved", "entry=pending")
+        ] {
+            XCTAssertFalse(
+                viewportHasReportedSettlement(
+                    report.replacingOccurrences(of: settled, with: unsettled), allowPreservedEntry: true
+                ),
+                "A keyboard resize must not settle with \(unsettled)"
+            )
+        }
     }
 
     /// Exercise the real absent-keyboard query without a hardware preference
