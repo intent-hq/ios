@@ -707,10 +707,10 @@ jobs:
 
           walk(json.loads(Path("recovery-evidence/tests.json").read_text())["testNodes"])
           print(rows)
-          assert len(rows) == 2, "Expected exactly two executed controls"
+          assert len(rows) == len(expected), "Expected exactly four executed controls"
           for test in expected:
               assert len([row for row in rows if row[0].endswith(test) and row[1] == "Passed"]) == 1, test
-          print("Both diagnostic cases passed; inspect the retained recovery trace before claiming a cause or correction.")
+          print("All four candidate cases passed; retain the overlap receipt and source-bound results.")
           PYPROOF
 
       - name: Require actual iPad execution
