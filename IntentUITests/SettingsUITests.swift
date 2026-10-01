@@ -41,37 +41,6 @@ nonisolated final class SettingsUITests: XCTestCase {
     }
 
     @MainActor
-    func testSavedConnectionSelectionUsesWindowRouting() {
-        let app = launch()
-        openSettings(app)
-        assertConnections(app, current: "Studio Mac", other: "Travel Mac")
-        card(app, named: "Studio Mac").tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
-        openSettings(app)
-        card(app, named: "Travel Mac").tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
-        openSettings(app)
-        assertConnections(app, current: "Travel Mac", other: "Studio Mac")
-
-        // Resuming this process must keep the user's selection. Backgrounding
-        // also gives the native scene its real restoration lifecycle.
-        XCUIDevice.shared.press(.home)
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: Self.timeout))
-        app.activate()
-        assertConnections(app, current: "Travel Mac", other: "Studio Mac")
-        XCUIDevice.shared.press(.home)
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: Self.timeout))
-        app.terminate()
-        app.launch()
-        openSettings(app)
-        assertConnections(app, current: "Studio Mac", other: "Travel Mac")
-        card(app, named: "Travel Mac").tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
-        openSettings(app)
-        assertConnections(app, current: "Travel Mac", other: "Studio Mac")
-    }
-
-    @MainActor
     func testPairingCancellationAndAcknowledgementsReturnToSettings() {
         let app = launch()
         openSettings(app)
@@ -96,7 +65,6 @@ nonisolated final class SettingsUITests: XCTestCase {
         acknowledgements.buttons.firstMatch.tap()
         XCTAssertTrue(acknowledgements.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        assertConnections(app, current: "Studio Mac", other: "Travel Mac")
         XCTAssertTrue(app.buttons["settings.close"].isHittable)
     }
 
@@ -115,7 +83,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         app.buttons["log-off.cancel"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        assertConnections(app, current: "Studio Mac", other: "Travel Mac")
+        XCTAssertTrue(app.buttons["settings.close"].isHittable)
     }
 
     @MainActor
@@ -135,7 +103,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        assertConnections(app, current: "Studio Mac", other: "Travel Mac")
+        XCTAssertTrue(app.buttons["settings.close"].isHittable)
     }
 
     @MainActor
@@ -201,23 +169,7 @@ nonisolated final class SettingsUITests: XCTestCase {
     private func openSettings(_ app: XCUIApplication) {
         app.openHomeAction("settings")
         XCTAssertTrue(app.buttons["settings.close"].waitForExistence(timeout: Self.timeout))
-    }
-
-    @MainActor
-    private func card(_ app: XCUIApplication, named name: String) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "settings.connection.", name)).firstMatch
-    }
-
-    @MainActor
-    private func assertConnections(_ app: XCUIApplication, current: String, other: String) {
-        let selected = card(app, named: current)
-        XCTAssertTrue(selected.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(selected.isSelected)
-        XCTAssertTrue(selected.label.contains("Connected"))
-        let saved = card(app, named: other)
-        XCTAssertTrue(saved.exists)
-        XCTAssertFalse(saved.isSelected)
-        XCTAssertFalse(saved.label.contains("Connected"))
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "settings.connection.")).firstMatch.exists)
     }
 
     @MainActor

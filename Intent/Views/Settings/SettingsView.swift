@@ -60,8 +60,6 @@ private struct SettingsContent: View {
 
     var body: some View {
         settingsSurface
-            .onAppear { coordinator.refreshSyncedBackends() }
-            .refreshable { coordinator.refreshSyncedBackends() }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showLogOffConfirmation) {
                 LogOffConfirmationSheet { coordinator.onLogOff() }
@@ -78,13 +76,9 @@ private struct SettingsContent: View {
                     SettingsAppearanceSelector(selection: $themePreference)
                 }
                 .padding(.bottom, SettingsStyle.appearanceBottomSpacing)
-                SettingsConnectionsSection(
-                    connections: coordinator.savedConnections,
-                    windowConnectionID: coordinator.windowConnectionID,
-                    status: session.connection.connectionState,
-                    mismatches: session.connection.certMismatches,
-                    onSelect: selectConnection
-                )
+                if !session.connection.certMismatches.isEmpty {
+                    CertMismatchListView(mismatches: session.connection.certMismatches)
+                }
                 SettingsPairingSection()
                 SettingsSupportSection()
                 logOffButton
@@ -115,14 +109,6 @@ private struct SettingsContent: View {
 
     private var outerBackground: Color {
         presentedAsSheet ? .clear : (colorScheme == .dark ? SettingsStyle.charcoal : SettingsStyle.lightChrome)
-    }
-
-    private func selectConnection(_ id: UUID) {
-        if id == coordinator.windowConnectionID {
-            coordinator.onSettingsBack()
-        } else {
-            coordinator.onSwitchConnection(id: id)
-        }
     }
 
     private var logOffButton: some View {
