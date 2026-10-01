@@ -65,12 +65,17 @@ final class AppCoordinatorLifecycleState {
 class AppCoordinator {
     var currentScreen: AppScreen = .loading {
         didSet {
+            navigationState.recentWorkspaceAgentRequestId = nil
             if !currentScreen.supportsConnectionLossOverlay {
                 resetConnectionLossEligibility()
             }
         }
     }
-    var selectedSection: AppSection = .workspaces
+    var selectedSection: AppSection = .workspaces {
+        didSet {
+            if selectedSection != oldValue { navigationState.recentWorkspaceAgentRequestId = nil }
+        }
+    }
     var assistantAgentId: String?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false {
@@ -104,6 +109,7 @@ class AppCoordinator {
 
     var selectedWorkspaceId: String? {
         didSet {
+            if selectedWorkspaceId != oldValue { navigationState.recentWorkspaceAgentRequestId = nil }
             if let workspaceId = selectedWorkspaceId,
                selectedWorkspaceId != oldValue,
                !navigationState.suppressWorkspaceNavigation {

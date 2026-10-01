@@ -183,7 +183,7 @@ import Observation
     /// and whole-second RFC-3339 forms (which string comparison misorders).
     /// Agents with no parseable timestamp sort last, with id as a stable
     /// tiebreak.
-    private static func byLastActivity(_ firstAgent: AgentSession, _ secondAgent: AgentSession) -> Bool {
+    static func byLastActivity(_ firstAgent: AgentSession, _ secondAgent: AgentSession) -> Bool {
         let dateA = ISO8601DateFormatter.lenientDate(from: firstAgent.bestTimestamp)
         let dateB = ISO8601DateFormatter.lenientDate(from: secondAgent.bestTimestamp)
         switch (dateA, dateB) {

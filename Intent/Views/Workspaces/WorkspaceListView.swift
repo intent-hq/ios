@@ -267,6 +267,9 @@ struct WorkspaceListView: View {
         ) {
             searchFocused = false
             coordinator.onSelectWorkspace(workspace.id)
+        } onOpenRecentAgent: {
+            searchFocused = false
+            coordinator.onOpenRecentWorkspaceAgent(workspace.id)
         } onAction: { action in
             searchFocused = false
             pendingAction = PendingAction(workspace: workspace, action: action)

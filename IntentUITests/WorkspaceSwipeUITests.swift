@@ -5,6 +5,54 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
     private static let workspaceId = "demo-ws-dashboard"
 
     @MainActor
+    func testRightSwipeOpensRecentAgentAndBackReturnsToWorkspace() {
+        let app = launchWorkspaces()
+        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 280, dy: 0)))
+        let transcript = app.scrollViews["transcript.scrollView"]
+        XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "workspace-right-swipe-recent-agent"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            app.buttons["conversation.back"].tap()
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+        XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(transcript.exists)
+    }
+
+    @MainActor
+    func testShortRightSwipeCancelsAndTapStillOpensOverview() {
+        let app = launchWorkspaces()
+        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 60, dy: 0)))
+        XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
+        XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
+        row.tap()
+        XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
+    }
+
+    @MainActor
+    func testClosingTrailingActionsWithLongRightSwipeDoesNotOpenAgent() {
+        let app = launchWorkspaces()
+        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
+        revealActions(on: row)
+        let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
+        XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+        let start = visibleRowPoint(in: app, row: row, action: archive)
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 220, dy: 0)))
+        XCTAssertTrue(archive.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
+        XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
+    }
+
+    @MainActor
     func testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh() {
         let app = launchWorkspaces()
         let row = app.buttons["workspace.row.\(Self.workspaceId)"]

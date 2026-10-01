@@ -6,6 +6,9 @@ struct WorkspaceRowView: View {
     var showRepo: Bool = true
     var spacious = false
     var timestampOpacity: Double = 1
+    var statusIconHidden = false
+    var leadingSwipeProgress: CGFloat = 0
+    var onStatusCenterChanged: (CGFloat) -> Void = { _ in }
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Workspace-scoped PR monitors feeding the pill pool and the "+N"
@@ -51,6 +54,10 @@ struct WorkspaceRowView: View {
         HStack(alignment: Self.titleCenter, spacing: spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
             // Status icon with agent activity / unread dot overlays
             WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme)
+                .opacity(statusIconHidden ? 0 : 1)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.frame(in: .named(workspace.id)).midY
+                } action: { onStatusCenterChanged($0) }
 
             VStack(alignment: .leading, spacing: spacious ? Constants.WorkspaceRow.spaciousTitleSpacing : Constants.WorkspaceRow.titleSpacing) {
                 titleRow
@@ -80,9 +87,11 @@ struct WorkspaceRowView: View {
                     }
             }
         }
+        .offset(x: -(Constants.WorkspaceRow.statusIconSize + (spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing)) * leadingSwipeProgress)
         .contentShape(Rectangle())
         .padding(.vertical, spacious ? Constants.WorkspaceRow.spaciousPadding : Constants.WorkspaceRow.verticalPadding)
         .padding(.horizontal, spacious ? 0 : Constants.WorkspaceRow.horizontalPadding)
+        .coordinateSpace(name: workspace.id)
         .visionAttentionCue(workspaceNeedsInput(workspace))
         .task(id: workspace.id) {
             guard !Task.isCancelled else { return }
@@ -322,8 +331,10 @@ struct WorkspaceRowView: View {
                 .opacity(timestampOpacity)
         }
     }
+}
 
-    private func relativeDate(from isoString: String) -> String {
+private extension WorkspaceRowView {
+    func relativeDate(from isoString: String) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         guard let date = formatter.date(from: isoString) else {
