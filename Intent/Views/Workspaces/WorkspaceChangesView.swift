@@ -17,6 +17,7 @@ struct WorkspaceChangesView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedFile: WorkspaceChange?
     @State private var selectedCommit: WorkspaceCommit?
+    @State private var areCommitsExpanded = true
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
@@ -33,8 +34,8 @@ struct WorkspaceChangesView: View {
                     Text("Loading changes…").interFont(Constants.Typography.bodyS)
                 }
             } else if store.hasLoaded {
-                fileSection("Unstaged", files: store.unstagedChanges)
-                fileSection("Staged", files: store.stagedChanges)
+                fileSection("Unstaged", identifier: "unstaged", files: store.unstagedChanges)
+                fileSection("Staged", identifier: "staged", files: store.stagedChanges)
                 commitsSection
                 if store.isTruncated {
                     Text("Some changed files could not be listed. Open the desktop app to see all changes.")
@@ -129,47 +130,18 @@ struct WorkspaceChangesView: View {
         )
     }
 
-    private func fileSection(_ title: String, files: [WorkspaceChange]) -> some View {
-        VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
-            sectionHeading("\(title) (\(files.count))")
-            if files.isEmpty {
-                Text("No \(title.lowercased()) files")
-                    .interFont(Constants.Typography.bodyS)
-                    .foregroundStyle(secondary)
-            }
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(files) { file in
-                    fileRow(file)
-                        .overlay(alignment: .bottom) {
-                            if file.id != files.last?.id { rowDivider }
-                        }
-                }
-            }
-        }
-    }
-
-    private func fileRow(_ file: WorkspaceChange) -> some View {
-        Button { selectedFile = file } label: {
-            WorkspaceChangesRow(title: file.path) {
-                metadataLayout {
-                    Text([file.status.capitalized, file.agentName].compactMap { $0 }.joined(separator: " · "))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if file.isBinary {
-                        Text("Binary")
-                    } else if file.hasLineStats {
-                        WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
-                    }
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Opens the file diff")
+    private func fileSection(_ title: String, identifier: String, files: [WorkspaceChange]) -> some View {
+        WorkspaceChangesFileTree(
+            title: title,
+            identifier: identifier,
+            files: files,
+            scope: "\(workspaceId):\(store.selectedRootId ?? "")",
+            onSelect: { selectedFile = $0 }
+        )
     }
 
     private var commitsSection: some View {
-        VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
-            sectionHeading("Commits")
+        WorkspaceChangesSection(title: "Commits", count: store.commits.count, identifier: "commits", isExpanded: $areCommitsExpanded) {
             if store.commits.isEmpty {
                 Text("No workspace commits yet")
                     .interFont(Constants.Typography.bodyS)
@@ -236,38 +208,25 @@ struct WorkspaceChangesView: View {
             .frame(height: CreateWorkspaceRepoStyle.dividerHeight)
             .accessibilityHidden(true)
     }
-
-    private func sectionHeading(_ title: String) -> some View {
-        Text(title)
-            .interFont(Constants.Typography.eyebrow)
-            .textCase(.uppercase)
-            .tracking(CreateWorkspaceRepoStyle.sectionTracking)
-            .foregroundStyle(CreateWorkspaceRepoStyle.sectionForeground(for: colorScheme, contrast: contrast))
-            .accessibilityAddTraits(.isHeader)
-    }
 }
 
-private struct WorkspaceChangesRow<Detail: View>: View {
+struct WorkspaceChangesRow<Detail: View>: View {
     let title: String
+    var symbol: String?
     @ViewBuilder let detail: () -> Detail
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
 
     var body: some View {
-        HStack(spacing: CreateWorkspaceRepoStyle.rowSpacing) {
-            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.rowTextSpacing) {
-                Text(title)
-                    .interFont(Constants.Typography.bodySEmphasized)
-                    .tracking(CreateWorkspaceRepoStyle.nameTracking)
-                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                    .fixedSize(horizontal: false, vertical: true)
-                detail()
-                    .font(Constants.Typography.subtextXXS.font)
-                    .tracking(CreateWorkspaceRepoStyle.fullNameTracking)
+        HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: iconSize))
                     .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
+                    .accessibilityHidden(true)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            text
             Image(.chevronRight)
                 .resizable()
                 .scaledToFit()
@@ -279,6 +238,21 @@ private struct WorkspaceChangesRow<Detail: View>: View {
         .padding(CreateWorkspaceFormStyle.pagePadding)
         .frame(maxWidth: .infinity, minHeight: CreateWorkspaceRepoStyle.rowMinimumHeight, alignment: .leading)
         .contentShape(.rect)
+    }
+
+    private var text: some View {
+        VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.rowTextSpacing) {
+            Text(title)
+                .interFont(Constants.Typography.bodySEmphasized)
+                .tracking(CreateWorkspaceRepoStyle.nameTracking)
+                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+            detail()
+                .font(Constants.Typography.subtextXXS.font)
+                .tracking(CreateWorkspaceRepoStyle.fullNameTracking)
+                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

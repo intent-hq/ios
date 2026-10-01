@@ -10,9 +10,10 @@ enum DemoChangesFixtures {
             return [
                 "changes": [
                     change(path: "Sources/Analytics.swift", stage: "unstaged"),
+                    change(path: "Sources/Analytics/Events.swift", stage: "unstaged"),
                     change(path: "Tests/AnalyticsTests.swift", stage: "staged")
                 ],
-                "truncated": false, "totalCount": 2
+                "truncated": false, "totalCount": 3
             ]
         case "file-tracking.loadCommits":
             return [
