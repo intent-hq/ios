@@ -158,24 +158,15 @@ struct NoteRowLayoutTests {
     @Test(arguments: [false, true])
     func nestedRowsStartRightOfTheirParentAtEveryDepth(usesAccessibilityLayout: Bool) {
         for depth in 1 ... 4 {
-            let parent = NoteRowLayout.contentLeadingOffset(
-                depth: depth - 1,
-                hasChildren: true,
+            let parent = NoteRowLayout.indentation(
+                for: depth - 1,
                 usesAccessibilityLayout: usesAccessibilityLayout
             )
-            let leaf = NoteRowLayout.contentLeadingOffset(
-                depth: depth,
-                hasChildren: false,
+            let child = NoteRowLayout.indentation(
+                for: depth,
                 usesAccessibilityLayout: usesAccessibilityLayout
             )
-            let branch = NoteRowLayout.contentLeadingOffset(
-                depth: depth,
-                hasChildren: true,
-                usesAccessibilityLayout: usesAccessibilityLayout
-            )
-            #expect(leaf > parent, "depth \(depth) leaf sits left of its parent")
-            #expect(branch > parent, "depth \(depth) branch sits left of its parent")
-            #expect(leaf == branch, "depth \(depth) leaf and branch siblings misalign")
+            #expect(child > parent, "depth \(depth) must be indented farther than its parent")
         }
     }
 

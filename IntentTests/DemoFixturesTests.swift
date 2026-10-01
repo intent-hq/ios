@@ -678,9 +678,9 @@ extension DemoFixturesTests {
             == .delay(DemoFixtures.defaultBlockHydrationDelay))
         #expect(DemoFixtures.blockHydrationGate(from: ["--demo-data", "--demo-block-hydration-delay-ms=9000"])
             == .delay(.milliseconds(9_000)))
-        #expect(DemoFixtures.blockHydrationDelay(from: ["--demo-block-hydration-delay-ms=0"]) == .zero)
-        #expect(DemoFixtures.blockHydrationDelay(from: ["--demo-block-hydration-delay-ms=abc"])
-            == DemoFixtures.defaultBlockHydrationDelay)
+        #expect(DemoFixtures.blockHydrationGate(from: ["--demo-block-hydration-delay-ms=0"]) == .delay(.zero))
+        #expect(DemoFixtures.blockHydrationGate(from: ["--demo-block-hydration-delay-ms=abc"])
+            == .delay(DemoFixtures.defaultBlockHydrationDelay))
         #expect(DemoFixtures.blockHydrationGate(from: ["--demo-block-hydration-trigger-file=/tmp/a.trigger"])
             == .triggerFile(URL(fileURLWithPath: "/tmp/a.trigger")))
         #expect(DemoFixtures.blockHydrationGate(from: [

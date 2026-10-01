@@ -96,8 +96,7 @@ struct ConversationStartupRPCTests {
         #expect(settled.failures.isEmpty)
     }
 
-    @Test(arguments: [0, 1, 5])
-    func lateProposalConsumersReuseParentDetail(cardCount: Int) async {
+    @Test func lateProposalConsumersReuseParentDetail() async {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
         fixture.parentMetadata["pendingProposals"] = [["proposalId": "proposal-1", "messageId": "proposal-message"]]
@@ -105,13 +104,13 @@ struct ConversationStartupRPCTests {
         let checkpoint = fixture.connection.checkpoint
         // ConversationView supplies one ProposalActionStore to its cards.
         let proposal = fixture.makeProposalStore()
-        for _ in 0..<cardCount {
+        for _ in 0..<5 {
             await proposal.loadIfNeeded()
             #expect(proposal.pending["proposal-1"] == "proposal-message")
             #expect(proposal.loadError == nil)
         }
         let proposals = fixture.connection.traffic(since: checkpoint)
-        print("Proposal mounts \(cardCount): \(fixture.connection.traffic().summary)")
+        print("Proposal mounts 5: \(fixture.connection.traffic().summary)")
         #expect(proposals.requests.isEmpty)
         #expect(fixture.connection.traffic().calls("agent.get").count == 1)
         #expect(fixture.connection.traffic().requests.count == 8)

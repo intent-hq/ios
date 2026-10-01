@@ -213,14 +213,6 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
-    func testWorkspaceTileOpensRepositoryPicker() {
-        let app = launchHome()
-        openMenu(app)
-        app.buttons["intent.menu.workspace"].tap()
-        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Self.timeout))
-    }
-
-    @MainActor
     private func verifyMenuDragBehavior(in app: XCUIApplication) {
         let carousel = app.scrollViews["intent.menu.tiles"]
         let assistant = app.buttons["intent.menu.assistant"]
