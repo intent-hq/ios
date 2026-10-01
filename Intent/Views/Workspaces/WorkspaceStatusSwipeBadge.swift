@@ -18,7 +18,7 @@ struct WorkspaceStatusSwipeBadge: View {
     }
     private var size: CGSize {
         CGSize(
-            width: dotSize + (labelSize.width - dotSize) * expansion,
+            width: dotSize + (min(labelSize.width, max(dotSize, availableWidth)) - dotSize) * expansion,
             height: dotSize + (labelSize.height - dotSize) * expansion
         )
     }
@@ -54,7 +54,7 @@ struct WorkspaceStatusSwipeBadge: View {
                 .accessibilityHidden(true)
             Text(status == .blocked ? "Blocker" : status.label)
                 .interFont(Constants.Typography.bodySEmphasized)
-                .lineLimit(2)
+                .lineLimit(1)
                 .frame(maxWidth: max(1, availableWidth - Style.labelInsets))
         }
         .foregroundStyle(Constants.Pairing.onAccent)
@@ -94,7 +94,7 @@ private extension WorkspaceDisplayStatus {
     }
 }
 
-private struct WorkspaceStatusBadgeShape: Shape {
+nonisolated private struct WorkspaceStatusBadgeShape: Shape {
     var progress: CGFloat
     let stretches: Bool
     var animatableData: CGFloat {
@@ -128,7 +128,7 @@ private struct WorkspaceStatusBadgeShape: Shape {
         return path
     }
 
-    private enum Style {
+    nonisolated private enum Style {
         static let cornerRadius: CGFloat = 20
         static let neckDepth: CGFloat = 0.3
         static let shoulder: CGFloat = 0.4

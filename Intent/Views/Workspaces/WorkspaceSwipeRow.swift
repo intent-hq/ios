@@ -23,9 +23,16 @@ struct WorkspaceSwipeRow: View {
 
     private var actionSize: CGFloat { max(Constants.Accessibility.minimumTapTarget, scaledActionSize) }
     private var horizontalInset: CGFloat { spacious ? Constants.WorkspaceList.pageInset : 0 }
-    private var leadingWidth: CGFloat {
-        min(badgeWidth + Constants.WorkspaceList.swipeActionsLeadingSpacing + horizontalInset, max(actionSize, rowSize.width * BadgeStyle.maximumSwipeFraction))
+    private var statusInset: CGFloat { horizontalInset + (spacious ? 0 : Constants.WorkspaceRow.horizontalPadding) }
+    private var leadingLayout: WorkspaceSwipePolicy.LeadingLayout {
+        WorkspaceSwipePolicy.leadingLayout(
+            rowWidth: rowSize.width,
+            badgeWidth: badgeWidth,
+            leadingInset: statusInset,
+            gap: Constants.WorkspaceList.swipeActionsLeadingSpacing
+        )
     }
+    private var leadingWidth: CGFloat { leadingLayout.revealWidth }
     private var leadingProgress: CGFloat { min(1, max(0, swipeOffset / max(1, leadingWidth))) }
 
     private var dividerOpacity: Double {
@@ -59,10 +66,10 @@ struct WorkspaceSwipeRow: View {
             WorkspaceStatusSwipeBadge(
                 workspace: workspace,
                 progress: leadingProgress,
-                availableWidth: max(actionSize, rowSize.width - 2 * horizontalInset - Constants.WorkspaceList.swipeActionsLeadingSpacing)
+                availableWidth: leadingLayout.maximumBadgeWidth
             ) { badgeWidth = $0 }
             .offset(
-                x: horizontalInset + (spacious ? 0 : Constants.WorkspaceRow.horizontalPadding) + min(0, swipeOffset),
+                x: statusInset + min(0, swipeOffset),
                 y: statusCenter + (rowSize.height / 2 - statusCenter) * leadingProgress - Constants.WorkspaceRow.statusIconSize / 2
             )
         }
@@ -94,7 +101,6 @@ struct WorkspaceSwipeRow: View {
 
     private enum BadgeStyle {
         static let initialWidth: CGFloat = 136
-        static let maximumSwipeFraction: CGFloat = 0.7
     }
 
     private func workspaceButton(swipeProgress: CGFloat) -> some View {

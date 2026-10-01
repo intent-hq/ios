@@ -6,6 +6,22 @@ struct WorkspaceSwipePolicyTests {
     private static let leadingWidth: CGFloat = 168
     private static let trailingWidth: CGFloat = 136
 
+    @Test(arguments: [CGFloat(180), 300, 402], [CGFloat(136), 268, 600])
+    func longBadgesStayBeforeTheCard(rowWidth: CGFloat, measuredBadgeWidth: CGFloat) {
+        let gap: CGFloat = 32
+        for leadingInset: CGFloat in [0, 4, 24] {
+            let layout = WorkspaceSwipePolicy.leadingLayout(
+                rowWidth: rowWidth,
+                badgeWidth: measuredBadgeWidth,
+                leadingInset: leadingInset,
+                gap: gap
+            )
+            let badgeRightEdge = leadingInset + min(measuredBadgeWidth, layout.maximumBadgeWidth)
+            #expect(badgeRightEdge + gap <= layout.revealWidth)
+            #expect(layout.revealWidth < rowWidth)
+        }
+    }
+
     @Test func rightSwipeFollowsTheFingerAndRequiresTheFullDistance() {
         let partial: CGFloat = 80
         #expect(WorkspaceSwipePolicy.offset(
