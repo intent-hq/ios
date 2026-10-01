@@ -17,6 +17,10 @@ nonisolated enum AppLog {
         func debug(_ message: @autoclosure () -> String) {
             #if DEBUG
             let renderedMessage = message()
+            // Scratch-only recovery diagnostics: retain debug scroll events in xcresult stdout.
+            if renderedMessage.hasPrefix("[SCROLL]"), ProcessInfo.processInfo.arguments.contains("--demo-data") {
+                print(renderedMessage)
+            }
             logger.debug("\(renderedMessage, privacy: .public)")
             #endif
         }

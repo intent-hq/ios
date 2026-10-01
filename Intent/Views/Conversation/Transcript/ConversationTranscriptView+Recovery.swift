@@ -58,6 +58,10 @@ extension ConversationTranscriptView {
                 correctionsSpent: scrollState.unrealizedEndRecoveryCorrections,
                 timedOut: ContinuousClock.now >= deadline
             )
+            AppLog.userInterface.debug(
+                "[SCROLL] diagnostic poll=\(token) step=\(step) spent=\(scrollState.unrealizedEndRecoveryCorrections) "
+                    + "geometry=\(String(describing: geometry)) previous=\(String(describing: previous))"
+            )
             previous = geometry
             switch step {
             case .continue(let continuation):
@@ -96,6 +100,10 @@ extension ConversationTranscriptView {
             for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds)
         )
         guard !Task.isCancelled else { return false }
+        AppLog.userInterface.debug(
+            "[SCROLL] diagnostic after-page-up geometry=\(String(describing: scrollMomentumProxy.restingGeometry)) "
+                + "end=\(lifecycle.isEndRealized) visible=\(String(describing: scrollState.viewportAnchor.visiblePosition))"
+        )
         let mayFollowBack = ConversationTranscriptScrollPolicy.unrealizedEndRecoveryMayFollowBack(
             isInteracting: isUserInteracting,
             userIsScrolledAway: userIsScrolledAway,

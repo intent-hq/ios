@@ -193,7 +193,7 @@ jobs:
       TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO: '1'
       TEST_CRASH_RETRY: '0'
       SIM_LOCK_TIMEOUT: '0'
-      KEYBOARD_PROOF_SOURCE_SHA: 8d160c1c84aae0e2997e0b6b07e7303fc1c13772
+      RECOVERY_DIAGNOSTIC_BASE_SHA: 8d160c1c84aae0e2997e0b6b07e7303fc1c13772
       SIMULATOR_FAMILY: ${{ github.event_name == 'workflow_dispatch' && inputs.simulator_family || 'iphone' }}
     steps:
       - name: Checkout
@@ -477,23 +477,43 @@ jobs:
       # a selector that matches or executes nothing fails with exit 82, an
       # unverifiable selection with 83, and the per-selector table is appended
       # to the job summary (see the script header).
-      - name: Record keyboard proof provenance
+      - name: Record recovery diagnostic provenance
         run: |
-          mkdir keyboard-evidence
-          git fetch --no-tags --depth=1 origin "$KEYBOARD_PROOF_SOURCE_SHA"
-          test "$(git diff --name-only "$KEYBOARD_PROOF_SOURCE_SHA" HEAD)" = .github/workflows/ci.yml
+          mkdir recovery-evidence
+          git fetch --no-tags --depth=1 origin "$RECOVERY_DIAGNOSTIC_BASE_SHA"
+          python3 - <<'PYSOURCE'
+          import os
+          import subprocess
+
+          expected = {
+              ".github/workflows/ci.yml",
+              "Intent/Utils/AppLog.swift",
+              "Intent/Views/Conversation/Transcript/ConversationScrollViewSupport.swift",
+              "Intent/Views/Conversation/Transcript/ConversationTranscriptView+Follow.swift",
+              "Intent/Views/Conversation/Transcript/ConversationTranscriptView+Geometry.swift",
+              "Intent/Views/Conversation/Transcript/ConversationTranscriptView+Recovery.swift",
+          }
+          changed = subprocess.check_output([
+              "git", "diff", "--name-only", os.environ["RECOVERY_DIAGNOSTIC_BASE_SHA"], "HEAD",
+          ], text=True).splitlines()
+          assert set(changed) == expected, changed
+          PYSOURCE
+          git diff "$RECOVERY_DIAGNOSTIC_BASE_SHA" HEAD -- Intent > recovery-evidence/instrumentation.patch
           {
             date -u
             git show -s --format='%H%n%P%n%s' HEAD
-            echo "Source commit: $KEYBOARD_PROOF_SOURCE_SHA"
-            git diff "$KEYBOARD_PROOF_SOURCE_SHA" HEAD --stat
+            echo "Uninstrumented source commit: $RECOVERY_DIAGNOSTIC_BASE_SHA"
+            git diff "$RECOVERY_DIAGNOSTIC_BASE_SHA" HEAD --stat
             xcodebuild -version
             sw_vers
             uptime
             echo "SIM_UDID=$SIM_UDID"
+            echo "ONLY_TESTING=${{ inputs.only_testing }}"
+            echo "TEST_CRASH_RETRY=$TEST_CRASH_RETRY SIM_LOCK_TIMEOUT=$SIM_LOCK_TIMEOUT"
+            shasum -a 256 recovery-evidence/instrumentation.patch
             xcrun simctl list runtimes
-          } > keyboard-evidence/provenance.txt
-          defaults read com.apple.iphonesimulator > keyboard-evidence/simulator-preferences.txt 2>&1 || true
+          } > recovery-evidence/provenance.txt
+          defaults read com.apple.iphonesimulator > recovery-evidence/simulator-preferences.txt 2>&1 || true
 
       - name: Run unit tests
         id: selected-tests
@@ -507,26 +527,26 @@ jobs:
             scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/test.log"
           elif [ -n "$ONLY_TESTING" ]; then
             set -o pipefail
-            scripts/xcodebuild.sh test-without-building 2>&1 | tee keyboard-evidence/test.log
+            scripts/xcodebuild.sh test-without-building 2>&1 | tee recovery-evidence/test.log
           else
             scripts/xcodebuild.sh test-without-building-unit
           fi
 
-      - name: Preserve keyboard results and require two actual passes
+      - name: Preserve recovery diagnostics and require two actual passes
         if: always() && steps.selected-tests.outcome != 'skipped'
         run: |
           test -d TestResults
-          bundle="$RUNNER_TEMP/b58i-keyboard.xcresult"
+          bundle="$RUNNER_TEMP/b58i-recovery.xcresult"
           ln -s "$PWD/TestResults" "$bundle"
-          xcrun xcresulttool get test-results tests --path "$bundle" > keyboard-evidence/tests.json
-          xcrun xcresulttool export attachments --path "$bundle" --output-path keyboard-evidence/attachments
+          xcrun xcresulttool get test-results tests --path "$bundle" > recovery-evidence/tests.json
+          xcrun xcresulttool export attachments --path "$bundle" --output-path recovery-evidence/attachments
           python3 - <<'PYPROOF'
           import json
           from pathlib import Path
 
           expected = {
-              "ConversationTranscriptScrollUITests/testKeyboardOpenKeepsTranscriptAtEnd",
-              "ConversationTranscriptScrollUITests/testSoftwareKeyboardPrerequisiteSkipsWhenKeyboardIsAbsent",
+              "ConversationTranscriptScrollUITests/testTappingSuggestedPromptKeepsTranscriptAtBottomAndGoToEndHidden",
+              "ConversationTranscriptScrollUITests/testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath",
           }
           rows = []
 
@@ -537,12 +557,12 @@ jobs:
                       rows.append((identity, node.get("result")))
                   walk(node.get("children", []))
 
-          walk(json.loads(Path("keyboard-evidence/tests.json").read_text())["testNodes"])
+          walk(json.loads(Path("recovery-evidence/tests.json").read_text())["testNodes"])
           print(rows)
           assert len(rows) == 2, "Expected exactly two executed controls"
           for test in expected:
               assert len([row for row in rows if row[0].endswith(test) and row[1] == "Passed"]) == 1, test
-          print("Both controls passed; the unfocused absence control is not a post-focus issue #385 reproduction.")
+          print("Both diagnostic cases passed; inspect the retained recovery trace before claiming a cause or correction.")
           PYPROOF
 
       - name: Require actual iPad execution
@@ -631,7 +651,7 @@ jobs:
           name: ios-unit-test-results
           retention-days: 14
           path: |
-            keyboard-evidence
+            recovery-evidence
             TestResults
             TestResults-source-moved
             TestResults-keychain

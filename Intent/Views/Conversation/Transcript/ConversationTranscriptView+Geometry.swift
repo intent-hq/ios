@@ -73,6 +73,12 @@ extension ConversationTranscriptView {
         to newContainerHeight: CGFloat,
         proxy: ScrollViewProxy
     ) -> Bool {
+        if oldContainerHeight != newContainerHeight {
+            AppLog.userInterface.debug(
+                "[SCROLL] diagnostic container=\(oldContainerHeight)->\(newContainerHeight) "
+                    + "owner=\(lifecycle.owner) geometry=\(String(describing: scrollMomentumProxy.restingGeometry))"
+            )
+        }
         switch ConversationTranscriptScrollPolicy.containerHeightChangeDecision(
             oldContainerHeight: oldContainerHeight,
             newContainerHeight: newContainerHeight,
@@ -86,6 +92,7 @@ extension ConversationTranscriptView {
             scheduleDeferredContainerRePin(proxy: proxy)
             return false
         case .rePin:
+            AppLog.userInterface.debug("[SCROLL] diagnostic immediate-container-repin owner=\(lifecycle.owner)")
             proxy.scrollTo("scroll-bottom", anchor: .bottom)
             if case .follow(_, let forced) = lifecycle.owner {
                 scrollToBottom(proxy: proxy, forced: forced)

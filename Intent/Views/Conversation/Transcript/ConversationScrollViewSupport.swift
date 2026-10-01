@@ -107,6 +107,7 @@ class ScrollViewMomentumProxy {
         guard let scrollView else { return false }
         AppLog.userInterface.debug("[SCROLL] Paging blank viewport from \(scrollView.contentOffset.y) to \(offsetY)")
         scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: offsetY), animated: false)
+        AppLog.userInterface.debug("[SCROLL] diagnostic page-up-applied geometry=\(String(describing: restingGeometry))")
         return true
     }
 

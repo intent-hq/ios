@@ -10,6 +10,10 @@ extension ConversationTranscriptView {
     @discardableResult
     func send(_ event: Lifecycle.Event, proxy: ScrollViewProxy, animated: Bool = true) -> [Lifecycle.Effect] {
         let (state, effects) = Lifecycle.transition(lifecycle, event)
+        AppLog.userInterface.debug(
+            "[SCROLL] diagnostic event=\(event) owner=\(lifecycle.owner)->\(state.owner) "
+                + "end=\(state.isEndRealized) geometry=\(String(describing: scrollMomentumProxy.restingGeometry))"
+        )
         scrollState.lifecycle = state
         for effect in effects {
             perform(effect, proxy: proxy, animated: animated)
