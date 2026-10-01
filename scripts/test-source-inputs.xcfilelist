@@ -354,6 +354,7 @@ $(SRCROOT)/Intent/Presentation/ToolClassifier+Classification.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceLinks.swift
 $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
+$(SRCROOT)/Intent/Presentation/WorkspaceSwipePolicy.swift
 $(SRCROOT)/Intent/Resources
 $(SRCROOT)/Intent/Resources/Fonts
 $(SRCROOT)/Intent/Resources/Fonts/Inter
@@ -712,6 +713,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSearchBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusIconView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusImageView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusSwipeBadge.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSwipeContainer.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSwipeRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTab.swift
@@ -737,6 +739,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorConnectionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorIPadReselectionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorInvitedSyncTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorMissingEntityTests.swift
+$(SRCROOT)/IntentTests/AppCoordinatorRecentAgentTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorRegistryCorruptionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorReturnHomeTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorRoutingTests.swift
@@ -1088,6 +1091,7 @@ $(SRCROOT)/IntentTests/WorkspaceStoreStateTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreStatusImageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
+$(SRCROOT)/IntentTests/WorkspaceSwipePolicyTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTabTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTranscriptDesignTests.swift
