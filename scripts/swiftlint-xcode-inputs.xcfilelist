@@ -69,6 +69,7 @@ $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
 $(SRCROOT)/Intent/Models/WatchedAgentRow.swift
 $(SRCROOT)/Intent/Models/WorkspaceAction.swift
 $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
+$(SRCROOT)/Intent/Models/WorkspaceChangeTree.swift
 $(SRCROOT)/Intent/Models/WorkspaceChanges.swift
 $(SRCROOT)/Intent/Models/WorkspaceDiff.swift
 $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
@@ -422,6 +423,8 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAttentionCue.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserPage.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowsersView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesFileTree.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesSection.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceConnectionSwitcher.swift
@@ -772,6 +775,7 @@ $(SRCROOT)/IntentTests/WorkspaceBrowserRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserTabTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserTests.swift
+$(SRCROOT)/IntentTests/WorkspaceChangeTreeTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRootRaceTests.swift
