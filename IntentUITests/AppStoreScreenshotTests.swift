@@ -33,6 +33,15 @@ nonisolated final class AppStoreScreenshotTests: XCTestCase {
         }
     }
 
+    @MainActor
+    private func dismissNotificationPrompt() {
+        let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
+        if allowNotifications.waitForExistence(timeout: 2) {
+            allowNotifications.tap()
+            XCTAssertTrue(allowNotifications.waitForNonExistence(timeout: 5))
+        }
+    }
+
     /// 01–04: workspace list → workspace detail → agent conversation →
     /// note with tasks, all against `--demo-data` fixture content.
     @MainActor
@@ -42,6 +51,7 @@ nonisolated final class AppStoreScreenshotTests: XCTestCase {
         setupSnapshot(app)
         app.launchArguments += ["--demo-data"]
         app.launch()
+        dismissNotificationPrompt()
 
         // 01 — workspace list ("Add usage analytics dashboard" is the first
         // fixture workspace; on iPad landscape it renders in the always-
@@ -70,15 +80,11 @@ nonisolated final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertTrue(conversationMessage.waitForExistence(timeout: 15))
         snapshot("03-agent-conversation")
 
-        // Back to workspace detail: iPad shows a custom "Agents" leading
-        // button (its nav bar can also contain the sidebar toggle, so avoid
-        // a blind boundBy-0 tap); iPhone uses the standard back button.
-        let agentsBackButton = app.navigationBars.buttons["Agents"].firstMatch
-        if agentsBackButton.exists {
-            agentsBackButton.tap()
-        } else {
-            app.navigationBars.buttons.element(boundBy: 0).tap()
-        }
+        let customBackButton = app.buttons["conversation.back"]
+        let nativeBackButton = app.navigationBars["Dashboard Implementor"].buttons.element(boundBy: 0)
+        let agentsBackButton = customBackButton.exists ? customBackButton : nativeBackButton
+        XCTAssertTrue(agentsBackButton.waitForExistence(timeout: 15))
+        agentsBackButton.tap()
         XCTAssertTrue(agentRow.waitForExistence(timeout: 15))
 
         // 04 — note with tasks (Context tab → "Spec" fixture note, which
@@ -88,6 +94,10 @@ nonisolated final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertTrue(specRow.waitForExistence(timeout: 15))
         specRow.tap()
         XCTAssertTrue(app.navigationBars["Spec"].waitForExistence(timeout: 15))
+        let loadedNote = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "Per-team daily/weekly active seat counts")
+        ).firstMatch
+        XCTAssertTrue(loadedNote.waitForExistence(timeout: 15))
         snapshot("04-note-tasks")
     }
 
@@ -101,6 +111,7 @@ nonisolated final class AppStoreScreenshotTests: XCTestCase {
         let app = XCUIApplication()
         setupSnapshot(app)
         app.launch()
+        dismissNotificationPrompt()
 
         let scanOption = app.staticTexts["Scan QR Code"].firstMatch
         XCTAssertTrue(scanOption.waitForExistence(timeout: 30))
