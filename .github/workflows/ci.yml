@@ -664,7 +664,7 @@ jobs:
       - name: Run transcript policy and lifecycle regressions
         env:
           RESULT_BUNDLE: TestResults-recovery-policy
-          ONLY_TESTING: IntentTests/ConversationTranscriptScrollPolicyTests IntentTests/TranscriptRecoveryLifecycleTests
+          ONLY_TESTING: IntentTests/ConversationTranscriptScrollPolicyTests IntentTests/TranscriptRecoveryLifecycleTests IntentTests/LayoutPolicyTests
         run: |
           set -o pipefail
           scripts/xcodebuild.sh test-without-building 2>&1 | tee recovery-evidence/policy-tests.log
