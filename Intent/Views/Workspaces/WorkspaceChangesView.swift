@@ -215,25 +215,8 @@ private struct WorkspaceChangesRow<Detail: View>: View {
     @ViewBuilder let detail: () -> Detail
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
 
     var body: some View {
-        HStack(spacing: CreateWorkspaceRepoStyle.rowSpacing) {
-            text
-            Image(.chevronRight)
-                .resizable()
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
-                .accessibilityHidden(true)
-        }
-        .multilineTextAlignment(.leading)
-        .padding(CreateWorkspaceFormStyle.pagePadding)
-        .frame(maxWidth: .infinity, minHeight: CreateWorkspaceRepoStyle.rowMinimumHeight, alignment: .leading)
-        .contentShape(.rect)
-    }
-
-    private var text: some View {
         VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.rowTextSpacing) {
             Text(title)
                 .interFont(Constants.Typography.bodySEmphasized)
@@ -245,7 +228,10 @@ private struct WorkspaceChangesRow<Detail: View>: View {
                 .tracking(CreateWorkspaceRepoStyle.fullNameTracking)
                 .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
+        .padding(.vertical, CreateWorkspaceFormStyle.pagePadding)
+        .frame(maxWidth: .infinity, minHeight: CreateWorkspaceRepoStyle.rowMinimumHeight, alignment: .leading)
+        .contentShape(.rect)
     }
 }
 
