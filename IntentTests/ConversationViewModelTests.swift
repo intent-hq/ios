@@ -11,10 +11,10 @@ import UIKit
 struct ConversationViewModelTests {
     // MARK: - Helpers
 
-    func makeVM() -> ConversationViewModel {
+    func makeVM(workspaceId: String = "test-ws") -> ConversationViewModel {
         ConversationViewModel(
             agentId: "test-agent",
-            workspaceId: "test-ws",
+            workspaceId: workspaceId,
             agentName: "Test",
             connection: ConnectionManager.shared,
             uploadService: .shared,

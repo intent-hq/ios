@@ -98,6 +98,8 @@ class AppCoordinator {
     /// cold-start connect) restarts the attempt — SwiftUI would otherwise
     /// keep the existing ConnectingView and never re-run its task.
     private(set) var connectionAttemptId = 0
+    /// Only launch/restoration auto-connect hides Connecting's Back action.
+    var connectingStartedByLaunch = false
     var conversationRequestId = 0
 
     var selectedWorkspaceId: String? {
@@ -198,6 +200,7 @@ class AppCoordinator {
 
     /// Restarts the keyed ConnectingView task while preserving its transition order.
     func restartConnectionAttempt() {
+        connectingStartedByLaunch = false
         connectionAttemptId += 1
         currentScreen = .connecting
     }

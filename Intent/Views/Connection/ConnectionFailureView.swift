@@ -13,6 +13,7 @@ struct ConnectionFailureView: View {
     @State private var retryTask: Task<Void, Never>?
     @State private var savedConnections: [StoredConnection] = []
     @State private var showingDiagnosticLogs = false
+    @State private var viewportHeight: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -41,27 +42,24 @@ struct ConnectionFailureView: View {
     }
 
     private var failureContent: some View {
-        // A minimum viewport height centers short content without capping scrollable Dynamic Type content.
-        // swiftlint:disable:next geometry_reader_usage
-        GeometryReader { geometry in
-            ScrollView {
-                FailurePageLayout {
-                    VStack(spacing: Constants.ConnectionFailure.contentSpacing) {
-                        VStack(spacing: Constants.ConnectionFailure.titleToControlsSpacing) {
-                            failureTitle
-                            failureControls
-                        }
-                        savedConnectionsSection
+        ScrollView {
+            FailurePageLayout {
+                VStack(spacing: Constants.ConnectionFailure.contentSpacing) {
+                    VStack(spacing: Constants.ConnectionFailure.titleToControlsSpacing) {
+                        failureTitle
+                        failureControls
                     }
-                    helpText
+                    savedConnectionsSection
                 }
-                .padding(.horizontal, Constants.ConnectionFailure.pagePadding)
-                .padding(.top, Constants.ConnectionFailure.pagePadding)
-                .padding(.bottom, Constants.ConnectionFailure.footerBottomPadding)
-                .frame(minHeight: geometry.size.height)
+                helpText
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .padding(.horizontal, Constants.ConnectionFailure.pagePadding)
+            .padding(.top, Constants.ConnectionFailure.pagePadding)
+            .padding(.bottom, Constants.ConnectionFailure.footerBottomPadding)
+            .frame(minHeight: viewportHeight)
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
         // The 48pt export hit target includes space below its text, leaving the
         // visible label above the home indicator while matching the mock's inset.
         .ignoresSafeArea(.container, edges: .bottom)

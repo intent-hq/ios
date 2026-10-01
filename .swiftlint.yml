@@ -186,10 +186,10 @@ no_magic_numbers:
 reporter: "xcode"
 custom_rules:
   geometry_reader_usage:
-    name: "Avoid GeometryReader Usage"
+    name: "GeometryReader Is Banned"
     regex: '\bGeometryReader\b'
-    message: "Avoid using GeometryReader when possible - consider alternatives like onGeometryChange() or containerRelativeFrame"
+    message: "GeometryReader is banned. Use onGeometryChange, containerRelativeFrame, Shape.path(in:), or a custom Layout. Do not suppress this rule."
     match_kinds:
       - typeidentifier
       - identifier
-    severity: warning
+    severity: error
