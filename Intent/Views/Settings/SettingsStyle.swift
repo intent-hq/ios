@@ -6,7 +6,6 @@ enum SettingsStyle {
     static let sectionSpacing: CGFloat = 24
     static let headingSpacing: CGFloat = 32
     static let sectionHeaderSpacing: CGFloat = 20
-    static let appearanceBottomSpacing: CGFloat = 12
     static let headerGap: CGFloat = 48
     static let cardRadius: CGFloat = 20
     static let surfaceRadius: CGFloat = 44

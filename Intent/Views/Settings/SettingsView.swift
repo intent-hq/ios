@@ -53,7 +53,6 @@ private struct SettingsContent: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
-    @AppStorage("appThemePreference") private var themePreference: String = "system"
     @State private var showLogOffConfirmation = false
     @ScaledMetric(relativeTo: .callout) private var iconSize = SettingsStyle.iconWidth
     var presentedAsSheet = false
@@ -72,10 +71,6 @@ private struct SettingsContent: View {
             VStack(alignment: .leading, spacing: SettingsStyle.sectionSpacing) {
                 SettingsHeader(onClose: coordinator.onSettingsBack)
                     .padding(.bottom, SettingsStyle.headingSpacing - SettingsStyle.sectionSpacing)
-                SettingsSection(title: "APPEARANCE") {
-                    SettingsAppearanceSelector(selection: $themePreference)
-                }
-                .padding(.bottom, SettingsStyle.appearanceBottomSpacing)
                 if !session.connection.certMismatches.isEmpty {
                     CertMismatchListView(mismatches: session.connection.certMismatches)
                 }

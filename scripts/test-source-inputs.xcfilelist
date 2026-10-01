@@ -446,6 +446,7 @@ $(SRCROOT)/Intent/Services/NetworkPathMonitoring.swift
 $(SRCROOT)/Intent/Services/NoteStore+Events.swift
 $(SRCROOT)/Intent/Services/NoteStore.swift
 $(SRCROOT)/Intent/Services/NoteStoreCollections.swift
+$(SRCROOT)/Intent/Services/OutgoingImagePayload.swift
 $(SRCROOT)/Intent/Services/PairingDiagnostics.swift
 $(SRCROOT)/Intent/Services/PairingFlow.swift
 $(SRCROOT)/Intent/Services/ProposalActionStore.swift
@@ -656,7 +657,6 @@ $(SRCROOT)/Intent/Views/Settings/DiagnosticPreviewSection.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticShareSheet.swift
 $(SRCROOT)/Intent/Views/Settings/LogOffConfirmationSheet.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsActionLabel.swift
-$(SRCROOT)/Intent/Views/Settings/SettingsAppearanceSelector.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsHeader.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsPairingSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsSection.swift
@@ -916,6 +916,7 @@ $(SRCROOT)/IntentTests/InvitedSessionRegistryTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionSyncTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionTLSTests.swift
 $(SRCROOT)/IntentTests/LaunchPhaseTimelineTests.swift
+$(SRCROOT)/IntentTests/LayoutPolicyTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
