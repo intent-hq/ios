@@ -72,6 +72,7 @@ jobs:
     name: Select macOS runner
     runs-on: ubuntu-latest
     outputs:
+      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"macos-15"' }}
       runs-on: ${{ steps.select.outputs.runs-on || '"macos-15"' }}
     steps:
       - uses: actions/checkout@v7
@@ -79,6 +80,12 @@ jobs:
         id: select
         env:
           RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+        run: bash .github/scripts/select-macos-runner.sh
+      - name: Check build-only Mac status
+        id: select-build
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+          RUNNER_POOL_LABEL: intent-ios-build
         run: bash .github/scripts/select-macos-runner.sh
 
   go-test:
@@ -569,7 +576,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload test results
-        if: failure() || (github.event_name == 'workflow_dispatch' && contains(inputs.only_testing, 'WorkspaceChangesUITests'))
+        if: failure() || (github.event_name == 'workflow_dispatch' && (contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests')))
         uses: actions/upload-artifact@v7
         with:
           name: ios-unit-test-results
@@ -868,7 +875,7 @@ jobs:
     # dispatch to save runner time.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"macos-15"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'

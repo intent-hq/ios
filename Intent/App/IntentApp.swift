@@ -273,11 +273,13 @@ struct BackendWindowRoot: View {
     /// backend's own window, or replace this unbound pairing window with
     /// the target's own window so it stays raisable by value).
     private func retarget(to target: BackendID) {
-        switch WindowRetargetRoute.route(
+        let route = WindowRetargetRoute.route(
             currentBackendID: backendID,
             target: target,
             supportsMultipleWindows: supportsMultipleWindows
-        ) {
+        )
+        windowSession.prepareForSelection(to: target, route: route)
+        switch route {
         case .openTargetWindow:
             openWindow(value: target)
             if windowSession.isShowingSavedMachines {

@@ -26,10 +26,15 @@ struct WorkspaceStatusIconView: View {
     }
 
     private var statusColor: Color {
-        if colorSchemeContrast == .increased {
+        Self.statusColor(for: workspace, colorScheme: colorScheme, contrast: colorSchemeContrast)
+    }
+
+    static func statusColor(for workspace: Workspace, colorScheme: ColorScheme, contrast: ColorSchemeContrast) -> Color {
+        let displayStatus = resolveDisplayStatus(for: workspace)
+        if contrast == .increased {
             switch displayStatus {
             case .idle, .notStarted, .unknown:
-                return Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast)
+                return Theme.mutedForeground(for: colorScheme, contrast: contrast)
             default:
                 break
             }

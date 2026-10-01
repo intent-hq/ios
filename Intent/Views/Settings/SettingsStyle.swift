@@ -6,7 +6,6 @@ enum SettingsStyle {
     static let sectionSpacing: CGFloat = 24
     static let headingSpacing: CGFloat = 32
     static let sectionHeaderSpacing: CGFloat = 20
-    static let appearanceBottomSpacing: CGFloat = 12
     static let headerGap: CGFloat = 48
     static let cardRadius: CGFloat = 20
     static let surfaceRadius: CGFloat = 44
@@ -15,10 +14,8 @@ enum SettingsStyle {
     static let segmentHeight: CGFloat = 48
     static let rowHeight: CGFloat = 56
     static let connectionHeight: CGFloat = 96
-    static let connectionCardSpacing: CGFloat = 8
     static let iconWidth: CGFloat = 24
     static let rowSpacing: CGFloat = 24
-    static let textSpacing: CGFloat = 4
     static let metadataSpacing: CGFloat = 12
     static let rowVerticalPadding: CGFloat = 16
     static let maximumContentWidth: CGFloat = 600

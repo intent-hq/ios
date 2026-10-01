@@ -11,31 +11,47 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
     let target: WorkspaceSwipeTarget
     @Binding var revealedTarget: WorkspaceSwipeTarget?
     let actionCount: Int
+    var actionWidth: CGFloat?
+    var actionLeadingSpacing: CGFloat = WorkspaceSwipeStyle.spacing
     var rowBackground: Color = .clear
     var restingCornerRadius: CGFloat = 0
     var horizontalInset: CGFloat = 0
     var showsSwipeTint = true
+    var swipeBackground: Color?
+    var leadingSwipeWidth: CGFloat = 0
+    var isSwipeEnabled = true
+    var onLeadingSwipeCompleted: () -> Void = {}
+    var onOffsetChanged: (CGFloat) -> Void = { _ in }
     var onSwipeProgressChanged: (CGFloat) -> Void = { _ in }
     @ViewBuilder var content: (_ swipeProgress: CGFloat) -> Content
     @ViewBuilder var actions: () -> Actions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @ScaledMetric(relativeTo: .body) private var actionWidth = WorkspaceSwipeStyle.buttonWidth
+    @ScaledMetric(relativeTo: .body) private var defaultActionWidth = WorkspaceSwipeStyle.buttonWidth
     @State private var offset: CGFloat = 0
     @State private var dragOrigin: CGFloat?
     @State private var actionsVisible = false
     @State private var animationRevision = 0
 
     private var isRevealed: Bool { revealedTarget == target }
-    private var revealWidth: CGFloat { CGFloat(actionCount) * (actionWidth + WorkspaceSwipeStyle.spacing) }
+    private var revealWidth: CGFloat {
+        guard actionCount > 0 else { return 0 }
+        return CGFloat(actionCount) * (actionWidth ?? defaultActionWidth)
+            + CGFloat(max(0, actionCount - 1)) * WorkspaceSwipeStyle.spacing
+            + actionLeadingSpacing
+    }
     private var restingOffset: CGFloat { isRevealed ? -revealWidth : 0 }
-    private var swipeProgress: CGFloat { min(1, max(0, -offset / max(revealWidth, 1))) }
+    private var swipeProgress: CGFloat {
+        min(1, abs(offset) / max(offset > 0 ? leadingSwipeWidth : revealWidth, 1))
+    }
+    private var leadingSwipeArmed: Bool { leadingSwipeWidth > 0 && offset >= leadingSwipeWidth }
     private var rowCornerRadius: CGFloat {
         restingCornerRadius + (WorkspaceSwipeStyle.rowCornerRadius - restingCornerRadius) * swipeProgress
     }
     private var rowTintOpacity: Double {
         guard showsSwipeTint else { return 0 }
+        if swipeBackground != nil { return Double(swipeProgress) }
         let opacity = contrast == .increased ? WorkspaceSwipeStyle.increasedTintOpacity : WorkspaceSwipeStyle.tintOpacity
         return Double(swipeProgress) * opacity
     }
@@ -45,7 +61,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
             .background(rowBackground.opacity(1 - Double(swipeProgress)), in: .rect(cornerRadius: restingCornerRadius))
             .padding(.leading, horizontalInset)
             .background {
-                (colorScheme == .dark ? Color.white : Color.black).opacity(rowTintOpacity)
+                (swipeBackground ?? (colorScheme == .dark ? Color.white : Color.black)).opacity(rowTintOpacity)
             }
             .clipShape(RoundedRectangle(cornerRadius: rowCornerRadius, style: .continuous))
             .offset(x: offset)
@@ -53,7 +69,7 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
             .overlay(alignment: .trailing) {
                 if actionsVisible {
                     HStack(spacing: WorkspaceSwipeStyle.spacing, content: actions)
-                        .padding(.leading, WorkspaceSwipeStyle.spacing)
+                        .padding(.leading, actionLeadingSpacing)
                         .fixedSize(horizontal: true, vertical: false)
                         .scaleEffect(reduceMotion ? 1 : swipeProgress, anchor: .trailing)
                         .offset(x: reduceMotion ? revealWidth + offset : 0)
@@ -67,10 +83,16 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
             .clipped()
             .contentShape(Rectangle())
             .modifier(WorkspaceRowSwipeGesture(onChanged: drag, onEnded: finish, onCancelled: settle))
+            .onChange(of: leadingSwipeArmed) { _, armed in
+                if armed { HapticManager.impact(.light) }
+            }
             .onChange(of: isRevealed) { _, _ in
                 if offset != restingOffset { settle() }
             }
             .onChange(of: revealWidth) { _, _ in settle() }
+            .onChange(of: isSwipeEnabled) { _, enabled in
+                if !enabled { settle() }
+            }
             .onDisappear {
                 animationRevision += 1
                 dragOrigin = nil
@@ -78,24 +100,43 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
                 actionsVisible = false
                 if isRevealed { revealedTarget = nil }
                 onSwipeProgressChanged(0)
+                onOffsetChanged(0)
             }
     }
 
     private func drag(_ distance: CGFloat) {
+        guard isSwipeEnabled else { return }
         if dragOrigin == nil {
             animationRevision += 1
             dragOrigin = offset
             if !isRevealed { revealedTarget = nil }
         }
         withTransaction(Transaction(animation: nil)) {
-            actionsVisible = true
-            offset = max(-revealWidth, min(0, (dragOrigin ?? 0) + distance))
+            offset = WorkspaceSwipePolicy.offset(
+                translation: distance,
+                origin: dragOrigin ?? 0,
+                leadingWidth: leadingSwipeWidth,
+                trailingWidth: revealWidth
+            )
+            actionsVisible = offset < 0
             onSwipeProgressChanged(swipeProgress)
+            onOffsetChanged(offset)
         }
     }
 
     private func finish(_ distance: CGFloat) {
-        if distance < -WorkspaceSwipeStyle.revealThreshold {
+        guard isSwipeEnabled, let dragOrigin else { settle(); return }
+        if WorkspaceSwipePolicy.completesLeadingSwipe(
+            translation: distance,
+            origin: dragOrigin,
+            leadingWidth: leadingSwipeWidth
+        ) {
+            revealedTarget = nil
+            settle()
+            onLeadingSwipeCompleted()
+            return
+        }
+        if revealWidth > 0, distance < -WorkspaceSwipeStyle.revealThreshold {
             revealedTarget = target
         } else if distance > WorkspaceSwipeStyle.revealThreshold, isRevealed {
             revealedTarget = nil
@@ -111,11 +152,32 @@ struct WorkspaceSwipeContainer<Content: View, Actions: View>: View {
         withAnimation(reduceMotion ? nil : WorkspaceSwipeStyle.spring, completionCriteria: .removed) {
             offset = restingOffset
             onSwipeProgressChanged(swipeProgress)
+            onOffsetChanged(offset)
         } completion: {
             if animationRevision == revision, !isRevealed, dragOrigin == nil {
                 actionsVisible = false
             }
         }
+    }
+}
+
+struct WorkspaceSwipeIconButtonStyle: ButtonStyle {
+    let size: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: size, height: size)
+            .foregroundStyle(configuration.role == .destructive
+                ? Theme.destructive(for: colorScheme)
+                : Constants.Pairing.foreground(for: colorScheme))
+            .background(
+                Constants.WorkspaceList.controlSurface(for: colorScheme),
+                in: .rect(cornerRadius: Constants.WorkspaceList.swipeButtonCornerRadius)
+            )
+            .contentShape(.rect(cornerRadius: Constants.WorkspaceList.swipeButtonCornerRadius))
+            .opacity(isEnabled ? (configuration.isPressed ? WorkspaceSwipeStyle.pressedOpacity : 1) : WorkspaceSwipeStyle.disabledOpacity)
     }
 }
 

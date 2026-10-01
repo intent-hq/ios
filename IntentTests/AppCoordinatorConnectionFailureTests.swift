@@ -4,6 +4,85 @@ import Security
 import Testing
 
 extension AppCoordinatorTests {
+    @Test(arguments: ["retry", "saved", "pairing", "deepLink"])
+    @MainActor func explicitConnectionAfterLaunchShowsBack(action: String) {
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let coordinator = makeLaunchCoordinator(for: stored, registry: BackendSessionRegistry())
+        coordinator.onLoadComplete()
+        #expect(coordinator.connectingStartedByLaunch)
+
+        switch action {
+        case "retry":
+            coordinator.onConnectionFailed(error: "timeout")
+            coordinator.onRetryConnection()
+        case "saved":
+            coordinator.onReturnToSavedMachines()
+            #expect(!coordinator.connectingStartedByLaunch)
+            coordinator.onSwitchConnection(id: stored.id)
+        case "pairing":
+            coordinator.onConnectionFailed(error: "timeout")
+            coordinator.onPaired(stored) // Shared completion for QR and manual pairing.
+        default:
+            coordinator.onDeepLinkPaired(stored) // Replaces launch while still connecting.
+        }
+
+        #expect(coordinator.currentScreenDescription == "connecting")
+        #expect(!coordinator.connectingStartedByLaunch)
+    }
+
+    @Test(arguments: [WindowRetargetRoute.rebindInPlace, .openTargetWindow, .replaceWindow], [false, true])
+    @MainActor func selectedBackendHandsOffBackVisibilityOnce(route: WindowRetargetRoute, pairing: Bool) {
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let other = persistence.upsertConnection(Self.makeConnection(port: 5252))
+        let registry = BackendSessionRegistry()
+        let window = BackendWindowSession(registry: registry, persistence: persistence)
+        let home = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: FakeConnectionManager(),
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
+        home.onLoadComplete()
+        home.retargetWindow = { window.prepareForSelection(to: $0, route: route) }
+        if pairing {
+            home.onPaired(stored)
+        } else {
+            home.onSwitchConnection(id: stored.id)
+        }
+
+        // Restoring another backend must not consume this selection's token.
+        let otherWindow = makeLaunchCoordinator(for: other, registry: registry)
+        otherWindow.onLoadComplete()
+        #expect(otherWindow.connectingStartedByLaunch)
+        let selected = makeLaunchCoordinator(for: stored, registry: registry)
+        selected.onLoadComplete()
+        #expect(selected.currentScreenDescription == "connecting")
+        #expect(!selected.connectingStartedByLaunch)
+
+        // The token is spent: a later automatic restoration is not a selection.
+        let restored = makeLaunchCoordinator(for: stored, registry: registry)
+        restored.onLoadComplete()
+        #expect(restored.connectingStartedByLaunch)
+        // A new process also starts with no selection, even for the same saved record.
+        let coldLaunch = makeLaunchCoordinator(for: stored, registry: BackendSessionRegistry())
+        coldLaunch.onLoadComplete()
+        #expect(coldLaunch.connectingStartedByLaunch)
+    }
+
+    @MainActor private func makeLaunchCoordinator(
+        for connection: StoredConnection, registry: BackendSessionRegistry
+    ) -> AppCoordinator {
+        AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: FakeConnectionManager(),
+            backendID: BackendID(connection.id),
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
+    }
+
     /// A legacy saved record without a certificate pin must be kept for
     /// repair, while transport admission refuses it before opening a socket.
     @Test @MainActor func legacyPinlessRecordRoutesToRepairAndIsKept() throws {

@@ -22,7 +22,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     @MainActor
     func testChangesTabOpensStagedUnstagedAndCommitDiffs() {
         let app = openChanges()
-        let unstaged = app.staticTexts["Sources/Analytics.swift"].firstMatch
+        let unstaged = app.buttons["changes.file.unstaged.Sources/Analytics.swift"].firstMatch
         reveal(unstaged, in: app)
         capture(app, name: "workspace-changes")
         unstaged.tap()
@@ -30,7 +30,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         assertDiffLine(in: app, containing: "let enabled = true")
         capture(app, name: "unstaged-diff")
         app.buttons["Done"].tap()
-        let staged = app.staticTexts["Tests/AnalyticsTests.swift"].firstMatch
+        let staged = app.buttons["changes.file.staged.Tests/AnalyticsTests.swift"].firstMatch
         reveal(staged, in: app)
         staged.tap()
         XCTAssertTrue(app.navigationBars["Staged Changes"].waitForExistence(timeout: Fixture.timeout))
@@ -49,9 +49,9 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         let app = openChanges()
         selectRepository("ios", in: app)
         let commit = app.staticTexts["feat: add mobile analytics"].firstMatch
-        let staged = app.staticTexts["Tests/MobileAnalyticsTests.swift"].firstMatch
+        let staged = app.buttons["changes.file.staged.Tests/MobileAnalyticsTests.swift"].firstMatch
         reveal(staged, in: app)
-        let unstaged = app.staticTexts["Sources/Analytics.swift"].firstMatch
+        let unstaged = app.buttons["changes.file.unstaged.Sources/Analytics.swift"].firstMatch
         reveal(unstaged, in: app, towardTop: true)
         XCTAssertFalse(app.staticTexts["feat: add usage analytics"].exists)
         capture(app, name: "submodule-changes")
@@ -70,11 +70,72 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         capture(app, name: "submodule-commit-diff")
         app.buttons["Done"].tap()
         selectRepository("Main repository", in: app)
-        let mainStaged = app.staticTexts["Tests/AnalyticsTests.swift"].firstMatch
+        let mainStaged = app.buttons["changes.file.staged.Tests/AnalyticsTests.swift"].firstMatch
         reveal(mainStaged, in: app)
         XCTAssertFalse(commit.exists)
         reveal(unstaged, in: app, towardTop: true)
         unstaged.tap()
+        assertDiffLine(in: app, containing: "let enabled = true")
+    }
+
+    @MainActor
+    func testSectionsCollapseIndependentlyAndReopen() {
+        let app = openChanges()
+        let unstaged = app.buttons["changes.section.unstaged"].firstMatch
+        reveal(unstaged, in: app)
+        unstaged.tap()
+        XCTAssertEqual(unstaged.value as? String, "Collapsed")
+        XCTAssertFalse(app.buttons["changes.folder.unstaged.Sources"].exists)
+        let staged = app.buttons["changes.section.staged"].firstMatch
+        reveal(staged, in: app)
+        XCTAssertEqual(staged.value as? String, "Expanded")
+        staged.tap()
+        XCTAssertFalse(app.buttons["changes.folder.staged.Tests"].exists)
+        let commits = app.buttons["changes.section.commits"].firstMatch
+        reveal(commits, in: app)
+        commits.tap()
+        XCTAssertEqual(commits.value as? String, "Collapsed")
+        XCTAssertFalse(app.staticTexts["feat: add usage analytics"].exists)
+        capture(app, name: "collapsed-changes-sections")
+        commits.tap()
+        reveal(app.staticTexts["feat: add usage analytics"].firstMatch, in: app)
+        reveal(staged, in: app, towardTop: true)
+        staged.tap()
+        reveal(app.buttons["changes.file.staged.Tests/AnalyticsTests.swift"].firstMatch, in: app)
+        reveal(unstaged, in: app, towardTop: true)
+        unstaged.tap()
+        reveal(app.buttons["changes.file.unstaged.Sources/Analytics.swift"].firstMatch, in: app)
+    }
+
+    @MainActor
+    func testNestedFoldersPreserveCollapseUntilRepositoryChanges() {
+        let app = openChanges()
+        let nested = app.buttons["changes.folder.unstaged.Sources/Analytics"].firstMatch
+        let child = app.buttons["changes.file.unstaged.Sources/Analytics/Events.swift"].firstMatch
+        reveal(nested, in: app)
+        nested.tap()
+        XCTAssertEqual(nested.value as? String, "Collapsed")
+        XCTAssertFalse(child.exists)
+        let parent = app.buttons["changes.folder.unstaged.Sources"].firstMatch
+        reveal(parent, in: app, towardTop: true)
+        parent.tap()
+        XCTAssertFalse(nested.exists)
+        parent.tap()
+        reveal(nested, in: app)
+        XCTAssertEqual(nested.value as? String, "Collapsed")
+        let section = app.buttons["changes.section.unstaged"].firstMatch
+        reveal(section, in: app, towardTop: true)
+        section.tap()
+        section.tap()
+        reveal(nested, in: app)
+        XCTAssertEqual(nested.value as? String, "Collapsed")
+        capture(app, name: "nested-file-tree")
+        selectRepository("ios", in: app)
+        reveal(app.buttons["changes.file.unstaged.Sources/Analytics.swift"].firstMatch, in: app)
+        selectRepository("Main repository", in: app)
+        reveal(child, in: app)
+        child.tap()
+        XCTAssertTrue(app.navigationBars["Unstaged Changes"].waitForExistence(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: "let enabled = true")
     }
 

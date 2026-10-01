@@ -5,6 +5,28 @@ import SwiftUI
 import Testing
 
 extension BackendSessionRegistryTests {
+    @Test(arguments: [WindowRetargetRoute.rebindInPlace, .openTargetWindow, .replaceWindow])
+    func raisingExistingBackendDoesNotLeaveSelectionForLaterRestoration(route: WindowRetargetRoute) {
+        let registry = makeRegistry()
+        let stored = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 4242))
+        let backend = BackendID(stored.id)
+        let window = BackendWindowSession(registry: registry, persistence: persistence)
+        window.bind(to: backend)
+        window.prepareForSelection(to: backend, route: route)
+        window.release()
+
+        let restored = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: FakeConnectionManager(),
+            backendID: backend,
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: AppCoordinatorTests.syncedRegistry(payloads: [])
+        )
+        restored.onLoadComplete()
+        #expect(restored.connectingStartedByLaunch)
+    }
+
     @Test func sceneNetworkReportsRemainLiveAcrossInactiveAndForegroundRestart() throws {
         let factory = NetworkAvailabilityTests.MonitorFactory()
         let availability = NetworkAvailability(makeMonitor: factory.make)

@@ -65,12 +65,17 @@ final class AppCoordinatorLifecycleState {
 class AppCoordinator {
     var currentScreen: AppScreen = .loading {
         didSet {
+            navigationState.recentWorkspaceAgentRequestId = nil
             if !currentScreen.supportsConnectionLossOverlay {
                 resetConnectionLossEligibility()
             }
         }
     }
-    var selectedSection: AppSection = .workspaces
+    var selectedSection: AppSection = .workspaces {
+        didSet {
+            if selectedSection != oldValue { navigationState.recentWorkspaceAgentRequestId = nil }
+        }
+    }
     var assistantAgentId: String?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false {
@@ -98,10 +103,13 @@ class AppCoordinator {
     /// cold-start connect) restarts the attempt — SwiftUI would otherwise
     /// keep the existing ConnectingView and never re-run its task.
     private(set) var connectionAttemptId = 0
+    /// Only launch/restoration auto-connect hides Connecting's Back action.
+    var connectingStartedByLaunch = false
     var conversationRequestId = 0
 
     var selectedWorkspaceId: String? {
         didSet {
+            if selectedWorkspaceId != oldValue { navigationState.recentWorkspaceAgentRequestId = nil }
             if let workspaceId = selectedWorkspaceId,
                selectedWorkspaceId != oldValue,
                !navigationState.suppressWorkspaceNavigation {
@@ -198,6 +206,7 @@ class AppCoordinator {
 
     /// Restarts the keyed ConnectingView task while preserving its transition order.
     func restartConnectionAttempt() {
+        connectingStartedByLaunch = false
         connectionAttemptId += 1
         currentScreen = .connecting
     }

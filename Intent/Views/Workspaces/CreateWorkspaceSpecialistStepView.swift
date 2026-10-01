@@ -279,10 +279,6 @@ extension CreateWorkspaceView {
         1...Constants.CreateWorkspace.messageLineCountRange.upperBound
     }
 
-    static func creationContextAccessibilityDescription(_ row: CreationContextRow) -> String {
-        "\(row.label): \(row.value.isEmpty ? "Not specified" : row.value)"
-    }
-
     static func isCreateDisabled(
         isCreating: Bool,
         isLoadingProviders: Bool,

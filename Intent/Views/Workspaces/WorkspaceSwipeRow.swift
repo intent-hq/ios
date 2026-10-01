@@ -7,10 +7,33 @@ struct WorkspaceSwipeRow: View {
     @Binding var revealedTarget: WorkspaceSwipeTarget?
     @Binding var workspaceSwipeProgress: [String: CGFloat]
     let nextWorkspaceId: String?
+    var spacious = true
+    var showsTrailingActions = true
     let onSelect: () -> Void
+    let onOpenRecentAgent: () -> Void
     let onAction: (WorkspaceAction) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .body) private var scaledActionSize = Constants.WorkspaceList.swipeButtonSize
+    @ScaledMetric(relativeTo: .body) private var actionIconSize = Constants.WorkspaceList.swipeButtonIconSize
+    @State private var swipeOffset: CGFloat = 0
+    @State private var badgeSize = CGSize(width: BadgeStyle.initialWidth, height: Constants.WorkspaceList.swipeButtonSize)
+    @State private var statusCenter: CGFloat = 0
+    @State private var rowSize: CGSize = .zero
+
+    private var actionSize: CGFloat { max(Constants.Accessibility.minimumTapTarget, scaledActionSize) }
+    private var horizontalInset: CGFloat { spacious ? Constants.WorkspaceList.pageInset : 0 }
+    private var statusInset: CGFloat { horizontalInset + (spacious ? 0 : Constants.WorkspaceRow.horizontalPadding) }
+    private var leadingLayout: WorkspaceSwipePolicy.LeadingLayout {
+        WorkspaceSwipePolicy.leadingLayout(
+            rowWidth: rowSize.width,
+            badgeWidth: badgeSize.width,
+            leadingInset: statusInset,
+            gap: Constants.WorkspaceList.swipeActionsLeadingSpacing
+        )
+    }
+    private var leadingWidth: CGFloat { leadingLayout.revealWidth }
+    private var leadingProgress: CGFloat { min(1, max(0, swipeOffset / max(1, leadingWidth))) }
 
     private var dividerOpacity: Double {
         let progress = workspaceSwipeProgress[workspace.id, default: 0]
@@ -22,20 +45,42 @@ struct WorkspaceSwipeRow: View {
         WorkspaceSwipeContainer(
             target: .workspace(workspace.id),
             revealedTarget: $revealedTarget,
-            actionCount: 2,
-            horizontalInset: Constants.WorkspaceList.pageInset,
+            actionCount: showsTrailingActions ? 2 : 0,
+            actionWidth: actionSize,
+            actionLeadingSpacing: Constants.WorkspaceList.swipeActionsLeadingSpacing,
+            horizontalInset: horizontalInset,
+            swipeBackground: Constants.WorkspaceList.controlSurface(for: colorScheme),
+            leadingSwipeWidth: leadingWidth,
+            isSwipeEnabled: !isUpdating,
+            onLeadingSwipeCompleted: onOpenRecentAgent,
+            onOffsetChanged: updateOffset,
             onSwipeProgressChanged: updateSwipeProgress
         ) { progress in
             workspaceButton(swipeProgress: progress)
         } actions: {
-            actionButton(.archive, color: .orange)
-            actionButton(.delete, color: .red)
+            actionButton(.archive)
+            actionButton(.delete)
         }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { rowSize = $0 }
+        .overlay(alignment: .topLeading) {
+            WorkspaceStatusSwipeBadge(
+                workspace: workspace,
+                progress: leadingProgress,
+                availableWidth: leadingLayout.maximumBadgeWidth
+            ) { badgeSize = $0 }
+            .offset(
+                x: statusInset + min(0, swipeOffset),
+                y: statusCenter + (rowSize.height / 2 - statusCenter) * leadingProgress - Constants.WorkspaceRow.statusIconSize / 2
+            )
+        }
+        .clipped()
         .overlay(alignment: .bottom) {
-            Divider()
-                .padding(.horizontal, Constants.WorkspaceList.pageInset)
-                .opacity(dividerOpacity)
-                .animation(reduceMotion ? nil : .easeOut(duration: DividerStyle.fadeDuration), value: dividerOpacity)
+            if spacious {
+                Divider()
+                    .padding(.horizontal, Constants.WorkspaceList.pageInset)
+                    .opacity(dividerOpacity)
+                    .animation(reduceMotion ? nil : .easeOut(duration: DividerStyle.fadeDuration), value: dividerOpacity)
+            }
         }
     }
 
@@ -47,9 +92,15 @@ struct WorkspaceSwipeRow: View {
         }
     }
 
+    private func updateOffset(_ offset: CGFloat) { swipeOffset = offset }
+
     private enum DividerStyle {
         static let fadeProgress: CGFloat = 0.15
         static let fadeDuration = 0.12
+    }
+
+    private enum BadgeStyle {
+        static let initialWidth: CGFloat = 136
     }
 
     private func workspaceButton(swipeProgress: CGFloat) -> some View {
@@ -64,9 +115,12 @@ struct WorkspaceSwipeRow: View {
                 workspace: workspace,
                 colorScheme: colorScheme,
                 showRepo: showRepo,
-                spacious: true,
-                timestampOpacity: 1 - Double(swipeProgress)
-            )
+                spacious: spacious,
+                timestampOpacity: 1 - Double(swipeProgress),
+                statusIconHidden: true,
+                minimumHeight: badgeSize.height,
+                leadingSwipeProgress: leadingProgress
+            ) { statusCenter = $0 }
                 .overlay(alignment: .trailing) {
                     if isUpdating { ProgressView().padding(.trailing) }
                 }
@@ -74,22 +128,34 @@ struct WorkspaceSwipeRow: View {
         .buttonStyle(.plain)
         .disabled(isUpdating)
         .accessibilityIdentifier("workspace.row.\(workspace.id)")
+        .accessibilityValue(WorkspaceStatusIconView.accessibilitySummary(for: workspace))
         .contextMenu { menuActions }
         .accessibilityActions { menuActions }
     }
 
-    private func actionButton(_ action: WorkspaceAction, color: Color) -> some View {
-        Button(action.label) { select(action) }
-            .buttonStyle(WorkspaceSwipeButtonStyle(color: color))
-            .disabled(isUpdating)
-            .accessibilityLabel("\(action.label) workspace")
-            .accessibilityIdentifier("workspace.\(action.rawValue).\(workspace.id)")
+    private func actionButton(_ action: WorkspaceAction) -> some View {
+        Button(role: action == .delete ? .destructive : nil) { select(action) } label: {
+            Image(action == .archive ? .archive : .delete)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSize, height: actionIconSize)
+        }
+        .buttonStyle(WorkspaceSwipeIconButtonStyle(size: actionSize))
+        .disabled(isUpdating)
+        .accessibilityLabel("\(action.label) workspace")
+        .accessibilityIdentifier("workspace.\(action.rawValue).\(workspace.id)")
     }
 
     private var menuActions: some View {
         Group {
-            Button("Archive workspace", systemImage: "archivebox") { select(.archive) }
-            Button("Delete workspace", systemImage: "trash", role: .destructive) { select(.delete) }
+            Button("Open most recent agent", systemImage: "bubble.left") {
+                revealedTarget = nil
+                onOpenRecentAgent()
+            }
+            if showsTrailingActions {
+                Button("Archive workspace", systemImage: "archivebox") { select(.archive) }
+                Button("Delete workspace", systemImage: "trash", role: .destructive) { select(.delete) }
+            }
         }
         .disabled(isUpdating)
     }

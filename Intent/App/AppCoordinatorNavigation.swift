@@ -12,6 +12,8 @@ final class AppCoordinatorNavigationState {
 
     var suppressWorkspaceNavigation = false
     var claimedScreenRestoration = ScreenRestorationClaim.unclaimed
+    /// Cleared by navigation, even when the user later returns to the same overview.
+    var recentWorkspaceAgentRequestId: UUID?
 }
 
 extension AppCoordinator {
@@ -109,6 +111,41 @@ extension AppCoordinator {
         selectedWorkspaceId = workspaceId
         currentScreen = .workspaceDetail(workspaceId: workspaceId)
         saveCurrentScreen()
+    }
+
+    /// A completed row swipe opens the overview first, then the most recently
+    /// active non-retired agent. Ordinary row taps keep using onSelectWorkspace.
+    @discardableResult
+    func onOpenRecentWorkspaceAgent(_ workspaceId: String) -> Task<Void, Never> {
+        onSelectWorkspace(workspaceId)
+        guard workspaceId != Workspace.chiefWorkspaceId else { return Task {} }
+        let requestId = UUID()
+        navigationState.recentWorkspaceAgentRequestId = requestId
+        return Task { @MainActor [weak self, connection = dependencies.connection] in
+            guard self?.navigationState.recentWorkspaceAgentRequestId == requestId, !Task.isCancelled else { return }
+            defer {
+                if self?.navigationState.recentWorkspaceAgentRequestId == requestId {
+                    self?.navigationState.recentWorkspaceAgentRequestId = nil
+                }
+            }
+            do {
+                // Unscoped reads include delegated and background agents too.
+                let result = try await connection.request("agent.list", params: ["workspaceId": workspaceId])
+                guard let self, !Task.isCancelled,
+                      navigationState.recentWorkspaceAgentRequestId == requestId,
+                      selectedSection == .workspaces,
+                      case let .workspaceDetail(currentWorkspaceId) = currentScreen,
+                      currentWorkspaceId == workspaceId,
+                      let response = result as? [String: Any],
+                      let rows = response["agents"] as? [[String: Any]],
+                      let agent = rows.compactMap(AgentSession.parseAgent)
+                          .filter({ $0.retiredAt == nil })
+                          .min(by: AgentListViewModel.byLastActivity) else { return }
+                onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
+            } catch {
+                AppLog.app.error("[AppCoordinator] Recent workspace agent lookup failed: \(error)")
+            }
+        }
     }
 
     /// Fire-and-forget workspace.markSeen: clears the server-owned unread

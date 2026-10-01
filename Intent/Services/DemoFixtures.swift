@@ -187,14 +187,6 @@ enum DemoFixtures {
         )
     }
 
-    static func blockHydrationDelay(from arguments: [String]) -> Duration {
-        delay(
-            from: arguments,
-            prefix: blockHydrationDelayArgumentPrefix,
-            defaultDelay: defaultBlockHydrationDelay
-        )
-    }
-
     private static func gate(
         from arguments: [String],
         triggerFilePrefix: String,

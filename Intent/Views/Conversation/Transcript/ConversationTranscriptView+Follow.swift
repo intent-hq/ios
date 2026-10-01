@@ -9,6 +9,7 @@ extension ConversationTranscriptView {
     /// corrections. Returns the effects.
     @discardableResult
     func send(_ event: Lifecycle.Event, proxy: ScrollViewProxy, animated: Bool = true) -> [Lifecycle.Effect] {
+        recordDemoRecoveryResizeFollowBack(event)
         let (state, effects) = Lifecycle.transition(lifecycle, event)
         scrollState.lifecycle = state
         for effect in effects {

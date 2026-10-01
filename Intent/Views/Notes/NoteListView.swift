@@ -267,16 +267,6 @@ enum NoteRowLayout {
         return CGFloat(max(0, depth)) * width
     }
 
-    /// Disclosure and navigation share the same icon slot so siblings align.
-    static func contentLeadingOffset(
-        depth: Int,
-        hasChildren _: Bool,
-        usesAccessibilityLayout: Bool
-    ) -> CGFloat {
-        indentation(for: depth, usesAccessibilityLayout: usesAccessibilityLayout)
-            + disclosureTargetSize + WorkspaceDetailStyle.noteTextSpacing
-    }
-
     static func titleLineLimit(usesAccessibilityLayout: Bool) -> Int? {
         usesAccessibilityLayout ? nil : Constants.Notes.List.titleLineLimit
     }

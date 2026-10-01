@@ -68,12 +68,42 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: Fixture.elementTimeout))
 
         edgeSwipe(in: app)
+        let closeSwitcher = app.buttons["connection-switcher.close"]
+        XCTAssertTrue(closeSwitcher.waitForExistence(timeout: Fixture.elementTimeout))
+        closeSwitcher.tap()
+        XCTAssertTrue(closeSwitcher.waitForNonExistence(timeout: Fixture.elementTimeout))
         workspace.tap()
         XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
         agent.tap()
         XCTAssertTrue(back.waitForExistence(timeout: Fixture.elementTimeout))
         back.tap()
         XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+    }
+
+    @MainActor
+    func testSelectedPanelSurvivesCancelledSwipeAndWorkspaceReentry() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .phone, "Compact navigation gesture")
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
+        workspace.tap()
+
+        for title in ["Changes", "Context", "Agents"] {
+            let tab = app.buttons[title].firstMatch
+            XCTAssertTrue(tab.waitForExistence(timeout: Fixture.elementTimeout))
+            tab.tap()
+            XCTAssertTrue(tab.isSelected)
+
+            edgeSwipe(in: app, progress: 0.15)
+            XCTAssertTrue(tab.isSelected, "Cancelling navigation must retain the \(title) panel")
+            edgeSwipe(in: app)
+            XCTAssertTrue(app.buttons[Fixture.workspaceListIdentifier].waitForExistence(timeout: Fixture.elementTimeout))
+            workspace.tap()
+            XCTAssertTrue(tab.waitForExistence(timeout: Fixture.elementTimeout))
+            XCTAssertTrue(tab.isSelected, "Re-entering the workspace must restore the \(title) panel")
+        }
     }
 
     @MainActor

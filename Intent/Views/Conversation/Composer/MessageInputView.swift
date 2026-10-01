@@ -65,7 +65,8 @@ struct MessageInputView: View {
                         Task { await viewModel.stopStreaming() }
                     },
                     onPhotos: { isPhotoPickerPresented = true },
-                    onFiles: { isFilePickerPresented = true }
+                    onFiles: { isFilePickerPresented = true },
+                    onPasteImages: viewModel.pasteImages
                 )
             } else {
                 inputRow
@@ -214,6 +215,7 @@ private extension MessageInputView {
                 text: $viewModel.messageText,
                 isFocused: $isFocused,
                 onSubmit: { sendCurrentMessage() },
+                onPasteImages: viewModel.pasteImages,
                 onHeightChange: updateTextViewHeight,
                 onCaretChange: updateCaretOffset
             )

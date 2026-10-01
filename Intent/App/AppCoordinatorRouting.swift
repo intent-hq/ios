@@ -19,6 +19,7 @@ extension AppCoordinator {
         routingState.hasLoadCompleted = true
         refreshSyncedBackends()
         if DemoMode.pretendPaired || backendID != nil {
+            connectingStartedByLaunch = !dependencies.sessionRegistry.consumeConnectionSelection(for: backendID)
             currentScreen = .connecting
         } else {
             // Synced connections merged from the registry (or connections
@@ -344,6 +345,7 @@ extension AppCoordinator {
 
     func onRetryConnection() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
+        connectingStartedByLaunch = false
         currentScreen = .connecting
     }
 
@@ -357,6 +359,7 @@ extension AppCoordinator {
     func onReturnToSavedMachines() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
         stopConnectionLifecycleForReturnHome()
+        connectingStartedByLaunch = false
         isDisconnected = false
         selectedWorkspaceId = nil
         pendingDeepLinkPairing = nil

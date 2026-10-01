@@ -11,6 +11,7 @@ struct WorkspaceListView: View {
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
+    @State private var showingConnectionSwitcher = false
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var workspaceSwipeProgress: [String: CGFloat] = [:]
     @State private var pendingAction: PendingAction?
@@ -29,7 +30,66 @@ struct WorkspaceListView: View {
         _viewModel = State(initialValue: WorkspaceListViewModel(workspaceStore: workspaceStore))
     }
 
+    private var canSwitchConnections: Bool {
+        guard case .workspaceList = coordinator.currentScreen else { return false }
+        return !showingConnections && !showingCreateWorkspace && pendingAction == nil && actionError == nil
+    }
+
     var body: some View {
+        WorkspaceConnectionSwitcher(
+            isPresented: $showingConnectionSwitcher,
+            isEnabled: canSwitchConnections,
+            onReveal: prepareConnectionSwitcher
+        ) {
+            workspacePage
+        }
+        .modifier(WorkspaceActionLauncher(
+            isSearching: isSearching,
+            onCreateWorkspace: {
+                showingConnectionSwitcher = false
+                if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
+            },
+            onConnections: {
+                showingConnectionSwitcher = false
+                showingConnections = true
+            }
+        ))
+        .navigationTitle("Workspaces")
+        .toolbar(.hidden, for: .navigationBar)
+        .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
+            if shouldDismiss { showingCreateWorkspace = false }
+        }
+        .sheet(isPresented: $showingCreateWorkspace) {
+            CreateWorkspaceView(session: session)
+                .environment(coordinator)
+        }
+        .sheet(isPresented: $showingConnections) {
+            ConnectionsView()
+                .environment(coordinator)
+        }
+        .alert(pendingAction?.action.title ?? "Workspace", isPresented: confirmationPresented, presenting: pendingAction) { pending in
+            Button("Cancel", role: .cancel) {}
+            Button(pending.action.label, role: pending.action == .delete ? .destructive : nil) {
+                perform(pending)
+            }
+        } message: { pending in
+            Text(pending.action.message(workspaceTitle: pending.workspace.title))
+        }
+        .alert("Workspace action failed", isPresented: errorPresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(actionError ?? "Please try again.")
+        }
+        .onChange(of: viewModel.viewMode) { _, _ in revealedSwipeTarget = nil }
+        .onChange(of: viewModel.searchText) { _, _ in revealedSwipeTarget = nil }
+        .visionWorkspaceAttentionSound(viewModel.workspaces)
+        .preference(
+            key: ConnectionBackdropPreference.self,
+            value: showingConnections ? ConnectionBackdropPreference.savedOpacity : 0
+        )
+    }
+
+    private var workspacePage: some View {
         ScrollView {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 pageHeader
@@ -68,44 +128,12 @@ struct WorkspaceListView: View {
         .refreshable {
             await workspaceStore.fetchAll()
         }
-        .modifier(WorkspaceActionLauncher(
-            isSearching: isSearching,
-            onCreateWorkspace: { if coordinator.canCreateWorkspace { showingCreateWorkspace = true } },
-            onConnections: { showingConnections = true }
-        ))
-        .navigationTitle("Workspaces")
-        .toolbar(.hidden, for: .navigationBar)
-        .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
-            if shouldDismiss { showingCreateWorkspace = false }
-        }
-        .sheet(isPresented: $showingCreateWorkspace) {
-            CreateWorkspaceView(session: session)
-                .environment(coordinator)
-        }
-        .sheet(isPresented: $showingConnections) {
-            ConnectionsView()
-                .environment(coordinator)
-        }
-        .alert(pendingAction?.action.title ?? "Workspace", isPresented: confirmationPresented, presenting: pendingAction) { pending in
-            Button("Cancel", role: .cancel) {}
-            Button(pending.action.label, role: pending.action == .delete ? .destructive : nil) {
-                perform(pending)
-            }
-        } message: { pending in
-            Text(pending.action.message(workspaceTitle: pending.workspace.title))
-        }
-        .alert("Workspace action failed", isPresented: errorPresented) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(actionError ?? "Please try again.")
-        }
-        .onChange(of: viewModel.viewMode) { _, _ in revealedSwipeTarget = nil }
-        .onChange(of: viewModel.searchText) { _, _ in revealedSwipeTarget = nil }
-        .visionWorkspaceAttentionSound(viewModel.workspaces)
-        .preference(
-            key: ConnectionBackdropPreference.self,
-            value: showingConnections ? ConnectionBackdropPreference.savedOpacity : 0
-        )
+    }
+
+    private func prepareConnectionSwitcher() {
+        searchFocused = false
+        isSearching = false
+        revealedSwipeTarget = nil
     }
 
     private var emptyState: some View {
@@ -131,6 +159,9 @@ struct WorkspaceListView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("workspaces.title")
+                .accessibilityAction(named: Text("Switch connection")) {
+                    showingConnectionSwitcher = true
+                }
         }
         .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
         .padding(.bottom, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleBottomSpacing)
@@ -161,6 +192,11 @@ struct WorkspaceListView: View {
     private var workspaceSections: some View {
         switch viewModel.viewMode {
         case .recent:
+            if !isSearching {
+                Color.clear
+                    .frame(height: Constants.WorkspaceList.recentTopSpacing)
+                    .accessibilityHidden(true)
+            }
             workspaceRows(viewModel.filteredWorkspaces)
         case .repo:
             ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
@@ -223,6 +259,9 @@ struct WorkspaceListView: View {
         ) {
             searchFocused = false
             coordinator.onSelectWorkspace(workspace.id)
+        } onOpenRecentAgent: {
+            searchFocused = false
+            coordinator.onOpenRecentWorkspaceAgent(workspace.id)
         } onAction: { action in
             searchFocused = false
             pendingAction = PendingAction(workspace: workspace, action: action)

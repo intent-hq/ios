@@ -10,6 +10,7 @@ extension ConversationTranscriptScrollPolicyTests {
         from oldHeight: CGFloat,
         to newHeight: CGFloat,
         isInteracting: Bool = false,
+        recoveryOwnsViewport: Bool = false,
         hasInitiallyScrolled: Bool = true,
         userIsScrolledAway: Bool = false
     ) -> ContainerRePin {
@@ -18,7 +19,8 @@ extension ConversationTranscriptScrollPolicyTests {
             newContainerHeight: newHeight,
             isInteracting: isInteracting,
             hasInitiallyScrolled: hasInitiallyScrolled,
-            userIsScrolledAway: userIsScrolledAway
+            userIsScrolledAway: userIsScrolledAway,
+            recoveryOwnsViewport: recoveryOwnsViewport
         )
     }
 
@@ -75,6 +77,30 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(rePinOnContainerChange(from: 780, to: 700, isInteracting: true) == .deferred)
         #expect(rePinOnContainerChange(from: 700, to: 780, isInteracting: true) == .deferred)
         #expect(rePinOnContainerChange(from: 780, to: 700, isInteracting: false) == .rePin)
+    }
+
+    /// A resize must not undo the recovery's page-up before it follows back.
+    /// The ordinary idle/follow path still pins a changed container immediately.
+    @Test func containerChangeWhileRecoveryOwnsViewportIsDeferred() {
+        #expect(rePinOnContainerChange(from: 780, to: 700, recoveryOwnsViewport: true) == .deferred)
+        #expect(rePinOnContainerChange(from: 700, to: 780, recoveryOwnsViewport: true) == .deferred)
+        #expect(rePinOnContainerChange(from: 780, to: 700, recoveryOwnsViewport: false) == .rePin)
+    }
+
+    @Test func deferredContainerChangeWaitsForRecoveryToReleaseViewport() {
+        #expect(rePinOnContainerChange(from: 780, to: 700, recoveryOwnsViewport: true) == .deferred)
+        #expect(deferredContainerRePin(distanceToBottom: 590, isFollowing: true) == .deferred)
+        #expect(deferredContainerRePin(distanceToBottom: 590, isFollowing: false) == .rePin)
+    }
+
+    @Test func recoveryOwnershipDoesNotPinUnchangedOrUnfollowedContainers() {
+        #expect(rePinOnContainerChange(from: 780, to: 780, recoveryOwnsViewport: true) == .none)
+        #expect(rePinOnContainerChange(
+            from: 780, to: 700, recoveryOwnsViewport: true, userIsScrolledAway: true
+        ) == .none)
+        #expect(rePinOnContainerChange(
+            from: 780, to: 700, recoveryOwnsViewport: true, hasInitiallyScrolled: false
+        ) == .none)
     }
 
     /// A 36 pt hooks row landing during the bounce back leaves the settled

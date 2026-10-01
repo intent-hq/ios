@@ -243,6 +243,14 @@ struct EndRecoveryReport {
 
     /// False while an episode is in flight.
     var isTerminal: Bool { reason != Fixture.recoveringReason }
+
+    /// A control may observe a natural recovery before releasing its trigger.
+    /// That episode is a baseline only, never proof of the triggered recovery.
+    func canBeBaseline(allowRecoveredEntry: Bool = false) -> Bool {
+        guard isTerminal else { return false }
+        if reason != Fixture.recoveredReason { return true }
+        return allowRecoveredEntry && corrections > 0 && endRealized
+    }
 }
 
 /// A launch armed for its evidence record: what `attachRecoveryEvidence`
@@ -628,14 +636,16 @@ func assertRecoveryReportWellFormed(in opened: OpenConversation, context: String
 /// The controlled tests' baseline: `waitUntilSettled` on `lastRow`,
 /// `assertAtEnd` on `endRow`, then the `endRecovery` report once it is
 /// terminal — an entry-time episode may still be in flight when the
-/// follow reports — which must not already read `recovered`. Fails the
-/// test and returns nil when any of that does not happen.
+/// follow reports. Legacy controls require a non-recovered baseline; a
+/// control that allows entry recovery must still require a newer episode
+/// after its trigger. Fails the test when the baseline is not allowed.
 @MainActor
 func settledRecoveryBaseline(
     lastRow: XCUIElement,
     endRow: EndRow,
     in opened: OpenConversation,
-    context: String
+    context: String,
+    allowRecoveredEntry: Bool = false
 ) -> EndRecoveryReport? {
     guard waitUntilSettled(
         on: lastRow,
@@ -658,10 +668,9 @@ func settledRecoveryBaseline(
         )
         return nil
     }
-    XCTAssertNotEqual(
-        baseline.reason,
-        Fixture.recoveredReason,
-        "\(context): the report already reads recovered before the trigger file exists — \(baseline.raw)"
+    XCTAssertTrue(
+        baseline.canBeBaseline(allowRecoveredEntry: allowRecoveredEntry),
+        "\(context): the pre-trigger report is not an allowed settled baseline — \(baseline.raw)"
     )
     return baseline
 }

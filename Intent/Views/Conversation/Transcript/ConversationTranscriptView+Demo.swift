@@ -16,6 +16,7 @@ extension ConversationTranscriptView {
             + " forcedRequests=\(scrollState.forcedFollowRequestCount)"
             + " phase=\(isUserInteracting ? "gesture" : "idle")"
             + " workspace=\(viewModel.store.workspaceId ?? "pending")"
+            + demoRecoveryResizeReport
     }
 
     /// The last episode's report or, with one in flight (`recovering`) or
@@ -80,6 +81,7 @@ extension ConversationTranscriptView {
               )
         else { return }
         AppLog.userInterface.debug("[SCROLL] Demo: restoring the end row at \(geometry.contentOffsetY)")
+        releaseHooksRowDuringDemoRecovery(geometry: geometry)
         scrollState.demoEndDerealization = nil
     }
 }

@@ -28,11 +28,8 @@ struct WorkspaceSearchBar: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { switcherWidth = $0 }
                     .transition(reduceMotion ? .identity : .offset(x: -switcherWidth - horizontalPadding))
 
-                Color.clear
-                    .frame(width: controlHeight, height: controlHeight)
-                    .anchorPreference(key: WorkspaceSearchBounds.self, value: .bounds) { $0 }
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                WorkspaceSearchSlot(height: controlHeight, isSearching: false)
+                    .frame(width: controlHeight)
                     .transition(.identity)
             }
         }
@@ -84,6 +81,7 @@ struct WorkspaceSearchPresentation: ViewModifier {
     @Binding var text: String
     @Binding var isSearching: Bool
     var isFocused: FocusState<Bool>.Binding
+    @State private var placement: WorkspaceSearchPlacement?
     @ScaledMetric(relativeTo: .body) private var inputHeight = Constants.WorkspaceSearch.expandedHeight
 
     func body(content: Content) -> some View {
@@ -91,11 +89,7 @@ struct WorkspaceSearchPresentation: ViewModifier {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isSearching {
                     HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
-                        Color.clear
-                            .frame(height: max(inputHeight, Constants.WorkspaceSearch.expandedHeight))
-                            .anchorPreference(key: WorkspaceSearchBounds.self, value: .bounds) { $0 }
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true)
+                        WorkspaceSearchSlot(height: max(inputHeight, Constants.WorkspaceSearch.expandedHeight), isSearching: true)
                         closeButton
                     }
                     .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
@@ -103,19 +97,26 @@ struct WorkspaceSearchPresentation: ViewModifier {
                     .transition(.identity)
                 }
             }
-            .overlayPreferenceValue(WorkspaceSearchBounds.self) { anchor in
-                // Resolve both slots above the scroll view so one control owns the entire morph.
-                // swiftlint:disable:next geometry_reader_usage
-                GeometryReader { proxy in
-                    if let anchor {
-                        let frame = proxy[anchor]
-                        WorkspaceSearchControl(text: $text, isSearching: $isSearching, isFocused: isFocused)
-                            .frame(width: frame.width, height: frame.height)
-                            .position(x: frame.midX, y: frame.midY)
-                    }
-                }
+            .overlayPreferenceValue(WorkspaceSearchBounds.self) { measuredPlacement in
+                let frame = placement?.frame ?? .zero
+                WorkspaceSearchControl(text: $text, isSearching: $isSearching, isFocused: isFocused)
+                    .frame(width: frame.width, height: frame.height)
+                    .position(x: frame.midX, y: frame.midY)
+                    .opacity(placement == nil ? 0 : 1)
+                    .allowsHitTesting(placement != nil)
+                    .accessibilityHidden(placement == nil)
+                    .onChange(of: measuredPlacement, initial: true) { _, next in updatePlacement(next) }
             }
+            .coordinateSpace(name: WorkspaceSearchBounds.coordinateSpace)
             .animation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration), value: isSearching)
+    }
+
+    private func updatePlacement(_ next: WorkspaceSearchPlacement?) {
+        guard let next, next.isSearching == isSearching else { return }
+        let animates = placement != nil && (isSearching || placement?.isSearching != next.isSearching)
+        withAnimation(animates && !reduceMotion ? .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration) : nil) {
+            placement = next
+        }
     }
 
     private var closeButton: some View {
@@ -228,10 +229,36 @@ private struct WorkspaceSearchControl: View {
     }
 }
 
-private struct WorkspaceSearchBounds: PreferenceKey {
-    nonisolated static var defaultValue: Anchor<CGRect>? { nil }
+private struct WorkspaceSearchSlot: View {
+    var height: CGFloat
+    var isSearching: Bool
+    @State private var frame: CGRect = .zero
 
-    nonisolated static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+    var body: some View {
+        Color.clear
+            .frame(height: height)
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .named(WorkspaceSearchBounds.coordinateSpace))
+            } action: { frame = $0 }
+            .preference(
+                key: WorkspaceSearchBounds.self,
+                value: frame.isEmpty ? nil : WorkspaceSearchPlacement(frame: frame, isSearching: isSearching)
+            )
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
+nonisolated private struct WorkspaceSearchPlacement: Equatable, Sendable {
+    var frame: CGRect
+    var isSearching: Bool
+}
+
+private struct WorkspaceSearchBounds: PreferenceKey {
+    nonisolated static let coordinateSpace = "workspaceSearch"
+    nonisolated static var defaultValue: WorkspaceSearchPlacement? { nil }
+
+    nonisolated static func reduce(value: inout WorkspaceSearchPlacement?, nextValue: () -> WorkspaceSearchPlacement?) {
         value = nextValue() ?? value
     }
 }
