@@ -61,7 +61,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         XCTAssertTrue(otherWorkspace.waitForExistence(timeout: Fixture.timeout))
         app.buttons["workspaces.search.open"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertEqual(field.value as? String, "Search workspaces")
+        XCTAssertEqual(field.value as? String, "Search")
     }
 
     @MainActor
@@ -93,7 +93,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         XCTAssertTrue(app.buttons["workspaces.viewMode.Recent"].isHittable)
         app.buttons["workspaces.search.open"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertEqual(field.value as? String, "Search workspaces")
+        XCTAssertEqual(field.value as? String, "Search")
     }
 
     @MainActor

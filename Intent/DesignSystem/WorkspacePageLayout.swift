@@ -25,10 +25,10 @@ extension Constants.WorkspaceList {
 
 extension Constants.WorkspaceSearch {
     static let morphAnimationDuration: Double = 0.45
+    static let compactTravelCompletion: CGFloat = 0.18
+    static let expansionCompletion: CGFloat = 0.75
     static let splitCompletion: CGFloat = 0.65
-    static let iconFadeStart: CGFloat = 0.55
-    static let iconFadeEnd: CGFloat = 0.9
-    static let fieldFadeStart: CGFloat = 0.08
+    static let fieldFadeStart: CGFloat = 0.22
     static let fieldFadeEnd: CGFloat = 0.5
     static let compactHeight: CGFloat = 48
     static let expandedHeight: CGFloat = 56

@@ -81,6 +81,7 @@ struct WorkspaceSearchPresentation: ViewModifier {
     @Binding var isSearching: Bool
     var isFocused: FocusState<Bool>.Binding
     @State private var placement: WorkspaceSearchPlacement?
+    @State private var fieldContentWidth: CGFloat = 0
     @ScaledMetric(relativeTo: .body) private var inputHeight = Constants.WorkspaceSearch.expandedHeight
 
     func body(content: Content) -> some View {
@@ -99,6 +100,7 @@ struct WorkspaceSearchPresentation: ViewModifier {
                     text: $text,
                     isSearching: $isSearching,
                     isFocused: isFocused,
+                    fieldContentWidth: fieldContentWidth,
                     size: frame.size,
                     progress: placement?.isSearching == true ? 1 : 0
                 )
@@ -116,6 +118,9 @@ struct WorkspaceSearchPresentation: ViewModifier {
         guard let next, next.isSearching == isSearching else { return }
         let animates = placement != nil && (isSearching || placement?.isSearching != next.isSearching)
         withAnimation(animates && !reduceMotion ? .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration) : nil) {
+            if next.isSearching {
+                fieldContentWidth = max(0, next.frame.width - next.frame.height - Constants.WorkspaceSearch.contentSpacing)
+            }
             placement = next
         }
     }
@@ -128,6 +133,7 @@ private struct WorkspaceSearchControl: View, Animatable {
     @Binding var text: String
     @Binding var isSearching: Bool
     var isFocused: FocusState<Bool>.Binding
+    var fieldContentWidth: CGFloat
     nonisolated var size: CGSize
     nonisolated var progress: CGFloat
     @State private var closingText = ""
@@ -142,11 +148,12 @@ private struct WorkspaceSearchControl: View, Animatable {
     }
 
     private var splitProgress: CGFloat {
-        min(1, max(0, progress / Constants.WorkspaceSearch.splitCompletion))
+        phase(from: Constants.WorkspaceSearch.compactTravelCompletion, to: Constants.WorkspaceSearch.splitCompletion)
     }
 
-    private var iconVisibility: CGFloat {
-        1 - phase(from: Constants.WorkspaceSearch.iconFadeStart, to: Constants.WorkspaceSearch.iconFadeEnd)
+    private var controlWidth: CGFloat {
+        let expansion = phase(from: Constants.WorkspaceSearch.compactTravelCompletion, to: Constants.WorkspaceSearch.expansionCompletion)
+        return size.height + max(0, size.width - size.height) * expansion
     }
 
     private var fieldVisibility: CGFloat {
@@ -154,7 +161,7 @@ private struct WorkspaceSearchControl: View, Animatable {
     }
 
     private var fieldWidth: CGFloat {
-        max(size.height, size.width - (size.height + Constants.WorkspaceSearch.contentSpacing) * splitProgress)
+        max(size.height, controlWidth - (size.height + Constants.WorkspaceSearch.contentSpacing) * splitProgress)
     }
 
     private var controlShape: RoundedRectangle {
@@ -163,27 +170,20 @@ private struct WorkspaceSearchControl: View, Animatable {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            closeButton
-                .frame(width: size.height, height: size.height)
-                .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: controlShape)
-                .offset(x: max(0, size.width - size.height))
+            searchField
+                .frame(width: fieldContentWidth)
+                .opacity(fieldVisibility)
+                .frame(width: fieldWidth, height: size.height, alignment: .leading)
+                .background(Constants.WorkspaceList.controlSurface(for: colorScheme))
+                .clipShape(controlShape)
+                .offset(x: max(0, size.width - controlWidth))
                 .allowsHitTesting(isSearching)
                 .accessibilityHidden(!isSearching)
 
-            ZStack(alignment: .leading) {
-                searchField
-                    .opacity(fieldVisibility)
-                    .allowsHitTesting(isSearching)
-                    .accessibilityHidden(!isSearching)
-                searchIcon
-                if !isSearching {
-                    searchButton
-                        .transition(.identity)
-                }
-            }
-            .frame(width: fieldWidth, height: size.height)
-            .background(Constants.WorkspaceList.controlSurface(for: colorScheme))
-            .clipShape(controlShape)
+            searchButton
+                .frame(width: size.height, height: size.height)
+                .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: controlShape)
+                .offset(x: max(0, size.width - size.height))
         }
         .frame(width: size.width, height: size.height, alignment: .leading)
         // Geometry and contents already use the same interpolated progress.
@@ -193,61 +193,35 @@ private struct WorkspaceSearchControl: View, Animatable {
         }
     }
 
-    private var searchIcon: some View {
-        let centeredInset = (size.height - Constants.WorkspaceSearch.iconSize) / 2
-        return Image(.search)
-            .resizable()
-            .scaledToFit()
-            .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
-            .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-            .padding(.leading, centeredInset + (Constants.WorkspaceSearch.inputLeadingInset - centeredInset) * progress)
-            .opacity(iconVisibility)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-
     private var searchButton: some View {
         Button {
+            if isSearching {
+                closingText = text
+                text = ""
+                isFocused.wrappedValue = false
+            }
             withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
-                isSearching = true
+                isSearching.toggle()
             }
         } label: {
-            Color.clear
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Search workspaces")
-        .accessibilityIdentifier("workspaces.search.open")
-    }
-
-    private var closeButton: some View {
-        Button {
-            closingText = text
-            text = ""
-            isFocused.wrappedValue = false
-            withAnimation(reduceMotion ? nil : .smooth(duration: Constants.WorkspaceSearch.morphAnimationDuration)) {
-                isSearching = false
-            }
-        } label: {
-            Image(.close)
+            Image(isSearching || progress > 0 ? .close : .search)
                 .resizable()
                 .scaledToFit()
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                 .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                 .accessibilityHidden(true)
-                .opacity(splitProgress)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Close search")
-        .accessibilityIdentifier("workspaces.search.cancel")
+        .accessibilityLabel(isSearching ? "Close search" : "Search workspaces")
+        .accessibilityIdentifier(isSearching ? "workspaces.search.cancel" : "workspaces.search.open")
     }
 
     private var searchField: some View {
         HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
             if isSearching {
-                TextField("Search workspaces", text: $text)
+                TextField("Search", text: $text)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
@@ -257,8 +231,9 @@ private struct WorkspaceSearchControl: View, Animatable {
                     .onSubmit { isFocused.wrappedValue = false }
                     .transition(.identity)
             } else {
-                Text(closingText.isEmpty ? "Search workspaces" : closingText)
+                Text(closingText.isEmpty ? "Search" : closingText)
                     .foregroundStyle(closingText.isEmpty ? Constants.Pairing.mutedForeground(for: colorScheme) : Constants.Pairing.foreground(for: colorScheme))
+                    .fixedSize(horizontal: true, vertical: false)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .lineLimit(1)
                     .accessibilityHidden(true)
@@ -269,7 +244,7 @@ private struct WorkspaceSearchControl: View, Animatable {
         }
         .interFont(Constants.Typography.bodyS)
         .tracking(inputTracking)
-        .padding(.leading, Constants.WorkspaceSearch.inputLeadingInset + (Constants.WorkspaceSearch.iconSize + Constants.WorkspaceSearch.contentSpacing) * iconVisibility)
+        .padding(.leading, Constants.WorkspaceSearch.inputLeadingInset)
         .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
         .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
     }
