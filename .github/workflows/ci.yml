@@ -478,6 +478,8 @@ jobs:
       # unverifiable selection with 83, and the per-selector table is appended
       # to the job summary (see the script header).
       - name: Record recovery diagnostic provenance
+        env:
+          ONLY_TESTING: ${{ inputs.only_testing }}
         run: |
           mkdir recovery-evidence
           git fetch --no-tags --depth=1 origin "$RECOVERY_DIAGNOSTIC_BASE_SHA"
@@ -508,7 +510,7 @@ jobs:
             sw_vers
             uptime
             echo "SIM_UDID=$SIM_UDID"
-            echo "ONLY_TESTING=${{ inputs.only_testing }}"
+            echo "ONLY_TESTING=$ONLY_TESTING"
             echo "TEST_CRASH_RETRY=$TEST_CRASH_RETRY SIM_LOCK_TIMEOUT=$SIM_LOCK_TIMEOUT"
             shasum -a 256 recovery-evidence/instrumentation.patch
             xcrun simctl list runtimes

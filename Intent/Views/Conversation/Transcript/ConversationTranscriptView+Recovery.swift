@@ -58,10 +58,8 @@ extension ConversationTranscriptView {
                 correctionsSpent: scrollState.unrealizedEndRecoveryCorrections,
                 timedOut: ContinuousClock.now >= deadline
             )
-            AppLog.userInterface.debug(
-                "[SCROLL] diagnostic poll=\(token) step=\(step) spent=\(scrollState.unrealizedEndRecoveryCorrections) "
-                    + "geometry=\(String(describing: geometry)) previous=\(String(describing: previous))"
-            )
+            AppLog.userInterface.debug("[SCROLL] diagnostic poll=\(token) step=\(step) spent=\(scrollState.unrealizedEndRecoveryCorrections) "
+                + "geometry=\(String(describing: geometry)) previous=\(String(describing: previous))")
             previous = geometry
             switch step {
             case .continue(let continuation):
