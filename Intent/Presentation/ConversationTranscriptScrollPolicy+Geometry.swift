@@ -152,10 +152,13 @@ extension ConversationTranscriptScrollPolicy {
     /// gesture has settled, as the #271 past-end clamp does; the edge the
     /// resize carries is applied meanwhile, so a row taller than the
     /// threshold shows Go to End as usual.
+    /// Recovery also defers the pin: its temporary page-up must survive
+    /// until recovery follows back. Ordinary follows still pin immediately.
     static func containerHeightChangeDecision(
         oldContainerHeight: CGFloat,
         newContainerHeight: CGFloat,
         isInteracting: Bool,
+        recoveryOwnsViewport: Bool,
         hasInitiallyScrolled: Bool,
         userIsScrolledAway: Bool
     ) -> ContainerRePinDecision {
@@ -163,7 +166,7 @@ extension ConversationTranscriptScrollPolicy {
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         ) else { return .none }
-        return isInteracting ? .deferred : .rePin
+        return isInteracting || recoveryOwnsViewport ? .deferred : .rePin
     }
 
     /// The settle re-check after a container resize: of a re-pin deferred

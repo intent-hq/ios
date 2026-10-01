@@ -615,6 +615,7 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationScrollViewSupport.sw
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptGestureProbe.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptRowHeightFrame.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Demo.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+DemoResize.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+EntryScroll.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Follow.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Geometry.swift
