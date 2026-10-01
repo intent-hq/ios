@@ -169,6 +169,12 @@ private struct WorkspaceSearchControl: View, Animatable {
         max(size.height, controlWidth - (size.height + Constants.WorkspaceSearch.contentSpacing) * splitProgress)
     }
 
+    private var fieldTravelOffset: CGFloat {
+        let travel = phase(from: Constants.WorkspaceSearch.compactTravelCompletion, to: 1)
+        let separation = sin(.pi * travel)
+        return reduceMotion ? 0 : -Constants.WorkspaceSearch.fieldTravelLag * separation * separation
+    }
+
     private var controlShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
     }
@@ -181,7 +187,7 @@ private struct WorkspaceSearchControl: View, Animatable {
                 .frame(width: fieldWidth, height: size.height, alignment: .leading)
                 .background(Constants.WorkspaceList.controlSurface(for: colorScheme))
                 .clipShape(controlShape)
-                .offset(x: max(0, size.width - controlWidth))
+                .offset(x: max(0, size.width - controlWidth), y: fieldTravelOffset)
                 .allowsHitTesting(isSearching)
                 .accessibilityHidden(!isSearching)
 
