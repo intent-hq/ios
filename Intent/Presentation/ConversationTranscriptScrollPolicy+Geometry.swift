@@ -158,7 +158,7 @@ extension ConversationTranscriptScrollPolicy {
         oldContainerHeight: CGFloat,
         newContainerHeight: CGFloat,
         isInteracting: Bool,
-        recoveryOwnsViewport: Bool,
+        recoveryOwnsViewport: Bool = false,
         hasInitiallyScrolled: Bool,
         userIsScrolledAway: Bool
     ) -> ContainerRePinDecision {
