@@ -17,7 +17,7 @@ struct WorkspaceDetailView: View {
     @State private var showNewBrowser = false
     @State private var showTransferWorkspace = false
     @State private var terminalCreationRequest: UUID?
-    @State private(set) var selectedTab: WorkspaceTab
+    @State private var selectedTab: WorkspaceTab
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var noteStore: NoteStore
     @State private var scriptStore: WorkspaceScriptStore
@@ -41,6 +41,7 @@ struct WorkspaceDetailView: View {
 
     var agentStore: AgentStore { storedAgentStore }
     var viewModel: AgentListViewModel { storedViewModel }
+    var currentTab: WorkspaceTab { selectedTab }
 
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
 
@@ -114,14 +115,7 @@ struct WorkspaceDetailView: View {
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: newId) }
             Task { await noteStore.fetchNotes(workspaceId: newId) }
-            var transaction = Transaction(animation: nil)
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                selectedTab = WorkspaceTab.restored(
-                    persistedValue: persistence.loadWorkspaceTab(workspaceId: newId),
-                    fallback: .agents
-                )
-            }
+            restoreSelectedTab(workspaceId: newId)
         }
         .onChange(of: selectedTab) { _, newTab in
             persistence.saveWorkspaceTab(
@@ -277,6 +271,17 @@ struct WorkspaceDetailView: View {
 }
 
 private extension WorkspaceDetailView {
+    func restoreSelectedTab(workspaceId: String) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            selectedTab = WorkspaceTab.restored(
+                persistedValue: persistence.loadWorkspaceTab(workspaceId: workspaceId),
+                fallback: .agents
+            )
+        }
+    }
+
     var toolbarTitle: some View {
         VStack(spacing: WorkspaceDetailStyle.tabInset) {
             Text(workspaceTitle)

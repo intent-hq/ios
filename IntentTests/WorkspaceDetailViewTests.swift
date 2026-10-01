@@ -17,8 +17,8 @@ struct WorkspaceDetailViewTests {
         let saved = WorkspaceDetailView(workspaceId: "saved-workspace", session: session, persistence: persistence)
         let unsaved = WorkspaceDetailView(workspaceId: "new-workspace", session: session, persistence: persistence)
 
-        #expect(saved.selectedTab == tab)
-        #expect(unsaved.selectedTab == .agents)
+        #expect(saved.currentTab == tab)
+        #expect(unsaved.currentTab == .agents)
         #expect(persistence.loadWorkspaceTab(workspaceId: "saved-workspace") == tab.persistedValue)
         #expect(persistence.loadWorkspaceTab(workspaceId: "new-workspace") == nil)
     }
