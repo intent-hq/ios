@@ -155,20 +155,19 @@ private struct WorkspaceSearchControl: View {
 
     var body: some View {
         ZStack {
-            searchField
-                .opacity(isSearching ? 1 : 0)
-                .allowsHitTesting(isSearching)
-                .accessibilityHidden(!isSearching)
-            searchButton
-                .opacity(isSearching ? 0 : 1)
-                .allowsHitTesting(!isSearching)
-                .accessibilityHidden(isSearching)
+            if isSearching {
+                searchField
+                    .transition(.opacity)
+            } else {
+                searchButton
+                    .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Constants.WorkspaceList.controlSurface(for: colorScheme))
         .clipShape(RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular))
-        .onChange(of: isSearching, initial: true) { _, searching in
-            isFocused.wrappedValue = searching
+        .onChange(of: isSearching) { _, searching in
+            if !searching { isFocused.wrappedValue = false }
         }
     }
 
@@ -201,6 +200,7 @@ private struct WorkspaceSearchControl: View {
                 .submitLabel(.search)
                 .focused(isFocused)
                 .accessibilityIdentifier("workspaces.search.field")
+                .onAppear { isFocused.wrappedValue = true }
                 .onSubmit { isFocused.wrappedValue = false }
             if !text.isEmpty {
                 Button {
