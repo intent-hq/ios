@@ -123,6 +123,9 @@ jobs:
       - name: macOS runner pool selection tests
         run: python3 scripts/test_select_macos_runner.py
 
+      - name: TestFlight release notes tests
+        run: python3 scripts/test_release_notes.py
+
       - name: Xcode Cloud post-clone tests
         run: scripts/test-ci-post-clone.sh
 
