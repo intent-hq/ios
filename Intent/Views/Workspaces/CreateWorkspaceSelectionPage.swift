@@ -21,7 +21,7 @@ struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Co
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSearching = false
     @State private var viewportHeight: CGFloat = 0
-    @State private var resultsOffset: CGFloat = 0
+    @State private var searchScrollOffset: CGFloat = 0
     @State private var scrollPosition = ScrollPosition(edge: .top)
     @FocusState private var searchFocused: Bool
 
@@ -86,21 +86,21 @@ struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Co
             } action: { _, size in
                 viewportHeight = size.viewportHeight
                 if isSearching {
-                    scrollPosition.scrollTo(y: resultsOffset)
+                    scrollPosition.scrollTo(y: searchScrollOffset)
                 }
             }
             .onPreferenceChange(CreateWorkspaceResultsOffset.self) { offset in
-                resultsOffset = offset
-                if isSearching { scrollPosition.scrollTo(y: offset) }
+                searchScrollOffset = max(0, offset - CreateWorkspaceFormStyle.pagePadding)
+                if isSearching { scrollPosition.scrollTo(y: searchScrollOffset) }
             }
             .onChange(of: searchText) { _, query in
                 if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    scrollPosition.scrollTo(y: resultsOffset)
+                    scrollPosition.scrollTo(y: searchScrollOffset)
                 }
             }
             .onChange(of: isSearching) { _, searching in
                 if searching {
-                    scrollPosition.scrollTo(y: resultsOffset)
+                    scrollPosition.scrollTo(y: searchScrollOffset)
                 } else {
                     scrollPosition.scrollTo(edge: .top)
                 }
