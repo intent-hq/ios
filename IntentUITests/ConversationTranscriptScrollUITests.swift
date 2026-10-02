@@ -302,7 +302,8 @@ extension ConversationTranscriptScrollUITests {
             return isInside(rect, opened.transcript)
         })
         assertStartupDividerGeometry(app, opened: opened)
-        let row = message(in: app, containing: "Startup row 26.")
+        // The divider can be at the viewport's bottom, leaving row 26 offscreen.
+        let row = try startupVisibleRow(opened)
         try assertStartupViewportStays(app, opened: opened, row: row) {}
     }
 
@@ -401,6 +402,7 @@ extension ConversationTranscriptScrollUITests {
             (frame(of: row)?.minY ?? .nan) - opened.transcript.frame.minY
         })
         XCTAssertEqual(row.label, expectedLabel, "the baseline must measure the selected row")
+        XCTAssertTrue(isInside(row, opened.transcript), "the baseline must measure a fully visible row")
         try release()
         var moved = false
         let ready = waitUntil(timeout: Fixture.settleTimeout) {

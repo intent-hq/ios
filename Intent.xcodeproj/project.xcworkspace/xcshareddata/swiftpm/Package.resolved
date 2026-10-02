@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/intent-hq/textual",
       "state" : {
-        "revision" : "59f9f196ee9c0e855230d82b9124b24162fb9ddd",
-        "version" : "0.5.0-intent.3"
+        "revision" : "57fc5619f9e3d478f42fa0a1eb9e9ae328414fcd",
+        "version" : "0.5.0-intent.4"
       }
     }
   ],
