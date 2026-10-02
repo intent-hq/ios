@@ -8,7 +8,6 @@ struct AgentHistoryList: View {
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @ScaledMetric(relativeTo: .body) private var avatarSize = ConnectionSwitcherStyle.iconSize
 
     private var entries: [AgentHistoryEntry] { coordinator.visibleAgentHistory }
 
@@ -77,8 +76,6 @@ struct AgentHistoryList: View {
         let subtitle = subtitle(for: entry, showsAgentName: workspaceTitle != nil)
         return Button { onSelect(entry) } label: {
             HStack(spacing: ConnectionSwitcherStyle.rowInset) {
-                AgentAvatarView(agentId: entry.agentId, size: avatarSize)
-                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.rowTextSpacing) {
                     Text(workspaceTitle ?? entry.agentName)
                         .interFont(Constants.Typography.bodySEmphasized)
