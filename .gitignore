@@ -38,5 +38,9 @@ fastlane/screenshots/
 fastlane/test_output/
 fastlane/report.xml
 
+# Local Bundler configuration and installed gems (the lockfile is tracked)
+.bundle/
+vendor/bundle/
+
 # OS files
 .DS_Store

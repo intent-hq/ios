@@ -75,7 +75,12 @@ for arg in "$@"; do
   prev=$arg
 done
 case " $* " in
-  *" -showsdks "*) echo "Simulator - iOS -sdk iphonesimulator"; echo "Simulator - visionOS -sdk xrsimulator"; exit 0 ;;
+  *" -showsdks "*)
+    echo "Simulator - iOS -sdk iphonesimulator"
+    echo "Simulator - visionOS -sdk xrsimulator"
+    [ "${STUB_NO_XROS:-0}" = 1 ] || echo "visionOS -sdk xros"
+    if [ "${STUB_SDK_DELAY:-0}" = 1 ]; then sleep 0.05; echo 'another installed SDK'; fi
+    exit 0 ;;
   *" -enumerate-tests "*)
     if [ -n "${STUB_ENUMERATE_FAIL:-}" ]; then
       echo "xcodebuild: error: Unable to enumerate tests (stub)"
@@ -287,6 +292,10 @@ kept_log() { sed -n 's/^Full xcodebuild output kept at: //p' "$1" | head -n 1; }
 retry_argv() { grep '^argv:' "$work/$1.args" | grep -v -- '-enumerate-tests' | sed -n '2p'; }
 
 mkdir -p "$SIM_LOCK_DIR"
+
+echo "# SDK probes consume later output instead of treating SIGPIPE as a missing SDK (ios#673)"
+status=$(run_filtered sdk-later-output "" build-visionos STUB_SDK_DELAY=1)
+assert_eq "installed visionOS simulator SDK survives later producer output" "$status" 0
 
 echo "# passing run"
 status=$(STUB_MODE=pass run_wrapper "$work/pass.out" test-without-building)
@@ -898,6 +907,69 @@ for config in Profile release 'Release -sdk iphoneos'; do
     'BUILD_CONFIGURATION must be Debug or Release'
   assert_eq "invalid configuration never invokes xcodebuild" "$(argv_count badconfig)" 0
 done
+echo "# release archive/export use signed device Release builds with explicit numbers"
+printf '%s\n' 'test key fixture (not a real key)' > "$work/AuthKey.p8"
+printf '%s\n' '<plist/>' > "$work/ExportOptions.plist"
+release_env=(ASC_KEY_ID=TESTKEY ASC_ISSUER_ID=TESTISSUER ASC_KEY_PATH="$work/AuthKey.p8"
+  RELEASE_ARCHIVE_PATH="$work/Intent.xcarchive" RELEASE_VERSION=1.2.3 RELEASE_BUILD_NUMBER=987)
+status=$(run_filtered archive "" archive-ios "${release_env[@]}" DERIVED_DATA_DIR="$work/Release Data")
+assert_eq "signed archive succeeds" "$status" 0
+args=$(argv_line archive 1)
+assert_contains "archive pins project, scheme and Release" "$args" \
+  '[archive] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-configuration] [Release]'
+assert_contains "archive uses iOS devices, not a simulator" "$args" '[-destination] [generic/platform=iOS]'
+assert_contains "archive supplies API key file and provisioning updates" "$args" \
+  "[-allowProvisioningUpdates] [-authenticationKeyPath] [$work/AuthKey.p8] [-authenticationKeyID] [TESTKEY] [-authenticationKeyIssuerID] [TESTISSUER]"
+assert_contains "archive overrides version/build only at build time" "$args" \
+  '[CODE_SIGN_STYLE=Automatic] [MARKETING_VERSION=1.2.3] [CURRENT_PROJECT_VERSION=987]'
+assert_contains "archive preserves derived data override" "$args" "[-derivedDataPath] [$work/Release Data]"
+assert_lacks "archive does not disable code signing" "$args" CODE_SIGNING_ALLOWED=NO
+assert_lacks "archive never enables testability" "$args" ENABLE_TESTABILITY
+status=$(run_filtered archive-no-auth "" archive-ios "${release_env[@]}" ASC_KEY_ID=)
+assert_eq "archive rejects missing credentials" "$status" 1
+assert_eq "missing credentials stop before xcodebuild" "$(argv_count archive-no-auth)" 0
+status=$(run_filtered archive-debug "" archive-ios "${release_env[@]}" BUILD_CONFIGURATION=Debug)
+assert_eq "archive rejects Debug" "$status" 1
+for invalid in '' '12.3' '987 -sdk iphoneos'; do
+  status=$(run_filtered archive-number "" archive-ios "${release_env[@]}" RELEASE_BUILD_NUMBER="$invalid")
+  assert_eq "invalid release number is rejected" "$status" 1
+  assert_eq "invalid release number never invokes xcodebuild" "$(argv_count archive-number)" 0
+done
+mkdir -p "$work/Intent.xcarchive"
+status=$(run_filtered archive-existing "" archive-ios "${release_env[@]}")
+assert_eq "archive refuses to overwrite a prior archive" "$status" 1
+status=$(run_filtered export "" export-ios "${release_env[@]}" \
+  RELEASE_EXPORT_PATH="$work/Export" RELEASE_EXPORT_OPTIONS="$work/ExportOptions.plist")
+assert_eq "export succeeds" "$status" 0
+assert_contains "export consumes the supplied archive and options" "$(argv_line export 1)" \
+  "[-exportArchive] [-archivePath] [$work/Intent.xcarchive] [-exportPath] [$work/Export] [-exportOptionsPlist] [$work/ExportOptions.plist]"
+assert_contains "export also supports automatic API signing" "$(argv_line export 1)" '[-allowProvisioningUpdates]'
+assert_lacks "export never uses simulator signing flags" "$(argv_line export 1)" CODE_SIGNING_ALLOWED=NO
+
+echo "# visionOS archive requires its device SDK, never TailcatKit"
+mkdir -p "$work/vision-only/scripts"
+cp "$SCRIPT" "$work/vision-only/scripts/xcodebuild.sh"
+status=$(SCRIPT="$work/vision-only/scripts/xcodebuild.sh" run_filtered archive-vision "" archive-visionos \
+  "${release_env[@]}" RELEASE_ARCHIVE_PATH="$work/Vision.xcarchive" TAILCATKIT_AUTOBUILD=0 STUB_SDK_DELAY=1)
+assert_eq "visionOS archives without any TailcatKit framework or autobuild" "$status" 0
+assert_eq "visionOS archive checks SDK before archiving" "$(argv_line archive-vision 1)" 'argv: [-showsdks]'
+assert_contains "visionOS archive uses a device destination" "$(argv_line archive-vision 2)" \
+  '[-destination] [generic/platform=visionOS]'
+assert_contains "visionOS archive uses the same checked pair" "$(argv_line archive-vision 2)" \
+  '[MARKETING_VERSION=1.2.3] [CURRENT_PROJECT_VERSION=987]'
+assert_lacks "visionOS archive permits signing" "$(argv_line archive-vision 2)" CODE_SIGNING_ALLOWED=NO
+status=$(run_filtered archive-vision-no-sdk "" archive-visionos "${release_env[@]}" \
+  RELEASE_ARCHIVE_PATH="$work/Vision.xcarchive" STUB_NO_XROS=1)
+assert_eq "a simulator SDK alone cannot satisfy a visionOS archive" "$status" 1
+assert_eq "missing visionOS device SDK never starts archiving" "$(argv_count archive-vision-no-sdk)" 1
+mkdir -p "$work/Vision.xcarchive"
+status=$(run_filtered export-vision "" export-visionos "${release_env[@]}" \
+  RELEASE_ARCHIVE_PATH="$work/Vision.xcarchive" RELEASE_EXPORT_PATH="$work/VisionExport" \
+  RELEASE_EXPORT_OPTIONS="$work/ExportOptions.plist")
+assert_eq "visionOS exports its own archive" "$status" 0
+assert_contains "visionOS export consumes the visionOS archive" "$(argv_line export-vision 1)" \
+  "[-exportArchive] [-archivePath] [$work/Vision.xcarchive]"
+
 echo "# derived data is shared within a job, including enumeration and retries"
 derived_data="$work/Derived Data"
 for sub in resolve build-ios build-visionos build-for-testing test-ios test-ios-unit test-without-building test-without-building-unit; do

@@ -2,12 +2,8 @@
 
 app_identifier("dev.intentapp.ios")
 
-# TODO(user): set the Apple ID email used to sign in to App Store Connect.
-apple_id("todo-user@example.com")
+# Release lanes authenticate using ASC_KEY_ID, ASC_ISSUER_ID and ASC_PRIVATE_KEY.
+# No interactive Apple ID session is required.
 
 # Apple Developer Portal team (matches DEVELOPMENT_TEAM in Intent.xcodeproj).
 team_id("C26QN7DD6G")
-
-# TODO(user): uncomment and set only if the App Store Connect team id differs
-# from the Developer Portal team id (e.g. membership in multiple teams).
-# itc_team_id("123456789")

@@ -2,11 +2,49 @@ default_platform(:ios)
 
 require "fileutils"
 require "json"
+require_relative "lib/release_support"
 
 # Keep in sync with the devices() list in fastlane/Snapfile.
 SCREENSHOT_DEVICES = ["iPhone 17 Pro Max", "iPad Pro 13-inch (M4)"].freeze
 
 platform :ios do
+  desc "Read App Store Connect and print the next version/build pair; never archive or upload"
+  lane :testflight_preflight do
+    app = app_store_connect_app
+    version = version_guard(app: app)
+    number = next_build_number(app: app)
+    UI.success("Version guard passed. TestFlight version #{version}, next build #{number} (from App Store Connect).")
+    { version: version, build_number: number }
+  end
+
+  private_lane :app_store_connect_app do
+    app_store_connect_api_key(**ReleaseSupport.credentials, duration: 1200)
+    ReleaseSupport.app
+  end
+
+  private_lane :next_build_number do |options|
+    ReleaseSupport.next_build_number(options[:app] || app_store_connect_app)
+  end
+
+  private_lane :version_guard do |options|
+    ReleaseSupport.version_guard(options[:app] || app_store_connect_app, ReleaseSupport.marketing_version)
+  end
+
+  # Callers must serialize all release jobs through upload/processing. Reading
+  # ASC is not a reservation; an independent uploader could still race us.
+  # Pass the same `release: testflight_preflight` result for both platforms,
+  # and finish BOTH archives before uploading either one.
+  private_lane :build_app_for_testflight do |options|
+    platform = (options[:platform] || "ios").to_s
+    UI.user_error!("Release platform must be ios or visionos.") unless ReleaseSupport::PLATFORMS.key?(platform)
+    pair = options[:release] || testflight_preflight
+    if options[:dry_run]
+      pair
+    else
+      ReleaseSupport.build(**pair, platform: platform)
+    end
+  end
+
   desc "Capture App Store screenshots on the devices configured in fastlane/Snapfile"
   lane :screenshots do
     prepare_screenshot_simulators

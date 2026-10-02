@@ -15,6 +15,10 @@
 #
 #   resolve                 Resolve SPM package dependencies
 #   build-ios               Build for the generic iOS Simulator destination
+#   archive-ios             Signed Release archive for generic iOS devices
+#   export-ios              Export that archive for App Store Connect (no upload)
+#   archive-visionos        Signed Release archive for generic visionOS devices
+#   export-visionos         Export that archive for App Store Connect (no upload)
 #   build-visionos          Build for the generic visionOS Simulator destination
 #   build-for-testing       Build the iOS test bundle (CI split step)
 #   test-without-building   Run iOS tests against a prior build-for-testing
@@ -32,6 +36,11 @@
 # platformFilter = ios only).
 #
 # Environment knobs (all optional; local runs need none):
+#   Release-only commands require RELEASE_ARCHIVE_PATH, ASC_KEY_PATH (a mode
+#   0600 .p8 file), ASC_KEY_ID and ASC_ISSUER_ID. Both archive commands require
+#   RELEASE_VERSION and RELEASE_BUILD_NUMBER; both export commands require
+#   RELEASE_EXPORT_PATH and RELEASE_EXPORT_OPTIONS. Fastlane sets these after
+#   checking App Store Connect. Build numbers are command-line overrides only.
 #   BUILD_CONFIGURATION   Debug or Release; unset/empty preserves the scheme's
 #                         existing defaults. Applied to every build/test call,
 #                         including enumeration and crash retries. Release test
@@ -215,6 +224,10 @@ Usage: scripts/xcodebuild.sh <subcommand>
 
   resolve                 Resolve SPM package dependencies
   build-ios               Build for the generic iOS Simulator destination
+  archive-ios             Signed Release archive for generic iOS devices
+  export-ios              Export that archive for App Store Connect (no upload)
+  archive-visionos        Signed Release archive for generic visionOS devices
+  export-visionos         Export that archive for App Store Connect (no upload)
   build-visionos          Build for the generic visionOS Simulator destination
   build-for-testing       Build the iOS test bundle (CI split step)
   test-without-building   Run iOS tests against a prior build-for-testing
@@ -273,7 +286,8 @@ pick_simulator() {
 }
 
 ensure_visionos_sdk() {
-  if ! xcodebuild -showsdks 2>/dev/null | grep -q 'xrsimulator'; then
+  # Consume the full stream: grep -q can SIGPIPE xcodebuild under pipefail (#673).
+  if ! xcodebuild -showsdks 2>/dev/null | grep 'xrsimulator' >/dev/null; then
     die "visionOS simulator SDK (xrsimulator) is not installed for the selected Xcode.
 Install it with: xcodebuild -downloadPlatform visionOS
 Refusing to build: without the platform, xcodebuild would silently fall back to iphoneos."
@@ -761,6 +775,54 @@ cmd_build_ios() {
   ensure_tailcatkit
   run_xcodebuild build "${PROJECT_ARGS[@]}" \
     -destination 'generic/platform=iOS Simulator' "${SIGNING_ARGS[@]}"
+}
+
+release_signing_args() {
+  [ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_ISSUER_ID:-}" ] && [ -s "${ASC_KEY_PATH:-}" ] \
+    || die "Release signing requires ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_PATH; run through bundle exec fastlane."
+  [ -n "${RELEASE_ARCHIVE_PATH:-}" ] || die "RELEASE_ARCHIVE_PATH is required."
+  RELEASE_SIGNING_ARGS=(-allowProvisioningUpdates -authenticationKeyPath "$ASC_KEY_PATH"
+    -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+}
+
+cmd_archive() {
+  local platform=$1 destination
+  release_signing_args
+  [[ "${RELEASE_VERSION:-}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] \
+    || die "RELEASE_VERSION must be the checked MARKETING_VERSION from fastlane."
+  [[ "${RELEASE_BUILD_NUMBER:-}" =~ ^[0-9]+$ ]] \
+    || die "RELEASE_BUILD_NUMBER must be the next App Store Connect build number from fastlane."
+  [ ! -e "$RELEASE_ARCHIVE_PATH" ] || die "Archive already exists; choose a fresh RELEASE_ARCHIVE_PATH."
+  [ "${BUILD_CONFIGURATION:-Release}" = Release ] || die "Release archives only support Release."
+  if [ "$platform" = ios ]; then
+    destination='generic/platform=iOS'
+    ensure_tailcatkit
+  else
+    destination='generic/platform=visionOS'
+    if ! xcodebuild -showsdks 2>/dev/null | grep -- '-sdk xros' >/dev/null; then
+      die "visionOS device SDK (xros) is not installed. Install the visionOS platform in Xcode before archiving."
+    fi
+  fi
+  local extra=()
+  [ -z "${SPM_CLONE_DIR:-}" ] || extra+=(-clonedSourcePackagesDirPath "$SPM_CLONE_DIR")
+  [ -z "${DERIVED_DATA_DIR:-}" ] || extra+=(-derivedDataPath "$DERIVED_DATA_DIR")
+  # Do not trace signing arguments or inherit the simulator's no-signing flags.
+  xcodebuild archive "${PROJECT_ARGS[@]}" -configuration Release \
+    -destination "$destination" -archivePath "$RELEASE_ARCHIVE_PATH" \
+    "${RELEASE_SIGNING_ARGS[@]}" CODE_SIGN_STYLE=Automatic \
+    "MARKETING_VERSION=$RELEASE_VERSION" "CURRENT_PROJECT_VERSION=$RELEASE_BUILD_NUMBER" \
+    ${extra+"${extra[@]}"}
+}
+
+cmd_export() {
+  release_signing_args
+  [ -d "$RELEASE_ARCHIVE_PATH" ] || die "Release archive does not exist."
+  [ -n "${RELEASE_EXPORT_PATH:-}" ] && [ -s "${RELEASE_EXPORT_OPTIONS:-}" ] \
+    || die "RELEASE_EXPORT_PATH and RELEASE_EXPORT_OPTIONS are required."
+  [ ! -e "$RELEASE_EXPORT_PATH" ] || die "Export path already exists; choose a fresh RELEASE_EXPORT_PATH."
+  xcodebuild -exportArchive -archivePath "$RELEASE_ARCHIVE_PATH" \
+    -exportPath "$RELEASE_EXPORT_PATH" -exportOptionsPlist "$RELEASE_EXPORT_OPTIONS" \
+    "${RELEASE_SIGNING_ARGS[@]}"
 }
 
 cmd_build_visionos() {
@@ -1290,6 +1352,9 @@ esac
 case "$subcommand" in
   resolve)               cmd_resolve ;;
   build-ios)             cmd_build_ios ;;
+  archive-ios)           cmd_archive ios ;;
+  archive-visionos)      cmd_archive visionos ;;
+  export-ios|export-visionos) cmd_export ;;
   build-visionos)        cmd_build_visionos ;;
   build-for-testing)     cmd_build_for_testing ;;
   test-without-building) cmd_test_without_building ;;
