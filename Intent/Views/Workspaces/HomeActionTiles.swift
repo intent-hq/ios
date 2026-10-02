@@ -17,6 +17,7 @@ struct HomeActionTiles: View {
     var allowsWorkspaceCreation = true
     var allowsAssistant = true
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .body) private var tileHeight = Layout.minimumHeight
@@ -51,7 +52,8 @@ struct HomeActionTiles: View {
         .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         .scrollTargetBehavior(.viewAligned)
         .defaultScrollAnchor(.trailing, for: .alignment)
-        .contentMargins(.horizontal, Layout.inset, for: .scrollContent)
+        .contentMargins(.horizontal, sizeClass == .regular ? 0 : Layout.inset, for: .scrollContent)
+        .padding(.horizontal, sizeClass == .regular ? Layout.inset : 0)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("intent.menu.tiles")
     }
