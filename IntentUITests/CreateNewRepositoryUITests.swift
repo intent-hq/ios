@@ -123,11 +123,11 @@ extension XCUIApplication {
         let origin = coordinate(withNormalizedOffset: .zero)
         for _ in 0..<WorkspaceCreationTestSupport.maximumSwipes {
             let inset = WorkspaceCreationTestSupport.gestureInset
-            let bottom = min(form.frame.maxY, buttons["creation.create"].frame.minY - inset)
+            let bottom = min(form.frame.maxY, buttons["creation.create"].frame.minY)
             let viewport = CGRect(x: form.frame.minX, y: form.frame.minY, width: form.frame.width, height: bottom - form.frame.minY)
             if viewport.contains(source.frame) { return source }
-            let start = origin.withOffset(CGVector(dx: form.frame.minX + inset / 2, dy: bottom - inset))
-            let end = origin.withOffset(CGVector(dx: form.frame.minX + inset / 2, dy: form.frame.minY + inset))
+            let start = origin.withOffset(CGVector(dx: form.frame.midX, dy: bottom - inset))
+            let end = origin.withOffset(CGVector(dx: form.frame.midX, dy: form.frame.minY + inset))
             start.press(forDuration: WorkspaceCreationTestSupport.dragDuration, thenDragTo: end)
         }
         XCTFail("Scrolling must reveal the source selector above the Create button.", file: file, line: line)
