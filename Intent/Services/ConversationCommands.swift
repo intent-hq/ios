@@ -55,6 +55,7 @@ final class ConversationCommands {
         let delegationGroupStatus: (completed: Int, total: Int)?
         let groups: [WatchedAgentGroup]
         let agentStatuses: [String: String]
+        let agents: [[String: Any]]
         let summaryBoundary: AgentSummaryStore.ReadBoundary
     }
 
@@ -457,6 +458,10 @@ extension ConversationCommands {
             groups: groups,
             agentStatuses: (response["agentStatuses"] as? [String: Any] ?? [:])
                 .compactMapValues { $0 as? String }.filter { agentIds.contains($0.key) },
+            agents: (response["agents"] as? [[String: Any]] ?? []).filter { row in
+                guard let id = row["id"] as? String, !id.isEmpty else { return false }
+                return agentIds.contains(id)
+            },
             summaryBoundary: summaryBoundary
         )
     }
