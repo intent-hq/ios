@@ -1,0 +1,113 @@
+name: TestFlight
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: Upload both platforms to internal Alpha (false archives only)
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+# All Alpha/Beta/manual releases must use this SAME group until upload and
+# tagging finish. queue:max preserves pending merges instead of replacing them.
+concurrency:
+  group: testflight-upload
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  select-macos-runner:
+    name: Select macOS runner
+    runs-on: ubuntu-latest
+    outputs:
+      runs-on: ${{ steps.select.outputs.runs-on || '"macos-15"' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check build-only Mac status
+        id: select
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+          RUNNER_POOL_LABEL: intent-ios-build
+        run: bash .github/scripts/select-macos-runner.sh
+
+  alpha:
+    name: Alpha (iOS and visionOS)
+    needs: select-macos-runner
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on) }}
+    timeout-minutes: 180
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      commit: ${{ steps.release.outputs.commit }}
+    env:
+      GIT_TERMINAL_PROMPT: '0'
+      FASTLANE_SKIP_UPDATE_CHECK: '1'
+      FASTLANE_HIDE_CHANGELOG: '1'
+      SPM_CLONE_DIR: build/SourcePackages
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Ruby and pinned fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - name: Test release orchestration
+        run: |
+          bundle exec ruby scripts/test-fastlane.rb
+          bundle exec ruby scripts/test-alpha.rb
+          python3 scripts/test_release_notes.py
+      - name: Select Xcode
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
+            xcode=/Applications/Xcode_26.3.app
+          else
+            xcode=$(find /Applications -maxdepth 1 -name 'Xcode*.app' | sort -V | tail -n 1)
+          fi
+          if [ ! -d "$xcode/Contents/Developer" ]; then
+            echo "::error::The release Xcode is not installed."
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          echo "DERIVED_DATA=$RUNNER_TEMP/testflight-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+      - name: Check Metal Toolchain on local Mac
+        if: runner.environment == 'self-hosted'
+        run: |
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun metal -v
+      - name: Archive both platforms and optionally upload Alpha
+        id: release
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          RELEASE_UPLOAD: ${{ github.event_name == 'push' || inputs.upload }}
+        run: bundle exec fastlane ios alpha "upload:$RELEASE_UPLOAD" defer_tag:true
+
+  tag-alpha:
+    name: Mark completed Alpha release
+    needs: alpha
+    if: needs.alpha.outputs.tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.alpha.outputs.commit }}
+      - name: Push built commit tag
+        env:
+          TESTFLIGHT_TAG: ${{ needs.alpha.outputs.tag }}
+          TESTFLIGHT_COMMIT: ${{ needs.alpha.outputs.commit }}
+        run: bash .github/scripts/push-testflight-tag.sh

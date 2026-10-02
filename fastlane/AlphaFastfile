@@ -1,0 +1,53 @@
+require_relative "lib/testflight_release"
+
+platform :ios do
+  desc "Archive iOS and visionOS, then upload to internal Alpha (upload:false archives only)"
+  lane :alpha do |options|
+    upload = TestflightRelease.boolean_option(options, :upload, default: true)
+    defer_tag = TestflightRelease.boolean_option(options, :defer_tag, default: false)
+    release = testflight_preflight
+    head = TestflightRelease.git("rev-parse", "HEAD").strip
+    notes = TestflightRelease.notes(channel: "alpha", head: head)
+    UI.message("Alpha #{release[:version]} (#{release[:build_number]}) at #{head}\nWhat to Test:\n#{notes}")
+    statuses = { "ios" => "not built", "visionos" => "not built" }
+    begin
+      group = TestflightRelease.internal_group("Alpha") if upload
+      artifacts = statuses.keys.map do |platform|
+        statuses[platform] = "archive/export failed"
+        artifact = build_app_for_testflight(platform: platform, release: release)
+        statuses[platform] = "archived; not uploaded"
+        artifact
+      end
+      if upload
+        artifacts.each do |artifact|
+          platform = artifact.fetch(:platform)
+          statuses[platform] = "upload/processing failed; check Apple for a possibly accepted binary"
+          # Refresh the short-lived token after archives and before each upload.
+          app_store_connect_app
+          upload_to_testflight(
+            app_identifier: ReleaseSupport::APP_IDENTIFIER,
+            app_platform: platform == "visionos" ? "xros" : "ios",
+            ipa: artifact.fetch(:ipa), app_version: release[:version],
+            build_number: release[:build_number].to_s, changelog: notes,
+            skip_submission: true, skip_waiting_for_build_processing: false,
+            distribute_external: false, notify_external_testers: false,
+            submit_beta_review: false, wait_processing_timeout_duration: 3600
+          )
+          statuses[platform] = "uploaded and processed; group assignment failed"
+          TestflightRelease.distribute(artifact, group)
+          statuses[platform] = "uploaded, processed and distributed to internal Alpha"
+        end
+        tag = "testflight/alpha/#{release[:build_number]}"
+        if defer_tag
+          TestflightRelease.output("tag", tag)
+          TestflightRelease.output("commit", head)
+        else
+          TestflightRelease.push_tag(tag, head)
+        end
+      end
+    ensure
+      TestflightRelease.summary(channel: "Alpha", release: release, head: head, notes: notes, statuses: statuses)
+    end
+    release
+  end
+end

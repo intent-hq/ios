@@ -4,6 +4,8 @@ require "fileutils"
 require "json"
 require_relative "lib/release_support"
 
+import "AlphaFastfile"
+
 # Keep in sync with the devices() list in fastlane/Snapfile.
 SCREENSHOT_DEVICES = ["iPhone 17 Pro Max", "iPad Pro 13-inch (M4)"].freeze
 
@@ -82,3 +84,5 @@ platform :ios do
     end
   end
 end
+
+import "VersionBumpFastfile"
