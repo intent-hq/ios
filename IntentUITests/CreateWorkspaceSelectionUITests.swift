@@ -63,8 +63,11 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         attachEvidence(in: app, name: "repository-selected")
 
         selectRepositoryThroughSearch(in: app, previous: repository)
+        app.buttons["creation.repositorySearch.open"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
         let close = app.buttons["creation.close"]
         XCTAssertEqual(close.label, "Close")
+        XCTAssertTrue(close.isHittable)
         close.tap()
         XCTAssertTrue(title.waitForNonExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.elementTimeout))
@@ -233,6 +236,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         app.buttons["creation.branchSearch.open"].tap()
         XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.buttons["creation.branchBack"].isHittable)
         attachEvidence(in: app, name: "branch-search-opened")
         XCTAssertLessThan(main.frame.minY, initialRowY)
         XCTAssertTrue(main.isHittable)

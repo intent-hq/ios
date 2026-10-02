@@ -17,6 +17,8 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Next"].isEnabled)
         name.tap()
         name.typeText("my-project")
+        XCTAssertTrue(app.buttons["creation.branchBack"].isHittable)
+        attachEvidence(in: app, name: "new-repository-name-with-keyboard")
         app.buttons["Next"].tap()
         let prompt = app.textViews["creation.prompt"]
         XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
@@ -25,6 +27,7 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         XCTAssertEqual(source.label, "Source. New repository: ~/Developer/my-project")
         prompt.tap()
         prompt.typeText("Build my new project")
+        XCTAssertTrue(app.buttons["creation.back"].isHittable)
         XCTAssertTrue(app.buttons["creation.create"].isHittable)
         attachEvidence(in: app, name: "new-repository-create-with-keyboard")
         app.revealWorkspaceSource().tap()

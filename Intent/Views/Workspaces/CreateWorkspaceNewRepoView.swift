@@ -12,21 +12,19 @@ struct CreateWorkspaceNewRepoView: View {
     @State private var checkTask: Task<Void, Never>?
 
     var body: some View {
-        VStack(spacing: 0) {
-            CreateWorkspaceSelectionHeader(
-                leadingControl: .back,
-                onLeadingAction: onBack
-            )
-            .disabled(isChecking)
-            CreateWorkspaceSelectionPage(
-                title: "New Repository",
-                titleIdentifier: "creation.newRepositoryTitle",
-                isNextDisabled: draft.repositoryPath == nil || isChecking,
-                onNext: checkDestination
-            ) {
+        CreateWorkspaceSelectionPage(
+            title: "New Repository",
+            titleIdentifier: "creation.newRepositoryTitle",
+            isNextDisabled: draft.repositoryPath == nil || isChecking,
+            onNext: checkDestination,
+            leadingAction: {
+                CreateWorkspaceNavigationButton(onAction: onBack)
+                    .disabled(isChecking)
+            },
+            content: {
                 formFields
             }
-        }
+        )
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .interactiveDismissDisabled(isChecking)

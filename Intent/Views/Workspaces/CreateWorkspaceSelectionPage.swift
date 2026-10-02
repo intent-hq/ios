@@ -4,7 +4,7 @@ private enum CreateWorkspaceCoordinates {
     static let content = "creation.selectionContent"
 }
 
-struct CreateWorkspaceSelectionPage<LeadingAction: View, Content: View>: View {
+struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Content: View>: View {
     let title: LocalizedStringKey
     let titleIdentifier: String
     @Binding var searchText: String
@@ -14,6 +14,7 @@ struct CreateWorkspaceSelectionPage<LeadingAction: View, Content: View>: View {
     let isLoading: Bool
     let isNextDisabled: Bool
     let onNext: (() -> Void)?
+    let headingAction: HeadingAction
     let leadingAction: LeadingAction
     let content: Content
     @Environment(\.colorScheme) private var colorScheme
@@ -34,6 +35,7 @@ struct CreateWorkspaceSelectionPage<LeadingAction: View, Content: View>: View {
         isLoading: Bool = false,
         isNextDisabled: Bool = false,
         onNext: (() -> Void)? = nil,
+        @ViewBuilder headingAction: () -> HeadingAction = { EmptyView() },
         @ViewBuilder leadingAction: () -> LeadingAction = { EmptyView() },
         @ViewBuilder content: () -> Content
     ) {
@@ -46,6 +48,7 @@ struct CreateWorkspaceSelectionPage<LeadingAction: View, Content: View>: View {
         self.isLoading = isLoading
         self.isNextDisabled = isNextDisabled
         self.onNext = onNext
+        self.headingAction = headingAction()
         self.leadingAction = leadingAction()
         self.content = content()
     }
@@ -124,6 +127,7 @@ struct CreateWorkspaceSelectionPage<LeadingAction: View, Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier(titleIdentifier)
+            headingAction
             if let searchPlaceholder {
                 WorkspaceSearchButton(isSearching: $isSearching, label: searchPlaceholder, identifier: "\(searchIdentifier).open")
                     .opacity(isSearching || !isSearchEnabled ? 0 : 1)

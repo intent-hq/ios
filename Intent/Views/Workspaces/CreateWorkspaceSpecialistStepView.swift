@@ -38,7 +38,6 @@ struct CreateWorkspaceSpecialistStepView: View {
         ZStack {
             CreateWorkspaceFormStyle.background(for: colorScheme).ignoresSafeArea()
             VStack(spacing: 0) {
-                CreateWorkspaceFormHeader(isCreating: isCreating, onBack: onBack)
                 if isLoadingSpecialists {
                     ProgressView {
                         Text("Loading...").interFont(Constants.Typography.bodyS)
@@ -71,6 +70,8 @@ struct CreateWorkspaceSpecialistStepView: View {
 
     private var createControls: some View {
         HStack {
+            CreateWorkspaceNavigationButton(identifier: "creation.back", onAction: onBack)
+                .disabled(isCreating)
             Spacer()
             CreateWorkspaceSubmitButton(
                 isDisabled: CreateWorkspaceView.isCreateDisabled(

@@ -20,22 +20,23 @@ struct CreateWorkspaceBranchStepView: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        VStack(spacing: 0) {
-            CreateWorkspaceSelectionHeader(leadingControl: .back) { dismiss() }
-            CreateWorkspaceSelectionPage(
-                title: "Select Branch",
-                titleIdentifier: "creation.branchTitle",
-                searchText: $searchText,
-                searchPlaceholder: "Search branches",
-                searchIdentifier: "creation.branchSearch",
-                isSearchEnabled: !isLoading && loadError == nil,
-                isLoading: isLoading,
-                isNextDisabled: selectedBranch == nil,
-                onNext: onNext
-            ) {
+        CreateWorkspaceSelectionPage(
+            title: "Select Branch",
+            titleIdentifier: "creation.branchTitle",
+            searchText: $searchText,
+            searchPlaceholder: "Search branches",
+            searchIdentifier: "creation.branchSearch",
+            isSearchEnabled: !isLoading && loadError == nil,
+            isLoading: isLoading,
+            isNextDisabled: selectedBranch == nil,
+            onNext: onNext,
+            leadingAction: {
+                CreateWorkspaceNavigationButton { dismiss() }
+            },
+            content: {
                 content
             }
-        }
+        )
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task { await onLoad() }

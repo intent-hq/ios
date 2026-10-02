@@ -19,6 +19,7 @@ struct GitHubRepoPickerView: View {
     @Binding var selectedRepo: GitHubRepo?
     let onCreateRepository: () -> Void
     let onNext: () -> Void
+    let onClose: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -49,7 +50,7 @@ struct GitHubRepoPickerView: View {
 
     var body: some View {
         CreateWorkspaceSelectionPage(
-            title: "Select Repository",
+            title: "Select Project",
             titleIdentifier: "creation.repositoryTitle",
             searchText: $searchText,
             searchPlaceholder: "Search repositories",
@@ -58,7 +59,10 @@ struct GitHubRepoPickerView: View {
             isLoading: isInitiallyLoading,
             isNextDisabled: selectedRepo == nil,
             onNext: onNext,
-            leadingAction: { newRepositoryButton },
+            headingAction: { newRepositoryButton },
+            leadingAction: {
+                CreateWorkspaceNavigationButton(control: .close, identifier: "creation.close", onAction: onClose)
+            },
             content: {
                 CreateWorkspaceSearchResults { content }
             }
@@ -75,14 +79,12 @@ struct GitHubRepoPickerView: View {
 
     private var newRepositoryButton: some View {
         Button(action: onCreateRepository) {
-            Label("New", systemImage: "plus")
-                .interFont(Constants.Typography.bodySEmphasized)
-                .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
-                .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-                .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
-                .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(
-                    cornerRadius: CreateWorkspaceFormStyle.cornerRadius
-                ))
+            Image(systemName: "plus")
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
+                .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
+                .background { WorkspaceControlSurface() }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("New Repository")

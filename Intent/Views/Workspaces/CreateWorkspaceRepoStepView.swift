@@ -10,45 +10,18 @@ struct CreateWorkspaceRepoStepView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(spacing: 0) {
-            CreateWorkspaceSelectionHeader(onLeadingAction: onClose)
-            GitHubRepoPickerView(store: store, selectedRepo: $selectedRepo, onCreateRepository: onCreateRepository, onNext: onNext)
-        }
+        GitHubRepoPickerView(
+            store: store,
+            selectedRepo: $selectedRepo,
+            onCreateRepository: onCreateRepository,
+            onNext: onNext,
+            onClose: onClose
+        )
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: selectedRepo?.id) { _, _ in
             onRepoChanged()
         }
-    }
-}
-
-struct CreateWorkspaceSelectionHeader: View {
-    enum LeadingControl {
-        case close, back
-    }
-
-    var leadingControl: LeadingControl = .close
-    let onLeadingAction: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
-    @ScaledMetric(relativeTo: .title3) private var iconSize = CreateWorkspaceRepoStyle.iconSize
-
-    var body: some View {
-        HStack {
-            Button(action: onLeadingAction) {
-                Image(leadingControl == .back ? .arrowLeft : .close)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: iconSize, height: iconSize)
-                    .frame(minWidth: CreateWorkspaceFormStyle.controlHeight, minHeight: CreateWorkspaceFormStyle.controlHeight)
-                    .contentShape(.rect)
-            }
-            .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
-            .accessibilityLabel(leadingControl == .back ? "Back" : "Close")
-            .accessibilityIdentifier(leadingControl == .back ? "creation.branchBack" : "creation.close")
-            Spacer()
-        }
-        .buttonStyle(.plain)
-        .padding(CreateWorkspaceFormStyle.pagePadding)
     }
 }
 

@@ -89,7 +89,7 @@ struct WorkspaceSearchButton: View {
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                 .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                 .frame(width: height, height: height)
-                .background { WorkspaceSearchSurface() }
+                .background { WorkspaceControlSurface() }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -124,7 +124,7 @@ struct WorkspaceSearchInput: View {
                     .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                     .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                     .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
-                    .background { WorkspaceSearchSurface() }
+                    .background { WorkspaceControlSurface() }
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close search")
@@ -170,11 +170,11 @@ struct WorkspaceSearchInput: View {
         .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
         .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
         .frame(minHeight: Constants.WorkspaceSearch.expandedHeight)
-        .background { WorkspaceSearchSurface() }
+        .background { WorkspaceControlSurface() }
     }
 }
 
-private struct WorkspaceSearchSurface: View {
+struct WorkspaceControlSurface: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
