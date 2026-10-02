@@ -282,3 +282,64 @@ extension ConversationWatchedAgentsTests {
         #expect(!connection.traffic().calls("agent.get").contains { $0.params["agentId"] as? String == "selected-child" })
     }
 }
+
+
+extension ConversationWatchedAgentsTests {
+    @Test(arguments: ["cancelled", "invalidated", "obsolete", "authority", "reconnected"])
+    func rejectedSubscriptionReplyCannotSeedBundledRows(reason: String) async throws {
+        let connection = RPCRecordingConnection()
+        let commands = ConversationCommands(connectionManager: connection)
+        let watched = ConversationWatchedAgents(commands: commands)
+        connection.pendingMethods = ["agent.getSubscriptions"]
+        var current = true
+        let read = Task {
+            await watched.fetchSubscriptions(
+                agentId: "parent", workspaceId: "workspace",
+                awaitAuthority: { reason != "authority" }, isCurrent: { current }
+            )
+        }
+        defer { read.cancel() }
+        try await connection.waitForPendingRequests("agent.getSubscriptions")
+        switch reason {
+        case "cancelled": read.cancel()
+        case "invalidated": watched.invalidateReads()
+        case "obsolete": current = false
+        case "reconnected": commands.agentDetails.reset()
+        default: break
+        }
+        connection.resolvePending("agent.getSubscriptions", with: [
+            "subscriptions": [["actorIds": ["child"]]],
+            "agents": [["id": "child", "workspaceId": "canonical", "name": "Stale child"]]
+        ])
+        await read.value
+        #expect(commands.agentDetails.summaries.cached(agentId: "child").isEmpty)
+        #expect(commands.agentDetails.cached(agentId: "child") == nil)
+    }
+
+    @Test func bundledRowsWaitForParentAuthorityBeforePublication() async throws {
+        let connection = RPCRecordingConnection()
+        let commands = ConversationCommands(connectionManager: connection)
+        let watched = ConversationWatchedAgents(commands: commands)
+        let authority = TestGate()
+        defer { authority.open() }
+        connection.responseMap["agent.getSubscriptions"] = [
+            "subscriptions": [["actorIds": ["child"]]],
+            "agents": [["id": "child", "workspaceId": "canonical", "name": "Child"]]
+        ]
+        var awaitingAuthority = false
+        let read = Task {
+            await watched.fetchSubscriptions(agentId: "parent", workspaceId: "workspace", awaitAuthority: {
+                awaitingAuthority = true
+                await authority.wait()
+                return true
+            })
+        }
+        defer { read.cancel() }
+        try await waitUntil("subscription awaits parent authority") { awaitingAuthority }
+        #expect(commands.agentDetails.summaries.cached(agentId: "child").isEmpty)
+        authority.open()
+        await read.value
+        #expect(watched.row("child").hasSummary)
+        #expect(watched.row("child").workspaceId == "canonical")
+    }
+}

@@ -9,9 +9,11 @@ import UIKit
 @MainActor
 @Suite(.serialized)
 struct AgentWaitingViewTests {
-    @Test func scrollingLoadsOnlyRowsIntersectingTheWaitingViewport() async throws {
+    @Test(arguments: [false, true])
+    func scrollingLoadsOnlyRowsIntersectingTheWaitingViewport(bundled: Bool) async throws {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
+        fixture.bundlesWatchedAgents = bundled
         let childCount = 50
         fixture.watchedIds = (0..<childCount).map { String(format: "visible-child-%02d", $0) }
         let model = fixture.makeViewModel()
@@ -36,7 +38,7 @@ struct AgentWaitingViewTests {
         try await expectNever("eager offscreen rows", within: .milliseconds(300)) {
             fixture.connection.traffic(since: checkpoint).calls("agent.get").count >= initialMaximum
         }
-        #expect(!model.store.watchedAgentCoordinator.row("visible-child-49").hasSummary)
+        #expect(model.store.watchedAgentCoordinator.row("visible-child-49").hasSummary == bundled)
         let scroll = try #require(scrollViews(in: controller.view).first)
         scroll.setContentOffset(CGPoint(x: 0, y: max(0, scroll.contentSize.height - scroll.bounds.height)), animated: false)
         try await waitUntil("scrolling realizes the final watched row", timeout: .seconds(5)) {
@@ -45,6 +47,12 @@ struct AgentWaitingViewTests {
         let afterScrolling = fixture.connection.traffic(since: checkpoint)
         let scrollingMaximum = 20
         #expect(afterScrolling.calls("agent.get").count < scrollingMaximum)
+        if bundled {
+            try await expectNever("details while scrolling bundled rows", within: .milliseconds(300)) {
+                fixture.connection.traffic().calls("agent.get").count > 1
+            }
+            #expect(fixture.details.cached(agentId: "visible-child-49") == nil)
+        }
         #expect(afterScrolling.calls("agent.list").isEmpty)
         #expect(afterScrolling.calls("chat.subscribe").isEmpty)
         #expect(afterScrolling.calls("agent.getSubscriptions").isEmpty)

@@ -290,3 +290,57 @@ extension ConversationWatchedAgentsTests {
         #expect(commands.agentDetails.cached(agentId: "child") == nil)
     }
 }
+
+
+extension ConversationWatchedAgentsTests {
+    @Test func sparseBundlePreservesMetadataAndStatusMapRetiresLiveness() async {
+        let context = summaryContext()
+        let summaries = context.commands.agentDetails.summaries
+        summaries.seed([[
+            "id": "child", "workspaceId": "workspace", "name": "Old name", "digest": "Keep preview",
+            "metadata": ["specialist": "implementor", "attentionRequestKind": "blocker", "attentionRequestReason": "Keep reason"]
+        ]], since: summaries.beginRead())
+        context.connection.responseMap["agent.getSubscriptions"] = [
+            "subscriptions": [["actorIds": ["child"]]], "agentStatuses": ["child": "idle"],
+            "agents": [["id": "child", "workspaceId": "workspace", "name": "New name", "isStreaming": true, "metadata": ["specialist": "verifier"]]]
+        ]
+        await context.watched.fetchSubscriptions(agentId: "parent", workspaceId: "workspace")
+        let row = context.watched.row("child")
+        #expect(row.agent.name == "New name")
+        #expect(row.agent.digest == "Keep preview")
+        #expect(row.agent.specialist == "verifier")
+        #expect(row.agent.pendingAttentionRequest?.reason == "Keep reason")
+        #expect(row.agent.status == "idle")
+        #expect(!row.agent.isStreaming)
+        #expect(context.commands.agentDetails.cached(agentId: "child") == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func staleBundleCannotReplaceNewerEventOrDetail(detail: Bool) async throws {
+        let context = summaryContext()
+        context.connection.pendingMethods = ["agent.getSubscriptions"]
+        let read = Task { await context.watched.fetchSubscriptions(agentId: "parent", workspaceId: "workspace") }
+        defer { read.cancel() }
+        try await context.connection.waitForPendingRequests("agent.getSubscriptions")
+        if detail {
+            context.connection.responseMap["agent.get"] = ["agent": ["id": "child", "workspaceId": "canonical", "name": "New name", "status": "completed"]]
+            _ = try await context.commands.agentDetails.load(agentId: "child")
+        } else {
+            context.connection.deliverEvent(method: "event", params: [
+                "type": "agent:updated", "workspaceId": "canonical",
+                "data": ["agentId": "child", "agentName": "New name", "status": "completed"]
+            ])
+        }
+        context.connection.resolvePending("agent.getSubscriptions", with: [
+            "subscriptions": [["actorIds": ["child"]]], "agentStatuses": ["child": "responding"],
+            "agents": [["id": "child", "workspaceId": "canonical", "name": "Old name", "status": "responding", "digest": "Fill omitted preview", "isStreaming": true]]
+        ])
+        await read.value
+        let row = context.watched.row("child")
+        #expect(row.agent.name == "New name")
+        #expect(row.agent.status == "completed")
+        #expect(!row.agent.isStreaming)
+        #expect(row.agent.digest == "Fill omitted preview")
+        #expect(row.workspaceId == "canonical")
+    }
+}

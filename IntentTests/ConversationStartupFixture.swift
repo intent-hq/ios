@@ -19,6 +19,7 @@ final class ConversationStartupFixture {
     private(set) var viewModels: [ConversationViewModel] = []
     var parentMetadata: [String: Any] = ["lastSeenMessageId": ConversationStartupFixture.messageId]
     var watchedIds: [String] = []
+    var bundlesWatchedAgents = false
     var unrelatedAgentCount = 0
     var modelId: String?
     var providerId: String?
@@ -112,11 +113,13 @@ final class ConversationStartupFixture {
     }
 
     func subscriptions() -> [String: Any] {
-        [
+        var response: [String: Any] = [
             "subscriptions": watchedIds.isEmpty ? [] : [["actorIds": watchedIds]],
             "delegationGroups": [],
             "agentStatuses": Dictionary(uniqueKeysWithValues: watchedIds.map { ($0, "active") })
         ]
+        if bundlesWatchedAgents { response["agents"] = watchedIds.map(agent) }
+        return response
     }
 
     private func response(method: String, params: [String: Any]) -> Any? {
