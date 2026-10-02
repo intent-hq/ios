@@ -42,13 +42,20 @@ struct GitHubRepoPickerView: View {
         )
     }
 
+    private var isInitiallyLoading: Bool {
+        if !store.hasCheckedAuth { return store.lastError == nil }
+        return !store.hasLoaded && store.isConfigured && store.isLoading && store.recentRepos.isEmpty && store.ownRepos.isEmpty
+    }
+
     var body: some View {
         CreateWorkspaceSelectionPage(
             title: "Select Repository",
             titleIdentifier: "creation.repositoryTitle",
             searchText: $searchText,
-            searchPlaceholder: store.hasCheckedAuth && store.isConfigured ? "Search repositories" : nil,
+            searchPlaceholder: "Search repositories",
             searchIdentifier: "creation.repositorySearch",
+            isSearchEnabled: store.hasCheckedAuth && store.isConfigured && !isInitiallyLoading,
+            isLoading: isInitiallyLoading,
             isNextDisabled: selectedRepo == nil,
             onNext: onNext,
             introduction: { newRepositorySection },
@@ -89,14 +96,7 @@ struct GitHubRepoPickerView: View {
     @ViewBuilder
     private var content: some View {
         if !store.hasCheckedAuth {
-            if store.lastError != nil {
-                emptyState
-            } else {
-                ProgressView {
-                    Text("Checking GitHub connection...").interFont(Constants.Typography.bodyS)
-                }
-                .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
-            }
+            emptyState
         } else if !store.isConfigured {
             notConnectedPlaceholder
         } else {
@@ -108,10 +108,10 @@ struct GitHubRepoPickerView: View {
         let sections = suggestions
         return VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
             if store.isLoading || pendingSearchQuery != nil, sections.isEmpty {
-                ProgressView {
-                    Text("Loading repositories...").interFont(Constants.Typography.bodyS)
-                }
-                .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel("Loading repositories")
+                    .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
             } else if sections.isEmpty {
                 emptyState
             } else {

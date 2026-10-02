@@ -26,8 +26,10 @@ struct CreateWorkspaceBranchStepView: View {
                 title: "Select Branch",
                 titleIdentifier: "creation.branchTitle",
                 searchText: $searchText,
-                searchPlaceholder: !isLoading && loadError == nil ? "Search branches" : nil,
+                searchPlaceholder: "Search branches",
                 searchIdentifier: "creation.branchSearch",
+                isSearchEnabled: !isLoading && loadError == nil,
+                isLoading: isLoading,
                 isNextDisabled: selectedBranch == nil,
                 onNext: onNext
             ) {
@@ -43,12 +45,7 @@ struct CreateWorkspaceBranchStepView: View {
 
     @ViewBuilder
     private var content: some View {
-        if isLoading {
-            ProgressView {
-                Text("Loading branches...").interFont(Constants.Typography.bodyS)
-            }
-            .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
-        } else if let loadError {
+        if let loadError {
             VStack(spacing: Constants.CreateWorkspace.errorStateSpacing) {
                 Text("Couldn't load branches")
                     .interFont(Constants.Typography.bodyXSEmphasized)

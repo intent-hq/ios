@@ -6,6 +6,46 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     private static let elementTimeout: TimeInterval = 15
 
     @MainActor
+    func testLoadingTransitionsKeepSelectionTitlesStable() throws {
+        continueAfterFailure = false
+        let gate = FileManager.default.temporaryDirectory
+            .appendingPathComponent("workspace-selection-\(UUID().uuidString).trigger")
+        defer { try? FileManager.default.removeItem(at: gate) }
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "--demo-workspace-selection-trigger-file=" + gate.path]
+        if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
+            app.launchArguments += ["-appThemePreference", appearance]
+        }
+        app.launch()
+        app.openHomeAction("workspace")
+        try releaseSelectionLoading(in: app, step: "repository", gate: gate)
+        let repository = app.buttons["creation.repository.nova-labs/console"]
+        XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
+        repository.tap()
+        try FileManager.default.removeItem(at: gate)
+        app.buttons["Next"].tap()
+        try releaseSelectionLoading(in: app, step: "branch", gate: gate)
+        XCTAssertTrue(app.buttons["creation.branch.main"].waitForExistence(timeout: Self.elementTimeout))
+    }
+
+    @MainActor
+    private func releaseSelectionLoading(in app: XCUIApplication, step: String, gate: URL) throws {
+        let title = app.staticTexts["creation.\(step)Title"]
+        let spinner = app.progressIndicators["creation.\(step)Title.loading"]
+        let search = app.buttons["creation.\(step)Search.open"]
+        XCTAssertTrue(spinner.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(title.exists)
+        XCTAssertFalse(search.exists)
+        let loadingTitleY = title.frame.minY
+        attachEvidence(in: app, name: "\(step)-loading")
+        try Data().write(to: gate)
+        XCTAssertTrue(spinner.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertEqual(title.frame.minY, loadingTitleY, accuracy: 1)
+        attachEvidence(in: app, name: "\(step)-loaded")
+    }
+
+    @MainActor
     func testRepositorySelectionSearchAndClose() {
         continueAfterFailure = false
         let app = XCUIApplication()

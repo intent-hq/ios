@@ -12,6 +12,9 @@ import tempfile
 
 CAPTURES = {
     "CreateWorkspaceSelectionUITests": {
+        "testLoadingTransitionsKeepSelectionTitlesStable": (
+            "repository-loading", "repository-loaded", "branch-loading", "branch-loaded",
+        ),
         "testRepositorySelectionSearchAndClose": (
             "repository-selected", "repository-search-opened", "repository-search-results",
         ),

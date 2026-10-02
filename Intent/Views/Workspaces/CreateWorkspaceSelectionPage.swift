@@ -11,6 +11,8 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
     @Binding var searchText: String
     let searchPlaceholder: LocalizedStringKey?
     let searchIdentifier: String
+    let isSearchEnabled: Bool
+    let isLoading: Bool
     let isNextDisabled: Bool
     let onNext: (() -> Void)?
     let introduction: Introduction
@@ -27,6 +29,8 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
         searchText: Binding<String> = .constant(""),
         searchPlaceholder: LocalizedStringKey? = nil,
         searchIdentifier: String = "creation.search",
+        isSearchEnabled: Bool = true,
+        isLoading: Bool = false,
         isNextDisabled: Bool = false,
         onNext: (() -> Void)? = nil,
         @ViewBuilder introduction: () -> Introduction = { EmptyView() },
@@ -37,6 +41,8 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
         _searchText = searchText
         self.searchPlaceholder = searchPlaceholder
         self.searchIdentifier = searchIdentifier
+        self.isSearchEnabled = isSearchEnabled
+        self.isLoading = isLoading
         self.isNextDisabled = isNextDisabled
         self.onNext = onNext
         self.introduction = introduction()
@@ -45,27 +51,16 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                pageContent
-            }
-            #if !os(visionOS)
-            .scrollDismissesKeyboard(.interactively)
-            #endif
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                max(0, geometry.containerSize.height - geometry.contentInsets.top - geometry.contentInsets.bottom)
-            } action: { _, height in
-                viewportHeight = height
-            }
-            .onChange(of: searchText) { _, query in
-                if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    proxy.scrollTo(CreateWorkspaceScrollTarget.searchResults, anchor: .top)
-                }
-            }
-            .onChange(of: isSearching) { _, searching in
-                proxy.scrollTo(searching ? CreateWorkspaceScrollTarget.searchResults : .top, anchor: .top)
-            }
+            scrollView(proxy: proxy)
         }
         .environment(\.workspaceSelectionResultHeight, isSearching ? viewportHeight : 0)
+        .overlay {
+            if isLoading {
+                ProgressView()
+                    .accessibilityLabel("Loading")
+                    .accessibilityIdentifier("\(titleIdentifier).loading")
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomControls }
         .onAppear {
             if !searchText.isEmpty { isSearching = true }
@@ -75,17 +70,45 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
     }
 
+    private func scrollView(proxy: ScrollViewProxy) -> some View {
+        ScrollView { pageContent }
+            #if !os(visionOS)
+            .scrollDismissesKeyboard(.interactively)
+            #endif
+            .onScrollGeometryChange(for: CreateWorkspaceScrollSize.self) { geometry in
+                CreateWorkspaceScrollSize(
+                    viewportHeight: max(0, geometry.containerSize.height - geometry.contentInsets.top - geometry.contentInsets.bottom),
+                    contentHeight: geometry.contentSize.height
+                )
+            } action: { _, size in
+                viewportHeight = size.viewportHeight
+                if isSearching {
+                    proxy.scrollTo(CreateWorkspaceScrollTarget.searchResults, anchor: .top)
+                }
+            }
+            .onChange(of: searchText) { _, query in
+                if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    proxy.scrollTo(CreateWorkspaceScrollTarget.searchResults, anchor: .top)
+                }
+            }
+            .onChange(of: isSearching) { _, searching in
+                proxy.scrollTo(searching ? CreateWorkspaceScrollTarget.searchResults : .top, anchor: .top)
+            }
+    }
+
     private var pageContent: some View {
-        VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
-            introduction
-            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
+        VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
+            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
+                introduction
                 heading
+            }
+            .id(CreateWorkspaceScrollTarget.top)
+            if !isLoading {
                 content
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(CreateWorkspaceFormStyle.pagePadding)
-        .id(CreateWorkspaceScrollTarget.top)
     }
 
     private var heading: some View {
@@ -98,9 +121,9 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
                 .accessibilityIdentifier(titleIdentifier)
             if let searchPlaceholder {
                 WorkspaceSearchButton(isSearching: $isSearching, label: searchPlaceholder, identifier: "\(searchIdentifier).open")
-                    .opacity(isSearching ? 0 : 1)
-                    .allowsHitTesting(!isSearching)
-                    .accessibilityHidden(isSearching)
+                    .opacity(isSearching || !isSearchEnabled ? 0 : 1)
+                    .allowsHitTesting(!isSearching && isSearchEnabled)
+                    .accessibilityHidden(isSearching || !isSearchEnabled)
             }
         }
     }
@@ -134,6 +157,11 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
             .transition(reduceMotion ? .identity : .move(edge: .bottom).combined(with: .opacity))
         }
     }
+}
+
+private struct CreateWorkspaceScrollSize: Equatable {
+    let viewportHeight: CGFloat
+    let contentHeight: CGFloat
 }
 
 extension EnvironmentValues {
