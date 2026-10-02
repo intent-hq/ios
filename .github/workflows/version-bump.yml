@@ -1,0 +1,52 @@
+name: Marketing version bump
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read App Store Connect without writing a branch or PR
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# One writer across scheduled and manual runs; separate from TestFlight uploads.
+concurrency:
+  group: marketing-version-bump
+  cancel-in-progress: false
+
+jobs:
+  check-version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Feature branches can exercise the real Apple query, but only the default
+    # branch may write the shared automation branch.
+    if: github.ref_name == github.event.repository.default_branch || inputs.dry_run
+    env:
+      FASTLANE_SKIP_UPDATE_CHECK: '1'
+      FASTLANE_HIDE_CHANGELOG: '1'
+      FASTLANE_OPT_OUT_USAGE: '1'
+      VERSION_BUMP_BASE: ${{ github.event.repository.default_branch }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Optional fine-grained token lets the automated PR trigger normal CI.
+          # GITHUB_TOKEN can create the PR but cannot trigger other workflows.
+          token: ${{ secrets.VERSION_BUMP_TOKEN || github.token }}
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - name: Version-bump contract tests
+        run: bundle exec ruby scripts/test-version-bump.rb
+      - name: Check both App Store versions
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          GH_TOKEN: ${{ secrets.VERSION_BUMP_TOKEN || github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: bundle exec fastlane ios check_version_bump dry_run:"$DRY_RUN"

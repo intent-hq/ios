@@ -89,24 +89,38 @@ iOS and visionOS plists deliberately omit those keys because Xcode generates the
 from build settings. Keep both settings consistent across Debug and Release for
 `Intent`, `IntentTests`, and `IntentUITests`; preserve the shared iOS/visionOS setup.
 
-Before choosing either number, check the repository settings and App Store Connect/
-TestFlight, including uploaded or in-flight builds. Never derive a concrete next pair
-from possibly stale checkout values; ask the user if the baseline or intended release
-is unclear. For an ordinary fix, default to a patch marketing-version bump unless the
-user specifies another release version. Every new release/upload needs that deliberate
-marketing-version increase and a fresh build number higher than all known prior uploads.
-Apple permits several builds for one version, but project policy allows retaining the
-marketing version only for an explicitly requested rebuild of that same unreleased
-release; even then, use a fresh, never-reused build number.
+Fastlane's release lanes read App Store Connect at build time and choose one build
+number above every uploaded or in-flight build on either iOS or visionOS, including
+older versions and failed builds. Both platforms use the same version/build pair.
+The effective build number overrides local `CURRENT_PROJECT_VERSION`; never derive
+the next build number from the checkout. Repeated Alpha/Beta builds may share an
+unsubmitted marketing version, but every run must use a fresh build number.
 
-Automatic build numbering does not bump the marketing version. If CI or Xcode Cloud
-assigns an effective build number, distinguish it from the local
-`CURRENT_PROJECT_VERSION` and verify the effective value; do not assume this repository
-has release automation. Before upload, inspect `CFBundleShortVersionString` and
-`CFBundleVersion` in the actual archived or exported app. Stop on any mismatch and
-rebuild—never relabel an old archive. After App Store Connect finishes processing,
-confirm the displayed pair and record it in the release handoff. Archive upload,
-submission, and release remain human-controlled.
+`.github/workflows/version-bump.yml` runs `check_version_bump` hourly. When either
+platform's current marketing version is submitted, approved or released, it opens
+or updates one PR on `automation/marketing-version-bump`, titled
+`chore: bump version to X.Y.Z`. The PR increases the patch version for all targets
+and configurations; review and merge it before another TestFlight build. The upload
+guard blocks closed versions until the bump is merged. Unknown Apple states fail
+for human inspection instead of guessing. Submission and App Store release stay
+human-controlled; this job never uploads or submits anything.
+
+For a read-only check against real Apple data, dispatch `version-bump.yml` with
+`dry_run=true` (also the manual default), or run
+`bundle exec fastlane ios check_version_bump dry_run:true` with the ASC API-key
+environment variables configured. The workflow runs on Linux without Xcode.
+Enable Actions' “Allow GitHub Actions to create and approve pull requests” setting.
+For automated PRs to trigger required CI, configure `VERSION_BUMP_TOKEN` as a
+fine-grained token with repository Contents and Pull requests read/write access.
+Without it, the job uses `GITHUB_TOKEN`; a human must close/reopen the PR to trigger
+CI before merging. Never enable automatic merging as part of this workflow.
+
+For a deliberate minor/major release, check the repository and App Store Connect
+baseline before choosing a version; ask the user if the intended release is unclear.
+Before upload, verify `CFBundleShortVersionString` and `CFBundleVersion` in the actual
+archived and exported apps. Stop on any mismatch and rebuild—never relabel an old
+archive. After Apple finishes processing, confirm the displayed pair and record it
+in the release handoff.
 
 ## Where to look
 
