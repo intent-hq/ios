@@ -321,6 +321,8 @@
 				"$(SRCROOT)/.swiftlint.yml",
 				"$(SRCROOT)/scripts/swiftlint-xcode.sh",
 				"$(SRCROOT)/Intent",
+				"$(SRCROOT)/Intent/AppIcon.icon",
+				"$(SRCROOT)/Intent/AppIcon.icon/Assets",
 				"$(SRCROOT)/IntentTests",
 				"$(SRCROOT)/IntentUITests",
 			);
@@ -408,6 +410,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=xros*]" = AppIcon.icon;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=xrsimulator*]" = AppIcon.icon;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/TailcatKit/build",
@@ -456,6 +460,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=xros*]" = AppIcon.icon;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=xrsimulator*]" = AppIcon.icon;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/TailcatKit/build",
