@@ -42,19 +42,12 @@ struct GitHubRepoPickerView: View {
     }
 
     var body: some View {
-        CreateWorkspaceSelectionPage(title: "Select Repository", titleIdentifier: "creation.repositoryTitle", searchText: searchText) {
-            Button(action: onCreateRepository) {
-                Label("New Repository", systemImage: "plus")
-                    .interFont(Constants.Typography.bodySEmphasized)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(CreateWorkspaceFormStyle.controlPadding)
-                    .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
-                    .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(
-                        cornerRadius: CreateWorkspaceFormStyle.cornerRadius
-                    ))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("creation.newRepository")
+        CreateWorkspaceSelectionPage(
+            title: "Select Repository",
+            titleIdentifier: "creation.repositoryTitle",
+            searchText: searchText,
+            introduction: { newRepositorySection }
+        ) {
             content
                 .id(CreateWorkspaceScrollTarget.searchResults)
         }
@@ -72,6 +65,26 @@ struct GitHubRepoPickerView: View {
     }
 
     // MARK: - Subviews
+
+    private var newRepositorySection: some View {
+        VStack(spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
+            Button(action: onCreateRepository) {
+                Label("New Repository", systemImage: "plus")
+                    .interFont(Constants.Typography.bodySEmphasized)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(CreateWorkspaceFormStyle.controlPadding)
+                    .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+                    .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(
+                        cornerRadius: CreateWorkspaceFormStyle.cornerRadius
+                    ))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("creation.newRepository")
+            CreateWorkspaceRepoStyle.divider(for: colorScheme)
+                .frame(height: CreateWorkspaceRepoStyle.dividerHeight)
+                .accessibilityHidden(true)
+        }
+    }
 
     @ViewBuilder
     private var content: some View {
@@ -193,23 +206,41 @@ enum CreateWorkspaceScrollTarget: Hashable {
     case searchResults
 }
 
-struct CreateWorkspaceSelectionPage<Content: View>: View {
+struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
     let title: LocalizedStringKey
     let titleIdentifier: String
-    var searchText = ""
-    @ViewBuilder let content: Content
+    let searchText: String
+    let introduction: Introduction
+    let content: Content
     @Environment(\.colorScheme) private var colorScheme
+
+    init(
+        title: LocalizedStringKey,
+        titleIdentifier: String,
+        searchText: String = "",
+        @ViewBuilder introduction: () -> Introduction = { EmptyView() },
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.titleIdentifier = titleIdentifier
+        self.searchText = searchText
+        self.introduction = introduction()
+        self.content = content()
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
-                    Text(title)
-                        .interFont(Constants.Typography.heading2)
-                        .tracking(CreateWorkspaceRepoStyle.titleTracking)
-                        .accessibilityAddTraits(.isHeader)
-                        .accessibilityIdentifier(titleIdentifier)
-                    content
+                VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
+                    introduction
+                    VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
+                        Text(title)
+                            .interFont(Constants.Typography.heading2)
+                            .tracking(CreateWorkspaceRepoStyle.titleTracking)
+                            .accessibilityAddTraits(.isHeader)
+                            .accessibilityIdentifier(titleIdentifier)
+                        content
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(CreateWorkspaceFormStyle.pagePadding)
