@@ -75,6 +75,13 @@ struct CreateWorkspaceSourceCard: View {
 }
 
 extension CreateWorkspaceView {
+    struct CreationContextRow: Equatable, Identifiable {
+        let label: String
+        let value: String
+
+        var id: String { label }
+    }
+
     static func creationContextRows(
         repositoryFullName: String,
         branch: String? = nil

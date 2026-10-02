@@ -7,13 +7,6 @@ struct CreateWorkspaceView: View {
         case newRepository
     }
 
-    struct CreationContextRow: Equatable, Identifiable {
-        let label: String
-        let value: String
-
-        var id: String { label }
-    }
-
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
@@ -195,7 +188,11 @@ struct CreateWorkspaceView: View {
 
 extension CreateWorkspaceView {
     private var repositoryStep: some View {
-        CreateWorkspaceRepoStepView(
+        let createRepository = {
+            idempotencyKey = UUID().uuidString
+            navigationPath.append(.newRepository)
+        }
+        return CreateWorkspaceRepoStepView(
             store: githubStore,
             selectedRepo: $selectedRepo,
             onClose: { dismiss() },
@@ -203,24 +200,24 @@ extension CreateWorkspaceView {
                 idempotencyKey = UUID().uuidString
                 navigationPath.append(.branches)
             },
-            onRepoChanged: resetRepositoryState
-        ) {
-            idempotencyKey = UUID().uuidString
-            navigationPath.append(.newRepository)
-        }
+            onRepoChanged: resetRepositoryState,
+            onCreateRepository: createRepository
+        )
     }
 
     private var newRepositoryStep: some View {
-        CreateWorkspaceNewRepoView(
-            draft: $newRepositoryDraft,
-            connection: session.connection,
-            attempt: newRepositoryAttempt,
-            onBack: { navigationPath.removeLast() }
-        ) { path in
+        let advance: (String) -> Void = { path in
             idempotencyKey = newRepositoryAttempt?.retryKey(for: path) ?? UUID().uuidString
             newRepositoryPath = path
             navigationPath.append(.create)
         }
+        return CreateWorkspaceNewRepoView(
+            draft: $newRepositoryDraft,
+            connection: session.connection,
+            attempt: newRepositoryAttempt,
+            onBack: { navigationPath.removeLast() },
+            onNext: advance
+        )
     }
 
     @ViewBuilder
@@ -229,21 +226,7 @@ extension CreateWorkspaceView {
         case .newRepository:
             newRepositoryStep
         case .branches:
-            CreateWorkspaceBranchStepView(
-                repositoryFullName: selectedRepo?.fullName ?? "",
-                displayedBranches: displayedBranches,
-                defaultBranch: branchListing?.defaultBranch,
-                isLoading: isLoadingBranches,
-                loadError: branchLoadError,
-                selectedBranch: $selectedBranch,
-                searchText: $branchSearchText,
-                colorScheme: colorScheme,
-                onRetry: { Task { await fetchBranches() } },
-                onNext: { navigationPath.append(.create) },
-                onLoad: { await fetchBranches() },
-                onBranchChanged: { idempotencyKey = UUID().uuidString },
-                onSearchTextChanged: scheduleBranchSearch
-            )
+            branchStep
         case .create:
             CreateWorkspaceSpecialistStepView(
                 repositoryFullName: navigationPath.contains(.newRepository) ? (newRepositoryPath ?? "") : (selectedRepo?.fullName ?? ""),
@@ -276,6 +259,24 @@ extension CreateWorkspaceView {
                 onLoad: fetchCreationOptions
             )
         }
+    }
+
+    private var branchStep: some View {
+        CreateWorkspaceBranchStepView(
+            repositoryFullName: selectedRepo?.fullName ?? "",
+            displayedBranches: displayedBranches,
+            defaultBranch: branchListing?.defaultBranch,
+            isLoading: isLoadingBranches,
+            loadError: branchLoadError,
+            selectedBranch: $selectedBranch,
+            searchText: $branchSearchText,
+            colorScheme: colorScheme,
+            onRetry: { Task { await fetchBranches() } },
+            onNext: { navigationPath.append(.create) },
+            onLoad: { await fetchBranches() },
+            onBranchChanged: { idempotencyKey = UUID().uuidString },
+            onSearchTextChanged: scheduleBranchSearch
+        )
     }
 
     private func reconcileBranchSelection(with listing: GitHubBranchListing) {
