@@ -33,22 +33,31 @@ struct CreateWorkspaceFormHeader: View {
 struct CreateWorkspaceSubmitButton: View {
     let isDisabled: Bool
     let onCreate: () -> Void
+    @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
 
     var body: some View {
         Button(action: onCreate) {
-            Text("Create")
-                .interFont(Constants.Typography.bodySEmphasized)
-                .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
-                .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-                .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
-                .foregroundStyle(CreateWorkspaceFormStyle.primaryForeground)
-                .background(CreateWorkspaceFormStyle.primary, in: .rect(
-                    cornerRadius: CreateWorkspaceFormStyle.cornerRadius
-                ))
-                .opacity(isDisabled ? 0.5 : 1)
+            HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
+                Text("Create")
+                    .interFont(Constants.Typography.bodySEmphasized)
+                Image(.addIcon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
+            .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
+            .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+            .foregroundStyle(CreateWorkspaceFormStyle.primaryForeground)
+            .background(CreateWorkspaceFormStyle.primary, in: .rect(
+                cornerRadius: CreateWorkspaceFormStyle.cornerRadius
+            ))
+            .opacity(isDisabled ? 0.5 : 1)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
+        .accessibilityLabel("Create")
         .accessibilityIdentifier("creation.create")
     }
 }
