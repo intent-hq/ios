@@ -19,7 +19,7 @@ struct CreateWorkspaceView: View {
     @State private var selectedRepo: GitHubRepo?
     @State private var newRepositoryDraft = NewRepositoryDraft()
     @State private var newRepositoryPath: String?
-    @State private var newRepositoryAttempt: NewRepositoryAttempt?
+    @State private var creationAttempts = WorkspaceCreationAttempts()
     @State private var selectedBranch: String?
     @State private var branchSearchText = ""
     @State private var completedBranchQuery: String?
@@ -38,7 +38,6 @@ struct CreateWorkspaceView: View {
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var showError = false
-    @State private var idempotencyKey = UUID().uuidString
     @State private var catalogConsumer = UUID()
     @State private var catalogIsVisible = true
 
@@ -187,17 +186,13 @@ struct CreateWorkspaceView: View {
 extension CreateWorkspaceView {
     private var repositoryStep: some View {
         let createRepository = {
-            idempotencyKey = UUID().uuidString
             navigationPath.append(.newRepository)
         }
         return CreateWorkspaceRepoStepView(
             store: githubStore,
             selectedRepo: $selectedRepo,
             onClose: { dismiss() },
-            onNext: {
-                idempotencyKey = UUID().uuidString
-                navigationPath.append(.branches)
-            },
+            onNext: { navigationPath.append(.branches) },
             onRepoChanged: resetRepositoryState,
             onCreateRepository: createRepository
         )
@@ -205,14 +200,13 @@ extension CreateWorkspaceView {
 
     private var newRepositoryStep: some View {
         let advance: (String) -> Void = { path in
-            idempotencyKey = newRepositoryAttempt?.retryKey(for: path) ?? UUID().uuidString
             newRepositoryPath = path
             navigationPath.append(.create)
         }
         return CreateWorkspaceNewRepoView(
             draft: $newRepositoryDraft,
             connection: session.connection,
-            attempt: newRepositoryAttempt,
+            attempts: creationAttempts,
             onBack: { navigationPath.removeLast() },
             onNext: advance
         )
@@ -272,7 +266,6 @@ extension CreateWorkspaceView {
             onRetry: { Task { await fetchBranches() } },
             onNext: { navigationPath.append(.create) },
             onLoad: { await fetchBranches() },
-            onBranchChanged: { idempotencyKey = UUID().uuidString },
             onSearchTextChanged: scheduleBranchSearch
         )
     }
@@ -296,7 +289,6 @@ extension CreateWorkspaceView {
     }
 
     private func resetRepositoryState() {
-        idempotencyKey = UUID().uuidString
         selectedBranch = nil
         branchSearchTask?.cancel()
         branchSearchText = ""
@@ -441,6 +433,7 @@ extension CreateWorkspaceView {
             return
         }
         do {
+            let idempotencyKey = creationAttempts.requestKey(for: source)
             let params = Self.buildCreateWorkspaceParams(
                 source: source,
                 idempotencyKey: idempotencyKey,
@@ -454,9 +447,7 @@ extension CreateWorkspaceView {
                 )
             )
             try WorkspaceCreationImages.validateRequest(params)
-            if case let .newRepository(path) = source {
-                newRepositoryAttempt = NewRepositoryAttempt(path: path, idempotencyKey: idempotencyKey)
-            }
+            creationAttempts.record(idempotencyKey, for: source)
             let result = try await session.connection.request(
                 "workspace.create",
                 params: params,
@@ -467,7 +458,6 @@ extension CreateWorkspaceView {
                let workspace = WorkspaceStore.parseWorkspace(workspaceDictionary) {
                 session.workspaceStore.addOrUpdate(workspace)
                 HapticManager.notification(.success)
-                idempotencyKey = UUID().uuidString
                 dismiss()
                 coordinator.onSelectWorkspace(workspace.id)
             } else {

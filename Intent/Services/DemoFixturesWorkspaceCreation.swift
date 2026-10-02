@@ -1,17 +1,20 @@
 import Foundation
 
 extension DemoFixtures {
-    private static var newRepositoryAttempt: NewRepositoryAttempt?
-    /// GitHub creation stays unsupported; new-repository creation simulates a failed attempt and same-key retry.
+    private static var workspaceCreationKeys: [WorkspaceRepositorySource: String] = [:]
     static func workspaceCreationResponse(for method: String, params: [String: Any]) -> Any {
         switch method {
         case "github.authStatus":
             return ["isConfigured": !ProcessInfo.processInfo.arguments.contains("--demo-github-disconnected")]
         case "host.directoryStatus":
             let path = params["path"] as? String ?? ""
-            return ["exists": path.hasSuffix("/existing-project") || newRepositoryAttempt?.path == path, "path": path]
+            return ["exists": path.hasSuffix("/existing-project") || workspaceCreationKeys[.newRepository(path: path)] != nil, "path": path]
         case "workspace.create" where params["isNewRepo"] as? Bool == true:
-            return newRepositoryCreationResponse(params: params)
+            guard let path = params["repositoryPath"] as? String else { return [String: Any]() }
+            return workspaceCreationRetryResponse(source: .newRepository(path: path), path: path, params: params)
+        case "workspace.create" where ProcessInfo.processInfo.arguments.contains("--demo-github-create-retry"):
+            guard let url = params["githubUrl"] as? String, let branch = params["baseRef"] as? String else { return [String: Any]() }
+            return workspaceCreationRetryResponse(source: .github(url: url, baseRef: branch), path: "~/Developer/console", params: params)
         case "github.repos.list":
             return [
                 "repos": [
@@ -49,13 +52,12 @@ extension DemoFixtures {
         }
     }
 
-    private static func newRepositoryCreationResponse(params: [String: Any]) -> Any {
-        guard let path = params["repositoryPath"] as? String,
-              let key = params["idempotencyKey"] as? String else { return [String: Any]() }
-        if let attempt = newRepositoryAttempt, attempt.retryKey(for: path) == key {
-            return ["workspace": ["id": "demo-new-repository", "title": "My New Project", "repositoryPath": path]]
+    private static func workspaceCreationRetryResponse(source: WorkspaceRepositorySource, path: String, params: [String: Any]) -> Any {
+        guard let key = params["idempotencyKey"] as? String else { return [String: Any]() }
+        if workspaceCreationKeys[source] == key {
+            return ["workspace": ["id": "demo-retried-workspace", "title": "My New Project", "repositoryPath": path]]
         }
-        newRepositoryAttempt = NewRepositoryAttempt(path: path, idempotencyKey: key)
+        workspaceCreationKeys[source] = key
         return [String: Any]()
     }
 }

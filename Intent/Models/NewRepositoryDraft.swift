@@ -43,7 +43,7 @@ struct NewRepositoryDraft: Equatable {
     }
 }
 
-enum WorkspaceRepositorySource {
+enum WorkspaceRepositorySource: Hashable {
     case github(url: String, baseRef: String)
     case newRepository(path: String)
 
@@ -57,11 +57,18 @@ enum WorkspaceRepositorySource {
     }
 }
 
-struct NewRepositoryAttempt {
-    let path: String
-    let idempotencyKey: String
+struct WorkspaceCreationAttempts {
+    private var keys: [WorkspaceRepositorySource: String] = [:]
 
-    func retryKey(for path: String) -> String? {
-        self.path == path ? idempotencyKey : nil
+    func retryKey(for source: WorkspaceRepositorySource) -> String? {
+        keys[source]
+    }
+
+    func requestKey(for source: WorkspaceRepositorySource) -> String {
+        retryKey(for: source) ?? UUID().uuidString
+    }
+
+    mutating func record(_ key: String, for source: WorkspaceRepositorySource) {
+        keys[source] = key
     }
 }

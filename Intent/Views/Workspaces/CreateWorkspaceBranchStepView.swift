@@ -12,7 +12,6 @@ struct CreateWorkspaceBranchStepView: View {
     let onRetry: () -> Void
     let onNext: () -> Void
     let onLoad: () async -> Void
-    let onBranchChanged: () -> Void
     let onSearchTextChanged: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -40,7 +39,6 @@ struct CreateWorkspaceBranchStepView: View {
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task { await onLoad() }
-        .onChange(of: selectedBranch) { _, _ in onBranchChanged() }
         .onChange(of: searchText) { _, newValue in onSearchTextChanged(newValue) }
     }
 

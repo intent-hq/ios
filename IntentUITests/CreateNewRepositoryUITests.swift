@@ -4,6 +4,78 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
     private static let elementTimeout: TimeInterval = 15
 
     @MainActor
+    func testGitHubRetryPreservesRequestAfterReturningToProjectPicker() {
+        verifyGitHubRetry(switchToNewRepository: false)
+    }
+
+    @MainActor
+    func testGitHubRetryKeepsItsRequestSeparateFromANewRepositoryAttempt() {
+        verifyGitHubRetry(switchToNewRepository: true)
+    }
+
+    @MainActor
+    private func verifyGitHubRetry(switchToNewRepository: Bool) {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "--demo-github-create-retry"]
+        app.launch()
+        app.openHomeAction("workspace")
+        openGitHubForm(in: app)
+        submitExpectingLostResponse(in: app)
+        returnToProjectPicker(in: app)
+        if switchToNewRepository {
+            app.buttons["creation.newRepository"].tap()
+            let name = app.textFields["creation.newRepositoryName"]
+            XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
+            name.tap()
+            name.typeText("other-project")
+            app.buttons["Next"].tap()
+            submitExpectingLostResponse(in: app)
+            returnToProjectPicker(in: app)
+        }
+        openGitHubForm(in: app)
+        app.buttons["creation.create"].tap()
+        XCTAssertTrue(app.buttons["creation.sourceCard"].waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertFalse(app.alerts["Error"].exists)
+    }
+
+    @MainActor
+    private func openGitHubForm(in app: XCUIApplication) {
+        let repository = app.buttons["creation.repository.nova-labs/console"]
+        XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
+        repository.tap()
+        app.buttons["Next"].tap()
+        let branch = app.buttons["creation.branch.main"]
+        XCTAssertTrue(branch.waitForExistence(timeout: Self.elementTimeout))
+        branch.tap()
+        app.buttons["Next"].tap()
+        waitForCreate(in: app)
+    }
+
+    @MainActor
+    private func submitExpectingLostResponse(in app: XCUIApplication) {
+        waitForCreate(in: app)
+        app.buttons["creation.create"].tap()
+        XCTAssertTrue(app.alerts["Error"].waitForExistence(timeout: Self.elementTimeout))
+        app.alerts.buttons["OK"].tap()
+    }
+
+    @MainActor
+    private func waitForCreate(in app: XCUIApplication) {
+        let create = app.buttons["creation.create"]
+        XCTAssertTrue(create.waitForExistence(timeout: Self.elementTimeout))
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: create)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
+    }
+
+    @MainActor
+    private func returnToProjectPicker(in app: XCUIApplication) {
+        app.buttons["creation.back"].tap()
+        app.buttons["creation.branchBack"].tap()
+        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Self.elementTimeout))
+    }
+
+    @MainActor
     func testNewRepositoryWithoutGitHubPreservesDraftAndRetriesCreation() throws {
         continueAfterFailure = false
         let gate = FileManager.default.temporaryDirectory

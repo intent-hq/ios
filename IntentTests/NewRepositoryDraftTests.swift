@@ -49,9 +49,34 @@ struct NewRepositoryDraftTests {
     }
 
     @Test func retriesKeepTheirKeyOnlyForTheAttemptedDestination() {
-        let attempt = NewRepositoryAttempt(path: "~/Developer/my-project", idempotencyKey: "original-key")
-        #expect(attempt.retryKey(for: "~/Developer/my-project") == "original-key")
-        #expect(attempt.retryKey(for: "~/Developer/existing-project") == nil)
+        var attempts = WorkspaceCreationAttempts()
+        let source = WorkspaceRepositorySource.newRepository(path: "~/Developer/my-project")
+        let key = attempts.requestKey(for: source)
+        #expect(attempts.retryKey(for: source) == nil)
+        attempts.record(key, for: source)
+        #expect(attempts.requestKey(for: source) == key)
+        #expect(attempts.retryKey(for: .newRepository(path: "~/Developer/existing-project")) == nil)
+    }
+
+    @Test func githubRetrySurvivesOtherSourcesWithoutSharingTheirKeys() {
+        var attempts = WorkspaceCreationAttempts()
+        let sources: [WorkspaceRepositorySource] = [
+            .github(url: "https://github.com/owner/repo", baseRef: "main"),
+            .github(url: "https://github.com/owner/other", baseRef: "main"),
+            .github(url: "https://github.com/owner/repo", baseRef: "feature"),
+            .newRepository(path: "~/Developer/project")
+        ]
+        var keys: [String] = []
+        for source in sources {
+            let key = attempts.requestKey(for: source)
+            keys.append(key)
+            attempts.record(key, for: source)
+        }
+        #expect(Set(keys).count == sources.count)
+        for (source, key) in zip(sources, keys) {
+            #expect(attempts.requestKey(for: source) == key)
+        }
+        #expect(WorkspaceCreationAttempts().retryKey(for: sources[0]) == nil)
     }
 
     @Test func newRepositoryRequestOmitsGitHubAndBranchAndKeepsAgentSettings() throws {
