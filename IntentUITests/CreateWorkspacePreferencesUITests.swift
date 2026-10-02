@@ -21,10 +21,7 @@ nonisolated final class CreateWorkspacePreferencesUITests: XCTestCase {
         app.buttons["Named Model"].tap()
         app.buttons["creation.reasoningPicker"].tap()
         app.buttons["high"].tap()
-        app.buttons["creation.back"].tap()
-        app.buttons["creation.branchBack"].tap()
-        app.buttons["creation.close"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.elementTimeout))
+        closeForm(in: app)
 
         openForm(in: app)
         app.scrollViews["creation.form"].swipeUp()
@@ -36,6 +33,23 @@ nonisolated final class CreateWorkspacePreferencesUITests: XCTestCase {
         screenshot.name = "remembered-agent-settings"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        app.buttons["creation.specialistPicker"].tap()
+        app.buttons["None"].tap()
+        closeForm(in: app)
+        openForm(in: app)
+        app.scrollViews["creation.form"].swipeUp()
+        assertValue("None", for: "creation.specialistPicker", in: app)
+        assertValue("Codex", for: "creation.providerPicker", in: app)
+        assertValue("Named Model", for: "creation.modelPicker", in: app)
+        assertValue("high", for: "creation.reasoningPicker", in: app)
+    }
+
+    @MainActor
+    private func closeForm(in app: XCUIApplication) {
+        app.buttons["creation.back"].tap()
+        app.buttons["creation.branchBack"].tap()
+        app.buttons["creation.close"].tap()
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.elementTimeout))
     }
 
     @MainActor

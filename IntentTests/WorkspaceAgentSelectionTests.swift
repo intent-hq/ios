@@ -79,6 +79,20 @@ struct WorkspaceAgentSelectionTests {
         }
     }
 
+    @Test func providerPickedBeforeSpecialistsLoadKeepsTheNormalDefault() throws {
+        try withPersistence { persistence in
+            let selection = WorkspaceAgentSelection(backendID: backendID, persistence: persistence)
+            selection.reconcileProvider(state: .loaded([auggie, codex]))
+            selection.selectProvider(codex)
+            selection.reconcileSpecialist(catalog: [implementor, verifier])
+            #expect(selection.specialist == implementor)
+            let reopened = WorkspaceAgentSelection(backendID: backendID, persistence: persistence)
+            reconcile(reopened)
+            #expect(reopened.specialist == implementor)
+            #expect(reopened.provider == codex)
+        }
+    }
+
     @Test func unavailableProviderCannotReuseItsModelOnFallbackProvider() throws {
         try withPersistence { persistence in
             let selection = configuredSelection(persistence)

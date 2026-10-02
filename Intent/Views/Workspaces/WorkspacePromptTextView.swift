@@ -1,5 +1,46 @@
+import Combine
+import Observation
 import SwiftUI
 import UIKit
+
+@MainActor
+@Observable
+final class WorkspacePromptFocus {
+    private static let dismissalTimeout: TimeInterval = 1
+    private(set) var isDismissing = false
+    @ObservationIgnored weak var textView: WorkspacePromptUITextView?
+    @ObservationIgnored private var dismissal: AnyCancellable?
+
+    func dismissKeyboard(then onDismiss: @escaping () -> Void) {
+        guard !isDismissing else { return }
+        guard let textView, textView.isFirstResponder, let window = textView.window else {
+            onDismiss()
+            return
+        }
+        guard window.keyboardLayoutGuide.layoutFrame.height > window.safeAreaInsets.bottom else {
+            textView.resignFirstResponder()
+            onDismiss()
+            return
+        }
+        isDismissing = true
+        let hidden = NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification).map { _ in () }
+        let fallback = Just(()).delay(for: .seconds(Self.dismissalTimeout), scheduler: RunLoop.main)
+        dismissal = hidden.merge(with: fallback).first().receive(on: RunLoop.main).sink { [weak self, weak window] _ in
+            guard let self, isDismissing else { return }
+            cancelDismissal()
+            window?.layoutIfNeeded()
+            guard let window, window.keyboardLayoutGuide.layoutFrame.height <= window.safeAreaInsets.bottom else { return }
+            onDismiss()
+        }
+        textView.resignFirstResponder()
+    }
+
+    func cancelDismissal() {
+        dismissal?.cancel()
+        dismissal = nil
+        isDismissing = false
+    }
+}
 
 /// Scoped to workspace creation: Return remains a newline on every device.
 final class WorkspacePromptUITextView: UITextView {
@@ -31,6 +72,7 @@ struct WorkspacePromptTextView: UIViewRepresentable {
     let minimumHeight: CGFloat
     let allowsImagePaste: Bool
     let onPasteImages: () -> Void
+    var focus: WorkspacePromptFocus? = nil
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
 
@@ -42,6 +84,7 @@ struct WorkspacePromptTextView: UIViewRepresentable {
         view.isScrollEnabled = true
         view.alwaysBounceVertical = false
         view.delegate = context.coordinator
+        focus?.textView = view
         view.accessibilityIdentifier = "creation.prompt"
         view.accessibilityLabel = String(localized: "What should we work on?")
         view.accessibilityHint = String(localized: "Optional. Add instructions for the first agent in this workspace.")

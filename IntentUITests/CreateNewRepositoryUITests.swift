@@ -45,12 +45,17 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
 
     @MainActor
     private func verifyPendingCreationAndRecovery(in app: XCUIApplication, gate: URL) throws {
+        app.textViews["creation.prompt"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
         let create = app.buttons["creation.create"]
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: create)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
+        let keyboardVisibleButtonY = create.frame.minY
         create.tap()
         let loading = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'Creating workspace'"), object: create)
         XCTAssertEqual(XCTWaiter.wait(for: [loading], timeout: Self.elementTimeout), .completed)
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        XCTAssertGreaterThan(create.frame.minY, keyboardVisibleButtonY)
         XCTAssertFalse(create.isEnabled)
         XCTAssertFalse(app.buttons["creation.back"].isEnabled)
         XCTAssertFalse(app.buttons["creation.sourceCard"].isEnabled)

@@ -2,10 +2,17 @@ import Foundation
 import Observation
 
 struct WorkspaceAgentPreferences: Codable, Equatable {
+    enum SpecialistMode: String, Codable {
+        case automatic
+        case noSpecialist = "none"
+        case selected
+    }
+
     var specialistID: String?
     var providerID: String?
     var modelID: String?
     var reasoningEffort: String?
+    var specialistMode: SpecialistMode?
 }
 
 extension PersistenceManager {
@@ -40,7 +47,7 @@ final class WorkspaceAgentSelection {
 
     func reconcileSpecialist(catalog: [SpecialistInfo]) {
         guard !catalog.isEmpty else { return }
-        if let preferences, preferences.specialistID == nil {
+        if preferences?.specialistMode == .noSpecialist {
             specialist = nil
             return
         }
@@ -63,8 +70,8 @@ final class WorkspaceAgentSelection {
 
     func reconcileModels(_ models: [ModelInfo]) {
         if let preferences {
-            model = models.first {
-                $0.id == preferences.modelID && $0.provider == preferences.providerID && $0.provider == provider?.id
+            model = models.first { candidate in
+                candidate.id == preferences.modelID && candidate.provider == preferences.providerID && candidate.provider == provider?.id
             }
         } else {
             model = CreationSelectionPolicy.reconciledModel(current: model, models: models)
@@ -79,7 +86,10 @@ final class WorkspaceAgentSelection {
 
     func selectSpecialist(_ specialist: SpecialistInfo?) {
         self.specialist = specialist
-        remember { $0.specialistID = specialist?.id }
+        remember { next in
+            next.specialistID = specialist?.id
+            next.specialistMode = specialist == nil ? .noSpecialist : .selected
+        }
     }
 
     func selectProvider(_ provider: ProviderInfo) {
@@ -87,20 +97,20 @@ final class WorkspaceAgentSelection {
         self.provider = provider
         model = nil
         reasoningEffort = nil
-        remember {
-            $0.providerID = provider.id
-            $0.modelID = nil
-            $0.reasoningEffort = nil
+        remember { next in
+            next.providerID = provider.id
+            next.modelID = nil
+            next.reasoningEffort = nil
         }
     }
 
     func selectModel(_ model: ModelInfo?) {
         self.model = model?.provider == provider?.id ? model : nil
         reconcileReasoning(effortLevels: self.model?.effortLevels ?? [])
-        remember {
-            $0.providerID = provider?.id
-            $0.modelID = self.model?.id
-            $0.reasoningEffort = reasoningEffort
+        remember { next in
+            next.providerID = provider?.id
+            next.modelID = self.model?.id
+            next.reasoningEffort = reasoningEffort
         }
     }
 
@@ -111,7 +121,8 @@ final class WorkspaceAgentSelection {
 
     private func remember(_ update: (inout WorkspaceAgentPreferences) -> Void) {
         var next = preferences ?? WorkspaceAgentPreferences(
-            specialistID: specialist?.id, providerID: provider?.id, modelID: model?.id, reasoningEffort: reasoningEffort
+            specialistID: specialist?.id, providerID: provider?.id, modelID: model?.id, reasoningEffort: reasoningEffort,
+            specialistMode: specialist == nil ? .automatic : .selected
         )
         update(&next)
         preferences = next

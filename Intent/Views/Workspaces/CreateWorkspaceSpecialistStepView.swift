@@ -33,6 +33,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     @ScaledMetric(relativeTo: .title) private var headingTracking = CreateWorkspaceFormStyle.headingTracking
     @ScaledMetric(relativeTo: .title) private var headingSize = Constants.Typography.heading2.size
     @State private var createControlsHeight: CGFloat = 0
+    @State private var promptFocus = WorkspacePromptFocus()
 
     var body: some View {
         ZStack {
@@ -47,6 +48,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                 } else {
                     optionsList
                         .disabled(isCreating)
+                        .allowsHitTesting(!promptFocus.isDismissing)
                 }
             }
             .overlay(alignment: .bottomTrailing) {
@@ -56,31 +58,32 @@ struct CreateWorkspaceSpecialistStepView: View {
         }
         .navigationTitle("Create Workspace")
         .toolbar(.hidden, for: .navigationBar)
-        .interactiveDismissDisabled(isCreating)
+        .interactiveDismissDisabled(isCreating || promptFocus.isDismissing)
         .alert("Error", isPresented: $showError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "An unknown error occurred.")
         }
         .task { await onLoad() }
+        .onDisappear { promptFocus.cancelDismissal() }
     }
 
     private var createControls: some View {
         HStack {
             CreateWorkspaceNavigationButton(identifier: "creation.back", onAction: onBack)
-                .disabled(isCreating)
+                .disabled(isCreating || promptFocus.isDismissing)
             Spacer()
             CreateWorkspaceSubmitButton(
                 isCreating: isCreating,
                 isDisabled: CreateWorkspaceView.isCreateDisabled(
-                    isCreating: isCreating,
+                    isCreating: isCreating || promptFocus.isDismissing,
                     isLoadingProviders: isLoadingProviders,
                     providers: providers,
                     selectedProvider: selectedProvider,
                     allowsCreation: allowsCreation,
                     isImportingImages: images.isImporting
                 ),
-                onCreate: onCreate
+                onCreate: { promptFocus.dismissKeyboard(then: onCreate) }
             )
         }
         .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
@@ -94,7 +97,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                 pageHeading
                     .padding(.top, CreateWorkspaceFormStyle.headingTopPadding)
                     .padding(.bottom, CreateWorkspaceFormStyle.headingSpacing)
-                CreateWorkspacePrompt(text: $messageText, attachments: images)
+                CreateWorkspacePrompt(text: $messageText, attachments: images, focus: promptFocus)
                 CreateWorkspaceSourceCard(repositoryFullName: repositoryFullName, branch: branch, onEdit: onBack)
                     .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
                 agentSection
@@ -172,6 +175,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                 get: { selectedSpecialist?.id ?? "" },
                 set: { id in selectedSpecialist = specialists.first { $0.id == id } }
             )) {
+                Text("None").tag("")
                 ForEach(specialists) { specialist in
                     Text(specialist.name).interFont(Constants.Typography.bodyS).tag(specialist.id)
                 }
