@@ -83,7 +83,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                     allowsCreation: allowsCreation,
                     isImportingImages: images.isImporting
                 ),
-                onCreate: { promptFocus.dismissKeyboard(then: onCreate) }
+                onCreate: { promptFocus.dismissKeyboard { onCreate() } }
             )
         }
         .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)

@@ -72,7 +72,7 @@ struct WorkspacePromptTextView: UIViewRepresentable {
     let minimumHeight: CGFloat
     let allowsImagePaste: Bool
     let onPasteImages: () -> Void
-    var focus: WorkspacePromptFocus? = nil
+    var focus: WorkspacePromptFocus?
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
 

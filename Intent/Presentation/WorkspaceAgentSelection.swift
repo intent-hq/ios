@@ -121,7 +121,10 @@ final class WorkspaceAgentSelection {
 
     private func remember(_ update: (inout WorkspaceAgentPreferences) -> Void) {
         var next = preferences ?? WorkspaceAgentPreferences(
-            specialistID: specialist?.id, providerID: provider?.id, modelID: model?.id, reasoningEffort: reasoningEffort,
+            specialistID: specialist?.id,
+            providerID: provider?.id,
+            modelID: model?.id,
+            reasoningEffort: reasoningEffort,
             specialistMode: specialist == nil ? .automatic : .selected
         )
         update(&next)
