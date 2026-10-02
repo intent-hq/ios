@@ -66,10 +66,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let launcherBottom = launcher.frame.maxY
         openMenu(app)
         XCTAssertEqual(app.buttons["intent.menu.close"].frame.maxY, launcherBottom, accuracy: Self.scrollTolerance)
-        let menuScreenshot = XCTAttachment(screenshot: app.screenshot())
-        menuScreenshot.name = "iPad landscape Intent menu tiles"
-        menuScreenshot.lifetime = .keepAlways
-        add(menuScreenshot)
+        attachScreenshot(app.screenshot(), named: "iPad landscape Intent menu tiles")
         app.buttons["intent.menu.close"].tap()
         XCTAssertTrue(waitUntilHittable(composer))
 
@@ -82,10 +79,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(send.isHittable)
         XCTAssertFalse(launcher.frame.intersects(send.frame))
         XCTAssertLessThan(launcher.frame.maxY, composer.frame.minY)
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "iPad Intent menu floating above the composer"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad Intent menu floating above the composer")
         send.tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", draft))
             .firstMatch.waitForExistence(timeout: Self.timeout))
@@ -250,6 +244,14 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
             predicate: NSPredicate(format: "isHittable == true"), object: element
         )
         return XCTWaiter.wait(for: [available], timeout: Self.timeout) == .completed
+    }
+
+    @MainActor
+    private func attachScreenshot(_ screenshot: XCUIScreenshot, named name: String) {
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor
