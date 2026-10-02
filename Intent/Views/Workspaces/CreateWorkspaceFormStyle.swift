@@ -1,9 +1,9 @@
 import CoreText
 import SwiftUI
 
-/// Scoped to the final workspace form; other creation flows keep their theme.
 enum CreateWorkspaceFormStyle {
     static let pagePadding: CGFloat = 24
+    static let headingTopPadding: CGFloat = 12
     static let headingSpacing: CGFloat = 41
     static let sectionSpacing: CGFloat = 48
     static let agentSectionSpacing: CGFloat = 24
@@ -55,7 +55,6 @@ enum CreateWorkspaceFormStyle {
 
 /// Shared presentation for repository and branch selection.
 enum CreateWorkspaceRepoStyle {
-    static let headingTopPadding: CGFloat = 12
     static let titleSpacing: CGFloat = 56
     static let sectionSpacing: CGFloat = 32
     static let sectionHeaderSpacing: CGFloat = 24

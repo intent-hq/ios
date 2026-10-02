@@ -94,6 +94,7 @@ struct CreateWorkspaceSpecialistStepView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 pageHeading
+                    .padding(.top, CreateWorkspaceFormStyle.headingTopPadding)
                     .padding(.bottom, CreateWorkspaceFormStyle.headingSpacing)
                 CreateWorkspacePrompt(text: $messageText, attachments: images)
                 CreateWorkspaceSourceCard(repositoryFullName: repositoryFullName, branch: branch, onEdit: onBack)

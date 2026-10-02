@@ -52,7 +52,6 @@ struct GitHubRepoPickerView: View {
         CreateWorkspaceSelectionPage(
             title: "Select Project",
             titleIdentifier: "creation.repositoryTitle",
-            headingTopPadding: CreateWorkspaceRepoStyle.headingTopPadding,
             searchText: $searchText,
             searchPlaceholder: "Search repositories",
             searchIdentifier: "creation.repositorySearch",
