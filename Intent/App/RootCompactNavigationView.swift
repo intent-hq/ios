@@ -8,7 +8,11 @@ extension RootView {
                 .navigationDestination(isPresented: $showingWorkspaceDetail) {
                     if let workspaceId = coordinator.selectedWorkspaceId {
                         WorkspaceDetailView(workspaceId: workspaceId, session: session)
-                            .toolbar(UIDevice.current.userInterfaceIdiom == .phone ? .hidden : .visible, for: .navigationBar)
+                            #if os(iOS)
+                            .toolbar(sizeClass == .compact ? .hidden : .visible, for: .navigationBar)
+                            #else
+                            .toolbar(.visible, for: .navigationBar)
+                            #endif
                             .navigationDestination(isPresented: $showingConversation) {
                                 conversationDestination
                             }

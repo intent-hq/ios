@@ -354,13 +354,19 @@ struct RootView: View {
     }
 }
 
-private extension RootView {
-    var showsSettingsSheet: Bool {
+extension RootView {
+    static func presentsSettingsSheet(currentScreen: AppScreen, sizeClass: UserInterfaceSizeClass?) -> Bool {
         #if os(iOS)
-        guard UIDevice.current.userInterfaceIdiom == .phone else { return false }
-        if case .settings = coordinator.currentScreen { return true }
+        guard sizeClass == .compact else { return false }
+        if case .settings = currentScreen { return true }
         #endif
         return false
+    }
+}
+
+private extension RootView {
+    var showsSettingsSheet: Bool {
+        Self.presentsSettingsSheet(currentScreen: coordinator.currentScreen, sizeClass: sizeClass)
     }
 
     var settingsPresented: Binding<Bool> {
