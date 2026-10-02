@@ -11,6 +11,11 @@ import tempfile
 
 
 CAPTURES = {
+    "WorkspaceSearchUITests": {
+        "testSearchAboveKeyboardHidesAssistantUntilClosed": (
+            "Workspace search above keyboard without Assistant launcher",
+        ),
+    },
     "CreateNewRepositoryUITests": {
         "testNewRepositoryWithoutGitHubPreservesDraftAndRetriesCreation": (
             "new-repository-create-with-keyboard", "new-repository-draft-after-retry",

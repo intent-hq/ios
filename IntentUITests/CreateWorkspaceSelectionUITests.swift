@@ -13,9 +13,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: gate) }
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-workspace-selection-trigger-file=" + gate.path]
-        if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
-            app.launchArguments += ["-appThemePreference", appearance]
-        }
+        app.launchArguments += ["-appThemePreference", ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] ?? "light"]
         app.launch()
         app.openHomeAction("workspace")
         try releaseSelectionLoading(in: app, step: "repository", gate: gate)
@@ -50,9 +48,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data"]
-        if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
-            app.launchArguments += ["-appThemePreference", appearance]
-        }
+        app.launchArguments += ["-appThemePreference", ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] ?? "light"]
         app.launch()
         app.openHomeAction("workspace")
         let title = app.staticTexts["creation.repositoryTitle"]
@@ -171,9 +167,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         try Data().write(to: gate)
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-workspace-provider-trigger-file=" + gate.path]
-        if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
-            app.launchArguments += ["-appThemePreference", appearance]
-        }
+        app.launchArguments += ["-appThemePreference", ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] ?? "light"]
         app.launch()
         openCreationForm(in: app)
 

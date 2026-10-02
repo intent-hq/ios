@@ -89,10 +89,7 @@ struct WorkspaceSearchButton: View {
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                 .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                 .frame(width: height, height: height)
-                .background(
-                    Constants.WorkspaceList.controlSurface(for: colorScheme),
-                    in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-                )
+                .background { WorkspaceSearchSurface() }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -127,10 +124,7 @@ struct WorkspaceSearchInput: View {
                     .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                     .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                     .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
-                    .background(
-                        Constants.WorkspaceList.controlSurface(for: colorScheme),
-                        in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-                    )
+                    .background { WorkspaceSearchSurface() }
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close search")
@@ -176,9 +170,20 @@ struct WorkspaceSearchInput: View {
         .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
         .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
         .frame(minHeight: Constants.WorkspaceSearch.expandedHeight)
-        .background(
-            Constants.WorkspaceList.controlSurface(for: colorScheme),
-            in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-        )
+        .background { WorkspaceSearchSurface() }
+    }
+}
+
+private struct WorkspaceSearchSurface: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
+            .fill(Constants.Pairing.surface(for: colorScheme))
+            .shadow(
+                color: .black.opacity(colorScheme == .light ? Constants.WorkspaceSearch.surfaceShadowOpacity : 0),
+                radius: Constants.WorkspaceSearch.surfaceShadowRadius,
+                y: Constants.WorkspaceSearch.surfaceShadowOffset
+            )
     }
 }
