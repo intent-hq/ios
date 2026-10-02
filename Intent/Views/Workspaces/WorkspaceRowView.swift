@@ -74,19 +74,6 @@ struct WorkspaceRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             monitorRefreshButton
-
-            // Agent-set status screenshot (PROTOCOL §5.1 statusImageAssetId);
-            // mounted only when set so an unset workspace leaves no gap.
-            if let statusImageAssetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
-                WorkspaceStatusImageView(
-                    workspaceId: workspace.id,
-                    assetId: statusImageAssetId,
-                    style: .card
-                )
-                    .alignmentGuide(Self.titleCenter) { dimensions in
-                        dimensions[VerticalAlignment.center]
-                    }
-            }
         }
         .offset(x: -(Constants.WorkspaceRow.statusIconSize + (spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing)) * leadingSwipeProgress)
         .contentShape(Rectangle())

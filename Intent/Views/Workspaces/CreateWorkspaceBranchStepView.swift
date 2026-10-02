@@ -12,7 +12,6 @@ struct CreateWorkspaceBranchStepView: View {
     let onRetry: () -> Void
     let onNext: () -> Void
     let onLoad: () async -> Void
-    let onBranchChanged: () -> Void
     let onSearchTextChanged: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -20,32 +19,32 @@ struct CreateWorkspaceBranchStepView: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        VStack(spacing: 0) {
-            CreateWorkspaceSelectionHeader(
-                leadingControl: .back,
-                isNextDisabled: selectedBranch == nil,
-                onLeadingAction: { dismiss() },
-                onNext: onNext
-            )
-            CreateWorkspaceSelectionPage(title: "Select Branch", titleIdentifier: "creation.branchTitle") {
+        CreateWorkspaceSelectionPage(
+            title: "Select Branch",
+            titleIdentifier: "creation.branchTitle",
+            searchText: $searchText,
+            searchPlaceholder: "Search branches",
+            searchIdentifier: "creation.branchSearch",
+            isSearchEnabled: !isLoading && loadError == nil,
+            isLoading: isLoading,
+            isNextDisabled: selectedBranch == nil,
+            onNext: onNext,
+            leadingAction: {
+                CreateWorkspaceNavigationButton { dismiss() }
+            },
+            content: {
                 content
             }
-        }
+        )
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task { await onLoad() }
-        .onChange(of: selectedBranch) { _, _ in onBranchChanged() }
         .onChange(of: searchText) { _, newValue in onSearchTextChanged(newValue) }
     }
 
     @ViewBuilder
     private var content: some View {
-        if isLoading {
-            ProgressView {
-                Text("Loading branches...").interFont(Constants.Typography.bodyS)
-            }
-            .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
-        } else if let loadError {
+        if let loadError {
             VStack(spacing: Constants.CreateWorkspace.errorStateSpacing) {
                 Text("Couldn't load branches")
                     .interFont(Constants.Typography.bodyXSEmphasized)
@@ -59,9 +58,8 @@ struct CreateWorkspaceBranchStepView: View {
             .padding(Constants.CreateWorkspace.errorStatePadding)
         } else {
             VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
-                CreateWorkspaceSelectionSearchField(text: $searchText, placeholder: "Search branches", identifier: "creation.branchSearch")
                 sourceSection
-                branchList
+                CreateWorkspaceSearchResults { branchList }
             }
         }
     }

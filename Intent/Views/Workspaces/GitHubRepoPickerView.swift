@@ -6,8 +6,8 @@ import SwiftUI
 /// below, both prefix-filtered client-side by the typed text, followed by
 /// deduped debounced global search results. When GitHub is not connected
 /// (`github.authStatus.isConfigured == false`) the screen shows
-/// desktop-setup guidance instead — there is no fallback flow, so recents
-/// are deliberately auth-gated at render time too: picking a repo needs
+/// desktop-setup guidance for existing repos; the new-repository action
+/// remains available. Recents are deliberately auth-gated at render time too: picking a repo needs
 /// GitHub for branch listing and workspace creation either way.
 ///
 /// `store` is the session-owned cache: on a reopen the cached lists render
@@ -17,6 +17,9 @@ import SwiftUI
 struct GitHubRepoPickerView: View {
     var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
+    let onCreateRepository: () -> Void
+    let onNext: () -> Void
+    let onClose: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -40,10 +43,31 @@ struct GitHubRepoPickerView: View {
         )
     }
 
+    private var isInitiallyLoading: Bool {
+        if !store.hasCheckedAuth { return store.lastError == nil }
+        return !store.hasLoaded && store.isConfigured && store.isLoading && store.recentRepos.isEmpty && store.ownRepos.isEmpty
+    }
+
     var body: some View {
-        CreateWorkspaceSelectionPage(title: "Select Repository", titleIdentifier: "creation.repositoryTitle") {
-            content
-        }
+        CreateWorkspaceSelectionPage(
+            title: "Select Project",
+            titleIdentifier: "creation.repositoryTitle",
+            searchText: $searchText,
+            searchPlaceholder: "Search repositories",
+            searchIdentifier: "creation.repositorySearch",
+            searchButtonShowsBackground: false,
+            isSearchEnabled: store.hasCheckedAuth && store.isConfigured && !isInitiallyLoading,
+            isLoading: isInitiallyLoading,
+            isNextDisabled: selectedRepo == nil,
+            onNext: onNext,
+            headingAction: { newRepositoryButton },
+            leadingAction: {
+                CreateWorkspaceNavigationButton(control: .close, identifier: "creation.close", onAction: onClose)
+            },
+            content: {
+                CreateWorkspaceSearchResults { content }
+            }
+        )
         .task {
             await store.loadIfNeeded()
         }
@@ -54,17 +78,24 @@ struct GitHubRepoPickerView: View {
 
     // MARK: - Subviews
 
+    private var newRepositoryButton: some View {
+        Button(action: onCreateRepository) {
+            Image(systemName: "plus")
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
+                .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("New Repository")
+        .accessibilityIdentifier("creation.newRepository")
+    }
+
     @ViewBuilder
     private var content: some View {
         if !store.hasCheckedAuth {
-            if store.lastError != nil {
-                emptyState
-            } else {
-                ProgressView {
-                    Text("Checking GitHub connection...").interFont(Constants.Typography.bodyS)
-                }
-                .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
-            }
+            emptyState
         } else if !store.isConfigured {
             notConnectedPlaceholder
         } else {
@@ -75,12 +106,11 @@ struct GitHubRepoPickerView: View {
     private var repoList: some View {
         let sections = suggestions
         return VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
-            CreateWorkspaceSelectionSearchField(text: $searchText)
             if store.isLoading || pendingSearchQuery != nil, sections.isEmpty {
-                ProgressView {
-                    Text("Loading repositories...").interFont(Constants.Typography.bodyS)
-                }
-                .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel("Loading repositories")
+                    .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
             } else if sections.isEmpty {
                 emptyState
             } else {
@@ -168,76 +198,6 @@ struct GitHubRepoPickerView: View {
             }
             pendingSearchQuery = nil
         }
-    }
-}
-
-struct CreateWorkspaceSelectionPage<Content: View>: View {
-    let title: LocalizedStringKey
-    let titleIdentifier: String
-    @ViewBuilder let content: Content
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
-                Text(title)
-                    .interFont(Constants.Typography.heading2)
-                    .tracking(CreateWorkspaceRepoStyle.titleTracking)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier(titleIdentifier)
-                content
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(CreateWorkspaceFormStyle.pagePadding)
-        }
-        #if !os(visionOS)
-        .scrollDismissesKeyboard(.interactively)
-        #endif
-        .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
-        .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
-    }
-}
-
-struct CreateWorkspaceSelectionSearchField: View {
-    @Binding var text: String
-    var placeholder: LocalizedStringKey = "Search GitHub repositories"
-    var identifier = "creation.repositorySearch"
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.colorSchemeContrast) private var contrast
-    @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
-
-    var body: some View {
-        HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: iconSize))
-                .frame(width: iconSize, height: iconSize)
-                .accessibilityHidden(true)
-            TextField(placeholder, text: $text)
-                .interFont(Constants.Typography.bodyS)
-                .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .accessibilityIdentifier(identifier)
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(.close)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: iconSize, height: iconSize)
-                        .frame(minWidth: CreateWorkspaceFormStyle.controlHeight, minHeight: CreateWorkspaceFormStyle.controlHeight)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
-        .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
-        .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
-        .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(cornerRadius: CreateWorkspaceFormStyle.cornerRadius))
     }
 }
 

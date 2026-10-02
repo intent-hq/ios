@@ -2,15 +2,10 @@ import SwiftUI
 
 /// Pure mapping for the workspace status image (PROTOCOL §5.1
 /// `statusImageAssetId`; FE parity: WorkspaceProgressCard.svelte): which
-/// workspaces render one, how the fetch is keyed, and how each placement
-/// degrades when the asset cannot be loaded.
+/// workspaces render one in their detail header and how the fetch is keyed.
 nonisolated enum WorkspaceStatusImageLayout {
-    enum Style: Equatable {
-        /// Workspace list row: small square thumbnail trailing the text.
-        case card
-        /// Workspace detail header: full-width banner that opens the lightbox.
-        case detail
-    }
+    static let accessibilityIdentifier = "workspaceDetail.statusImage"
+    static let accessibilityLabel = "Workspace status image"
 
     /// The daemon omits the field until set and folds blanks to a clear;
     /// mirror that so an empty id never reaches the loader.
@@ -29,24 +24,6 @@ nonisolated enum WorkspaceStatusImageLayout {
     static func loadKey(workspaceId: String, assetId: String, attempt: Int) -> String {
         "\(workspaceId)|\(assetId)|\(attempt)"
     }
-
-    /// The row has no room for an error affordance, so a broken asset
-    /// collapses to the plain row (desktop parity); the detail header keeps
-    /// a non-broken placeholder with a retry.
-    static func hidesOnFailure(_ style: Style) -> Bool {
-        style == .card
-    }
-
-    static func accessibilityIdentifier(for style: Style) -> String {
-        switch style {
-        case .card: "workspaceRow.statusImage"
-        case .detail: "workspaceDetail.statusImage"
-        }
-    }
-
-    static func accessibilityLabel(for _: Style) -> String {
-        "Workspace status image"
-    }
 }
 
 /// Renders a workspace's status screenshot, fetched through the session's
@@ -58,7 +35,6 @@ struct WorkspaceStatusImageView: View {
 
     let workspaceId: String
     let assetId: String
-    let style: Layout.Style
     /// Explicit loader override (tests/previews); when nil, the window
     /// session's loader is used, falling back to the shared loader.
     var loader: WorkspaceFileImageLoader?
@@ -89,7 +65,7 @@ struct WorkspaceStatusImageView: View {
                     image = loaded
                     loadedKey = key
                 } catch is CancellationError {
-                    // Row scrolled away / workspace changed mid-fetch.
+                    // View disappeared / workspace changed mid-fetch.
                 } catch {
                     if !Task.isCancelled { failed = true }
                 }
@@ -99,71 +75,40 @@ struct WorkspaceStatusImageView: View {
     @ViewBuilder
     private var content: some View {
         if let image {
-            switch style {
-            case .card:
-                thumbnail(image)
-                    .accessibilityLabel(Layout.accessibilityLabel(for: style))
-                    .accessibilityIdentifier(Layout.accessibilityIdentifier(for: style))
-            case .detail:
-                Button { lightboxPresented = true } label: {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .accessibilityLabel(Layout.accessibilityLabel(for: style))
-                        .frame(maxHeight: Layout.detailMaxHeight)
-                        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
-                        .overlay(border)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Layout.accessibilityLabel(for: style))
-                .accessibilityHint("Opens the image full size")
-                .accessibilityIdentifier(Layout.accessibilityIdentifier(for: style))
-                .contextMenu {
-                    ImageActionMenuItems(image: image)
-                }
-                .fullScreenCover(isPresented: $lightboxPresented) {
-                    ImageLightboxView(image: image)
-                }
+            Button { lightboxPresented = true } label: {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .accessibilityLabel(Layout.accessibilityLabel)
+                    .frame(maxHeight: Layout.detailMaxHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+                    .overlay(border)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Layout.accessibilityLabel)
+            .accessibilityHint("Opens the image full size")
+            .accessibilityIdentifier(Layout.accessibilityIdentifier)
+            .contextMenu {
+                ImageActionMenuItems(image: image)
+            }
+            .fullScreenCover(isPresented: $lightboxPresented) {
+                ImageLightboxView(image: image)
             }
         } else if failed {
-            if Layout.hidesOnFailure(style) {
-                // A real (zero-sized) view, not EmptyView, so `.task(id:)`
-                // still re-runs when the asset id changes after a failure.
-                Color.clear.frame(width: 0, height: 0)
-            } else {
-                Button { attempt += 1 } label: {
-                    placeholder(
-                        systemImage: "photo.badge.exclamationmark",
-                        text: "Status image unavailable — tap to retry"
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Status image unavailable")
-                .accessibilityHint("Retries loading the image")
+            Button { attempt += 1 } label: {
+                placeholder(
+                    systemImage: "photo.badge.exclamationmark",
+                    text: "Status image unavailable — tap to retry"
+                )
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Status image unavailable")
+            .accessibilityHint("Retries loading the image")
         } else {
-            switch style {
-            case .card:
-                // Reserve the thumbnail's square so the row doesn't shift
-                // when the (cached, usually instant) image lands.
-                Color.clear
-                    .frame(width: Layout.cardThumbnailSide, height: Layout.cardThumbnailSide)
-            case .detail:
-                placeholder(systemImage: nil, text: "Loading status image…")
-                    .accessibilityHidden(true)
-            }
+            placeholder(systemImage: nil, text: "Loading status image…")
+                .accessibilityHidden(true)
         }
-    }
-
-    private func thumbnail(_ image: UIImage) -> some View {
-        Image(uiImage: image)
-            .resizable()
-            .scaledToFill()
-            .accessibilityLabel(Layout.accessibilityLabel(for: style))
-            .frame(width: Layout.cardThumbnailSide, height: Layout.cardThumbnailSide)
-            .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
-            .overlay(border)
     }
 
     private var border: some View {

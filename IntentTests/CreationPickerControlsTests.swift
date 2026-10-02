@@ -738,7 +738,7 @@ private struct PickerLayoutHost: View {
                 providers: [Self.provider],
                 isLoadingProviders: false,
                 providerGuidance: nil,
-                selectedProvider: $selectedProvider,
+                selectedProvider: selectedProvider,
                 models: [Self.model],
                 selectedModel: $selectedModel,
                 reasoningLevels: [],
