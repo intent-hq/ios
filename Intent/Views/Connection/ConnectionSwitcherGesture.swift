@@ -3,7 +3,7 @@ import UIKit
 
 struct ConnectionSwitcherGesture: ViewModifier {
     let isEnabled: Bool
-    let isOpen: Bool
+    let isOpen: Binding<Bool>
     let onChanged: (CGFloat) -> Void
     let onEnded: (CGFloat, CGFloat) -> Void
     let onCancelled: () -> Void
@@ -26,7 +26,7 @@ struct ConnectionSwitcherGesture: ViewModifier {
 #if os(iOS)
 private struct ConnectionSwitcherPan: UIGestureRecognizerRepresentable {
     let isEnabled: Bool
-    let isOpen: Bool
+    let isOpen: Binding<Bool>
     let onChanged: (CGFloat) -> Void
     let onEnded: (CGFloat, CGFloat) -> Void
     let onCancelled: () -> Void
@@ -62,14 +62,15 @@ private struct ConnectionSwitcherPan: UIGestureRecognizerRepresentable {
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var isOpen: Bool
+        // UIKit can ask before SwiftUI refreshes the representable; read the live state.
+        var isOpen: Binding<Bool>
 
-        init(isOpen: Bool) { self.isOpen = isOpen }
+        init(isOpen: Binding<Bool>) { self.isOpen = isOpen }
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
             let startX = pan.location(in: pan.view).x - pan.translation(in: pan.view).x
-            return ConnectionSwitcherDrag.canBegin(isOpen: isOpen, startX: startX, velocity: pan.velocity(in: pan.view))
+            return ConnectionSwitcherDrag.canBegin(isOpen: isOpen.wrappedValue, startX: startX, velocity: pan.velocity(in: pan.view))
         }
 
         func gestureRecognizer(

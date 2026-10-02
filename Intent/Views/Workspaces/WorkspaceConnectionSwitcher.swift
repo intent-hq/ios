@@ -50,7 +50,7 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
         }
         .modifier(ConnectionSwitcherGesture(
             isEnabled: isEnabled,
-            isOpen: isPresented,
+            isOpen: $isPresented,
             onChanged: drag,
             onEnded: finish,
             onCancelled: cancelDrag
