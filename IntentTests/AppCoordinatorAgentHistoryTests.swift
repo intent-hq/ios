@@ -141,7 +141,7 @@ extension AppCoordinatorTests {
 
     @MainActor
     private func makeRemovalCoordinator() -> HistoryRemovalFixture {
-        let saved = persistence.upsertConnection(Self.makeConnection(port: 4100))
+        let saved = persistence.upsertConnection(Self.makeConnection(port: HistoryRemovalFixture.savedPort))
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
         let coordinator = AppCoordinator(
@@ -190,6 +190,8 @@ extension AppCoordinatorTests {
 
 @MainActor
 private struct HistoryRemovalFixture {
+    static let savedPort = 4100
+
     let coordinator: AppCoordinator
     let store: WorkspaceStore
     let fake: FakeConnectionManager
