@@ -50,6 +50,7 @@ struct HomeActionTiles: View {
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         .scrollTargetBehavior(.viewAligned)
+        .defaultScrollAnchor(.trailing, for: .alignment)
         .contentMargins(.horizontal, Layout.inset, for: .scrollContent)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("intent.menu.tiles")
