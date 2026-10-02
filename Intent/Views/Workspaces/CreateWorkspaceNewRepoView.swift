@@ -15,12 +15,15 @@ struct CreateWorkspaceNewRepoView: View {
         VStack(spacing: 0) {
             CreateWorkspaceSelectionHeader(
                 leadingControl: .back,
-                isNextDisabled: draft.repositoryPath == nil || isChecking,
-                onLeadingAction: onBack,
-                onNext: checkDestination
+                onLeadingAction: onBack
             )
             .disabled(isChecking)
-            CreateWorkspaceSelectionPage(title: "New Repository", titleIdentifier: "creation.newRepositoryTitle") {
+            CreateWorkspaceSelectionPage(
+                title: "New Repository",
+                titleIdentifier: "creation.newRepositoryTitle",
+                isNextDisabled: draft.repositoryPath == nil || isChecking,
+                onNext: checkDestination
+            ) {
                 VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.sectionSpacing) {
                     Text("Create a Git repository on your connected computer. You can publish it to GitHub later.")
                         .interFont(Constants.Typography.bodyS)

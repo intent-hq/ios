@@ -18,6 +18,7 @@ struct GitHubRepoPickerView: View {
     var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
     let onCreateRepository: () -> Void
+    let onNext: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -48,10 +49,11 @@ struct GitHubRepoPickerView: View {
             searchText: $searchText,
             searchPlaceholder: store.hasCheckedAuth && store.isConfigured ? "Search repositories" : nil,
             searchIdentifier: "creation.repositorySearch",
+            isNextDisabled: selectedRepo == nil,
+            onNext: onNext,
             introduction: { newRepositorySection },
             content: {
-                content
-                    .id(CreateWorkspaceScrollTarget.searchResults)
+                CreateWorkspaceSearchResults { content }
             }
         )
         .task {
@@ -196,112 +198,6 @@ struct GitHubRepoPickerView: View {
                 completedSearchQuery = query
             }
             pendingSearchQuery = nil
-        }
-    }
-}
-
-enum CreateWorkspaceScrollTarget: Hashable {
-    case searchResults
-    case top
-}
-
-struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
-    let title: LocalizedStringKey
-    let titleIdentifier: String
-    @Binding var searchText: String
-    let searchPlaceholder: LocalizedStringKey?
-    let searchIdentifier: String
-    let introduction: Introduction
-    let content: Content
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isSearching = false
-    @FocusState private var searchFocused: Bool
-
-    init(
-        title: LocalizedStringKey,
-        titleIdentifier: String,
-        searchText: Binding<String> = .constant(""),
-        searchPlaceholder: LocalizedStringKey? = nil,
-        searchIdentifier: String = "creation.search",
-        @ViewBuilder introduction: () -> Introduction = { EmptyView() },
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.titleIdentifier = titleIdentifier
-        _searchText = searchText
-        self.searchPlaceholder = searchPlaceholder
-        self.searchIdentifier = searchIdentifier
-        self.introduction = introduction()
-        self.content = content()
-    }
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
-                    introduction
-                    VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
-                        heading
-                        content
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(CreateWorkspaceFormStyle.pagePadding)
-                .id(CreateWorkspaceScrollTarget.top)
-            }
-            #if !os(visionOS)
-            .scrollDismissesKeyboard(.interactively)
-            #endif
-            .onChange(of: searchText) { _, query in
-                if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    proxy.scrollTo(CreateWorkspaceScrollTarget.searchResults, anchor: .top)
-                }
-            }
-            .onChange(of: isSearching) { _, searching in
-                if !searching {
-                    proxy.scrollTo(CreateWorkspaceScrollTarget.top, anchor: .top)
-                }
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) { searchInput }
-        .onAppear {
-            if !searchText.isEmpty { isSearching = true }
-        }
-        .onDisappear { searchFocused = false }
-        .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
-        .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
-    }
-
-    private var heading: some View {
-        HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
-            Text(title)
-                .interFont(Constants.Typography.heading2)
-                .tracking(CreateWorkspaceRepoStyle.titleTracking)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier(titleIdentifier)
-            if let searchPlaceholder {
-                WorkspaceSearchButton(isSearching: $isSearching, label: searchPlaceholder, identifier: "\(searchIdentifier).open")
-                    .opacity(isSearching ? 0 : 1)
-                    .allowsHitTesting(!isSearching)
-                    .accessibilityHidden(isSearching)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var searchInput: some View {
-        if let searchPlaceholder, isSearching {
-            WorkspaceSearchInput(
-                text: $searchText,
-                isSearching: $isSearching,
-                isFocused: $searchFocused,
-                placeholder: searchPlaceholder,
-                identifierPrefix: searchIdentifier
-            )
-            .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
-            .transition(reduceMotion ? .identity : .move(edge: .bottom).combined(with: .opacity))
         }
     }
 }

@@ -11,8 +11,8 @@ struct CreateWorkspaceRepoStepView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            CreateWorkspaceSelectionHeader(isNextDisabled: selectedRepo == nil, onLeadingAction: onClose, onNext: onNext)
-            GitHubRepoPickerView(store: store, selectedRepo: $selectedRepo, onCreateRepository: onCreateRepository)
+            CreateWorkspaceSelectionHeader(onLeadingAction: onClose)
+            GitHubRepoPickerView(store: store, selectedRepo: $selectedRepo, onCreateRepository: onCreateRepository, onNext: onNext)
         }
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
@@ -28,9 +28,7 @@ struct CreateWorkspaceSelectionHeader: View {
     }
 
     var leadingControl: LeadingControl = .close
-    let isNextDisabled: Bool
     let onLeadingAction: () -> Void
-    let onNext: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .title3) private var iconSize = CreateWorkspaceRepoStyle.iconSize
 
@@ -48,21 +46,32 @@ struct CreateWorkspaceSelectionHeader: View {
             .accessibilityLabel(leadingControl == .back ? "Back" : "Close")
             .accessibilityIdentifier(leadingControl == .back ? "creation.branchBack" : "creation.close")
             Spacer()
-            Button(action: onNext) {
-                Text("Next")
-                    .interFont(Constants.Typography.bodySEmphasized)
-                    .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
-                    .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-                    .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
-                    .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
-                    .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(
-                        cornerRadius: CreateWorkspaceFormStyle.cornerRadius
-                    ))
-                    .opacity(isNextDisabled ? 0.5 : 1)
-            }
-            .disabled(isNextDisabled)
         }
         .buttonStyle(.plain)
         .padding(CreateWorkspaceFormStyle.pagePadding)
+    }
+}
+
+struct CreateWorkspaceNextButton: View {
+    let isDisabled: Bool
+    let onNext: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button(action: onNext) {
+            Text("Next")
+                .interFont(Constants.Typography.bodySEmphasized)
+                .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
+                .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
+                .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+                .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
+                .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(
+                    cornerRadius: CreateWorkspaceFormStyle.cornerRadius
+                ))
+                .opacity(isDisabled ? 0.5 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityIdentifier("creation.next")
     }
 }

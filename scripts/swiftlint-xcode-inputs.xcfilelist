@@ -405,6 +405,7 @@ $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormStyle.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceNewRepoView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspacePrompt.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSelectionPage.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSourceCard.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceView.swift

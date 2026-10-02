@@ -38,9 +38,12 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     private func selectRepositoryThroughSearch(in app: XCUIApplication, previous: XCUIElement) {
         let search = app.textFields["creation.repositorySearch.field"]
         XCTAssertFalse(search.exists)
+        let initialRowY = previous.frame.minY
         app.buttons["creation.repositorySearch.open"].tap()
         XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertLessThan(previous.frame.minY, initialRowY)
+        XCTAssertTrue(previous.isHittable)
         attachEvidence(in: app, name: "repository-search-opened")
         search.typeText("docs")
         let docs = app.buttons["creation.repository.nova-labs/docs"]
@@ -190,13 +193,16 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     @MainActor
     private func selectBranchThroughSearch(in app: XCUIApplication) {
         let search = app.textFields["creation.branchSearch.field"]
+        let main = app.buttons["creation.branch.main"]
         XCTAssertFalse(search.exists)
+        let initialRowY = main.frame.minY
         app.buttons["creation.branchSearch.open"].tap()
         XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertLessThan(main.frame.minY, initialRowY)
+        XCTAssertTrue(main.isHittable)
         attachEvidence(in: app, name: "branch-search-opened")
         search.typeText("feature")
-        let main = app.buttons["creation.branch.main"]
         let feature = app.buttons["creation.branch.feature/docs"]
         XCTAssertTrue(feature.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(main.waitForNonExistence(timeout: Self.elementTimeout))
@@ -209,6 +215,10 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertTrue(feature.isSelected)
         checkSearchCancellation(in: app, prefix: "creation.branchSearch", placeholder: "Search branches", result: main)
         XCTAssertTrue(feature.isSelected)
+        app.buttons["creation.branchSearch.open"].tap()
+        XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
+        search.typeText("feature")
+        XCTAssertTrue(app.buttons["Next"].isHittable)
     }
 
     @MainActor

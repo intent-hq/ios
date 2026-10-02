@@ -23,16 +23,16 @@ struct CreateWorkspaceBranchStepView: View {
         VStack(spacing: 0) {
             CreateWorkspaceSelectionHeader(
                 leadingControl: .back,
-                isNextDisabled: selectedBranch == nil,
-                onLeadingAction: { dismiss() },
-                onNext: onNext
+                onLeadingAction: { dismiss() }
             )
             CreateWorkspaceSelectionPage(
                 title: "Select Branch",
                 titleIdentifier: "creation.branchTitle",
                 searchText: $searchText,
                 searchPlaceholder: !isLoading && loadError == nil ? "Search branches" : nil,
-                searchIdentifier: "creation.branchSearch"
+                searchIdentifier: "creation.branchSearch",
+                isNextDisabled: selectedBranch == nil,
+                onNext: onNext
             ) {
                 content
             }
@@ -66,8 +66,7 @@ struct CreateWorkspaceBranchStepView: View {
         } else {
             VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
                 sourceSection
-                branchList
-                    .id(CreateWorkspaceScrollTarget.searchResults)
+                CreateWorkspaceSearchResults { branchList }
             }
         }
     }
