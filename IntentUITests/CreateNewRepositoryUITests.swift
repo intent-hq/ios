@@ -25,6 +25,8 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         XCTAssertEqual(source.label, "Source. New repository: ~/Developer/my-project")
         prompt.tap()
         prompt.typeText("Build my new project")
+        XCTAssertTrue(app.buttons["creation.create"].isHittable)
+        attachEvidence(in: app, name: "new-repository-create-with-keyboard")
         source.tap()
         XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertEqual(name.value as? String, "my-project")

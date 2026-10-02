@@ -6,6 +6,7 @@ enum CreateWorkspaceFormStyle {
     static let pagePadding: CGFloat = 24
     static let headingSpacing: CGFloat = 41
     static let sectionSpacing: CGFloat = 48
+    static let agentSectionSpacing: CGFloat = 24
     static let rowSpacing: CGFloat = 8
     static let controlPadding: CGFloat = 20
     static let controlVerticalPadding: CGFloat = 12

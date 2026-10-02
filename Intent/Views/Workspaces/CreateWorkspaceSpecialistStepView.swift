@@ -37,19 +37,7 @@ struct CreateWorkspaceSpecialistStepView: View {
         ZStack {
             CreateWorkspaceFormStyle.background(for: colorScheme).ignoresSafeArea()
             VStack(spacing: 0) {
-                CreateWorkspaceFormHeader(
-                    isCreateDisabled: CreateWorkspaceView.isCreateDisabled(
-                        isCreating: isCreating,
-                        isLoadingProviders: isLoadingProviders,
-                        providers: providers,
-                        selectedProvider: selectedProvider,
-                        allowsCreation: allowsCreation,
-                        isImportingImages: images.isImporting
-                    ),
-                    isCreating: isCreating,
-                    onBack: onBack,
-                    onCreate: onCreate
-                )
+                CreateWorkspaceFormHeader(isCreating: isCreating, onBack: onBack)
                 if isLoadingSpecialists {
                     ProgressView {
                         Text("Loading...").interFont(Constants.Typography.bodyS)
@@ -61,6 +49,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                         .disabled(isCreating)
                 }
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) { createControls }
             if isCreating {
                 creatingOverlay
             }
@@ -76,6 +65,27 @@ struct CreateWorkspaceSpecialistStepView: View {
         .task { await onLoad() }
     }
 
+    private var createControls: some View {
+        HStack {
+            Spacer()
+            CreateWorkspaceSubmitButton(
+                isDisabled: CreateWorkspaceView.isCreateDisabled(
+                    isCreating: isCreating,
+                    isLoadingProviders: isLoadingProviders,
+                    providers: providers,
+                    selectedProvider: selectedProvider,
+                    allowsCreation: allowsCreation,
+                    isImportingImages: images.isImporting
+                ),
+                onCreate: onCreate
+            )
+        }
+        .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
+        .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
+        .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
+        .background(CreateWorkspaceFormStyle.background(for: colorScheme))
+    }
+
     private var optionsList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -85,7 +95,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                 CreateWorkspaceSourceCard(repositoryFullName: repositoryFullName, branch: branch, onEdit: onBack)
                     .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
                 agentSection
-                    .padding(.top, CreateWorkspaceFormStyle.sectionSpacing)
+                    .padding(.top, CreateWorkspaceFormStyle.agentSectionSpacing)
             }
             .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))
             .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)

@@ -1,10 +1,8 @@
 import SwiftUI
 
 struct CreateWorkspaceFormHeader: View {
-    let isCreateDisabled: Bool
     let isCreating: Bool
     let onBack: () -> Void
-    let onCreate: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .title3) private var backIconSize: CGFloat = 24
 
@@ -26,21 +24,31 @@ struct CreateWorkspaceFormHeader: View {
             .disabled(isCreating)
             .accessibilityIdentifier("creation.back")
             Spacer()
-            Button(action: onCreate) {
-                Text("Create")
-                    .interFont(Constants.Typography.bodySEmphasized)
-                    .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
-                    .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-                    .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
-                    .foregroundStyle(CreateWorkspaceFormStyle.primaryForeground)
-                    .background(CreateWorkspaceFormStyle.primary, in: .rect(
-                        cornerRadius: CreateWorkspaceFormStyle.cornerRadius
-                    ))
-                    .opacity(isCreateDisabled ? 0.5 : 1)
-            }
-            .disabled(isCreateDisabled)
         }
         .buttonStyle(.plain)
         .padding(CreateWorkspaceFormStyle.pagePadding)
+    }
+}
+
+struct CreateWorkspaceSubmitButton: View {
+    let isDisabled: Bool
+    let onCreate: () -> Void
+
+    var body: some View {
+        Button(action: onCreate) {
+            Text("Create")
+                .interFont(Constants.Typography.bodySEmphasized)
+                .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
+                .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
+                .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+                .foregroundStyle(CreateWorkspaceFormStyle.primaryForeground)
+                .background(CreateWorkspaceFormStyle.primary, in: .rect(
+                    cornerRadius: CreateWorkspaceFormStyle.cornerRadius
+                ))
+                .opacity(isDisabled ? 0.5 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityIdentifier("creation.create")
     }
 }

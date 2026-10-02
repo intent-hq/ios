@@ -11,6 +11,11 @@ import tempfile
 
 
 CAPTURES = {
+    "CreateNewRepositoryUITests": {
+        "testNewRepositoryWithoutGitHubPreservesDraftAndRetriesCreation": (
+            "new-repository-create-with-keyboard", "new-repository-draft-after-retry",
+        ),
+    },
     "CreateWorkspaceSelectionUITests": {
         "testLoadingTransitionsKeepSelectionTitlesStable": (
             "repository-loading", "repository-loaded", "branch-loading", "branch-loaded",
@@ -20,6 +25,7 @@ CAPTURES = {
         ),
         "testBackThenForwardPreservesProviderAndNamedModelThroughRefresh": (
             "selected-repository", "selected-branch", "branch-search-opened", "branch-search-results",
+            "selected-before-back", "draft-after-source-edit",
         ),
     },
     "WorkspaceChangesUITests": {
