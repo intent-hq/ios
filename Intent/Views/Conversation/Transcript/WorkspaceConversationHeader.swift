@@ -8,9 +8,26 @@ extension View {
         onBack: @escaping () -> Void,
         @ViewBuilder actions: @escaping () -> Actions
     ) -> some View {
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            toolbar(.hidden, for: .navigationBar)
-                .safeAreaInset(edge: .top, spacing: 0) {
+        #if os(iOS)
+        modifier(WorkspacePhoneNavigationModifier(title: title, onBack: onBack, actions: actions))
+        #else
+        self
+        #endif
+    }
+}
+
+#if os(iOS)
+private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
+    let title: String
+    let onBack: () -> Void
+    @ViewBuilder let actions: () -> Actions
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    func body(content: Content) -> some View {
+        content
+            .toolbar(horizontalSizeClass == .compact ? .hidden : .automatic, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if horizontalSizeClass == .compact {
                     WorkspaceNavigationHeader(
                         title: title,
                         subtitle: "Workspace",
@@ -20,11 +37,10 @@ extension View {
                         actions: actions
                     )
                 }
-        } else {
-            self
-        }
+            }
     }
 }
+#endif
 
 struct WorkspaceConversationHeader<Actions: View>: View {
     let title: String
