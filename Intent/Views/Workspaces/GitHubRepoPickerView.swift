@@ -46,11 +46,12 @@ struct GitHubRepoPickerView: View {
             title: "Select Repository",
             titleIdentifier: "creation.repositoryTitle",
             searchText: searchText,
-            introduction: { newRepositorySection }
-        ) {
-            content
-                .id(CreateWorkspaceScrollTarget.searchResults)
-        }
+            introduction: { newRepositorySection },
+            content: {
+                content
+                    .id(CreateWorkspaceScrollTarget.searchResults)
+            }
+        )
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if store.hasCheckedAuth, store.isConfigured {
                 CreateWorkspaceSearchFooter(text: $searchText)
