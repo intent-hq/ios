@@ -51,8 +51,13 @@ extension XCUIApplication {
         XCTAssertTrue(tile.waitForExistence(timeout: HomeActionMenuTestSupport.timeout), file: file, line: line)
         let viewport = carousel.frame.intersection(frame)
         for _ in 0..<HomeActionMenuTestSupport.maximumSwipes {
-            if viewport.contains(CGPoint(x: tile.frame.midX, y: tile.frame.midY)) { break }
-            carousel.swipeLeft()
+            let tileCenter = CGPoint(x: tile.frame.midX, y: tile.frame.midY)
+            if viewport.contains(tileCenter) { break }
+            if tileCenter.x < viewport.minX {
+                carousel.swipeRight()
+            } else {
+                carousel.swipeLeft()
+            }
         }
         XCTAssertTrue(
             viewport.contains(CGPoint(x: tile.frame.midX, y: tile.frame.midY)),
