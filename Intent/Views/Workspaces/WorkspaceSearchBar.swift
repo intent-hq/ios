@@ -25,25 +25,7 @@ struct WorkspaceSearchBar: View {
             HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
                 viewModeSwitcher
 
-                Button {
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration)) {
-                        isSearching = true
-                    }
-                } label: {
-                    Image(.search)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
-                        .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-                        .frame(width: controlHeight, height: controlHeight)
-                        .background(
-                            Constants.WorkspaceList.controlSurface(for: colorScheme),
-                            in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Search workspaces")
-                .accessibilityIdentifier("workspaces.search.open")
+                WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight)
             }
         }
         .padding(.horizontal, horizontalPadding)
@@ -87,6 +69,37 @@ struct WorkspaceSearchBar: View {
     }
 }
 
+struct WorkspaceSearchButton: View {
+    @Binding var isSearching: Bool
+    var height: CGFloat = Constants.WorkspaceSearch.expandedHeight
+    var label: LocalizedStringKey = "Search workspaces"
+    var identifier = "workspaces.search.open"
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration)) {
+                isSearching = true
+            }
+        } label: {
+            Image(.search)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
+                .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+                .frame(width: height, height: height)
+                .background(
+                    Constants.WorkspaceList.controlSurface(for: colorScheme),
+                    in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 struct WorkspaceSearchInput: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -94,6 +107,8 @@ struct WorkspaceSearchInput: View {
     @Binding var text: String
     @Binding var isSearching: Bool
     var isFocused: FocusState<Bool>.Binding
+    var placeholder: LocalizedStringKey = "Search workspaces"
+    var identifierPrefix = "workspaces.search"
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
     var body: some View {
@@ -119,7 +134,7 @@ struct WorkspaceSearchInput: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close search")
-            .accessibilityIdentifier("workspaces.search.cancel")
+            .accessibilityIdentifier("\(identifierPrefix).cancel")
         }
         .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
         .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
@@ -127,14 +142,14 @@ struct WorkspaceSearchInput: View {
 
     private var searchField: some View {
         HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
-            TextField("Search workspaces", text: $text)
+            TextField(placeholder, text: $text)
                 .interFont(Constants.Typography.bodyS)
                 .tracking(inputTracking)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
                 .focused(isFocused)
-                .accessibilityIdentifier("workspaces.search.field")
+                .accessibilityIdentifier("\(identifierPrefix).field")
                 .onAppear { isFocused.wrappedValue = true }
                 .onSubmit { isFocused.wrappedValue = false }
             if !text.isEmpty {
@@ -154,7 +169,7 @@ struct WorkspaceSearchInput: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
-                .accessibilityIdentifier("workspaces.search.clear")
+                .accessibilityIdentifier("\(identifierPrefix).clear")
             }
         }
         .padding(.leading, Constants.WorkspaceSearch.inputLeadingInset)

@@ -27,13 +27,14 @@ struct CreateWorkspaceBranchStepView: View {
                 onLeadingAction: { dismiss() },
                 onNext: onNext
             )
-            CreateWorkspaceSelectionPage(title: "Select Branch", titleIdentifier: "creation.branchTitle", searchText: searchText) {
+            CreateWorkspaceSelectionPage(
+                title: "Select Branch",
+                titleIdentifier: "creation.branchTitle",
+                searchText: $searchText,
+                searchPlaceholder: !isLoading && loadError == nil ? "Search branches" : nil,
+                searchIdentifier: "creation.branchSearch"
+            ) {
                 content
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !isLoading, loadError == nil {
-                    CreateWorkspaceSearchFooter(text: $searchText, placeholder: "Search branches", identifier: "creation.branchSearch")
-                }
             }
         }
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())

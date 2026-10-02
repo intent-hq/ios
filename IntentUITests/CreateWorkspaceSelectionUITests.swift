@@ -26,25 +26,34 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertTrue(next.isEnabled)
         attachEvidence(in: app, name: "repository-selected")
 
-        let search = app.textFields["creation.repositorySearch"]
-        search.tap()
-        search.typeText("docs")
-        let docs = app.buttons["creation.repository.nova-labs/docs"]
-        XCTAssertTrue(docs.waitForExistence(timeout: Self.elementTimeout))
-        XCTAssertTrue(repository.waitForNonExistence(timeout: Self.elementTimeout))
-        XCTAssertTrue(docs.isHittable)
-        docs.tap()
-        XCTAssertTrue(docs.isSelected)
-        attachEvidence(in: app, name: "repository-search-results")
-        app.buttons["Clear search"].tap()
-        XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
-        XCTAssertFalse(repository.isSelected)
-        XCTAssertTrue(docs.isSelected)
+        selectRepositoryThroughSearch(in: app, previous: repository)
         let close = app.buttons["creation.close"]
         XCTAssertEqual(close.label, "Close")
         close.tap()
         XCTAssertTrue(title.waitForNonExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.elementTimeout))
+    }
+
+    @MainActor
+    private func selectRepositoryThroughSearch(in app: XCUIApplication, previous: XCUIElement) {
+        let search = app.textFields["creation.repositorySearch.field"]
+        XCTAssertFalse(search.exists)
+        app.buttons["creation.repositorySearch.open"].tap()
+        XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
+        search.typeText("docs")
+        let docs = app.buttons["creation.repository.nova-labs/docs"]
+        XCTAssertTrue(docs.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(previous.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(docs.isHittable)
+        docs.tap()
+        XCTAssertTrue(docs.isSelected)
+        attachEvidence(in: app, name: "repository-search-results")
+        app.buttons["creation.repositorySearch.clear"].tap()
+        XCTAssertTrue(previous.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertFalse(previous.isSelected)
+        XCTAssertTrue(docs.isSelected)
+        checkSearchCancellation(in: app, prefix: "creation.repositorySearch", placeholder: "Search repositories", result: previous)
+        XCTAssertTrue(docs.isSelected)
     }
 
     @MainActor
@@ -167,8 +176,21 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         app.staticTexts["nova-labs/docs"].tap()
         app.buttons["Next"].tap()
         XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
-        let search = app.textFields["creation.branchSearch"]
-        search.tap()
+        selectBranchThroughSearch(in: app)
+        app.buttons["Next"].tap()
+        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertEqual(prompt.value as? String, draft)
+        XCTAssertEqual(app.buttons["creation.sourceCard"].label, "Source. Repository: nova-labs/docs. Branch: feature/docs")
+        assertSelections(in: app)
+        attachEvidence(in: app, name: "draft-after-source-edit")
+    }
+
+    @MainActor
+    private func selectBranchThroughSearch(in app: XCUIApplication) {
+        let search = app.textFields["creation.branchSearch.field"]
+        XCTAssertFalse(search.exists)
+        app.buttons["creation.branchSearch.open"].tap()
+        XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
         search.typeText("feature")
         let main = app.buttons["creation.branch.main"]
         let feature = app.buttons["creation.branch.feature/docs"]
@@ -178,15 +200,27 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         feature.tap()
         XCTAssertTrue(feature.isSelected)
         attachEvidence(in: app, name: "branch-search-results")
-        app.buttons["Clear search"].tap()
+        app.buttons["creation.branchSearch.clear"].tap()
         XCTAssertTrue(main.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(feature.isSelected)
-        app.buttons["Next"].tap()
-        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
-        XCTAssertEqual(prompt.value as? String, draft)
-        XCTAssertEqual(app.buttons["creation.sourceCard"].label, "Source. Repository: nova-labs/docs. Branch: feature/docs")
-        assertSelections(in: app)
-        attachEvidence(in: app, name: "draft-after-source-edit")
+        checkSearchCancellation(in: app, prefix: "creation.branchSearch", placeholder: "Search branches", result: main)
+        XCTAssertTrue(feature.isSelected)
+    }
+
+    @MainActor
+    private func checkSearchCancellation(in app: XCUIApplication, prefix: String, placeholder: String, result: XCUIElement) {
+        let search = app.textFields["\(prefix).field"]
+        search.typeText("no-matching-source")
+        XCTAssertTrue(result.waitForNonExistence(timeout: Self.elementTimeout))
+        app.buttons["\(prefix).cancel"].tap()
+        XCTAssertTrue(search.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(result.waitForExistence(timeout: Self.elementTimeout))
+        app.buttons["\(prefix).open"].tap()
+        XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertEqual(search.value as? String, placeholder)
+        app.buttons["\(prefix).cancel"].tap()
+        XCTAssertTrue(search.waitForNonExistence(timeout: Self.elementTimeout))
     }
 
     @MainActor

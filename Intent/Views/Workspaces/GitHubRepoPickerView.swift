@@ -45,18 +45,15 @@ struct GitHubRepoPickerView: View {
         CreateWorkspaceSelectionPage(
             title: "Select Repository",
             titleIdentifier: "creation.repositoryTitle",
-            searchText: searchText,
+            searchText: $searchText,
+            searchPlaceholder: store.hasCheckedAuth && store.isConfigured ? "Search repositories" : nil,
+            searchIdentifier: "creation.repositorySearch",
             introduction: { newRepositorySection },
             content: {
                 content
                     .id(CreateWorkspaceScrollTarget.searchResults)
             }
         )
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if store.hasCheckedAuth, store.isConfigured {
-                CreateWorkspaceSearchFooter(text: $searchText)
-            }
-        }
         .task {
             await store.loadIfNeeded()
         }
@@ -205,26 +202,36 @@ struct GitHubRepoPickerView: View {
 
 enum CreateWorkspaceScrollTarget: Hashable {
     case searchResults
+    case top
 }
 
 struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
     let title: LocalizedStringKey
     let titleIdentifier: String
-    let searchText: String
+    @Binding var searchText: String
+    let searchPlaceholder: LocalizedStringKey?
+    let searchIdentifier: String
     let introduction: Introduction
     let content: Content
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isSearching = false
+    @FocusState private var searchFocused: Bool
 
     init(
         title: LocalizedStringKey,
         titleIdentifier: String,
-        searchText: String = "",
+        searchText: Binding<String> = .constant(""),
+        searchPlaceholder: LocalizedStringKey? = nil,
+        searchIdentifier: String = "creation.search",
         @ViewBuilder introduction: () -> Introduction = { EmptyView() },
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.titleIdentifier = titleIdentifier
-        self.searchText = searchText
+        _searchText = searchText
+        self.searchPlaceholder = searchPlaceholder
+        self.searchIdentifier = searchIdentifier
         self.introduction = introduction()
         self.content = content()
     }
@@ -235,16 +242,13 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
                 VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
                     introduction
                     VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
-                        Text(title)
-                            .interFont(Constants.Typography.heading2)
-                            .tracking(CreateWorkspaceRepoStyle.titleTracking)
-                            .accessibilityAddTraits(.isHeader)
-                            .accessibilityIdentifier(titleIdentifier)
+                        heading
                         content
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(CreateWorkspaceFormStyle.pagePadding)
+                .id(CreateWorkspaceScrollTarget.top)
             }
             #if !os(visionOS)
             .scrollDismissesKeyboard(.interactively)
@@ -254,68 +258,48 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
                     proxy.scrollTo(CreateWorkspaceScrollTarget.searchResults, anchor: .top)
                 }
             }
+            .onChange(of: isSearching) { _, searching in
+                if !searching {
+                    proxy.scrollTo(CreateWorkspaceScrollTarget.top, anchor: .top)
+                }
+            }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { searchInput }
+        .onAppear {
+            if !searchText.isEmpty { isSearching = true }
+        }
+        .onDisappear { searchFocused = false }
         .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
     }
-}
 
-struct CreateWorkspaceSearchFooter: View {
-    @Binding var text: String
-    var placeholder: LocalizedStringKey = "Search GitHub repositories"
-    var identifier = "creation.repositorySearch"
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        CreateWorkspaceSelectionSearchField(text: $text, placeholder: placeholder, identifier: identifier)
-            .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
-            .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
-            .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
-            .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
-    }
-}
-
-struct CreateWorkspaceSelectionSearchField: View {
-    @Binding var text: String
-    var placeholder: LocalizedStringKey = "Search GitHub repositories"
-    var identifier = "creation.repositorySearch"
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.colorSchemeContrast) private var contrast
-    @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
-
-    var body: some View {
-        HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            TextField(placeholder, text: $text)
-                .interFont(Constants.Typography.bodyS)
-                .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .accessibilityIdentifier(identifier)
-            if text.isEmpty {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: iconSize))
-                    .frame(width: iconSize, height: iconSize)
-                    .accessibilityHidden(true)
-            } else {
-                Button {
-                    text = ""
-                } label: {
-                    Image(.close)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: iconSize, height: iconSize)
-                        .frame(minWidth: CreateWorkspaceFormStyle.controlHeight, minHeight: CreateWorkspaceFormStyle.controlHeight)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
+    private var heading: some View {
+        HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
+            Text(title)
+                .interFont(Constants.Typography.heading2)
+                .tracking(CreateWorkspaceRepoStyle.titleTracking)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier(titleIdentifier)
+            if let searchPlaceholder, !isSearching {
+                WorkspaceSearchButton(isSearching: $isSearching, label: searchPlaceholder, identifier: "\(searchIdentifier).open")
             }
         }
-        .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
-        .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
-        .frame(minHeight: CreateWorkspaceRepoStyle.searchHeight)
-        .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(cornerRadius: CreateWorkspaceFormStyle.cornerRadius))
+    }
+
+    @ViewBuilder
+    private var searchInput: some View {
+        if let searchPlaceholder, isSearching {
+            WorkspaceSearchInput(
+                text: $searchText,
+                isSearching: $isSearching,
+                isFocused: $searchFocused,
+                placeholder: searchPlaceholder,
+                identifierPrefix: searchIdentifier
+            )
+            .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
+            .transition(reduceMotion ? .identity : .move(edge: .bottom).combined(with: .opacity))
+        }
     }
 }
 
