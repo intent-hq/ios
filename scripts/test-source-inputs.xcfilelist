@@ -536,6 +536,7 @@ $(SRCROOT)/Intent/Views/Agents/AgentAvatarView.swift
 $(SRCROOT)/Intent/Views/Agents/AgentRowView.swift
 $(SRCROOT)/Intent/Views/Components
 $(SRCROOT)/Intent/Views/Components/AssistantLaunchButton.swift
+$(SRCROOT)/Intent/Views/Components/IntentLoadingIndicator.swift
 $(SRCROOT)/Intent/Views/Components/NavigationBackGesture.swift
 $(SRCROOT)/Intent/Views/Components/NavigationPopObserver.swift
 $(SRCROOT)/Intent/Views/Components/NavigationTitleSubtitleView.swift
