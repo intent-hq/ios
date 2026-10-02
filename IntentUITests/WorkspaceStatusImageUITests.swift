@@ -2,7 +2,7 @@ import XCTest
 
 /// Guards the workspace status image (intent-hq/intent#3868) against the
 /// `--demo-data` fixtures: exactly one fixture workspace carries a
-/// `statusImageAssetId`, its list row renders the thumbnail, the workspace
+/// `statusImageAssetId`, its list row has no status image, the workspace
 /// detail header renders the image, and tapping it opens the fullscreen
 /// lightbox at a readable size. Rows without an asset render no image.
 ///
@@ -12,7 +12,7 @@ nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
         /// `DemoFixtures.statusImageWorkspaceId`'s title: a workspace with no
         /// agents, so its detail header is the only surface to check.
         static let workspaceTitle = "Dark mode for settings screens"
-        static let cardIdentifier = "workspaceRow.statusImage"
+        static let statusImageLabel = "Workspace status image"
         static let detailIdentifier = "workspaceDetail.statusImage"
         static let lightboxLabel = "Image preview"
         static let lightboxCloseLabel = "Close image"
@@ -29,7 +29,7 @@ nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
     }
 
     @MainActor
-    func testStatusImageRendersOnTheCardAndOpensFullSizeFromDetail() {
+    func testStatusImageIsAbsentFromListAndOpensFullSizeFromDetail() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
         app.launch()
@@ -42,17 +42,12 @@ nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
             XCTAssertTrue(workspaceRow.waitForExistence(timeout: 15))
         }
 
-        // The card thumbnail is fetched over the fixture `note.readAsset`
-        // after the list renders, so wait for it rather than asserting once.
-        let cardImages = app.descendants(matching: .any).matching(identifier: Fixture.cardIdentifier)
-        XCTAssertTrue(
-            cardImages.firstMatch.waitForExistence(timeout: 15),
-            "status image thumbnail never appeared on the fixture workspace row"
-        )
-        XCTAssertEqual(
-            cardImages.count,
-            1,
-            "only the fixture workspace carrying statusImageAssetId may render a thumbnail"
+        // Allow an asynchronous image fetch to finish before checking that
+        // even a workspace carrying statusImageAssetId has no list thumbnail.
+        let listImage = app.descendants(matching: .any)[Fixture.statusImageLabel].firstMatch
+        XCTAssertFalse(
+            listImage.waitForExistence(timeout: 3),
+            "workspace list rows must not render status image thumbnails"
         )
 
         workspaceRow.tap()
