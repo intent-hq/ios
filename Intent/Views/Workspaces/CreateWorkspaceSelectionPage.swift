@@ -7,9 +7,11 @@ private enum CreateWorkspaceCoordinates {
 struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Content: View>: View {
     let title: LocalizedStringKey
     let titleIdentifier: String
+    let headingTopPadding: CGFloat
     @Binding var searchText: String
     let searchPlaceholder: LocalizedStringKey?
     let searchIdentifier: String
+    let searchButtonShowsBackground: Bool
     let isSearchEnabled: Bool
     let isLoading: Bool
     let isNextDisabled: Bool
@@ -28,9 +30,11 @@ struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Co
     init(
         title: LocalizedStringKey,
         titleIdentifier: String,
+        headingTopPadding: CGFloat = 0,
         searchText: Binding<String> = .constant(""),
         searchPlaceholder: LocalizedStringKey? = nil,
         searchIdentifier: String = "creation.search",
+        searchButtonShowsBackground: Bool = true,
         isSearchEnabled: Bool = true,
         isLoading: Bool = false,
         isNextDisabled: Bool = false,
@@ -41,9 +45,11 @@ struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Co
     ) {
         self.title = title
         self.titleIdentifier = titleIdentifier
+        self.headingTopPadding = headingTopPadding
         _searchText = searchText
         self.searchPlaceholder = searchPlaceholder
         self.searchIdentifier = searchIdentifier
+        self.searchButtonShowsBackground = searchButtonShowsBackground
         self.isSearchEnabled = isSearchEnabled
         self.isLoading = isLoading
         self.isNextDisabled = isNextDisabled
@@ -110,6 +116,7 @@ struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Co
     private var pageContent: some View {
         VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
             heading
+                .padding(.top, headingTopPadding)
             if !isLoading {
                 content
             }
@@ -129,10 +136,15 @@ struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Co
                 .accessibilityIdentifier(titleIdentifier)
             headingAction
             if let searchPlaceholder {
-                WorkspaceSearchButton(isSearching: $isSearching, label: searchPlaceholder, identifier: "\(searchIdentifier).open")
-                    .opacity(isSearching || !isSearchEnabled ? 0 : 1)
-                    .allowsHitTesting(!isSearching && isSearchEnabled)
-                    .accessibilityHidden(isSearching || !isSearchEnabled)
+                WorkspaceSearchButton(
+                    isSearching: $isSearching,
+                    label: searchPlaceholder,
+                    identifier: "\(searchIdentifier).open",
+                    showsBackground: searchButtonShowsBackground
+                )
+                .opacity(isSearching || !isSearchEnabled ? 0 : 1)
+                .allowsHitTesting(!isSearching && isSearchEnabled)
+                .accessibilityHidden(isSearching || !isSearchEnabled)
             }
         }
     }

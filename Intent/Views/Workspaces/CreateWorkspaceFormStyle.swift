@@ -55,6 +55,7 @@ enum CreateWorkspaceFormStyle {
 
 /// Shared presentation for repository and branch selection.
 enum CreateWorkspaceRepoStyle {
+    static let headingTopPadding: CGFloat = 12
     static let titleSpacing: CGFloat = 56
     static let sectionSpacing: CGFloat = 32
     static let sectionHeaderSpacing: CGFloat = 24

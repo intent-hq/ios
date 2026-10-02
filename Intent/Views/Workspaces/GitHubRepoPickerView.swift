@@ -52,9 +52,11 @@ struct GitHubRepoPickerView: View {
         CreateWorkspaceSelectionPage(
             title: "Select Project",
             titleIdentifier: "creation.repositoryTitle",
+            headingTopPadding: CreateWorkspaceRepoStyle.headingTopPadding,
             searchText: $searchText,
             searchPlaceholder: "Search repositories",
             searchIdentifier: "creation.repositorySearch",
+            searchButtonShowsBackground: false,
             isSearchEnabled: store.hasCheckedAuth && store.isConfigured && !isInitiallyLoading,
             isLoading: isInitiallyLoading,
             isNextDisabled: selectedRepo == nil,
@@ -84,7 +86,7 @@ struct GitHubRepoPickerView: View {
                 .scaledToFit()
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                 .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
-                .background { WorkspaceControlSurface() }
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("New Repository")

@@ -74,6 +74,7 @@ struct WorkspaceSearchButton: View {
     var height: CGFloat = Constants.WorkspaceSearch.expandedHeight
     var label: LocalizedStringKey = "Search workspaces"
     var identifier = "workspaces.search.open"
+    var showsBackground = true
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -89,7 +90,10 @@ struct WorkspaceSearchButton: View {
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                 .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                 .frame(width: height, height: height)
-                .background { WorkspaceControlSurface() }
+                .contentShape(.rect)
+                .background {
+                    if showsBackground { WorkspaceControlSurface() }
+                }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
