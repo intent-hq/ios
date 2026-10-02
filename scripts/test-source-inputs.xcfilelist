@@ -623,7 +623,6 @@ $(SRCROOT)/Intent/Views/Conversation/StatusStrip/BackgroundHooksRow.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript
 $(SRCROOT)/Intent/Views/Conversation/Transcript/AssistantMessageView.swift
-$(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationActionMenu.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationColumnView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationScrollViewSupport.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptGestureProbe.swift

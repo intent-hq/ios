@@ -1,0 +1,45 @@
+name: Export UI evidence
+description: Retain only allowlisted fixture screenshots and transcript recovery records
+inputs:
+  bundles:
+    description: Result bundle paths, one per line; retry bundles are included automatically
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Export fixture attachments
+      id: evidence
+      shell: bash
+      env:
+        EVIDENCE_BUNDLES: ${{ inputs.bundles }}
+      run: >-
+        python3 scripts/export_ui_evidence.py
+        --output-root "$RUNNER_TEMP/ui-evidence-$GITHUB_JOB"
+        --bundles "$EVIDENCE_BUNDLES"
+
+    - name: Upload review screenshots
+      if: always() && steps.evidence.outputs.review_count != '' && steps.evidence.outputs.review_count != '0'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ios-ui-review-evidence
+        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/review
+        retention-days: 14
+        if-no-files-found: ignore
+
+    - name: Upload agent group screenshots
+      if: always() && steps.evidence.outputs.agent-groups_count != '' && steps.evidence.outputs.agent-groups_count != '0'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ios-agent-group-evidence
+        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/agent-groups
+        retention-days: 14
+        if-no-files-found: ignore
+
+    - name: Upload transcript recovery evidence
+      if: always() && steps.evidence.outputs.recovery_count != '' && steps.evidence.outputs.recovery_count != '0'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ios-transcript-recovery-evidence
+        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/recovery
+        retention-days: 14
+        if-no-files-found: ignore

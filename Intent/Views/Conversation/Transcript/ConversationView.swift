@@ -270,22 +270,18 @@ private struct ConversationViewContent: View {
         )
     }
 
-    /// Branded iOS agent actions; shared Assistant and spatial menus retain their native behavior.
-    @ViewBuilder
+    /// The native menu owns its container shape and dismissal on every device.
     private var agentMenu: some View {
-        if assistantStore == nil,
-           UIDevice.current.userInterfaceIdiom == .phone || UIDevice.current.userInterfaceIdiom == .pad {
-            ConversationActionMenu(
-                modelDisplayName: viewModel.currentModelDisplayName,
-                canChangeModel: viewModel.filteredMessages.isEmpty,
-                onAction: handleAgentAction
-            )
-        } else {
-            nativeAgentMenu
-        }
+        nativeAgentMenu
     }
 
-    private func handleAgentAction(_ action: ConversationActionMenu.Action) {
+    private enum AgentAction {
+        case changeModel
+        case delete
+        case rename
+    }
+
+    private func handleAgentAction(_ action: AgentAction) {
         switch action {
         case .changeModel:
             if viewModel.filteredMessages.isEmpty { showModelPicker = true }
@@ -306,26 +302,30 @@ private struct ConversationViewContent: View {
             }
             if let displayName = viewModel.currentModelDisplayName {
                 Text("Model: \(displayName)")
+                    .accessibilityIdentifier("conversation.actions.modelInformation")
             }
             if viewModel.filteredMessages.isEmpty {
                 Button { handleAgentAction(.changeModel) } label: {
-                    Label("Change Model", systemImage: "cpu")
+                    Label { Text("Change Model") } icon: { Image(.settings2) }
                 }
+                .accessibilityIdentifier("conversation.actions.model")
             }
             Button { handleAgentAction(.rename) } label: {
-                Label("Rename", systemImage: "pencil")
+                Label { Text("Rename") } icon: { Image(.edit) }
             }
+            .accessibilityIdentifier("conversation.actions.rename")
             Divider()
             Button(role: .destructive) {
                 handleAgentAction(.delete)
             } label: {
-                Label("Delete Agent", systemImage: "trash")
+                Label { Text("Delete Agent") } icon: { Image(.delete) }
             }
+            .accessibilityIdentifier("conversation.actions.delete")
         } label: {
             ToolbarOverflowLabel()
         }
         .accessibilityLabel(assistantStore == nil ? "Agent actions" : "Assistant actions")
-        .accessibilityIdentifier(assistantStore == nil ? "agent.actions" : "assistant.actions")
+        .accessibilityIdentifier(assistantStore == nil ? "conversation.actions.open" : "assistant.actions")
     }
 
     /// Note detail sheet content for a tapped note reference.

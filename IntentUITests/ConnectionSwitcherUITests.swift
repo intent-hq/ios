@@ -42,9 +42,14 @@ nonisolated final class ConnectionSwitcherUITests: XCTestCase {
         assertClosed(app)
         drag(app, from: CGVector(dx: 0.35, dy: 0.5), to: CGVector(dx: 0.85, dy: 0.5))
         assertClosed(app)
-        reveal(app)
-        drag(app, from: CGVector(dx: 0.9, dy: 0.5), to: CGVector(dx: 0.1, dy: 0.5))
-        assertClosed(app)
+        // Reopening and closing must refresh the gate in both directions.
+        for _ in 0..<2 {
+            reveal(app)
+            drag(app, from: CGVector(dx: 0.9, dy: 0.5), to: CGVector(dx: 0.1, dy: 0.5))
+            assertClosed(app)
+            drag(app, from: CGVector(dx: 0.35, dy: 0.5), to: CGVector(dx: 0.85, dy: 0.5))
+            assertClosed(app)
+        }
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
         XCTAssertTrue(workspace.isHittable)
         workspace.tap()

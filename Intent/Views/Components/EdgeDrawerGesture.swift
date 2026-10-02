@@ -5,7 +5,7 @@ import UIKit
 struct EdgeDrawerGesture: ViewModifier {
     let side: EdgeDrawerSide
     let isEnabled: Bool
-    let isOpen: Bool
+    let isOpen: Binding<Bool>
     let onChanged: (CGFloat) -> Void
     let onEnded: (CGFloat, CGFloat) -> Void
     let onCancelled: () -> Void
@@ -33,7 +33,7 @@ private final class EdgeDrawerPanRecognizer: UIPanGestureRecognizer {}
 private struct EdgeDrawerPan: UIGestureRecognizerRepresentable {
     let side: EdgeDrawerSide
     let isEnabled: Bool
-    let isOpen: Bool
+    let isOpen: Binding<Bool>
     let onChanged: (CGFloat) -> Void
     let onEnded: (CGFloat, CGFloat) -> Void
     let onCancelled: () -> Void
@@ -71,9 +71,10 @@ private struct EdgeDrawerPan: UIGestureRecognizerRepresentable {
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let side: EdgeDrawerSide
-        var isOpen: Bool
+        // UIKit can ask before SwiftUI refreshes the representable; read the live state.
+        var isOpen: Binding<Bool>
 
-        init(side: EdgeDrawerSide, isOpen: Bool) {
+        init(side: EdgeDrawerSide, isOpen: Binding<Bool>) {
             self.side = side
             self.isOpen = isOpen
         }
@@ -84,7 +85,7 @@ private struct EdgeDrawerPan: UIGestureRecognizerRepresentable {
             let startX = pan.location(in: pan.view).x - pan.translation(in: pan.view).x
             let velocity = pan.velocity(in: pan.view)
             return EdgeDrawerDrag.canBegin(
-                isOpen: isOpen,
+                isOpen: isOpen.wrappedValue,
                 startX: EdgeDrawerDrag.distanceFromEdge(startX, width: width, side: side),
                 velocity: CGPoint(x: EdgeDrawerDrag.towardOpening(velocity.x, side: side), y: velocity.y)
             )

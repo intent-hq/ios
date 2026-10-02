@@ -56,7 +56,7 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
         .modifier(EdgeDrawerGesture(
             side: side,
             isEnabled: isEnabled,
-            isOpen: isPresented,
+            isOpen: $isPresented,
             onChanged: drag,
             onEnded: finish,
             onCancelled: cancelDrag

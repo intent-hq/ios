@@ -101,6 +101,41 @@ struct MarkdownTextViewTests {
         #expect(MarkdownTextView.lightboxImage(for: attachment) === image)
     }
 
+    // A lazy transcript can measure a new row before it appears or receives callbacks.
+    @MainActor
+    @Test(arguments: [
+        "A complete paragraph must participate in the first sizing pass.",
+        "## Heading\n\nA **bold** paragraph with `inline code`.\n\n- One\n- Two"
+    ])
+    func firstSizingPassContainsMarkdown(_ markdown: String) {
+        let controller = UIHostingController(rootView: MarkdownTextView(text: markdown))
+        let size = controller.sizeThatFits(in: CGSize(width: 320, height: 10_000))
+        #expect(size.height.isFinite && size.height > 0)
+        #expect(size.width.isFinite && size.width > 0)
+    }
+
+    // Fixed input must not grow or shrink after its initial natural-height measurement.
+    @MainActor
+    @Test(arguments: [
+        "First paragraph.\n\nSecond paragraph.",
+        "## Heading\n\nA paragraph below the heading.",
+        "1. First item\n2. Second item\n\nLast paragraph.",
+        "| Stage | Result |\n| --- | --- |\n| Layout | Stable height |\n| Text | Complete content |",
+        "Before code.\n\n```swift\nlet answer = 42\n```\n\nAfter code."
+    ])
+    func unchangedMarkdownKeepsItsInitialHeight(_ markdown: String) async throws {
+        var heights: [CGFloat] = []
+        let view = MarkdownTextView(text: markdown)
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { heights.append($0) }
+            .environment(\.dynamicTypeSize, .large)
+        try await SyntheticBadgeHost.render(view, width: 320, height: 700) { _, _ in
+            let first = try #require(heights.first)
+            #expect(first > 0)
+            #expect(heights.allSatisfy { abs($0 - first) < 1 }, "Natural heights: \(heights)")
+        }
+    }
+
     @MainActor
     @Test func renderedMarkdownKeepsCodeMonospacedAndProseScalable() async throws {
         let narrow = "iiiiiiii"
