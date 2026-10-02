@@ -20,6 +20,10 @@ import Observation
         }
     }
 
+    /// Ids this backend reported deleted or archived (events or own actions);
+    /// unique across daemons, so consumers need not know which daemon replied.
+    var removedWorkspaceIds: AnyPublisher<String, Never> { removedWorkspaceSubject.eraseToAnyPublisher() }
+    @ObservationIgnored private let removedWorkspaceSubject = PassthroughSubject<String, Never>()
     @ObservationIgnored private var fetchTask: Task<Void, Never>?
     @ObservationIgnored private var fetchRevision = 0
     @ObservationIgnored private var fetchNeedsRefresh = false
@@ -114,6 +118,7 @@ import Observation
             ])
         }
         workspaces.removeAll { $0.id == workspaceId }
+        removedWorkspaceSubject.send(workspaceId)
         invalidateFetchForEvent()
         await fetchAll()
     }
@@ -264,6 +269,10 @@ extension WorkspaceStore {
 
         let eventWorkspaceId = event["workspaceId"] as? String
         let data = event["data"] as? [String: Any]
+
+        if let removedId = Self.removedWorkspaceId(type: eventType, workspaceId: eventWorkspaceId, data: data ?? [:]) {
+            removedWorkspaceSubject.send(removedId)
+        }
 
         // In-place patches apply in every mode (live or not) and before the
         // refetch decision, since they are the complete application of the event.

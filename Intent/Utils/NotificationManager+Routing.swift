@@ -99,6 +99,40 @@ extension NotificationManager {
         }
     }
 
+    /// Routes an agent history tap like an alert tap, except where an alert
+    /// tap would be dropped (a single window showing another backend): the
+    /// selection is held, `switchWindow` moves the window to the entry's
+    /// backend, and that backend's window registration delivers it.
+    func routeHistorySelection(
+        agentId: String,
+        workspaceId: String,
+        agentName: String,
+        connectionId: UUID,
+        switchWindow: (UUID) -> Void
+    ) {
+        let route = Self.selectionRoute(
+            source: BackendID(connectionId),
+            registeredBackends: Set(agentSelectionHandlers.keys),
+            supportsMultipleWindows: supportsMultipleWindows
+        )
+        guard route == .drop else {
+            routeAgentSelection(
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName,
+                connectionId: connectionId
+            )
+            return
+        }
+        pendingAgentSelection = PendingAgentSelection(
+            agentId: agentId,
+            workspaceId: workspaceId,
+            agentName: agentName,
+            connectionId: connectionId
+        )
+        switchWindow(connectionId)
+    }
+
     // MARK: - Tap routing (spec decision 5)
 
     /// Where a tapped agent alert (toast or system notification) goes.

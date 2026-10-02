@@ -1,7 +1,9 @@
 import SwiftUI
 import UIKit
 
-struct ConnectionSwitcherGesture: ViewModifier {
+/// Reports pans in the drawer's opening frame (see `EdgeDrawerDrag`).
+struct EdgeDrawerGesture: ViewModifier {
+    let side: EdgeDrawerSide
     let isEnabled: Bool
     let isOpen: Binding<Bool>
     let onChanged: (CGFloat) -> Void
@@ -10,7 +12,8 @@ struct ConnectionSwitcherGesture: ViewModifier {
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        content.gesture(ConnectionSwitcherPan(
+        content.gesture(EdgeDrawerPan(
+            side: side,
             isEnabled: isEnabled,
             isOpen: isOpen,
             onChanged: onChanged,
@@ -24,7 +27,11 @@ struct ConnectionSwitcherGesture: ViewModifier {
 }
 
 #if os(iOS)
-private struct ConnectionSwitcherPan: UIGestureRecognizerRepresentable {
+/// Distinguishes drawer pans so nested drawers never wait on each other.
+private final class EdgeDrawerPanRecognizer: UIPanGestureRecognizer {}
+
+private struct EdgeDrawerPan: UIGestureRecognizerRepresentable {
+    let side: EdgeDrawerSide
     let isEnabled: Bool
     let isOpen: Binding<Bool>
     let onChanged: (CGFloat) -> Void
@@ -32,7 +39,7 @@ private struct ConnectionSwitcherPan: UIGestureRecognizerRepresentable {
     let onCancelled: () -> Void
 
     func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
-        let recognizer = UIPanGestureRecognizer()
+        let recognizer = EdgeDrawerPanRecognizer()
         recognizer.maximumNumberOfTouches = 1
         recognizer.delegate = context.coordinator
         recognizer.isEnabled = isEnabled
@@ -45,15 +52,16 @@ private struct ConnectionSwitcherPan: UIGestureRecognizerRepresentable {
     }
 
     func makeCoordinator(converter _: CoordinateSpaceConverter) -> Coordinator {
-        Coordinator(isOpen: isOpen)
+        Coordinator(side: side, isOpen: isOpen)
     }
 
     func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context _: Context) {
+        let translation = EdgeDrawerDrag.towardOpening(recognizer.translation(in: recognizer.view).x, side: side)
         switch recognizer.state {
         case .began, .changed:
-            onChanged(recognizer.translation(in: recognizer.view).x)
+            onChanged(translation)
         case .ended:
-            onEnded(recognizer.translation(in: recognizer.view).x, recognizer.velocity(in: recognizer.view).x)
+            onEnded(translation, EdgeDrawerDrag.towardOpening(recognizer.velocity(in: recognizer.view).x, side: side))
         case .cancelled, .failed:
             onCancelled()
         default:
@@ -62,15 +70,25 @@ private struct ConnectionSwitcherPan: UIGestureRecognizerRepresentable {
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        let side: EdgeDrawerSide
         // UIKit can ask before SwiftUI refreshes the representable; read the live state.
         var isOpen: Binding<Bool>
 
-        init(isOpen: Binding<Bool>) { self.isOpen = isOpen }
+        init(side: EdgeDrawerSide, isOpen: Binding<Bool>) {
+            self.side = side
+            self.isOpen = isOpen
+        }
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+            let width = pan.view?.bounds.width ?? 0
             let startX = pan.location(in: pan.view).x - pan.translation(in: pan.view).x
-            return ConnectionSwitcherDrag.canBegin(isOpen: isOpen.wrappedValue, startX: startX, velocity: pan.velocity(in: pan.view))
+            let velocity = pan.velocity(in: pan.view)
+            return EdgeDrawerDrag.canBegin(
+                isOpen: isOpen.wrappedValue,
+                startX: EdgeDrawerDrag.distanceFromEdge(startX, width: width, side: side),
+                velocity: CGPoint(x: EdgeDrawerDrag.towardOpening(velocity.x, side: side), y: velocity.y)
+            )
         }
 
         func gestureRecognizer(
@@ -78,7 +96,7 @@ private struct ConnectionSwitcherPan: UIGestureRecognizerRepresentable {
             shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
             // Row actions and scrolling wait for the direction/edge gate to reject this pan.
-            otherGestureRecognizer is UIPanGestureRecognizer
+            otherGestureRecognizer is UIPanGestureRecognizer && !(otherGestureRecognizer is EdgeDrawerPanRecognizer)
         }
     }
 }

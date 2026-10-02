@@ -1,4 +1,5 @@
 $(SRCROOT)/Intent/App/AppCoordinator.swift
+$(SRCROOT)/Intent/App/AppCoordinatorAgentHistory.swift
 $(SRCROOT)/Intent/App/AppCoordinatorNavigation.swift
 $(SRCROOT)/Intent/App/AppCoordinatorRouting.swift
 $(SRCROOT)/Intent/App/BackendID.swift
@@ -41,6 +42,7 @@ $(SRCROOT)/Intent/DesignSystem/WorkspaceDetailStyle.swift
 $(SRCROOT)/Intent/DesignSystem/WorkspacePageLayout.swift
 $(SRCROOT)/Intent/Models.swift
 $(SRCROOT)/Intent/Models/ActionProposal.swift
+$(SRCROOT)/Intent/Models/AgentHistoryEntry.swift
 $(SRCROOT)/Intent/Models/AgentListState.swift
 $(SRCROOT)/Intent/Models/AgentMessageAttribution.swift
 $(SRCROOT)/Intent/Models/AgentSession.swift
@@ -77,6 +79,7 @@ $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
 $(SRCROOT)/Intent/Models/WorkspaceScript.swift
 $(SRCROOT)/Intent/Models/WorkspaceTask.swift
 $(SRCROOT)/Intent/PersistenceKeychainStorage.swift
+$(SRCROOT)/Intent/PersistenceManager+AgentHistory.swift
 $(SRCROOT)/Intent/PersistenceManager+BackendSync.swift
 $(SRCROOT)/Intent/PersistenceManager+Drafts.swift
 $(SRCROOT)/Intent/PersistenceManager+InvitedBackfill.swift
@@ -84,7 +87,6 @@ $(SRCROOT)/Intent/PersistenceManager+InvitedImport.swift
 $(SRCROOT)/Intent/PersistenceManager+InvitedSessions.swift
 $(SRCROOT)/Intent/PersistenceManager+Screens.swift
 $(SRCROOT)/Intent/PersistenceManager.swift
-$(SRCROOT)/Intent/Presentation/ConnectionSwitcherDrag.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Geometry.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Landing.swift
@@ -94,6 +96,7 @@ $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollState.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptViewportAnchor+Application.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptViewportAnchor.swift
 $(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
+$(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
@@ -112,6 +115,7 @@ $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceSwipePolicy.swift
 $(SRCROOT)/Intent/Services/AgentDetailRequestLimiter.swift
 $(SRCROOT)/Intent/Services/AgentDetailStore.swift
+$(SRCROOT)/Intent/Services/AgentHistoryStore.swift
 $(SRCROOT)/Intent/Services/AgentStore+ScopedLoading.swift
 $(SRCROOT)/Intent/Services/AgentStore.swift
 $(SRCROOT)/Intent/Services/AgentSummaryStore.swift
@@ -279,8 +283,12 @@ $(SRCROOT)/Intent/ViewModels/ConversationViewModel.swift
 $(SRCROOT)/Intent/ViewModels/DiagnosticExportModel.swift
 $(SRCROOT)/Intent/ViewModels/WorkspaceListViewModel.swift
 $(SRCROOT)/Intent/Views/Agents/AgentAvatarView.swift
+$(SRCROOT)/Intent/Views/Agents/AgentHistoryDrawer.swift
+$(SRCROOT)/Intent/Views/Agents/AgentHistoryList.swift
 $(SRCROOT)/Intent/Views/Agents/AgentRowView.swift
 $(SRCROOT)/Intent/Views/Components/AssistantLaunchButton.swift
+$(SRCROOT)/Intent/Views/Components/EdgeDrawer.swift
+$(SRCROOT)/Intent/Views/Components/EdgeDrawerGesture.swift
 $(SRCROOT)/Intent/Views/Components/IntentLoadingIndicator.swift
 $(SRCROOT)/Intent/Views/Components/NavigationBackGesture.swift
 $(SRCROOT)/Intent/Views/Components/NavigationPopObserver.swift
@@ -301,7 +309,6 @@ $(SRCROOT)/Intent/Views/Connection/ConnectionPairingButtons.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSheet.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSheetButtonStyle.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSheetText.swift
-$(SRCROOT)/Intent/Views/Connection/ConnectionSwitcherGesture.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSwitcherList.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionsView.swift
 $(SRCROOT)/Intent/Views/Connection/DisconnectedView.swift
@@ -456,6 +463,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTransferSheet.swift
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
 $(SRCROOT)/IntentTests/AgentGroupingTests.swift
+$(SRCROOT)/IntentTests/AgentHistoryTests.swift
 $(SRCROOT)/IntentTests/AgentListViewModelTests.swift
 $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
 $(SRCROOT)/IntentTests/AgentSessionDisplayTests.swift
@@ -464,6 +472,7 @@ $(SRCROOT)/IntentTests/AgentStoreScopedLifecycleTests.swift
 $(SRCROOT)/IntentTests/AgentStoreScopedTests.swift
 $(SRCROOT)/IntentTests/AgentStoreTests.swift
 $(SRCROOT)/IntentTests/AgentWaitingViewTests.swift
+$(SRCROOT)/IntentTests/AppCoordinatorAgentHistoryTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorAssistantTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorAutoOpenTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorBackendRegistryTests.swift
@@ -527,7 +536,6 @@ $(SRCROOT)/IntentTests/ConnectionPairingTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceMigrationTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ConnectionPrincipalTests.swift
-$(SRCROOT)/IntentTests/ConnectionSwitcherDragTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
 $(SRCROOT)/IntentTests/ConversationBudgetEvidence.swift
 $(SRCROOT)/IntentTests/ConversationBudgetFixture.swift
@@ -626,6 +634,7 @@ $(SRCROOT)/IntentTests/DiagnosticTestSupport.swift
 $(SRCROOT)/IntentTests/DiagnosticZIPTestReader.swift
 $(SRCROOT)/IntentTests/DiagnosticZIPTests.swift
 $(SRCROOT)/IntentTests/DictationTranscriptTests.swift
+$(SRCROOT)/IntentTests/EdgeDrawerDragTests.swift
 $(SRCROOT)/IntentTests/EventCatalogCoverageTests.swift
 $(SRCROOT)/IntentTests/EventWakeAttributionTests.swift
 $(SRCROOT)/IntentTests/ExternalLinkTests.swift

@@ -1,6 +1,14 @@
 import Foundation
 
-nonisolated enum ConnectionSwitcherDrag {
+/// The physical screen side a drawer slides out from.
+nonisolated enum EdgeDrawerSide {
+    case left
+    case right
+}
+
+/// Drag rules shared by the edge drawers. Every value is in the drawer's
+/// opening frame: distances from its own edge, positive toward opening.
+nonisolated enum EdgeDrawerDrag {
     static let edgeWidth: CGFloat = 24
     static let maximumReveal: CGFloat = 320
     static let pagePeek: CGFloat = 82
@@ -23,5 +31,15 @@ nonisolated enum ConnectionSwitcherDrag {
         guard width > 0 else { return false }
         if abs(velocity) >= flickVelocity { return velocity > 0 }
         return offset(isOpen: isOpen, translation: translation, width: width) > width / 2
+    }
+
+    /// Converts a horizontal screen-space translation or velocity into the opening frame.
+    static func towardOpening(_ value: CGFloat, side: EdgeDrawerSide) -> CGFloat {
+        side == .left ? value : -value
+    }
+
+    /// Converts a screen-space x position into the distance from the drawer's edge.
+    static func distanceFromEdge(_ x: CGFloat, width: CGFloat, side: EdgeDrawerSide) -> CGFloat {
+        side == .left ? x : width - x
     }
 }
