@@ -8,22 +8,12 @@ struct AgentHistoryList: View {
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var avatarSize = ConnectionSwitcherStyle.iconSize
-    /// Tallest rendered row; rows grow with Dynamic Type, so the cap is measured.
-    @State private var rowHeight: CGFloat = 0
 
     private var entries: [AgentHistoryEntry] { coordinator.visibleAgentHistory }
 
     private var secondaryForeground: Color {
         Constants.Connections.sectionForeground(for: colorScheme, contrast: contrast)
-    }
-
-    /// Rows past the visible count scroll beneath the fixed header.
-    private var rowsMaxHeight: CGFloat? {
-        guard rowHeight > 0 else { return nil }
-        let rows = CGFloat(ConnectionSwitcherStyle.historyVisibleRows)
-        return rows * rowHeight + (rows - 1) * ConnectionSwitcherStyle.rowSpacing
     }
 
     var body: some View {
@@ -34,27 +24,28 @@ struct AgentHistoryList: View {
                 Text("Agents you open on any device appear here.")
                     .interFont(Constants.Typography.bodyS)
             } else {
-                ScrollView {
-                    VStack(spacing: ConnectionSwitcherStyle.rowSpacing) {
-                        ForEach(entries) { entry in
-                            row(entry)
-                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                                    rowHeight = max(rowHeight, height)
-                                }
-                        }
-                    }
+                // Short lists stay centered; longer ones fill the panel and scroll beneath the header.
+                ViewThatFits(in: .vertical) {
+                    rows
+                    ScrollView { rows }
+                        .scrollBounceBehavior(.basedOnSize)
                 }
-                .frame(maxHeight: rowsMaxHeight)
-                .scrollBounceBehavior(.basedOnSize)
             }
         }
         .padding(.vertical, ConnectionSwitcherStyle.inset)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .onChange(of: dynamicTypeSize) { rowHeight = 0 }
         .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
         .padding(.leading, ConnectionSwitcherStyle.trailingInset)
         .padding(.trailing, ConnectionSwitcherStyle.inset)
         .accessibilityIdentifier("agent-history.list")
+    }
+
+    private var rows: some View {
+        VStack(spacing: ConnectionSwitcherStyle.rowSpacing) {
+            ForEach(entries) { entry in
+                row(entry)
+            }
+        }
     }
 
     private var header: some View {
