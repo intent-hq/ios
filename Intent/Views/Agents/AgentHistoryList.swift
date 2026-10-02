@@ -67,13 +67,14 @@ struct AgentHistoryList: View {
 
     private func row(_ entry: AgentHistoryEntry) -> some View {
         let isCurrent = coordinator.isShowingConversation(of: entry)
-        let subtitle = subtitle(for: entry)
+        let workspaceTitle = workspaceTitle(for: entry)
+        let subtitle = subtitle(for: entry, showsAgentName: workspaceTitle != nil)
         return Button { onSelect(entry) } label: {
             HStack(spacing: ConnectionSwitcherStyle.rowInset) {
                 AgentAvatarView(agentId: entry.agentId, size: avatarSize)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.rowTextSpacing) {
-                    Text(entry.agentName)
+                    Text(workspaceTitle ?? entry.agentName)
                         .interFont(Constants.Typography.bodySEmphasized)
                         .lineLimit(1)
                     if !subtitle.isEmpty {
@@ -102,14 +103,20 @@ struct AgentHistoryList: View {
         .accessibilityIdentifier("agent-history.entry.\(entry.id)")
     }
 
-    /// Workspace and device; the open device's workspace title is read live.
-    private func subtitle(for entry: AgentHistoryEntry) -> String {
+    /// The open device's workspace title is read live; others use the title from the visit.
+    private func workspaceTitle(for entry: AgentHistoryEntry) -> String? {
         var liveTitle: String?
         if entry.connectionId == coordinator.windowConnectionID {
             liveTitle = session.workspaceStore.workspaces.first { $0.id == entry.workspaceId }?.title
         }
+        guard let title = liveTitle ?? entry.workspaceTitle, !title.isEmpty else { return nil }
+        return title
+    }
+
+    /// Agent and device; the agent name moves to the title when the workspace is unknown.
+    private func subtitle(for entry: AgentHistoryEntry, showsAgentName: Bool) -> String {
         let device = coordinator.savedConnections.first { $0.id == entry.connectionId }?.displayName
-        return [liveTitle ?? entry.workspaceTitle, device]
+        return [showsAgentName ? entry.agentName : nil, device]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
