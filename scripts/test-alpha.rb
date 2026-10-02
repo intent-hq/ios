@@ -117,8 +117,10 @@ begin
         chdir: dir, env: { "GIT_COMMITTER_DATE" => date })
     end
     commit.call("chore: root", "2000-01-01T00:00:00Z")
+    first = git.call("rev-parse", "HEAD")
     git.call("tag", "testflight/alpha/9")
-    commit.call("fix: previous change", "2000-01-02T00:00:00Z")
+    commit.call("fix: earlier change", "2000-01-03T06:00:00Z")
+    commit.call("fix: previous change", "2000-01-03T12:00:00Z")
     previous = git.call("rev-parse", "HEAD")
     git.call("tag", "testflight/alpha/10")
     git.call("tag", "testflight/alpha/not-a-build")
@@ -193,16 +195,28 @@ begin
     assert_error("tagging failed") { TestflightRelease.push_tag("testflight/alpha/1", previous) }
     puts "PASS: successful lane pushes the captured commit; repeat tagging is safe and conflicting tags are refused"
 
-    git.call("tag", "testflight/alpha/11", head)
-    assert_equal("No changes.\n", TestflightRelease.notes(channel: "alpha", head: head))
-    assert_error("Git tag failed") { TestflightRelease.notes(channel: "alpha", head: "missing-commit") }
-    git.call("tag", "-d", "testflight/alpha/9", "testflight/alpha/10", "testflight/alpha/11")
-    first_notes = TestflightRelease.notes(channel: "alpha", head: head)
-    assert_equal("Features\n- newest change (#42)\n", first_notes)
-    git.call("tag", "testflight/alpha/9", "#{previous}^")
-    assert_equal("Features\n- newest change (#42)\n\nFixes\n- previous change\n",
-      TestflightRelease.notes(channel: "alpha", head: head))
-    puts "PASS: notes use numeric Alpha tags, preserve marked ranges, and bootstrap from only the last 24 hours"
+    git.call("tag", "-d", "testflight/alpha/9", "testflight/alpha/10", "testflight/alpha/not-a-build")
+    mismatches = []
+    [["no marker", nil], ["distant marker", first], ["already shipped commit", head]].each do |scenario, marker|
+      git.call("tag", "testflight/alpha/11", marker) if marker
+      actual = TestflightRelease.notes(channel: "alpha", head: head)
+      mismatches << "#{scenario}: #{actual.inspect}" unless actual == "Features\n- newest change (#42)\n"
+      git.call("tag", "-d", "testflight/alpha/11") if marker
+    end
+    raise "Alpha notes included the wrong commits: #{mismatches.join('; ')}" unless mismatches.empty?
+    assert_error("Release notes failed") { TestflightRelease.notes(channel: "alpha", head: "missing-commit") }
+    puts "PASS: Alpha notes contain only the build commit with absent, distant, or same-commit markers"
+
+    git.call("tag", "testflight/beta/9", first)
+    git.call("tag", "testflight/beta/10", previous)
+    assert_equal("Features\n- newest change (#42)\n", TestflightRelease.notes(channel: "beta", head: head))
+    git.call("tag", "testflight/beta/11", head)
+    assert_equal("No changes.\n", TestflightRelease.notes(channel: "beta", head: head))
+    assert_error("Git tag failed") { TestflightRelease.notes(channel: "beta", head: "missing-commit") }
+    git.call("tag", "-d", "testflight/beta/10", "testflight/beta/11")
+    assert_equal("Features\n- newest change (#42)\n\nFixes\n- earlier change\n- previous change\n",
+      TestflightRelease.notes(channel: "beta", head: head))
+    puts "PASS: shared range selection still uses the latest numeric marker and preserves empty/error behavior"
   end
 ensure
   ReleaseSupport.send(:remove_const, :ROOT)

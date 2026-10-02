@@ -39,8 +39,8 @@ class ReleaseNotesTests(unittest.TestCase):
     def commit(self, message, committed_at=None):
         self.git("commit", "--allow-empty", "-q", "-m", message, committed_at=committed_at)
 
-    def generate(self, base=None, head="HEAD", last_24_hours=False):
-        args = ["--last-24-hours", "--", head] if last_24_hours else ["--", base or self.base, head]
+    def generate(self, base=None, head="HEAD", single_commit=False):
+        args = ["--commit", "--", head] if single_commit else ["--", base or self.base, head]
         return subprocess.run(
             [sys.executable, str(SCRIPT), *args],
             cwd=self.root, env=self.env, capture_output=True, text=True, encoding="utf-8",
@@ -81,33 +81,29 @@ class ReleaseNotesTests(unittest.TestCase):
                          "\nFixes\n- use native menu (#600) (#659)\n")
 
     def test_requested_range_excludes_base_and_later_commits(self):
-        self.git("tag", "previous-alpha")
+        self.git("tag", "previous-beta")
         self.commit("fix: included change (#20)")
-        self.git("tag", "next-alpha")
+        self.git("tag", "next-beta")
         self.commit("feat: not in this build")
-        result = self.generate(base="previous-alpha", head="next-alpha")
+        result = self.generate(base="previous-beta", head="next-beta")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "Fixes\n- included change (#20)\n")
 
-    def test_bootstrap_uses_build_commit_time_and_first_parent_history(self):
-        self.commit("feat: at the cutoff", committed_at="2000-01-02T12:00:00Z")
-        self.commit("feat: too old", committed_at="2000-01-02T11:59:59Z")
+    def test_single_commit_excludes_parents_and_later_commits(self):
         self.commit("fix: recent change", committed_at="2000-01-03T11:00:00Z")
-        self.commit("feat: future clock skew", committed_at="2000-01-03T12:00:01Z")
         self.git("checkout", "-q", "-b", "feature")
         self.commit("feat: side-branch detail", committed_at="2000-01-03T11:30:00Z")
         self.git("checkout", "-q", "main")
-        self.git("merge", "--no-ff", "-m", "feat: build change (#42)", "feature",
+        self.git("merge", "--no-ff", "-m", "Merge pull request #42 from example/feature\n\nfeat: build change", "feature",
                  committed_at="2000-01-03T12:00:00Z")
         build = self.git("rev-parse", "HEAD").strip()
         self.commit("feat: after the build", committed_at="2000-01-03T12:00:00Z")
-        result = self.generate(head=build, last_24_hours=True)
+        result = self.generate(head=build, single_commit=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "Features\n- at the cutoff\n- build change (#42)\n"
-                         "\nFixes\n- recent change\n")
+        self.assertEqual(result.stdout, "Features\n- build change (#42)\n")
 
-    def test_bootstrap_without_earlier_commits_includes_the_build(self):
-        result = self.generate(last_24_hours=True)
+    def test_single_commit_supports_root_builds(self):
+        result = self.generate(single_commit=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "Features\n- excluded base commit\n")
 
@@ -163,8 +159,8 @@ class ReleaseNotesTests(unittest.TestCase):
                 self.assertEqual(result.stdout, "")
                 self.assertIn("Could not read Git history", result.stderr)
         for head in ["missing", "--all"]:
-            with self.subTest(bootstrap_head=head):
-                result = self.generate(head=head, last_24_hours=True)
+            with self.subTest(single_commit_head=head):
+                result = self.generate(head=head, single_commit=True)
                 self.assertEqual(result.returncode, 1)
                 self.assertEqual(result.stdout, "")
                 self.assertIn("Could not read Git history", result.stderr)

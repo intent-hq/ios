@@ -17,18 +17,17 @@ module TestflightRelease
   end
 
   def self.notes(channel:, head:)
-    tags = git("tag", "--merged", head, "--list", "testflight/#{channel}/*").lines.map(&:strip)
-    base = tags.select { |tag| tag.match?(%r{\Atestflight/#{Regexp.escape(channel)}/\d+\z}) }
-      .max_by { |tag| tag.split("/").last.to_i }
-    if base
-      arguments = [base, head]
-    elsif channel == "alpha"
-      FastlaneCore::UI.message("No previous Alpha tag; notes cover the 24 hours ending at the build commit.")
-      arguments = ["--last-24-hours", "--", head]
+    if channel == "alpha"
+      arguments = ["--commit", "--", head]
     else
-      base = git("rev-list", "--max-parents=0", "--first-parent", head).lines.last.strip
-      FastlaneCore::UI.message("No previous #{channel} tag; notes start at repository root #{base}.")
-      return "Initial #{channel.capitalize} build.\n" if base == head
+      tags = git("tag", "--merged", head, "--list", "testflight/#{channel}/*").lines.map(&:strip)
+      base = tags.select { |tag| tag.match?(%r{\Atestflight/#{Regexp.escape(channel)}/\d+\z}) }
+        .max_by { |tag| tag.split("/").last.to_i }
+      unless base
+        base = git("rev-list", "--max-parents=0", "--first-parent", head).lines.last.strip
+        FastlaneCore::UI.message("No previous #{channel} tag; notes start at repository root #{base}.")
+        return "Initial #{channel.capitalize} build.\n" if base == head
+      end
       arguments = [base, head]
     end
     text, _stderr, status = Open3.capture3("python3", File.join(ReleaseSupport::ROOT, "scripts/release_notes.py"), *arguments, chdir: ReleaseSupport::ROOT)
