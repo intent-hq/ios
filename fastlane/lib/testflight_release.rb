@@ -1,4 +1,5 @@
 require "open3"
+require_relative "release_provenance"
 
 # Release orchestration shared by TestFlight channels; never selects a build
 # by "latest", or a group by name without checking that it is internal.

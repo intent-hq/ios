@@ -41,6 +41,9 @@ jobs:
   alpha:
     name: Alpha (iOS and visionOS)
     needs: select-macos-runner
+    permissions:
+      contents: read
+      statuses: write
     runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on) }}
     timeout-minutes: 180
     env:
@@ -88,5 +91,6 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
           RELEASE_UPLOAD: ${{ github.event_name == 'push' || inputs.upload }}
         run: bundle exec fastlane ios alpha "upload:$RELEASE_UPLOAD"

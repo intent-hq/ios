@@ -41,6 +41,7 @@ class AlphaPage
 end
 
 root = ReleaseSupport::ROOT
+original_command = ReleaseProvenance.method(:command!)
 fastfile = Fastlane::FastFile.new(File.join(root, "fastlane/Fastfile"))
 saved_env = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY GITHUB_STEP_SUMMARY].to_h { |key| [key, ENV[key]] }
 ENV["ASC_KEY_ID"] = "TESTKEY"
@@ -50,6 +51,16 @@ events = []
 remote_groups = []
 uploaded = []
 failure = nil
+ReleaseProvenance.define_singleton_method(:command!) do |*args|
+  next original_command.call(*args) unless args.first == "gh"
+  assert_equal(["gh", "api", "repos/#{ReleaseProvenance.repository}/statuses/#{TestflightRelease.git('rev-parse', 'HEAD').strip}",
+    "--method", "POST", "-f", "state=success", "-f", "context=TestFlight", "-f",
+    "description=#{ReleaseSupport.marketing_version} (1)"], args)
+  raise "Recorded without a successful upload" if uploaded.empty?
+  events << "record:#{uploaded.last}"
+  ReleaseSupport.fail!("fixture recording failure") if failure == "record:#{uploaded.last}"
+  "{}"
+end
 app = Spaceship::ConnectAPI::App.new("fixture-app", {})
 Spaceship::ConnectAPI::App.define_singleton_method(:find) { |_identifier| app }
 Spaceship::ConnectAPI.define_singleton_method(:get_build_uploads) { |**_args| AlphaPage.new([]) }
@@ -149,12 +160,12 @@ begin
 
     reset.call
     run.call(upload: true)
-    assert_equal(%w[build:ios build:visionos upload:IOS group:IOS upload:VISION_OS group:VISION_OS], events)
+    assert_equal(%w[build:ios build:visionos upload:IOS record:IOS group:IOS upload:VISION_OS record:VISION_OS group:VISION_OS], events)
     assert_equal(original_tags, git.call("show-ref", "--tags"))
     assert_equal("", git.call("ls-remote", "--tags", "origin"))
     puts "PASS: both archives precede uploads, internal group IDs exclude external Alpha, and no tags are created or pushed"
 
-    ["build:visionos", "upload:VISION_OS", "group:VISION_OS"].each do |scenario|
+    ["build:visionos", "upload:VISION_OS", "record:VISION_OS", "group:VISION_OS"].each do |scenario|
       reset.call
       failure = scenario
       assert_error("fixture") { run.call(upload: true) }
@@ -163,13 +174,16 @@ begin
       summary = File.read(ENV.fetch("GITHUB_STEP_SUMMARY"))
       if scenario.start_with?("build:")
         assert_equal([], events.grep(/^upload:/))
+        assert_equal([], events.grep(/^record:/))
         raise "Missing platform failure" unless summary.include?("visionos: archive/export failed")
       else
+        expected_records = scenario == "upload:VISION_OS" ? ["record:IOS"] : %w[record:IOS record:VISION_OS]
+        assert_equal(expected_records, events.grep(/^record:/))
         raise "Missing successful iOS upload" unless summary.include?("ios: uploaded, processed and distributed")
         raise "Missing failed visionOS status" unless summary.include?("visionos:") && summary.include?("failed")
       end
     end
-    puts "PASS: platform archive/upload/distribution failures report partial state and never tag"
+    puts "PASS: partial failures preserve uploaded commit provenance, recording failures are loud, and no path tags"
 
     [[external], [internal, internal]].each do |groups|
       reset.call
@@ -186,6 +200,7 @@ begin
     puts "PASS: invalid build commits fail instead of uploading without notes"
   end
 ensure
+  ReleaseProvenance.define_singleton_method(:command!, original_command)
   ReleaseSupport.send(:remove_const, :ROOT)
   ReleaseSupport.const_set(:ROOT, root)
   saved_env.each { |key, value| ENV[key] = value }
