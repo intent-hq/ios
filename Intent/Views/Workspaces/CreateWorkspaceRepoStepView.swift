@@ -56,22 +56,31 @@ struct CreateWorkspaceNextButton: View {
     let isDisabled: Bool
     let onNext: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
 
     var body: some View {
         Button(action: onNext) {
-            Text("Next")
-                .interFont(Constants.Typography.bodySEmphasized)
-                .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
-                .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-                .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
-                .foregroundStyle(isDisabled ? CreateWorkspaceRepoStyle.foreground(for: colorScheme) : CreateWorkspaceFormStyle.primaryForeground)
-                .background(isDisabled ? CreateWorkspaceRepoStyle.card(for: colorScheme) : CreateWorkspaceFormStyle.primary, in: .rect(
-                    cornerRadius: CreateWorkspaceFormStyle.cornerRadius
-                ))
-                .opacity(isDisabled ? 0.5 : 1)
+            HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
+                Text("Next")
+                    .interFont(Constants.Typography.bodySEmphasized)
+                Image(.arrowRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
+            .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
+            .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+            .foregroundStyle(isDisabled ? CreateWorkspaceRepoStyle.foreground(for: colorScheme) : CreateWorkspaceFormStyle.primaryForeground)
+            .background(isDisabled ? CreateWorkspaceRepoStyle.card(for: colorScheme) : CreateWorkspaceFormStyle.primary, in: .rect(
+                cornerRadius: CreateWorkspaceFormStyle.cornerRadius
+            ))
+            .opacity(isDisabled ? 0.5 : 1)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
+        .accessibilityLabel("Next")
         .accessibilityIdentifier("creation.next")
     }
 }
