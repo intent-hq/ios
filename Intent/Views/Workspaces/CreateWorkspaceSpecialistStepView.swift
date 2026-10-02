@@ -53,9 +53,6 @@ struct CreateWorkspaceSpecialistStepView: View {
                 createControls
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { createControlsHeight = $0 }
             }
-            if isCreating {
-                creatingOverlay
-            }
         }
         .navigationTitle("Create Workspace")
         .toolbar(.hidden, for: .navigationBar)
@@ -74,6 +71,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                 .disabled(isCreating)
             Spacer()
             CreateWorkspaceSubmitButton(
+                isCreating: isCreating,
                 isDisabled: CreateWorkspaceView.isCreateDisabled(
                     isCreating: isCreating,
                     isLoadingProviders: isLoadingProviders,
@@ -263,21 +261,6 @@ struct CreateWorkspaceSpecialistStepView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .padding(.vertical, Constants.ModalPicker.rowVerticalPadding)
-    }
-
-    private var creatingOverlay: some View {
-        Group {
-            Color.black.opacity(Constants.ModalPicker.loadingOverlayOpacity).ignoresSafeArea()
-            VStack(spacing: Constants.ModalPicker.loadingOverlaySpacing) {
-                ProgressView()
-                Text("Cloning repository…")
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-            }
-            .padding(Constants.ModalPicker.loadingOverlayPadding)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: Constants.ModalPicker.loadingOverlayCornerRadius))
-        }
     }
 }
 

@@ -4,10 +4,13 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
     private static let elementTimeout: TimeInterval = 15
 
     @MainActor
-    func testNewRepositoryWithoutGitHubPreservesDraftAndRetriesCreation() {
+    func testNewRepositoryWithoutGitHubPreservesDraftAndRetriesCreation() throws {
         continueAfterFailure = false
+        let gate = FileManager.default.temporaryDirectory
+            .appendingPathComponent("workspace-create-\(UUID().uuidString).trigger")
+        defer { try? FileManager.default.removeItem(at: gate) }
         let app = XCUIApplication()
-        app.launchArguments = ["--demo-data", "--demo-github-disconnected"]
+        app.launchArguments = ["--demo-data", "--demo-github-disconnected", "--demo-workspace-create-trigger-file=" + gate.path]
         app.launch()
         app.openHomeAction("workspace")
         XCTAssertTrue(app.staticTexts["GitHub Is Not Connected"].waitForExistence(timeout: Self.elementTimeout))
@@ -36,13 +39,30 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         app.buttons["Next"].tap()
         XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertEqual(prompt.value as? String, "Build my new project")
-        let create = app.buttons["Create"]
+        try verifyPendingCreationAndRecovery(in: app, gate: gate)
+        retryAfterSourceRevisit(in: app)
+    }
+
+    @MainActor
+    private func verifyPendingCreationAndRecovery(in app: XCUIApplication, gate: URL) throws {
+        let create = app.buttons["creation.create"]
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: create)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
         create.tap()
+        let loading = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'Creating workspace'"), object: create)
+        XCTAssertEqual(XCTWaiter.wait(for: [loading], timeout: Self.elementTimeout), .completed)
+        XCTAssertFalse(create.isEnabled)
+        XCTAssertFalse(app.buttons["creation.back"].isEnabled)
+        XCTAssertFalse(app.buttons["creation.sourceCard"].isEnabled)
+        XCTAssertEqual(app.textViews["creation.prompt"].value as? String, "Build my new project")
+        attachEvidence(in: app, name: "new-repository-creating")
+        try Data().write(to: gate)
         XCTAssertTrue(app.alerts["Error"].waitForExistence(timeout: Self.elementTimeout))
         app.alerts.buttons["OK"].tap()
-        retryAfterSourceRevisit(in: app)
+        XCTAssertEqual(create.label, "Create")
+        XCTAssertTrue(create.isEnabled)
+        XCTAssertTrue(app.buttons["creation.back"].isEnabled)
+        attachEvidence(in: app, name: "new-repository-create-recovered")
     }
 
     @MainActor

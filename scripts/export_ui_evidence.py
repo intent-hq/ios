@@ -19,6 +19,7 @@ CAPTURES = {
     "CreateNewRepositoryUITests": {
         "testNewRepositoryWithoutGitHubPreservesDraftAndRetriesCreation": (
             "new-repository-name-with-keyboard", "new-repository-create-with-keyboard", "new-repository-draft-after-retry",
+            "new-repository-creating", "new-repository-create-recovered",
         ),
     },
     "CreateWorkspaceSelectionUITests": {
