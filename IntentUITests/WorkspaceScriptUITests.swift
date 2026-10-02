@@ -3,15 +3,27 @@ import XCTest
 nonisolated final class WorkspaceScriptUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
+    // iOS 27 native submenus drop action identifiers, including identifiers on Label.
+    // Match the exact demo names from DemoBrowserFixtures / DemoRepositoryScriptFixtures;
+    // keep row identifiers and observable launch/swipe behavior as the test contracts.
+    private enum Fixture {
+        static let server = "Web server"
+        static let command = "Check project"
+        static let verification = "Gradient browser verification"
+        static let dev = "dev"
+        static let build = "build"
+        static let test = "test"
+    }
+
     @MainActor
     func testFirstLaunchAddsServerToSectionAndRetainsBrowser() {
         let app = launchWorkspace()
         let script = app.buttons["workspace.script.demo-server"]
         XCTAssertFalse(script.exists)
         openScriptsMenu(in: app)
-        let server = app.buttons["workspace.script.menu.demo-server"]
+        let server = app.buttons[Fixture.server]
         XCTAssertTrue(server.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["workspace.script.menu.demo-check"].exists)
+        XCTAssertTrue(app.buttons[Fixture.command].exists)
         server.tap()
         assertServerBrowser(in: app)
         app.buttons["Done"].tap()
@@ -36,7 +48,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     func testScriptSubmenuLaunchesServerAndCommandDoesNotOpenBrowser() {
         let app = launchWorkspace()
         openScriptsMenu(in: app)
-        let command = app.buttons["workspace.script.menu.demo-check"]
+        let command = app.buttons[Fixture.command]
         XCTAssertTrue(command.waitForExistence(timeout: Self.timeout))
         command.tap()
         let commandRow = app.buttons["workspace.script.demo-check"]
@@ -48,7 +60,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         XCTAssertFalse(app.textFields["Browser URL"].exists)
         XCTAssertFalse(app.buttons["workspace.script.demo-server"].exists)
         openScriptsMenu(in: app)
-        let server = app.buttons["workspace.script.menu.demo-server"]
+        let server = app.buttons[Fixture.server]
         XCTAssertTrue(server.waitForExistence(timeout: Self.timeout))
         server.tap()
         assertServerBrowser(in: app)
@@ -58,11 +70,11 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     func testRepositoryScriptsAppearBesideSavedCommandAndRegisterOnFirstLaunch() {
         let app = launchWorkspace(repositoryScripts: true)
         openScriptsMenu(in: app)
-        XCTAssertTrue(app.buttons["workspace.script.menu.demo-verification"].exists)
-        let dev = app.buttons["workspace.script.menu.manifest:package.json:dev"]
+        XCTAssertTrue(app.buttons[Fixture.verification].exists)
+        let dev = app.buttons[Fixture.dev]
         XCTAssertTrue(dev.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["workspace.script.menu.manifest:package.json:build"].exists)
-        XCTAssertTrue(app.buttons["workspace.script.menu.manifest:package.json:test"].exists)
+        XCTAssertTrue(app.buttons[Fixture.build].exists)
+        XCTAssertTrue(app.buttons[Fixture.test].exists)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "workspace-repository-scripts-menu"
         screenshot.lifetime = .keepAlways
@@ -81,7 +93,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     func testSwipeStopsServerAndDeletesFinishedScript() {
         let app = launchWorkspace()
         openScriptsMenu(in: app)
-        app.buttons["workspace.script.menu.demo-server"].tap()
+        app.buttons[Fixture.server].tap()
         assertServerBrowser(in: app)
         app.buttons["Done"].tap()
         let row = app.buttons["workspace.script.demo-server"]
@@ -108,15 +120,15 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         delete.tap()
         XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
         openScriptsMenu(in: app)
-        XCTAssertFalse(app.buttons["workspace.script.menu.demo-server"].exists)
-        XCTAssertTrue(app.buttons["workspace.script.menu.demo-check"].exists)
+        XCTAssertFalse(app.buttons[Fixture.server].exists)
+        XCTAssertTrue(app.buttons[Fixture.command].exists)
     }
 
     @MainActor
     func testSwipingBetweenResourceTypesClosesPreviousMenuAndTapDismissesWithoutOpening() {
         let app = launchWorkspace()
         openScriptsMenu(in: app)
-        app.buttons["workspace.script.menu.demo-server"].tap()
+        app.buttons[Fixture.server].tap()
         assertServerBrowser(in: app)
         app.buttons["Done"].tap()
         let script = app.buttons["workspace.script.demo-server"]
@@ -145,7 +157,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     func testDeleteRunningRepositoryScriptAllowsFreshLaunchFromMenu() {
         let app = launchWorkspace(repositoryScripts: true)
         openScriptsMenu(in: app)
-        app.buttons["workspace.script.menu.manifest:package.json:dev"].tap()
+        app.buttons[Fixture.dev].tap()
         assertServerBrowser(in: app)
         app.buttons["Done"].tap()
         let row = app.buttons["workspace.script.demo-repo-dev"]
@@ -156,7 +168,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         app.buttons["workspace.script.delete.demo-repo-dev"].tap()
         XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
         openScriptsMenu(in: app)
-        let dev = app.buttons["workspace.script.menu.manifest:package.json:dev"]
+        let dev = app.buttons[Fixture.dev]
         XCTAssertTrue(dev.waitForExistence(timeout: Self.timeout))
         dev.tap()
         assertServerBrowser(in: app)
@@ -166,7 +178,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     func testVerticalDragOnScriptRowStillScrollsWorkspace() {
         let app = launchWorkspace()
         openScriptsMenu(in: app)
-        app.buttons["workspace.script.menu.demo-check"].tap()
+        app.buttons[Fixture.command].tap()
         let row = app.buttons["workspace.script.demo-check"]
         for _ in 0..<5 where !row.isHittable { app.swipeUp() }
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
