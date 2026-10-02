@@ -66,7 +66,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let launcherBottom = launcher.frame.maxY
         openMenu(app)
         XCTAssertEqual(app.buttons["intent.menu.close"].frame.maxY, launcherBottom, accuracy: Self.scrollTolerance)
-        attachScreenshot(app.screenshot(), named: "iPad landscape Intent menu tiles")
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad landscape Intent menu tiles")
         app.buttons["intent.menu.close"].tap()
         XCTAssertTrue(waitUntilHittable(composer))
 
