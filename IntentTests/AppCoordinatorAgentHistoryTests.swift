@@ -77,46 +77,51 @@ extension AppCoordinatorTests {
         #expect(retargeted == nil)
     }
 
-    @Test @MainActor func fetchedWorkspaceListDropsHistoryForRemovedWorkspaces() async throws {
+    @Test(arguments: ["deleted", "archived"])
+    @MainActor func removedWorkspaceEventDropsThisDevicesHistoryForIt(removal: String) {
+        let data: [String: Any] = removal == "deleted"
+            ? ["workspaceId": "gone"]
+            : ["workspaceId": "gone", "changes": ["archived": true]]
+        let event: [String: Any] = [
+            "type": removal == "deleted" ? "workspace:deleted" : "workspace:updated",
+            "workspaceId": "gone",
+            "data": data
+        ]
         let store = WorkspaceStore(forTesting: true)
-        let fake = FakeConnectionManager()
-        fake.simulateConnect()
         let coordinator = AppCoordinator(
             workspaceStore: store,
-            connection: fake,
+            connection: FakeConnectionManager(),
             backendID: Self.windowBackend,
             persistence: persistence
         )
         let here = Self.windowBackend.connectionID
         let elsewhere = UUID()
-        for (connectionId, workspaceId) in [
-            (here, "kept"), (here, "deleted"), (here, "archived"), (elsewhere, "deleted")
-        ] {
-            coordinator.agentHistory.record(historyEntry(on: connectionId, workspaceId: workspaceId, agentId: "agent-\(workspaceId)"))
-        }
+        coordinator.agentHistory.record(historyEntry(on: here, workspaceId: "kept", agentId: "kept"))
+        coordinator.agentHistory.record(historyEntry(on: here, workspaceId: "gone", agentId: "removed"))
+        coordinator.agentHistory.record(historyEntry(on: elsewhere, workspaceId: "gone", agentId: "other-device"))
 
-        store.publishFetchedWorkspaces([
-            Self.makeWorkspace(id: "kept"),
-            Self.makeWorkspace(id: "archived", status: "archived")
-        ])
+        store.handleEvent("event", params: ["event": event] as [String: Any])
 
-        try await waitUntil("history pruned after the workspace list loads") {
-            coordinator.agentHistory.entries.count == 2
-        }
-        let remaining = coordinator.agentHistory.entries.map { "\($0.connectionId == here ? "here" : "elsewhere")/\($0.workspaceId)" }
-        #expect(Set(remaining) == ["here/kept", "elsewhere/deleted"])
+        #expect(Set(coordinator.agentHistory.entries.map(\.agentId)) == ["kept", "other-device"])
     }
 
-    @Test @MainActor func disconnectedWindowNeverPrunesHistory() {
+    @Test @MainActor func unrelatedWorkspaceUpdatesKeepHistory() {
+        let store = WorkspaceStore(forTesting: true)
         let coordinator = AppCoordinator(
-            workspaceStore: WorkspaceStore(forTesting: true),
+            workspaceStore: store,
             connection: FakeConnectionManager(),
             backendID: Self.windowBackend,
             persistence: persistence
         )
-        coordinator.agentHistory.record(historyEntry(on: Self.windowBackend.connectionID))
+        coordinator.agentHistory.record(historyEntry(on: Self.windowBackend.connectionID, workspaceId: "kept"))
 
-        coordinator.pruneAgentHistory(keeping: [])
+        store.handleEvent("event", params: [
+            "event": [
+                "type": "workspace:updated",
+                "workspaceId": "kept",
+                "data": ["workspaceId": "kept", "changes": ["archived": false, "status": "Active"]]
+            ] as [String: Any]
+        ] as [String: Any])
 
         #expect(coordinator.agentHistory.entries.count == 1)
     }

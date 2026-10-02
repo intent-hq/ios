@@ -21,8 +21,8 @@ final class AgentHistoryStore {
         persistence.saveAgentHistory(entries)
     }
 
-    func removeEntries(on connectionId: UUID, keepingWorkspaceIDs workspaceIDs: Set<String>) {
-        let pruned = AgentHistory.pruning(entries, connectionId: connectionId, keepingWorkspaceIDs: workspaceIDs)
+    func removeWorkspace(_ workspaceId: String, on connectionId: UUID) {
+        let pruned = AgentHistory.removing(workspaceId: workspaceId, on: connectionId, from: entries)
         guard pruned.count != entries.count else { return }
         entries = pruned
         persistence.saveAgentHistory(entries)

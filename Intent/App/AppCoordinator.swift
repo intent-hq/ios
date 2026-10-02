@@ -132,6 +132,7 @@ class AppCoordinator {
     @ObservationIgnored private var reconnectOverlayTimeoutTask: Task<Void, Never>?
     @ObservationIgnored var invitedRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var savedConnectionsObserver: AnyCancellable?
+    @ObservationIgnored private var workspaceRemovalObserver: AnyCancellable?
 
     @ObservationIgnored let dependencies: AppCoordinatorDependencies
     @ObservationIgnored let lifecycleState = AppCoordinatorLifecycleState()
@@ -203,6 +204,9 @@ class AppCoordinator {
         lifecycleState.workspaceDataAtInitialFlowStart = workspaceStore.lastUpdated
         savedConnectionsObserver = persistence.connectionsDidChange.sink { [weak self] _ in
             self?.refreshSavedConnectionsPresentation()
+        }
+        workspaceRemovalObserver = workspaceStore.removedWorkspaceIds.sink { [weak self] workspaceId in
+            self?.forgetHistory(ofWorkspace: workspaceId)
         }
         startObservingConnection()
         startObservingCertMismatch()
@@ -426,7 +430,6 @@ extension AppCoordinator {
                 // Only validate after workspaces have been fetched at least once
                 guard dependencies.workspaceStore.lastUpdated != nil else { return }
                 validateCurrentWorkspaceExists(in: dependencies.workspaceStore.workspaces)
-                pruneAgentHistory(keeping: dependencies.workspaceStore.workspaces)
             }
         }
     }

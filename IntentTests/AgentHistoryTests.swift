@@ -9,12 +9,13 @@ struct AgentHistoryTests {
     private func entry(
         _ agentId: String,
         on connectionId: UUID = Self.phone,
+        workspaceId: String = "workspace",
         title: String? = "Workspace",
         at seconds: TimeInterval = 0
     ) -> AgentHistoryEntry {
         AgentHistoryEntry(
             connectionId: connectionId,
-            workspaceId: "workspace",
+            workspaceId: workspaceId,
             workspaceTitle: title,
             agentId: agentId,
             agentName: agentId,
@@ -43,19 +44,13 @@ struct AgentHistoryTests {
         #expect(updated.map(\.agentId) == ["new", "a", "b"])
     }
 
-    @Test func pruningDropsOnlyThatDevicesMissingWorkspaces() {
+    @Test func removingAWorkspaceDropsOnlyThatDevicesEntriesForIt() {
         let history = [
             entry("kept"),
-            AgentHistoryEntry(
-                connectionId: Self.phone, workspaceId: "gone", workspaceTitle: nil,
-                agentId: "removed", agentName: "removed", visitedAt: .now
-            ),
-            AgentHistoryEntry(
-                connectionId: Self.laptop, workspaceId: "gone", workspaceTitle: nil,
-                agentId: "other-device", agentName: "other-device", visitedAt: .now
-            )
+            entry("removed", workspaceId: "gone"),
+            entry("other-device", on: Self.laptop, workspaceId: "gone")
         ]
-        let pruned = AgentHistory.pruning(history, connectionId: Self.phone, keepingWorkspaceIDs: ["workspace"])
+        let pruned = AgentHistory.removing(workspaceId: "gone", on: Self.phone, from: history)
         #expect(pruned.map(\.agentId) == ["kept", "other-device"])
     }
 

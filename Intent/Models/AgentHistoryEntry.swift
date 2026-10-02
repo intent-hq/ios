@@ -30,13 +30,13 @@ nonisolated enum AgentHistory {
         return Array(([visit] + others).prefix(limit))
     }
 
-    /// Drops one device's entries whose workspace is no longer in its workspace list.
-    static func pruning(
-        _ entries: [AgentHistoryEntry],
-        connectionId: UUID,
-        keepingWorkspaceIDs workspaceIDs: Set<String>
+    /// Drops one device's entries for a workspace it reported deleted or archived.
+    static func removing(
+        workspaceId: String,
+        on connectionId: UUID,
+        from entries: [AgentHistoryEntry]
     ) -> [AgentHistoryEntry] {
-        entries.filter { $0.connectionId != connectionId || workspaceIDs.contains($0.workspaceId) }
+        entries.filter { $0.connectionId != connectionId || $0.workspaceId != workspaceId }
     }
 
     /// Entries whose connection is still saved; forgotten devices drop out.

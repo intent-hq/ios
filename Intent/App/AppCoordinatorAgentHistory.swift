@@ -15,19 +15,12 @@ extension AppCoordinator {
         ))
     }
 
-    /// Drops this device's history for workspaces gone from its fetched list.
-    /// `workspace.list` omits archived workspaces, which the app also leaves, so
-    /// they drop out with deleted ones. Pairing can briefly fill this window's
-    /// store from another daemon, so only a live, non-pairing window prunes.
-    func pruneAgentHistory(keeping workspaces: [Workspace]) {
-        guard let connectionID = windowConnectionID,
-              dependencies.connection.connectionState == .connected else { return }
-        if case .pairing = currentScreen { return }
-        let live = workspaces.filter { workspace in
-            let status = workspace.status?.lowercased()
-            return status != "archived" && status != "deleted"
-        }
-        agentHistory.removeEntries(on: connectionID, keepingWorkspaceIDs: Set(live.map(\.id)))
+    /// Forgets a workspace this device reported deleted or archived. Only an
+    /// explicit id is trusted: pairing can briefly route another daemon's data
+    /// through this window, and that daemon's ids never match these entries.
+    func forgetHistory(ofWorkspace workspaceId: String) {
+        guard let connectionID = windowConnectionID else { return }
+        agentHistory.removeWorkspace(workspaceId, on: connectionID)
     }
 
     /// History entries this window can offer: the device must still be saved.
