@@ -12,24 +12,12 @@ module TestflightRelease
 
   def self.git(*args)
     stdout, _stderr, status = Open3.capture3("git", *args, chdir: ReleaseSupport::ROOT)
-    ReleaseSupport.fail!("Git #{args.first} failed; ensure full history and TestFlight tags are fetched.") unless status.success?
+    ReleaseSupport.fail!("Git #{args.first} failed; ensure the build commit is checked out.") unless status.success?
     stdout
   end
 
-  def self.notes(channel:, head:)
-    if channel == "alpha"
-      arguments = ["--commit", "--", head]
-    else
-      tags = git("tag", "--merged", head, "--list", "testflight/#{channel}/*").lines.map(&:strip)
-      base = tags.select { |tag| tag.match?(%r{\Atestflight/#{Regexp.escape(channel)}/\d+\z}) }
-        .max_by { |tag| tag.split("/").last.to_i }
-      unless base
-        base = git("rev-list", "--max-parents=0", "--first-parent", head).lines.last.strip
-        FastlaneCore::UI.message("No previous #{channel} tag; notes start at repository root #{base}.")
-        return "Initial #{channel.capitalize} build.\n" if base == head
-      end
-      arguments = [base, head]
-    end
+  def self.notes(head:)
+    arguments = ["--commit", "--", head]
     text, _stderr, status = Open3.capture3("python3", File.join(ReleaseSupport::ROOT, "scripts/release_notes.py"), *arguments, chdir: ReleaseSupport::ROOT)
     ReleaseSupport.fail!("Release notes failed (exit #{status.exitstatus}); refusing to upload without notes.") unless [0, 3].include?(status.exitstatus)
     text
@@ -52,18 +40,6 @@ module TestflightRelease
     # Direct ID relationship avoids pilot's name-or-ID matching, which can
     # select both an internal and an external group named Alpha.
     builds.first.add_beta_groups(beta_groups: [group])
-  end
-
-  def self.push_tag(tag, commit)
-    success = system({ "TESTFLIGHT_TAG" => tag, "TESTFLIGHT_COMMIT" => commit },
-      "bash", File.join(ReleaseSupport::ROOT, ".github/scripts/push-testflight-tag.sh"), chdir: ReleaseSupport::ROOT)
-    ReleaseSupport.fail!("Both platforms uploaded, but tagging failed. Push #{tag} on #{commit} before the next release.") unless success
-  end
-
-  def self.output(name, value)
-    path = ENV["GITHUB_OUTPUT"]
-    ReleaseSupport.fail!("defer_tag:true requires GITHUB_OUTPUT and a follow-up tag job.") if path.to_s.empty?
-    File.open(path, "a") { |file| file.puts("#{name}=#{value}") }
   end
 
   def self.summary(channel:, release:, head:, notes:, statuses:)

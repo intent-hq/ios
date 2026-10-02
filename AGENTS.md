@@ -96,6 +96,11 @@ The effective build number overrides local `CURRENT_PROJECT_VERSION`; never deri
 the next build number from the checkout. Repeated Alpha/Beta builds may share an
 unsubmitted marketing version, but every run must use a fresh build number.
 
+Git tags are only for App Store releases, created manually as plain versions
+(for example, `1.1.3`). TestFlight Alpha/Beta builds never create or push tags.
+Alpha release notes contain only the commit being built; the notes generator also
+supports an explicit range between two refs for Beta releases.
+
 `.github/workflows/version-bump.yml` runs `check_version_bump` hourly. When either
 platform's current marketing version is submitted, approved or released, it opens
 or updates one PR on `automation/marketing-version-bump`, titled

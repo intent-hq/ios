@@ -4,10 +4,9 @@ platform :ios do
   desc "Archive iOS and visionOS, then upload to internal Alpha (upload:false archives only)"
   lane :alpha do |options|
     upload = TestflightRelease.boolean_option(options, :upload, default: true)
-    defer_tag = TestflightRelease.boolean_option(options, :defer_tag, default: false)
     release = testflight_preflight
     head = TestflightRelease.git("rev-parse", "HEAD").strip
-    notes = TestflightRelease.notes(channel: "alpha", head: head)
+    notes = TestflightRelease.notes(head: head)
     UI.message("Alpha #{release[:version]} (#{release[:build_number]}) at #{head}\nWhat to Test:\n#{notes}")
     statuses = { "ios" => "not built", "visionos" => "not built" }
     begin
@@ -36,13 +35,6 @@ platform :ios do
           statuses[platform] = "uploaded and processed; group assignment failed"
           TestflightRelease.distribute(artifact, group)
           statuses[platform] = "uploaded, processed and distributed to internal Alpha"
-        end
-        tag = "testflight/alpha/#{release[:build_number]}"
-        if defer_tag
-          TestflightRelease.output("tag", tag)
-          TestflightRelease.output("commit", head)
-        else
-          TestflightRelease.push_tag(tag, head)
         end
       end
     ensure

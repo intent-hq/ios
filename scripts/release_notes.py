@@ -7,7 +7,7 @@ Exit codes: 0 = notes, 3 = no commits, 1 = Git error, 2 = usage error.
 First-parent history represents each merged PR once. Maintenance-only ranges
 still produce notes; chore/ci/test commits are otherwise omitted. Truncation
 keeps complete entries and counts omitted entries, not maintenance commits.
-Alpha uses --commit for only the build commit, regardless of release markers.
+Alpha uses --commit for only the build commit; Beta can pass an explicit range.
 """
 
 import argparse

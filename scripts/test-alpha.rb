@@ -1,5 +1,5 @@
 # Run with bundle exec ruby scripts/test-alpha.rb. Apple and archive boundaries
-# are fixtures; notes selection and release-marker pushes use real temporary git.
+# are fixtures; notes selection and unchanged tags use real temporary git.
 require "fastlane"
 require "pilot"
 require "tmpdir"
@@ -42,7 +42,7 @@ end
 
 root = ReleaseSupport::ROOT
 fastfile = Fastlane::FastFile.new(File.join(root, "fastlane/Fastfile"))
-saved_env = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY GITHUB_OUTPUT GITHUB_STEP_SUMMARY].to_h { |key| [key, ENV[key]] }
+saved_env = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY GITHUB_STEP_SUMMARY].to_h { |key| [key, ENV[key]] }
 ENV["ASC_KEY_ID"] = "TESTKEY"
 ENV["ASC_ISSUER_ID"] = "TESTISSUER"
 ENV["ASC_PRIVATE_KEY"] = OpenSSL::PKey::EC.generate("prime256v1").to_pem
@@ -104,8 +104,6 @@ begin
     FileUtils.cp_r(File.join(root, "Intent.xcodeproj"), dir)
     FileUtils.mkdir_p(File.join(dir, "scripts"))
     FileUtils.cp(File.join(root, "scripts/release_notes.py"), File.join(dir, "scripts"))
-    FileUtils.mkdir_p(File.join(dir, ".github/scripts"))
-    FileUtils.cp(File.join(root, ".github/scripts/push-testflight-tag.sh"), File.join(dir, ".github/scripts"))
     ReleaseSupport.send(:remove_const, :ROOT)
     ReleaseSupport.const_set(:ROOT, dir)
     git = ->(*args) { command("git", *args, chdir: dir) }
@@ -117,19 +115,15 @@ begin
         chdir: dir, env: { "GIT_COMMITTER_DATE" => date })
     end
     commit.call("chore: root", "2000-01-01T00:00:00Z")
-    first = git.call("rev-parse", "HEAD")
-    git.call("tag", "testflight/alpha/9")
+    git.call("tag", "1.1.3")
     commit.call("fix: earlier change", "2000-01-03T06:00:00Z")
     commit.call("fix: previous change", "2000-01-03T12:00:00Z")
-    previous = git.call("rev-parse", "HEAD")
-    git.call("tag", "testflight/alpha/10")
-    git.call("tag", "testflight/alpha/not-a-build")
     commit.call("feat: newest change (#42)", "2000-01-04T00:00:00Z")
     head = git.call("rev-parse", "HEAD")
+    original_tags = git.call("show-ref", "--tags")
     bare = File.join(dir, "remote.git")
     command("git", "init", "--bare", "--quiet", bare, chdir: dir)
     git.call("remote", "add", "origin", bare)
-    ENV["GITHUB_OUTPUT"] = File.join(dir, "outputs")
     ENV["GITHUB_STEP_SUMMARY"] = File.join(dir, "summary")
     internal = Spaceship::ConnectAPI::BetaGroup.new("alpha-internal", { "name" => "Alpha", "isInternalGroup" => true })
     external = Spaceship::ConnectAPI::BetaGroup.new("alpha-external", { "name" => "Alpha", "isInternalGroup" => false })
@@ -139,32 +133,32 @@ begin
       uploaded.clear
       remote_groups.replace([external, internal])
       failure = nil
-      File.write(ENV.fetch("GITHUB_OUTPUT"), "")
       File.write(ENV.fetch("GITHUB_STEP_SUMMARY"), "")
       Fastlane::Actions.lane_context.clear
     end
     run = ->(**options) { fastfile.runner.execute(:alpha, :ios, options) }
     reset.call
-    run.call(upload: "false", defer_tag: true)
+    run.call(upload: "false")
     assert_equal(["build:ios", "build:visionos"], events)
-    assert_equal("", File.read(ENV.fetch("GITHUB_OUTPUT")))
+    assert_equal(original_tags, git.call("show-ref", "--tags"))
     assert_equal("", git.call("ls-remote", "--tags", "origin"))
     summary = File.read(ENV.fetch("GITHUB_STEP_SUMMARY"))
+    raise "Missing build commit" unless summary.include?("Commit: #{head}")
     raise "Missing dry-run pair/notes/status" unless summary.include?("(1)") && summary.include?("newest change (#42)") && summary.include?("visionos: archived; not uploaded")
     puts "PASS: upload:false archives both, prints notes/pair, and does not upload or tag"
 
     reset.call
-    run.call(upload: true, defer_tag: true)
+    run.call(upload: true)
     assert_equal(%w[build:ios build:visionos upload:IOS group:IOS upload:VISION_OS group:VISION_OS], events)
-    assert_equal("tag=testflight/alpha/1\ncommit=#{head}\n", File.read(ENV.fetch("GITHUB_OUTPUT")))
+    assert_equal(original_tags, git.call("show-ref", "--tags"))
     assert_equal("", git.call("ls-remote", "--tags", "origin"))
-    puts "PASS: both archives precede uploads, internal group IDs exclude external Alpha, outputs capture built commit"
+    puts "PASS: both archives precede uploads, internal group IDs exclude external Alpha, and no tags are created or pushed"
 
     ["build:visionos", "upload:VISION_OS", "group:VISION_OS"].each do |scenario|
       reset.call
       failure = scenario
-      assert_error("fixture") { run.call(upload: true, defer_tag: true) }
-      assert_equal("", File.read(ENV.fetch("GITHUB_OUTPUT")))
+      assert_error("fixture") { run.call(upload: true) }
+      assert_equal(original_tags, git.call("show-ref", "--tags"))
       assert_equal("", git.call("ls-remote", "--tags", "origin"))
       summary = File.read(ENV.fetch("GITHUB_STEP_SUMMARY"))
       if scenario.start_with?("build:")
@@ -188,35 +182,8 @@ begin
     assert_equal([], events)
     puts "PASS: missing/ambiguous internal groups and invalid upload options fail closed"
 
-    reset.call
-    run.call(upload: true)
-    assert_equal("#{head}\trefs/tags/testflight/alpha/1", git.call("ls-remote", "--tags", "origin"))
-    TestflightRelease.push_tag("testflight/alpha/1", head)
-    assert_error("tagging failed") { TestflightRelease.push_tag("testflight/alpha/1", previous) }
-    puts "PASS: successful lane pushes the captured commit; repeat tagging is safe and conflicting tags are refused"
-
-    git.call("tag", "-d", "testflight/alpha/9", "testflight/alpha/10", "testflight/alpha/not-a-build")
-    mismatches = []
-    [["no marker", nil], ["distant marker", first], ["already shipped commit", head]].each do |scenario, marker|
-      git.call("tag", "testflight/alpha/11", marker) if marker
-      actual = TestflightRelease.notes(channel: "alpha", head: head)
-      mismatches << "#{scenario}: #{actual.inspect}" unless actual == "Features\n- newest change (#42)\n"
-      git.call("tag", "-d", "testflight/alpha/11") if marker
-    end
-    raise "Alpha notes included the wrong commits: #{mismatches.join('; ')}" unless mismatches.empty?
-    assert_error("Release notes failed") { TestflightRelease.notes(channel: "alpha", head: "missing-commit") }
-    puts "PASS: Alpha notes contain only the build commit with absent, distant, or same-commit markers"
-
-    git.call("tag", "testflight/beta/9", first)
-    git.call("tag", "testflight/beta/10", previous)
-    assert_equal("Features\n- newest change (#42)\n", TestflightRelease.notes(channel: "beta", head: head))
-    git.call("tag", "testflight/beta/11", head)
-    assert_equal("No changes.\n", TestflightRelease.notes(channel: "beta", head: head))
-    assert_error("Git tag failed") { TestflightRelease.notes(channel: "beta", head: "missing-commit") }
-    git.call("tag", "-d", "testflight/beta/10", "testflight/beta/11")
-    assert_equal("Features\n- newest change (#42)\n\nFixes\n- earlier change\n- previous change\n",
-      TestflightRelease.notes(channel: "beta", head: head))
-    puts "PASS: shared range selection still uses the latest numeric marker and preserves empty/error behavior"
+    assert_error("Release notes failed") { TestflightRelease.notes(head: "missing-commit") }
+    puts "PASS: invalid build commits fail instead of uploading without notes"
   end
 ensure
   ReleaseSupport.send(:remove_const, :ROOT)
