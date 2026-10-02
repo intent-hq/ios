@@ -77,12 +77,60 @@ extension AppCoordinatorTests {
         #expect(retargeted == nil)
     }
 
-    private func historyEntry(on connectionId: UUID) -> AgentHistoryEntry {
+    @Test @MainActor func fetchedWorkspaceListDropsHistoryForRemovedWorkspaces() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        fake.simulateConnect()
+        let coordinator = AppCoordinator(
+            workspaceStore: store,
+            connection: fake,
+            backendID: Self.windowBackend,
+            persistence: persistence
+        )
+        let here = Self.windowBackend.connectionID
+        let elsewhere = UUID()
+        for (connectionId, workspaceId) in [
+            (here, "kept"), (here, "deleted"), (here, "archived"), (elsewhere, "deleted")
+        ] {
+            coordinator.agentHistory.record(historyEntry(on: connectionId, workspaceId: workspaceId, agentId: "agent-\(workspaceId)"))
+        }
+
+        store.publishFetchedWorkspaces([
+            Self.makeWorkspace(id: "kept"),
+            Self.makeWorkspace(id: "archived", status: "archived")
+        ])
+
+        try await waitUntil("history pruned after the workspace list loads") {
+            coordinator.agentHistory.entries.count == 2
+        }
+        let remaining = coordinator.agentHistory.entries.map { "\($0.connectionId == here ? "here" : "elsewhere")/\($0.workspaceId)" }
+        #expect(Set(remaining) == ["here/kept", "elsewhere/deleted"])
+    }
+
+    @Test @MainActor func disconnectedWindowNeverPrunesHistory() {
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: FakeConnectionManager(),
+            backendID: Self.windowBackend,
+            persistence: persistence
+        )
+        coordinator.agentHistory.record(historyEntry(on: Self.windowBackend.connectionID))
+
+        coordinator.pruneAgentHistory(keeping: [])
+
+        #expect(coordinator.agentHistory.entries.count == 1)
+    }
+
+    private func historyEntry(
+        on connectionId: UUID,
+        workspaceId: String = "workspace-1",
+        agentId: String = "agent-1"
+    ) -> AgentHistoryEntry {
         AgentHistoryEntry(
             connectionId: connectionId,
-            workspaceId: "workspace-1",
+            workspaceId: workspaceId,
             workspaceTitle: "Payments",
-            agentId: "agent-1",
+            agentId: agentId,
             agentName: "Builder",
             visitedAt: .now
         )

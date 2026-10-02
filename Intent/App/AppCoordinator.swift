@@ -426,6 +426,7 @@ extension AppCoordinator {
                 // Only validate after workspaces have been fetched at least once
                 guard dependencies.workspaceStore.lastUpdated != nil else { return }
                 validateCurrentWorkspaceExists(in: dependencies.workspaceStore.workspaces)
+                pruneAgentHistory(keeping: dependencies.workspaceStore.workspaces)
             }
         }
     }

@@ -30,6 +30,15 @@ nonisolated enum AgentHistory {
         return Array(([visit] + others).prefix(limit))
     }
 
+    /// Drops one device's entries whose workspace is no longer in its workspace list.
+    static func pruning(
+        _ entries: [AgentHistoryEntry],
+        connectionId: UUID,
+        keepingWorkspaceIDs workspaceIDs: Set<String>
+    ) -> [AgentHistoryEntry] {
+        entries.filter { $0.connectionId != connectionId || workspaceIDs.contains($0.workspaceId) }
+    }
+
     /// Entries whose connection is still saved; forgotten devices drop out.
     static func visible(_ entries: [AgentHistoryEntry], savedConnectionIDs: Set<UUID>) -> [AgentHistoryEntry] {
         entries.filter { savedConnectionIDs.contains($0.connectionId) }

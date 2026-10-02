@@ -43,6 +43,22 @@ struct AgentHistoryTests {
         #expect(updated.map(\.agentId) == ["new", "a", "b"])
     }
 
+    @Test func pruningDropsOnlyThatDevicesMissingWorkspaces() {
+        let history = [
+            entry("kept"),
+            AgentHistoryEntry(
+                connectionId: Self.phone, workspaceId: "gone", workspaceTitle: nil,
+                agentId: "removed", agentName: "removed", visitedAt: .now
+            ),
+            AgentHistoryEntry(
+                connectionId: Self.laptop, workspaceId: "gone", workspaceTitle: nil,
+                agentId: "other-device", agentName: "other-device", visitedAt: .now
+            )
+        ]
+        let pruned = AgentHistory.pruning(history, connectionId: Self.phone, keepingWorkspaceIDs: ["workspace"])
+        #expect(pruned.map(\.agentId) == ["kept", "other-device"])
+    }
+
     @Test func forgottenDevicesAreHidden() {
         let visible = AgentHistory.visible(
             [entry("a"), entry("b", on: Self.laptop)],
