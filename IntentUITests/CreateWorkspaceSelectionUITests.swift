@@ -32,6 +32,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         let docs = app.buttons["creation.repository.nova-labs/docs"]
         XCTAssertTrue(docs.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(repository.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(docs.isHittable)
         docs.tap()
         XCTAssertTrue(docs.isSelected)
         attachEvidence(in: app, name: "repository-search-results")
@@ -173,7 +174,9 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         let feature = app.buttons["creation.branch.feature/docs"]
         XCTAssertTrue(feature.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(main.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(feature.isHittable)
         feature.tap()
+        XCTAssertTrue(feature.isSelected)
         attachEvidence(in: app, name: "branch-search-results")
         app.buttons["Clear search"].tap()
         XCTAssertTrue(main.waitForExistence(timeout: Self.elementTimeout))

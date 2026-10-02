@@ -27,7 +27,7 @@ struct CreateWorkspaceBranchStepView: View {
                 onLeadingAction: { dismiss() },
                 onNext: onNext
             )
-            CreateWorkspaceSelectionPage(title: "Select Branch", titleIdentifier: "creation.branchTitle") {
+            CreateWorkspaceSelectionPage(title: "Select Branch", titleIdentifier: "creation.branchTitle", searchText: searchText) {
                 content
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -66,6 +66,7 @@ struct CreateWorkspaceBranchStepView: View {
             VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
                 sourceSection
                 branchList
+                    .id(CreateWorkspaceScrollTarget.searchResults)
             }
         }
     }

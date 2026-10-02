@@ -42,7 +42,7 @@ struct GitHubRepoPickerView: View {
     }
 
     var body: some View {
-        CreateWorkspaceSelectionPage(title: "Select Repository", titleIdentifier: "creation.repositoryTitle") {
+        CreateWorkspaceSelectionPage(title: "Select Repository", titleIdentifier: "creation.repositoryTitle", searchText: searchText) {
             Button(action: onCreateRepository) {
                 Label("New Repository", systemImage: "plus")
                     .interFont(Constants.Typography.bodySEmphasized)
@@ -56,6 +56,7 @@ struct GitHubRepoPickerView: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("creation.newRepository")
             content
+                .id(CreateWorkspaceScrollTarget.searchResults)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if store.hasCheckedAuth, store.isConfigured {
@@ -188,28 +189,40 @@ struct GitHubRepoPickerView: View {
     }
 }
 
+enum CreateWorkspaceScrollTarget: Hashable {
+    case searchResults
+}
+
 struct CreateWorkspaceSelectionPage<Content: View>: View {
     let title: LocalizedStringKey
     let titleIdentifier: String
+    var searchText = ""
     @ViewBuilder let content: Content
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
-                Text(title)
-                    .interFont(Constants.Typography.heading2)
-                    .tracking(CreateWorkspaceRepoStyle.titleTracking)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier(titleIdentifier)
-                content
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
+                    Text(title)
+                        .interFont(Constants.Typography.heading2)
+                        .tracking(CreateWorkspaceRepoStyle.titleTracking)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier(titleIdentifier)
+                    content
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(CreateWorkspaceFormStyle.pagePadding)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(CreateWorkspaceFormStyle.pagePadding)
+            #if !os(visionOS)
+            .scrollDismissesKeyboard(.interactively)
+            #endif
+            .onChange(of: searchText) { _, query in
+                if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    proxy.scrollTo(CreateWorkspaceScrollTarget.searchResults, anchor: .top)
+                }
+            }
         }
-        #if !os(visionOS)
-        .scrollDismissesKeyboard(.interactively)
-        #endif
         .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
     }
