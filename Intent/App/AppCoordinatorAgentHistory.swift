@@ -15,12 +15,23 @@ extension AppCoordinator {
         ))
     }
 
-    /// Forgets a workspace this device reported deleted or archived. Only an
-    /// explicit id is trusted: pairing can briefly route another daemon's data
-    /// through this window, and that daemon's ids never match these entries.
+    /// Forgets a workspace reported deleted or archived, but only when the
+    /// report came from this window's own device: a sheet pairing can borrow
+    /// the shared socket, and transfers keep workspace ids across devices.
     func forgetHistory(ofWorkspace workspaceId: String) {
-        guard let connectionID = windowConnectionID else { return }
+        guard let connectionID = windowConnectionID, socketReachesWindowDevice else { return }
         agentHistory.removeWorkspace(workspaceId, on: connectionID)
+    }
+
+    /// The shared socket is admitted with this window's saved credentials and
+    /// no pairing attempt owns it, so its events describe this device.
+    private var socketReachesWindowDevice: Bool {
+        let connection = dependencies.connection
+        guard connection.connectionState == .connected,
+              connection.pairingAttemptID == nil,
+              let admission = connection.admission,
+              let saved = windowConnection else { return false }
+        return admission.token == saved.token && admission.fingerprint == saved.server.certFingerprint
     }
 
     /// History entries this window can offer: the device must still be saved.

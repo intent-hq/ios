@@ -78,44 +78,57 @@ extension AppCoordinatorTests {
     }
 
     @Test(arguments: ["deleted", "archived"])
-    @MainActor func removedWorkspaceEventDropsThisDevicesHistoryForIt(removal: String) {
-        let data: [String: Any] = removal == "deleted"
-            ? ["workspaceId": "gone"]
-            : ["workspaceId": "gone", "changes": ["archived": true]]
-        let event: [String: Any] = [
-            "type": removal == "deleted" ? "workspace:deleted" : "workspace:updated",
-            "workspaceId": "gone",
-            "data": data
-        ]
-        let store = WorkspaceStore(forTesting: true)
-        let coordinator = AppCoordinator(
-            workspaceStore: store,
-            connection: FakeConnectionManager(),
-            backendID: Self.windowBackend,
-            persistence: persistence
+    @MainActor func removedWorkspaceEventDropsThisDevicesHistoryForIt(removal: String) async throws {
+        let fixture = makeRemovalCoordinator()
+        try await fixture.fake.connect(
+            hosts: fixture.saved.server.hosts,
+            port: fixture.saved.server.port,
+            token: fixture.saved.token,
+            certFingerprint: fixture.saved.server.certFingerprint,
+            tcAddress: nil
         )
-        let here = Self.windowBackend.connectionID
-        let elsewhere = UUID()
-        coordinator.agentHistory.record(historyEntry(on: here, workspaceId: "kept", agentId: "kept"))
-        coordinator.agentHistory.record(historyEntry(on: here, workspaceId: "gone", agentId: "removed"))
-        coordinator.agentHistory.record(historyEntry(on: elsewhere, workspaceId: "gone", agentId: "other-device"))
+        let here = fixture.saved.id
+        fixture.coordinator.agentHistory.record(historyEntry(on: here, workspaceId: "kept", agentId: "kept"))
+        fixture.coordinator.agentHistory.record(historyEntry(on: here, workspaceId: "gone", agentId: "removed"))
+        fixture.coordinator.agentHistory.record(historyEntry(on: UUID(), workspaceId: "gone", agentId: "other-device"))
 
-        store.handleEvent("event", params: ["event": event] as [String: Any])
+        fixture.store.handleEvent("event", params: ["event": removalEvent(removal)] as [String: Any])
 
-        #expect(Set(coordinator.agentHistory.entries.map(\.agentId)) == ["kept", "other-device"])
+        #expect(Set(fixture.coordinator.agentHistory.entries.map(\.agentId)) == ["kept", "other-device"])
     }
 
-    @Test @MainActor func unrelatedWorkspaceUpdatesKeepHistory() {
-        let store = WorkspaceStore(forTesting: true)
-        let coordinator = AppCoordinator(
-            workspaceStore: store,
-            connection: FakeConnectionManager(),
-            backendID: Self.windowBackend,
-            persistence: persistence
-        )
-        coordinator.agentHistory.record(historyEntry(on: Self.windowBackend.connectionID, workspaceId: "kept"))
+    @Test(arguments: ["pairing", "otherDevice", "disconnected"])
+    @MainActor func removalEventsKeepHistoryUnlessTheSocketReachesThisDevice(socket: String) async throws {
+        let fixture = makeRemovalCoordinator()
+        switch socket {
+        case "pairing":
+            try await PairingConnectionContext.$attemptID.withValue(UUID()) {
+                try await fixture.fake.connect(
+                    hosts: fixture.saved.server.hosts,
+                    port: fixture.saved.server.port,
+                    token: fixture.saved.token,
+                    certFingerprint: fixture.saved.server.certFingerprint,
+                    tcAddress: nil
+                )
+            }
+        case "otherDevice":
+            try await fixture.fake.connect(hosts: ["10.0.0.2"], port: 4200, token: "tok-other", certFingerprint: nil, tcAddress: nil)
+        default:
+            break
+        }
+        fixture.coordinator.agentHistory.record(historyEntry(on: fixture.saved.id, workspaceId: "gone", agentId: "kept"))
 
-        store.handleEvent("event", params: [
+        fixture.store.handleEvent("event", params: ["event": removalEvent("deleted")] as [String: Any])
+
+        #expect(fixture.coordinator.agentHistory.entries.count == 1)
+    }
+
+    @Test @MainActor func unrelatedWorkspaceUpdatesKeepHistory() async throws {
+        let fixture = makeRemovalCoordinator()
+        try await fixture.fake.connect(hosts: fixture.saved.server.hosts, port: fixture.saved.server.port, token: fixture.saved.token, certFingerprint: nil, tcAddress: nil)
+        fixture.coordinator.agentHistory.record(historyEntry(on: fixture.saved.id, workspaceId: "kept"))
+
+        fixture.store.handleEvent("event", params: [
             "event": [
                 "type": "workspace:updated",
                 "workspaceId": "kept",
@@ -123,7 +136,32 @@ extension AppCoordinatorTests {
             ] as [String: Any]
         ] as [String: Any])
 
-        #expect(coordinator.agentHistory.entries.count == 1)
+        #expect(fixture.coordinator.agentHistory.entries.count == 1)
+    }
+
+    @MainActor
+    private func makeRemovalCoordinator() -> HistoryRemovalFixture {
+        let saved = persistence.upsertConnection(Self.makeConnection(port: 4100))
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: store,
+            connection: fake,
+            backendID: BackendID(saved.id),
+            persistence: persistence
+        )
+        return HistoryRemovalFixture(coordinator: coordinator, store: store, fake: fake, saved: saved)
+    }
+
+    private func removalEvent(_ removal: String) -> [String: Any] {
+        let data: [String: Any] = removal == "deleted"
+            ? ["workspaceId": "gone"]
+            : ["workspaceId": "gone", "changes": ["archived": true]]
+        return [
+            "type": removal == "deleted" ? "workspace:deleted" : "workspace:updated",
+            "workspaceId": "gone",
+            "data": data
+        ]
     }
 
     private func historyEntry(
@@ -148,4 +186,12 @@ extension AppCoordinatorTests {
             registerEvents: false
         )
     }
+}
+
+@MainActor
+private struct HistoryRemovalFixture {
+    let coordinator: AppCoordinator
+    let store: WorkspaceStore
+    let fake: FakeConnectionManager
+    let saved: StoredConnection
 }
