@@ -6,7 +6,7 @@ import UIKit
 
 /// Pure mapping behind the workspace status image (intent-hq/intent#3868):
 /// which workspaces render one, how the fetch is keyed so replacements and
-/// removals refresh, and how each placement degrades when the asset fails.
+/// removals refresh, and the detail image's presentation.
 @MainActor
 struct WorkspaceStatusImageViewTests {
     private typealias Layout = WorkspaceStatusImageLayout
@@ -58,25 +58,13 @@ struct WorkspaceStatusImageViewTests {
         #expect(base != Layout.loadKey(workspaceId: "ws-1", assetId: "a.png", attempt: 1))
     }
 
-    @Test func cardHidesAFailedImageWhileDetailShowsARetryState() {
-        // The list row has no room for an error affordance: a broken asset
-        // collapses to the plain row (desktop card parity). The detail
-        // header keeps a clear, non-broken placeholder the user can retry.
-        #expect(Layout.hidesOnFailure(.card))
-        #expect(!Layout.hidesOnFailure(.detail))
+    @Test func detailImageHasAccessibilityIdentifierAndLabel() {
+        #expect(Layout.accessibilityIdentifier == "workspaceDetail.statusImage")
+        #expect(Layout.accessibilityLabel == "Workspace status image")
     }
 
-    @Test func placementsHaveDistinctAccessibilityIdentifiers() {
-        #expect(Layout.accessibilityIdentifier(for: .card) == "workspaceRow.statusImage")
-        #expect(Layout.accessibilityIdentifier(for: .detail) == "workspaceDetail.statusImage")
-        #expect(Layout.accessibilityLabel(for: .card) == "Workspace status image")
-        #expect(Layout.accessibilityLabel(for: .detail) == "Workspace status image")
-    }
-
-    @Test func detailImageIsBoundedAndCardThumbnailIsSquare() {
+    @Test func detailImageIsBounded() {
         #expect(Layout.detailMaxHeight > 0)
-        #expect(Layout.cardThumbnailSide > 0)
-        #expect(Layout.cardThumbnailSide < Layout.detailMaxHeight)
     }
 
     // MARK: - Hosted: a superseded fetch must not overwrite its replacement
@@ -189,7 +177,6 @@ struct WorkspaceStatusImageViewTests {
                 WorkspaceStatusImageView(
                     workspaceId: "ws-1",
                     assetId: assetId,
-                    style: .detail,
                     loader: loader
                 )
                 .frame(width: 390, height: 300, alignment: .topLeading)
@@ -202,7 +189,7 @@ struct WorkspaceStatusImageViewTests {
             view.layoutIfNeeded()
             return SyntheticBadgeHost.accessibilityElements(in: view).contains { element in
                 SyntheticBadgeHost.accessibilityIdentifier(of: element)
-                    == WorkspaceStatusImageLayout.accessibilityIdentifier(for: .detail)
+                    == WorkspaceStatusImageLayout.accessibilityIdentifier
             }
         }
 

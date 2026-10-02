@@ -34,8 +34,6 @@ extension Constants.WorkspaceDetail {
 }
 
 extension WorkspaceStatusImageLayout {
-    /// Row thumbnail side (matches the list's status-icon scale).
-    nonisolated static let cardThumbnailSide: CGFloat = 44
     /// Detail banner cap — the desktop card's `max-h-48`.
     nonisolated static let detailMaxHeight: CGFloat = 192
     nonisolated static let cornerRadius: CGFloat = 8

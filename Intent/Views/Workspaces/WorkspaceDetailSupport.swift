@@ -210,7 +210,7 @@ struct WorkspaceDetailHeader: View {
             statusMessage: workspace?.statusMessage
         )
         if let assetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
-            WorkspaceStatusImageView(workspaceId: workspaceId, assetId: assetId, style: .detail)
+            WorkspaceStatusImageView(workspaceId: workspaceId, assetId: assetId)
                 .padding(.horizontal, WorkspaceDetailStyle.pageInset)
                 .padding(.bottom, Constants.WorkspaceDetail.statusImageBottomPadding)
         }
