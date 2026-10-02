@@ -2,7 +2,7 @@ import SwiftUI
 
 struct CreateWorkspaceSourceCard: View {
     let repositoryFullName: String
-    let branch: String
+    let branch: String?
     let onEdit: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -18,8 +18,13 @@ struct CreateWorkspaceSourceCard: View {
                 folderIcon
                 VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
                     trimmedText(Text(repositoryFullName))
-                    trimmedText(Text("off branch \(Text(branch).foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme)))"))
-                        .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
+                    if let branch {
+                        trimmedText(Text("off branch \(Text(branch).foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme)))"))
+                            .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
+                    } else {
+                        trimmedText(Text("New repository on your connected computer"))
+                            .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
+                    }
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -40,8 +45,11 @@ struct CreateWorkspaceSourceCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("creation.sourceCard")
-        .accessibilityLabel("Source. Repository: \(repositoryFullName). Branch: \(branch)")
-        .accessibilityHint("Change the branch, or go back again to change the repository.")
+        .accessibilityLabel(branch.map { String(localized: "Source. Repository: \(repositoryFullName). Branch: \($0)") }
+            ?? String(localized: "Source. New repository: \(repositoryFullName)"))
+        .accessibilityHint(branch == nil
+            ? Text("Change the repository name or parent folder.")
+            : Text("Change the branch, or go back again to change the repository."))
     }
 
     private func trimmedText(_ text: Text) -> some View {
@@ -63,5 +71,25 @@ struct CreateWorkspaceSourceCard: View {
             .frame(width: folderSize, height: folderSize)
             .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
             .accessibilityHidden(true)
+    }
+}
+
+extension CreateWorkspaceView {
+    struct CreationContextRow: Equatable, Identifiable {
+        let label: String
+        let value: String
+
+        var id: String { label }
+    }
+
+    static func creationContextRows(
+        repositoryFullName: String,
+        branch: String? = nil
+    ) -> [CreationContextRow] {
+        var rows = [CreationContextRow(label: "Repository", value: repositoryFullName)]
+        if let branch {
+            rows.append(CreationContextRow(label: "Branch", value: branch))
+        }
+        return rows
     }
 }

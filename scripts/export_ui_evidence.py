@@ -11,6 +11,32 @@ import tempfile
 
 
 CAPTURES = {
+    "WorkspaceSearchUITests": {
+        "testSearchAboveKeyboardHidesAssistantUntilClosed": (
+            "Workspace search above keyboard without Assistant launcher",
+        ),
+    },
+    "CreateNewRepositoryUITests": {
+        "testNewRepositoryWithoutGitHubPreservesDraftAndRetriesCreation": (
+            "new-repository-name-with-keyboard", "new-repository-create-with-keyboard", "new-repository-draft-after-retry",
+            "new-repository-creating", "new-repository-create-recovered",
+        ),
+    },
+    "CreateWorkspaceSelectionUITests": {
+        "testLoadingTransitionsKeepSelectionTitlesStable": (
+            "repository-loading", "repository-loaded", "branch-loading", "branch-loaded",
+        ),
+        "testRepositorySelectionSearchAndClose": (
+            "repository-selected", "repository-search-opened", "repository-search-results",
+        ),
+        "testBackThenForwardPreservesProviderAndNamedModelThroughRefresh": (
+            "selected-repository", "selected-branch", "branch-search-opened", "branch-search-results",
+            "selected-before-back", "draft-after-source-edit",
+        ),
+    },
+    "CreateWorkspacePreferencesUITests": {
+        "testCancelledFormRemembersAgentSettings": ("remembered-agent-settings",),
+    },
     "WorkspaceChangesUITests": {
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (
             "workspace-changes", "unstaged-diff", "commit-diff",

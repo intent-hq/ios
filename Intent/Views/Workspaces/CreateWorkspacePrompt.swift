@@ -4,6 +4,7 @@ import SwiftUI
 struct CreateWorkspacePrompt: View {
     @Binding var text: String
     @Bindable var attachments: WorkspaceCreationImages
+    let focus: WorkspacePromptFocus
     @State private var showsPhotos = false
     @State private var showsFiles = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
@@ -11,7 +12,7 @@ struct CreateWorkspacePrompt: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            WorkspaceCreationPromptEditor(text: $text, attachments: attachments)
+            WorkspaceCreationPromptEditor(text: $text, attachments: attachments, focus: focus)
             if !attachments.images.isEmpty {
                 ScrollView(.horizontal) {
                     HStack {
@@ -64,6 +65,7 @@ struct CreateWorkspacePrompt: View {
 private struct WorkspaceCreationPromptEditor: View {
     @Binding var text: String
     let attachments: WorkspaceCreationImages
+    let focus: WorkspacePromptFocus
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .body) private var bodyTracking = CreateWorkspaceFormStyle.bodyTracking
@@ -79,7 +81,8 @@ private struct WorkspaceCreationPromptEditor: View {
                 text: $text,
                 minimumHeight: minimumEditorHeight,
                 allowsImagePaste: !attachments.isImporting,
-                onPasteImages: attachments.addPaste
+                onPasteImages: attachments.addPaste,
+                focus: focus
             )
             if text.isEmpty {
                 Text("What should we work on?")
