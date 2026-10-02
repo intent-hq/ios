@@ -13,7 +13,7 @@ nonisolated struct AgentHistoryEntry: Codable, Equatable, Identifiable, Sendable
 }
 
 nonisolated enum AgentHistory {
-    static let maximumEntries = 50
+    static let maximumEntries = 30
 
     /// Moves the visit to the front. A visit made before the workspace list
     /// loaded keeps the title recorded on an earlier visit.

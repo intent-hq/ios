@@ -8,7 +8,10 @@ struct AgentHistoryList: View {
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var avatarSize = ConnectionSwitcherStyle.iconSize
+    /// Tallest rendered row; rows grow with Dynamic Type, so the cap is measured.
+    @State private var rowHeight: CGFloat = 0
 
     private var entries: [AgentHistoryEntry] { coordinator.visibleAgentHistory }
 
@@ -16,26 +19,38 @@ struct AgentHistoryList: View {
         Constants.Connections.sectionForeground(for: colorScheme, contrast: contrast)
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.headingSpacing) {
-                header
+    /// Rows past the visible count scroll beneath the fixed header.
+    private var rowsMaxHeight: CGFloat? {
+        guard rowHeight > 0 else { return nil }
+        let rows = CGFloat(ConnectionSwitcherStyle.historyVisibleRows)
+        return rows * rowHeight + (rows - 1) * ConnectionSwitcherStyle.rowSpacing
+    }
 
-                if entries.isEmpty {
-                    Text("Agents you open on any device appear here.")
-                        .interFont(Constants.Typography.bodyS)
-                } else {
+    var body: some View {
+        VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.headingSpacing) {
+            header
+
+            if entries.isEmpty {
+                Text("Agents you open on any device appear here.")
+                    .interFont(Constants.Typography.bodyS)
+            } else {
+                ScrollView {
                     VStack(spacing: ConnectionSwitcherStyle.rowSpacing) {
                         ForEach(entries) { entry in
                             row(entry)
+                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                                    rowHeight = max(rowHeight, height)
+                                }
                         }
                     }
                 }
+                .frame(maxHeight: rowsMaxHeight)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .padding(.vertical, ConnectionSwitcherStyle.inset)
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .defaultScrollAnchor(.center, for: .alignment)
+        .padding(.vertical, ConnectionSwitcherStyle.inset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .onChange(of: dynamicTypeSize) { rowHeight = 0 }
         .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
         .padding(.leading, ConnectionSwitcherStyle.trailingInset)
         .padding(.trailing, ConnectionSwitcherStyle.inset)

@@ -13,7 +13,7 @@ final class AgentHistoryStore {
 
     init(persistence: PersistenceManager) {
         self.persistence = persistence
-        entries = persistence.loadAgentHistory()
+        entries = Array(persistence.loadAgentHistory().prefix(AgentHistory.maximumEntries))
     }
 
     func record(_ visit: AgentHistoryEntry) {
