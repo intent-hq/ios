@@ -32,6 +32,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .title) private var headingTracking = CreateWorkspaceFormStyle.headingTracking
     @ScaledMetric(relativeTo: .title) private var headingSize = Constants.Typography.heading2.size
+    @State private var createControlsHeight: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -49,7 +50,10 @@ struct CreateWorkspaceSpecialistStepView: View {
                         .disabled(isCreating)
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { createControls }
+            .overlay(alignment: .bottomTrailing) {
+                createControls
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { createControlsHeight = $0 }
+            }
             if isCreating {
                 creatingOverlay
             }
@@ -83,7 +87,6 @@ struct CreateWorkspaceSpecialistStepView: View {
         .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
         .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
         .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
-        .background(CreateWorkspaceFormStyle.background(for: colorScheme))
     }
 
     private var optionsList: some View {
@@ -100,7 +103,7 @@ struct CreateWorkspaceSpecialistStepView: View {
             .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))
             .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
             .padding(.top, CreateWorkspaceFormStyle.pagePadding)
-            .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
+            .padding(.bottom, CreateWorkspaceFormStyle.pagePadding + createControlsHeight)
         }
         #if !os(visionOS)
         .scrollDismissesKeyboard(.interactively)
