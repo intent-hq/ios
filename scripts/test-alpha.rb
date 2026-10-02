@@ -22,8 +22,8 @@ def assert_error(text)
   raise "Expected failure containing #{text}"
 end
 
-def command(*args, chdir:)
-  output, error, status = Open3.capture3(*args, chdir: chdir)
+def command(*args, chdir:, env: {})
+  output, error, status = Open3.capture3(env, *args, chdir: chdir)
   raise "Fixture command failed: #{error}" unless status.success?
   output.strip
 end
@@ -112,13 +112,17 @@ begin
     git.call("init", "--quiet")
     git.call("config", "user.name", "Release Test")
     git.call("config", "user.email", "release-test@example.invalid")
-    git.call("commit", "--allow-empty", "--quiet", "-m", "chore: root")
+    commit = lambda do |message, date|
+      command("git", "commit", "--allow-empty", "--quiet", "-m", message,
+        chdir: dir, env: { "GIT_COMMITTER_DATE" => date })
+    end
+    commit.call("chore: root", "2000-01-01T00:00:00Z")
     git.call("tag", "testflight/alpha/9")
-    git.call("commit", "--allow-empty", "--quiet", "-m", "fix: previous change")
+    commit.call("fix: previous change", "2000-01-02T00:00:00Z")
     previous = git.call("rev-parse", "HEAD")
     git.call("tag", "testflight/alpha/10")
     git.call("tag", "testflight/alpha/not-a-build")
-    git.call("commit", "--allow-empty", "--quiet", "-m", "feat: newest change (#42)")
+    commit.call("feat: newest change (#42)", "2000-01-04T00:00:00Z")
     head = git.call("rev-parse", "HEAD")
     bare = File.join(dir, "remote.git")
     command("git", "init", "--bare", "--quiet", bare, chdir: dir)
@@ -194,8 +198,11 @@ begin
     assert_error("Git tag failed") { TestflightRelease.notes(channel: "alpha", head: "missing-commit") }
     git.call("tag", "-d", "testflight/alpha/9", "testflight/alpha/10", "testflight/alpha/11")
     first_notes = TestflightRelease.notes(channel: "alpha", head: head)
-    raise "First-run notes lost history" unless first_notes.include?("previous change") && first_notes.include?("newest change (#42)")
-    puts "PASS: notes use numeric Alpha tags, distinguish empty/broken ranges, and bootstrap without a tag"
+    assert_equal("Features\n- newest change (#42)\n", first_notes)
+    git.call("tag", "testflight/alpha/9", "#{previous}^")
+    assert_equal("Features\n- newest change (#42)\n\nFixes\n- previous change\n",
+      TestflightRelease.notes(channel: "alpha", head: head))
+    puts "PASS: notes use numeric Alpha tags, preserve marked ranges, and bootstrap from only the last 24 hours"
   end
 ensure
   ReleaseSupport.send(:remove_const, :ROOT)

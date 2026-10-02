@@ -2,10 +2,12 @@
 """Print TestFlight notes for BASE..HEAD in the current Git repository.
 
 Usage: python3 scripts/release_notes.py BASE HEAD
+       python3 scripts/release_notes.py --last-24-hours HEAD
 Exit codes: 0 = notes, 3 = no commits, 1 = Git error, 2 = usage error.
 First-parent history represents each merged PR once. Maintenance-only ranges
 still produce notes; chore/ci/test commits are otherwise omitted. Truncation
 keeps complete entries and counts omitted entries, not maintenance commits.
+Without a release marker, --last-24-hours uses HEAD's committer time, not now.
 """
 
 import argparse
@@ -31,14 +33,23 @@ def git(*arguments):
 def history(base, head):
     # Resolve refs separately so untrusted input cannot become git-log options
     # or introduce extra revisions/path filters into the requested range.
-    base_sha = git("rev-parse", "--verify", "--end-of-options", base + "^{commit}").strip()
     head_sha = git("rev-parse", "--verify", "--end-of-options", head + "^{commit}").strip()
+    if base is None:
+        revision = head_sha
+        end = int(git("show", "-s", "--format=%ct", head_sha, "--").strip())
+    else:
+        base_sha = git("rev-parse", "--verify", "--end-of-options", base + "^{commit}").strip()
+        revision = f"{base_sha}..{head_sha}"
     output = git(
-        "log", "--first-parent", "--reverse", "--topo-order", "--format=%s%x00%b", "-z",
-        f"{base_sha}..{head_sha}", "--",
+        "log", "--first-parent", "--reverse", "--topo-order", "--format=%ct%x00%s%x00%b", "-z",
+        revision, "--",
     )
     fields = output.split("\0")
-    return list(zip(fields[0:-1:2], fields[1:-1:2]))
+    commits = zip(fields[0:-1:3], fields[1:-1:3], fields[2:-1:3])
+    # Filter every first-parent commit: timestamps can be out of order, so
+    # stopping traversal at the first older commit would lose valid changes.
+    return [(subject, body) for timestamp, subject, body in commits
+            if base is not None or end - 86400 <= int(timestamp) <= end]
 
 
 def entry(subject, body):
@@ -96,9 +107,12 @@ def notes(commits):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("base", help="exclusive base commit or ref")
+    parser.add_argument("--last-24-hours", action="store_true", help="bootstrap from HEAD's last 24 hours")
+    parser.add_argument("base", nargs="?", help="exclusive base commit or ref")
     parser.add_argument("head", help="inclusive head commit or ref")
     args = parser.parse_args()
+    if args.last_24_hours != (args.base is None):
+        parser.error("provide either BASE HEAD or --last-24-hours HEAD")
     try:
         commits = history(args.base, args.head)
     except (OSError, subprocess.CalledProcessError):

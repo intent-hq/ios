@@ -20,14 +20,18 @@ module TestflightRelease
     tags = git("tag", "--merged", head, "--list", "testflight/#{channel}/*").lines.map(&:strip)
     base = tags.select { |tag| tag.match?(%r{\Atestflight/#{Regexp.escape(channel)}/\d+\z}) }
       .max_by { |tag| tag.split("/").last.to_i }
-    unless base
-      # The first migration build has no previous Alpha marker. Include all
-      # history after the initial repository commit rather than invent a tag.
+    if base
+      arguments = [base, head]
+    elsif channel == "alpha"
+      FastlaneCore::UI.message("No previous Alpha tag; notes cover the 24 hours ending at the build commit.")
+      arguments = ["--last-24-hours", "--", head]
+    else
       base = git("rev-list", "--max-parents=0", "--first-parent", head).lines.last.strip
       FastlaneCore::UI.message("No previous #{channel} tag; notes start at repository root #{base}.")
       return "Initial #{channel.capitalize} build.\n" if base == head
+      arguments = [base, head]
     end
-    text, _stderr, status = Open3.capture3("python3", File.join(ReleaseSupport::ROOT, "scripts/release_notes.py"), base, head, chdir: ReleaseSupport::ROOT)
+    text, _stderr, status = Open3.capture3("python3", File.join(ReleaseSupport::ROOT, "scripts/release_notes.py"), *arguments, chdir: ReleaseSupport::ROOT)
     ReleaseSupport.fail!("Release notes failed (exit #{status.exitstatus}); refusing to upload without notes.") unless [0, 3].include?(status.exitstatus)
     text
   end
