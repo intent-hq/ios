@@ -60,6 +60,7 @@ enum CreateWorkspaceRepoStyle {
     static let rowSpacing: CGFloat = 24
     static let rowTextSpacing: CGFloat = 12
     static let rowMinimumHeight: CGFloat = 80
+    static let searchHeight: CGFloat = 56
     static let iconSize: CGFloat = 24
     static let avatarRadius: CGFloat = 8
     static let titleTracking: CGFloat = -0.56

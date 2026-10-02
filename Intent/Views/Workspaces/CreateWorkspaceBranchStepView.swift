@@ -30,6 +30,11 @@ struct CreateWorkspaceBranchStepView: View {
             CreateWorkspaceSelectionPage(title: "Select Branch", titleIdentifier: "creation.branchTitle") {
                 content
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !isLoading, loadError == nil {
+                    CreateWorkspaceSearchFooter(text: $searchText, placeholder: "Search branches", identifier: "creation.branchSearch")
+                }
+            }
         }
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
@@ -59,7 +64,6 @@ struct CreateWorkspaceBranchStepView: View {
             .padding(Constants.CreateWorkspace.errorStatePadding)
         } else {
             VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
-                CreateWorkspaceSelectionSearchField(text: $searchText, placeholder: "Search branches", identifier: "creation.branchSearch")
                 sourceSection
                 branchList
             }

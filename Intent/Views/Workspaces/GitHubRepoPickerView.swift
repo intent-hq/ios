@@ -7,8 +7,7 @@ import SwiftUI
 /// deduped debounced global search results. When GitHub is not connected
 /// (`github.authStatus.isConfigured == false`) the screen shows
 /// desktop-setup guidance for existing repos; the new-repository action
-/// remains available. Recents are
-/// are deliberately auth-gated at render time too: picking a repo needs
+/// remains available. Recents are deliberately auth-gated at render time too: picking a repo needs
 /// GitHub for branch listing and workspace creation either way.
 ///
 /// `store` is the session-owned cache: on a reopen the cached lists render
@@ -58,6 +57,11 @@ struct GitHubRepoPickerView: View {
             .accessibilityIdentifier("creation.newRepository")
             content
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if store.hasCheckedAuth, store.isConfigured {
+                CreateWorkspaceSearchFooter(text: $searchText)
+            }
+        }
         .task {
             await store.loadIfNeeded()
         }
@@ -89,7 +93,6 @@ struct GitHubRepoPickerView: View {
     private var repoList: some View {
         let sections = suggestions
         return VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionHeaderSpacing) {
-            CreateWorkspaceSelectionSearchField(text: $searchText)
             if store.isLoading || pendingSearchQuery != nil, sections.isEmpty {
                 ProgressView {
                     Text("Loading repositories...").interFont(Constants.Typography.bodyS)
@@ -212,6 +215,21 @@ struct CreateWorkspaceSelectionPage<Content: View>: View {
     }
 }
 
+struct CreateWorkspaceSearchFooter: View {
+    @Binding var text: String
+    var placeholder: LocalizedStringKey = "Search GitHub repositories"
+    var identifier = "creation.repositorySearch"
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        CreateWorkspaceSelectionSearchField(text: $text, placeholder: placeholder, identifier: identifier)
+            .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
+            .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
+            .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
+            .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
+    }
+}
+
 struct CreateWorkspaceSelectionSearchField: View {
     @Binding var text: String
     var placeholder: LocalizedStringKey = "Search GitHub repositories"
@@ -222,10 +240,6 @@ struct CreateWorkspaceSelectionSearchField: View {
 
     var body: some View {
         HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: iconSize))
-                .frame(width: iconSize, height: iconSize)
-                .accessibilityHidden(true)
             TextField(placeholder, text: $text)
                 .interFont(Constants.Typography.bodyS)
                 .foregroundStyle(CreateWorkspaceRepoStyle.foreground(for: colorScheme))
@@ -233,7 +247,12 @@ struct CreateWorkspaceSelectionSearchField: View {
                 .autocorrectionDisabled()
                 .submitLabel(.search)
                 .accessibilityIdentifier(identifier)
-            if !text.isEmpty {
+            if text.isEmpty {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: iconSize))
+                    .frame(width: iconSize, height: iconSize)
+                    .accessibilityHidden(true)
+            } else {
                 Button {
                     text = ""
                 } label: {
@@ -250,7 +269,7 @@ struct CreateWorkspaceSelectionSearchField: View {
         }
         .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
         .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
-        .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+        .frame(minHeight: CreateWorkspaceRepoStyle.searchHeight)
         .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(cornerRadius: CreateWorkspaceFormStyle.cornerRadius))
     }
 }

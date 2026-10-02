@@ -11,6 +11,14 @@ import tempfile
 
 
 CAPTURES = {
+    "CreateWorkspaceSelectionUITests": {
+        "testRepositorySelectionSearchAndClose": (
+            "repository-selected", "repository-search-results",
+        ),
+        "testBackThenForwardPreservesProviderAndNamedModelThroughRefresh": (
+            "selected-repository", "selected-branch", "branch-search-results",
+        ),
+    },
     "WorkspaceChangesUITests": {
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (
             "workspace-changes", "unstaged-diff", "commit-diff",
