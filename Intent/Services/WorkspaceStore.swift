@@ -20,10 +20,10 @@ import Observation
         }
     }
 
-    /// Ids of workspaces this backend reported deleted or archived (events or
-    /// this client's own action). Ids are unique across daemons, so consumers
-    /// can act on one without knowing which daemon the socket reaches.
-    @ObservationIgnored let removedWorkspaceIds = PassthroughSubject<String, Never>()
+    /// Ids this backend reported deleted or archived (events or own actions);
+    /// unique across daemons, so consumers need not know which daemon replied.
+    var removedWorkspaceIds: AnyPublisher<String, Never> { removedWorkspaceSubject.eraseToAnyPublisher() }
+    @ObservationIgnored private let removedWorkspaceSubject = PassthroughSubject<String, Never>()
     @ObservationIgnored private var fetchTask: Task<Void, Never>?
     @ObservationIgnored private var fetchRevision = 0
     @ObservationIgnored private var fetchNeedsRefresh = false
@@ -118,7 +118,7 @@ import Observation
             ])
         }
         workspaces.removeAll { $0.id == workspaceId }
-        removedWorkspaceIds.send(workspaceId)
+        removedWorkspaceSubject.send(workspaceId)
         invalidateFetchForEvent()
         await fetchAll()
     }
@@ -270,8 +270,8 @@ extension WorkspaceStore {
         let eventWorkspaceId = event["workspaceId"] as? String
         let data = event["data"] as? [String: Any]
 
-        if let removedId = Self.removedWorkspaceId(type: eventType, workspaceId: eventWorkspaceId, data: data) {
-            removedWorkspaceIds.send(removedId)
+        if let removedId = Self.removedWorkspaceId(type: eventType, workspaceId: eventWorkspaceId, data: data ?? [:]) {
+            removedWorkspaceSubject.send(removedId)
         }
 
         // In-place patches apply in every mode (live or not) and before the
@@ -298,21 +298,6 @@ extension WorkspaceStore {
             break
         case nil:
             AppLog.workspace.debug("[WorkspaceStore] Ignoring unclassified event: \(eventType)")
-        }
-    }
-
-    /// The workspace an event deletes or archives: `workspace:deleted`, or a
-    /// `workspace:updated` whose delta sets `archived: true`.
-    nonisolated static func removedWorkspaceId(type: String, workspaceId: String?, data: [String: Any]?) -> String? {
-        let id = (data?["workspaceId"] as? String) ?? workspaceId
-        switch type {
-        case "workspace:deleted":
-            return id
-        case "workspace:updated":
-            let changes = data?["changes"] as? [String: Any]
-            return changes?["archived"] as? Bool == true ? id : nil
-        default:
-            return nil
         }
     }
 
