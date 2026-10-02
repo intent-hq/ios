@@ -118,10 +118,10 @@ struct AgentHistoryList: View {
         return title
     }
 
-    /// Agent and device; the agent name moves to the title when the workspace is unknown.
+    /// Device, then agent; the agent name moves to the title when the workspace is unknown.
     private func subtitle(for entry: AgentHistoryEntry, showsAgentName: Bool) -> String {
         let device = coordinator.savedConnections.first { $0.id == entry.connectionId }?.displayName
-        return [showsAgentName ? entry.agentName : nil, device]
+        return [device, showsAgentName ? entry.agentName : nil]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
