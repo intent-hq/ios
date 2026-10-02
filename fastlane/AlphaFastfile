@@ -32,8 +32,6 @@ platform :ios do
             distribute_external: false, notify_external_testers: false,
             submit_beta_review: false, wait_processing_timeout_duration: 3600
           )
-          statuses[platform] = "uploaded and processed; commit recording failed"
-          ReleaseProvenance.record_upload(release: release, head: head)
           statuses[platform] = "uploaded and processed; group assignment failed"
           TestflightRelease.distribute(artifact, group)
           statuses[platform] = "uploaded, processed and distributed to internal Alpha"

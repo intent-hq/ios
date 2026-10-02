@@ -109,10 +109,6 @@ begin
     git.call("init", "--bare", remote)
     git.call("remote", "add", "origin", remote)
     git.call("push", "origin", "main")
-    # Tagging behavior has its own public-lane suite; this already-tagged fixture
-    # lets the existing released-version bump cases exercise the no-op path.
-    git.call("tag", "-a", "1.1.6", "-m", "Previously tagged release")
-    git.call("push", "origin", "refs/tags/1.1.6")
     prs = []
     calls = []
     fail_create = false

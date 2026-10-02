@@ -1,32 +1,19 @@
 require_relative "lib/version_bump"
-require_relative "lib/app_store_release"
 
 platform :ios do
-  desc "Check version bumps and exact-commit App Store tags; dry_run makes no remote changes"
+  desc "Open or update the patch-version PR after either platform is submitted; dry_run only reads Apple"
   lane :check_version_bump do |options|
     dry_run = options.fetch(:dry_run, false)
     UI.user_error!("dry_run must be true or false") unless [true, false, "true", "false"].include?(dry_run)
-    dry_run = dry_run == true || dry_run == "true"
-    publish = options.fetch(:publish, true)
-    UI.user_error!("publish must be true or false") unless [true, false, "true", "false"].include?(publish)
-    publish = publish == true || publish == "true"
     app = app_store_connect_app
-    tags = AppStoreRelease.plan(app)
     plan = VersionBump.plan(app, ReleaseSupport.marketing_version)
-    AppStoreRelease.publish(tags, dry_run: dry_run || !publish)
     if plan.nil?
       UI.success("no bump needed")
-    elsif dry_run || !publish
+    elsif dry_run == true || dry_run == "true"
       UI.success("would bump #{plan.fetch(:from)} → #{plan.fetch(:to)}")
     else
       VersionBump.publish(plan)
       UI.success("Version-bump PR ready: #{plan.fetch(:from)} → #{plan.fetch(:to)}")
-    end
-    if ENV["GITHUB_OUTPUT"]
-      File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |file|
-        file.puts("bump_plan=#{JSON.generate(plan)}")
-        file.puts("release_tags=#{JSON.generate(tags)}")
-      end
     end
     plan
   end

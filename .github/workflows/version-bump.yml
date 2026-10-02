@@ -1,4 +1,4 @@
-name: App Store release check
+name: Marketing version bump
 
 on:
   schedule:
@@ -6,12 +6,13 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Print version bumps and exact-commit tags without creating anything
+        description: Read App Store Connect without writing a branch or PR
         type: boolean
         default: true
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 # One writer across scheduled and manual runs; separate from TestFlight uploads.
 concurrency:
@@ -21,14 +22,7 @@ concurrency:
 jobs:
   check-version:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      actions: read
-      statuses: read
-    outputs:
-      bump_plan: ${{ steps.check.outputs.bump_plan }}
-      release_tags: ${{ steps.check.outputs.release_tags }}
+    timeout-minutes: 10
     # Feature branches can exercise the real Apple query, but only the default
     # branch may write the shared automation branch.
     if: github.ref_name == github.event.repository.default_branch || inputs.dry_run
@@ -40,70 +34,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Read-only token also authenticates ls-remote for this private repo.
-          persist-credentials: true
-      - uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-      - name: Release contract tests
-        run: |
-          bundle exec ruby scripts/test-version-bump.rb
-          bundle exec ruby scripts/test-app-store-release.rb
-      - name: Check both App Store versions
-        id: check
-        env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
-          GH_TOKEN: ${{ github.token }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
-        run: bundle exec fastlane ios check_version_bump dry_run:"$DRY_RUN" publish:false
-
-  publish-bump:
-    needs: check-version
-    if: >-
-      github.ref_name == github.event.repository.default_branch &&
-      !(github.event_name == 'workflow_dispatch' && inputs.dry_run) &&
-      needs.check-version.outputs.bump_plan != 'null'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    # Existing PR writer needs both permissions; no Apple credentials here.
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # Optional token allows this PR to trigger CI; fallback cannot.
+          # Optional fine-grained token lets the automated PR trigger normal CI.
+          # GITHUB_TOKEN can create the PR but cannot trigger other workflows.
           token: ${{ secrets.VERSION_BUMP_TOKEN || github.token }}
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
-      - name: Open or update version-bump PR
+      - name: Version-bump contract tests
+        run: bundle exec ruby scripts/test-version-bump.rb
+      - name: Check both App Store versions
         env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
           GH_TOKEN: ${{ secrets.VERSION_BUMP_TOKEN || github.token }}
-          VERSION_BUMP_BASE: ${{ github.event.repository.default_branch }}
-          BUMP_PLAN: ${{ needs.check-version.outputs.bump_plan }}
-        run: bundle exec ruby -rfastlane -r./fastlane/lib/version_bump -e 'VersionBump.publish(JSON.parse(ENV.fetch("BUMP_PLAN"), symbolize_names:true))'
-
-  tag-release:
-    needs: check-version
-    if: >-
-      github.ref_name == github.event.repository.default_branch &&
-      !(github.event_name == 'workflow_dispatch' && inputs.dry_run) &&
-      needs.check-version.outputs.release_tags != '[]'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    # GitHub scopes tokens per job, not per step: only this tag publisher gets
-    # tag-write access. The independent PR writer above has its existing access.
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-      - name: Create annotated App Store release tags
-        env:
-          RELEASE_TAGS: ${{ needs.check-version.outputs.release_tags }}
-        run: bundle exec ruby -rfastlane -r./fastlane/lib/app_store_release -e 'AppStoreRelease.publish(JSON.parse(ENV.fetch("RELEASE_TAGS"), symbolize_names:true), dry_run:false)'
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: bundle exec fastlane ios check_version_bump dry_run:"$DRY_RUN"
