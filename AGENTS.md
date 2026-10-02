@@ -96,8 +96,28 @@ The effective build number overrides local `CURRENT_PROJECT_VERSION`; never deri
 the next build number from the checkout. Repeated Alpha/Beta builds may share an
 unsubmitted marketing version, but every run must use a fresh build number.
 
-Git tags are only for App Store releases, created manually as plain versions
-(for example, `1.1.3`). TestFlight Alpha/Beta builds never create or push tags.
+Git tags are only for App Store releases, using plain version names and annotated
+tags (matching `1.1.3`). The hourly release check automatically tags the exact
+released build commit, starting with the `1.1.4` backfill; older manual history is
+left alone. It checks released iOS and visionOS versions independently of the
+checkout's marketing version, including replaced releases missed by earlier runs.
+Both platforms must agree on their build/commit and produce only one tag. Existing
+tags are never moved or overwritten. Missing or ambiguous provenance fails the job
+rather than guessing from the latest commit or a similarly numbered CI run.
+
+Xcode Cloud provenance comes from the app's `ciProduct` and its `ciBuildRuns`,
+filtered by the released App Store build resource ID, using `sourceCommit.commitSha`.
+TestFlight Alpha/Beta builds never create or push tags. After each processed upload,
+the shared `ReleaseProvenance.record_upload` helper writes a successful GitHub
+commit status with context `TestFlight` and description `X.Y.Z (build)` on the
+built commit, even if the other platform or group assignment later fails.
+`upload:false` records nothing. Future Beta lanes must call the same helper after
+each processed upload. Lookup scans paginated `testflight.yml` run heads and their
+full status history (not only the latest status), requiring one exact match. Keep
+that Actions history; deleted runs or missing statuses can make provenance
+unresolvable and require human inspection. Upload jobs need `statuses:write`, not
+`contents:write`.
+
 Alpha release notes contain only the commit being built; the notes generator also
 supports an explicit range between two refs for Beta releases.
 
@@ -108,12 +128,19 @@ or updates one PR on `automation/marketing-version-bump`, titled
 and configurations; review and merge it before another TestFlight build. The upload
 guard blocks closed versions until the bump is merged. Unknown Apple states fail
 for human inspection instead of guessing. Submission and App Store release stay
-human-controlled; this job never uploads or submits anything.
+human-controlled; this job never uploads or submits anything. The read-only
+`check-version` job plans both bump PRs and tags; separate publisher jobs have
+write access (contents for tags, contents/PRs for the existing bump writer).
+`publish:false` prints/exports plans without publishing them.
 
 For a read-only check against real Apple data, dispatch `version-bump.yml` with
 `dry_run=true` (also the manual default), or run
 `bundle exec fastlane ios check_version_bump dry_run:true` with the ASC API-key
-environment variables configured. The workflow runs on Linux without Xcode.
+environment variables and GitHub CLI authentication configured. This also prints
+each missing annotated tag and its exact commit without creating tags or PRs.
+The workflow runs on Linux without Xcode. Stubbed release tests are
+`bundle exec ruby scripts/test-app-store-release.rb`, `scripts/test-alpha.rb`,
+and `scripts/test-version-bump.rb` (all run with `bundle exec ruby`).
 Enable Actions' “Allow GitHub Actions to create and approve pull requests” setting.
 For automated PRs to trigger required CI, configure `VERSION_BUMP_TOKEN` as a
 fine-grained token with repository Contents and Pull requests read/write access.
