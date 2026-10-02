@@ -24,27 +24,7 @@ struct CreateWorkspaceNewRepoView: View {
                 isNextDisabled: draft.repositoryPath == nil || isChecking,
                 onNext: checkDestination
             ) {
-                VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.sectionSpacing) {
-                    Text("Create a Git repository on your connected computer. You can publish it to GitHub later.")
-                        .interFont(Constants.Typography.bodyS)
-                    field("Repository name", placeholder: "my-project", text: $draft.name, identifier: "creation.newRepositoryName")
-                    field("Parent folder", placeholder: "~/Developer", text: $draft.parentPath, identifier: "creation.newRepositoryParent")
-                    if let path = draft.repositoryPath {
-                        Text(path)
-                            .interFont(Constants.Typography.bodyS)
-                            .accessibilityIdentifier("creation.newRepositoryPath")
-                    }
-                    if let error = destinationError ?? (draft.name.isEmpty ? nil : draft.validationError) {
-                        Text(error)
-                            .interFont(Constants.Typography.bodyS)
-                            .foregroundStyle(.red)
-                            .accessibilityIdentifier("creation.newRepositoryError")
-                    }
-                    if isChecking {
-                        ProgressView("Checking folder...")
-                    }
-                }
-                .disabled(isChecking)
+                formFields
             }
         }
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
@@ -55,6 +35,30 @@ struct CreateWorkspaceNewRepoView: View {
             checkTask?.cancel()
             isChecking = false
         }
+    }
+
+    private var formFields: some View {
+        VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.sectionSpacing) {
+            Text("Create a Git repository on your connected computer. You can publish it to GitHub later.")
+                .interFont(Constants.Typography.bodyS)
+            field("Repository name", placeholder: "my-project", text: $draft.name, identifier: "creation.newRepositoryName")
+            field("Parent folder", placeholder: "~/Developer", text: $draft.parentPath, identifier: "creation.newRepositoryParent")
+            if let path = draft.repositoryPath {
+                Text(path)
+                    .interFont(Constants.Typography.bodyS)
+                    .accessibilityIdentifier("creation.newRepositoryPath")
+            }
+            if let error = destinationError ?? (draft.name.isEmpty ? nil : draft.validationError) {
+                Text(error)
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("creation.newRepositoryError")
+            }
+            if isChecking {
+                ProgressView("Checking folder...")
+            }
+        }
+        .disabled(isChecking)
     }
 
     private func field(_ title: LocalizedStringKey, placeholder: LocalizedStringKey, text: Binding<String>, identifier: String) -> some View {

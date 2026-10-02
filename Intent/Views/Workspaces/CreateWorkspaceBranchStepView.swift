@@ -21,10 +21,7 @@ struct CreateWorkspaceBranchStepView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            CreateWorkspaceSelectionHeader(
-                leadingControl: .back,
-                onLeadingAction: { dismiss() }
-            )
+            CreateWorkspaceSelectionHeader(leadingControl: .back) { dismiss() }
             CreateWorkspaceSelectionPage(
                 title: "Select Branch",
                 titleIdentifier: "creation.branchTitle",
