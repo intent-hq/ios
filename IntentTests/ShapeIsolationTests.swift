@@ -17,8 +17,12 @@ nonisolated struct ShapeIsolationTests {
     // MARK: - IntentLogo
 
     @Test func intentLogoScalesWithItsRect() {
-        let small = IntentLogo().path(in: CGRect(x: 0, y: 0, width: 24, height: 24)).boundingRect
-        let large = IntentLogo().path(in: CGRect(x: 0, y: 0, width: 48, height: 48)).boundingRect
+        let smallPath = IntentLogo().path(in: CGRect(x: 0, y: 0, width: 24, height: 24))
+        let largePath = IntentLogo().path(in: CGRect(x: 0, y: 0, width: 48, height: 48))
+        // Materialize the stroked outline: on iOS 27, Path.boundingRect does not
+        // scale the stroke's contribution to the bounds with its transform (#540).
+        let small = smallPath.cgPath.boundingBoxOfPath
+        let large = largePath.cgPath.boundingBoxOfPath
         #expect(!small.isEmpty)
         #expect(abs(large.width - small.width * 2) < Self.tolerance)
         #expect(abs(large.height - small.height * 2) < Self.tolerance)
