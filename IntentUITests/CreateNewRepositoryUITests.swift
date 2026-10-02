@@ -27,7 +27,7 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         prompt.typeText("Build my new project")
         XCTAssertTrue(app.buttons["creation.create"].isHittable)
         attachEvidence(in: app, name: "new-repository-create-with-keyboard")
-        source.tap()
+        app.revealWorkspaceSource().tap()
         XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertEqual(name.value as? String, "my-project")
         app.buttons["Next"].tap()
@@ -103,5 +103,31 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         screenshot.name = name
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+}
+
+private enum WorkspaceCreationTestSupport {
+    static let maximumSwipes = 3
+    static let gestureInset: CGFloat = 24
+    static let dragDuration: TimeInterval = 0.1
+}
+
+extension XCUIApplication {
+    @MainActor
+    func revealWorkspaceSource(file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
+        let form = scrollViews["creation.form"]
+        let source = buttons["creation.sourceCard"]
+        let origin = coordinate(withNormalizedOffset: .zero)
+        for _ in 0..<WorkspaceCreationTestSupport.maximumSwipes {
+            let inset = WorkspaceCreationTestSupport.gestureInset
+            let bottom = min(form.frame.maxY, buttons["creation.create"].frame.minY - inset)
+            let viewport = CGRect(x: form.frame.minX, y: form.frame.minY, width: form.frame.width, height: bottom - form.frame.minY)
+            if viewport.contains(source.frame) { return source }
+            let start = origin.withOffset(CGVector(dx: form.frame.minX + inset / 2, dy: bottom - inset))
+            let end = origin.withOffset(CGVector(dx: form.frame.minX + inset / 2, dy: form.frame.minY + inset))
+            start.press(forDuration: WorkspaceCreationTestSupport.dragDuration, thenDragTo: end)
+        }
+        XCTFail("Scrolling must reveal the source selector above the Create button.", file: file, line: line)
+        return source
     }
 }

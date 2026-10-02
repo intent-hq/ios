@@ -31,7 +31,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     @MainActor
     private func releaseSelectionLoading(in app: XCUIApplication, step: String, gate: URL) throws {
         let title = app.staticTexts["creation.\(step)Title"]
-        let spinner = app.progressIndicators["creation.\(step)Title.loading"]
+        let spinner = app.activityIndicators["creation.\(step)Title.loading"]
         let search = app.buttons["creation.\(step)Search.open"]
         XCTAssertTrue(spinner.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(title.exists)
@@ -82,9 +82,9 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         app.buttons["creation.repositorySearch.open"].tap()
         XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
+        attachEvidence(in: app, name: "repository-search-opened")
         XCTAssertLessThan(previous.frame.minY, initialRowY)
         XCTAssertTrue(previous.isHittable)
-        attachEvidence(in: app, name: "repository-search-opened")
         search.typeText("docs")
         let docs = app.buttons["creation.repository.nova-labs/docs"]
         XCTAssertTrue(docs.waitForExistence(timeout: Self.elementTimeout))
@@ -214,7 +214,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         let draft = "Keep these instructions when editing the source."
         prompt.tap()
         prompt.typeText(draft)
-        app.buttons["creation.sourceCard"].tap()
+        app.revealWorkspaceSource().tap()
         XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
         app.buttons["creation.branchBack"].tap()
         XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Self.elementTimeout))
@@ -239,9 +239,9 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         app.buttons["creation.branchSearch.open"].tap()
         XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
+        attachEvidence(in: app, name: "branch-search-opened")
         XCTAssertLessThan(main.frame.minY, initialRowY)
         XCTAssertTrue(main.isHittable)
-        attachEvidence(in: app, name: "branch-search-opened")
         search.typeText("feature")
         let feature = app.buttons["creation.branch.feature/docs"]
         XCTAssertTrue(feature.waitForExistence(timeout: Self.elementTimeout))

@@ -1,8 +1,7 @@
 import SwiftUI
 
-enum CreateWorkspaceScrollTarget: Hashable {
-    case searchResults
-    case top
+private enum CreateWorkspaceCoordinates {
+    static let content = "creation.selectionContent"
 }
 
 struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
@@ -21,6 +20,8 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSearching = false
     @State private var viewportHeight: CGFloat = 0
+    @State private var resultsOffset: CGFloat = 0
+    @State private var scrollPosition = ScrollPosition(edge: .top)
     @FocusState private var searchFocused: Bool
 
     init(
@@ -50,9 +51,7 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            scrollView(proxy: proxy)
-        }
+        scrollView
         .environment(\.workspaceSelectionResultHeight, isSearching ? viewportHeight : 0)
         .overlay {
             if isLoading {
@@ -70,29 +69,38 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
     }
 
-    private func scrollView(proxy: ScrollViewProxy) -> some View {
+    private var scrollView: some View {
         ScrollView { pageContent }
+            .scrollPosition($scrollPosition)
             #if !os(visionOS)
             .scrollDismissesKeyboard(.interactively)
             #endif
             .onScrollGeometryChange(for: CreateWorkspaceScrollSize.self) { geometry in
                 CreateWorkspaceScrollSize(
-                    viewportHeight: max(0, geometry.containerSize.height - geometry.contentInsets.top - geometry.contentInsets.bottom),
+                    viewportHeight: geometry.containerSize.height,
                     contentHeight: geometry.contentSize.height
                 )
             } action: { _, size in
                 viewportHeight = size.viewportHeight
                 if isSearching {
-                    proxy.scrollTo(CreateWorkspaceScrollTarget.searchResults, anchor: .top)
+                    scrollPosition.scrollTo(y: resultsOffset)
                 }
+            }
+            .onPreferenceChange(CreateWorkspaceResultsOffset.self) { offset in
+                resultsOffset = offset
+                if isSearching { scrollPosition.scrollTo(y: offset) }
             }
             .onChange(of: searchText) { _, query in
                 if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    proxy.scrollTo(CreateWorkspaceScrollTarget.searchResults, anchor: .top)
+                    scrollPosition.scrollTo(y: resultsOffset)
                 }
             }
             .onChange(of: isSearching) { _, searching in
-                proxy.scrollTo(searching ? CreateWorkspaceScrollTarget.searchResults : .top, anchor: .top)
+                if searching {
+                    scrollPosition.scrollTo(y: resultsOffset)
+                } else {
+                    scrollPosition.scrollTo(edge: .top)
+                }
             }
     }
 
@@ -102,13 +110,13 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
                 introduction
                 heading
             }
-            .id(CreateWorkspaceScrollTarget.top)
             if !isLoading {
                 content
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(CreateWorkspaceFormStyle.pagePadding)
+        .coordinateSpace(name: CreateWorkspaceCoordinates.content)
     }
 
     private var heading: some View {
@@ -164,6 +172,14 @@ private struct CreateWorkspaceScrollSize: Equatable {
     let contentHeight: CGFloat
 }
 
+private struct CreateWorkspaceResultsOffset: PreferenceKey {
+    static var defaultValue: CGFloat { 0 }
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 extension EnvironmentValues {
     @Entry var workspaceSelectionResultHeight: CGFloat = 0
 }
@@ -171,10 +187,14 @@ extension EnvironmentValues {
 struct CreateWorkspaceSearchResults<Content: View>: View {
     @ViewBuilder let content: Content
     @Environment(\.workspaceSelectionResultHeight) private var minimumHeight
+    @State private var offset: CGFloat = 0
 
     var body: some View {
         content
             .frame(minHeight: minimumHeight, alignment: .topLeading)
-            .id(CreateWorkspaceScrollTarget.searchResults)
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                geometry.frame(in: .named(CreateWorkspaceCoordinates.content)).minY
+            } action: { offset = $0 }
+            .preference(key: CreateWorkspaceResultsOffset.self, value: offset)
     }
 }

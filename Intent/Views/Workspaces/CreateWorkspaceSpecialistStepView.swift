@@ -105,6 +105,7 @@ struct CreateWorkspaceSpecialistStepView: View {
         #if !os(visionOS)
         .scrollDismissesKeyboard(.interactively)
         #endif
+        .accessibilityIdentifier("creation.form")
     }
 
     private var pageHeading: some View {
