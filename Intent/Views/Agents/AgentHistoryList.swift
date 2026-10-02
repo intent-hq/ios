@@ -29,6 +29,8 @@ struct AgentHistoryList: View {
                     ScrollView { rows }
                         .scrollBounceBehavior(.basedOnSize)
                 }
+                // Row text aligns with the header; the selection fill bleeds into the margin.
+                .padding(.horizontal, -ConnectionSwitcherStyle.rowInset)
             }
         }
         .padding(.vertical, ConnectionSwitcherStyle.inset)
