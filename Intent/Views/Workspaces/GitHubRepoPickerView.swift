@@ -281,8 +281,11 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier(titleIdentifier)
-            if let searchPlaceholder, !isSearching {
+            if let searchPlaceholder {
                 WorkspaceSearchButton(isSearching: $isSearching, label: searchPlaceholder, identifier: "\(searchIdentifier).open")
+                    .opacity(isSearching ? 0 : 1)
+                    .allowsHitTesting(!isSearching)
+                    .accessibilityHidden(isSearching)
             }
         }
     }
