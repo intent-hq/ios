@@ -283,7 +283,6 @@ extension ConversationWatchedAgentsTests {
     }
 }
 
-
 extension ConversationWatchedAgentsTests {
     @Test(arguments: ["cancelled", "invalidated", "obsolete", "authority", "reconnected"])
     func rejectedSubscriptionReplyCannotSeedBundledRows(reason: String) async throws {
@@ -294,8 +293,10 @@ extension ConversationWatchedAgentsTests {
         var current = true
         let read = Task {
             await watched.fetchSubscriptions(
-                agentId: "parent", workspaceId: "workspace",
-                awaitAuthority: { reason != "authority" }, isCurrent: { current }
+                agentId: "parent",
+                workspaceId: "workspace",
+                awaitAuthority: { reason != "authority" },
+                isCurrent: { current }
             )
         }
         defer { read.cancel() }
@@ -328,11 +329,11 @@ extension ConversationWatchedAgentsTests {
         ]
         var awaitingAuthority = false
         let read = Task {
-            await watched.fetchSubscriptions(agentId: "parent", workspaceId: "workspace", awaitAuthority: {
+            await watched.fetchSubscriptions(agentId: "parent", workspaceId: "workspace") {
                 awaitingAuthority = true
                 await authority.wait()
                 return true
-            })
+            }
         }
         defer { read.cancel() }
         try await waitUntil("subscription awaits parent authority") { awaitingAuthority }

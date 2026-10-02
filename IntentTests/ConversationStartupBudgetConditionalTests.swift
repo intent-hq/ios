@@ -104,7 +104,6 @@ extension ConversationStartupBudgetTests {
     }
 }
 
-
 extension ConversationStartupBudgetTests {
     @Test func bundledBudgetCountsAddedSubscriptionBytesAndAvoidedDisplayReads() async throws {
         var totals: [RPCTraffic] = []

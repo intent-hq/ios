@@ -291,15 +291,16 @@ extension ConversationWatchedAgentsTests {
     }
 }
 
-
 extension ConversationWatchedAgentsTests {
     @Test func sparseBundlePreservesMetadataAndStatusMapRetiresLiveness() async {
         let context = summaryContext()
         let summaries = context.commands.agentDetails.summaries
-        summaries.seed([[
-            "id": "child", "workspaceId": "workspace", "name": "Old name", "digest": "Keep preview",
-            "metadata": ["specialist": "implementor", "attentionRequestKind": "blocker", "attentionRequestReason": "Keep reason"]
-        ]], since: summaries.beginRead())
+        summaries.seed([
+            [
+                "id": "child", "workspaceId": "workspace", "name": "Old name", "digest": "Keep preview",
+                "metadata": ["specialist": "implementor", "attentionRequestKind": "blocker", "attentionRequestReason": "Keep reason"]
+            ]
+        ], since: summaries.beginRead())
         context.connection.responseMap["agent.getSubscriptions"] = [
             "subscriptions": [["actorIds": ["child"]]], "agentStatuses": ["child": "idle"],
             "agents": [["id": "child", "workspaceId": "workspace", "name": "New name", "isStreaming": true, "metadata": ["specialist": "verifier"]]]

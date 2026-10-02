@@ -171,7 +171,6 @@ extension ConversationWatchedAgentsTests {
     }
 }
 
-
 extension ConversationWatchedAgentsTests {
     @Test func bundledRowsAvoidDisplayDetailsButNeverSatisfyRouteDetails() async throws {
         let fixture = ConversationStartupFixture()
@@ -210,7 +209,7 @@ extension ConversationWatchedAgentsTests {
         #expect(fixture.connection.traffic().calls("agent.get").count == 1)
     }
 
-    @Test func partialBundlePreservesMembershipAndCanonicalCrossWorkspaceIdentity() async throws {
+    @Test func partialBundlePreservesMembershipAndCanonicalCrossWorkspaceIdentity() async {
         let connection = RPCRecordingConnection()
         let commands = ConversationCommands(connectionManager: connection)
         let watched = ConversationWatchedAgents(commands: commands)
