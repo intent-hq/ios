@@ -99,9 +99,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         let row = app.buttons["workspace.script.demo-server"]
         for _ in 0..<5 where !row.isHittable { app.swipeUp() }
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
-        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.3))
-        let end = row.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.35))
-        start.press(forDuration: 0.05, thenDragTo: end)
+        row.swipeLeft()
         let stop = app.buttons["workspace.script.stop.demo-server"]
         XCTAssertTrue(stop.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["workspace.script.delete.demo-server"].exists)
@@ -176,7 +174,8 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
 
     @MainActor
     func testVerticalDragOnScriptRowStillScrollsWorkspace() {
-        let app = launchWorkspace()
+        // Extra completed scripts provide real scroll range on tall screens at default text size.
+        let app = launchWorkspace(longScriptList: true)
         openScriptsMenu(in: app)
         app.buttons[Fixture.command].tap()
         let row = app.buttons["workspace.script.demo-check"]
@@ -194,10 +193,11 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchWorkspace(repositoryScripts: Bool = false) -> XCUIApplication {
+    private func launchWorkspace(repositoryScripts: Bool = false, longScriptList: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-browsers", repositoryScripts ? "--demo-repo-scripts" : "--demo-scripts"]
+        if longScriptList { app.launchArguments.append("--demo-long-script-list") }
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
