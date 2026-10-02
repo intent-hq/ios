@@ -353,6 +353,7 @@ $(SRCROOT)/Intent/Presentation/SplashPlaybackState.swift
 $(SRCROOT)/Intent/Presentation/SuggestedPrompts.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier+Classification.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
+$(SRCROOT)/Intent/Presentation/WorkspaceAgentSelection.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceLinks.swift
 $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceSwipePolicy.swift
@@ -1047,6 +1048,7 @@ $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceActionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAgentLoadingTests.swift
+$(SRCROOT)/IntentTests/WorkspaceAgentSelectionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserFixture.swift

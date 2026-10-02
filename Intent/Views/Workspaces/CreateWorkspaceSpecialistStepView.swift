@@ -9,7 +9,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     let providers: [ProviderInfo]
     let isLoadingProviders: Bool
     let providerGuidance: String?
-    @Binding var selectedProvider: ProviderInfo?
+    let selectedProvider: ProviderInfo?
     let models: [ModelInfo]
     @Binding var selectedModel: ModelInfo?
     let reasoningLevels: [String]

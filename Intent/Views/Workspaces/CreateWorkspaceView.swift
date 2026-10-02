@@ -32,10 +32,7 @@ struct CreateWorkspaceView: View {
     /// Published only for loads that returned in the store generation they
     /// started in; a reconnect clear resets every marker.
     @State private var settledLoads = SpecialistPickerView.SettledLoads()
-    @State private var selectedSpecialist: SpecialistInfo?
-    @State private var selectedProvider: ProviderInfo?
-    @State private var selectedModel: ModelInfo?
-    @State private var selectedReasoningEffort: String?
+    @State private var agentSelection: WorkspaceAgentSelection
     @State private var messageText = ""
     @State private var images = WorkspaceCreationImages()
     @State private var isCreating = false
@@ -47,6 +44,7 @@ struct CreateWorkspaceView: View {
 
     init(session: BackendSession) {
         self.session = session
+        _agentSelection = State(initialValue: WorkspaceAgentSelection(backendID: session.backendID, persistence: .shared))
     }
 
     /// The session-owned repo cache: it outlives this sheet so a reopen
@@ -66,16 +64,16 @@ struct CreateWorkspaceView: View {
     /// The selected provider's cached catalog; empty until loaded, which
     /// hides the model row (the daemon default applies).
     private var models: [ModelInfo] {
-        selectedProvider.flatMap { optionsStore.models(for: $0.id) } ?? []
+        agentSelection.provider.flatMap { optionsStore.models(for: $0.id) } ?? []
     }
     private var reasoningLevels: [String] {
         CreationSelectionPolicy.workspaceReasoningLevels(
-            provider: selectedProvider, model: selectedModel, models: models
+            provider: agentSelection.provider, model: agentSelection.model, models: models
         )
     }
     private var validatedReasoningEffort: String? {
         CreationSelectionPolicy.reconciledReasoningEffort(
-            current: selectedReasoningEffort, effortLevels: reasoningLevels
+            current: agentSelection.reasoningEffort, effortLevels: reasoningLevels
         )
     }
     /// Derived from the store, never a local snapshot: a cache that warms
@@ -97,8 +95,8 @@ struct CreateWorkspaceView: View {
     /// never gates.
     private var isLoadingSelectedModelCatalog: Bool {
         Self.showsModelCatalogLoading(
-            catalogCached: selectedProvider.map { optionsStore.models(for: $0.id) != nil },
-            settled: selectedProvider.map { settledLoads.modelProviders.contains($0.id) } ?? false
+            catalogCached: agentSelection.provider.map { optionsStore.models(for: $0.id) != nil },
+            settled: agentSelection.provider.map { settledLoads.modelProviders.contains($0.id) } ?? false
         )
     }
     /// The branch step's state for the selected repo, owned by the store
@@ -167,10 +165,10 @@ struct CreateWorkspaceView: View {
             Task { await reconcileProviderSelection() }
         }
         .onChange(of: models) { _, models in
-            selectedModel = CreationSelectionPolicy.reconciledModel(current: selectedModel, models: models)
+            agentSelection.reconcileModels(models)
         }
         .onChange(of: reasoningLevels) { _, _ in
-            selectedReasoningEffort = validatedReasoningEffort
+            agentSelection.reconcileReasoning(effortLevels: reasoningLevels)
         }
     }
 
@@ -233,15 +231,15 @@ extension CreateWorkspaceView {
                 branch: navigationPath.contains(.newRepository) ? nil : selectedBranch,
                 specialists: specialists,
                 isLoadingSpecialists: isLoadingOptions,
-                selectedSpecialist: $selectedSpecialist,
+                selectedSpecialist: Binding(get: { agentSelection.specialist }, set: agentSelection.selectSpecialist),
                 providers: providers,
                 isLoadingProviders: isLoadingOptions || providerOptions.isLoading || isLoadingSelectedModelCatalog,
                 providerGuidance: providerOptions.guidance,
-                selectedProvider: $selectedProvider,
+                selectedProvider: agentSelection.provider,
                 models: models,
-                selectedModel: $selectedModel,
+                selectedModel: Binding(get: { agentSelection.model }, set: agentSelection.selectModel),
                 reasoningLevels: reasoningLevels,
-                selectedReasoningEffort: $selectedReasoningEffort,
+                selectedReasoningEffort: Binding(get: { agentSelection.reasoningEffort }, set: agentSelection.selectReasoning),
                 messageText: $messageText,
                 images: images,
                 isCreating: isCreating,
@@ -377,10 +375,7 @@ extension CreateWorkspaceView {
     /// re-defaults or clears it when the selected specialist left the
     /// pickable set.
     private func reconcileSpecialistSelection() {
-        selectedSpecialist = CreationSelectionPolicy.preselectedWorkspaceSpecialist(
-            current: selectedSpecialist,
-            catalog: optionsStore.specialists
-        )
+        agentSelection.reconcileSpecialist(catalog: optionsStore.specialists)
     }
 
     /// Defaults the provider selection to a selectable provider (auggie
@@ -390,20 +385,15 @@ extension CreateWorkspaceView {
     /// provider's catalog shares a bare model id with the old one.
     private func reconcileProviderSelection() async {
         guard catalogIsVisible else { return }
-        CreationSelectionPolicy.reconcileWorkspaceProvider(
-            provider: &selectedProvider,
-            model: &selectedModel,
-            state: providerOptions.state
-        )
-        optionsStore.selectModelProvider(selectedProvider?.id, consumer: catalogConsumer)
-        guard !providerOptions.isLoading, let provider = selectedProvider else { return }
+        agentSelection.reconcileProvider(state: providerOptions.state)
+        optionsStore.selectModelProvider(agentSelection.provider?.id, consumer: catalogConsumer)
+        guard !providerOptions.isLoading, let provider = agentSelection.provider else { return }
         await loadModels(for: provider)
     }
 
     private func selectProvider(_ provider: ProviderInfo) {
-        guard providers.contains(provider), provider.isSelectable, provider.id != selectedProvider?.id else { return }
-        selectedProvider = provider
-        selectedModel = nil
+        guard providers.contains(provider), provider.isSelectable, provider.id != agentSelection.provider?.id else { return }
+        agentSelection.selectProvider(provider)
         Task { await loadModels(for: provider) }
     }
 
@@ -411,7 +401,7 @@ extension CreateWorkspaceView {
     /// Create gate only when the load returned in the generation it started
     /// in — a completion from before a reconnect clear settles nothing.
     private func loadModels(for provider: ProviderInfo) async {
-        guard catalogIsVisible, selectedProvider?.id == provider.id, !Task.isCancelled else { return }
+        guard catalogIsVisible, agentSelection.provider?.id == provider.id, !Task.isCancelled else { return }
         optionsStore.selectModelProvider(provider.id, consumer: catalogConsumer)
         let generation = optionsStore.loadGeneration
         await optionsStore.loadModelsIfNeeded(providerId: provider.id, consumer: catalogConsumer)
@@ -420,6 +410,9 @@ extension CreateWorkspaceView {
             startedAt: generation,
             current: optionsStore.loadGeneration
         )
+        if generation == optionsStore.loadGeneration, agentSelection.provider?.id == provider.id {
+            agentSelection.reconcileModels(models)
+        }
     }
 }
 
@@ -452,9 +445,9 @@ extension CreateWorkspaceView {
                 source: source,
                 idempotencyKey: idempotencyKey,
                 initialAgent: InitialAgentInput(
-                    specialist: selectedSpecialist,
-                    provider: selectedProvider,
-                    model: selectedModel,
+                    specialist: agentSelection.specialist,
+                    provider: agentSelection.provider,
+                    model: agentSelection.model,
                     message: messageText,
                     reasoningEffort: validatedReasoningEffort,
                     imageBlocks: images.images.map(\.block)
@@ -493,7 +486,7 @@ extension CreateWorkspaceView {
             isCreating: false,
             isLoadingProviders: isLoadingOptions || providerOptions.isLoading || isLoadingSelectedModelCatalog,
             providers: providers,
-            selectedProvider: selectedProvider,
+            selectedProvider: agentSelection.provider,
             allowsCreation: coordinator.canCreateWorkspace
         )
     }

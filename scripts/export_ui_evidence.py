@@ -34,6 +34,9 @@ CAPTURES = {
             "selected-before-back", "draft-after-source-edit",
         ),
     },
+    "CreateWorkspacePreferencesUITests": {
+        "testCancelledFormRemembersAgentSettings": ("remembered-agent-settings",),
+    },
     "WorkspaceChangesUITests": {
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (
             "workspace-changes", "unstaged-diff", "commit-diff",
