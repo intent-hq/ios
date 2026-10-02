@@ -48,6 +48,12 @@ struct NewRepositoryDraftTests {
         #expect(NewRepositoryDraft.destinationError(for: NSNull()) != nil)
     }
 
+    @Test func retriesKeepTheirKeyOnlyForTheAttemptedDestination() {
+        let attempt = NewRepositoryAttempt(path: "~/Developer/my-project", idempotencyKey: "original-key")
+        #expect(attempt.retryKey(for: "~/Developer/my-project") == "original-key")
+        #expect(attempt.retryKey(for: "~/Developer/existing-project") == nil)
+    }
+
     @Test func newRepositoryRequestOmitsGitHubAndBranchAndKeepsAgentSettings() throws {
         let agent = CreateWorkspaceView.InitialAgentInput(
             specialist: nil,

@@ -34,14 +34,29 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         let create = app.buttons["Create"]
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: create)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
-        for _ in 0..<2 {
-            create.tap()
-            XCTAssertTrue(app.alerts["Error"].waitForExistence(timeout: Self.elementTimeout))
-            app.alerts.buttons["OK"].tap()
-            XCTAssertEqual(prompt.value as? String, "Build my new project")
-            XCTAssertEqual(source.label, "Source. New repository: ~/Developer/my-project")
-        }
+        create.tap()
+        XCTAssertTrue(app.alerts["Error"].waitForExistence(timeout: Self.elementTimeout))
+        app.alerts.buttons["OK"].tap()
+        retryAfterSourceRevisit(in: app)
+    }
+
+    @MainActor
+    private func retryAfterSourceRevisit(in app: XCUIApplication) {
+        app.buttons["creation.sourceCard"].tap()
+        let name = app.textFields["creation.newRepositoryName"]
+        XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
+        app.buttons["creation.branchBack"].tap()
+        app.buttons["creation.newRepository"].tap()
+        XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
+        app.buttons["Next"].tap()
+        let prompt = app.textViews["creation.prompt"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertEqual(prompt.value as? String, "Build my new project")
+        XCTAssertEqual(app.buttons["creation.sourceCard"].label, "Source. New repository: ~/Developer/my-project")
         attachEvidence(in: app, name: "new-repository-draft-after-retry")
+        app.buttons["Create"].tap()
+        XCTAssertTrue(app.buttons["creation.sourceCard"].waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertFalse(app.alerts["Error"].exists)
     }
 
     @MainActor

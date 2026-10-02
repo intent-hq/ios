@@ -266,6 +266,8 @@ struct CreateWorkspaceSpecialistStepView: View {
 }
 
 extension CreateWorkspaceView {
+    static let createRequestTimeout: TimeInterval = 120
+
     /// A failed cold load settles; an uncached load still in flight gates creation.
     static func showsOptionsLoading(
         storeIsLoading: Bool, storeHasLoaded: Bool, settled: Bool

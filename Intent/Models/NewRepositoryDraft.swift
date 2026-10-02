@@ -56,3 +56,12 @@ enum WorkspaceRepositorySource {
         }
     }
 }
+
+struct NewRepositoryAttempt {
+    let path: String
+    let idempotencyKey: String
+
+    func retryKey(for path: String) -> String? {
+        self.path == path ? idempotencyKey : nil
+    }
+}

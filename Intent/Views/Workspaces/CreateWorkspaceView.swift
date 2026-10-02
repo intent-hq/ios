@@ -26,6 +26,7 @@ struct CreateWorkspaceView: View {
     @State private var selectedRepo: GitHubRepo?
     @State private var newRepositoryDraft = NewRepositoryDraft()
     @State private var newRepositoryPath: String?
+    @State private var newRepositoryAttempt: NewRepositoryAttempt?
     @State private var selectedBranch: String?
     @State private var branchSearchText = ""
     @State private var completedBranchQuery: String?
@@ -202,28 +203,31 @@ extension CreateWorkspaceView {
                 idempotencyKey = UUID().uuidString
                 navigationPath.append(.branches)
             },
-            onRepoChanged: resetRepositoryState,
-            onCreateRepository: {
-                idempotencyKey = UUID().uuidString
-                navigationPath.append(.newRepository)
-            }
-        )
+            onRepoChanged: resetRepositoryState
+        ) {
+            idempotencyKey = UUID().uuidString
+            navigationPath.append(.newRepository)
+        }
+    }
+
+    private var newRepositoryStep: some View {
+        CreateWorkspaceNewRepoView(
+            draft: $newRepositoryDraft,
+            connection: session.connection,
+            attempt: newRepositoryAttempt,
+            onBack: { navigationPath.removeLast() }
+        ) { path in
+            idempotencyKey = newRepositoryAttempt?.retryKey(for: path) ?? UUID().uuidString
+            newRepositoryPath = path
+            navigationPath.append(.create)
+        }
     }
 
     @ViewBuilder
     private func destination(for route: Route) -> some View {
         switch route {
         case .newRepository:
-            CreateWorkspaceNewRepoView(
-                draft: $newRepositoryDraft,
-                connection: session.connection,
-                onBack: { navigationPath.removeLast() },
-                onNext: { path in
-                    if newRepositoryPath != path { idempotencyKey = UUID().uuidString }
-                    newRepositoryPath = path
-                    navigationPath.append(.create)
-                }
-            )
+            newRepositoryStep
         case .branches:
             CreateWorkspaceBranchStepView(
                 repositoryFullName: selectedRepo?.fullName ?? "",
@@ -419,8 +423,6 @@ extension CreateWorkspaceView {
 }
 
 extension CreateWorkspaceView {
-    static let createRequestTimeout: TimeInterval = 120
-
     private func createWorkspace() {
         guard !isCreating, !images.isImporting, canSubmitProvider,
               let source = repositorySource else { return }
@@ -458,6 +460,9 @@ extension CreateWorkspaceView {
                 )
             )
             try WorkspaceCreationImages.validateRequest(params)
+            if case let .newRepository(path) = source {
+                newRepositoryAttempt = NewRepositoryAttempt(path: path, idempotencyKey: idempotencyKey)
+            }
             let result = try await session.connection.request(
                 "workspace.create",
                 params: params,

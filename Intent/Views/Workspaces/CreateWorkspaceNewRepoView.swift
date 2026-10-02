@@ -3,6 +3,7 @@ import SwiftUI
 struct CreateWorkspaceNewRepoView: View {
     @Binding var draft: NewRepositoryDraft
     let connection: any SessionConnectionManaging
+    let attempt: NewRepositoryAttempt?
     let onBack: () -> Void
     let onNext: (String) -> Void
     @Environment(\.colorScheme) private var colorScheme
@@ -71,6 +72,10 @@ struct CreateWorkspaceNewRepoView: View {
 
     private func checkDestination() {
         guard !isChecking, let path = draft.repositoryPath else { return }
+        if attempt?.retryKey(for: path) != nil {
+            onNext(path)
+            return
+        }
         isChecking = true
         destinationError = nil
         checkTask = Task {

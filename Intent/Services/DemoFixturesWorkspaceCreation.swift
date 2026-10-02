@@ -1,15 +1,17 @@
 import Foundation
 
 extension DemoFixtures {
-    /// Read-only wizard fixtures for the Back/forward regression (#446).
-    /// `workspace.create` deliberately remains unsupported: no workspace is made.
+    private static var newRepositoryAttempt: NewRepositoryAttempt?
+    /// GitHub creation stays unsupported; new-repository creation simulates a failed attempt and same-key retry.
     static func workspaceCreationResponse(for method: String, params: [String: Any]) -> Any {
         switch method {
         case "github.authStatus":
             return ["isConfigured": !ProcessInfo.processInfo.arguments.contains("--demo-github-disconnected")]
         case "host.directoryStatus":
             let path = params["path"] as? String ?? ""
-            return ["exists": path.hasSuffix("/existing-project"), "path": path]
+            return ["exists": path.hasSuffix("/existing-project") || newRepositoryAttempt?.path == path, "path": path]
+        case "workspace.create" where params["isNewRepo"] as? Bool == true:
+            return newRepositoryCreationResponse(params: params)
         case "github.repos.list":
             return [
                 "repos": [
@@ -45,5 +47,15 @@ extension DemoFixtures {
         default:
             return [String: Any]()
         }
+    }
+
+    private static func newRepositoryCreationResponse(params: [String: Any]) -> Any {
+        guard let path = params["repositoryPath"] as? String,
+              let key = params["idempotencyKey"] as? String else { return [String: Any]() }
+        if let attempt = newRepositoryAttempt, attempt.retryKey(for: path) == key {
+            return ["workspace": ["id": "demo-new-repository", "title": "My New Project", "repositoryPath": path]]
+        }
+        newRepositoryAttempt = NewRepositoryAttempt(path: path, idempotencyKey: key)
+        return [String: Any]()
     }
 }
