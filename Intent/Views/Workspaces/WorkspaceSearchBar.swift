@@ -94,6 +94,7 @@ struct WorkspaceSearchButton: View {
                 .background {
                     if showsBackground { WorkspaceControlSurface() }
                 }
+                .accessibilityHidden(true)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
