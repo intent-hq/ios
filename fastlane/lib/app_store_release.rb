@@ -3,6 +3,7 @@ require_relative "release_provenance"
 module AppStoreRelease
   RELEASED_STATES = %w[READY_FOR_SALE READY_FOR_DISTRIBUTION REPLACED_WITH_NEW_VERSION].freeze
   FIRST_AUTOMATED_VERSION = Gem::Version.new("1.1.4")
+  CONFIRMED_BACKFILL_COMMIT = "e6e38ce70160e19a0271170267a8ab229f384831".freeze
 
   def self.git(*args)
     ReleaseProvenance.command!("git", *args)
@@ -14,6 +15,13 @@ module AppStoreRelease
 
   def self.validate_version!(version)
     ReleaseSupport.fail!("App Store tag must be a plain X.Y.Z version.") unless version.to_s.match?(/\A\d+\.\d+\.\d+\z/)
+  end
+
+  def self.validate_backfill!(version, commits)
+    return unless version == "1.1.4"
+    unless commits == [CONFIRMED_BACKFILL_COMMIT]
+      ReleaseSupport.fail!("1.1.4 backfill requires Xcode Cloud sourceCommit #{CONFIRMED_BACKFILL_COMMIT}; lookup did not confirm it. Refusing to tag.")
+    end
   end
 
   def self.cloud_commits(app_id, build_id)
@@ -57,6 +65,9 @@ module AppStoreRelease
         build = response.body.fetch("data") && response.to_models.first
         ReleaseSupport.fail!("Released #{platform.platform} #{version} has no selected build; refusing to tag.") unless build
         candidates = cloud_commits(app.id, build.id)
+        # The user confirmed this Xcode Cloud archive's source. It is an
+        # assertion on Apple's lookup, never a replacement for missing evidence.
+        validate_backfill!(version, candidates)
         candidates = ReleaseProvenance.upload_commits(version: version, build: build.version) if candidates.empty?
         unless candidates.length == 1
           ReleaseSupport.fail!("Cannot identify one exact commit for released #{platform.platform} #{version} (#{build.version}): found #{candidates.length}. Check Xcode Cloud sourceCommit and TestFlight statuses; refusing to guess.")
@@ -77,6 +88,7 @@ module AppStoreRelease
       commit = ReleaseProvenance.validate_commit!(plan.fetch(:commit))
       # Recheck at the write boundary: never move a tag, including a racing writer.
       next if existing_tag?(version)
+      validate_backfill!(version, [commit])
       if dry_run
         FastlaneCore::UI.success("would tag #{version} at #{commit} (annotated)")
         next

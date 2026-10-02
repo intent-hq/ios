@@ -99,7 +99,11 @@ unsubmitted marketing version, but every run must use a fresh build number.
 Git tags are only for App Store releases, using plain version names and annotated
 tags (matching `1.1.3`). The hourly release check automatically tags the exact
 released build commit, starting with the `1.1.4` backfill; older manual history is
-left alone. It checks released iOS and visionOS versions independently of the
+left alone. The user-confirmed `1.1.4` source is
+`e6e38ce70160e19a0271170267a8ab229f384831`: Xcode Cloud lookup must return exactly
+that commit or the job fails. This is an assertion, not a fallback; do not create
+the tag manually or substitute a TestFlight status for its Xcode Cloud evidence.
+It checks released iOS and visionOS versions independently of the
 checkout's marketing version, including replaced releases missed by earlier runs.
 Both platforms must agree on their build/commit and produce only one tag. Existing
 tags are never moved or overwritten. Missing or ambiguous provenance fails the job

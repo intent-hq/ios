@@ -117,7 +117,8 @@ begin
         cloud[id] = sha ? [{ "id" => "cloud-#{id}", "attributes" => { "sourceCommit" => { "commitSha" => sha }, "isPullRequestBuild" => false } }] : []
       end
     end
-    set_release.call("1.1.4", "READY_FOR_DISTRIBUTION", [released, released])
+    confirmed_backfill = "e6e38ce70160e19a0271170267a8ab229f384831"
+    set_release.call("1.1.4", "READY_FOR_DISTRIBUTION", [confirmed_backfill, confirmed_backfill])
     before = git.call("ls-remote", "--tags", "origin")
     output = []
     ui = FastlaneCore::UI.ui_object
@@ -129,18 +130,36 @@ begin
     ensure
       ui.define_singleton_method(:success, success)
     end
-    raise "Missing exact dry-run tag" unless output.include?("would tag 1.1.4 at #{released} (annotated)")
+    raise "Missing exact dry-run tag" unless output.include?("would tag 1.1.4 at #{confirmed_backfill} (annotated)")
     equal(before, git.call("ls-remote", "--tags", "origin"))
     equal("1.1.3", git.call("tag", "--list"))
     exported = JSON.parse(File.readlines(ENV.fetch("GITHUB_OUTPUT")).grep(/^release_tags=/).last.split("=", 2).last)
     equal(1, exported.length)
-    equal(released, exported.first.fetch("commit"))
-    puts "PASS: dry-run and separated planning backfill 1.1.4 despite newer marketing/main, without creating tags"
+    equal(confirmed_backfill, exported.first.fetch("commit"))
+    puts "PASS: 1.1.4 resolves via Xcode Cloud to the confirmed e6e38ce source in dry-run and separated planning"
 
+    [[released, released], [confirmed_backfill, released]].each do |sources|
+      set_release.call("1.1.4", "READY_FOR_DISTRIBUTION", sources)
+      fails_with("1.1.4 backfill requires Xcode Cloud sourceCommit #{confirmed_backfill}") { lane.call(dry_run: false) }
+    end
+    set_release.call("1.1.4", "READY_FOR_DISTRIBUTION", [nil, nil])
+    runs.replace([{ "head_sha" => confirmed_backfill }])
+    statuses[confirmed_backfill] = [{ "context" => "TestFlight", "state" => "success", "description" => "1.1.4 (214)" }]
+    fails_with("1.1.4 backfill requires Xcode Cloud sourceCommit #{confirmed_backfill}") { lane.call(dry_run: true) }
+    fails_with("1.1.4 backfill requires Xcode Cloud sourceCommit #{confirmed_backfill}") do
+      AppStoreRelease.publish([{ version: "1.1.4", commit: released, builds: [] }], dry_run: false)
+    end
+    equal(before, git.call("ls-remote", "--tags", "origin"))
+    equal("1.1.3", git.call("tag", "--list"))
+    puts "PASS: 1.1.4 rejects a different platform source, status-only evidence, and an incorrect publication plan without tagging"
+
+    # Exercise real tag creation using an ordinary later release and a real
+    # temporary commit; never manufacture or fetch the production backfill SHA.
+    set_release.call("1.1.7", "READY_FOR_DISTRIBUTION", [released, released])
     lane.call(dry_run: false)
-    equal("tag", git.call("cat-file", "-t", "refs/tags/1.1.4"))
-    equal(released, git.call("rev-parse", "refs/tags/1.1.4^{}"))
-    raise "Wrong remote release target" unless git.call("ls-remote", "--tags", "origin", "refs/tags/1.1.4^{}").start_with?(released)
+    equal("tag", git.call("cat-file", "-t", "refs/tags/1.1.7"))
+    equal(released, git.call("rev-parse", "refs/tags/1.1.7^{}"))
+    raise "Wrong remote release target" unless git.call("ls-remote", "--tags", "origin", "refs/tags/1.1.7^{}").start_with?(released)
     tagged = git.call("ls-remote", "--tags", "origin")
     requests.clear
     cloud.clear
