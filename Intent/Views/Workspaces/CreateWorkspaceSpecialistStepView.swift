@@ -2,7 +2,7 @@ import SwiftUI
 
 struct CreateWorkspaceSpecialistStepView: View {
     let repositoryFullName: String
-    let branch: String
+    let branch: String?
     let specialists: [SpecialistInfo]
     let isLoadingSpecialists: Bool
     @Binding var selectedSpecialist: SpecialistInfo?
@@ -266,6 +266,24 @@ struct CreateWorkspaceSpecialistStepView: View {
 }
 
 extension CreateWorkspaceView {
+    /// A failed cold load settles; an uncached load still in flight gates creation.
+    static func showsOptionsLoading(
+        storeIsLoading: Bool, storeHasLoaded: Bool, settled: Bool
+    ) -> Bool {
+        storeIsLoading || (!storeHasLoaded && !settled)
+    }
+
+    // swiftlint:disable discouraged_optional_boolean
+    /// A missing provider needs no load; a failed catalog falls back to the daemon default.
+    static func showsModelCatalogLoading(catalogCached: Bool?, settled: Bool) -> Bool {
+        catalogCached == false && !settled
+    }
+    // swiftlint:enable discouraged_optional_boolean
+
+    static func usesExpandedFormLayout(for size: DynamicTypeSize) -> Bool {
+        size.isAccessibilitySize
+    }
+
     struct InitialAgentInput {
         let specialist: SpecialistInfo?
         let provider: ProviderInfo?
@@ -298,11 +316,20 @@ extension CreateWorkspaceView {
         idempotencyKey: String,
         initialAgent: InitialAgentInput
     ) -> [String: Any] {
-        var params: [String: Any] = [
-            "githubUrl": githubUrl,
-            "baseRef": baseRef,
-            "idempotencyKey": idempotencyKey
-        ]
+        buildCreateWorkspaceParams(
+            source: .github(url: githubUrl, baseRef: baseRef),
+            idempotencyKey: idempotencyKey,
+            initialAgent: initialAgent
+        )
+    }
+
+    static func buildCreateWorkspaceParams(
+        source: WorkspaceRepositorySource,
+        idempotencyKey: String,
+        initialAgent: InitialAgentInput
+    ) -> [String: Any] {
+        var params = source.parameters
+        params["idempotencyKey"] = idempotencyKey
         let trimmedMessage = initialAgent.message.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasMessage = !trimmedMessage.isEmpty
         if initialAgent.specialist != nil || hasMessage || initialAgent.model != nil

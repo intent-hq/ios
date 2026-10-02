@@ -6,12 +6,13 @@ struct CreateWorkspaceRepoStepView: View {
     let onClose: () -> Void
     let onNext: () -> Void
     let onRepoChanged: () -> Void
+    let onCreateRepository: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
             CreateWorkspaceSelectionHeader(isNextDisabled: selectedRepo == nil, onLeadingAction: onClose, onNext: onNext)
-            GitHubRepoPickerView(store: store, selectedRepo: $selectedRepo)
+            GitHubRepoPickerView(store: store, selectedRepo: $selectedRepo, onCreateRepository: onCreateRepository)
         }
         .background(CreateWorkspaceRepoStyle.background(for: colorScheme).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)

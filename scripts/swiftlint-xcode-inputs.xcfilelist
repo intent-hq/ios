@@ -61,6 +61,7 @@ $(SRCROOT)/Intent/Models/MobileTerminal.swift
 $(SRCROOT)/Intent/Models/ModelChangeNotice.swift
 $(SRCROOT)/Intent/Models/MonitoredPr.swift
 $(SRCROOT)/Intent/Models/NewMessagesDivider.swift
+$(SRCROOT)/Intent/Models/NewRepositoryDraft.swift
 $(SRCROOT)/Intent/Models/Note.swift
 $(SRCROOT)/Intent/Models/PendingFile.swift
 $(SRCROOT)/Intent/Models/PrMonitorWakeAttribution.swift
@@ -401,6 +402,7 @@ $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormStyle.swift
+$(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceNewRepoView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspacePrompt.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceRepoStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSourceCard.swift
@@ -669,6 +671,7 @@ $(SRCROOT)/IntentTests/NavigationPopObserverTests.swift
 $(SRCROOT)/IntentTests/NetworkAvailabilityTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerAnchorTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerTests.swift
+$(SRCROOT)/IntentTests/NewRepositoryDraftTests.swift
 $(SRCROOT)/IntentTests/NoteContentSegmentsTests.swift
 $(SRCROOT)/IntentTests/NoteDetailViewLifecycleTests.swift
 $(SRCROOT)/IntentTests/NoteRowIconTests.swift
@@ -838,6 +841,7 @@ $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Keyboard.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+RecoveryResize.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
+$(SRCROOT)/IntentUITests/CreateNewRepositoryUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
 $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuTestSupport.swift

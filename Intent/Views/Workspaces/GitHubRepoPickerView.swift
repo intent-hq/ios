@@ -6,7 +6,8 @@ import SwiftUI
 /// below, both prefix-filtered client-side by the typed text, followed by
 /// deduped debounced global search results. When GitHub is not connected
 /// (`github.authStatus.isConfigured == false`) the screen shows
-/// desktop-setup guidance instead — there is no fallback flow, so recents
+/// desktop-setup guidance for existing repos; the new-repository action
+/// remains available. Recents are
 /// are deliberately auth-gated at render time too: picking a repo needs
 /// GitHub for branch listing and workspace creation either way.
 ///
@@ -17,6 +18,7 @@ import SwiftUI
 struct GitHubRepoPickerView: View {
     var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
+    let onCreateRepository: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -42,6 +44,18 @@ struct GitHubRepoPickerView: View {
 
     var body: some View {
         CreateWorkspaceSelectionPage(title: "Select Repository", titleIdentifier: "creation.repositoryTitle") {
+            Button(action: onCreateRepository) {
+                Label("New Repository", systemImage: "plus")
+                    .interFont(Constants.Typography.bodySEmphasized)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(CreateWorkspaceFormStyle.controlPadding)
+                    .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+                    .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(
+                        cornerRadius: CreateWorkspaceFormStyle.cornerRadius
+                    ))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("creation.newRepository")
             content
         }
         .task {

@@ -4,6 +4,7 @@ struct CreateWorkspaceView: View {
     private enum Route: Hashable {
         case branches
         case create
+        case newRepository
     }
 
     struct CreationContextRow: Equatable, Identifiable {
@@ -23,6 +24,8 @@ struct CreateWorkspaceView: View {
     private let session: BackendSession
     @State private var navigationPath: [Route] = []
     @State private var selectedRepo: GitHubRepo?
+    @State private var newRepositoryDraft = NewRepositoryDraft()
+    @State private var newRepositoryPath: String?
     @State private var selectedBranch: String?
     @State private var branchSearchText = ""
     @State private var completedBranchQuery: String?
@@ -187,20 +190,40 @@ struct CreateWorkspaceView: View {
         guard navigationPath.contains(.create) else { return }
         Task { await fetchCreationOptions() }
     }
+}
 
+extension CreateWorkspaceView {
     private var repositoryStep: some View {
         CreateWorkspaceRepoStepView(
             store: githubStore,
             selectedRepo: $selectedRepo,
             onClose: { dismiss() },
-            onNext: { navigationPath.append(.branches) },
-            onRepoChanged: resetRepositoryState
+            onNext: {
+                idempotencyKey = UUID().uuidString
+                navigationPath.append(.branches)
+            },
+            onRepoChanged: resetRepositoryState,
+            onCreateRepository: {
+                idempotencyKey = UUID().uuidString
+                navigationPath.append(.newRepository)
+            }
         )
     }
 
     @ViewBuilder
     private func destination(for route: Route) -> some View {
         switch route {
+        case .newRepository:
+            CreateWorkspaceNewRepoView(
+                draft: $newRepositoryDraft,
+                connection: session.connection,
+                onBack: { navigationPath.removeLast() },
+                onNext: { path in
+                    if newRepositoryPath != path { idempotencyKey = UUID().uuidString }
+                    newRepositoryPath = path
+                    navigationPath.append(.create)
+                }
+            )
         case .branches:
             CreateWorkspaceBranchStepView(
                 repositoryFullName: selectedRepo?.fullName ?? "",
@@ -219,8 +242,8 @@ struct CreateWorkspaceView: View {
             )
         case .create:
             CreateWorkspaceSpecialistStepView(
-                repositoryFullName: selectedRepo?.fullName ?? "",
-                branch: selectedBranch ?? "",
+                repositoryFullName: navigationPath.contains(.newRepository) ? (newRepositoryPath ?? "") : (selectedRepo?.fullName ?? ""),
+                branch: navigationPath.contains(.newRepository) ? nil : selectedBranch,
                 specialists: specialists,
                 isLoadingSpecialists: isLoadingOptions,
                 selectedSpecialist: $selectedSpecialist,
@@ -396,54 +419,26 @@ struct CreateWorkspaceView: View {
 }
 
 extension CreateWorkspaceView {
-    /// The pickers' loading state: shown while the store runs a cold load
-    /// (first load or reconnect reload) and before this sheet's first load
-    /// has settled on an empty cache; never for a warm cache revalidating,
-    /// and not after a settled load that failed (empty state instead).
-    static func showsOptionsLoading(
-        storeIsLoading: Bool, storeHasLoaded: Bool, settled: Bool
-    ) -> Bool {
-        storeIsLoading || (!storeHasLoaded && !settled)
-    }
-
-    // swiftlint:disable discouraged_optional_boolean
-    /// Create's model-catalog gate: on while the selected provider's catalog
-    /// is not cached (`catalogCached == false`) and this sheet's load for
-    /// that provider has not settled; never for a cached catalog (instant
-    /// path), no selected provider (nothing to wait on), or after that
-    /// provider's load settled — a failed catalog load then falls back to
-    /// the daemon default.
-    static func showsModelCatalogLoading(catalogCached: Bool?, settled: Bool) -> Bool {
-        catalogCached == false && !settled
-    }
-    // swiftlint:enable discouraged_optional_boolean
-
     static let createRequestTimeout: TimeInterval = 120
-
-    static func creationContextRows(
-        repositoryFullName: String,
-        branch: String? = nil
-    ) -> [CreationContextRow] {
-        var rows = [CreationContextRow(label: "Repository", value: repositoryFullName)]
-        if let branch {
-            rows.append(CreationContextRow(label: "Branch", value: branch))
-        }
-        return rows
-    }
-
-    static func usesExpandedFormLayout(for size: DynamicTypeSize) -> Bool {
-        size.isAccessibilitySize
-    }
 
     private func createWorkspace() {
         guard !isCreating, !images.isImporting, canSubmitProvider,
-              let repo = selectedRepo, let branch = selectedBranch else { return }
+              let source = repositorySource else { return }
         isCreating = true
 
-        Task { await performCreateWorkspace(repo: repo, branch: branch) }
+        Task { await performCreateWorkspace(source: source) }
     }
 
-    private func performCreateWorkspace(repo: GitHubRepo, branch: String) async {
+    private var repositorySource: WorkspaceRepositorySource? {
+        if navigationPath.contains(.newRepository) {
+            guard let path = newRepositoryPath, path == newRepositoryDraft.repositoryPath else { return nil }
+            return .newRepository(path: path)
+        }
+        guard let repo = selectedRepo, let branch = selectedBranch else { return nil }
+        return .github(url: "https://github.com/\(repo.owner)/\(repo.name)", baseRef: branch)
+    }
+
+    private func performCreateWorkspace(source: WorkspaceRepositorySource) async {
         // Recheck at the request boundary: a refresh may have removed the selection after the tap but before this task ran.
         guard canSubmitProvider, !images.isImporting else {
             isCreating = false
@@ -451,8 +446,7 @@ extension CreateWorkspaceView {
         }
         do {
             let params = Self.buildCreateWorkspaceParams(
-                githubUrl: "https://github.com/\(repo.owner)/\(repo.name)",
-                baseRef: branch,
+                source: source,
                 idempotencyKey: idempotencyKey,
                 initialAgent: InitialAgentInput(
                     specialist: selectedSpecialist,

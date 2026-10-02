@@ -6,7 +6,10 @@ extension DemoFixtures {
     static func workspaceCreationResponse(for method: String, params: [String: Any]) -> Any {
         switch method {
         case "github.authStatus":
-            return ["isConfigured": true]
+            return ["isConfigured": !ProcessInfo.processInfo.arguments.contains("--demo-github-disconnected")]
+        case "host.directoryStatus":
+            let path = params["path"] as? String ?? ""
+            return ["exists": path.hasSuffix("/existing-project"), "path": path]
         case "github.repos.list":
             return [
                 "repos": [
