@@ -58,7 +58,7 @@ struct GitHubRepoPickerView: View {
             isLoading: isInitiallyLoading,
             isNextDisabled: selectedRepo == nil,
             onNext: onNext,
-            introduction: { newRepositorySection },
+            leadingAction: { newRepositoryButton },
             content: {
                 CreateWorkspaceSearchResults { content }
             }
@@ -73,24 +73,20 @@ struct GitHubRepoPickerView: View {
 
     // MARK: - Subviews
 
-    private var newRepositorySection: some View {
-        VStack(spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
-            Button(action: onCreateRepository) {
-                Label("New Repository", systemImage: "plus")
-                    .interFont(Constants.Typography.bodySEmphasized)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(CreateWorkspaceFormStyle.controlPadding)
-                    .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
-                    .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(
-                        cornerRadius: CreateWorkspaceFormStyle.cornerRadius
-                    ))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("creation.newRepository")
-            CreateWorkspaceRepoStyle.divider(for: colorScheme)
-                .frame(height: CreateWorkspaceRepoStyle.dividerHeight)
-                .accessibilityHidden(true)
+    private var newRepositoryButton: some View {
+        Button(action: onCreateRepository) {
+            Label("New", systemImage: "plus")
+                .interFont(Constants.Typography.bodySEmphasized)
+                .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
+                .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
+                .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
+                .background(CreateWorkspaceRepoStyle.card(for: colorScheme), in: .rect(
+                    cornerRadius: CreateWorkspaceFormStyle.cornerRadius
+                ))
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("New Repository")
+        .accessibilityIdentifier("creation.newRepository")
     }
 
     @ViewBuilder

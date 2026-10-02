@@ -4,7 +4,7 @@ private enum CreateWorkspaceCoordinates {
     static let content = "creation.selectionContent"
 }
 
-struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
+struct CreateWorkspaceSelectionPage<LeadingAction: View, Content: View>: View {
     let title: LocalizedStringKey
     let titleIdentifier: String
     @Binding var searchText: String
@@ -14,7 +14,7 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
     let isLoading: Bool
     let isNextDisabled: Bool
     let onNext: (() -> Void)?
-    let introduction: Introduction
+    let leadingAction: LeadingAction
     let content: Content
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -34,7 +34,7 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
         isLoading: Bool = false,
         isNextDisabled: Bool = false,
         onNext: (() -> Void)? = nil,
-        @ViewBuilder introduction: () -> Introduction = { EmptyView() },
+        @ViewBuilder leadingAction: () -> LeadingAction = { EmptyView() },
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
@@ -46,7 +46,7 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
         self.isLoading = isLoading
         self.isNextDisabled = isNextDisabled
         self.onNext = onNext
-        self.introduction = introduction()
+        self.leadingAction = leadingAction()
         self.content = content()
     }
 
@@ -106,10 +106,7 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
 
     private var pageContent: some View {
         VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.titleSpacing) {
-            VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
-                introduction
-                heading
-            }
+            heading
             if !isLoading {
                 content
             }
@@ -140,6 +137,7 @@ struct CreateWorkspaceSelectionPage<Introduction: View, Content: View>: View {
         VStack(spacing: 0) {
             if let onNext {
                 HStack {
+                    leadingAction
                     Spacer()
                     CreateWorkspaceNextButton(isDisabled: isNextDisabled, onNext: onNext)
                 }
