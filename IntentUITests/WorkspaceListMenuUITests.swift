@@ -7,10 +7,14 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     func testRecentAgentsOpensAndClosesExistingDrawer() {
         let app = launchWorkspaces()
         app.buttons["workspaces.menu"].tap()
+        capture(app, named: "workspace-list-menu")
         app.buttons["Recent agents"].tap()
         let close = app.buttons["agent-history.close"]
         XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.otherElements["agent-history.list"].exists)
+        let heading = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Recent agents")).firstMatch
+        XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(heading.isHittable)
+        capture(app, named: "workspace-menu-recent-agents")
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["workspaces.menu"].isHittable)
@@ -47,5 +51,13 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         }
         XCTAssertTrue(menu.waitForExistence(timeout: Self.timeout))
         return app
+    }
+
+    @MainActor
+    private func capture(_ app: XCUIApplication, named name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }
