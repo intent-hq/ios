@@ -41,15 +41,18 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         app.buttons["Recent connections"].tap()
         travel.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
-        let menu = app.buttons["workspaces.menu"]
+        // iPad opens the selected connection in its own native window.
+        let window = app.windows.firstMatch
+        let menu = window.buttons["workspaces.menu"]
         if UIDevice.current.userInterfaceIdiom == .pad, !menu.isHittable {
-            app.buttons["Show Sidebar"].tap()
+            window.buttons["Show Sidebar"].tap()
         }
         menu.tap()
         app.buttons["Recent connections"].tap()
-        XCTAssertTrue(travel.isSelected)
-        close.tap()
-        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(connection("Travel Mac", in: window).isSelected)
+        let activeClose = window.buttons["connection-switcher.close"]
+        activeClose.tap()
+        XCTAssertTrue(activeClose.waitForNonExistence(timeout: Self.timeout))
     }
 
     @MainActor
@@ -69,8 +72,8 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     }
 
     @MainActor
-    private func connection(_ name: String, in app: XCUIApplication) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "connection-switcher.connection.", name)).firstMatch
+    private func connection(_ name: String, in container: XCUIElement) -> XCUIElement {
+        container.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "connection-switcher.connection.", name)).firstMatch
     }
 
     @MainActor
