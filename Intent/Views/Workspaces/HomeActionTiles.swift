@@ -17,6 +17,7 @@ struct HomeActionTiles: View {
     var allowsWorkspaceCreation = true
     var allowsAssistant = true
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .body) private var tileHeight = Layout.minimumHeight
@@ -26,6 +27,7 @@ struct HomeActionTiles: View {
     private enum Layout {
         static let inset: CGFloat = 24
         static let spacing: CGFloat = 8
+        static let maximumTileWidth: CGFloat = 192
         static let minimumHeight: CGFloat = 240
         static let cornerRadius: CGFloat = 20
         static let iconSize: CGFloat = 24
@@ -49,7 +51,9 @@ struct HomeActionTiles: View {
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         .scrollTargetBehavior(.viewAligned)
-        .contentMargins(.horizontal, Layout.inset, for: .scrollContent)
+        .defaultScrollAnchor(.trailing, for: .alignment)
+        .contentMargins(.horizontal, sizeClass == .regular ? 0 : Layout.inset, for: .scrollContent)
+        .padding(.horizontal, sizeClass == .regular ? Layout.inset : 0)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("intent.menu.tiles")
     }
@@ -65,7 +69,11 @@ struct HomeActionTiles: View {
             }
             .padding(Layout.inset)
             .frame(maxWidth: .infinity, minHeight: max(Layout.minimumHeight, tileHeight), alignment: .leading)
-            .containerRelativeFrame(.horizontal, count: dynamicTypeSize.isAccessibilitySize ? 1 : 2, spacing: Layout.spacing)
+            .containerRelativeFrame(.horizontal) { width, _ in
+                let columns: CGFloat = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+                let contentWidth = min(width, Layout.maximumTileWidth * 2 + Layout.spacing)
+                return (contentWidth - Layout.spacing * (columns - 1)) / columns
+            }
             .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
         }
