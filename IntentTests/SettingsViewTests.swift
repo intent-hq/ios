@@ -6,6 +6,16 @@ import UIKit
 @MainActor
 @Suite(.serialized)
 struct SettingsViewTests {
+    @Test(arguments: [
+        (UserInterfaceSizeClass?.some(.compact), true),
+        (UserInterfaceSizeClass?.some(.regular), false),
+        (UserInterfaceSizeClass?.none, false)
+    ])
+    func settingsSheetFollowsAvailableWidth(sizeClass: UserInterfaceSizeClass?, presented: Bool) {
+        #expect(RootView.presentsSettingsSheet(currentScreen: .settings, sizeClass: sizeClass) == presented)
+        #expect(!RootView.presentsSettingsSheet(currentScreen: .workspaceList, sizeClass: sizeClass))
+    }
+
     @Test(arguments: [CGFloat(272), CGFloat(552)])
     func actionLabelGrowsWithoutOverflowingAtAccessibilitySizes(width: CGFloat) {
         let label = SettingsActionLabel(title: "Manual Connection", image: .connectManual)
