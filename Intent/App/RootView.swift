@@ -145,7 +145,7 @@ struct RootView: View {
                 isPresented: $showingConnectionSwitcher,
                 isEnabled: isWorkspaceFlow && !showingConnections && !showingCreateWorkspace
                     && coordinator.selectedSection == .workspaces,
-                onReveal: { isSearchingWorkspaces = false }
+                onReveal: prepareConnectionSwitcher
             ) {
                 NavigationSplitView {
                     WorkspaceListSidebar(
@@ -181,6 +181,10 @@ struct RootView: View {
                     .environment(coordinator)
             }
         }
+    }
+
+    private func prepareConnectionSwitcher() {
+        isSearchingWorkspaces = false
     }
 
     private var launchContent: some View {
