@@ -447,6 +447,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+AgentGroups.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceListMenu.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
@@ -878,6 +879,7 @@ $(SRCROOT)/IntentUITests/WorkspaceBrowserUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceChangesUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceComposerUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceEntryUITests.swift
+$(SRCROOT)/IntentUITests/WorkspaceListMenuUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceScriptUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceSearchUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift

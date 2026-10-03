@@ -95,6 +95,16 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         app.scrollViews["workspaces.list"].swipeDown()
         XCTAssertFalse(row.exists)
         XCTAssertFalse(other.exists)
+
+        app.buttons["workspaces.menu"].tap()
+        app.buttons["Show archived"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(other.exists)
+        app.scrollViews["workspaces.list"].swipeDown()
+        XCTAssertTrue(row.exists)
+        app.buttons["workspaces.menu"].tap()
+        app.buttons["Hide archived"].tap()
+        XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
     }
 
     @MainActor

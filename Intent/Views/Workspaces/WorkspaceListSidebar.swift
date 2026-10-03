@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkspaceListSidebar: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.openAgentHistory) private var openAgentHistory
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
@@ -51,6 +52,23 @@ struct WorkspaceListSidebar: View {
             await workspaceStore.fetchAll()
         }
         .navigationTitle("Workspaces")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                WorkspaceListMenu(showArchived: $viewModel.showArchived) {
+                    searchFocused = false
+                    isSearching = false
+                    revealedSwipeTarget = nil
+                    openAgentHistory()
+                } onRecentWorkspaces: {
+                    searchFocused = false
+                    isSearching = false
+                    revealedSwipeTarget = nil
+                    viewModel.searchText = ""
+                    viewModel.viewMode = .recent
+                }
+            }
+        }
+        .onChange(of: viewModel.showArchived) { _, _ in revealedSwipeTarget = nil }
         .onDisappear {
             isSearching = false
             viewModel.searchText = ""

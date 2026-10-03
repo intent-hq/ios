@@ -9,6 +9,25 @@ import UIKit
 extension AppCoordinatorTests {
     // MARK: - Missing workspace handling
 
+    @Test @MainActor func archivedWorkspaceStaysOpenUntilArchivesAreHidden() async throws {
+        let workspaceId = "archived-workspace"
+        let store = WorkspaceStore(forTesting: true)
+        store.showArchived = true
+        let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
+        defer { cleanupLastScreen() }
+        coordinator.onSelectWorkspace(workspaceId)
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: workspaceId, status: "Archived")])
+
+        try await expectNever("archived workspace dismissed while archives are visible") {
+            !Self.isWorkspaceDetail(coordinator.currentScreen, for: workspaceId)
+        }
+
+        store.showArchived = false
+        try await waitUntil("workspace list after hiding the selected archive") {
+            Self.isWorkspaceList(coordinator.currentScreen)
+        }
+    }
+
     @Test @MainActor func handleMissingWorkspace_navigatesToWorkspaceList() {
         let wsId = "test-coord-missing-ws-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
