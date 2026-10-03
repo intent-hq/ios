@@ -883,3 +883,4 @@ $(SRCROOT)/IntentUITests/WorkspaceSearchUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceSwipeUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceTransferUITests.swift
+$(SRCROOT)/IntentUITests/WorkspaceWindowControlsUITests.swift
