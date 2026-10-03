@@ -65,6 +65,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
     func testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh() {
         let app = launchWorkspaces()
         let row = app.buttons["workspace.row.\(Self.workspaceId)"]
+        XCTAssertTrue(row.label.contains("Updated "))
         for action in ["Archive", "Delete"] {
             revealActions(on: row)
             let button = app.buttons["workspace.\(action.lowercased()).\(Self.workspaceId)"]
@@ -99,9 +100,13 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         app.buttons["workspaces.menu"].tap()
         app.buttons["Show archived"].tap()
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.label.contains("Archived"))
+        XCTAssertFalse(row.label.contains("Updated "))
         XCTAssertFalse(other.exists)
         app.scrollViews["workspaces.list"].swipeDown()
         XCTAssertTrue(row.exists)
+        XCTAssertTrue(row.label.contains("Archived"))
+        XCTAssertFalse(row.label.contains("Updated "))
         let archivedScreenshot = XCTAttachment(screenshot: app.screenshot())
         archivedScreenshot.name = "workspace-archived-badge"
         archivedScreenshot.lifetime = .keepAlways

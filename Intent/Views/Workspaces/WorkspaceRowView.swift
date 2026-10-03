@@ -98,7 +98,7 @@ struct WorkspaceRowView: View {
     private var hasMetadata: Bool {
         let hasRepository = showRepo && workspace.repositoryName != nil
         let hasPullRequests = prIndicator.pill != nil || prIndicator.otherMonitorCount > 0
-        let hasActivityLabel = workspace.status == "archived" || workspace.lastActivity != nil || workspace.updatedAt != nil
+        let hasActivityLabel = workspace.status?.lowercased() == "archived" || workspace.lastActivity != nil || workspace.updatedAt != nil
         let showsMetadataActivity = !spacious || Self.usesExpandedMetadataLayout(for: dynamicTypeSize)
         return hasRepository || hasPullRequests || (hasActivityLabel && showsMetadataActivity)
     }
@@ -306,7 +306,7 @@ struct WorkspaceRowView: View {
 
     @ViewBuilder
     private var activityLabel: some View {
-        if workspace.status == "archived" {
+        if workspace.status?.lowercased() == "archived" {
             archivedBadge
                 .opacity(timestampOpacity)
         } else if let activity = workspace.lastActivity ?? workspace.updatedAt {
