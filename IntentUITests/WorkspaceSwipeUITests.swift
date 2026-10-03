@@ -102,6 +102,10 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         XCTAssertFalse(other.exists)
         app.scrollViews["workspaces.list"].swipeDown()
         XCTAssertTrue(row.exists)
+        let archivedScreenshot = XCTAttachment(screenshot: app.screenshot())
+        archivedScreenshot.name = "workspace-archived-badge"
+        archivedScreenshot.lifetime = .keepAlways
+        add(archivedScreenshot)
         app.buttons["workspaces.menu"].tap()
         app.buttons["Hide archived"].tap()
         XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))

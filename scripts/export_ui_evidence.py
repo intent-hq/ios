@@ -11,6 +11,9 @@ import tempfile
 
 
 CAPTURES = {
+    "WorkspaceSwipeUITests": {
+        "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
+    },
     "WorkspaceListMenuUITests": {
         "testRecentAgentsOpensAndClosesExistingDrawer": (
             "workspace-list-menu", "workspace-menu-recent-agents",
