@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct ConversationDeltaCompatibilityTests {
-    @Test func requestsIncrementalSlimSnapshotWithDefaultPageBudget() async throws {
+    @Test func requestsIncrementalSlimSnapshotWithFiftyMessageLimit() async throws {
         let connection = RPCRecordingConnection()
         connection.responseMap["chat.subscribe"] = ["subscriptionId": "chat"]
         connection.responseMap["chat.unsubscribe"] = [:] as [String: Any]
@@ -16,7 +16,8 @@ struct ConversationDeltaCompatibilityTests {
         #expect(params["deltaEncoding"] as? String == "incremental")
         #expect(params["projection"] as? String == "slim")
         #expect(params["replaceGroup"] as? String == "ios-chat-agent")
-        #expect(Set(params.keys) == ["agentId", "deltaEncoding", "projection", "replaceGroup"])
+        #expect(params["limit"] as? Int == 50)
+        #expect(Set(params.keys) == ["agentId", "deltaEncoding", "projection", "replaceGroup", "limit"])
         #expect(connection.traffic().methodCounts == ["chat.subscribe": 1])
     }
 
@@ -32,6 +33,7 @@ struct ConversationDeltaCompatibilityTests {
         await live.subscribe(agentId: "agent")
         let params = connection.paramsForMethod("chat.subscribe")
         #expect(params.count == 2)
+        #expect(params.allSatisfy { $0["limit"] as? Int == 50 })
         #expect(params.first?["deltaEncoding"] as? String == "incremental")
         #expect(params.last?["deltaEncoding"] == nil)
         #expect(params.last?["projection"] as? String == "slim")
@@ -41,6 +43,7 @@ struct ConversationDeltaCompatibilityTests {
         live.prepareForReconnect()
         await live.subscribe(agentId: "agent")
         #expect(connection.paramsForMethod("chat.subscribe").count == 4)
+        #expect(connection.paramsForMethod("chat.subscribe").allSatisfy { $0["limit"] as? Int == 50 })
         #expect(connection.paramsForMethod("chat.subscribe").last?["deltaEncoding"] as? String == "incremental")
     }
 

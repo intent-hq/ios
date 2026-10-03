@@ -19,7 +19,8 @@ struct ConversationStoreIntegrationTests {
 
     /// The registration acks first; the load stays open until its seq-0
     /// snapshot lands, which is the whole transcript. No page fetch runs.
-    @Test func firstOpenAwaitsTheSnapshotAndNeverFetchesAPage() async throws {
+    @Test(arguments: [0, 3, 50])
+    func firstOpenAwaitsTheSnapshotAndNeverFetchesAPage(messageCount: Int) async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
@@ -30,19 +31,22 @@ struct ConversationStoreIntegrationTests {
         let wait = Task { await store.awaitLiveChatSnapshot() }
         try await waitUntil("the snapshot wait to park") { !store.liveTranscript.snapshotWaiters.isEmpty }
 
+        let messageIds = (0..<messageCount).map { "msg-\($0)" }
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .snapshot,
             seq: 0,
-            snapshot: [conversationRow(id: "msg-1", text: "Hello")],
+            snapshot: messageIds.map { conversationRow(id: $0, text: "Hello") },
             delta: nil
         ))
         await wait.value
 
-        #expect(store.messages.map(\.id) == ["msg-1"])
+        #expect(store.messages.map(\.id) == messageIds)
+        #expect(store.totalMessageCount == messageCount)
         #expect(!store.isLoading)
         #expect(store.liveTranscript.snapshotWaiters.isEmpty)
         #expect(fake.paramsForMethod("chat.subscribe").count == 1)
+        #expect(fake.paramsForMethod("chat.subscribe").first?["limit"] as? Int == 50)
         #expect(fake.requestLog.allSatisfy { $0.method.hasPrefix("chat.") }, "the transcript has no other source")
     }
 
@@ -90,6 +94,7 @@ struct ConversationStoreIntegrationTests {
         #expect(!store.isLoading)
         #expect(fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-1"])
         #expect(fake.paramsForMethod("chat.subscribe").count == 2)
+        #expect(fake.paramsForMethod("chat.subscribe").allSatisfy { $0["limit"] as? Int == 50 })
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
         #expect(fake.hasSubscriptionHandler(id: "sub-2"))
         #expect(store.liveTranscript.nextRetryDelay == nil, "an applied snapshot resets the backoff")
@@ -118,6 +123,7 @@ struct ConversationStoreIntegrationTests {
         try await waitUntil("the retried registration's snapshot") { store.messages.map(\.id) == ["msg-1"] }
         #expect(!store.isLoading)
         #expect(store.liveTranscript.nextRetryDelay == nil)
+        #expect(fake.paramsForMethod("chat.subscribe").allSatisfy { $0["limit"] as? Int == 50 })
         #expect(!fake.didCallMethod("agent.getConversation"), "a rejected registration retries, it never fetches")
     }
 
@@ -863,5 +869,7 @@ extension ConversationStoreIntegrationTests {
         #expect(store.messages.map(\.id) == ["msg-1"])
         #expect(!store.isLoading)
         #expect(fake.hasSubscriptionHandler(id: "sub-2"))
+        #expect(fake.paramsForMethod("chat.subscribe").count == 2)
+        #expect(fake.paramsForMethod("chat.subscribe").allSatisfy { $0["limit"] as? Int == 50 })
     }
 }
