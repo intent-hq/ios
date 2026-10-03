@@ -300,6 +300,7 @@ $(SRCROOT)/Intent/Views/Components/ToastView.swift
 $(SRCROOT)/Intent/Views/Components/WindowFeedbackSoundEmitter.swift
 $(SRCROOT)/Intent/Views/Connection/CertMismatchListView.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectingView.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionBackButton.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionFailureView.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossOverlay.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossPresenter.swift
@@ -845,6 +846,7 @@ $(SRCROOT)/IntentTests/WorkspaceTransferStoreTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/AssistantNavigationUITests.swift
 $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
+$(SRCROOT)/IntentUITests/ConnectionFailureRecoveryUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossContrastAssertions.swift
 $(SRCROOT)/IntentUITests/ConnectionLossUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionSwitcherUITests.swift
