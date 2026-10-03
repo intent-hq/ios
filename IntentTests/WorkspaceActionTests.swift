@@ -6,10 +6,12 @@ import Testing
 struct WorkspaceActionTests {
     @Test func refreshIncludesArchivedRowsWithoutShowingThemByDefault() async throws {
         let (fake, store) = try fixture()
-        fake.responseMap["workspace.list"] = ["workspaces": [
-            ["id": "active", "title": "Active"],
-            ["id": "archived", "title": "Archived", "status": "Archived"]
-        ]]
+        fake.responseMap["workspace.list"] = [
+            "workspaces": [
+                ["id": "active", "title": "Active"],
+                ["id": "archived", "title": "Archived", "status": "Archived"]
+            ]
+        ]
         let model = WorkspaceListViewModel(workspaceStore: store)
 
         await store.fetchAll()
