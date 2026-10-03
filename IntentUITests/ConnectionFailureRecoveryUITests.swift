@@ -21,6 +21,7 @@ extension ConnectionLossUITests {
         var arguments = ["--demo-connection-loss-pending-startup", "--demo-connection-loss-startup-failure"]
         arguments.append(certificateMismatch
             ? "--demo-connection-loss-cert-mismatch" : "--demo-connection-loss-startup-unreachable")
+        arguments += ["-appThemePreference", certificateMismatch ? "dark" : "light"]
         let app = launch(directory: directory, arguments: arguments, waitForStartup: false)
         assertStartupState("connected", in: app)
         try trigger("loss", in: directory)
