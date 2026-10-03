@@ -21,27 +21,42 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     }
 
     @MainActor
-    func testRecentWorkspacesClearsSearchAndReturnsToRecentView() {
+    func testRecentConnectionsOpensSwitcherAndSelectsConnection() {
         let app = launchWorkspaces()
         app.buttons["workspaces.viewMode.Repo"].tap()
-        app.buttons["workspaces.search.open"].tap()
-        let field = app.textFields["workspaces.search.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
-        field.typeText("no-matching-workspace\n")
+        app.buttons["workspaces.menu"].tap()
+        app.buttons["Recent connections"].tap()
+        let close = app.buttons["connection-switcher.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
+        let studio = connection("Studio Mac", in: app)
+        let travel = connection("Travel Mac", in: app)
+        XCTAssertTrue(studio.isSelected)
+        XCTAssertTrue(travel.isHittable)
+        capture(app, named: "workspace-menu-recent-connections")
+        studio.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspaces.viewMode.Repo"].isSelected)
 
         app.buttons["workspaces.menu"].tap()
-        app.buttons["Recent workspaces"].tap()
-
-        XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["workspaces.viewMode.Recent"].isSelected)
-        XCTAssertTrue(app.buttons["workspace.row.demo-ws-dashboard"].exists)
+        app.buttons["Recent connections"].tap()
+        travel.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        let menu = app.buttons["workspaces.menu"]
+        if UIDevice.current.userInterfaceIdiom == .pad, !menu.isHittable {
+            app.buttons["Show Sidebar"].tap()
+        }
+        menu.tap()
+        app.buttons["Recent connections"].tap()
+        XCTAssertTrue(travel.isSelected)
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
     }
 
     @MainActor
     private func launchWorkspaces() -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data"]
+        app.launchArguments += ["--demo-data", "--demo-settings", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         let menu = app.buttons["workspaces.menu"]
         if UIDevice.current.userInterfaceIdiom == .pad, !menu.waitForExistence(timeout: 2) {
@@ -51,6 +66,11 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         }
         XCTAssertTrue(menu.waitForExistence(timeout: Self.timeout))
         return app
+    }
+
+    @MainActor
+    private func connection(_ name: String, in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "connection-switcher.connection.", name)).firstMatch
     }
 
     @MainActor

@@ -180,10 +180,9 @@ struct WorkspaceListView: View {
             WorkspaceListMenu(showArchived: $viewModel.showArchived) {
                 prepareConnectionSwitcher()
                 openAgentHistory()
-            } onRecentWorkspaces: {
+            } onRecentConnections: {
                 prepareConnectionSwitcher()
-                viewModel.searchText = ""
-                viewModel.viewMode = .recent
+                showingConnectionSwitcher = true
             }
         }
         .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)

@@ -4,6 +4,7 @@ struct WorkspaceListSidebar: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openAgentHistory) private var openAgentHistory
+    @Environment(\.openConnectionSwitcher) private var openConnectionSwitcher
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
@@ -59,12 +60,11 @@ struct WorkspaceListSidebar: View {
                     isSearching = false
                     revealedSwipeTarget = nil
                     openAgentHistory()
-                } onRecentWorkspaces: {
+                } onRecentConnections: {
                     searchFocused = false
                     isSearching = false
                     revealedSwipeTarget = nil
-                    viewModel.searchText = ""
-                    viewModel.viewMode = .recent
+                    openConnectionSwitcher()
                 }
             }
         }

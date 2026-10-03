@@ -15,6 +15,7 @@ CAPTURES = {
         "testRecentAgentsOpensAndClosesExistingDrawer": (
             "workspace-list-menu", "workspace-menu-recent-agents",
         ),
+        "testRecentConnectionsOpensSwitcherAndSelectsConnection": ("workspace-menu-recent-connections",),
     },
     "WorkspaceSearchUITests": {
         "testSearchAboveKeyboardHidesAssistantUntilClosed": (

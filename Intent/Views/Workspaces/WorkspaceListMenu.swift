@@ -3,7 +3,7 @@ import SwiftUI
 struct WorkspaceListMenu: View {
     @Binding var showArchived: Bool
     let onRecentAgents: () -> Void
-    let onRecentWorkspaces: () -> Void
+    let onRecentConnections: () -> Void
 
     var body: some View {
         Menu {
@@ -15,14 +15,14 @@ struct WorkspaceListMenu: View {
                 }
             }
             .accessibilityIdentifier("workspaces.menu.recentAgents")
-            Button(action: onRecentWorkspaces) {
+            Button(action: onRecentConnections) {
                 Label {
-                    Text("Recent workspaces").interFont(Constants.Typography.bodyS)
+                    Text("Recent connections").interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "clock")
+                    Image(.connectionLaptop)
                 }
             }
-            .accessibilityIdentifier("workspaces.menu.recentWorkspaces")
+            .accessibilityIdentifier("workspaces.menu.recentConnections")
             Button {
                 showArchived.toggle()
             } label: {
