@@ -280,6 +280,10 @@ final class ConversationTranscriptScrollState {
         retainedViewport = position
     }
 
+    var hasPendingViewportRestoration: Bool {
+        retainedViewport != nil || viewportAnchor.hasPendingRetainedRestoration
+    }
+
     func entryDividerAdjustment(_ measurement: ConversationTranscriptViewportAnchor.Measurement, viewportHeight: CGFloat) -> CGFloat? {
         guard pendingEntryDivider != nil, pendingEntryDivider == measurement.divider,
               measurement.generation == initialScrollGeneration,

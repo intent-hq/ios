@@ -160,7 +160,11 @@ private extension ConversationTranscriptView {
         .demoAccessibilityValue(transcriptDemoReport)
         .demoStartupGestureProbe(scrollState: scrollState)
         .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentOffset.y + geometry.contentInsets.top <= geometry.visibleRect.height
+            ConversationTranscriptScrollPolicy.isNearHistoryTop(
+                contentOffsetY: geometry.contentOffset.y,
+                topInset: geometry.contentInsets.top,
+                viewportHeight: geometry.visibleRect.height
+            )
         } action: { _, isNearTop in
             scrollState.isNearHistoryTop = isNearTop
             loadOlderMessagesIfNeeded(proxy: proxy)

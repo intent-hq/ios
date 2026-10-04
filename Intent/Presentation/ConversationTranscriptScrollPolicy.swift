@@ -44,6 +44,13 @@ enum ConversationTranscriptScrollPolicy {
         !oldIDs.isEmpty && newIDs.count > oldIDs.count && newIDs.suffix(oldIDs.count).elementsEqual(oldIDs)
     }
 
+    private static let historyPrefetchScreenCount: CGFloat = 3
+
+    static func isNearHistoryTop(contentOffsetY: CGFloat, topInset: CGFloat, viewportHeight: CGFloat) -> Bool {
+        guard contentOffsetY.isFinite, topInset.isFinite, viewportHeight.isFinite, viewportHeight > 0 else { return false }
+        return contentOffsetY + topInset <= viewportHeight * historyPrefetchScreenCount
+    }
+
     static func shouldLoadOlderMessages(
         isNearTop: Bool,
         hasInitiallyScrolled: Bool,

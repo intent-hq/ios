@@ -41,6 +41,22 @@ struct ConversationTranscriptHistoryPolicyTests {
         #expect(!shouldLoad(hasError: true))
     }
 
+    @Test(arguments: [CGFloat(400), 800])
+    func historyPrefetchScalesWithViewportAndIncludesTheTopInset(height: CGFloat) {
+        let topInset: CGFloat = 64
+        #expect(ConversationTranscriptScrollPolicy.isNearHistoryTop(contentOffsetY: height * 2, topInset: topInset, viewportHeight: height))
+        #expect(ConversationTranscriptScrollPolicy.isNearHistoryTop(contentOffsetY: height * 3 - topInset, topInset: topInset, viewportHeight: height))
+        #expect(!ConversationTranscriptScrollPolicy.isNearHistoryTop(contentOffsetY: height * 3 - topInset + 1, topInset: topInset, viewportHeight: height))
+        #expect(ConversationTranscriptScrollPolicy.isNearHistoryTop(contentOffsetY: -topInset - 1, topInset: topInset, viewportHeight: height))
+    }
+
+    @Test func unavailableHistoryGeometryDoesNotPrefetch() {
+        #expect(!ConversationTranscriptScrollPolicy.isNearHistoryTop(contentOffsetY: 0, topInset: 0, viewportHeight: 0))
+        #expect(!ConversationTranscriptScrollPolicy.isNearHistoryTop(contentOffsetY: 0, topInset: 0, viewportHeight: .infinity))
+        #expect(!ConversationTranscriptScrollPolicy.isNearHistoryTop(contentOffsetY: .nan, topInset: 0, viewportHeight: 600))
+        #expect(!ConversationTranscriptScrollPolicy.isNearHistoryTop(contentOffsetY: 0, topInset: .nan, viewportHeight: 600))
+    }
+
     private func shouldLoad(
         isNearTop: Bool = true,
         hasInitiallyScrolled: Bool = true,

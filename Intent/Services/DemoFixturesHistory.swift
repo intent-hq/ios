@@ -55,7 +55,10 @@ extension DemoFixtures {
 
     private static func historyMessage(_ index: Int) -> [String: Any] {
         let detail = "We checked the payment flow and kept the investigation notes available for the next review. "
-        var text = "History message \(index + 1). " + String(repeating: detail, count: 1 + index % historyParagraphVariants)
+        // The middle page is short enough to stay in the prefetch band after
+        // insertion, exercising chained loading without another scroll gesture.
+        let paragraphs = (historyPageSize..<(historyMessageCount - historyPageSize)).contains(index) ? 1 : 1 + index % historyParagraphVariants
+        var text = "History message \(index + 1). " + String(repeating: detail, count: paragraphs)
         if index == historyMessageCount - 1 {
             text += "\n\n" + longConversationLastSentence + "\n\n"
                 + (["<!-- suggested-prompts"] + longConversationSuggestedPrompts + ["-->"]).joined(separator: "\n")

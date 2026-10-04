@@ -7,8 +7,10 @@ extension ConversationTranscriptView {
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         let generation = scrollState.initialScrollGeneration
         let ownershipRevision = scrollState.viewportOwnershipRevision
-        olderMessagesRow(proxy: proxy)
-            .id("older-messages")
+        if viewModel.olderMessagesError != nil || !viewModel.hasOlderMessages {
+            olderMessagesRow(proxy: proxy)
+                .id("older-messages")
+        }
 
         ForEach(viewModel.filteredMessages) { message in
             // One stable lazy-stack target per message. A late divider changes

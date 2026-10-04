@@ -25,7 +25,13 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         let beginning = app.staticTexts["transcript.historyBeginning"]
         XCTAssertFalse(beginning.exists)
 
-        scrollUp(in: opened) { followReport(in: opened).contains("historyLoading=true") }
+        scrollUpToPrefetch(in: opened)
+        let geometry = app.descendants(matching: .any).matching(identifier: "transcript.gestureState").firstMatch.value as? String ?? ""
+        let offset = try XCTUnwrap(geometryValue("offset", in: geometry))
+        let viewport = try XCTUnwrap(geometryValue("viewport", in: geometry))
+        XCTAssertGreaterThan(offset, viewport, "Prefetch must begin while more than one screen from the top: \(geometry)")
+        XCTAssertFalse(app.staticTexts["Loading earlier messages"].exists)
+        XCTAssertFalse(app.progressIndicators["transcript.historyLoading"].exists)
         XCTAssertFalse(beginning.exists, "The beginning label must not replace a pending page")
         let anchor = try XCTUnwrap(rows(intersecting: opened.transcript).first { row in
             row.label.hasPrefix("History message") && isInside(row.frame, opened.transcript)
@@ -59,6 +65,26 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
     }
 
     @MainActor
+    func testPendingHistoryHasNoLoadingRowAndChainsPagesFromTop() throws {
+        let app = launchHistory()
+        let opened = openLongConversation(in: app)
+        waitUntilSettled(on: opened.lastMessage, named: "last message", in: opened, context: "silent loading entry", allowPreservedEntry: true)
+        let oldestLoaded = message(in: app, containing: "History message 21.")
+        scrollUp(in: opened) { isVisible(oldestLoaded, in: opened.transcript) }
+        XCTAssertTrue(followReport(in: opened).contains("historyCount=10 historyLoading=true"))
+        XCTAssertFalse(app.progressIndicators["transcript.historyLoading"].exists)
+        XCTAssertFalse(app.staticTexts["Loading earlier messages"].exists)
+        XCTAssertFalse(app.buttons["transcript.historyRetry"].exists)
+        XCTAssertFalse(app.staticTexts["transcript.historyBeginning"].exists)
+
+        try Data().write(to: pageGate)
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
+            followReport(in: opened).contains("historyCount=30 historyLoading=false olderAvailable=false")
+        }, "A short older page must prefetch the next page without another gesture")
+        XCTAssertTrue(isVisible(oldestLoaded, in: opened.transcript), "Chained prepends must retain the visible message")
+    }
+
+    @MainActor
     func testFailedHistoryLoadCanBeRetriedWithoutLeavingConversation() throws {
         try Data().write(to: pageGate)
         let app = launchHistory(requiresRetry: true)
@@ -71,7 +97,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["transcript.historyBeginning"].exists)
         try Data().write(to: retryGate)
         retry.tap()
-        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { followReport(in: opened).contains("historyCount=20") })
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { followReport(in: opened).contains("historyCount=30 historyLoading=false") })
         let older = message(in: app, containing: "History message 11.")
         scrollUp(in: opened) { isVisible(older, in: opened.transcript) }
         XCTAssertFalse(retry.exists)
@@ -110,6 +136,23 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         var arguments = ["--demo-history-pages", "--demo-history-page-trigger-file=" + pageGate.path]
         if requiresRetry { arguments.append("--demo-history-retry-trigger-file=" + retryGate.path) }
         return launchDemoApp(hooksRowTriggerFile: hooksGate, extraArguments: arguments)
+    }
+
+    private func geometryValue(_ key: String, in report: String) -> Double? {
+        report.split(separator: " ")
+            .first { $0.hasPrefix(key + "=") }
+            .flatMap { Double($0.dropFirst(key.count + 1)) }
+    }
+
+    @MainActor
+    private func scrollUpToPrefetch(in opened: OpenConversation) {
+        for _ in 0..<Self.maximumSwipes {
+            if followReport(in: opened).contains("historyLoading=true") { return }
+            let start = opened.transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+            let end = opened.transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+        }
+        XCTFail("History did not prefetch: \(followReport(in: opened))")
     }
 
     @MainActor
