@@ -471,6 +471,39 @@ class SimulatorTests(unittest.TestCase):
     def test_source_moved_phase_retains_failure_and_retry_transcripts(self):
         self.check_phase_transcript("Source-independence check (ios#320)", "source-moved")
 
+    def test_selected_tests_preserve_ui_build_pairing_and_ipad_evidence(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        section = workflow.split("      - name: Run unit tests\n", 1)[1].split("\n      - name:", 1)[0]
+        command = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        cases = [("iphone", "", "test-without-building-unit"),
+                 ("iphone", "IntentUITests", "test-without-building-ui"),
+                 ("iphone", SELECTORS, "test-without-building"),
+                 ("ipad", SELECTORS, "test-without-building")]
+        for family, selectors, subcommand in cases:
+            for exit_code in (0, 65):
+                with self.subTest(family=family, selectors=selectors, exit_code=exit_code), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    (root / "scripts").mkdir()
+                    evidence = root / "evidence"
+                    evidence.mkdir()
+                    stub = root / "scripts/xcodebuild.sh"
+                    stub.write_text('#!/usr/bin/env bash\n'
+                                    'printf "%s\\n" "$*" "$ONLY_TESTING" "${ONLY_TESTING_IDENTITIES_PATH:-}" > "$CALLS"\n'
+                                    'printf "test stdout\\n"\nprintf "test stderr\\n" >&2\nexit "$STUB_TEST_EXIT"\n')
+                    stub.chmod(0o755)
+                    env = {"PATH": os.environ["PATH"], "SIMULATOR_FAMILY": family, "ONLY_TESTING": selectors,
+                           "IPAD_EVIDENCE_DIR": str(evidence), "CALLS": str(root / "calls"),
+                           "STUB_TEST_EXIT": str(exit_code)}
+                    result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", command], cwd=root, env=env,
+                                            text=True, capture_output=True)
+                    self.assertEqual(result.returncode, exit_code, result.stderr)
+                    identities = str(evidence / "resolved-tests.json") if family == "ipad" else ""
+                    self.assertEqual((root / "calls").read_text().splitlines(), [subcommand, selectors, identities])
+                    if family == "ipad":
+                        self.assertEqual((evidence / "test.log").read_text(), "test stdout\ntest stderr\n")
+                    else:
+                        self.assertFalse((evidence / "test.log").exists())
+
     def test_validation_step_initializes_and_persists_runner_evidence_directory(self):
         scripts = Path(__file__).resolve().parent
         workflow = (scripts.parent / ".github/workflows/ci.yml").read_text()

@@ -562,6 +562,7 @@ $(SRCROOT)/Intent/Views/Components/WindowFeedbackSoundEmitter.swift
 $(SRCROOT)/Intent/Views/Connection
 $(SRCROOT)/Intent/Views/Connection/CertMismatchListView.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectingView.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionBackButton.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionFailureView.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossOverlay.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossPresenter.swift
@@ -669,7 +670,6 @@ $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift
 $(SRCROOT)/Intent/Views/Onboarding/Splash
 $(SRCROOT)/Intent/Views/Onboarding/Splash/SplashArtView.swift
-$(SRCROOT)/Intent/Views/Onboarding/Splash/SplashVideoBackground.swift
 $(SRCROOT)/Intent/Views/Settings
 $(SRCROOT)/Intent/Views/Settings/AcknowledgementsView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticExportView.swift
@@ -1023,7 +1023,6 @@ $(SRCROOT)/IntentTests/SharedWorkspaceStatusRaceTests.swift
 $(SRCROOT)/IntentTests/SharedWorkspaceStatusTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
-$(SRCROOT)/IntentTests/SplashVideoBackgroundTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift
