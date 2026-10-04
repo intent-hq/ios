@@ -72,6 +72,31 @@ struct WatcherMessagePresentationTests {
         #expect(result.details == text)
     }
 
+    @Test func keepsContextMentionsInProseBeforeJSON() {
+        let result = WatcherMessagePresentation(text: #"Review @context[github|123|Build report] {"jobs":[]}"#)
+        let rows = MessageView.userTextRows(result.summary)
+        #expect(rows == [
+            .text("Review"), .chips([ContextMention(provider: "github", identifier: "123", title: "Build report", url: nil)])
+        ])
+        #expect(result.isJSON)
+    }
+
+    @Test func previewDoesNotSplitEncodedContextMentions() throws {
+        let url = "https://example.com/" + String(repeating: "long-path/", count: 50)
+        let data = try JSONSerialization.data(withJSONObject: [
+            "provider": "github", "identifier": "123", "title": "Build report", "url": url
+        ])
+        let text = "Review @context[\(data.base64EncodedString())] before continuing."
+        let result = WatcherMessagePresentation(text: text)
+        let mentions = ContextMention.segments(from: result.summary).compactMap { segment -> ContextMention? in
+            if case .mention(let mention) = segment { return mention }
+            return nil
+        }
+        #expect(mentions.first?.title == "Build report")
+        #expect(mentions.first?.url == url)
+        #expect(result.details == text)
+    }
+
     @Test func missingAndUnknownJobStatusesStayNeutral() {
         let text = #"{"jobs":[{"name":"Unknown"},{"name":"Future","status":"some_new_state"},"#
             + #"{"name":"Done","status":"completed","conclusion":null},{"name":"  "},{"status":"success"}]}"#

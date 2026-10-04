@@ -59,13 +59,22 @@ struct WatcherMessagePresentation {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             let lines = trimmed.components(separatedBy: .newlines)
             let isLong = trimmed.count > Self.previewCharacterLimit || lines.count > Self.previewLineLimit
-            summary = isLong
-                ? String(lines.prefix(Self.previewLineLimit).joined(separator: "\n").prefix(Self.previewCharacterLimit)) + "…"
-                : trimmed
+            summary = isLong ? Self.preview(of: trimmed, lines: lines) : trimmed
             checks = []
             details = isLong ? text : nil
             isJSON = false
         }
+    }
+
+    private static func preview(of text: String, lines: [String]) -> String {
+        let preview = String(lines.prefix(previewLineLimit).joined(separator: "\n").prefix(previewCharacterLimit))
+        var end = text.index(text.startIndex, offsetBy: preview.count)
+        if let opening = text.range(of: "@context[", options: .backwards, range: text.startIndex..<end),
+           let closing = text.range(of: "]", range: opening.upperBound..<text.endIndex),
+           closing.upperBound > end {
+            end = closing.upperBound
+        }
+        return String(text[..<end]) + "…"
     }
 
     private static func jsonPayload(in text: String) -> (prefix: String, value: Any)? {

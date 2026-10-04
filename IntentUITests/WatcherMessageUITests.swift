@@ -17,6 +17,7 @@ nonisolated final class WatcherMessageUITests: XCTestCase {
         agent.tap()
         let show = app.buttons["Show details"]
         XCTAssertTrue(show.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Build report"].exists, "Watcher prose must decode context mentions")
         let rawDetails = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Lint sources")).firstMatch
         XCTAssertFalse(rawDetails.exists, "The report must start collapsed")
         attachScreenshot(app, name: "Watcher summary")

@@ -14,11 +14,7 @@ struct WatcherMessageBodyView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Constants.Conversation.UserMessage.textRowSpacing) {
-            Text(presentation.summary)
-                .interFont(Constants.Typography.bodyXS)
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-                .lineLimit(presentation.details == nil || isExpanded ? nil : Self.previewLineLimit)
-                .textSelection(.enabled)
+            prose(presentation.summary, isPreview: presentation.details != nil && !isExpanded)
             ForEach(Array(presentation.checks.prefix(Self.visibleCheckLimit).enumerated()), id: \.offset) { _, check in
                 checkRow(check)
             }
@@ -32,6 +28,29 @@ struct WatcherMessageBodyView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func prose(_ text: String, isPreview: Bool = false) -> some View {
+        let rows = MessageView.userTextRows(text)
+        return VStack(alignment: .leading, spacing: Constants.Conversation.UserMessage.textRowSpacing) {
+            ForEach(Array(rows.prefix(isPreview ? Self.previewLineLimit : rows.count).enumerated()), id: \.offset) { _, row in
+                switch row {
+                case .text(let run):
+                    Text(run)
+                        .interFont(Constants.Typography.bodyXS)
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                        .lineLimit(isPreview ? Self.previewLineLimit : nil)
+                        .textSelection(.enabled)
+                case .chips(let mentions):
+                    ChipFlowLayout(spacing: Constants.Conversation.UserMessage.mentionChipSpacing) {
+                        ForEach(Array(mentions.enumerated()), id: \.offset) { _, mention in
+                            ContextMentionChipView(mention: mention)
+                                .copyContextMenuPassthrough()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func checkRow(_ check: WatcherMessagePresentation.Check) -> some View {
@@ -55,10 +74,7 @@ struct WatcherMessageBodyView: View {
                 if presentation.isJSON {
                     CodeBlockView(code: details, language: "json")
                 } else {
-                    Text(details)
-                        .interFont(Constants.Typography.bodyXS)
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .textSelection(.enabled)
+                    prose(details)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -68,5 +84,6 @@ struct WatcherMessageBodyView: View {
                 .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
         }
         .tint(Theme.mutedForeground(for: colorScheme))
+        .copyContextMenuPassthrough()
     }
 }

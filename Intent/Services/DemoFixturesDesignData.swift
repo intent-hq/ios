@@ -117,9 +117,11 @@ extension DemoDesignFixtures {
         let name = "Watch iOS Mermaid validation"
         let payload = #"{"conclusion":"","jobs":[{"name":"SwiftLint","conclusion":"failure","status":"completed","steps":[{"name":"Lint sources","conclusion":"failure"}]},"#
             + #"{"name":"iOS Build","conclusion":"","status":"in_progress"},{"name":"Unit tests","conclusion":"success","status":"completed"}]}"#
-        var row = message(id: "demo-design-watcher", role: "user", blocks: [DemoFixtures.textBlock(
-            "[Background hook \"\(name)\"] iOS Mermaid validation: \(payload)\n\n[This hook has retired.]"
-        )])
+        var row = message(id: "demo-design-watcher", role: "user", blocks: [
+            DemoFixtures.textBlock(
+                "[Background hook \"\(name)\"] iOS Mermaid validation: @context[github|123|Build report] \(payload)\n\n[This hook has retired.]"
+            )
+        ])
         row["metadata"] = [
             "type": "hook_wake", "hookName": name, "hookId": "demo-watcher",
             "reason": "dispatched", "hookStillActive": false
