@@ -547,6 +547,7 @@ $(SRCROOT)/Intent/Views/Agents/AgentHistoryList.swift
 $(SRCROOT)/Intent/Views/Agents/AgentRowView.swift
 $(SRCROOT)/Intent/Views/Components
 $(SRCROOT)/Intent/Views/Components/AssistantLaunchButton.swift
+$(SRCROOT)/Intent/Views/Components/BeforeToastView.swift
 $(SRCROOT)/Intent/Views/Components/EdgeDrawer.swift
 $(SRCROOT)/Intent/Views/Components/EdgeDrawerGesture.swift
 $(SRCROOT)/Intent/Views/Components/IntentLoadingIndicator.swift
@@ -556,6 +557,7 @@ $(SRCROOT)/Intent/Views/Components/NavigationTitleSubtitleView.swift
 $(SRCROOT)/Intent/Views/Components/RepoOwnerAvatarView.swift
 $(SRCROOT)/Intent/Views/Components/TaskProgressRingView.swift
 $(SRCROOT)/Intent/Views/Components/TaskStatusIconView.swift
+$(SRCROOT)/Intent/Views/Components/ToastEvidenceView.swift
 $(SRCROOT)/Intent/Views/Components/ToastView.swift
 $(SRCROOT)/Intent/Views/Components/WindowFeedbackSoundEmitter.swift
 $(SRCROOT)/Intent/Views/Connection
