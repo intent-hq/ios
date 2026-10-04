@@ -3,9 +3,18 @@ import SwiftUI
 struct CodeBlockView: View {
     let code: String
     let language: String?
+    @Environment(\.assistantMessageStreaming) private var isStreaming
     @State private var copied = false
 
     var body: some View {
+        if language == "mermaid", !isStreaming {
+            MermaidDiagramView(source: code)
+        } else {
+            sourceView
+        }
+    }
+
+    private var sourceView: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             codeContent

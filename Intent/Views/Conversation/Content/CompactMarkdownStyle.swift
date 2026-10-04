@@ -26,7 +26,7 @@ struct CompactMarkdownStyle: StructuredText.Style {
     let headingStyle = CompactHeadingStyle()
     let paragraphStyle = CompactParagraphStyle()
     let blockQuoteStyle = CompactBlockQuoteStyle()
-    let codeBlockStyle = CompactCodeBlockStyle()
+    let codeBlockStyle: MermaidCodeBlockStyle
     let listItemStyle: StructuredText.DefaultListItemStyle = .default
     let unorderedListMarker: StructuredText.HierarchicalSymbolListMarker = .hierarchical(
         .disc,
@@ -37,6 +37,10 @@ struct CompactMarkdownStyle: StructuredText.Style {
     let tableStyle = CompactTableStyle()
     let tableCellStyle = CompactTableCellStyle()
     let thematicBreakStyle = CompactThematicBreakStyle()
+
+    init(mermaidSources: [String: String] = [:]) {
+        codeBlockStyle = MermaidCodeBlockStyle(sources: mermaidSources)
+    }
 }
 
 extension StructuredText.Style where Self == CompactMarkdownStyle {
@@ -99,6 +103,20 @@ struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
             .background(Self.background)
             .clipShape(RoundedRectangle(cornerRadius: Constants.Markdown.CodeBlock.cornerRadius))
             .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
+    }
+}
+
+struct MermaidCodeBlockStyle: StructuredText.CodeBlockStyle {
+    let sources: [String: String]
+
+    @ViewBuilder
+    func makeBody(configuration: Configuration) -> some View {
+        if let language = configuration.languageHint, let source = sources[language] {
+            MermaidDiagramView(source: source)
+                .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
+        } else {
+            CompactCodeBlockStyle().makeBody(configuration: configuration)
+        }
     }
 }
 

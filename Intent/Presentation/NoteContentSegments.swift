@@ -72,7 +72,7 @@ enum NoteContentSegmenter {
         var index = 0
         while index < lines.count {
             let line = lines[index]
-            if let fence = NoteCodeFence(opening: line) {
+            if let fence = MarkdownCodeFence(opening: line) {
                 let bodyStart = index + 1
                 var end = bodyStart
                 while end < lines.count, !fence.closes(with: lines[end]) { end += 1 }
@@ -139,36 +139,5 @@ enum NoteContentSegmenter {
         let markerRange = match.2.startIndex..<match.2.endIndex
         lines[line - 1] = target.replacingCharacters(in: markerRange, with: marker)
         return lines.joined(separator: "\n")
-    }
-}
-
-/// CommonMark fences use one marker, at most three leading spaces, and a closing
-/// run at least as long as the opener. Info strings cannot contain backticks
-/// when the opening marker is a backtick.
-private struct NoteCodeFence {
-    private static let openingRegex = #/^( {0,3})(`{3,}|~{3,})(.*)$/#
-    private static let closingRegex = #/^ {0,3}(`{3,}|~{3,})[ \t]*$/#
-
-    let marker: Substring
-    let indent: Int
-    let isMermaid: Bool
-
-    init?(opening line: String) {
-        guard let match = line.wholeMatch(of: Self.openingRegex) else { return nil }
-        guard match.2.first != "`" || !match.3.contains("`") else { return nil }
-        marker = match.2
-        indent = match.1.count
-        // Desktop notes also require the exact lowercase Mermaid info string.
-        isMermaid = match.3.trimmingCharacters(in: .whitespaces) == "mermaid"
-    }
-
-    func closes(with line: String) -> Bool {
-        guard let match = line.wholeMatch(of: Self.closingRegex) else { return false }
-        return match.1.first == marker.first && match.1.count >= marker.count
-    }
-
-    func removingIndent(from line: String) -> String {
-        let spaces = line.prefix { $0 == " " }.prefix(indent).count
-        return String(line.dropFirst(spaces))
     }
 }

@@ -99,6 +99,8 @@ $(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
 $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
+$(SRCROOT)/Intent/Presentation/MarkdownCodeFence.swift
+$(SRCROOT)/Intent/Presentation/MermaidMarkdownContent.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
 $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
 $(SRCROOT)/Intent/Presentation/NoteSheetInfo.swift
@@ -337,6 +339,8 @@ $(SRCROOT)/Intent/Views/Conversation/Content/ImageLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileAttachmentLoader.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileVideoAttachment.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MarkdownTextView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/MermaidDiagramView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/MermaidWebView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalCardView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalSelectionSwitch.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/VideoLightboxView.swift
@@ -386,8 +390,6 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/ToolCallView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/UserMessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/WorkspaceConversationHeader.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/WorkspaceTranscriptDesign.swift
-$(SRCROOT)/Intent/Views/Notes/MermaidDiagramView.swift
-$(SRCROOT)/Intent/Views/Notes/MermaidWebView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteContentView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteDetailView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteListView.swift
@@ -680,6 +682,7 @@ $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
 $(SRCROOT)/IntentTests/MarkdownTableLayoutTests.swift
 $(SRCROOT)/IntentTests/MarkdownTextViewTests.swift
 $(SRCROOT)/IntentTests/MediaAudioSessionTests.swift
+$(SRCROOT)/IntentTests/MermaidMarkdownContentTests.swift
 $(SRCROOT)/IntentTests/MermaidWebViewTests.swift
 $(SRCROOT)/IntentTests/MessageBlockPartitionTests.swift
 $(SRCROOT)/IntentTests/MessageCopyContextMenuGatingTests.swift
