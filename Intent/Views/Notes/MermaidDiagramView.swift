@@ -5,7 +5,8 @@ enum MermaidAppearance {
     static let maximumInlineHeight: CGFloat = 360
     static let cornerRadius: CGFloat = 8
     static let spacing: CGFloat = 8
-    static let renderTimeout: Duration = .seconds(20)
+    private static let renderTimeoutSeconds = 20
+    static let renderTimeout: Duration = .seconds(renderTimeoutSeconds)
 }
 
 struct MermaidDiagramView: View {

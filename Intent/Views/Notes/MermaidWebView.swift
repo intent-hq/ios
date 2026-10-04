@@ -2,9 +2,9 @@ import SwiftUI
 import WebKit
 
 enum MermaidRenderState: Equatable {
+    case failed(String)
     case loading
     case rendered(CGFloat)
-    case failed(String)
 
     var isLoading: Bool { self == .loading }
 
@@ -157,8 +157,8 @@ struct MermaidWebView: UIViewRepresentable {
                         contentWorld: .page
                     )
                 } catch {
-                    guard let self, self.revision == currentRevision, !Task.isCancelled else { return }
-                    self.fail()
+                    guard let self, revision == currentRevision, !Task.isCancelled else { return }
+                    fail()
                 }
             }
         }
@@ -178,8 +178,8 @@ struct MermaidWebView: UIViewRepresentable {
         private func publish(_ state: MermaidRenderState) {
             let currentRevision = revision
             Task { @MainActor [weak self] in
-                guard let self, self.revision == currentRevision else { return }
-                self.parent?.state = state
+                guard let self, revision == currentRevision else { return }
+                parent?.state = state
             }
         }
     }
