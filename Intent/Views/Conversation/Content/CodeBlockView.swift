@@ -7,8 +7,12 @@ struct CodeBlockView: View {
     @State private var copied = false
 
     var body: some View {
-        if language == "mermaid", !isStreaming {
-            MermaidDiagramView(source: code)
+        if language == "mermaid" {
+            if isStreaming {
+                MermaidStreamingPlaceholder()
+            } else {
+                MermaidDiagramView(source: code)
+            }
         } else {
             sourceView
         }

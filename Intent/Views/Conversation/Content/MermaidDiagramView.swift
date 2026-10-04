@@ -23,6 +23,24 @@ struct MermaidDiagramView: View {
     }
 }
 
+struct MermaidStreamingPlaceholder: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ProgressView("Generating diagram")
+            .interFont(Constants.Typography.bodyXS)
+            .frame(maxWidth: .infinity, minHeight: MermaidAppearance.minimumHeight)
+            .background(Theme.background(for: colorScheme))
+            .clipShape(RoundedRectangle(cornerRadius: MermaidAppearance.cornerRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: MermaidAppearance.cornerRadius)
+                    .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("mermaid.streaming")
+    }
+}
+
 private struct MermaidExpandedView: View {
     let source: String
     @Environment(\.dismiss) private var dismiss

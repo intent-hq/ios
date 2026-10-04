@@ -54,6 +54,42 @@ struct MermaidMarkdownContentTests {
         #expect(continued.markdown.hasSuffix("```mermaid\ngraph TD"))
     }
 
+    @Test func streamingPlaceholderStartsAtLanguageAndStaysStableAsSourceArrives() throws {
+        #expect(MermaidMarkdownContent("```merm").pending == nil)
+        let opening = MermaidMarkdownContent("Intro\n\n```mermaid")
+        let pending = try #require(opening.pending)
+        #expect(pending.markdown.hasPrefix("Intro\n\n"))
+        for suffix in ["\n", "\nflowchart", "\n" + Self.diagram, "\n" + Self.diagram + "\n``"] {
+            let content = "Intro\n\n```mermaid" + suffix
+            let partial = MermaidMarkdownContent(content)
+            #expect(partial.pending?.markdown == pending.markdown)
+            #expect(partial.pending?.language == pending.language)
+            #expect(partial.markdown == content)
+            #expect(partial.sources.isEmpty)
+        }
+        let closed = MermaidMarkdownContent("Intro\n\n```mermaid\n" + Self.diagram + "\n```")
+        #expect(closed.pending == nil)
+        #expect(closed.sources[pending.language] == Self.diagram)
+    }
+
+    @Test func pendingDiagramPreservesEarlierDiagramsAndReferenceLinks() throws {
+        let content = "[guide]: https://example.com\n\n[Guide][guide]\n\n```mermaid\n\(Self.diagram)\n```\n\n~~~mermaid\npartial source"
+        let prepared = MermaidMarkdownContent(content)
+        let pending = try #require(prepared.pending)
+        #expect(Array(prepared.sources.values) == [Self.diagram])
+        #expect(prepared.sources[pending.language] == nil)
+        #expect(!pending.markdown.contains("partial source"))
+        let parsed = try AttributedString(markdown: pending.markdown)
+        #expect(parsed.runs.contains { $0.link?.absoluteString == "https://example.com" })
+    }
+
+    @Test(arguments: ["```swift", "```mermaid extra", "```Mermaid", "````text\n```mermaid", "    ```mermaid"])
+    func otherOpenFencesDoNotGetStreamingPlaceholders(_ content: String) {
+        let prepared = MermaidMarkdownContent(content)
+        #expect(prepared.pending == nil)
+        #expect(prepared.markdown == content)
+    }
+
     @Test(arguments: [
         "```swift\nlet answer = 42\n```",
         "````markdown\n```mermaid\nflowchart LR\nA --> B\n```\n````",
@@ -95,6 +131,24 @@ struct MermaidMarkdownContentTests {
     }
 
     @MainActor
+    @Test(arguments: ["```mermaid", "~~~mermaid\nflowchart LR\nA -->", "```mermaid\nflowchart LR\nA --> B\n``"])
+    func streamingMarkdownShowsPlaceholderWithoutSource(_ content: String) async throws {
+        let view = MarkdownTextView(text: content).environment(\.assistantMessageStreaming, true)
+        try await expectStreamingPlaceholder(view, visible: true)
+        #expect(try await webViewCount(view) == 0)
+    }
+
+    @MainActor
+    @Test func interruptedAndClosedMarkdownRemoveStreamingPlaceholder() async throws {
+        let content = "```mermaid\n\(Self.diagram)"
+        let stopped = MarkdownTextView(text: content).environment(\.assistantMessageStreaming, false)
+        try await expectStreamingPlaceholder(stopped, visible: false)
+        let closed = MarkdownTextView(text: content + "\n```").environment(\.assistantMessageStreaming, true)
+        try await expectStreamingPlaceholder(closed, visible: false)
+        #expect(try await webViewCount(closed) == 1)
+    }
+
+    @MainActor
     @Test func noteViewMountsSharedDiagramRenderer() async throws {
         let view = NoteContentView(
             content: "Before\n\n```mermaid\n\(Self.diagram)\n```\n\nAfter",
@@ -109,9 +163,20 @@ struct MermaidMarkdownContentTests {
     @MainActor
     @Test func structuredCodeWaitsForStreamingToFinish() async throws {
         let code = CodeBlockView(code: Self.diagram, language: "mermaid")
+        try await expectStreamingPlaceholder(code.environment(\.assistantMessageStreaming, true), visible: true)
         #expect(try await webViewCount(code.environment(\.assistantMessageStreaming, true)) == 0)
         #expect(try await webViewCount(code.environment(\.assistantMessageStreaming, false)) == 1)
         #expect(try await webViewCount(CodeBlockView(code: "let answer = 42", language: "swift")) == 0)
+    }
+
+    @MainActor
+    private func expectStreamingPlaceholder(_ content: some View, visible: Bool) async throws {
+        try await SyntheticBadgeHost.render(content, width: 390, height: 700) { view, _ in
+            let found = SyntheticBadgeHost.accessibilityElements(in: view).contains {
+                SyntheticBadgeHost.accessibilityIdentifier(of: $0) == "mermaid.streaming"
+            }
+            #expect(found == visible)
+        }
     }
 
     @MainActor

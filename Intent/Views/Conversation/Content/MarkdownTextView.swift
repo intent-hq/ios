@@ -14,8 +14,10 @@ struct MarkdownTextView: View {
     /// also re-runs on lightbox state changes).
     private let markdownSource: String
     private let mermaidSources: [String: String]
+    private let pendingDiagram: MermaidMarkdownContent.PendingDiagram?
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.assistantMessageStreaming) private var isStreaming
     /// The window's session, when present: workspace images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
@@ -40,6 +42,9 @@ struct MarkdownTextView: View {
         let prepared = MermaidMarkdownContent(text)
         self.markdownSource = Self.replacingTaskListMarkers(prepared.markdown)
         self.mermaidSources = prepared.sources
+        self.pendingDiagram = prepared.pending.map {
+            .init(markdown: Self.replacingTaskListMarkers($0.markdown), language: $0.language)
+        }
     }
 
     /// Intent-file image fetcher bound to the session's loader when one is in
@@ -67,8 +72,12 @@ struct MarkdownTextView: View {
     }
 
     var body: some View {
-        let markdownView = StructuredText(markdown: markdownSource)
-            .textual.structuredTextStyle(CompactMarkdownStyle(mermaidSources: mermaidSources))
+        let pending = isStreaming ? pendingDiagram : nil
+        let markdownView = StructuredText(markdown: pending?.markdown ?? markdownSource)
+            .textual.structuredTextStyle(CompactMarkdownStyle(
+                mermaidSources: mermaidSources,
+                pendingMermaidLanguage: pending?.language
+            ))
             .textual.imageAttachmentLoader(
                 IntentFileAttachmentLoader(
                     workspaceId: workspaceId,

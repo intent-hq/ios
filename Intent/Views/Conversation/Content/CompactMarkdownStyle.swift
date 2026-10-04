@@ -38,8 +38,8 @@ struct CompactMarkdownStyle: StructuredText.Style {
     let tableCellStyle = CompactTableCellStyle()
     let thematicBreakStyle = CompactThematicBreakStyle()
 
-    init(mermaidSources: [String: String] = [:]) {
-        codeBlockStyle = MermaidCodeBlockStyle(sources: mermaidSources)
+    init(mermaidSources: [String: String] = [:], pendingMermaidLanguage: String? = nil) {
+        codeBlockStyle = MermaidCodeBlockStyle(sources: mermaidSources, pendingLanguage: pendingMermaidLanguage)
     }
 }
 
@@ -108,10 +108,14 @@ struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
 
 struct MermaidCodeBlockStyle: StructuredText.CodeBlockStyle {
     let sources: [String: String]
+    let pendingLanguage: String?
 
     @ViewBuilder
     func makeBody(configuration: Configuration) -> some View {
-        if let language = configuration.languageHint, let source = sources[language] {
+        if let language = configuration.languageHint, language == pendingLanguage {
+            MermaidStreamingPlaceholder()
+                .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
+        } else if let language = configuration.languageHint, let source = sources[language] {
             MermaidDiagramView(source: source)
                 .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
         } else {
