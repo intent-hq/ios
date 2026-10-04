@@ -9,6 +9,7 @@ nonisolated final class WatcherMessageUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=watcher"]
         app.launch()
+        defer { attachScreenshot(app, name: "Watcher final state") }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
         workspace.tap()
@@ -23,9 +24,9 @@ nonisolated final class WatcherMessageUITests: XCTestCase {
         attachScreenshot(app, name: "Watcher summary")
 
         show.tap()
-        XCTAssertTrue(rawDetails.waitForExistence(timeout: Self.timeout), "Expansion must expose nested job details")
         let hide = app.buttons["Hide details"]
-        XCTAssertTrue(hide.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(hide.waitForExistence(timeout: Self.timeout), "The tap must expand the watcher card")
+        XCTAssertTrue(rawDetails.waitForExistence(timeout: Self.timeout), "Expansion must expose nested job details")
         attachScreenshot(app, name: "Watcher expanded details")
         hide.tap()
         XCTAssertTrue(rawDetails.waitForNonExistence(timeout: Self.timeout))

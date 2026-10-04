@@ -11,6 +11,11 @@ import tempfile
 
 
 CAPTURES = {
+    "WatcherMessageUITests": {
+        "testWatcherDetailsExpandAndCollapseWithoutLosingTheReport": (
+            "Watcher summary", "Watcher expanded details", "Watcher final state",
+        ),
+    },
     "WorkspaceSwipeUITests": {
         "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
     },

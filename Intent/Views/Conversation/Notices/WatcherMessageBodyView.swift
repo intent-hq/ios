@@ -69,21 +69,36 @@ struct WatcherMessageBodyView: View {
     }
 
     private func disclosure(_ details: String) -> some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            ScrollView(.vertical) {
-                if presentation.isJSON {
-                    CodeBlockView(code: details, language: "json")
-                } else {
-                    prose(details)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: Constants.Conversation.UserMessage.textRowSpacing) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack {
+                    Text(isExpanded ? "Hide details" : "Show details")
+                        .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
+                    Spacer(minLength: 0)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .accessibilityHidden(true)
                 }
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .frame(minHeight: Constants.Conversation.Design.minimumTapTarget)
+                .contentShape(Rectangle())
+                .copyContextMenuPassthrough()
             }
-            .frame(maxHeight: detailsHeight)
-        } label: {
-            Text(isExpanded ? "Hide details" : "Show details")
-                .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
+            .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            if isExpanded {
+                ScrollView(.vertical) {
+                    if presentation.isJSON {
+                        CodeBlockView(code: details, language: "json")
+                    } else {
+                        prose(details)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .frame(height: detailsHeight)
+            }
         }
-        .tint(Theme.mutedForeground(for: colorScheme))
-        .copyContextMenuPassthrough()
     }
 }
