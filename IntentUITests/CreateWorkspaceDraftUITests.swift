@@ -29,7 +29,7 @@ nonisolated final class CreateWorkspaceDraftUITests: XCTestCase {
         assertRestoredPrompt(in: app)
         app.buttons["creation.create"].tap()
         XCTAssertTrue(app.scrollViews["creation.form"].waitForNonExistence(timeout: Fixture.timeout))
-        let back = app.navigationBars.buttons.element(boundBy: 0)
+        let back = app.buttons["workspaceDetail.back"]
         XCTAssertTrue(back.waitForExistence(timeout: Fixture.timeout))
         back.tap()
         app.openHomeAction("workspace")
@@ -57,7 +57,12 @@ nonisolated final class CreateWorkspaceDraftUITests: XCTestCase {
 
         let prompt = app.textViews["creation.prompt"]
         prompt.tap()
-        prompt.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: Fixture.prompt.count))
+        prompt.press(forDuration: 1)
+        let selectAll = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Select All")).firstMatch
+        XCTAssertTrue(selectAll.waitForExistence(timeout: Fixture.timeout))
+        selectAll.tap()
+        prompt.typeText(XCUIKeyboardKey.delete.rawValue)
+        XCTAssertEqual(prompt.value as? String, "")
         dismissForm(in: app)
         app.openHomeAction("workspace")
         XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Fixture.timeout))
