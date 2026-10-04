@@ -13,14 +13,18 @@ struct ToastView: View {
             HStack(spacing: Constants.Toast.contentSpacing) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title2)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(Constants.Pairing.onAccent, Constants.Pairing.accent)
 
                 VStack(alignment: .leading, spacing: Constants.Toast.textSpacing) {
                     Text(toast.workspaceName)
                         .interFont(Constants.Typography.bodyXS.withFace(.semibold))
+                        .foregroundStyle(.primary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                     Text(toast.agentName)
                         .interFont(Constants.Typography.subtextXXS)
+                        .foregroundStyle(.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
 
@@ -28,14 +32,14 @@ struct ToastView: View {
 
                 Text("Done")
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
+                    .foregroundStyle(.secondary)
             }
-            .foregroundStyle(Constants.Pairing.onAccent)
             .padding(.horizontal, Constants.Toast.horizontalPadding)
             .padding(.vertical, Constants.Toast.verticalPadding)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(Constants.Pairing.accent)
+        .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: Constants.Toast.cornerRadius, style: .continuous))
         .shadow(
             color: .black.opacity(Constants.Toast.shadowOpacity),
