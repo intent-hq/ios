@@ -365,6 +365,7 @@ $(SRCROOT)/Intent/Presentation/WorkspaceSwipePolicy.swift
 $(SRCROOT)/Intent/Resources
 $(SRCROOT)/Intent/Resources/Fonts
 $(SRCROOT)/Intent/Resources/Fonts/Inter
+$(SRCROOT)/Intent/Resources/Mermaid
 $(SRCROOT)/Intent/Services
 $(SRCROOT)/Intent/Services/AgentDetailRequestLimiter.swift
 $(SRCROOT)/Intent/Services/AgentDetailStore.swift
@@ -653,6 +654,8 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/UserMessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/WorkspaceConversationHeader.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/WorkspaceTranscriptDesign.swift
 $(SRCROOT)/Intent/Views/Notes
+$(SRCROOT)/Intent/Views/Notes/MermaidDiagramView.swift
+$(SRCROOT)/Intent/Views/Notes/MermaidWebView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteContentView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteDetailView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteListView.swift
@@ -953,6 +956,7 @@ $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
 $(SRCROOT)/IntentTests/MarkdownTableLayoutTests.swift
 $(SRCROOT)/IntentTests/MarkdownTextViewTests.swift
 $(SRCROOT)/IntentTests/MediaAudioSessionTests.swift
+$(SRCROOT)/IntentTests/MermaidWebViewTests.swift
 $(SRCROOT)/IntentTests/MessageBlockPartitionTests.swift
 $(SRCROOT)/IntentTests/MessageCopyContextMenuGatingTests.swift
 $(SRCROOT)/IntentTests/MobileTerminalConnectionTests.swift

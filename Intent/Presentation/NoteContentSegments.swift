@@ -34,9 +34,10 @@ struct LinkedTaskRef: Equatable {
     let noteId: String
 }
 
-/// A run of note content: either ordinary markdown or a single checkbox line.
+/// A run of note content: markdown, a closed Mermaid fence, or a checkbox line.
 enum NoteContentSegment: Equatable {
     case markdown(String)
+    case mermaid(String)
     case taskLine(NoteTaskLine)
 }
 
@@ -46,7 +47,8 @@ enum NoteContentSegment: Equatable {
 /// at any indent. Only `-` bullets — the daemon's `task.update` line parser
 /// (note_ops.rs `parse_dash_checkbox`) rejects `*` bullets, so a `* [ ]` line
 /// must stay ordinary markdown rather than become a row whose status write
-/// would fail.
+/// would fail. Fenced code is kept intact before checkbox extraction, and only
+/// closed Mermaid fences become diagrams so partial edits remain readable source.
 enum NoteContentSegmenter {
     /// Groups: 1 = leading indent, 2 = marker, 3 = text after the checkbox.
     private static let checkboxLineRegex = #/^([ \t]*)-\s+\[([ xX/])\]\s?(.*)$/#
@@ -64,14 +66,33 @@ enum NoteContentSegmenter {
             segments.append(.markdown(text))
         }
 
-        for (index, rawLine) in content.components(separatedBy: "\n").enumerated() {
-            let line = rawLine.hasSuffix("\r") ? String(rawLine.dropLast()) : rawLine
-            if let taskLine = taskLine(from: rawLine, lineNumber: index + 1) {
+        let lines = content.components(separatedBy: "\n").map { line in
+            line.hasSuffix("\r") ? String(line.dropLast()) : line
+        }
+        var index = 0
+        while index < lines.count {
+            let line = lines[index]
+            if let fence = NoteCodeFence(opening: line) {
+                let bodyStart = index + 1
+                var end = bodyStart
+                while end < lines.count, !fence.closes(with: lines[end]) { end += 1 }
+                if fence.isMermaid, end < lines.count {
+                    flushMarkdown()
+                    let source = lines[bodyStart..<end].map { fence.removingIndent(from: $0) }
+                    segments.append(.mermaid(source.joined(separator: "\n")))
+                } else {
+                    markdownBuffer.append(contentsOf: lines[index..<min(end + 1, lines.count)])
+                }
+                index = min(end + 1, lines.count)
+                continue
+            }
+            if let taskLine = taskLine(from: line, lineNumber: index + 1) {
                 flushMarkdown()
                 segments.append(.taskLine(taskLine))
             } else {
                 markdownBuffer.append(line)
             }
+            index += 1
         }
         flushMarkdown()
 
@@ -118,5 +139,36 @@ enum NoteContentSegmenter {
         let markerRange = match.2.startIndex..<match.2.endIndex
         lines[line - 1] = target.replacingCharacters(in: markerRange, with: marker)
         return lines.joined(separator: "\n")
+    }
+}
+
+/// CommonMark fences use one marker, at most three leading spaces, and a closing
+/// run at least as long as the opener. Info strings cannot contain backticks
+/// when the opening marker is a backtick.
+private struct NoteCodeFence {
+    private static let openingRegex = #/^( {0,3})(`{3,}|~{3,})(.*)$/#
+    private static let closingRegex = #/^ {0,3}(`{3,}|~{3,})[ \t]*$/#
+
+    let marker: Substring
+    let indent: Int
+    let isMermaid: Bool
+
+    init?(opening line: String) {
+        guard let match = line.wholeMatch(of: Self.openingRegex) else { return nil }
+        guard match.2.first != "`" || !match.3.contains("`") else { return nil }
+        marker = match.2
+        indent = match.1.count
+        // Desktop notes also require the exact lowercase Mermaid info string.
+        isMermaid = match.3.trimmingCharacters(in: .whitespaces) == "mermaid"
+    }
+
+    func closes(with line: String) -> Bool {
+        guard let match = line.wholeMatch(of: Self.closingRegex) else { return false }
+        return match.1.first == marker.first && match.1.count >= marker.count
+    }
+
+    func removingIndent(from line: String) -> String {
+        let spaces = line.prefix { $0 == " " }.prefix(indent).count
+        return String(line.dropFirst(spaces))
     }
 }

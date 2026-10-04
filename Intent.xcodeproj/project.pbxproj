@@ -76,6 +76,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		EB655ECB2F669E6B00176730 /* Intent */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFolders = (
+				Resources/Mermaid,
+			);
 			exceptions = (
 				EB655ECC2F669E6B00176730 /* Exceptions for "Intent" folder in "Intent" target */,
 			);
