@@ -137,18 +137,17 @@ struct WorkspaceRowView: View {
 
     @ViewBuilder
     private var title: some View {
-        let isUntitled = workspace.title.trimmingCharacters(in: .whitespaces).isEmpty
-        Text(isUntitled ? "<Untitled>" : workspace.title)
-            .interFont(Constants.Typography.bodyM.withFace(.semibold))
-            .tracking(titleTracking)
-            .foregroundStyle(isUntitled
-                ? Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast)
-                : Theme.foreground(for: colorScheme))
-            .lineLimit(Self.titleLineLimit(for: dynamicTypeSize))
-            .fixedSize(horizontal: false, vertical: true)
-            .alignmentGuide(Self.titleCenter) { dimensions in
-                dimensions[VerticalAlignment.center]
-            }
+        WorkspaceTitle(title: workspace.title) { title in
+            Text(title)
+                .interFont(Constants.Typography.bodyM.withFace(.semibold))
+                .tracking(titleTracking)
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .lineLimit(Self.titleLineLimit(for: dynamicTypeSize))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .alignmentGuide(Self.titleCenter) { dimensions in
+            dimensions[VerticalAlignment.center]
+        }
     }
 
     private var compactMetadata: some View {

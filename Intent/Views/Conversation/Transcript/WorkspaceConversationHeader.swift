@@ -33,6 +33,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
                         subtitle: "Workspace",
                         backLabel: "Back to workspaces",
                         backIdentifier: "workspaceDetail.back",
+                        showsWorkspacePlaceholder: true,
                         onBack: onBack,
                         actions: actions
                     )
@@ -65,6 +66,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     let subtitle: LocalizedStringKey
     let backLabel: LocalizedStringKey
     let backIdentifier: String
+    var showsWorkspacePlaceholder = false
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
@@ -86,7 +88,13 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
             .accessibilityLabel(backLabel)
             .accessibilityIdentifier(backIdentifier)
             VStack(spacing: Design.Header.titleSpacing) {
-                WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
+                if showsWorkspacePlaceholder {
+                    WorkspaceTitle(title: title, placeholderSize: Constants.Typography.bodyXSEmphasized.size) { title in
+                        WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
+                    }
+                } else {
+                    WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
+                }
                 WorkspaceHeaderText(Text(subtitle), style: Constants.Typography.bodyXS)
                     .foregroundStyle(Design.Palette.subtitleForeground(for: colorScheme, contrast: contrast))
             }

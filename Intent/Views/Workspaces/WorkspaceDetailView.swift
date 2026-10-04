@@ -58,9 +58,11 @@ struct WorkspaceDetailView: View {
     private var workspace: Workspace? { workspaceStore.workspaces.first { $0.id == workspaceId } }
 
     private var workspaceTitle: String {
-        guard let title = workspace?.title, !title.trimmingCharacters(in: .whitespaces).isEmpty else { return "<Untitled>" }
+        guard let title = workspace?.title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "" }
         return title
     }
+
+    private var workspaceName: String { workspaceTitle.isEmpty ? "New workspace" : workspaceTitle }
 
     private var lifecycleContent: some View {
         ZStack {
@@ -192,7 +194,7 @@ struct WorkspaceDetailView: View {
                 if workspaceStore.lastUpdated != nil, workspace == nil { coordinator.handleMissingWorkspace() }
             },
             content: {
-                WorkspaceTransferSheet(workspaceId: workspaceId, workspaceTitle: workspaceTitle, session: session)
+                WorkspaceTransferSheet(workspaceId: workspaceId, workspaceTitle: workspaceName, session: session)
                     .environment(coordinator)
                     .id(workspaceId)
             }
@@ -220,7 +222,7 @@ struct WorkspaceDetailView: View {
                 terminalStore.clearError(workspaceId: workspaceId)
             },
             content: { terminal in
-                MobileTerminalView(terminal: terminal, workspaceName: workspaceTitle, store: terminalStore)
+                MobileTerminalView(terminal: terminal, workspaceName: workspaceName, store: terminalStore)
             }
         )
         .alert("Terminal unavailable", isPresented: Binding(
@@ -231,7 +233,7 @@ struct WorkspaceDetailView: View {
         } message: {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
-        .navigationTitle(workspaceTitle)
+        .navigationTitle(workspaceName)
         .toolbarTitleDisplayMode(.inline)
         #if !os(visionOS)
         .navigationBarBackButtonHidden()
@@ -284,9 +286,11 @@ private extension WorkspaceDetailView {
 
     var toolbarTitle: some View {
         VStack(spacing: WorkspaceDetailStyle.tabInset) {
-            Text(workspaceTitle)
-                .interFont(Constants.Typography.bodyXSEmphasized)
-                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+            WorkspaceTitle(title: workspaceTitle, placeholderSize: Constants.Typography.bodyXSEmphasized.size) { title in
+                Text(title)
+                    .interFont(Constants.Typography.bodyXSEmphasized)
+                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+            }
             Text("Workspace")
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme))

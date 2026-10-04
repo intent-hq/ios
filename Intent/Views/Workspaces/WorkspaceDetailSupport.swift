@@ -11,12 +11,14 @@ struct WorkspaceDetailHeading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
-            Text(title)
-                .interFont(Constants.Typography.heading2)
-                .tracking(WorkspaceDetailStyle.titleTracking)
-                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+            WorkspaceTitle(title: title, placeholderSize: Constants.Typography.heading2.size) { title in
+                Text(title)
+                    .interFont(Constants.Typography.heading2)
+                    .tracking(WorkspaceDetailStyle.titleTracking)
+                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityAddTraits(.isHeader)
             if let repositoryOwner, let repositoryName {
                 Text("\(repositoryOwner)/\(repositoryName)")
                     .interFont(Constants.Typography.subtextXXS)
