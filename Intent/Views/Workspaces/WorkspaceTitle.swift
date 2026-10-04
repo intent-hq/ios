@@ -21,7 +21,7 @@ private struct WorkspaceTitlePlaceholder: View {
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
-    @ScaledMetric(relativeTo: .headline) private var size: CGFloat
+    @ScaledMetric private var size: CGFloat
 
     init(size: CGFloat) {
         _size = ScaledMetric(wrappedValue: size, relativeTo: .headline)
