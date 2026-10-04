@@ -439,6 +439,7 @@ $(SRCROOT)/Intent/Services/DemoSettings.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/DemoWorkspaceActionFixtures.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
+$(SRCROOT)/Intent/Services/ImagePasteboard.swift
 $(SRCROOT)/Intent/Services/InvitedImportOutcome.swift
 $(SRCROOT)/Intent/Services/InvitedLegacyMigration.swift
 $(SRCROOT)/Intent/Services/InvitedSessionRegistry.swift
@@ -718,6 +719,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+AgentGroups.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceListMenu.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
@@ -925,6 +927,7 @@ $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoSuggestionsTests.swift
 $(SRCROOT)/IntentTests/HookTimeBarTests.swift
+$(SRCROOT)/IntentTests/ImagePasteboardFixture.swift
 $(SRCROOT)/IntentTests/InfoPlistSyncTests.swift
 $(SRCROOT)/IntentTests/IntentFileAttachmentLoaderTests.swift
 $(SRCROOT)/IntentTests/IntentFileLinkTests.swift

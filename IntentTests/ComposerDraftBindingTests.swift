@@ -59,7 +59,7 @@ struct ComposerDraftBindingTests {
         #expect(model.imagePlacementError == nil)
     }
 
-    @Test(arguments: [false, true], ["unreadable", "tooMany", "tooLarge"])
+    @Test(arguments: [false, true], ["unreadable", "unavailable", "tooMany", "tooLarge"])
     func rejectedImagePasteKeepsTheWholeDraft(workspaceDesign: Bool, rejection: String) async throws {
         let model = makeModel()
         model.messageText = "Keep everything"
@@ -69,18 +69,22 @@ struct ComposerDraftBindingTests {
         let view = MessageInputView(viewModel: model, store: model.store, usesWorkspaceDesign: workspaceDesign)
         try await SyntheticBadgeHost.render(view, width: 390, height: 250) { root, _ in
             let editor = try #require(textView(in: root))
+            let pasteboard = ImagePasteboardFixture()
+            editor.imagePasteboard = pasteboard.source
+            model.attachmentPipeline.imagePasteboard = pasteboard.source
             editor.selectedRange = NSRange(location: 0, length: 4)
             switch rejection {
             case "tooMany":
-                UIPasteboard.general.items = Array(
+                pasteboard.items = Array(
                     repeating: [UTType.png.identifier: png], count: Constants.Conversation.Composer.maximumImageSelectionCount
                 )
             case "tooLarge":
-                UIPasteboard.general.items = [[UTType.png.identifier: Data(count: ConversationAttachmentPipeline.maxImageReferenceBytes + 1)]]
+                pasteboard.items = [[UTType.png.identifier: Data(count: ConversationAttachmentPipeline.maxImageReferenceBytes + 1)]]
+            case "unavailable":
+                pasteboard.items = [[UTType.png.identifier: NSNull()]]
             default:
-                UIPasteboard.general.items = [[UTType.png.identifier: png], [UTType.png.identifier: Data("not an image".utf8)]]
+                pasteboard.items = [[UTType.png.identifier: png], [UTType.png.identifier: Data("not an image".utf8)]]
             }
-            defer { UIPasteboard.general.items = [] }
             editor.paste(nil)
             #expect(model.pendingImages.count == 1)
             #expect(model.pendingImages.first === existing)
@@ -89,7 +93,7 @@ struct ComposerDraftBindingTests {
             #expect(model.messageText == "Keep everything")
             #expect(editor.text == model.messageText)
             #expect(editor.selectedRange == NSRange(location: 0, length: 4))
-            UIPasteboard.general.setData(png, forPasteboardType: UTType.png.identifier)
+            pasteboard.items = [[UTType.png.identifier: png]]
             editor.paste(nil)
             #expect(model.pendingImages.count == 2, "a rejected paste must remain recoverable")
             #expect(model.imagePlacementError == nil)
@@ -97,7 +101,7 @@ struct ComposerDraftBindingTests {
     }
 
     @Test
-    func textPasteStillReplacesSelectionWithoutAddingImages() async throws {
+    func textPasteDelegatesInsertionWithoutAddingImages() {
         let model = makeModel()
         model.messageText = "abc"
         let adapter = SubmittableTextView(
@@ -107,16 +111,14 @@ struct ComposerDraftBindingTests {
             onPasteImages: model.pasteImages
         )
         let coordinator = adapter.makeCoordinator()
-        let editor = KeyCommandTextView()
+        let editor = TextPasteKeyCommandTextView()
+        editor.imagePasteboard = ImagePasteboardFixture().source
+        editor.pastedText = "hello\nworld"
         editor.delegate = coordinator
         editor.onPasteImages = model.pasteImages
         editor.text = model.messageText
         editor.selectedRange = NSRange(location: 1, length: 1)
-        UIPasteboard.general.string = "hello\nworld"
-        defer { UIPasteboard.general.items = [] }
         editor.paste(nil)
-        // UIKit may complete text insertion on the next run loop; bound the wait.
-        for _ in 0..<100 where editor.text == "abc" { try await Task.sleep(for: .milliseconds(10)) }
         #expect(editor.text == "ahello\nworldc")
         #expect(model.messageText == editor.text)
         #expect(model.pendingImages.isEmpty)
@@ -229,14 +231,17 @@ struct ComposerDraftBindingTests {
         let editor = try #require(textView(in: root))
         editor.selectedRange = NSRange(location: 0, length: 4)
         // Multiple representations of one item must not duplicate the image.
-        UIPasteboard.general.items = [
+        let pasteboard = ImagePasteboardFixture(items: [
             [UTType.jpeg.identifier: jpeg, UTType.utf8PlainText.identifier: "Do not replace the draft"],
             [UTType.jpeg.identifier: jpeg]
-        ]
-        defer { UIPasteboard.general.items = [] }
+        ])
+        editor.imagePasteboard = pasteboard.source
+        model.attachmentPipeline.imagePasteboard = pasteboard.source
         #expect(editor.canPerformAction(#selector(UIResponderStandardEditActions.paste(_:)), withSender: nil))
+        #expect(pasteboard.readCount == 0, "Paste availability must not read clipboard contents")
         editor.paste(nil)
-        try #require(model.pendingImages.count == 2, "native Paste must reach the composer's attachment owner")
+        try #require(model.pendingImages.count == 2, "Paste must reach the composer's attachment owner")
+        #expect(pasteboard.readCount == 2)
         let preview = try #require(model.pendingImages.first)
         let format = UIGraphicsImageRendererFormat()
         format.scale = preview.scale
@@ -251,6 +256,7 @@ struct ComposerDraftBindingTests {
         #expect(!editor.canPerformAction(#selector(UIResponderStandardEditActions.paste(_:)), withSender: nil))
         editor.paste(nil)
         #expect(model.pendingImages.count == 2)
+        #expect(pasteboard.readCount == 2, "Disabled Paste must not read clipboard contents")
     }
 
     private func orientedPhotoData(orientation: Int, large: Bool) throws -> Data {

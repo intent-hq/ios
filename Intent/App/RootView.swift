@@ -19,6 +19,7 @@ struct RootView: View {
     @State private var isSearchingWorkspaces = false
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
+    @State private var showingConnectionSwitcher = false
     @State private var conversationIsPopping = false
     @State private var connectionSwitcherOpen = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
@@ -140,20 +141,27 @@ struct RootView: View {
             compactNavigationView
         } else {
             // iPad: NavigationSplitView with sidebar selection
-            NavigationSplitView {
-                WorkspaceListSidebar(
-                    workspaceStore: session.workspaceStore,
-                    isSearching: $isSearchingWorkspaces
-                )
-                .navigationSplitViewColumnWidth(
-                    min: Constants.Root.sidebarMinimumWidth,
-                    ideal: Constants.Root.sidebarIdealWidth,
-                    max: Constants.Root.sidebarMaximumWidth
-                )
-            } detail: {
-                detailContent
+            WorkspaceConnectionSwitcher(
+                isPresented: $showingConnectionSwitcher,
+                isEnabled: isWorkspaceFlow && !showingConnections && !showingCreateWorkspace
+                    && coordinator.selectedSection == .workspaces,
+                onReveal: prepareConnectionSwitcher
+            ) {
+                NavigationSplitView {
+                    WorkspaceListSidebar(
+                        workspaceStore: session.workspaceStore,
+                        isSearching: $isSearchingWorkspaces
+                    )
+                    .navigationSplitViewColumnWidth(
+                        min: Constants.Root.sidebarMinimumWidth,
+                        ideal: Constants.Root.sidebarIdealWidth,
+                        max: Constants.Root.sidebarMaximumWidth
+                    )
+                } detail: {
+                    detailContent
+                }
+                .navigationSplitViewStyle(.automatic)
             }
-            .navigationSplitViewStyle(.automatic)
             .modifier(WorkspaceActionLauncher(
                 isSearching: isSearchingWorkspaces,
                 alignment: .trailing,
@@ -173,6 +181,10 @@ struct RootView: View {
                     .environment(coordinator)
             }
         }
+    }
+
+    private func prepareConnectionSwitcher() {
+        isSearchingWorkspaces = false
     }
 
     private var launchContent: some View {

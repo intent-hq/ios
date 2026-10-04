@@ -80,6 +80,7 @@ enum ComposerImageRecovery {
     var isUploadingFiles: Bool { !fileUploadProgress.isEmpty }
 
     @ObservationIgnored var uploadService: AttachmentUploadService
+    @ObservationIgnored var imagePasteboard: ImagePasteboard = .general
     @ObservationIgnored private var securityScopedURLs: [URL] = []
     @ObservationIgnored private let startSecurityScopedAccess: @Sendable (URL) -> Bool
     @ObservationIgnored private let stopSecurityScopedAccess: @Sendable (URL) -> Void
@@ -109,8 +110,8 @@ enum ComposerImageRecovery {
     /// Called only by the native Paste action. Snapshot each image item before
     /// returning to the run loop, while lazy clipboard providers are available.
     func pasteImages() {
-        let pasteboard = UIPasteboard.general
-        let imageTypes = (pasteboard.types(forItemSet: nil) ?? []).enumerated().compactMap { index, types in
+        let pasteboard = imagePasteboard
+        let imageTypes = pasteboard.itemTypes().enumerated().compactMap { index, types in
             types.first { UTType($0)?.conforms(to: .image) == true }.map { (index, $0) }
         }
         let limit = Constants.Conversation.Composer.maximumImageSelectionCount
@@ -125,7 +126,7 @@ enum ComposerImageRecovery {
         var images: [UIImage] = []
         var sourceBytes = 0
         for (index, type) in imageTypes {
-            guard let data = pasteboard.data(forPasteboardType: type, inItemSet: IndexSet(integer: index))?.first else {
+            guard let data = pasteboard.data(type, index) else {
                 imagePlacementError = "Could not read the pasted image. Copy it again or choose it from Photos."
                 return
             }

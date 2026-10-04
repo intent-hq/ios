@@ -4,6 +4,7 @@ import UIKit
 extension EnvironmentValues {
     /// Lets the Connections switcher stand down while agent history is open.
     @Entry var isAgentHistoryOpen = false
+    @Entry var openAgentHistory: () -> Void = {}
 }
 
 /// Global right-edge drawer listing visited agents on every saved device;
@@ -27,6 +28,9 @@ struct AgentHistoryDrawer<Content: View>: View {
         } content: {
             content
                 .environment(\.isAgentHistoryOpen, isPresented)
+                .environment(\.openAgentHistory) {
+                    if isEnabled { isPresented = true }
+                }
         }
     }
 

@@ -110,15 +110,12 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         let prompt = app.textViews["creation.prompt"]
         XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
         prompt.tap()
-        prompt.typeText("Use this design")
-        seedImageClipboard()
+        UIPasteboard.general.string = "Use this design"
         defer { UIPasteboard.general.items = [] }
-        prompt.press(forDuration: 1.2)
-        let paste = app.menuItems["Paste"]
-        XCTAssertTrue(paste.waitForExistence(timeout: Self.elementTimeout))
-        paste.tap()
-        let allowPaste = app.alerts.buttons["Allow Paste"]
-        if allowPaste.waitForExistence(timeout: 2) { allowPaste.tap() }
+        pasteClipboard(into: prompt, in: app)
+        XCTAssertEqual(prompt.value as? String, "Use this design")
+        seedImageClipboard()
+        pasteClipboard(into: prompt, in: app)
         let remove = app.buttons["creation.removeImage"]
         XCTAssertTrue(remove.waitForExistence(timeout: Self.elementTimeout))
         XCTAssertEqual(prompt.value as? String, "Use this design")
@@ -138,6 +135,16 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         remove.tap()
         XCTAssertFalse(remove.exists)
         XCTAssertEqual(prompt.value as? String, "Use this design")
+    }
+
+    @MainActor
+    private func pasteClipboard(into editor: XCUIElement, in app: XCUIApplication) {
+        editor.press(forDuration: 1.2)
+        let paste = app.menuItems["Paste"]
+        XCTAssertTrue(paste.waitForExistence(timeout: Self.elementTimeout))
+        paste.tap()
+        let allowPaste = app.alerts.buttons["Allow Paste"]
+        if allowPaste.waitForExistence(timeout: 2) { allowPaste.tap() }
     }
 
     @MainActor

@@ -11,6 +11,15 @@ import tempfile
 
 
 CAPTURES = {
+    "WorkspaceSwipeUITests": {
+        "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
+    },
+    "WorkspaceListMenuUITests": {
+        "testRecentAgentsOpensAndClosesExistingDrawer": (
+            "workspace-list-menu", "workspace-menu-recent-agents",
+        ),
+        "testRecentConnectionsOpensSwitcherAndSelectsConnection": ("workspace-menu-recent-connections",),
+    },
     "WorkspaceSearchUITests": {
         "testSearchAboveKeyboardHidesAssistantUntilClosed": (
             "Workspace search above keyboard without Assistant launcher",
