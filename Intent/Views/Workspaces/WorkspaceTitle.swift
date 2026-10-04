@@ -3,12 +3,19 @@ import UIKit
 
 struct WorkspaceTitle<Content: View>: View {
     let title: String
-    var placeholderSize: CGFloat = Constants.Typography.bodyM.size
+    var rollingPlaceholderSize: CGFloat?
     @ViewBuilder let content: (String) -> Content
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            WorkspaceTitlePlaceholder(size: placeholderSize)
+            if let rollingPlaceholderSize {
+                WorkspaceTitlePlaceholder(size: rollingPlaceholderSize)
+            } else {
+                content("New Workspace")
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme, contrast: contrast))
+            }
         } else {
             content(title)
         }
@@ -34,7 +41,7 @@ private struct WorkspaceTitlePlaceholder: View {
         )
         .frame(width: size * Self.widthInDiameters, height: size)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("New workspace")
+        .accessibilityLabel("New Workspace")
         .accessibilityIdentifier("workspace.titlePlaceholder")
     }
 }

@@ -89,7 +89,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
             .accessibilityIdentifier(backIdentifier)
             VStack(spacing: Design.Header.titleSpacing) {
                 if showsWorkspacePlaceholder {
-                    WorkspaceTitle(title: title, placeholderSize: Constants.Typography.bodyXSEmphasized.size) { title in
+                    WorkspaceTitle(title: title) { title in
                         WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
                     }
                 } else {

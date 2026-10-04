@@ -141,10 +141,10 @@ struct WorkspaceRowView: View {
             Text(title)
                 .interFont(Constants.Typography.bodyM.withFace(.semibold))
                 .tracking(titleTracking)
-                .foregroundStyle(Theme.foreground(for: colorScheme))
                 .lineLimit(Self.titleLineLimit(for: dynamicTypeSize))
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .foregroundStyle(Theme.foreground(for: colorScheme))
         .alignmentGuide(Self.titleCenter) { dimensions in
             dimensions[VerticalAlignment.center]
         }

@@ -62,7 +62,7 @@ struct WorkspaceDetailView: View {
         return title
     }
 
-    private var workspaceName: String { workspaceTitle.isEmpty ? "New workspace" : workspaceTitle }
+    private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
 
     private var lifecycleContent: some View {
         ZStack {
@@ -286,11 +286,11 @@ private extension WorkspaceDetailView {
 
     var toolbarTitle: some View {
         VStack(spacing: WorkspaceDetailStyle.tabInset) {
-            WorkspaceTitle(title: workspaceTitle, placeholderSize: Constants.Typography.bodyXSEmphasized.size) { title in
+            WorkspaceTitle(title: workspaceTitle) { title in
                 Text(title)
                     .interFont(Constants.Typography.bodyXSEmphasized)
-                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
             }
+            .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
             Text("Workspace")
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme))
