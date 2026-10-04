@@ -13,17 +13,14 @@ struct ToastView: View {
             HStack(spacing: Constants.Toast.contentSpacing) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.green)
 
                 VStack(alignment: .leading, spacing: Constants.Toast.textSpacing) {
-                    Text(toast.agentName)
+                    Text(toast.workspaceName)
                         .interFont(Constants.Typography.bodyXS.withFace(.semibold))
-                        .foregroundStyle(.primary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
-                    Text(toast.workspaceName)
+                    Text(toast.agentName)
                         .interFont(Constants.Typography.subtextXXS)
-                        .foregroundStyle(.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
 
@@ -31,14 +28,14 @@ struct ToastView: View {
 
                 Text("Done")
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
-                    .foregroundStyle(.secondary)
             }
+            .foregroundStyle(Constants.Pairing.onAccent)
             .padding(.horizontal, Constants.Toast.horizontalPadding)
             .padding(.vertical, Constants.Toast.verticalPadding)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(.ultraThinMaterial)
+        .background(Constants.Pairing.accent)
         .clipShape(RoundedRectangle(cornerRadius: Constants.Toast.cornerRadius, style: .continuous))
         .shadow(
             color: .black.opacity(Constants.Toast.shadowOpacity),
@@ -66,7 +63,7 @@ struct ToastView: View {
                     }
                 }
         )
-        .accessibilityLabel("\(toast.agentName) completed in \(toast.workspaceName)")
+        .accessibilityLabel("\(toast.workspaceName): \(toast.agentName) completed")
         .accessibilityHint("Opens the completed conversation")
         .accessibilityAction(named: "Dismiss") {
             onDismiss()
