@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Exercises the real composer and monitor actions through the deterministic
@@ -47,6 +48,40 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertTrue(stop.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertEqual(composer.value as? String, draft, "Stop must not consume the next message")
         XCTAssertTrue(send.isEnabled)
+    }
+
+    @MainActor
+    func testNativePasteKeepsTextAndImageDraft() {
+        let app = launch(scenario: "composer")
+        let composer = app.textViews["composer.textView"]
+        composer.tap()
+        UIPasteboard.general.string = "Keep this draft"
+        defer { UIPasteboard.general.items = [] }
+        pasteClipboard(into: composer, in: app)
+        XCTAssertEqual(composer.value as? String, "Keep this draft")
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 30))
+        UIPasteboard.general.image = renderer.image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
+        }
+        pasteClipboard(into: composer, in: app)
+        let remove = app.buttons["Remove image 1"]
+        XCTAssertTrue(remove.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertEqual(composer.value as? String, "Keep this draft")
+        XCTAssertTrue(app.buttons["composer.send"].isEnabled)
+        remove.tap()
+        XCTAssertTrue(remove.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertEqual(composer.value as? String, "Keep this draft")
+    }
+
+    @MainActor
+    private func pasteClipboard(into editor: XCUIElement, in app: XCUIApplication) {
+        editor.press(forDuration: 1.2)
+        let paste = app.menuItems["Paste"]
+        XCTAssertTrue(paste.waitForExistence(timeout: Fixture.timeout))
+        paste.tap()
+        let allowPaste = app.alerts.buttons["Allow Paste"]
+        if allowPaste.waitForExistence(timeout: 2) { allowPaste.tap() }
     }
 
     @MainActor

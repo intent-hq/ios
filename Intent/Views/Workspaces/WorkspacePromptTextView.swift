@@ -43,12 +43,13 @@ final class WorkspacePromptFocus {
 }
 
 /// Scoped to workspace creation: Return remains a newline on every device.
-final class WorkspacePromptUITextView: UITextView {
+class WorkspacePromptUITextView: UITextView {
     var onPasteImages: (() -> Void)?
     var allowsImagePaste = true
+    var imagePasteboard: ImagePasteboard = .general
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        if action == #selector(paste(_:)), UIPasteboard.general.hasImages {
+        if action == #selector(paste(_:)), imagePasteboard.hasImages() {
             // hasImages is a metadata check; never read clipboard content on render/focus.
             return isEditable && allowsImagePaste && onPasteImages != nil
         }
@@ -58,12 +59,16 @@ final class WorkspacePromptUITextView: UITextView {
     override func paste(_ sender: Any?) {
         guard isEditable else { return }
         // Both edit-menu Paste and Command-V use this responder action.
-        guard UIPasteboard.general.hasImages else {
-            super.paste(sender)
+        guard imagePasteboard.hasImages() else {
+            pasteStandardContent(sender)
             return
         }
         guard allowsImagePaste, let onPasteImages else { return }
         onPasteImages()
+    }
+
+    func pasteStandardContent(_ sender: Any?) {
+        super.paste(sender)
     }
 }
 
