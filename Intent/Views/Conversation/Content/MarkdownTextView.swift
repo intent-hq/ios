@@ -42,8 +42,8 @@ struct MarkdownTextView: View {
         let prepared = MermaidMarkdownContent(text)
         self.markdownSource = Self.replacingTaskListMarkers(prepared.markdown)
         self.mermaidSources = prepared.sources
-        self.pendingDiagram = prepared.pending.map {
-            .init(markdown: Self.replacingTaskListMarkers($0.markdown), language: $0.language)
+        self.pendingDiagram = prepared.pending.map { pending in
+            .init(markdown: Self.replacingTaskListMarkers(pending.markdown), language: pending.language)
         }
     }
 

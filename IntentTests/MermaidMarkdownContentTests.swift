@@ -172,8 +172,8 @@ struct MermaidMarkdownContentTests {
     @MainActor
     private func expectStreamingPlaceholder(_ content: some View, visible: Bool) async throws {
         try await SyntheticBadgeHost.render(content, width: 390, height: 700) { view, _ in
-            let found = SyntheticBadgeHost.accessibilityElements(in: view).contains {
-                SyntheticBadgeHost.accessibilityIdentifier(of: $0) == "mermaid.streaming"
+            let found = SyntheticBadgeHost.accessibilityElements(in: view).contains { element in
+                SyntheticBadgeHost.accessibilityIdentifier(of: element) == "mermaid.streaming"
             }
             #expect(found == visible)
         }
