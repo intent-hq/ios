@@ -27,9 +27,10 @@ class KeyCommandTextView: UITextView {
     var onLayoutChange: (() -> Void)?
     var onPasteImages: (() -> Void)?
     var allowsImagePaste = true
+    var imagePasteboard: ImagePasteboard = .general
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        if action == #selector(paste(_:)), UIPasteboard.general.hasImages {
+        if action == #selector(paste(_:)), imagePasteboard.hasImages() {
             // Metadata only: never read clipboard contents on focus or render.
             return isEditable && allowsImagePaste && onPasteImages != nil
         }
@@ -38,13 +39,17 @@ class KeyCommandTextView: UITextView {
 
     override func paste(_ sender: Any?) {
         guard isEditable else { return }
-        guard UIPasteboard.general.hasImages else {
-            super.paste(sender)
+        guard imagePasteboard.hasImages() else {
+            pasteStandardContent(sender)
             return
         }
         // Edit-menu Paste and Command-V share this explicit user action.
         guard allowsImagePaste, let onPasteImages else { return }
         onPasteImages()
+    }
+
+    func pasteStandardContent(_ sender: Any?) {
+        super.paste(sender)
     }
 
     /// Tracks whether Shift is currently held on a hardware keyboard.

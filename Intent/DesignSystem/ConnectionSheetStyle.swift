@@ -21,6 +21,7 @@ struct ConnectionBackdropPreference: PreferenceKey {
 struct ConnectionSceneBackdrop: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var opacity: Double = 0
     private let blurRadius: CGFloat = 10
     private let transitionDuration: Double = 0.2
@@ -28,16 +29,16 @@ struct ConnectionSceneBackdrop: ViewModifier {
     // swiftlint:disable:next no_magic_numbers
     private let shade = Color(.sRGB, white: 8 / 255, opacity: 1)
 
-    private var isPhone: Bool {
+    private var usesCompactBackdrop: Bool {
         #if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .phone
+        sizeClass == .compact
         #else
         false
         #endif
     }
 
     func body(content: Content) -> some View {
-        let activeOpacity = isPhone ? opacity : 0
+        let activeOpacity = usesCompactBackdrop ? opacity : 0
         content
             .blur(radius: activeOpacity > 0 && !reduceTransparency ? blurRadius : 0)
             .overlay {

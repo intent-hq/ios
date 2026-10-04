@@ -4,9 +4,46 @@ import Testing
 import UIKit
 
 @MainActor
+@Suite(.serialized)
 struct WorkspaceTranscriptDesignTests {
     // The 354pt fixture has a valid 265.5pt bubble: 2× represents both mirrored edges exactly.
     private let rasterScale: CGFloat = 2
+
+    @Test func workspaceHeaderTracksWidthWithoutRecreatingItsContent() async throws {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = try #require(SyntheticBadgeHostScene.resolve(in: scenes))
+        var appearances = 0
+        let content = NavigationStack {
+            Color.clear
+                .onAppear { appearances += 1 }
+                .navigationTitle("Workspace")
+                .workspacePhoneNavigation(title: "Workspace", onBack: {}, actions: { Text("Actions") })
+        }
+        let controller = UIHostingController(rootView: content.environment(\.horizontalSizeClass, .regular))
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
+        window.rootViewController = controller
+        defer { window.isHidden = true; window.rootViewController = nil; window.windowScene = nil }
+        window.isHidden = false
+        window.layoutIfNeeded()
+        try await waitUntil("workspace navigation is installed") {
+            navigationController(in: controller) != nil && appearances == 1
+        }
+        let navigation = try #require(navigationController(in: controller))
+        for sizeClass in [UserInterfaceSizeClass.regular, .compact, .regular, .compact] {
+            controller.rootView = content.environment(\.horizontalSizeClass, sizeClass)
+            try await waitUntil("navigation bar follows \(sizeClass) width") {
+                navigation.isNavigationBarHidden == (sizeClass == .compact)
+            }
+            #expect(appearances == 1, "Changing the header must not recreate stateful workspace content")
+            #expect(navigation.viewControllers.count == 1, "Resizing must not push or pop a destination")
+        }
+    }
+
+    private func navigationController(in controller: UIViewController) -> UINavigationController? {
+        if let navigation = controller as? UINavigationController { return navigation }
+        return controller.children.lazy.compactMap { navigationController(in: $0) }.first
+    }
 
     @Test(arguments: [CGFloat(272), CGFloat(354), CGFloat(620)])
     func bubbleAlignsToTrailingEdgeAndAccessibilityCanUseEntireWidth(width: CGFloat) async throws {

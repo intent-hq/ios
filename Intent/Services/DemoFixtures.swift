@@ -289,6 +289,10 @@ enum DemoFixtures {
         if let gate = agentGroupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         if let gate = startupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         switch method {
+        case "workspace.create":
+            return triggerFile(from: ProcessInfo.processInfo.arguments, prefix: "--demo-workspace-create-trigger-file=").map(ResponseGate.triggerFile)
+        case "github.authStatus", "github.branches.list", "github.branches.listCached":
+            return triggerFile(from: ProcessInfo.processInfo.arguments, prefix: "--demo-workspace-selection-trigger-file=").map(ResponseGate.triggerFile)
         case "settings.get" where params["path"] as? String == "providers.enabled":
             return workspaceProviderGate(from: ProcessInfo.processInfo.arguments)
         case "workspace.list":

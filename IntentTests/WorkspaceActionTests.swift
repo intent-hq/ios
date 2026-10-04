@@ -4,6 +4,26 @@ import Testing
 
 @MainActor
 struct WorkspaceActionTests {
+    @Test func refreshIncludesArchivedRowsWithoutShowingThemByDefault() async throws {
+        let (fake, store) = try fixture()
+        fake.responseMap["workspace.list"] = [
+            "workspaces": [
+                ["id": "active", "title": "Active"],
+                ["id": "archived", "title": "Archived", "status": "Archived"]
+            ]
+        ]
+        let model = WorkspaceListViewModel(workspaceStore: store)
+
+        await store.fetchAll()
+
+        #expect(fake.paramsForMethod("workspace.list").first?["includeArchived"] as? Bool == true)
+        #expect(Set(store.workspaces.map(\.id)) == ["active", "archived"])
+        #expect(model.filteredWorkspaces.map(\.id) == ["active"])
+        model.showArchived = true
+        await store.fetchAll()
+        #expect(Set(model.filteredWorkspaces.map(\.id)) == ["active", "archived"])
+    }
+
     @Test(arguments: [WorkspaceAction.archive, .delete])
     func successUsesSelectedWorkspaceAndRefreshes(_ action: WorkspaceAction) async throws {
         let (fake, store) = try fixture()

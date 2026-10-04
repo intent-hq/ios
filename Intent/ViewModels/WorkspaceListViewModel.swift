@@ -167,6 +167,11 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     var viewMode: ViewMode = .recent
     var searchText = ""
 
+    var showArchived: Bool {
+        get { workspaceStore.showArchived }
+        set { workspaceStore.showArchived = newValue }
+    }
+
     /// The window's workspace store, injected from its `BackendSession`.
     @ObservationIgnored private let workspaceStore: WorkspaceStore
     @ObservationIgnored private let activityTime: @MainActor (Workspace) -> TimeInterval
@@ -210,14 +215,16 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     }
 
     private var derivedWorkspaces: DerivedWorkspaces {
-        // Read both observable inputs even on a hit so SwiftUI remains subscribed.
+        // Read every observable input even on a hit so SwiftUI remains subscribed.
         // Cache storage itself must not publish changes during a view read.
         let revision = workspaceStore.workspacesRevision
         let query = normalizedSearchText
-        if let derivedCache, derivedCache.revision == revision, derivedCache.query == query {
+        let includeArchived = showArchived
+        if let derivedCache, derivedCache.revision == revision, derivedCache.query == query,
+           derivedCache.includeArchived == includeArchived {
             return derivedCache
         }
-        let sorted = sortedWorkspaces(revision: revision)
+        let sorted = sortedWorkspaces(revision: revision, includeArchived: includeArchived)
         let filtered = query.isEmpty ? sorted : sorted.filter { workspace in
             workspace.title.localizedCaseInsensitiveContains(query) ||
             (workspace.branch?.localizedCaseInsensitiveContains(query) ?? false) ||
@@ -227,6 +234,7 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         let result = DerivedWorkspaces(
             revision: revision,
             query: query,
+            includeArchived: includeArchived,
             filtered: filtered,
             byRepo: repoGroups(filtered),
             byStatus: statuses.sorted { $0.key.sortOrder < $1.key.sortOrder }
@@ -236,12 +244,13 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         return result
     }
 
-    private func sortedWorkspaces(revision: UInt64) -> [Workspace] {
-        if let sortedCache, sortedCache.revision == revision { return sortedCache.workspaces }
+    private func sortedWorkspaces(revision: UInt64, includeArchived: Bool) -> [Workspace] {
+        if let sortedCache, sortedCache.revision == revision,
+           sortedCache.includeArchived == includeArchived { return sortedCache.workspaces }
         var nextTimes: [String: ActivityTime] = [:]
         let timed = workspaces.compactMap { workspace -> (workspace: Workspace, time: TimeInterval)? in
             let status = workspace.status?.lowercased() ?? ""
-            guard status != "archived", status != "deleted" else { return nil }
+            guard status != "deleted", includeArchived || status != "archived" else { return nil }
             let inputs = ActivityTimeInputs(workspace)
             let entry: ActivityTime
             if let cached = activityTimes[workspace.id], cached.inputs == inputs {
@@ -255,7 +264,7 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         // Prune removed workspaces; metadata-only updates retain parsed keys.
         activityTimes = nextTimes
         let sorted = timed.sorted { $0.time > $1.time }.map(\.workspace)
-        sortedCache = SortedWorkspaces(revision: revision, workspaces: sorted)
+        sortedCache = SortedWorkspaces(revision: revision, includeArchived: includeArchived, workspaces: sorted)
         return sorted
     }
 
@@ -296,12 +305,14 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
 
     private struct SortedWorkspaces {
         let revision: UInt64
+        let includeArchived: Bool
         let workspaces: [Workspace]
     }
 
     private struct DerivedWorkspaces {
         let revision: UInt64
         let query: String
+        let includeArchived: Bool
         let filtered: [Workspace]
         let byRepo: [(String, [Workspace])]
         let byStatus: [(String, [Workspace])]

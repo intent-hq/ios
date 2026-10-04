@@ -66,6 +66,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let launcherBottom = launcher.frame.maxY
         openMenu(app)
         XCTAssertEqual(app.buttons["intent.menu.close"].frame.maxY, launcherBottom, accuracy: Self.scrollTolerance)
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad landscape Intent menu tiles")
         app.buttons["intent.menu.close"].tap()
         XCTAssertTrue(waitUntilHittable(composer))
 
@@ -78,10 +79,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(send.isHittable)
         XCTAssertFalse(launcher.frame.intersects(send.frame))
         XCTAssertLessThan(launcher.frame.maxY, composer.frame.minY)
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "iPad Intent menu floating above the composer"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad Intent menu floating above the composer")
         send.tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", draft))
             .firstMatch.waitForExistence(timeout: Self.timeout))
@@ -158,6 +156,8 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         // Seed stored System through the Home tile before removing the launch override.
         XCTAssertEqual(reveal("appearance", in: app).value as? String, "Dark Mode")
         reveal("appearance", in: app).tap()
+        // Connections is then behind us, so the helper must also scroll back toward the start.
+        _ = reveal("settings", in: app)
         reveal("connections", in: app).tap()
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
         // Relaunch restores the home screen without depending on the connection sheet's detent.
@@ -246,6 +246,14 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
             predicate: NSPredicate(format: "isHittable == true"), object: element
         )
         return XCTWaiter.wait(for: [available], timeout: Self.timeout) == .completed
+    }
+
+    @MainActor
+    private func attachScreenshot(_ screenshot: XCUIScreenshot, named name: String) {
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor

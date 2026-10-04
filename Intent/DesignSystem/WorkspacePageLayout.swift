@@ -31,6 +31,9 @@ extension Constants.WorkspaceSearch {
     static let inputTrailingInset: CGFloat = 4
     static let inputVerticalInset: CGFloat = 2
     static let compactSegmentInset: CGFloat = 2
+    static let surfaceShadowOpacity = 0.1
+    static let surfaceShadowRadius: CGFloat = 4
+    static let surfaceShadowOffset: CGFloat = 2
 }
 
 extension Constants.WorkspaceRow {

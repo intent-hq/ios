@@ -147,40 +147,44 @@ struct WorkspaceCreationImagesTests {
         #expect(draft.errorMessage != nil)
     }
 
-    @Test func nativePasteActionAddsAnImageWithoutReplacingSelectedPromptText() async throws {
+    @Test func pasteActionAddsAnImageWithoutReplacingSelectedPromptText() async throws {
         let draft = WorkspaceCreationImages()
         let view = WorkspacePromptUITextView()
+        let pasteboard = ImagePasteboardFixture(items: [[UTType.png.identifier: try png()]])
+        view.imagePasteboard = pasteboard.source
+        draft.imagePasteboard = pasteboard.source
         view.text = "Keep my prompt"
         view.selectedRange = NSRange(location: 0, length: 4)
         view.onPasteImages = draft.addPaste
-        UIPasteboard.general.setData(try png(), forPasteboardType: UTType.png.identifier)
-        defer { UIPasteboard.general.items = [] }
         #expect(view.canPerformAction(#selector(UIResponderStandardEditActions.paste(_:)), withSender: nil))
+        #expect(pasteboard.readCount == 0)
         // Same responder selector dispatched by edit-menu Paste and Command-V.
         view.paste(nil)
         #expect(draft.isImporting)
+        #expect(pasteboard.readCount == 1, "Snapshot the bytes synchronously during Paste")
+        pasteboard.items = []
         try await waitForImport(draft)
         #expect(draft.images.count == 1)
         #expect(view.text == "Keep my prompt")
         #expect(view.selectedRange == NSRange(location: 0, length: 4))
+        pasteboard.items = [[UTType.png.identifier: try png()]]
         view.allowsImagePaste = false
         #expect(!view.canPerformAction(#selector(UIResponderStandardEditActions.paste(_:)), withSender: nil))
         view.paste(nil)
         #expect(!draft.isImporting)
         #expect(draft.images.count == 1)
+        #expect(pasteboard.readCount == 1)
     }
 
-    @Test func normalTextPasteReplacesSelectionAndReturnInsertsNewline() async throws {
-        let view = WorkspacePromptUITextView()
+    @Test func textPasteDelegatesInsertionAndReturnInsertsNewline() {
+        let view = TextPasteWorkspacePromptTextView()
+        view.imagePasteboard = ImagePasteboardFixture().source
+        view.pastedText = "hello\nworld"
         view.text = "abc"
         view.selectedRange = NSRange(location: 1, length: 1)
         var imported = false
         view.onPasteImages = { imported = true }
-        UIPasteboard.general.string = "hello\nworld"
-        defer { UIPasteboard.general.items = [] }
         view.paste(nil)
-        // UIKit may finish its item-provider insertion on the next run loop.
-        for _ in 0..<100 where view.text == "abc" { try await Task.sleep(for: .milliseconds(10)) }
         #expect(view.text == "ahello\nworldc")
         view.insertText("\n")
         #expect(view.text == "ahello\nworld\nc")

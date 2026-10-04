@@ -72,6 +72,33 @@ struct WorkspaceListCacheTests {
         #expect(parseCount == store.workspaces.count)
     }
 
+    @Test func archiveVisibilityInvalidatesWarmListsAndPreservesSearch() throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = try [
+            workspace("active", ["repositoryName": "app", "lastActivity": "2026-01-01T00:00:00Z"]),
+            workspace("archived", ["status": "ARCHIVED", "repositoryName": "lib", "lastActivity": "2026-02-01T00:00:00Z"]),
+            workspace("deleted", ["status": "Deleted"])
+        ]
+        let model = WorkspaceListViewModel(workspaceStore: store)
+        #expect(model.filteredWorkspaces.map(\.id) == ["active"])
+        #expect(model.groupedByRepo.map(\.0) == ["app"])
+        #expect(model.groupedByStatus.first?.1.map(\.id) == ["active"])
+
+        model.showArchived = true
+        #expect(model.filteredWorkspaces.map(\.id) == ["archived", "active"])
+        #expect(model.groupedByRepo.map(\.0) == ["lib", "app"])
+        #expect(model.groupedByStatus.first?.1.map(\.id) == ["archived", "active"])
+        model.searchText = "lib"
+        #expect(model.filteredWorkspaces.map(\.id) == ["archived"])
+
+        model.showArchived = false
+        #expect(model.filteredWorkspaces.isEmpty)
+        #expect(model.groupedByRepo.isEmpty)
+        #expect(model.groupedByStatus.isEmpty)
+        model.searchText = ""
+        #expect(model.filteredWorkspaces.map(\.id) == ["active"])
+    }
+
     @Test func activityPatchReparsesOnlyChangedWorkspaceAndReordersGroups() throws {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = try [

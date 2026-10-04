@@ -52,6 +52,7 @@ private struct ConversationViewContent: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showModelPicker = false
     @State private var showDeleteConfirmation = false
     /// True while a deletion initiated from this view's own Delete button is in
@@ -196,25 +197,34 @@ private struct ConversationViewContent: View {
                 Text("The message was not sent. " + detail)
             }
     }
+}
 
+private extension ConversationViewContent {
     private var usesWorkspaceDesign: Bool {
-        UIDevice.current.userInterfaceIdiom == .phone
+        #if os(iOS)
+        horizontalSizeClass == .compact
             && assistantStore == nil && viewModel.workspaceId != Workspace.chiefWorkspaceId
+        #else
+        false
+        #endif
     }
 
-    /// Keep shared and non-phone navigation unchanged.
-    @ViewBuilder
+    /// Keep the column's identity (including its scroll state) across width changes.
     private var conversationChrome: some View {
-        if usesWorkspaceDesign {
-            conversationColumn
-                .toolbar(.hidden, for: .navigationBar, .tabBar)
-                .nativeNavigationBackGesture()
-                .safeAreaInset(edge: .top, spacing: 0) {
+        legacyConversationChrome
+            #if os(iOS)
+            .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar, .tabBar)
+            .background {
+                if usesWorkspaceDesign {
+                    Color.clear.nativeNavigationBackGesture()
+                }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if usesWorkspaceDesign {
                     WorkspaceConversationHeader(title: viewModel.agentName, onBack: { dismiss() }, actions: { agentMenu })
                 }
-        } else {
-            legacyConversationChrome
-        }
+            }
+            #endif
     }
 
     private var legacyConversationChrome: some View {
@@ -226,8 +236,10 @@ private struct ConversationViewContent: View {
                 workspaceId: viewModel.workspaceId
             )
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    agentMenu
+                if !usesWorkspaceDesign {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        agentMenu
+                    }
                 }
             }
     }
@@ -270,22 +282,18 @@ private struct ConversationViewContent: View {
         )
     }
 
-    /// Branded iOS agent actions; shared Assistant and spatial menus retain their native behavior.
-    @ViewBuilder
+    /// The native menu owns its container shape and dismissal on every device.
     private var agentMenu: some View {
-        if assistantStore == nil,
-           UIDevice.current.userInterfaceIdiom == .phone || UIDevice.current.userInterfaceIdiom == .pad {
-            ConversationActionMenu(
-                modelDisplayName: viewModel.currentModelDisplayName,
-                canChangeModel: viewModel.filteredMessages.isEmpty,
-                onAction: handleAgentAction
-            )
-        } else {
-            nativeAgentMenu
-        }
+        nativeAgentMenu
     }
 
-    private func handleAgentAction(_ action: ConversationActionMenu.Action) {
+    private enum AgentAction {
+        case changeModel
+        case delete
+        case rename
+    }
+
+    private func handleAgentAction(_ action: AgentAction) {
         switch action {
         case .changeModel:
             if viewModel.filteredMessages.isEmpty { showModelPicker = true }
@@ -306,26 +314,30 @@ private struct ConversationViewContent: View {
             }
             if let displayName = viewModel.currentModelDisplayName {
                 Text("Model: \(displayName)")
+                    .accessibilityIdentifier("conversation.actions.modelInformation")
             }
             if viewModel.filteredMessages.isEmpty {
                 Button { handleAgentAction(.changeModel) } label: {
-                    Label("Change Model", systemImage: "cpu")
+                    Label { Text("Change Model") } icon: { Image(.settings2) }
                 }
+                .accessibilityIdentifier("conversation.actions.model")
             }
             Button { handleAgentAction(.rename) } label: {
-                Label("Rename", systemImage: "pencil")
+                Label { Text("Rename") } icon: { Image(.edit) }
             }
+            .accessibilityIdentifier("conversation.actions.rename")
             Divider()
             Button(role: .destructive) {
                 handleAgentAction(.delete)
             } label: {
-                Label("Delete Agent", systemImage: "trash")
+                Label { Text("Delete Agent") } icon: { Image(.delete) }
             }
+            .accessibilityIdentifier("conversation.actions.delete")
         } label: {
             ToolbarOverflowLabel()
         }
         .accessibilityLabel(assistantStore == nil ? "Agent actions" : "Assistant actions")
-        .accessibilityIdentifier(assistantStore == nil ? "agent.actions" : "assistant.actions")
+        .accessibilityIdentifier(assistantStore == nil ? "conversation.actions.open" : "assistant.actions")
     }
 
     /// Note detail sheet content for a tapped note reference.

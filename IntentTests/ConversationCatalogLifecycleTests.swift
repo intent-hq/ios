@@ -58,7 +58,8 @@ extension ConversationStartupRPCTests {
         await viewModel.loadModelCatalogIfNeeded()
         printCatalogLedger("startup-cold", connection.traffic())
         #expect(connection.traffic().requests.count == 10)
-        #expect(connection.traffic().totalBytes == 2402)
+        // The explicit chat snapshot limit adds 11 request bytes: ,"limit":50.
+        #expect(connection.traffic().totalBytes == 2413)
         let retained = connection.checkpoint
         await viewModel.load()
         await viewModel.loadModelCatalogIfNeeded()

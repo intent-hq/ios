@@ -7,6 +7,8 @@ struct WorkspaceListView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.legibilityWeight) private var legibilityWeight
+    @Environment(\.isAgentHistoryOpen) private var isAgentHistoryOpen
+    @Environment(\.openAgentHistory) private var openAgentHistory
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
@@ -33,6 +35,7 @@ struct WorkspaceListView: View {
     private var canSwitchConnections: Bool {
         guard case .workspaceList = coordinator.currentScreen else { return false }
         return !showingConnections && !showingCreateWorkspace && pendingAction == nil && actionError == nil
+            && !isAgentHistoryOpen
     }
 
     var body: some View {
@@ -82,6 +85,7 @@ struct WorkspaceListView: View {
         }
         .onChange(of: viewModel.viewMode) { _, _ in revealedSwipeTarget = nil }
         .onChange(of: viewModel.searchText) { _, _ in revealedSwipeTarget = nil }
+        .onChange(of: viewModel.showArchived) { _, _ in revealedSwipeTarget = nil }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
         .preference(
             key: ConnectionBackdropPreference.self,
@@ -160,16 +164,26 @@ struct WorkspaceListView: View {
         let style = isSearching ? Constants.Typography.heading2 : Constants.Typography.heading1
         let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
         let font = CTFontCreateWithName(face.rawValue as CFString, isSearching ? compactHeadingSize : headingSize, nil)
-        return WorkspaceTextTrimLayout(capHeight: CTFontGetCapHeight(font)) {
-            Text("Workspaces")
-                .interFont(style)
-                .tracking(isSearching ? compactHeadingTracking : headingTracking)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("workspaces.title")
-                .accessibilityAction(named: Text("Switch connection")) {
-                    showingConnectionSwitcher = true
-                }
+        return HStack {
+            WorkspaceTextTrimLayout(capHeight: CTFontGetCapHeight(font)) {
+                Text("Workspaces")
+                    .interFont(style)
+                    .tracking(isSearching ? compactHeadingTracking : headingTracking)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("workspaces.title")
+                    .accessibilityAction(named: Text("Switch connection")) {
+                        showingConnectionSwitcher = true
+                    }
+            }
+            Spacer(minLength: 0)
+            WorkspaceListMenu(showArchived: $viewModel.showArchived) {
+                prepareConnectionSwitcher()
+                openAgentHistory()
+            } onRecentConnections: {
+                prepareConnectionSwitcher()
+                showingConnectionSwitcher = true
+            }
         }
         .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
         .padding(.bottom, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleBottomSpacing)
