@@ -735,6 +735,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusSwipeBadge.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSwipeContainer.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSwipeRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTab.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceTitle.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTransferSheet.swift
 $(SRCROOT)/IntentTests
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
