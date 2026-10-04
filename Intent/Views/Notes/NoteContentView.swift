@@ -27,8 +27,6 @@ struct NoteContentView: View {
                 switch segment {
                 case .markdown(let text):
                     MarkdownTextView(text: text, onOpenURL: onOpenURL, workspaceId: workspaceId)
-                case .mermaid(let source):
-                    MermaidDiagramView(source: source)
                 case .taskLine(let line):
                     if let linked = line.linkedTask {
                         LinkedTaskCardRow(

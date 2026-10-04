@@ -34,10 +34,9 @@ struct LinkedTaskRef: Equatable {
     let noteId: String
 }
 
-/// A run of note content: markdown, a closed Mermaid fence, or a checkbox line.
+/// A run of note content: markdown or a checkbox line.
 enum NoteContentSegment: Equatable {
     case markdown(String)
-    case mermaid(String)
     case taskLine(NoteTaskLine)
 }
 
@@ -47,8 +46,7 @@ enum NoteContentSegment: Equatable {
 /// at any indent. Only `-` bullets — the daemon's `task.update` line parser
 /// (note_ops.rs `parse_dash_checkbox`) rejects `*` bullets, so a `* [ ]` line
 /// must stay ordinary markdown rather than become a row whose status write
-/// would fail. Fenced code is kept intact before checkbox extraction, and only
-/// closed Mermaid fences become diagrams so partial edits remain readable source.
+/// would fail. Fences stay in Markdown so diagrams share its reference context.
 enum NoteContentSegmenter {
     /// Groups: 1 = leading indent, 2 = marker, 3 = text after the checkbox.
     private static let checkboxLineRegex = #/^([ \t]*)-\s+\[([ xX/])\]\s?(.*)$/#
@@ -73,16 +71,9 @@ enum NoteContentSegmenter {
         while index < lines.count {
             let line = lines[index]
             if let fence = MarkdownCodeFence(opening: line) {
-                let bodyStart = index + 1
-                var end = bodyStart
+                var end = index + 1
                 while end < lines.count, !fence.closes(with: lines[end]) { end += 1 }
-                if fence.isMermaid, end < lines.count {
-                    flushMarkdown()
-                    let source = lines[bodyStart..<end].map { fence.removingIndent(from: $0) }
-                    segments.append(.mermaid(source.joined(separator: "\n")))
-                } else {
-                    markdownBuffer.append(contentsOf: lines[index..<min(end + 1, lines.count)])
-                }
+                markdownBuffer.append(contentsOf: lines[index..<min(end + 1, lines.count)])
                 index = min(end + 1, lines.count)
                 continue
             }

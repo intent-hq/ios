@@ -18,6 +18,29 @@ struct MermaidMarkdownContentTests {
         #expect(links == ["https://example.com/guide", "https://example.com/guide"])
     }
 
+    @Test(arguments: [false, true])
+    func noteReferencesResolveAcrossDiagram(definitionsFirst: Bool) throws {
+        let definitions = "[guide]: https://example.com/guide\n[picture]: https://example.com/preview.png"
+        let references = "[Open guide][guide]\n\n![Preview][picture]"
+        let inline = "[Open guide](https://example.com/guide)\n\n![Preview](https://example.com/preview.png)"
+        let fence = "```mermaid\n\(Self.diagram)\n```"
+        let content = definitionsFirst
+            ? definitions + "\n\n" + fence + "\n\n" + references
+            : references + "\n\n" + fence + "\n\n" + definitions
+        let segments = NoteContentSegmenter.segments(for: content)
+        try #require(segments.count == 1)
+        guard case .markdown(let markdown) = segments[0] else {
+            Issue.record("Expected references and diagram to share a Markdown document")
+            return
+        }
+        let prepared = MermaidMarkdownContent(markdown)
+        #expect(Array(prepared.sources.values) == [Self.diagram])
+        let expected = MermaidMarkdownContent(definitionsFirst ? fence + "\n\n" + inline : inline + "\n\n" + fence)
+        let parsed = try AttributedString(markdown: prepared.markdown)
+        #expect(parsed == (try AttributedString(markdown: expected.markdown)))
+        #expect(parsed.runs.contains { $0.link?.absoluteString == "https://example.com/guide" })
+    }
+
     @Test func incompleteStreamingFenceBecomesDiagramOnlyWhenClosed() {
         let partial = "First\n\n```mermaid\n\(Self.diagram)"
         let incomplete = MermaidMarkdownContent(partial)
@@ -69,6 +92,18 @@ struct MermaidMarkdownContentTests {
         #expect(try await webViewCount(MarkdownTextView(text: complete)) == 1)
         #expect(try await webViewCount(MarkdownTextView(text: incomplete)) == 0)
         #expect(try await webViewCount(MarkdownTextView(text: "```swift\nlet answer = 42\n```")) == 0)
+    }
+
+    @MainActor
+    @Test func noteViewMountsSharedDiagramRenderer() async throws {
+        let view = NoteContentView(
+            content: "Before\n\n```mermaid\n\(Self.diagram)\n```\n\nAfter",
+            resolveNote: { _ in nil },
+            onOpenTaskNote: { _ in },
+            onSetLineStatus: { _, _ in },
+            onSetTaskNoteStatus: { _, _ in }
+        )
+        #expect(try await webViewCount(view) == 1)
     }
 
     @MainActor
