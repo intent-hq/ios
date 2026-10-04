@@ -347,9 +347,9 @@ $(SRCROOT)/Intent/Presentation/ConversationTranscriptViewportAnchor.swift
 $(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
 $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
-$(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/MarkdownCodeFence.swift
 $(SRCROOT)/Intent/Presentation/MermaidMarkdownContent.swift
+$(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
 $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
 $(SRCROOT)/Intent/Presentation/NoteSheetInfo.swift
