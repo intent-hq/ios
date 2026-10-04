@@ -97,6 +97,15 @@ struct WatcherMessagePresentationTests {
         #expect(result.details == text)
     }
 
+    @Test(arguments: 270...280)
+    func previewKeepsMentionsWholeAtEveryOpenerBoundary(prefixLength: Int) {
+        let text = String(repeating: "x", count: prefixLength) + " @context[github|123|Build report]"
+        let result = WatcherMessagePresentation(text: text)
+        let decoded = ContextMention.replacingTokensWithTitles(in: result.summary)
+        #expect(!decoded.contains("@"))
+        #expect(result.details == text)
+    }
+
     @Test func missingAndUnknownJobStatusesStayNeutral() {
         let text = #"{"jobs":[{"name":"Unknown"},{"name":"Future","status":"some_new_state"},"#
             + #"{"name":"Done","status":"completed","conclusion":null},{"name":"  "},{"status":"success"}]}"#

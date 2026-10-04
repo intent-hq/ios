@@ -69,10 +69,10 @@ struct WatcherMessagePresentation {
     private static func preview(of text: String, lines: [String]) -> String {
         let preview = String(lines.prefix(previewLineLimit).joined(separator: "\n").prefix(previewCharacterLimit))
         var end = text.index(text.startIndex, offsetBy: preview.count)
-        if let opening = text.range(of: "@context[", options: .backwards, range: text.startIndex..<end),
-           let closing = text.range(of: "]", range: opening.upperBound..<text.endIndex),
-           closing.upperBound > end {
-            end = closing.upperBound
+        if let token = text.matches(of: #/@context\[[^\]]+\]/#).first(where: {
+            $0.range.lowerBound < end && $0.range.upperBound > end
+        }) {
+            end = token.range.upperBound
         }
         return String(text[..<end]) + "…"
     }
