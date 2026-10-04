@@ -1,15 +1,13 @@
 import SwiftUI
 
 struct ToastEvidenceView: View {
-    let sourceBackendID: BackendID
-
     var body: some View {
         let toast = ToastInfo(
             agentId: "demo-agent-implementor",
             workspaceId: "demo-workspace-1",
             agentName: "Dashboard Implementor",
             workspaceName: "Add usage analytics dashboard",
-            sourceBackendID: sourceBackendID
+            sourceBackendID: BackendID(UUID())
         )
         Group {
             if ProcessInfo.processInfo.arguments.contains("--toast-before") {
