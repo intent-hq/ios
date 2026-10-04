@@ -76,6 +76,45 @@ struct WorkspaceCreationDraftTests {
         #expect(saved.resumable == nil)
     }
 
+    @Test func windowsOnTheSameBackendKeepDraftsAndMutableStateIndependent() throws {
+        let backendID = BackendID(UUID())
+        let persistence = PersistenceManager.ephemeral()
+        let connection = FakeConnectionManager()
+        let workspaces = WorkspaceStore(connectionManager: connection)
+        let first = AppCoordinator(workspaceStore: workspaces, connection: connection, backendID: backendID, persistence: persistence)
+        let second = AppCoordinator(workspaceStore: workspaces, connection: connection, backendID: backendID, persistence: persistence)
+        var draft = first.makeWorkspaceCreationDraft()
+        draft.navigationPath = [.branches, .create]
+        draft.messageText = "First window's prompt"
+        let codex = ProviderInfo(id: "codex", authenticated: .signedIn)
+        draft.agentSelection.selectProvider(codex)
+        first.workspaceCreationDraft = try #require(draft.resumable)
+
+        let reopened = first.makeWorkspaceCreationDraft()
+        var sibling = second.makeWorkspaceCreationDraft()
+        #expect(reopened.messageText == draft.messageText)
+        #expect(sibling.messageText.isEmpty)
+        #expect(sibling.navigationPath.isEmpty)
+        #expect(sibling.agentSelection !== reopened.agentSelection)
+        #expect(sibling.images !== reopened.images)
+        sibling.agentSelection.selectProvider(ProviderInfo(id: "auggie", authenticated: .signedIn))
+        #expect(reopened.agentSelection.provider == codex)
+
+        let importing = try #require(reopened.images.add([{ Data() }]))
+        defer { reopened.images.cancelImport() }
+        sibling.images.cancelImport()
+        #expect(reopened.images.isImporting)
+        #expect(!importing.isCancelled)
+
+        sibling.navigationPath = [.newRepository, .create]
+        sibling.messageText = "Second window's prompt"
+        second.workspaceCreationDraft = try #require(sibling.resumable)
+        #expect(first.makeWorkspaceCreationDraft().messageText == draft.messageText)
+        first.workspaceCreationDraft = nil
+        #expect(first.makeWorkspaceCreationDraft().messageText.isEmpty)
+        #expect(second.makeWorkspaceCreationDraft().messageText == sibling.messageText)
+    }
+
     private func makeDraft() -> WorkspaceCreationDraft {
         WorkspaceCreationDraft(backendID: BackendID(UUID()), persistence: .ephemeral())
     }

@@ -29,9 +29,9 @@ struct CreateWorkspaceView: View {
     @State private var catalogConsumer = UUID()
     @State private var catalogIsVisible = true
 
-    init(session: BackendSession) {
+    init(session: BackendSession, coordinator: AppCoordinator) {
         self.session = session
-        _form = State(initialValue: session.workspaceCreationDraft ?? WorkspaceCreationDraft(backendID: session.backendID, persistence: .shared))
+        _form = State(initialValue: coordinator.makeWorkspaceCreationDraft())
     }
 
     /// The session-owned repo cache: it outlives this sheet so a reopen
@@ -105,7 +105,7 @@ struct CreateWorkspaceView: View {
         navigationContent
         .onAppear { catalogIsVisible = true }
         .onDisappear {
-            session.workspaceCreationDraft = form.resumable
+            coordinator.workspaceCreationDraft = form.resumable
             catalogIsVisible = false
             optionsStore.releaseCatalogs(consumer: catalogConsumer)
             form.images.cancelImport()
@@ -447,7 +447,7 @@ extension CreateWorkspaceView {
                let workspace = WorkspaceStore.parseWorkspace(workspaceDictionary) {
                 session.workspaceStore.addOrUpdate(workspace)
                 form.didCreateWorkspace = true
-                session.workspaceCreationDraft = nil
+                coordinator.workspaceCreationDraft = nil
                 HapticManager.notification(.success)
                 dismiss()
                 coordinator.onSelectWorkspace(workspace.id)

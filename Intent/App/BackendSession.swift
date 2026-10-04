@@ -92,7 +92,6 @@ final class BackendSession {
     /// Session-lifetime specialist / provider / model cache for the New
     /// Workspace final step; same reopen-instantly contract as the repo cache.
     let creationOptionsStore: CreationOptionsStore
-    var workspaceCreationDraft: WorkspaceCreationDraft?
     let hooksStore: WorkspaceStatusStore<BackgroundHook>
     let prMonitorsStore: WorkspacePrMonitorsStore
     let mobileTerminalStore: MobileTerminalStore
@@ -191,7 +190,6 @@ final class BackendSession {
     /// Disconnects the backend connection. Called by the registry when the
     /// last window detaches from the session.
     func teardown() {
-        workspaceCreationDraft = nil
         creationOptionsStore.reset()
         hooksStore.reset()
         prMonitorsStore.reset()
