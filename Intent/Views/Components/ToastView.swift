@@ -15,6 +15,7 @@ struct ToastView: View {
                     .font(.title2)
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(Constants.Pairing.onAccent, Constants.Pairing.accent)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Constants.Toast.textSpacing) {
                     Text(toast.workspaceName)
