@@ -78,6 +78,7 @@ class AppCoordinator {
         }
     }
     var assistantAgentId: String?
+    var workspaceCreationDraft: WorkspaceCreationDraft?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false {
         didSet {
@@ -141,6 +142,10 @@ class AppCoordinator {
     @ObservationIgnored let connectionLossPresentation: ConnectionLossPresentation
     var canCreateWorkspace: Bool {
         dependencies.connection.connectionState == .connected && dependencies.connection.currentPrincipal?.canManageWorkspaces == true
+    }
+
+    func makeWorkspaceCreationDraft() -> WorkspaceCreationDraft {
+        workspaceCreationDraft ?? WorkspaceCreationDraft(backendID: backendID, persistence: dependencies.persistence)
     }
 
     /// Temporary transport recovery keeps the draft while submission remains

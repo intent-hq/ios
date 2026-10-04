@@ -63,7 +63,7 @@ struct WorkspaceListView: View {
             if shouldDismiss { showingCreateWorkspace = false }
         }
         .sheet(isPresented: $showingCreateWorkspace) {
-            CreateWorkspaceView(session: session)
+            CreateWorkspaceView(session: session, coordinator: coordinator)
                 .environment(coordinator)
         }
         .sheet(isPresented: $showingConnections) {
