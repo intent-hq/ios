@@ -1137,4 +1137,3 @@ $(SRCROOT)/IntentTests/WorkspaceTranscriptDesignTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTransferFixture.swift
 $(SRCROOT)/IntentTests/WorkspaceTransferRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTransferStoreTests.swift
-$(SRCROOT)/IntentUITests/ConversationTranscriptHistoryUITests.swift
