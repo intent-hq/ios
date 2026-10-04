@@ -109,12 +109,10 @@ struct ConnectionFailureView: View {
     }
 
     private var reconnectButton: some View {
-        Button {
-            stopAutoRetry()
-            coordinator.onReconnect()
-        } label: {
+        Button(action: returnToSavedMachines) {
             primaryButtonLabel(isCertMismatch ? "Re-pair Device" : "Connect to different server")
         }
+        .accessibilityIdentifier("connection-failure.reconnect")
     }
 
     private func primaryButtonLabel(_ title: LocalizedStringKey) -> some View {
@@ -334,19 +332,13 @@ struct ConnectionFailureView: View {
 
 extension ConnectionFailureView {
     private var homeButton: some View {
-        Button {
-            stopAutoRetry()
-            coordinator.onReturnToSavedMachines()
-        } label: {
-            Label("Back", systemImage: "chevron.backward")
-                .interFont(Constants.Typography.bodyS)
-                .frame(minHeight: Constants.ConnectionSheet.minimumTouchTarget)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Theme.primary(for: colorScheme))
-        .accessibilityLabel("Back to Home")
-        .accessibilityHint("Return to your saved machines without forgetting this connection.")
-        .accessibilityIdentifier("connection-failure.home")
+        ConnectionBackButton(action: returnToSavedMachines)
+            .accessibilityIdentifier("connection-failure.home")
+    }
+
+    private func returnToSavedMachines() {
+        stopAutoRetry()
+        coordinator.onReturnToSavedMachines()
     }
 
     private func savedConnectionRow(_ connection: StoredConnection) -> some View {
