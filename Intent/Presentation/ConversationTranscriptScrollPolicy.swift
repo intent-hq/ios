@@ -13,6 +13,7 @@ enum ConversationTranscriptScrollPolicy {
 
     enum MessageCountChangeDecision: Equatable {
         case none
+        case preserveViewport
         case rearmEntryScroll
         case rePinIfPastEnd
         case runEntryScroll
@@ -26,12 +27,31 @@ enum ConversationTranscriptScrollPolicy {
     static func messageCountChangeDecision(
         from oldCount: Int,
         to newCount: Int,
-        hasInitiallyScrolled: Bool
+        hasInitiallyScrolled: Bool,
+        isPrepend: Bool = false
     ) -> MessageCountChangeDecision {
+        if isPrepend { return .preserveViewport }
         if newCount == 0 { return .rearmEntryScroll }
         if newCount < oldCount { return .rePinIfPastEnd }
         if oldCount == 0, !hasInitiallyScrolled { return .runEntryScroll }
         return .none
+    }
+
+    /// Appends (including an append arriving with history) still follow the
+    /// live tail. A pure prepend must never treat the existing last user row
+    /// as a new send or re-arm entry scrolling.
+    static func isHistoryPrepend(from oldIDs: [String], to newIDs: [String]) -> Bool {
+        !oldIDs.isEmpty && newIDs.count > oldIDs.count && newIDs.suffix(oldIDs.count).elementsEqual(oldIDs)
+    }
+
+    static func shouldLoadOlderMessages(
+        isNearTop: Bool,
+        hasInitiallyScrolled: Bool,
+        hasUserScrolled: Bool,
+        isFollowing: Bool,
+        canRequestPage: Bool
+    ) -> Bool {
+        isNearTop && hasInitiallyScrolled && hasUserScrolled && !isFollowing && canRequestPage
     }
 
     /// Sequencing of the entry scroll against the finder. A `scrollTo` issued

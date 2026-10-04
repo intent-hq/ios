@@ -59,6 +59,14 @@ import SwiftUI
         get { liveTranscript.totalMessageCount }
         set { liveTranscript.totalMessageCount = newValue }
     }
+    var hasOlderMessages: Bool { liveTranscript.hasOlderMessages }
+    var isLoadingOlderMessages: Bool { liveTranscript.isLoadingOlderMessages }
+    var olderMessagesError: String? { liveTranscript.olderMessagesError }
+
+    func loadOlderMessages() async {
+        await liveTranscript.loadOlderMessages(using: commands)
+    }
+
     var agentNotFound = false
     var pendingQuestionsMessageId: String? {
         get { commands.pendingQuestionsMessageId }
@@ -78,7 +86,11 @@ import SwiftUI
     @ObservationIgnored let liveTranscript: ConversationLiveTranscript
     @ObservationIgnored let commands: ConversationCommands
     @ObservationIgnored let watchedAgentCoordinator: ConversationWatchedAgents
-    var agentId: String?
+    var agentId: String? {
+        didSet {
+            if agentId != oldValue { liveTranscript.resetOlderHistory() }
+        }
+    }
     var workspaceId: String?
     @ObservationIgnored var bootstrapWorkspaceHint: String?
 

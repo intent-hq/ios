@@ -7,10 +7,8 @@ extension ConversationTranscriptView {
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         let generation = scrollState.initialScrollGeneration
         let ownershipRevision = scrollState.viewportOwnershipRevision
-        if viewModel.isTruncated {
-            truncationBanner
-                .id("truncation-banner")
-        }
+        olderMessagesRow(proxy: proxy)
+            .id("older-messages")
 
         ForEach(viewModel.filteredMessages) { message in
             // One stable lazy-stack target per message. A late divider changes
@@ -312,35 +310,6 @@ extension ConversationTranscriptView {
         .buttonStyle(.plain)
     }
     #endif
-
-    @ViewBuilder
-    private var truncationBanner: some View {
-        if usesWorkspaceDesign {
-            WorkspaceHistoryNotice(
-                messageCount: viewModel.filteredMessages.count,
-                totalMessageCount: viewModel.totalMessageCount
-            )
-        } else {
-            legacyTruncationBanner
-        }
-    }
-
-    private var legacyTruncationBanner: some View {
-        HStack(spacing: Layout.truncationBannerSpacing) {
-            Image(systemName: "info.circle")
-                .font(.footnote)
-                .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
-            Text("Showing the most recent \(viewModel.filteredMessages.count) of \(viewModel.totalMessageCount) messages.\nSee the full conversation on the desktop app.")
-                .interFont(Constants.Typography.bodyXS)
-                .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
-                .multilineTextAlignment(.center)
-        }
-        .padding(.horizontal, Layout.truncationBannerHorizontalPadding)
-        .padding(.vertical, Layout.truncationBannerVerticalPadding)
-        .frame(maxWidth: .infinity)
-        .background(Theme.muted(for: transcriptColorScheme).opacity(Layout.truncationBannerBackgroundOpacity))
-        .clipShape(RoundedRectangle(cornerRadius: Layout.truncationBannerCornerRadius))
-    }
 }
 
 private struct WorkspaceSuggestedPromptStyle: ButtonStyle {
@@ -376,38 +345,5 @@ private struct WorkspaceSuggestedPromptStyle: ButtonStyle {
             }
             .contentShape(.rect(cornerRadius: Design.innerCornerRadius))
             .opacity(isEnabled ? 1 : Layout.disabledOpacity)
-    }
-}
-
-private struct WorkspaceHistoryNotice: View {
-    let messageCount: Int
-    let totalMessageCount: Int
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.colorSchemeContrast) private var contrast
-
-    private typealias Design = Constants.Conversation.Design
-    private typealias Layout = Design.HistoryNotice
-
-    var body: some View {
-        HStack(alignment: .top, spacing: Layout.contentSpacing) {
-            Image(.infoCircle)
-                .renderingMode(.template)
-                .resizable()
-                .scaledToFit()
-                .frame(width: Design.iconSize, height: Design.iconSize)
-                .accessibilityHidden(true)
-            Text("Showing the most recent \(messageCount) of \(totalMessageCount) messages.\nSee the full conversation on the desktop app.")
-                .interFont(Constants.Typography.bodyXS)
-                .tracking(Design.Typography.smallTracking)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
-        .padding(.horizontal, Layout.horizontalPadding)
-        .padding(.vertical, Layout.verticalPadding)
-        .background(Design.Palette.surface(for: colorScheme), in: .rect(cornerRadius: Design.innerCornerRadius))
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("transcript.historyNotice")
     }
 }

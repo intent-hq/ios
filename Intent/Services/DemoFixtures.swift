@@ -197,7 +197,7 @@ enum DemoFixtures {
         return .delay(delay(from: arguments, prefix: delayPrefix, defaultDelay: defaultDelay))
     }
 
-    private static func triggerFile(from arguments: [String], prefix: String) -> URL? {
+    static func triggerFile(from arguments: [String], prefix: String) -> URL? {
         arguments
             .filter { $0.hasPrefix(prefix) }
             .map { String($0.dropFirst(prefix.count)) }
@@ -286,6 +286,7 @@ enum DemoFixtures {
     /// Gate to wait on before serving `response(for:params:)`, or nil for an
     /// immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
+        if let gate = historyResponseGate(for: method, params: params) { return gate }
         if let gate = agentGroupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         if let gate = startupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         switch method {
@@ -338,6 +339,7 @@ extension DemoFixtures {
         if let push = designScenario?.subscriptionPush(for: method, params: params) { return push }
         guard method == "chat.subscribe" else { return nil }
         let agentId = params["agentId"] as? String
+        if let push = historySubscriptionPush(params: params) { return push }
         let messages = transcriptMessages(agentId: agentId)
         return SubscriptionPush(
             subscriptionId: chatSubscriptionId(agentId: agentId),
@@ -438,12 +440,7 @@ extension DemoFixtures {
             }
             return ["agent": agent]
         case "agent.getConversation":
-            let messages = transcriptMessages(agentId: params["agentId"] as? String)
-            return [
-                "messages": messages,
-                "truncated": false,
-                "totalMessages": messages.count
-            ] as [String: Any]
+            return conversationResponse(params: params)
         case "chat.subscribe":
             return ["subscriptionId": chatSubscriptionId(agentId: params["agentId"] as? String)]
         case "agent.getMessageBlock":

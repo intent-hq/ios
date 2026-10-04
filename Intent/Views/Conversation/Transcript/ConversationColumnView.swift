@@ -74,7 +74,7 @@ struct ConversationColumnView: View {
 
     @ViewBuilder
     private var columnContent: some View {
-        if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript {
+        if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript || DemoFixtures.usesHistoryPages {
             Button("Open conversation cover", action: onDemoCover)
                 .accessibilityIdentifier("demo.conversation.cover")
                 .accessibilityValue(

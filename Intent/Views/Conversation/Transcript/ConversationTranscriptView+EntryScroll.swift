@@ -22,12 +22,17 @@ extension ConversationTranscriptView {
         }
     }
 
-    func handleMessageCountChange(from oldCount: Int, to newCount: Int, proxy: ScrollViewProxy) {
+    func handleMessageCountChange(from oldIDs: [String], to newIDs: [String], proxy: ScrollViewProxy) {
+        let oldCount = oldIDs.count
+        let newCount = newIDs.count
         switch ConversationTranscriptScrollPolicy.messageCountChangeDecision(
             from: oldCount,
             to: newCount,
-            hasInitiallyScrolled: hasInitiallyScrolled
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            isPrepend: ConversationTranscriptScrollPolicy.isHistoryPrepend(from: oldIDs, to: newIDs)
         ) {
+        case .preserveViewport:
+            return
         case .rearmEntryScroll:
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
@@ -49,7 +54,7 @@ extension ConversationTranscriptView {
         case .none:
             break
         }
-        let appendedUserMessage = newCount > oldCount
+        let appendedUserMessage = newCount > oldCount && oldIDs.last != newIDs.last
             && viewModel.filteredMessages.last?.role == .user
         if appendedUserMessage {
             claimViewportForExplicitFollow(proxy: proxy)
