@@ -24,6 +24,7 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         app.launchArguments += ["--demo-data"]
         app.launch()
 
+        showWorkspaceList(in: app)
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
         let launcher = app.buttons["intent.menu.open"]
@@ -62,32 +63,62 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
     }
 
     @MainActor
-    func testAssistantButtonStaysOnWorkspaceList() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "compact-width behavior")
+    func testAssistantButtonStaysOnWorkspaceList() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
         app.launch()
 
+        showWorkspaceList(in: app)
+        let isCompact = !app.navigationBars["Workspaces"].exists
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
         let launcher = app.buttons["intent.menu.open"]
         XCTAssertTrue(launcher.isHittable)
         workspace.tap()
+        let hideSidebar = app.navigationBars["Workspaces"].buttons["Hide Sidebar"]
+        if hideSidebar.exists { hideSidebar.tap() }
         let agentRow = app.staticTexts["Test Stabilizer"].firstMatch
         XCTAssertTrue(agentRow.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(launcher.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(agentRow.isHittable, app.debugDescription)
+        if isCompact {
+            XCTAssertTrue(launcher.waitForNonExistence(timeout: Fixture.timeout))
+        } else {
+            XCTAssertTrue(launcher.isHittable)
+        }
 
         agentRow.tap()
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertFalse(launcher.exists)
+        if isCompact {
+            XCTAssertFalse(launcher.exists)
+        } else {
+            XCTAssertTrue(launcher.isHittable)
+        }
         XCTAssertFalse(app.tabBars.firstMatch.exists)
 
-        app.buttons["conversation.back"].tap()
+        let conversationBack = isCompact
+            ? app.buttons["conversation.back"]
+            : app.navigationBars["Test Stabilizer"].buttons["BackButton"]
+        XCTAssertTrue(conversationBack.waitForExistence(timeout: Fixture.timeout), app.debugDescription)
+        conversationBack.tap()
         XCTAssertTrue(agentRow.waitForExistence(timeout: Fixture.timeout))
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let workspaceBack = isCompact
+            ? app.buttons["workspaceDetail.back"]
+            : app.navigationBars.buttons["Back to workspaces"]
+        XCTAssertTrue(workspaceBack.waitForExistence(timeout: Fixture.timeout), app.debugDescription)
+        workspaceBack.tap()
+        showWorkspaceList(in: app)
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(launcher.isHittable)
+    }
+
+    @MainActor
+    private func showWorkspaceList(in app: XCUIApplication) {
+        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Fixture.timeout))
+        let sidebar = app.navigationBars.buttons["Show Sidebar"]
+        if sidebar.exists { sidebar.tap() }
+        XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.waitForExistence(timeout: Fixture.timeout), app.debugDescription)
     }
 
     @MainActor
@@ -108,6 +139,7 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertTrue(greeting.waitForExistence(timeout: Fixture.timeout))
         let newConversation = app.buttons["assistant.newConversation"]
         XCTAssertTrue(newConversation.isHittable)
+        let newConversationLabel = newConversation.label
         newConversation.tap()
         XCTAssertTrue(greeting.waitForNonExistence(timeout: Fixture.timeout))
 
@@ -115,7 +147,9 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         let history = app.buttons["assistant.conversations"]
         XCTAssertTrue(history.waitForExistence(timeout: Fixture.timeout))
         history.tap()
-        let menuAction = app.buttons["assistant.history.newConversation"]
+        // Native submenus on iOS 27 omit SwiftUI identifiers. Match the app's
+        // localized toolbar label inside the menu, never the toolbar itself.
+        let menuAction = app.collectionViews.buttons[newConversationLabel]
         XCTAssertTrue(menuAction.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(menuAction.isHittable, app.debugDescription)
         menuAction.tap()

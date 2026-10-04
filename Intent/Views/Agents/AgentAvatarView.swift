@@ -45,22 +45,13 @@ struct AgentAvatarView: View {
                 .fill(glyphColor)
                 .frame(width: artSize, height: artSize)
 
-            // Active pulsing indicator. Each phase is a finite ease-in-out
-            // animation on the stroke color only — a `repeatForever` implicit
-            // animation here leaked into the ring's geometry whenever the row
-            // moved in a reordering list, leaving rings oscillating between rows.
+            // Animate only the layer's stroke color in the render server, not
+            // SwiftUI geometry: an implicit repeatForever previously made rings
+            // drift between rows when a list reordered.
             if isActive {
-                PhaseAnimator([false, true]) { strong in
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(
-                            strong
-                                ? Constants.Colors.AgentAvatar.activeStrokeStrong
-                                : Constants.Colors.AgentAvatar.activeStrokeWeak,
-                            lineWidth: Constants.AgentAvatar.activeStrokeWidth
-                        )
-                } animation: { _ in
-                    .easeInOut(duration: Constants.AgentAvatar.pulseAnimationDuration)
-                }
+                AgentAvatarPulse(cornerRadius: cornerRadius)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
         }
         .frame(width: size, height: size)

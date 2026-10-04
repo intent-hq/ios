@@ -112,6 +112,7 @@ struct BackgroundHooksRow: View {
                     delayMs: hook.delayMs,
                     color: Theme.mutedForeground(for: colorScheme).opacity(Layout.timeBarOpacity)
                 )
+                .frame(height: Layout.timeBarHeight)
                 .id(nextRunAt)
                 .padding(.horizontal, Layout.timeBarInset)
                 .padding(.bottom, Layout.timeBarInset)
@@ -155,41 +156,5 @@ struct BackgroundHooksRow: View {
 
     static func stateLabel(_ hook: BackgroundHook) -> String {
         hook.state == .running ? "Running" : "Scheduled"
-    }
-}
-
-/// Thin shrinking time-to-next-run bar: a single linear animation from the
-/// not-yet-elapsed fraction of the `delayMs` cycle down to zero (mirrors the
-/// FE's pure-CSS bar — no timers, no daemon polling). The parent re-creates
-/// it via `.id(nextRunAt)` so each new cycle restarts the animation.
-private struct HookTimeBar: View {
-    let nextRunAt: String
-    let delayMs: Int
-    let color: Color
-
-    @State private var fraction: CGFloat = 1
-
-    private static let millisecondsPerSecond = 1000.0
-
-    var body: some View {
-        Rectangle()
-            .fill(color)
-            .frame(height: Constants.Conversation.StatusStrip.BackgroundHooks.timeBarHeight)
-            .scaleEffect(x: fraction, y: 1, anchor: .leading)
-            .onAppear(perform: start)
-    }
-
-    private func start() {
-        guard delayMs > 0,
-              let next = ISO8601DateFormatter.lenientDate(from: nextRunAt) else {
-            fraction = 0
-            return
-        }
-        let total = Double(delayMs) / Self.millisecondsPerSecond
-        let remaining = max(0, min(total, next.timeIntervalSinceNow))
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) { fraction = CGFloat(remaining / total) }
-        withAnimation(.linear(duration: remaining)) { fraction = 0 }
     }
 }

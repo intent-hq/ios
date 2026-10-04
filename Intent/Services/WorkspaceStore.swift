@@ -13,6 +13,7 @@ import Observation
     private(set) var workspacesRevision: UInt64 = 0
     var lastUpdated: Date?
     var isLoading = false
+    var showArchived = false
     private(set) var updatingWorkspaceIDs: Set<String> = []
     var agentSummaries: AgentSummaryStore? {
         didSet {
@@ -158,7 +159,7 @@ import Observation
             let revision = fetchRevision
             do {
                 let summaryBoundary = agentSummaries?.beginRead()
-                let result = try await connectionManager.request("workspace.list")
+                let result = try await connectionManager.request("workspace.list", params: ["includeArchived": true])
                 if revision == fetchRevision {
                     fetchNeedsRefresh = false
                     publishFetchedWorkspaces(Self.parseWorkspaces(from: result), summaryBoundary: summaryBoundary)

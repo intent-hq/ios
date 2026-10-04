@@ -52,6 +52,7 @@ private struct ConversationViewContent: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showModelPicker = false
     @State private var showDeleteConfirmation = false
     /// True while a deletion initiated from this view's own Delete button is in
@@ -196,25 +197,34 @@ private struct ConversationViewContent: View {
                 Text("The message was not sent. " + detail)
             }
     }
+}
 
+private extension ConversationViewContent {
     private var usesWorkspaceDesign: Bool {
-        UIDevice.current.userInterfaceIdiom == .phone
+        #if os(iOS)
+        horizontalSizeClass == .compact
             && assistantStore == nil && viewModel.workspaceId != Workspace.chiefWorkspaceId
+        #else
+        false
+        #endif
     }
 
-    /// Keep shared and non-phone navigation unchanged.
-    @ViewBuilder
+    /// Keep the column's identity (including its scroll state) across width changes.
     private var conversationChrome: some View {
-        if usesWorkspaceDesign {
-            conversationColumn
-                .toolbar(.hidden, for: .navigationBar, .tabBar)
-                .nativeNavigationBackGesture()
-                .safeAreaInset(edge: .top, spacing: 0) {
+        legacyConversationChrome
+            #if os(iOS)
+            .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar, .tabBar)
+            .background {
+                if usesWorkspaceDesign {
+                    Color.clear.nativeNavigationBackGesture()
+                }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if usesWorkspaceDesign {
                     WorkspaceConversationHeader(title: viewModel.agentName, onBack: { dismiss() }, actions: { agentMenu })
                 }
-        } else {
-            legacyConversationChrome
-        }
+            }
+            #endif
     }
 
     private var legacyConversationChrome: some View {
@@ -226,8 +236,10 @@ private struct ConversationViewContent: View {
                 workspaceId: viewModel.workspaceId
             )
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    agentMenu
+                if !usesWorkspaceDesign {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        agentMenu
+                    }
                 }
             }
     }

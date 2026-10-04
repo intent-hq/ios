@@ -39,7 +39,8 @@ extension ConversationLiveTranscript {
         var params: [String: Any] = [
             "agentId": agentId,
             "replaceGroup": "ios-chat-\(agentId)",
-            "projection": "slim"
+            "projection": "slim",
+            "limit": Self.initialHistoryMessageLimit
         ]
         if !useFullDeltaEncoding { params["deltaEncoding"] = "incremental" }
         do {
@@ -55,6 +56,7 @@ extension ConversationLiveTranscript {
         }
     }
 
+    private static let initialHistoryMessageLimit = 50
     private static let invalidParametersCode = -32_602
 
     private static func rejectsDeltaEncoding(_ error: Error) -> Bool {

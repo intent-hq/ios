@@ -421,6 +421,7 @@ extension AppCoordinator {
         withObservationTracking {
             _ = dependencies.workspaceStore.lastUpdated
             _ = dependencies.workspaceStore.workspaces
+            _ = dependencies.workspaceStore.showArchived
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -455,9 +456,8 @@ extension AppCoordinator {
             return
         }
 
-        // Check if workspace is archived or deleted
         let status = workspace.status?.lowercased() ?? ""
-        if status == "archived" || status == "deleted" {
+        if status == "deleted" || (status == "archived" && !dependencies.workspaceStore.showArchived) {
             handleMissingWorkspace()
         }
     }

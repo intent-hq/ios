@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension EnvironmentValues {
+    @Entry var openConnectionSwitcher: () -> Void = {}
+}
+
 /// True while the Connections switcher is open, so the global agent history
 /// drawer does not compete for the same horizontal pans.
 struct ConnectionSwitcherOpenPreference: PreferenceKey {
@@ -16,12 +20,15 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
     let onReveal: () -> Void
     @ViewBuilder let content: Content
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(\.isAgentHistoryOpen) private var isAgentHistoryOpen
+
+    private var canReveal: Bool { isEnabled && !isAgentHistoryOpen }
 
     var body: some View {
         EdgeDrawer(
             side: .left,
             isPresented: $isPresented,
-            isEnabled: isEnabled,
+            isEnabled: canReveal,
             closeLabel: "Close connection switcher",
             closeIdentifier: "connection-switcher.close",
             onReveal: onReveal
@@ -33,6 +40,9 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
             )
         } content: {
             content
+                .environment(\.openConnectionSwitcher) {
+                    if canReveal { isPresented = true }
+                }
         }
         .preference(key: ConnectionSwitcherOpenPreference.self, value: isPresented)
     }
