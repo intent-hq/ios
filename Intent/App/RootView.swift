@@ -233,7 +233,10 @@ struct RootView: View {
             // toast renders as before. The tap still goes through the
             // manager's routing so delivery lands on the source backend's
             // registered handler.
-            if let toast = notificationManager.currentToast,
+            if ProcessInfo.processInfo.arguments.contains("--demo-toast-evidence") {
+                ToastEvidenceView(sourceBackendID: session.backendID)
+                    .padding(.top, Constants.Root.toastTopPadding)
+            } else if let toast = notificationManager.currentToast,
                NotificationManager.windowPresentsAlert(
                    source: toast.sourceBackendID,
                    windowBackendID: session.backendID,

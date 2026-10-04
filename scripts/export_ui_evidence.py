@@ -11,6 +11,12 @@ import tempfile
 
 
 CAPTURES = {
+    "ToastScreenshotTests": {
+        "testBeforeLight": ("toast-before-light",),
+        "testAfterLight": ("toast-after-light",),
+        "testBeforeDark": ("toast-before-dark",),
+        "testAfterDark": ("toast-after-dark",),
+    },
     "WorkspaceSwipeUITests": {
         "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
     },
