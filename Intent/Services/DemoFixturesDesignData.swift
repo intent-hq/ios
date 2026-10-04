@@ -109,7 +109,22 @@ extension DemoDesignFixtures {
         if hasQuestions {
             rows.append(Self.message(id: Self.questionMessageId, role: "assistant", blocks: questionBlocks))
         }
+        if scenario == .watcher { rows.append(Self.watcherMessage) }
         return rows
+    }
+
+    private static var watcherMessage: [String: Any] {
+        let name = "Watch iOS Mermaid validation"
+        let payload = #"{"conclusion":"","jobs":[{"name":"SwiftLint","conclusion":"failure","status":"completed","steps":[{"name":"Lint sources","conclusion":"failure"}]},"#
+            + #"{"name":"iOS Build","conclusion":"","status":"in_progress"},{"name":"Unit tests","conclusion":"success","status":"completed"}]}"#
+        var row = message(id: "demo-design-watcher", role: "user", blocks: [DemoFixtures.textBlock(
+            "[Background hook \"\(name)\"] iOS Mermaid validation: \(payload)\n\n[This hook has retired.]"
+        )])
+        row["metadata"] = [
+            "type": "hook_wake", "hookName": name, "hookId": "demo-watcher",
+            "reason": "dispatched", "hookStillActive": false
+        ]
+        return row
     }
 
     static func message(id: String, role: String, blocks: [[String: Any]]) -> [String: Any] {

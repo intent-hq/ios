@@ -54,7 +54,10 @@ struct UserMessageView: View {
 
     var body: some View {
         if workspaceDesign {
-            WorkspaceUserBubbleLayout(usesFullWidth: dynamicTypeSize.isAccessibilitySize, layoutDirection: layoutDirection) {
+            WorkspaceUserBubbleLayout(
+                usesFullWidth: dynamicTypeSize.isAccessibilitySize || hookWake != nil || prWake != nil,
+                layoutDirection: layoutDirection
+            ) {
                 bubble
             }
         } else {
@@ -168,7 +171,11 @@ struct UserMessageView: View {
             }
             return MessageBlockPartitioning.stripSupervisorTags(text)
         }()
-        if (hookWake == nil && prWake == nil) || !display.isEmpty {
+        if hookWake != nil || prWake != nil {
+            if !display.isEmpty {
+                WatcherMessageBodyView(text: display)
+            }
+        } else {
             let rows = MessageView.userTextRows(display)
             if rows.contains(where: { row in
                 if case .chips = row { return true }
