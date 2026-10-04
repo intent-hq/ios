@@ -8,6 +8,7 @@ struct UserMessageView: View {
     let message: ConversationMessage
     let workspaceId: String
     var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
+    var onLayoutChange: (() -> Void)?
     @Binding var isAgentMessageExpanded: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(BackendSession.self) private var session
@@ -31,11 +32,13 @@ struct UserMessageView: View {
         message: ConversationMessage,
         workspaceId: String,
         onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?,
-        isAgentMessageExpanded: Binding<Bool>
+        isAgentMessageExpanded: Binding<Bool>,
+        onLayoutChange: (() -> Void)? = nil
     ) {
         self.message = message
         self.workspaceId = workspaceId
         self.onNavigateToAgent = onNavigateToAgent
+        self.onLayoutChange = onLayoutChange
         self._isAgentMessageExpanded = isAgentMessageExpanded
         let blocks = message.contentBlocks
         let hookWake = message.hookWakeAttribution
@@ -173,7 +176,7 @@ struct UserMessageView: View {
         }()
         if hookWake != nil || prWake != nil {
             if !display.isEmpty {
-                WatcherMessageBodyView(text: display)
+                WatcherMessageBodyView(text: display, onLayoutChange: onLayoutChange)
             }
         } else {
             let rows = MessageView.userTextRows(display)

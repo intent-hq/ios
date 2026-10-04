@@ -82,7 +82,8 @@ struct MessageRowContent: View, Equatable {
                     message: message,
                     workspaceId: workspaceId,
                     onNavigateToAgent: onNavigateToAgent,
-                    isAgentMessageExpanded: agentMessageExpansion
+                    isAgentMessageExpanded: agentMessageExpansion,
+                    onLayoutChange: onLayoutChange
                 )
             } else if message.role == .assistant {
                 AssistantMessageView(

@@ -2,14 +2,16 @@ import SwiftUI
 
 struct WatcherMessageBodyView: View {
     let presentation: WatcherMessagePresentation
+    var onLayoutChange: (() -> Void)?
     @State private var isExpanded = false
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .callout) private var detailsHeight: CGFloat = 280
     private static let visibleCheckLimit = 4
     private static let previewLineLimit = 4
 
-    init(text: String) {
+    init(text: String, onLayoutChange: (() -> Void)? = nil) {
         presentation = WatcherMessagePresentation(text: text)
+        self.onLayoutChange = onLayoutChange
     }
 
     var body: some View {
@@ -71,6 +73,7 @@ struct WatcherMessageBodyView: View {
     private func disclosure(_ details: String) -> some View {
         VStack(alignment: .leading, spacing: Constants.Conversation.UserMessage.textRowSpacing) {
             Button {
+                onLayoutChange?()
                 isExpanded.toggle()
             } label: {
                 HStack {
