@@ -428,7 +428,7 @@ struct CreationPickerControlsTests {
             height: layout == .workspace ? Self.pickerHostHeight : 1200,
             diagnostics: SyntheticBadgeHostTrace(context: "picker layout=\(layout) dynamicType=\(dynamicTypeSize) isCreating=\(isCreating)")
         ) { hostView, window in
-            let settled = try Self.settledPickerElements(in: hostView, window: window)
+            let settled = try Self.settledPickerElements(in: hostView, window: window, layout: layout)
             try CreationPickerRenderedGeometry(window: window).record(named: "\(layout)-\(dynamicTypeSize)")
             return PickerLayoutSnapshot(
                 hostFrame: window.bounds,
@@ -475,7 +475,8 @@ struct CreationPickerControlsTests {
 
     private static func settledPickerElements(
         in hostView: UIView,
-        window: UIWindow
+        window: UIWindow,
+        layout: PickerHostLayout
     ) throws -> SettledPickerElements {
         // SwiftUI can finish Dynamic Type reflow after the host appears.
         let deadline = Date(timeIntervalSinceNow: pickerSettleTimeout)
@@ -492,14 +493,18 @@ struct CreationPickerControlsTests {
             let provider = try pickerElement(identifier: "creation.providerPicker", in: hostView)
             let model = try pickerElement(identifier: "creation.modelPicker", in: hostView)
             let frames: [CGRect]
-            let rendered = try CreationPickerRenderedGeometry(window: window)
-            do {
-                frames = try rendered.frames(associatedWith: [provider, model].map { element in
-                    window.convert(element.accessibilityFrame, from: nil)
-                })
-            } catch {
-                try rendered.record(named: "picker-observation-failure")
-                throw error
+            if layout == .workspace {
+                let rendered = try CreationPickerRenderedGeometry(window: window)
+                do {
+                    frames = try rendered.frames(associatedWith: [provider, model].map { element in
+                        window.convert(element.accessibilityFrame, from: nil)
+                    })
+                } catch {
+                    try rendered.record(named: "picker-observation-failure")
+                    throw error
+                }
+            } else {
+                frames = try [provider, model].map { try visibleMenuRowFrame(of: $0, under: hostView, in: window) }
             }
             let providerFrame = frames[0]
             let modelFrame = frames[1]
@@ -519,6 +524,29 @@ struct CreationPickerControlsTests {
         }
 
         throw PickerInspectionError.framesDidNotSettle(samples: Array(samples.suffix(requiredStableFrameSamples)))
+    }
+
+    private static func visibleMenuRowFrame(of element: NSObject, under root: UIView, in window: UIWindow) throws -> CGRect {
+        let accessibilityFrame = window.convert(element.accessibilityFrame, from: nil)
+        let center = CGPoint(x: accessibilityFrame.midX, y: accessibilityFrame.midY)
+        func matchingCells(under view: UIView) -> [UICollectionViewCell] {
+            if let cell = view as? UICollectionViewCell,
+               cell.window === window, !cell.isHidden,
+               window.convert(cell.bounds, from: cell).contains(center) {
+                return [cell]
+            }
+            return view.subviews.flatMap { matchingCells(under: $0) }
+        }
+        let cells = matchingCells(under: root)
+        try #require(cells.count == 1, "Each picker must occupy a distinct rendered list row")
+        let view = try #require(cells.first).contentView
+        var frame = window.convert(view.bounds, from: view)
+        var ancestor = view.superview
+        while let parent = ancestor {
+            if parent.clipsToBounds { frame = frame.intersection(window.convert(parent.bounds, from: parent)) }
+            ancestor = parent.superview
+        }
+        return frame
     }
 
     private static func pickerElement(identifier: String, in hostView: UIView) throws -> NSObject {
