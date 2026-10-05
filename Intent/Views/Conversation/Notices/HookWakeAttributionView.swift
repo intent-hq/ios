@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HookWakeAttributionView: View {
     private typealias Design = Constants.Conversation.Design
+
     let attribution: HookWakeAttribution
     @Environment(\.colorScheme) var colorScheme
 

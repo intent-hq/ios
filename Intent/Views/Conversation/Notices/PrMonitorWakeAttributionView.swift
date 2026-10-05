@@ -8,6 +8,7 @@ import SwiftUI
 /// counterpart of cloudlands-fe's `PrMonitorWakeAttributionHeader`.
 struct PrMonitorWakeAttributionView: View {
     private typealias Design = Constants.Conversation.Design
+
     let attribution: PrMonitorWakeAttribution
     /// `<owner>/<repo>` of the conversation's workspace, or nil when unknown
     /// (the chip label then falls back to the bare `#<n>` form).

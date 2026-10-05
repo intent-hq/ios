@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WatcherMessageBodyView: View {
     private typealias Design = Constants.Conversation.Design
+
     let presentation: WatcherMessagePresentation
     var onLayoutChange: (() -> Void)?
     @State private var isExpanded = false
