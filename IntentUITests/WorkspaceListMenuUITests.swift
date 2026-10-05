@@ -12,8 +12,8 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             let create = app.buttons["workspaces.empty.create"]
             XCTAssertTrue(create.waitForExistence(timeout: Self.timeout))
             XCTAssertTrue(create.isEnabled)
-            XCTAssertTrue(create.isHittable)
             capture(app, named: "empty-workspaces-\(appearance)")
+            XCTAssertTrue(create.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
             create.tap()
             closeCreation(in: app)
             XCTAssertTrue(create.waitForExistence(timeout: Self.timeout))
@@ -134,7 +134,8 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
 
     @MainActor
     private func capture(_ app: XCUIApplication, named name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = UIDevice.current.userInterfaceIdiom == .pad ? XCUIScreen.main.screenshot() : app.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
