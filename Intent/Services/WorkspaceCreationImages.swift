@@ -6,7 +6,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Sheet-owned, local images. No upload or workspace identity exists until Create.
+/// Draft-owned, local images. No upload or workspace identity exists until Create.
 @MainActor
 @Observable final class WorkspaceCreationImages {
     nonisolated struct Image: Identifiable, Sendable {

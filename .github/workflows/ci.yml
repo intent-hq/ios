@@ -442,7 +442,14 @@ jobs:
         run: scripts/xcodebuild.sh resolve
 
       - name: Build for testing
-        run: scripts/xcodebuild.sh build-for-testing
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
+        run: |
+          if [ "$ONLY_TESTING" = IntentUITests ]; then
+            scripts/xcodebuild.sh build-for-testing-ui
+          else
+            scripts/xcodebuild.sh build-for-testing
+          fi
 
       # Diagnostics for the intermittent multi-minute stall before the test
       # host launches: show what the background boot printed and whether
@@ -462,6 +469,7 @@ jobs:
           echo "Filtered test run (non-gating): ONLY_TESTING='$ONLY_TESTING'" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Keychain conformance and existing registry/publisher tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.only_testing != 'IntentUITests' }}
         env:
           RESULT_BUNDLE: TestResults-keychain
           ONLY_TESTING: IntentTests/BackendKeychainConformanceTests IntentTests/BackendKeychainFixtureTests IntentTests/SyncedBackendRegistryTests IntentTests/SyncedBackendPublisherTests
@@ -493,6 +501,8 @@ jobs:
             set -o pipefail
             export ONLY_TESTING_IDENTITIES_PATH="$IPAD_EVIDENCE_DIR/resolved-tests.json"
             scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/test.log"
+          elif [ "$ONLY_TESTING" = IntentUITests ]; then
+            scripts/xcodebuild.sh test-without-building-ui
           elif [ -n "$ONLY_TESTING" ]; then
             scripts/xcodebuild.sh test-without-building
           else
@@ -519,6 +529,7 @@ jobs:
       # xcodebuild; a separate result bundle preserves the full run's for the
       # artifact upload.
       - name: Source-independence check (ios#320)
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.only_testing != 'IntentUITests' }}
         env:
           RESULT_BUNDLE: TestResults-source-moved
           ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests IntentTests/ObjCCallbackIsolationTests IntentTests/ExternalLinkTests IntentTests/PrivacyManifestDriftTests IntentTests/BackendKeychainConformanceTests IntentTests/BackendKeychainFixtureTests
@@ -753,7 +764,7 @@ jobs:
         run: scripts/xcodebuild.sh resolve
 
       - name: Build for testing
-        run: scripts/xcodebuild.sh build-for-testing
+        run: scripts/xcodebuild.sh build-for-testing-ui
 
       - name: Simulator state
         run: |
@@ -774,7 +785,7 @@ jobs:
             export ONLY_TESTING
             echo "UI tests: smoke list (scripts/ui-smoke-tests.txt)" >> "$GITHUB_STEP_SUMMARY"
           fi
-          scripts/xcodebuild.sh test-without-building
+          scripts/xcodebuild.sh test-without-building-ui
 
       - name: Run iPad menu regression tests
         env:
@@ -788,7 +799,7 @@ jobs:
               | .value[] | select(.name | startswith("iPad"))]
             | last | .udid // error("No available iPad simulator")')
           export SIM_UDID
-          scripts/xcodebuild.sh test-without-building
+          scripts/xcodebuild.sh test-without-building-ui
 
       - name: Upload UI test results
         if: failure()

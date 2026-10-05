@@ -216,7 +216,8 @@ nonisolated final class SettingsUITests: XCTestCase {
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         let scrollView = app.scrollViews["settings.scroll"]
         let viewport = scrollView.frame.intersection(app.frame)
-        for _ in 0..<Self.maximumSwipes where !element.isHittable || !viewport.contains(element.frame) {
+        for _ in 0..<Self.maximumSwipes {
+            if element.isHittable, viewport.contains(element.frame) { break }
             scrollView.swipeUp()
         }
         XCTAssertTrue(element.isHittable)
@@ -225,7 +226,8 @@ nonisolated final class SettingsUITests: XCTestCase {
 
     @MainActor
     private func scrollToTop(_ app: XCUIApplication) {
-        for _ in 0..<Self.maximumSwipes where !app.buttons["settings.close"].isHittable {
+        for _ in 0..<Self.maximumSwipes {
+            if app.buttons["settings.close"].isHittable { break }
             app.scrollViews["settings.scroll"].swipeDown()
         }
     }

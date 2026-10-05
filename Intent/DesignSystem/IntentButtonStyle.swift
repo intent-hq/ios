@@ -3,6 +3,7 @@ import SwiftUI
 /// Filled actions from the Intent button palette, with explicit interaction states.
 struct IntentButtonStyle: ButtonStyle {
     enum Variant {
+        case muted
         case primary
         case secondary
     }
@@ -52,7 +53,11 @@ struct IntentButtonStyle: ButtonStyle {
         guard isEnabled else {
             return Theme.foreground(for: colorScheme).opacity(Layout.disabledBackgroundOpacity)
         }
-        return variant == .primary ? Color(.assistantAccent) : Theme.card(for: colorScheme)
+        switch variant {
+        case .muted: return Theme.muted(for: colorScheme)
+        case .primary: return Color(.assistantAccent)
+        case .secondary: return Theme.card(for: colorScheme)
+        }
     }
 
     private var pressedOverlay: Color {

@@ -74,6 +74,7 @@ $(SRCROOT)/Intent/Models/WorkspaceAction.swift
 $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
 $(SRCROOT)/Intent/Models/WorkspaceChangeTree.swift
 $(SRCROOT)/Intent/Models/WorkspaceChanges.swift
+$(SRCROOT)/Intent/Models/WorkspaceCreationDraft.swift
 $(SRCROOT)/Intent/Models/WorkspaceDiff.swift
 $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
 $(SRCROOT)/Intent/Models/WorkspaceScript.swift
@@ -98,6 +99,8 @@ $(SRCROOT)/Intent/Presentation/ConversationTranscriptViewportAnchor.swift
 $(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
 $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
+$(SRCROOT)/Intent/Presentation/MarkdownCodeFence.swift
+$(SRCROOT)/Intent/Presentation/MermaidMarkdownContent.swift
 $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
 $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
@@ -149,6 +152,7 @@ $(SRCROOT)/Intent/Services/ConversationAttachmentPipeline.swift
 $(SRCROOT)/Intent/Services/ConversationCommands+QueueEvents.swift
 $(SRCROOT)/Intent/Services/ConversationCommands.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Fetch.swift
+$(SRCROOT)/Intent/Services/ConversationLiveTranscript+History.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Subscribe.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Commands.swift
@@ -174,6 +178,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesConversationStartup.swift
 $(SRCROOT)/Intent/Services/DemoFixturesData.swift
 $(SRCROOT)/Intent/Services/DemoFixturesDesign.swift
 $(SRCROOT)/Intent/Services/DemoFixturesDesignData.swift
+$(SRCROOT)/Intent/Services/DemoFixturesHistory.swift
 $(SRCROOT)/Intent/Services/DemoFixturesInlineImages.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
@@ -302,6 +307,7 @@ $(SRCROOT)/Intent/Views/Components/ToastView.swift
 $(SRCROOT)/Intent/Views/Components/WindowFeedbackSoundEmitter.swift
 $(SRCROOT)/Intent/Views/Connection/CertMismatchListView.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectingView.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionBackButton.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionFailureView.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossOverlay.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossPresenter.swift
@@ -337,6 +343,8 @@ $(SRCROOT)/Intent/Views/Conversation/Content/ImageLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileAttachmentLoader.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileVideoAttachment.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MarkdownTextView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/MermaidDiagramView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/MermaidWebView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalCardView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalSelectionSwitch.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/VideoLightboxView.swift
@@ -359,6 +367,8 @@ $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionAnswerCards.swif
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionButtonStyle.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionFreeText.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionHeader.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionPendingBanner.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionPresentation.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionStepView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/AgentWaitingView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/BackgroundHooksRow.swift
@@ -374,6 +384,7 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+DemoR
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+EntryScroll.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Follow.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Geometry.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+History.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Presentation.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Recovery.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView.swift
@@ -398,7 +409,6 @@ $(SRCROOT)/Intent/Views/Onboarding/ManualTokenEntryView.swift
 $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift
 $(SRCROOT)/Intent/Views/Onboarding/Splash/SplashArtView.swift
-$(SRCROOT)/Intent/Views/Onboarding/Splash/SplashVideoBackground.swift
 $(SRCROOT)/Intent/Views/Settings/AcknowledgementsView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticExportView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticPreviewSection.swift
@@ -521,6 +531,7 @@ $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/ComposerDraftBindingTests.swift
+$(SRCROOT)/IntentTests/ComposerFocusBindingTests.swift
 $(SRCROOT)/IntentTests/ComposerSubmitPolicyTests.swift
 $(SRCROOT)/IntentTests/ConnectionAdmissionRaceTests.swift
 $(SRCROOT)/IntentTests/ConnectionFailureViewTests.swift
@@ -555,6 +566,7 @@ $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
 $(SRCROOT)/IntentTests/ConversationDeltaCompatibilityTests.swift
 $(SRCROOT)/IntentTests/ConversationDesignTests.swift
+$(SRCROOT)/IntentTests/ConversationHistoryTests.swift
 $(SRCROOT)/IntentTests/ConversationIncrementalDeltaTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
@@ -593,6 +605,7 @@ $(SRCROOT)/IntentTests/ConversationStoreTurnBoundaryTests.swift
 $(SRCROOT)/IntentTests/ConversationStreamingFixture.swift
 $(SRCROOT)/IntentTests/ConversationStreamingFixtureTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptGestureTests.swift
+$(SRCROOT)/IntentTests/ConversationTranscriptHistoryPolicyTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptRestorationApplicationTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptRestorationTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
@@ -681,6 +694,8 @@ $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
 $(SRCROOT)/IntentTests/MarkdownTableLayoutTests.swift
 $(SRCROOT)/IntentTests/MarkdownTextViewTests.swift
 $(SRCROOT)/IntentTests/MediaAudioSessionTests.swift
+$(SRCROOT)/IntentTests/MermaidMarkdownContentTests.swift
+$(SRCROOT)/IntentTests/MermaidWebViewTests.swift
 $(SRCROOT)/IntentTests/MessageBlockPartitionTests.swift
 $(SRCROOT)/IntentTests/MessageCopyContextMenuGatingTests.swift
 $(SRCROOT)/IntentTests/MobileTerminalConnectionTests.swift
@@ -749,7 +764,6 @@ $(SRCROOT)/IntentTests/SharedWorkspaceStatusRaceTests.swift
 $(SRCROOT)/IntentTests/SharedWorkspaceStatusTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
-$(SRCROOT)/IntentTests/SplashVideoBackgroundTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift
@@ -811,6 +825,7 @@ $(SRCROOT)/IntentTests/WorkspaceChangesRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRootRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesStoreTests.swift
+$(SRCROOT)/IntentTests/WorkspaceCreationDraftTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationImagesTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
@@ -857,18 +872,22 @@ $(SRCROOT)/IntentTests/WorkspaceTransferStoreTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/AssistantNavigationUITests.swift
 $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
+$(SRCROOT)/IntentUITests/ConnectionFailureRecoveryUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossContrastAssertions.swift
 $(SRCROOT)/IntentUITests/ConnectionLossUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionSwitcherUITests.swift
 $(SRCROOT)/IntentUITests/ConversationActionsUITests.swift
 $(SRCROOT)/IntentUITests/ConversationMarkdownTableUITests.swift
+$(SRCROOT)/IntentUITests/ConversationMermaidUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptFullGateUITests.swift
+$(SRCROOT)/IntentUITests/ConversationTranscriptHistoryUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Keyboard.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+RecoveryResize.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
 $(SRCROOT)/IntentUITests/CreateNewRepositoryUITests.swift
+$(SRCROOT)/IntentUITests/CreateWorkspaceDraftUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspacePreferencesUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
 $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
@@ -893,3 +912,4 @@ $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceSwipeUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceTitleEditingUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceTransferUITests.swift
+$(SRCROOT)/IntentUITests/WorkspaceWindowControlsUITests.swift

@@ -126,6 +126,49 @@ struct ConversationViewModelTests {
         #expect(viewModel.filteredMessages.count == 5)
     }
 
+    @Test func transcriptMembershipTracksMutationsAndReset() {
+        let viewModel = makeVM()
+        viewModel.store.messages = [textMessage(role: .assistant, text: "First", id: "first")]
+        #expect(viewModel.filteredMessageIDs == ["first"])
+        viewModel.store.messages[0].contentBlocks = [ContentBlock(type: .text, text: "Updated")]
+        #expect(viewModel.filteredMessageIDs == ["first"])
+        viewModel.store.messages.insert(textMessage(role: .user, text: "Older", id: "older"), at: 0)
+        #expect(viewModel.filteredMessageIDs == ["older", "first"])
+        viewModel.store.messages.append(textMessage(role: .assistant, text: "Live", id: "live"))
+        #expect(viewModel.filteredMessageIDs == ["older", "first", "live"])
+        let retainedIDs = viewModel.filteredMessageIDs
+        viewModel.store.messages[1].contentBlocks = [ContentBlock(type: .text, text: "Another token")]
+        #expect(viewModel.filteredMessageIDs == retainedIDs)
+        viewModel.store.messages[1] = textMessage(role: .assistant, text: "Replacement", id: "replacement")
+        #expect(viewModel.filteredMessageIDs == ["older", "replacement", "live"])
+        #expect(retainedIDs == ["older", "first", "live"])
+        viewModel.store.messages.removeFirst()
+        #expect(viewModel.filteredMessageIDs == ["replacement", "live"])
+        viewModel.store.reset()
+        #expect(viewModel.filteredMessageIDs.isEmpty)
+    }
+
+    @Test func cachedTranscriptMembershipRemainsObservableAcrossStoreChanges() {
+        let viewModel = makeVM()
+        viewModel.store.messages = [textMessage(role: .user, text: "Old", id: "old")]
+        #expect(viewModel.filteredMessageIDs == ["old"])
+        let changes = Mutex(0)
+        withObservationTracking { _ = viewModel.filteredMessageIDs } onChange: {
+            changes.withLock { $0 += 1 }
+        }
+        viewModel.store.messages[0] = textMessage(role: .user, text: "New", id: "new")
+        #expect(changes.withLock { $0 } == 1)
+        #expect(viewModel.filteredMessageIDs == ["new"])
+        withObservationTracking { _ = viewModel.filteredMessageIDs } onChange: {
+            changes.withLock { $0 += 1 }
+        }
+        let replacement = ConversationStore()
+        replacement.messages = [textMessage(role: .user, text: "Other conversation", id: "other")]
+        viewModel.store = replacement
+        #expect(changes.withLock { $0 } == 2)
+        #expect(viewModel.filteredMessageIDs == ["other"])
+    }
+
     // MARK: - queuedMessages display filter
 
     func queuedEntry(

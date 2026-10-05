@@ -128,7 +128,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         let missing = message(in: app, containing: Fixture.missingCaption)
         let after = message(in: app, containing: Fixture.after)
         for paragraph in [before, saved, between, missing, after] {
-            XCTAssertTrue(paragraph.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(paragraph.exists || paragraph.waitForExistence(timeout: Fixture.timeout))
             reveal(paragraph, in: transcript)
         }
 
@@ -187,9 +187,11 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
     @MainActor
     private func reveal(_ paragraph: XCUIElement, in transcript: XCUIElement) {
         for _ in 0..<Fixture.maximumScrolls {
-            if transcript.frame.minY <= paragraph.frame.minY,
-               paragraph.frame.maxY <= transcript.frame.maxY { return }
-            if paragraph.frame.minY < transcript.frame.minY {
+            let transcriptFrame = transcript.frame
+            let paragraphFrame = paragraph.frame
+            if transcriptFrame.minY <= paragraphFrame.minY,
+               paragraphFrame.maxY <= transcriptFrame.maxY { return }
+            if paragraphFrame.minY < transcriptFrame.minY {
                 transcript.swipeDown()
             } else {
                 transcript.swipeUp()

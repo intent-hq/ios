@@ -166,6 +166,9 @@ final class ConversationTranscriptScrollState {
     /// Pending settle re-check of a pinned viewport that a geometry edge (or
     /// streaming ending) read within the at-bottom band (#346).
     @ObservationIgnored var bottomBandRePinTask: Task<Void, Never>?
+    @ObservationIgnored var olderMessagesTask: Task<Void, Never>?
+    @ObservationIgnored var isNearHistoryTop = false
+    @ObservationIgnored var hasScrolledForHistory = false
     var userIsScrolledAway = false
     /// True while SwiftUI reports a user-driven scroll phase (tracking,
     /// interacting, decelerating); read next to the UIScrollView flags when a
@@ -275,6 +278,10 @@ final class ConversationTranscriptScrollState {
         let position = hasInitiallyScrolled ? viewportAnchor.visiblePosition : nil
         retireViewportRestoration()
         retainedViewport = position
+    }
+
+    var hasPendingViewportRestoration: Bool {
+        retainedViewport != nil || viewportAnchor.hasPendingRetainedRestoration
     }
 
     func entryDividerAdjustment(_ measurement: ConversationTranscriptViewportAnchor.Measurement, viewportHeight: CGFloat) -> CGFloat? {

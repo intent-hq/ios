@@ -4,6 +4,7 @@ extension ConversationLiveTranscript {
     func bind(agentId newAgentId: String, workspaceId: String?) {
         if agentId != newAgentId {
             bindingGeneration &+= 1
+            resetOlderHistory()
             emptySnapshotRecoveryAttempts = 0
             // Snapshot waits and recovery timers belong to the binding they
             // were armed under; a new agent starts its own.

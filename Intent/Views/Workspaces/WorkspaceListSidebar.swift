@@ -6,14 +6,16 @@ struct WorkspaceListSidebar: View {
     @Environment(\.openAgentHistory) private var openAgentHistory
     @Environment(\.openConnectionSwitcher) private var openConnectionSwitcher
     private let workspaceStore: WorkspaceStore
+    private let onCreateWorkspace: () -> Void
     @State private var viewModel: WorkspaceListViewModel
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var workspaceSwipeProgress: [String: CGFloat] = [:]
     @Binding private var isSearching: Bool
     @FocusState private var searchFocused: Bool
 
-    init(workspaceStore: WorkspaceStore, isSearching: Binding<Bool>) {
+    init(workspaceStore: WorkspaceStore, isSearching: Binding<Bool>, onCreateWorkspace: @escaping () -> Void) {
         self.workspaceStore = workspaceStore
+        self.onCreateWorkspace = onCreateWorkspace
         _viewModel = State(initialValue: WorkspaceListViewModel(workspaceStore: workspaceStore))
         _isSearching = isSearching
     }
@@ -55,7 +57,7 @@ struct WorkspaceListSidebar: View {
         .navigationTitle("Workspaces")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                WorkspaceListMenu(showArchived: $viewModel.showArchived) {
+                WorkspaceListMenu(showArchived: $viewModel.showArchived, onCreateWorkspace: onCreateWorkspace) {
                     searchFocused = false
                     isSearching = false
                     revealedSwipeTarget = nil
@@ -77,15 +79,10 @@ struct WorkspaceListSidebar: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label {
-                Text("No Workspaces").interFont(Constants.Typography.bodyM.withFace(.semibold))
-            } icon: {
-                Image(systemName: "rectangle.stack.badge.plus")
-            }
-        } description: {
-            Text("Create one in the desktop app.").interFont(Constants.Typography.bodyS)
-        }
+        Button("New workspace", action: onCreateWorkspace)
+            .buttonStyle(IntentButtonStyle(variant: .muted))
+            .disabled(!coordinator.canCreateWorkspace)
+            .accessibilityIdentifier("workspaces.empty.create")
     }
 
     @ViewBuilder

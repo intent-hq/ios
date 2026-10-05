@@ -16,10 +16,23 @@ CAPTURES = {
             "Workspace title editing with keyboard and floating Done",
         ),
     },
+    "ConnectionLossUITests": {
+        "testDifferentServerAllowsSameMachineReselection": (
+            "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
+        ),
+        "testRepairAllowsSameMachineReselection": (
+            "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
+        ),
+        "testLaunchHidesBackButSelectedMachineCanReturnHome": (
+            "connection-loss-connection-failure-back", "connection-loss-connecting-back",
+        ),
+    },
     "WorkspaceSwipeUITests": {
         "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
     },
     "WorkspaceListMenuUITests": {
+        "testEmptyWorkspaceButtonOpensCreationAndReturns": ("empty-workspaces-light", "empty-workspaces-dark"),
+        "testNewWorkspaceMenuOpensCreationAndReturns": ("new-workspace-menu-light", "new-workspace-menu-dark"),
         "testRecentAgentsOpensAndClosesExistingDrawer": (
             "workspace-list-menu", "workspace-menu-recent-agents",
         ),
@@ -50,6 +63,9 @@ CAPTURES = {
     },
     "CreateWorkspacePreferencesUITests": {
         "testCancelledFormRemembersAgentSettings": ("remembered-agent-settings",),
+    },
+    "CreateWorkspaceDraftUITests": {
+        "testDismissedPromptRestoresAndClearsAfterSuccessfulRetry": ("restored-workspace-draft",),
     },
     "WorkspaceChangesUITests": {
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (

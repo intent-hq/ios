@@ -68,7 +68,8 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         XCTAssertTrue(scrollView.waitForExistence(timeout: Self.timeout))
         let export = app.buttons["Export logs"]
         let viewport = scrollView.frame.intersection(app.frame)
-        for _ in 0..<Self.maximumSwipes where !export.isHittable || !viewport.contains(export.frame) {
+        for _ in 0..<Self.maximumSwipes {
+            if export.isHittable, viewport.contains(export.frame) { break }
             scrollView.swipeUp()
         }
         XCTAssertTrue(export.isHittable)
@@ -79,7 +80,8 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
     @MainActor
     private func closeSettings(_ app: XCUIApplication) {
         let close = app.buttons["settings.close"]
-        for _ in 0..<Self.maximumSwipes where !close.isHittable {
+        for _ in 0..<Self.maximumSwipes {
+            if close.isHittable { break }
             app.scrollViews["settings.scroll"].swipeDown()
         }
         XCTAssertTrue(close.isHittable)

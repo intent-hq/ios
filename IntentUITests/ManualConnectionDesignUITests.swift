@@ -131,7 +131,8 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
 
     @MainActor
     private func scrollTo(_ element: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<5 where !element.isHittable {
+        for _ in 0..<5 {
+            if element.isHittable { break }
             // XCUITest's default swipe uses the full scroll frame, which extends
             // behind the keyboard. Drag the visible gutter, not the keyboard
             // or a focused text field's selection gesture.

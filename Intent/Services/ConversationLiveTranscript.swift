@@ -8,7 +8,27 @@ nonisolated struct InboundJSONValue: @unchecked Sendable {
 @MainActor
 @Observable
 final class ConversationLiveTranscript {
-    var messages: [ConversationMessage] = []
+    var messages: [ConversationMessage] = [] {
+        didSet { messageIDsNeedRefresh = true }
+    }
+    @ObservationIgnored private var cachedMessageIDs: Set<String> = []
+    @ObservationIgnored private var messageIDsNeedRefresh = true
+
+    /// Geometry callbacks share one membership snapshot until messages change.
+    /// Invalidate at the array owner so queued callbacks see deletions even
+    /// before SwiftUI's onChange runs, including same-count replacements.
+    var messageIDs: Set<String> {
+        _ = messages // Keep cached reads observable to SwiftUI consumers.
+        if messageIDsNeedRefresh {
+            let updatedIDs = Set(messages.lazy.map(\.id))
+            // Retain shared Set storage on content-only edits so consumers'
+            // equality guards stay constant-time on subsequent geometry ticks.
+            if updatedIDs != cachedMessageIDs { cachedMessageIDs = updatedIDs }
+            messageIDsNeedRefresh = false
+        }
+        return cachedMessageIDs
+    }
+
     var isStreaming = false {
         didSet {
             guard oldValue != isStreaming else { return }
@@ -20,6 +40,12 @@ final class ConversationLiveTranscript {
     var isTruncated = false
     var totalMessageCount = 0
     var hydratingBlockKeys: Set<String> = []
+    var olderMessagesCursor: String?
+    var hasOlderMessages: Bool { olderMessagesCursor != nil }
+    var isLoadingOlderMessages = false
+    var olderMessagesError: String?
+    @ObservationIgnored var olderHistoryGeneration = 0
+    @ObservationIgnored var olderHistorySeeded = false
 
     @ObservationIgnored var onStreamingChanged: (@MainActor (Bool) -> Void)?
     /// Fired when `chat.subscribe` is rejected for the still-bound agent.
@@ -273,7 +299,8 @@ extension ConversationLiveTranscript {
     private func applySnapshot(_ push: SubscriptionPush) {
         guard let items = push.snapshot else { return }
         let snapshotMessages = push.snapshotMessages ?? ConversationMessage.parseMessages(items)
-        if snapshotMessages.isEmpty, !messages.isEmpty {
+        let resumed = push.snapshotMeta?["resumed"] as? Bool == true
+        if !resumed, snapshotMessages.isEmpty, !messages.isEmpty {
             if emptySnapshotRecoveryAttempts >= Self.maxEmptySnapshotRecoveryAttempts,
                !resnapshotInProgress {
                 AppLog.conversation.warning(
@@ -304,13 +331,12 @@ extension ConversationLiveTranscript {
         resetBackoff()
         // `parse` pre-decodes off MainActor; the fallback covers pushes built
         // directly from raw dictionaries (tests).
-        messages = snapshotMessages
+        replaceHistory(with: snapshotMessages, metadata: push.snapshotMeta ?? [:])
         discardHydratedText(in: snapshotMessages)
         remergeHydratedBlocks()
 
-        isTruncated = push.snapshotMeta?["truncated"] as? Bool ?? false
         totalMessageCount = push.snapshotMeta?["totalMessages"] as? Int ?? messages.count
-        let hasInFlightMessage = messages.contains { $0.isStreaming == true }
+        let hasInFlightMessage = snapshotMessages.contains { $0.isStreaming == true }
         let isResponding = push.snapshotMeta?["isResponding"] as? Bool ?? false
         let turnInFlight = push.snapshotMeta?["turnInFlight"] as? Bool ?? false
         isStreaming = hasInFlightMessage || isResponding || turnInFlight
@@ -436,6 +462,7 @@ extension ConversationLiveTranscript {
     }
 
     func reset() {
+        resetOlderHistory()
         messages = []
         isStreaming = false
         isLoading = false

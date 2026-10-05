@@ -67,21 +67,27 @@ extension ConversationTranscriptScrollPolicyTests {
 
     @Test(arguments: [false, true], [false, true]) @MainActor
     func deletedRetainedRowRejectsQueuedGeometry(scrollIssued: Bool, replacesRow: Bool) {
+        let transcript = ConversationLiveTranscript(connectionManager: ConnectionManager.shared)
+        transcript.messages = ["row-31", "survivor"].map { ConversationMessage(id: $0, role: .user) }
         let state = retainedRestorationState(y: 48)
+        state.retainViewportMessages(withIDs: transcript.messageIDs)
         #expect(state.resumeViewportTarget() == "row-31")
         if scrollIssued { issueRetainedScroll(state) }
         let queued = retainedMeasurement(state, y: 0)
         let remaining: Set<String> = replacesRow ? ["survivor", "replacement"] : ["survivor"]
         #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(from: 2, to: remaining.count, hasInitiallyScrolled: true) == (replacesRow ? .none : .rePinIfPastEnd))
-        // The owner observes authoritative IDs even if the count is unchanged.
-        state.retainViewportMessages(withIDs: remaining)
+        transcript.messages = remaining.map { ConversationMessage(id: $0, role: .user) }
+        // A queued callback reads current membership before SwiftUI observes
+        // the replacement; the warmed cache must not resurrect the deleted row.
+        state.retainViewportMessages(withIDs: transcript.messageIDs)
         state.viewportAnchor.remove(id: "row-31", generation: queued.generation, entryGeneration: state.initialScrollGeneration, ownershipRevision: queued.ownershipRevision)
         #expect(state.viewportAnchor.record(id: "survivor", measurement: retainedMeasurement(state, y: 64), viewportHeight: 624, preserve: true, entryGeneration: state.initialScrollGeneration) == nil)
         #expect(recordRetainedMeasurement(state, queued) == nil)
         #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 0)) == nil)
         #expect(state.resumeViewportTarget() == nil)
         // Reusing an ID cannot resurrect the captured measurement either.
-        state.retainViewportMessages(withIDs: ["row-31", "survivor"])
+        transcript.messages = ["row-31", "survivor"].map { ConversationMessage(id: $0, role: .user) }
+        state.retainViewportMessages(withIDs: transcript.messageIDs)
         #expect(recordRetainedMeasurement(state, queued) == nil)
         #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 20)) == nil)
     }

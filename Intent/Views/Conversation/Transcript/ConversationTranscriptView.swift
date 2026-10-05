@@ -67,8 +67,8 @@ private extension ConversationTranscriptView {
         dividerAnchorId: String?
     ) -> some View {
         transcriptScrollBase(proxy: proxy, dividerAnchorId: dividerAnchorId)
-            .onChange(of: viewModel.filteredMessages.count) { oldCount, newCount in
-                handleMessageCountChange(from: oldCount, to: newCount, proxy: proxy)
+            .onChange(of: viewModel.filteredMessages.map(\.id)) { oldIDs, newIDs in
+                handleMessageCountChange(from: oldIDs, to: newIDs, proxy: proxy)
             }
             .onChange(of: viewModel.isStreaming) { _, isStreaming in
                 if ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
@@ -117,7 +117,7 @@ private extension ConversationTranscriptView {
                 } else if ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
                     goToEndRequested: goToEndRequested
                 ) {
-                    scrollToBottom(proxy: proxy, forced: true)
+                    followGoToEndRequest(proxy: proxy)
                 }
             }
     }
@@ -159,6 +159,16 @@ private extension ConversationTranscriptView {
         .accessibilityIdentifier("transcript.scrollView")
         .demoAccessibilityValue(transcriptDemoReport)
         .demoStartupGestureProbe(scrollState: scrollState)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            ConversationTranscriptScrollPolicy.isNearHistoryTop(
+                contentOffsetY: geometry.contentOffset.y,
+                topInset: geometry.contentInsets.top,
+                viewportHeight: geometry.visibleRect.height
+            )
+        } action: { _, isNearTop in
+            scrollState.isNearHistoryTop = isNearTop
+            loadOlderMessagesIfNeeded(proxy: proxy)
+        }
         .demoEndDerealization(
             triggerFile: DemoFixtures.configuredEndDerealizationTriggerFile,
             onTrigger: withdrawEndRowForDemo,
@@ -205,6 +215,10 @@ private extension ConversationTranscriptView {
             scrollState.isUserScrollPhase = newPhase.isUserDriven
             if newPhase.isUserDriven {
                 takeOverPendingFollowIfGesture(isInteracting: true, proxy: proxy)
+                if hasInitiallyScrolled {
+                    scrollState.hasScrolledForHistory = true
+                    loadOlderMessagesIfNeeded(proxy: proxy)
+                }
             } else {
                 scrollState.observeViewportGesture(isInteracting: false)
             }
@@ -242,6 +256,10 @@ private extension ConversationTranscriptView {
             }
         }
         .onDisappear {
+            scrollState.olderMessagesTask?.cancel()
+            scrollState.olderMessagesTask = nil
+            scrollState.hasScrolledForHistory = false
+            scrollState.isNearHistoryTop = false
             scrollState.suspendViewport()
             cancelPastEndRePin()
             cancelDeferredContainerRePin()

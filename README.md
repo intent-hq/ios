@@ -1,13 +1,15 @@
-# ios
+# Intent iOS companion
 
-The **Intent companion app** is a native SwiftUI client for iPhone, iPad, and Apple Vision Pro that connects to the `intentd` daemon over WebSocket (**WSS/TLS** when a certificate fingerprint is pinned, plain `ws://` otherwise). It provides on-the-go access to workspaces, notes, tasks, and agent conversations from any Intent-enabled desktop on your local network.
+The **Intent companion app** is a native SwiftUI client for iPhone, iPad, and Apple Vision Pro that connects to the `intentd` daemon over **WSS/TLS with certificate fingerprint pinning**. It provides on-the-go access to workspaces, notes, tasks, and agent conversations over a direct network connection or, on iPhone and iPad, a Tailcat tunnel.
 
 ## What it is
 
 - **Native SwiftUI.** Built for iOS 18.0+ / visionOS 2.0+ with async/await, SwiftUI lifecycle, and `@MainActor` isolation. Supports iPhone, iPad, and Apple Vision Pro form factors — visionOS is a destination of the single `Intent` target, not a separate target.
-- **Secure pairing.** Pair with `intentd` via **QR code (iPhone/iPad), `intent://pair` deep link, or manual entry**, verify TLS fingerprints (pin-on-first-use or QR code), and authenticate with bearer tokens. Traffic is **WSS/TLS** when a certificate fingerprint is available; new pairings always pin a fingerprint (manual entry aborts when the TLS probe finds no certificate), and only legacy fingerprint-less pairings still use plain `ws://`.
+- **Secure pairing.** Pair with `intentd` via **QR code (iPhone/iPad), `intent://pair` deep link, or manual entry**, verify TLS fingerprints (pin-on-first-use or QR code), and authenticate with bearer tokens. Connections without a trusted fingerprint are rejected, including legacy fingerprint-less pairings. Plain `ws://` is available only through an explicit Debug-only loopback test override, never as an app fallback.
 - **Local-first mirror.** The app maintains a local cache of workspaces, notes, and agent sessions for offline read access, synced via WebSocket JSON-RPC push notifications.
 - **JSON-RPC client.** Talks to `intentd`'s WebSocket transport using the same JSON-RPC 2.0 protocol the desktop client uses.
+- **Workspace tools.** Create and transfer workspaces, review staged and unstaged changes and commit diffs, use workspace terminals, and open browser previews served through the daemon.
+- **Rich content.** Render Markdown, tables, attachments, and offline Mermaid diagrams in notes and conversations.
 
 ## Architecture
 
@@ -29,25 +31,31 @@ Intent/
 ├── DesignSystem/              Colors, theme, layout, and avatar design
 ├── Utils/                     Shared formatting, links, haptics, and notifications
 ├── Assets.xcassets            App icons and colors
-├── Resources/                 Bundled media (splash asset)
+├── Resources/                 Inter fonts, Lottie animations, and offline Mermaid assets
 ├── Constants.swift, Models.swift
 ├── PrivacyInfo.xcprivacy      Privacy manifest
-└── PersistenceManager.swift   Keychain credentials, cached state, and preferences
+└── PersistenceManager*.swift  Keychain credentials, cached state, drafts, and preferences
 IntentTests/                   Unit and integration tests
 IntentUITests/                 UI and screenshot tests
+TailcatKit/                    Go bridge for iOS Tailcat tunnels
+scripts/                       Build/test/lint wrappers and Mermaid vendoring tools
+ci_scripts/                    Xcode Cloud dependency preparation
 ```
 
-
-The app uses **Network.framework** (`NWConnection` + `NWProtocolWebSocket`) for WebSocket transport and **Textual** for rendering notes and conversation messages.
+The app uses **Network.framework** (`NWConnection` + `NWProtocolWebSocket`) for WebSocket transport, **Textual** for Markdown, **SwiftTerm** for terminal emulation, and **Lottie** for bundled animations. Mermaid diagrams render in a `WKWebView` using bundled JavaScript, without a CDN or runtime Node dependency.
 
 ## Pairing
 
 On first launch, the app shows a pairing flow:
 
-1. **QR, deep link, or manual entry**: the user scans a QR code from the desktop app containing the host, port, token, and cert fingerprint, opens an `intent://pair` deep link, or enters them manually. On visionOS there is no QR path (no third-party camera access): pairing is deep link or manual entry only.
+1. **QR, deep link, or manual entry**: the user scans a QR code from the desktop app containing the host, port, token, and cert fingerprint, opens an `intent://pair` deep link, or enters them manually. On visionOS the app offers deep link or manual entry only, not QR scanning.
 2. **TLS fingerprint verification**: the app computes the SHA-256 fingerprint of the server's self-signed certificate and compares it to the expected fingerprint (from QR or prompt). On mismatch, connection is rejected.
 3. **Bearer auth**: the token is sent in the `Authorization: Bearer <token>` header.
 4. **Persist credentials**: the token, server info, and paired connections are stored in the **Keychain**; non-secret UI state (active connection id, drafts, last-screen navigation) is kept in `UserDefaults`.
+
+On iOS, pairing information can also include a Tailcat address. The connection
+manager races available direct hosts and the tunnel; the winning route still
+uses the pinned TLS certificate and bearer authentication.
 
 ## visionOS
 
@@ -55,10 +63,10 @@ Apple Vision Pro support is a **destination of the single `Intent` target**: `SU
 
 Platform limitations on visionOS:
 
-- **No tunnel pairing.** `TailcatKit.xcframework` has no xros slice (gomobile has no visionOS target), so the framework is linked for iOS only and the tunnel path reports an explicit "unavailable" error on visionOS. Connections are LAN only, paired via `intent://pair` deep link or manual entry.
-- **No QR scanning.** visionOS grants no third-party camera access, so the QR pairing path is hidden.
+- **No tunnel pairing.** `TailcatKit.xcframework` has no xros slice (gomobile has no visionOS target), so the framework is linked for iOS only and the tunnel path reports an explicit "unavailable" error on visionOS. Connections need a directly reachable daemon, paired via `intent://pair` deep link or manual entry.
+- **No QR scanning.** The app's camera-based QR pairing path is hidden on visionOS.
 
-`TailcatKit/build_xcframework.sh` builds the (gitignored) xcframework for the iOS slices. When the system Go is older than the version in `go.mod`, pin the toolchain explicitly, e.g. `GOTOOLCHAIN=go1.27.0 ./TailcatKit/build_xcframework.sh` — without the pin, gomobile fails resolving the bare `go1.27` toolchain alias.
+`TailcatKit/build_xcframework.sh` builds the (gitignored) xcframework for the iOS slices. Use Go compatible with `TailcatKit/go.mod` (currently Go 1.27.0 or newer); if needed, select a full toolchain version with `GOTOOLCHAIN`, for example `GOTOOLCHAIN=go1.27.0 ./TailcatKit/build_xcframework.sh`. visionOS builds do not need this framework or Go.
 
 ## JSON-RPC Surface
 
@@ -68,10 +76,14 @@ The app uses the daemon's namespaced JSON-RPC API for these capability groups:
 - note and comment reading and live state, plus task listing, status changes, and live state;
 - agent discovery and lifecycle plus conversation history, sending, queue management, questions, models, and streaming controls;
 - attachment upload, placement, and download;
-- repository, branch, provider, model, and specialist discovery; and
+- repository, branch, provider, model, and specialist discovery;
+- Git status, diffs, and commit history across workspace repositories;
+- workspace transfer and mobile terminal lifecycle, input, output, and resizing; and
 - background-hook and pull-request-monitor status and controls.
 
 Live updates combine domain subscriptions for workspaces, notes, tasks, comments, and chats—delivered as `subscription.push` notifications—with filtered `events.subscribe` streams for agent, hook, and pull-request-monitor events.
+Browser previews use an auxiliary authenticated WebSocket tunnel rather than
+passing daemon credentials to web content.
 
 ## Quickstart
 
@@ -100,16 +112,46 @@ intentd serve --listen tcp
 
 ## Dependencies
 
-Managed via Swift Package Manager (integrated in Xcode):
+Direct dependencies managed via Swift Package Manager (integrated in Xcode):
 
-- **[Textual](https://github.com/intent-hq/textual)** `0.5.0-intent.2` (exact) — Markdown rendering for notes and messages
+| Package | Project requirement | Purpose |
+| --- | --- | --- |
+| [Textual](https://github.com/intent-hq/textual) | `0.5.0-intent.4` (exact) | Markdown rendering for notes and messages |
+| [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) | `1.18.0` (exact) | Workspace terminal emulation |
+| [Lottie](https://github.com/airbnb/lottie-ios) | `4.6.1..<5.0.0` (currently resolved to `4.6.1`) | Bundled animations |
+
+`Intent.xcodeproj/project.pbxproj` declares these requirements;
+`Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` records
+the resolved direct and transitive packages. The separate Go bridge pins its
+dependencies in `TailcatKit/go.mod` and `TailcatKit/go.sum`.
+
+### Offline Mermaid bundle
+
+`Intent/Resources/Mermaid/` contains the checked-in Mermaid **11.17.2** and ELK
+layout **0.2.3** bundle, renderer, licenses, and `vendor.json` provenance. Normal
+Xcode builds use those assets directly; Node/npm is only needed to regenerate
+them or run the renderer's tests.
+
+To regenerate the bundle from its locked dependencies:
+
+```bash
+cd scripts/vendor-mermaid
+npm ci
+npm run build
+```
+
+Review the generated bundle, license notices, and `vendor.json` together. To test
+the shipped renderer from the same directory, run `npx playwright install chromium webkit`
+then `npm test`. Native coverage lives in `MermaidMarkdownContentTests`,
+`MermaidWebViewTests`, and `ConversationMermaidUITests`.
 
 ## Development
 
 ### Clean-checkout prerequisites
 
 - For app builds: macOS with Xcode and its command-line tools. Tests require an available iPhone
-  simulator.
+  simulator by default; use `SIM_UDID` to select an iPad. CI's self-hosted Macs
+  select Xcode 26.3 explicitly; hosted runners select their newest installed Xcode.
 - Network access for the first Swift package resolution and pinned Go tool download.
 - A Go toolchain compatible with the version in `TailcatKit/go.mod`. iOS commands
   automatically run `TailcatKit/build_xcframework.sh` when the gitignored framework
@@ -152,7 +194,7 @@ successful `swiftlint version` does not prove that prerequisite is met.
 | Host | Supported route |
 | --- | --- |
 | Ubuntu 24.04, x86_64 (development and Linux CI) | Native setup below; lint only. |
-| macOS with Xcode (native CI: macOS 15, arm64) | Existing SwiftLint 0.65.1 on `PATH` and Xcode toolchain; unchanged invocation. |
+| macOS with Xcode | Existing SwiftLint 0.65.1 on `PATH` and Xcode toolchain; unchanged invocation. |
 | Other Linux distributions / architectures | Automatic setup is unsupported; use one of the hosts above. |
 
 From this repository's root:
@@ -168,11 +210,16 @@ scripts/setup-swiftlint.sh --check  # read-only prerequisite check
 scripts/test-swiftlint-runtime.sh  # real clean and violating fixtures
 scripts/swiftlint.sh               # full strict gate; never installs tools
 
-# Offline wrapper, prerequisite, and setup regressions.
+# Offline wrapper, prerequisite, and setup regressions on Linux.
 scripts/test-swiftlint.sh
 scripts/test-swiftlint-prerequisites.sh
 scripts/test-setup-swiftlint.sh
 ```
+
+On macOS, use `scripts/test-swiftlint.sh` for wrapper smoke tests. The Linux
+prerequisite/setup fixtures need Linux host tools; the prerequisite suite currently
+depends on `ldd` even though it stubs the reported operating system
+([ios#733](https://github.com/intent-hq/ios/issues/733)).
 
 Setup reuses SwiftLint 0.65.1 from `PATH` and an existing usable runtime. If tools
 are missing, it installs the checksum-pinned [official SwiftLint release](https://github.com/realm/SwiftLint/releases/tag/0.65.1)
@@ -213,7 +260,9 @@ The Xcode wrapper supports these subcommands:
 | `build-ios` | Build for the generic iOS Simulator destination. |
 | `build-visionos` | Build for the generic visionOS Simulator destination. |
 | `build-for-testing` | Build the iOS test bundles for a later test-only run. |
+| `build-for-testing-ui` | Build the app and UI tests using the `IntentUI` scheme, without compiling the unit-test bundle. |
 | `test-without-building` | Run previously built unit and UI tests. |
+| `test-without-building-ui` | Run UI tests built with `build-for-testing-ui`; exclude unit tests from enumeration and execution. Defaults `ONLY_TESTING` to `IntentUITests` and verifies the selected results. |
 | `test-without-building-unit` | Run previously built tests without `IntentUITests`. |
 | `test-ios` | Build and run the complete unit and UI test gate. |
 | `test-ios-unit` | Build and run tests without `IntentUITests`. |
@@ -232,15 +281,6 @@ A selector whose tests were all skipped at runtime exits 0 with a notice. Inspec
 the per-selector summary and confirm a nonzero executed count before claiming that
 a green focused run executed the intended tests.
 
-CI run **Artifacts** retain `ios-ui-review-evidence` for 14 days on success or
-failure, including filtered runs. Open its PNGs directly; `manifest.json` records
-the tested checkout revision, suite/test, source bundle and retry origin. Only
-allowlisted `WorkspaceChangesUITests` captures are included: an absent image is
-not evidence that a view was captured (there is no commit-list capture). Existing
-`ios-agent-group-evidence` and `ios-transcript-recovery-evidence` remain separate.
-The capture allowlist and exporter live in `scripts/export_ui_evidence.py`; run
-`python3 scripts/test_export_ui_evidence.py` to check the export contract.
-
 For repeated focused runs, build once and reuse that build:
 
 ```bash
@@ -248,17 +288,80 @@ scripts/xcodebuild.sh build-for-testing
 ONLY_TESTING='IntentTests/DemoFixturesTests' scripts/xcodebuild.sh test-without-building-unit
 ```
 
-Use the non-unit variants when selecting `IntentUITests`. `SIM_UDID` selects a
-specific simulator; otherwise the wrapper chooses one and serializes test runs on
-that device.
+For UI-only iteration, avoid compiling the unit-test bundle by using the paired
+`IntentUI` scheme commands:
+
+```bash
+scripts/xcodebuild.sh build-for-testing-ui
+ONLY_TESTING='IntentUITests/WorkspaceChangesUITests' scripts/xcodebuild.sh test-without-building-ui
+```
+
+Use the regular `build-for-testing` / `test-without-building` pair for mixed unit
+and UI selectors. `SIM_UDID` selects a specific simulator; otherwise the wrapper
+chooses an iPhone and serializes test runs on that device. Keep `SIM_UDID` and
+`DERIVED_DATA_DIR` consistent between a split build and run, and rebuild after
+source changes. Use separate derived-data directories for concurrent builds.
+
+For Release verification, set `BUILD_CONFIGURATION=Release` on both build and
+test commands (or use `test-ios-unit` to do both). A focused example is
+`BUILD_CONFIGURATION=Release ONLY_TESTING='IntentTests/ReleaseConfigurationTests' scripts/xcodebuild.sh test-ios-unit`.
+Do not reuse a Debug build as Release evidence: `ReleaseConfigurationTests` is
+absent in Debug, and some other suites require Debug-only plaintext fixtures.
 
 The `build-visionos` command always uses the generic visionOS Simulator destination,
 never `-sdk`: an `-sdk xros...` invocation can silently fall back to `iphoneos` when
 the visionOS platform is absent and produce a bogus successful build.
 
-Tests run **serially** by default — the shared `Intent` scheme pins `parallelizable = "NO"`, so no extra flags are needed. Parallel simulator clone runners mass-flake the suite locally (see [intent-hq/intent#759](https://github.com/intent-hq/intent/issues/759)).
+Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes pin `parallelizable = "NO"`, so no extra flags are needed. Parallel simulator clone runners mass-flake the suite locally (see [intent-hq/intent#759](https://github.com/intent-hq/intent/issues/759)).
+
+### CI and review evidence
+
+`.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
+`scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
+queue. The UI job also runs focused iPad menu regressions. Go tests, wrapper
+self-tests, and the strict SwiftLint gate run on Linux. The full UI bundle runs
+on the default branch at **09:00 and 21:00 UTC** or on manual dispatch:
+
+```bash
+gh workflow run ci.yml --repo intent-hq/ios --ref your-branch -f ui_suite=full
+gh workflow run ci.yml --repo intent-hq/ios --ref your-branch -f only_testing='IntentTests/DemoFixturesTests'
+```
+
+Replace `your-branch` with the branch to test. Filtered dispatches are
+**non-gating** and do not replace the normal PR checks.
+For an iPad proof run, add `-f simulator_family=ipad` with 1–20
+`Target/Suite[/test]` selectors in `only_testing`; whole-bundle selectors are not
+accepted, and each selection must actually execute. This route creates and
+cleans up its own simulator and uploads `ios-ipad-execution-evidence`.
+
+The full UI bundle still excludes `AppStoreScreenshotTests` and honors runtime
+skips. Quarantined transcript cases in `ConversationTranscriptFullGateUITests`
+require `TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run;
+`ui_suite=full` alone does not opt into them.
+
+CI uploads `ios-ui-review-evidence` for 14 days when allowlisted captures exist,
+on success or failure and for filtered UI runs. Open its PNGs directly;
+`manifest.json` records the tested revision, suite/test, source bundle, and retry
+origin. Captures include workspace creation, menus, changes, and connection-loss
+flows; `scripts/export_ui_evidence.py` is the complete allowlist. Missing images
+are not proof that a view was captured. `ios-agent-group-evidence` and
+`ios-transcript-recovery-evidence` remain separate artifacts. Run
+`python3 scripts/test_export_ui_evidence.py` to check the export contract.
+On macOS, use `TMPDIR=/private/tmp python3 scripts/test_export_ui_evidence.py`
+to avoid the fixture's symlinked temporary-path mismatch
+([ios#671](https://github.com/intent-hq/ios/issues/671)).
+
+Xcode Cloud uses `ci_scripts/ci_post_clone.sh` to prepare TailcatKit for iOS with
+a checksum-pinned Go toolchain; it skips that setup for visionOS. This is build
+preparation, not release automation. See [AGENTS.md](AGENTS.md#releases) for
+version/build-number checks and the human-controlled upload and release policy.
+
+### Contributor rules
 
 **Conventional commits** are required (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`); PR titles are validated in CI.
+See [AGENTS.md](AGENTS.md) for layout and platform-guard policies, source-input
+packaging, focused validation, and issue-reporting requirements. Keep this README
+and those instructions aligned when changing build scripts, dependencies, or CI.
 
 ## Related Repositories
 

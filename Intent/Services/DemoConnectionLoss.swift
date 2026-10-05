@@ -98,7 +98,10 @@ enum DemoConnectionLoss {
             connection.connectionState = ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-reconnecting")
                 ? .reconnecting(attempt: 1) : .disconnected
             if ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-startup-failure") {
-                coordinator.onConnectionFailed(error: "Server certificate has changed. Re-pair to trust the new certificate.")
+                let message = ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-startup-unreachable")
+                    ? "The saved machine could not be reached."
+                    : "Server certificate has changed. Re-pair to trust the new certificate."
+                coordinator.onConnectionFailed(error: message)
                 return
             }
             try await DemoFixtures.wait(for: .triggerFile(directory.appendingPathComponent("recover")))
