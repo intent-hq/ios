@@ -2,9 +2,9 @@ import SwiftUI
 
 extension View {
     @ViewBuilder
-    func nativeNavigationBackGesture() -> some View {
+    func nativeNavigationBackGesture(isEnabled: Bool = true) -> some View {
         #if os(iOS)
-        background(NavigationBackGesture())
+        background(NavigationBackGesture(isEnabled: isEnabled))
         #else
         self
         #endif
@@ -13,15 +13,20 @@ extension View {
 
 #if os(iOS)
 private struct NavigationBackGesture: UIViewControllerRepresentable {
+    let isEnabled: Bool
+
     func makeUIViewController(context _: Context) -> Controller { Controller() }
 
-    func updateUIViewController(_: Controller, context _: Context) {}
+    func updateUIViewController(_ controller: Controller, context _: Context) {
+        controller.allowsNavigation = isEnabled
+    }
 
     static func dismantleUIViewController(_ controller: Controller, coordinator _: Void) {
         controller.restoreGesture()
     }
 
     final class Controller: UIViewController, UIGestureRecognizerDelegate {
+        var allowsNavigation = true
         private weak var gesture: UIGestureRecognizer?
         private weak var previousDelegate: (any UIGestureRecognizerDelegate)?
         private var wasEnabled = false
@@ -49,7 +54,7 @@ private struct NavigationBackGesture: UIViewControllerRepresentable {
         }
 
         func gestureRecognizerShouldBegin(_: UIGestureRecognizer) -> Bool {
-            guard let navigationController,
+            guard allowsNavigation, let navigationController,
                   navigationController.viewControllers.count > 1,
                   navigationController.transitionCoordinator == nil,
                   navigationController.presentedViewController == nil else { return false }

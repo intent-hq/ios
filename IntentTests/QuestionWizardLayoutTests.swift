@@ -26,7 +26,8 @@ struct QuestionWizardLayoutTests {
         #expect(compact.scrollsHorizontally)
         #expect(!compact.scrollsVertically)
         #expect(compact.hostFrame.contains(compact.sendFrame))
-        #expect(compact.sendFrame.height >= 44)
+        // Accessibility frame subtraction can report 43.99999999999997 for a 44pt target.
+        #expect(compact.sendFrame.height >= 44 - 0.001, "Rendered action frame: \(compact.sendFrame)")
     }
 
     @Test func accessibilityTextUsesVerticalScrollingAndKeepsSelectionSemantics() async throws {
@@ -61,13 +62,8 @@ struct QuestionWizardLayoutTests {
             index: 0,
             questionCount: 1,
             selectedIndices: [0],
-            freeText: .constant(""),
             availableHeight: height,
             onSelect: { _ in },
-            onSubmit: {},
-            onTextChange: {},
-            onCollapse: {},
-            onDismiss: nil,
             footer: footer
         )
         .environment(\.dynamicTypeSize, typeSize)
@@ -84,7 +80,7 @@ struct QuestionWizardLayoutTests {
             question: "Which check should run next?",
             explanation: nil,
             options: (1...4).map { index in
-                QuestionOption(label: "Answer \(index)", description: "Run this check before continuing the review.")
+                QuestionOption(label: "Answer \(index)", description: "Run this check next.")
             }
         )
     }

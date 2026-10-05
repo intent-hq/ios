@@ -7,74 +7,81 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
     let index: Int
     let questionCount: Int
     let selectedIndices: [Int]
-    @Binding var freeText: String
     let availableHeight: CGFloat
     let onSelect: (Int) -> Void
-    let onSubmit: () -> Void
-    let onTextChange: () -> Void
-    let onCollapse: () -> Void
-    let onDismiss: (() -> Void)?
     let footer: Footer
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @State private var writesAnswer = false
 
     private typealias Design = Constants.Conversation.Design
 
     var body: some View {
-        ViewThatFits(in: .vertical) {
-            if !dynamicTypeSize.isAccessibilitySize, !writesAnswer, freeText.isEmpty {
-                content(horizontal: false)
-                    .fixedSize(horizontal: false, vertical: true)
-                content(horizontal: true)
-                    .fixedSize(horizontal: false, vertical: true)
+        QuestionHeightLimit(maximumHeight: max(0, availableHeight)) {
+            ViewThatFits(in: .vertical) {
+                if !dynamicTypeSize.isAccessibilitySize {
+                    content(horizontal: false)
+                        .fixedSize(horizontal: false, vertical: true)
+                    content(horizontal: true)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                ScrollView {
+                    content(horizontal: false)
+                }
+                .scrollBounceBehavior(.basedOnSize)
             }
-            ScrollView {
-                content(horizontal: false)
-            }
-            .scrollBounceBehavior(.basedOnSize)
         }
-        .frame(maxHeight: max(0, availableHeight), alignment: .bottom)
     }
 
-    // The two fit candidates contain only stateless controls. Drafts belong to
-    // QuestionWizardView; the editor mounts only in the vertical fallback so a
-    // keyboard resize cannot swap its native first responder into another branch.
+    // The fit candidates contain only stateless controls. The free-text editor
+    // lives outside this panel, so a layout change cannot replace its responder.
+    // The final candidate scrolls the complete content, keeping the footer reachable.
     private func content(horizontal: Bool) -> some View {
         VStack(alignment: .leading, spacing: Design.Question.contentSpacing) {
-            WorkspaceQuestionHeader(
-                question: question,
-                onWriteAnswer: { writesAnswer = true },
-                onCollapse: onCollapse,
-                onDismiss: onDismiss
-            )
-            if questionCount > 1 {
-                Text("Question \(index + 1) of \(questionCount)")
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
-                    .accessibilityIdentifier("question.progress")
+            VStack(alignment: .leading, spacing: Design.Question.titleSpacing) {
+                WorkspaceQuestionHeader(question: question)
+                if questionCount > 1 {
+                    Text("Question \(index + 1) of \(questionCount)")
+                        .interFont(Constants.Typography.bodyXS)
+                        .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("question.progress")
+                }
             }
-            WorkspaceQuestionAnswerCards(
-                options: question.options,
-                selectedIndices: selectedIndices,
-                isMulti: question.multiSelect,
-                horizontal: horizontal,
-                availableHeight: availableHeight,
-                onSelect: onSelect
-            )
-            if writesAnswer || !freeText.isEmpty {
-                WorkspaceQuestionFreeText(
-                    text: $freeText,
-                    onSubmit: onSubmit,
-                    onTextChange: onTextChange
+            VStack(
+                alignment: .leading,
+                spacing: horizontal ? Design.Question.carouselFooterSpacing : Design.Question.footerSpacing
+            ) {
+                WorkspaceQuestionAnswerCards(
+                    options: question.options,
+                    selectedIndices: selectedIndices,
+                    isMulti: question.multiSelect,
+                    horizontal: horizontal,
+                    availableHeight: availableHeight,
+                    onSelect: onSelect
                 )
+                footer
             }
-            footer
         }
         .padding(.horizontal, Design.Question.horizontalPadding)
         .padding(.top, Design.Question.topPadding)
         .padding(.bottom, Design.Question.bottomPadding)
+    }
+}
+
+/// Offers the fit candidates a ceiling without expanding short content to that ceiling.
+private struct QuestionHeightLimit: Layout {
+    let maximumHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        guard let content = subviews.first else { return .zero }
+        let height = min(proposal.height ?? maximumHeight, maximumHeight)
+        let size = content.sizeThatFits(ProposedViewSize(width: proposal.width, height: height))
+        return CGSize(width: size.width, height: min(size.height, height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
 }

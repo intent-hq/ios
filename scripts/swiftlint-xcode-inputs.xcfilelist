@@ -367,6 +367,8 @@ $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionAnswerCards.swif
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionButtonStyle.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionFreeText.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionHeader.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionPendingBanner.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionPresentation.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionStepView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/AgentWaitingView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/BackgroundHooksRow.swift

@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Sequential Agent Q&A wizard rendered in the composer slot. The host
+/// Sequential Agent Q&A wizard rendered in the composer slot or floating panel. The host
 /// remounts it whenever a different question set pends.
 struct QuestionWizardView: View {
     let questions: [Question]
     @Binding var collapsed: Bool
     let containerHeight: CGFloat
-    /// Opt in only for workspace conversations. Supply the actual space left
-    /// after reserving the composer and transcript; nil keeps shared behavior.
+    /// Opt in only for the floating workspace panel. Supply its keyboard-safe
+    /// available height; nil keeps the shared composer-slot behavior.
     let workspaceAvailableHeight: CGFloat?
     let onComplete: ([QuestionAnswer]) -> Void
     var onDismiss: (() -> Void)?
@@ -31,6 +31,8 @@ struct QuestionWizardView: View {
     @State private var confirmingDismiss = false
     @State private var dismissed = false
     @State private var stepContentHeights: [Int: CGFloat] = [:]
+    @State private var answerFocused = false
+    @State private var answerComposerHeight: CGFloat = Constants.Conversation.Design.Composer.minimumHeight
 
     init(
         questions: [Question],
@@ -60,7 +62,7 @@ struct QuestionWizardView: View {
         Self.showsNext(isMulti: isMulti, isLast: isLast, hasFreeText: hasFreeText)
     }
     private var nextDisabled: Bool {
-        (isMulti || isLast) && drafts[idx].sel.isEmpty && !hasFreeText
+        (workspaceAvailableHeight != nil || isMulti || isLast) && drafts[idx].sel.isEmpty && !hasFreeText
     }
 
     /// Whether the footer Next/Send button is visible. Free text on a
@@ -72,6 +74,39 @@ struct QuestionWizardView: View {
     }
 
     var body: some View {
+        Group {
+            if let workspaceAvailableHeight, !questions.isEmpty {
+                VStack(spacing: Design.Composer.keyboardBottomSpacing) {
+                    WorkspaceQuestionStepView(
+                        question: current,
+                        index: idx,
+                        questionCount: questions.count,
+                        selectedIndices: drafts[idx].sel,
+                        availableHeight: max(0, workspaceAvailableHeight - answerComposerHeight - Design.Composer.keyboardBottomSpacing * 2),
+                        onSelect: selectOption,
+                        footer: workspaceFooter
+                    )
+                    .id(idx)
+                    .background(Design.Palette.surface(for: colorScheme), in: .rect(cornerRadius: Design.cornerRadius))
+                    .clipShape(.rect(cornerRadius: Design.cornerRadius))
+                    WorkspaceQuestionFreeText(
+                        text: $drafts[idx].text,
+                        focused: $answerFocused,
+                        onSubmit: handleNext,
+                        onTextChange: markCurrentDraftUnskipped
+                    )
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { answerComposerHeight = $0 }
+                }
+                .disabled(submitted)
+                .padding(.horizontal, answerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset)
+                .padding(.bottom, Design.Composer.keyboardBottomSpacing)
+            } else {
+                legacyWizard
+            }
+        }
+    }
+
+    private var legacyWizard: some View {
         VStack(alignment: .leading, spacing: 0) {
             wizardContent
         }
@@ -120,23 +155,6 @@ struct QuestionWizardView: View {
                 onDismiss: { confirmingDismiss = true },
                 usesWorkspaceDesign: workspaceAvailableHeight != nil
             )
-        } else if let workspaceAvailableHeight {
-            WorkspaceQuestionStepView(
-                question: current,
-                index: idx,
-                questionCount: questions.count,
-                selectedIndices: drafts[idx].sel,
-                freeText: $drafts[idx].text,
-                availableHeight: workspaceAvailableHeight,
-                onSelect: selectOption,
-                onSubmit: handleNext,
-                onTextChange: markCurrentDraftUnskipped,
-                onCollapse: { collapsed = true },
-                onDismiss: onDismiss == nil ? nil : { confirmingDismiss = true },
-                footer: workspaceFooter
-            )
-            .id(idx)
-            .disabled(submitted || dismissed)
         } else {
             QuestionWizardHeaderRow(
                 questionCount: questions.count,
@@ -186,7 +204,7 @@ struct QuestionWizardView: View {
             multiStep: multiStep,
             isMulti: isMulti,
             isLast: isLast,
-            showNext: showNext,
+            showNext: true,
             nextDisabled: nextDisabled,
             submitted: submitted,
             dismissed: dismissed,
@@ -234,7 +252,7 @@ struct QuestionWizardView: View {
         }
         drafts[idx].sel = drafts[idx].sel.contains(optionIndex) ? [] : [optionIndex]
         drafts[idx].skipped = false
-        if isLast { return }
+        if isLast || workspaceAvailableHeight != nil { return }
         advance()
     }
 

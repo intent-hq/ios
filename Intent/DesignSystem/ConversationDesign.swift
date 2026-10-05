@@ -83,22 +83,26 @@ extension Constants.Conversation.Design {
     }
 
     enum Question {
+        static let backdropBlur: CGFloat = 15
+        static let backdropOpacity: Double = 0.3
+        static let modalTopInset: CGFloat = 24
         static let horizontalPadding: CGFloat = 20
         static let topPadding: CGFloat = 24
         static let bottomPadding: CGFloat = 20
         static let contentSpacing: CGFloat = 24
-        static let titleSpacing: CGFloat = 16
+        // Native line boxes include leading that Figma trims; preserve the visible text gap.
+        static let titleSpacing: CGFloat = 8
         static let notificationSpacing: CGFloat = 32
         static let answerPadding: CGFloat = 24
         static let answerSpacing: CGFloat = 8
-        static let answerTextSpacing: CGFloat = 16
+        static let answerTextSpacing: CGFloat = 8
         static let footerSpacing: CGFloat = 20
         static let carouselFooterSpacing: CGFloat = 24
         // Reference widths only: the question layout owner adapts to available space and text size.
         static let carouselAnswerWidth: CGFloat = 243
         static let carouselAnswerMinimumHeight: CGFloat = 120
-        // Screenshot-calibrated standard; oversized native text uses the vertical fallback (#570).
-        static let carouselAnswerHeight: CGFloat = 166
+        // Figma's compact row; oversized native text uses the readable vertical fallback (#570).
+        static let carouselAnswerHeight: CGFloat = 120
         static let buttonSpacing: CGFloat = 8
         static let buttonHorizontalPadding: CGFloat = 20
         static let buttonHeight: CGFloat = 40
