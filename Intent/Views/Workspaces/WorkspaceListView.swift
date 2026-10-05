@@ -152,7 +152,7 @@ struct WorkspaceListView: View {
 
     private var emptyState: some View {
         Button("New workspace", action: createWorkspace)
-            .buttonStyle(IntentButtonStyle())
+            .buttonStyle(IntentButtonStyle(variant: .muted))
             .disabled(!coordinator.canCreateWorkspace)
             .accessibilityIdentifier("workspaces.empty.create")
     }
