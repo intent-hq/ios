@@ -9,7 +9,7 @@ struct DiagnosticExportModelTests {
         let clock = DiagnosticTestClock()
         let store = DiagnosticStore(storage: DiagnosticTestStorage()) { clock.now() }
         store.record(DiagnosticFixtures.event())
-        let model = DiagnosticExportModel(store: store, now: { clock.now() })
+        let model = DiagnosticExportModel(store: store) { clock.now() }
         model.refreshIfNeeded()
         await model.waitForWork()
         let reviewed = try #require(model.preview).snapshot
@@ -33,7 +33,7 @@ struct DiagnosticExportModelTests {
         let clock = DiagnosticTestClock()
         let store = DiagnosticStore(storage: DiagnosticTestStorage()) { clock.now() }
         store.record(DiagnosticFixtures.event())
-        let model = DiagnosticExportModel(store: store, now: { clock.now() })
+        let model = DiagnosticExportModel(store: store) { clock.now() }
         model.refreshIfNeeded()
         await model.waitForWork()
         #expect(try #require(model.preview).rows.count == 1)
