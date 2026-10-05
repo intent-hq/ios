@@ -228,7 +228,7 @@ struct ConversationColumnView: View {
                     answeringWorkspaceQuestions = true
                 }
                 .id(pendingSet.messageId)
-                .padding(.horizontal, Design.horizontalInset)
+                .padding(.horizontal, composerHorizontalInset)
             } else {
                 QuestionWizardView(
                     questions: pendingSet.questions,

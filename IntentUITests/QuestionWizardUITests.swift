@@ -21,10 +21,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         tap(app.textViews["Type your own answer…"].firstMatch)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
         assertStackedCards(first, second)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "question-cards-stacked-keyboard"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        attachScreenshot("question-cards-stacked-keyboard", in: app)
         tapQuestionAction("question.next", in: app)
         XCTAssertTrue(app.staticTexts["Detailed answers"].waitForExistence(timeout: Self.timeout))
         tapQuestionAction("question.back", in: app)
@@ -44,10 +41,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Detailed answers"].waitForExistence(timeout: Self.timeout))
         let first = app.buttons["question.option.0"]
         let second = app.buttons["question.option.1"]
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "question-cards-overflow"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        attachScreenshot("question-cards-overflow", in: app)
         XCTAssertLessThan(first.frame.maxY, second.frame.minY)
         XCTAssertEqual(first.frame.minX, second.frame.minX, accuracy: 1)
         let shortHeight = first.frame.height
@@ -77,10 +71,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         let first = app.buttons["question.option.0"]
         let second = app.buttons["question.option.1"]
         XCTAssertTrue(second.waitForExistence(timeout: Self.timeout))
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "questions-default-phone"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        attachScreenshot("questions-default-phone", in: app)
         XCTAssertLessThan(first.frame.maxY, second.frame.minY, "Both answers must stack in the real phone host")
         XCTAssertEqual(first.frame.minX, second.frame.minX)
         XCTAssertTrue(first.isHittable)
@@ -103,10 +94,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
         XCTAssertLessThan(first.frame.maxY, second.frame.minY, "The two-answer reference must also fit vertically above the keyboard")
         XCTAssertTrue(app.buttons["question.next"].isHittable)
-        let keyboardScreenshot = XCTAttachment(screenshot: app.screenshot())
-        keyboardScreenshot.name = "questions-vertical-keyboard"
-        keyboardScreenshot.lifetime = .keepAlways
-        add(keyboardScreenshot)
+        attachScreenshot("questions-vertical-keyboard", in: app)
     }
 
     @MainActor
@@ -186,12 +174,15 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     func testExpandedQuestionsKeepDraftWithoutSendingAboveKeyboard() throws {
         let app = try openQuestions()
         let composer = app.textViews["composer.textView"]
+        assertPendingBannerSideMargins(in: app, outerInset: 24)
         tap(composer)
         let draft = "Keep this draft\nfor later"
         composer.typeText(draft)
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(keyboard.isHittable)
+        attachScreenshot("questions-pending-keyboard", in: app)
+        assertPendingBannerSideMargins(in: app, outerInset: 8)
         XCTAssertEqual(composer.value as? String, draft, "Return remains a newline, not a question-bypassing submit")
         let send = app.buttons["composer.send"]
         XCTAssertTrue(send.exists)
@@ -218,10 +209,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         }
         XCTAssertTrue(next.isHittable)
         XCTAssertTrue(app.buttons["question.skip"].isHittable)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "questions-floating-keyboard"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        attachScreenshot("questions-floating-keyboard", in: app)
         tap(app.buttons["question.next"])
         tap(app.buttons["question.skip"])
         assertSentMessage(in: app, contains: ["A: (Other) A separate\nanswer", "A: (skipped)"])
@@ -231,6 +219,24 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertGreaterThan(app.scrollViews["transcript.scrollView"].frame.height, 0)
         XCTAssertEqual(composer.value as? String, draft)
         XCTAssertTrue(send.isEnabled, "Answering releases the ordinary-message send hold")
+    }
+
+    @MainActor
+    private func attachScreenshot(_ name: String, in app: XCUIApplication) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
+    private func assertPendingBannerSideMargins(in app: XCUIApplication, outerInset: CGFloat) {
+        // Buttons sit 20pt inside the banner surface; use their native frames
+        // without adding a test-only element or changing accessibility grouping.
+        let dismiss = app.buttons["question.dismiss"].frame
+        let answer = app.buttons["question.answer"].frame
+        XCTAssertEqual(dismiss.minX - app.frame.minX, outerInset + 20, accuracy: 1)
+        XCTAssertEqual(app.frame.maxX - answer.maxX, outerInset + 20, accuracy: 1)
     }
 
     @MainActor
