@@ -210,9 +210,9 @@ extension ConversationTranscriptView {
     /// only a gesture may break the pin (see
     /// `ConversationTranscriptScrollPolicy.scrolledAwayTransition`), and
     /// follows a pinned viewport that content grew under straight back to
-    /// the bottom. The pin goes through SwiftUI's own layout, as the
-    /// container re-pin does: the UIScrollView may not have laid out the new
-    /// content yet when this runs. `isInteracting` defaults to the live
+    /// the bottom. The owned follow defers scrolling until layout settles
+    /// and bounds its corrections; scrolling synchronously here can loop
+    /// while expanded lazy rows change size. `isInteracting` defaults to the live
     /// gesture state; a phase ending passes true for its final sample. The
     /// takeover latch is released against the live state, so the phase
     /// ending pinned releases it at once. An at-bottom edge over an
@@ -253,7 +253,7 @@ extension ConversationTranscriptView {
             userIsScrolledAway: next
         ) {
             AppLog.userInterface.debug("[SCROLL] Content grew under the pinned viewport; re-pinning to the bottom")
-            proxy.scrollTo("scroll-bottom", anchor: .bottom)
+            scrollToBottom(proxy: proxy, forced: true, animated: false)
         }
     }
 
