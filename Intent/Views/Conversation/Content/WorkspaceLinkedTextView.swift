@@ -19,18 +19,28 @@ struct WorkspaceLinkedTextView: View {
 
     var body: some View {
         let segments = WorkspaceLinks.parse(text, isStreaming: isStreaming)
+        // Resolve workspace availability on MainActor, outside row providers.
+        let rows = segments.enumerated().map { (offset: $0.offset, content: segmentContent($0.element)) }
         VStack(alignment: .leading, spacing: Layout.spacing) {
-            ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                switch segment {
-                case .markdown(let markdown):
-                    MarkdownTextView(text: markdown, onOpenURL: onOpenURL, workspaceId: workspaceId)
-                case .workspaces(let ids):
-                    ForEach(ids.filter { !coveredIDs.contains($0) }, id: \.self) { id in
-                        workspaceButton(id)
-                    }
-                }
+            ForEach(rows, id: \.offset) { @Sendable row in
+                row.content
             }
             .id(segments.count)
+        }
+    }
+
+    @ViewBuilder
+    private func segmentContent(_ segment: WorkspaceLinks.Segment) -> some View {
+        switch segment {
+        case .markdown(let markdown):
+            MarkdownTextView(text: markdown, onOpenURL: onOpenURL, workspaceId: workspaceId)
+        case .workspaces(let ids):
+            let rows = ids.filter { !coveredIDs.contains($0) }.map { id in
+                (id: id, content: workspaceButton(id))
+            }
+            ForEach(rows, id: \.id) { @Sendable row in
+                row.content
+            }
         }
     }
 

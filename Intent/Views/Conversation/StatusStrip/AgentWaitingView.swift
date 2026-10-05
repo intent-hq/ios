@@ -55,16 +55,22 @@ struct AgentWaitingView: View {
     }
 
     private var waitingList: some View {
-        ScrollView {
+        // Snapshot errors and prepare views before SwiftUI requests rows off-main.
+        let coordinator = store.watchedAgentCoordinator
+        let rows = coordinator.rows.map { row in
+            let content = watchedAgentRow(row, hasError: coordinator.errors[row.id] != nil)
+                .onScrollVisibilityChange(threshold: visibleFraction) { visible in
+                    coordinator.setVisible(row.id, visible: visible, consumer: visibilityConsumer)
+                }
+                .onDisappear {
+                    coordinator.setVisible(row.id, visible: false, consumer: visibilityConsumer)
+                }
+            return (id: row.id, content: content)
+        }
+        return ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(store.watchedAgentCoordinator.rows) { row in
-                    watchedAgentRow(row)
-                        .onScrollVisibilityChange(threshold: visibleFraction) { visible in
-                            store.watchedAgentCoordinator.setVisible(row.id, visible: visible, consumer: visibilityConsumer)
-                        }
-                        .onDisappear {
-                            store.watchedAgentCoordinator.setVisible(row.id, visible: false, consumer: visibilityConsumer)
-                        }
+                ForEach(rows, id: \.id) { @Sendable row in
+                    row.content
                 }
             }
         }
@@ -72,7 +78,7 @@ struct AgentWaitingView: View {
         .accessibilityIdentifier("watched-agent-list")
     }
 
-    private func watchedAgentRow(_ row: WatchedAgentRow) -> some View {
+    private func watchedAgentRow(_ row: WatchedAgentRow, hasError: Bool) -> some View {
         Group {
             if onNavigateToAgent != nil, !row.isDeleted {
                 Button {
@@ -82,25 +88,25 @@ struct AgentWaitingView: View {
                               let workspace = selected.workspaceId, !Task.isCancelled else { return }
                         onNavigateToAgent?(selected.id, workspace, selected.agent.name)
                     }
-                } label: { agentRow(row) }
+                } label: { agentRow(row, hasError: hasError) }
                     .buttonStyle(IntentContentButtonStyle())
             } else {
-                agentRow(row)
+                agentRow(row, hasError: hasError)
             }
         }
         .accessibilityIdentifier("watched-agent-" + row.id)
         .contextMenu {
             if !row.isDeleted { agentContextMenu(row.agent) }
-            if store.watchedAgentCoordinator.errors[row.id] != nil {
+            if hasError {
                 Button("Retry Loading") { store.watchedAgentCoordinator.retry(row.id) }
             }
         }
     }
 
-    private func agentRow(_ row: WatchedAgentRow) -> some View {
+    private func agentRow(_ row: WatchedAgentRow, hasError: Bool) -> some View {
         HStack(spacing: Layout.agentRowSpacing) {
             agentAvatar(row)
-            agentDescription(row)
+            agentDescription(row, hasError: hasError)
             Spacer()
             if onNavigateToAgent != nil, !row.isDeleted {
                 Image(.chevronRight)
@@ -172,7 +178,7 @@ struct AgentWaitingView: View {
             )
     }
 
-    private func agentDescription(_ row: WatchedAgentRow) -> some View {
+    private func agentDescription(_ row: WatchedAgentRow, hasError: Bool) -> some View {
         let agent = row.agent
         return VStack(alignment: .leading, spacing: Layout.descriptionSpacing) {
             Text(agent.name)
@@ -183,7 +189,7 @@ struct AgentWaitingView: View {
                 Text(row.statusText)
                     .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            } else if store.watchedAgentCoordinator.errors[row.id] != nil {
+            } else if hasError {
                 Text("Couldn’t load agent. Tap to retry.")
                     .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))

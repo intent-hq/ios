@@ -158,7 +158,9 @@ struct ConnectionsView: View {
     }
 
     private var connectionsList: some View {
-        VStack(spacing: Constants.Connections.cardSpacing) {
+        // Prepare rows on MainActor before SwiftUI requests them during async layout.
+        let rows = connections.map { (id: $0.id, content: connectionRow($0)) }
+        return VStack(spacing: Constants.Connections.cardSpacing) {
             if connections.isEmpty {
                 Text("No saved connections. Add a connection below to get started.")
                     .interFont(Constants.Typography.bodyS)
@@ -169,7 +171,7 @@ struct ConnectionsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("saved-connections.empty")
             } else {
-                ForEach(connections) { connectionRow($0) }
+                ForEach(rows, id: \.id) { @Sendable row in row.content }
             }
         }
     }
@@ -182,7 +184,8 @@ struct ConnectionsView: View {
     }
 
     private func connectionRow(_ connection: StoredConnection) -> some View {
-        Button {
+        let status = connection.id == windowConnectionId ? session.connection.connectionState : nil
+        return Button {
             if connection.id != windowConnectionId {
                 coordinator.onSwitchConnection(id: connection.id)
             }
@@ -191,7 +194,7 @@ struct ConnectionsView: View {
             SavedConnectionCard(
                 name: connection.displayName,
                 address: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)",
-                status: connection.id == windowConnectionId ? session.connection.connectionState : nil
+                status: status
             )
         }
         .buttonStyle(IntentContentButtonStyle())
