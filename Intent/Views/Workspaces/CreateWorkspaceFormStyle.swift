@@ -28,8 +28,26 @@ enum CreateWorkspaceFormStyle {
     private static let darkForegroundBlue = 0.922
     private static let darkSecondaryRedGreen = 0.549
     private static let darkSecondaryBlue = 0.537
+    private static let disabledColorFraction = 0.3
     static let primary = Color(red: primaryRed, green: primaryGreen, blue: primaryBlue)
     static let primaryForeground = Color(white: primaryTextWhite)
+
+    // Resolve Figma 2989:23630's disabled colors over the form without fading the button.
+    static func disabledBackground(for scheme: ColorScheme) -> Color {
+        CreateWorkspaceRepoStyle.background(for: scheme).mix(
+            with: Constants.ConnectionSheet.disabledBackground(for: scheme),
+            by: disabledColorFraction,
+            in: .device
+        )
+    }
+
+    static func disabledForeground(for scheme: ColorScheme) -> Color {
+        CreateWorkspaceRepoStyle.background(for: scheme).mix(
+            with: CreateWorkspaceRepoStyle.foreground(for: scheme),
+            by: disabledColorFraction,
+            in: .device
+        )
+    }
 
     static func background(for scheme: ColorScheme) -> Color {
         Constants.Pairing.background(for: scheme)

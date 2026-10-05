@@ -280,11 +280,4 @@ struct WorkspaceRowPrIndicatorTests {
         #expect(WorkspaceRowView.legacyPillStatus("Closed") == .closed)
         #expect(WorkspaceRowView.legacyPillStatus("Unknown") == nil)
     }
-
-    @Test func pillColorKeepsExistingMapping() {
-        #expect(WorkspaceRowView.pillColor(for: .merged) == .purple)
-        #expect(WorkspaceRowView.pillColor(for: .open) == .green)
-        #expect(WorkspaceRowView.pillColor(for: .draft) == .gray)
-        #expect(WorkspaceRowView.pillColor(for: .closed) == .red)
-    }
 }

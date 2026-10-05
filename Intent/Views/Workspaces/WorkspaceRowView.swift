@@ -238,7 +238,6 @@ struct WorkspaceRowView: View {
         @ViewBuilder
         private var badgeContent: some View {
             if let pill = indicator.pill {
-                let pillColor = WorkspaceRowView.pillColor(for: pill.status)
                 HStack(
                     alignment: .center,
                     spacing: Constants.WorkspaceRow.pillIconSpacing
@@ -247,7 +246,9 @@ struct WorkspaceRowView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: iconSize, height: iconSize)
-                        .foregroundStyle(pillColor)
+                        .foregroundStyle(colorScheme == .dark
+                            ? Constants.Pairing.mutedForeground(for: colorScheme)
+                            : WorkspaceDetailStyle.neutral)
                         .accessibilityHidden(true)
                     Text("PR\(pill.number.map { " #\($0)" } ?? "")")
                         .interFont(Constants.Typography.subtextXXS.withFace(.medium))

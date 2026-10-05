@@ -75,17 +75,6 @@ extension WorkspaceRowView {
         }
     }
 
-    /// Existing pill color mapping (Merged purple / Open green / Draft gray /
-    /// Closed red), keyed by pill bucket instead of the raw wire string.
-    static func pillColor(for status: WorkspacePrPill.Status) -> Color {
-        switch status {
-        case .merged: return .purple
-        case .open: return .green
-        case .draft: return .gray
-        case .closed: return .red
-        }
-    }
-
     static func pillImage(for status: WorkspacePrPill.Status) -> ImageResource {
         switch status {
         case .merged: return .pullRequestMerged
