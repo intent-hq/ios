@@ -64,21 +64,7 @@ private struct DiagnosticExportActions: View {
     var body: some View {
         Section {
             preparationStatus
-            Button { model.shareZIP() } label: {
-                Label {
-                    Text("Share ZIP").interFont(Constants.Typography.bodyS)
-                } icon: {
-                    icon(.upload)
-                }
-                .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget, alignment: .leading)
-                .contentShape(.rect)
-            }
-                .buttonStyle(IntentContentButtonStyle())
-                .foregroundStyle(isShareDisabled
-                    ? Theme.mutedForeground(for: colorScheme)
-                    : Theme.foreground(for: colorScheme))
-                .disabled(isShareDisabled)
-                .accessibilityIdentifier("diagnosticShareZIP")
+            shareZIPAction
             Button { model.refresh() } label: {
                 Label {
                     Text("Refresh").interFont(Constants.Typography.bodyS)
@@ -99,6 +85,24 @@ private struct DiagnosticExportActions: View {
                 .disabled(model.isWorking || model.share != nil)
                 .accessibilityIdentifier("diagnosticClear")
         }
+    }
+
+    private var shareZIPAction: some View {
+        Button { model.shareZIP() } label: {
+            Label {
+                Text("Share ZIP").interFont(Constants.Typography.bodyS)
+            } icon: {
+                icon(.upload)
+            }
+            .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .foregroundStyle(isShareDisabled
+            ? Theme.mutedForeground(for: colorScheme)
+            : Theme.foreground(for: colorScheme))
+        .disabled(isShareDisabled)
+        .accessibilityIdentifier("diagnosticShareZIP")
     }
 
     private func icon(_ image: ImageResource) -> some View {
