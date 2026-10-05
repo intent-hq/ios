@@ -254,13 +254,7 @@ struct SubmittableTextView: UIViewRepresentable {
         }
 
         context.coordinator.synchronizeText(in: textView)
-
-        // Sync focus
-        if isFocused, !textView.isFirstResponder {
-            DispatchQueue.main.async { textView.becomeFirstResponder() }
-        } else if !isFocused, textView.isFirstResponder {
-            DispatchQueue.main.async { textView.resignFirstResponder() }
-        }
+        context.coordinator.synchronizeFocus(in: textView)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -272,6 +266,19 @@ struct SubmittableTextView: UIViewRepresentable {
 
         init(_ parent: SubmittableTextView) {
             self.parent = parent
+        }
+
+        func synchronizeFocus(in textView: KeyCommandTextView) {
+            // Native editing callbacks defer their binding writes. Read the latest
+            // focus after those writes, not the render snapshot that preceded them.
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView else { return }
+                if parent.isFocused, !textView.isFirstResponder {
+                    textView.becomeFirstResponder()
+                } else if !parent.isFocused, textView.isFirstResponder {
+                    textView.resignFirstResponder()
+                }
+            }
         }
 
         func synchronizeText(in textView: KeyCommandTextView) {

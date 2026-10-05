@@ -35,6 +35,57 @@ struct ConversationDesignTests {
         }
     }
 
+    @Test(arguments: [ColorScheme.light, .dark])
+    func standardAnswerCardsRenderSelectedFillAndSubtleUnselectedOutline(scheme: ColorScheme) throws {
+        // Independent design values: white selection in light mode, neutral raised
+        // fill in dark mode, and a 10% outline only on unselected standard cards.
+        let shell: [Double] = scheme == .light ? [240, 240, 235] : [39, 39, 39]
+        let raised: [Double] = scheme == .light ? [255, 255, 255] : [61, 61, 60]
+        let outline = scheme == .light ? 0.0 : 255.0
+        for selected in [false, true] {
+            let pixels = try standardAnswerCardPixels(scheme: scheme, selected: selected)
+            let edge = selected ? raised : shell.map { $0 * 0.9 + outline * 0.1 }
+            let interior = selected ? raised : shell
+            for channel in 0..<3 {
+                #expect(abs(Double(pixels[channel]) - edge[channel]) <= 2)
+                #expect(abs(Double(pixels[7 * 4 + channel]) - interior[channel]) <= 2)
+            }
+            #expect(pixels[3] == 255 && pixels[7 * 4 + 3] == 255)
+        }
+    }
+
+    private func standardAnswerCardPixels(scheme: ColorScheme, selected: Bool) throws -> [UInt8] {
+        // ImageRenderer starts with the standard environment; no device-level
+        // contrast override is injected. Increased Contrast remains a separate policy.
+        let renderer = ImageRenderer(content: WorkspaceQuestionAnswerCards(
+            options: [QuestionOption(label: "Mountains", description: "Fresh air and a quiet cabin.")],
+            selectedIndices: selected ? [0] : [],
+            isMulti: false
+        ) { _ in }
+            .frame(width: 320)
+            .background(Palette.surface(for: scheme))
+            .environment(\.colorScheme, scheme))
+        renderer.scale = 1
+        let image = try #require(renderer.cgImage)
+        // Sample the straight left edge and blank inset, away from text and corners.
+        let strip = try #require(image.cropping(to: CGRect(x: 0, y: image.height / 2, width: 8, height: 1)))
+        var pixels = [UInt8](repeating: 0, count: 8 * 4)
+        let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        try pixels.withUnsafeMutableBytes { bytes in
+            let context = try #require(CGContext(
+                data: bytes.baseAddress,
+                width: 8,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 8 * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(strip, in: CGRect(x: 0, y: 0, width: 8, height: 1))
+        }
+        return pixels
+    }
+
     private func surfaces(for scheme: ColorScheme) -> [Color] {
         [Palette.background(for: scheme), Palette.surface(for: scheme), Palette.raisedSurface(for: scheme)]
     }

@@ -1,49 +1,55 @@
 import SwiftUI
 
-/// Uses the same multiline editor and Return policy as the existing wizard.
+/// Lets the native field lay out its prompt, caret, and multiline answer together.
 struct WorkspaceQuestionFreeText: View {
     @Binding var text: String
-    let onSubmit: () -> Void
+    let focused: FocusState<Bool>.Binding
     let onTextChange: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @State private var focused = false
-    @State private var height = QuestionStepView.clampedFreeTextHeight(
-        0, lineHeight: QuestionStepView.freeTextLineHeight
-    )
 
     private typealias Design = Constants.Conversation.Design
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Design.Question.buttonSpacing) {
-            Text("Your answer")
-                .interFont(Constants.Typography.bodyXSEmphasized)
-                .foregroundStyle(Design.Palette.foreground(for: colorScheme))
-            SubmittableTextView(
+        HStack(spacing: Design.Question.buttonSpacing) {
+            TextField(
+                "Message",
                 text: $text,
-                isFocused: $focused,
-                onSubmit: onSubmit,
-                onHeightChange: { contentHeight in
-                    height = QuestionStepView.clampedFreeTextHeight(
-                        contentHeight, lineHeight: QuestionStepView.freeTextLineHeight
-                    )
-                },
-                hoverCornerRadius: Design.innerCornerRadius,
-                accessibilityLabel: "Type your own answer…"
+                prompt: Text("Message")
+                    .foregroundStyle(Design.Palette.placeholderForeground(for: colorScheme, contrast: contrast)),
+                axis: .vertical
             )
-            .frame(height: max(height, Design.minimumTapTarget))
-            .padding(Design.Question.buttonSpacing)
-            .background(Design.Palette.raisedSurface(for: colorScheme))
-            .clipShape(.rect(cornerRadius: Design.innerCornerRadius))
-            .overlay {
-                RoundedRectangle(cornerRadius: Design.innerCornerRadius)
-                    .strokeBorder(
-                        Design.Palette.border(for: colorScheme, contrast: contrast),
-                        lineWidth: Design.Question.borderWidth
-                    )
-            }
+            .textFieldStyle(.plain)
+            .interFont(Constants.Typography.bodyS)
+            .foregroundStyle(Design.Palette.foreground(for: colorScheme))
+            .lineLimit(1...Constants.Conversation.QuestionWizard.freeTextMaximumLineCount)
+            .frame(minHeight: Design.minimumTapTarget)
+            .focused(focused)
+            .submitLabel(.return)
+            .accessibilityLabel("Type your own answer…")
+            .accessibilityIdentifier("question.freeText")
+            focusButton
         }
+        .padding(.leading, Design.Composer.leadingPadding)
+        .padding(.trailing, Design.Composer.activeTrailingPadding)
+        .padding(.vertical, (Design.Composer.minimumHeight - Design.minimumTapTarget) / 2)
+        .frame(minHeight: Design.Composer.minimumHeight)
+        .background(Design.Palette.surface(for: colorScheme), in: .rect(cornerRadius: Design.cornerRadius))
         .onChange(of: text) { _, _ in onTextChange() }
+    }
+
+    private var focusButton: some View {
+        Button { focused.wrappedValue = true } label: {
+            Image(.addIcon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Design.iconSize, height: Design.iconSize)
+                .foregroundStyle(Design.Palette.placeholderForeground(for: colorScheme, contrast: contrast))
+                .frame(width: Design.minimumTapTarget, height: Design.minimumTapTarget)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Write your own answer")
     }
 }

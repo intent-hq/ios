@@ -9,7 +9,7 @@ import UIKit
 })
 struct QuestionWizardLayoutTests {
     @Test(arguments: [CGFloat(320), CGFloat(390), CGFloat(600)])
-    func cardsStackWhenTheyFitAndScrollHorizontallyWhenHeightIsLimited(width: CGFloat) async throws {
+    func cardsStayStackedAndScrollVerticallyWhenHeightIsLimited(width: CGFloat) async throws {
         let tall = try await render(width: width, height: 1000)
         #expect(tall.options.count == 4)
         #expect(!tall.scrollsHorizontally)
@@ -23,10 +23,55 @@ struct QuestionWizardLayoutTests {
         #expect(tall.sendFrame.height >= 44)
 
         let compact = try await render(width: width, height: 400)
-        #expect(compact.scrollsHorizontally)
-        #expect(!compact.scrollsVertically)
-        #expect(compact.hostFrame.contains(compact.sendFrame))
-        #expect(compact.sendFrame.height >= 44)
+        #expect(!compact.scrollsHorizontally)
+        #expect(compact.scrollsVertically)
+        #expect(compact.options.count == 4)
+        for (previous, next) in zip(compact.options, compact.options.dropFirst()) {
+            #expect(previous.maxY < next.minY)
+            #expect(abs(previous.minX - next.minX) < 1)
+        }
+        // Accessibility frame subtraction can report 43.99999999999997 for a 44pt target.
+        #expect(compact.sendFrame.height >= 44 - 0.001, "Rendered action frame: \(compact.sendFrame)")
+    }
+
+    @Test func customAnswerCaretUsesTheDesignedTextEdge() async throws {
+        let empty = try await renderAnswerText("")
+        let typed = try await renderAnswerText("Message")
+        // The design puts the text origin 20pt inside the field. Check UIKit's
+        // real caret, not a duplicate of the padding formula or an ink threshold
+        // whose result changes with the placeholder's opacity and antialiasing.
+        #expect(abs(empty - 20) <= 1, "Empty caret x: \(empty)")
+        #expect(abs(typed - 20) <= 1, "Typed text origin x: \(typed)")
+    }
+
+    private func renderAnswerText(_ text: String) async throws -> CGFloat {
+        let view = AnswerTextHost(text: text)
+        .environment(\.colorScheme, .light)
+        .environment(\.dynamicTypeSize, .large)
+        return try await SyntheticBadgeHost.render(view, width: 320, height: 100, safeAreaRegions: []) { hostView, _ in
+            hostView.layoutIfNeeded()
+            let (editor, input) = try #require(textInput(in: hostView))
+            // No first responder is needed to measure the insertion rect.
+            let caret = editor.convert(input.caretRect(for: input.beginningOfDocument), to: hostView)
+            return caret.minX
+        }
+    }
+
+    private func textInput(in view: UIView) -> (UIView, any UITextInput)? {
+        if let input = view as? any UITextInput { return (view, input) }
+        for child in view.subviews {
+            if let result = textInput(in: child) { return result }
+        }
+        return nil
+    }
+
+    private struct AnswerTextHost: View {
+        let text: String
+        @FocusState private var focused: Bool
+
+        var body: some View {
+            WorkspaceQuestionFreeText(text: .constant(text), focused: $focused) {}
+        }
     }
 
     @Test func accessibilityTextUsesVerticalScrollingAndKeepsSelectionSemantics() async throws {
@@ -61,13 +106,8 @@ struct QuestionWizardLayoutTests {
             index: 0,
             questionCount: 1,
             selectedIndices: [0],
-            freeText: .constant(""),
             availableHeight: height,
             onSelect: { _ in },
-            onSubmit: {},
-            onTextChange: {},
-            onCollapse: {},
-            onDismiss: nil,
             footer: footer
         )
         .environment(\.dynamicTypeSize, typeSize)
@@ -84,7 +124,7 @@ struct QuestionWizardLayoutTests {
             question: "Which check should run next?",
             explanation: nil,
             options: (1...4).map { index in
-                QuestionOption(label: "Answer \(index)", description: "Run this check before continuing the review.")
+                QuestionOption(label: "Answer \(index)", description: "Run this check next.")
             }
         )
     }
