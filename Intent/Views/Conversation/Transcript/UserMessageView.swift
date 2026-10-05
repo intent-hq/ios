@@ -69,7 +69,8 @@ struct UserMessageView: View {
     }
 
     private var bubble: some View {
-        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+        VStack(alignment: .leading, spacing: hookWake != nil || prWake != nil
+            ? Design.Watcher.sectionSpacing : Layout.contentSpacing) {
             attributionHeader
             if agentMessage == nil || isAgentMessageExpanded {
                 messageContents

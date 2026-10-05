@@ -41,6 +41,15 @@ extension Constants.Conversation.Design {
         static let expandedContentIndent = Constants.Conversation.Design.toolIconSize + Self.toolLabelSpacing
     }
 
+    enum Watcher {
+        static let sectionSpacing: CGFloat = 20
+        static let rowSpacing: CGFloat = 12
+        static let attributionSpacing: CGFloat = 4
+        // The disclosure's touch area shares the surrounding spacing, like other transcript controls.
+        static let disclosureHitInset = (Constants.Conversation.Design.minimumTapTarget
+            - Constants.Conversation.Design.toolIconSize) / 2
+    }
+
     enum Composer {
         static let minimumHeight: CGFloat = 56
         static let leadingPadding: CGFloat = 20
