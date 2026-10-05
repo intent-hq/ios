@@ -7,30 +7,24 @@ extension ConversationTranscriptView {
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         let generation = scrollState.initialScrollGeneration
         let ownershipRevision = scrollState.viewportOwnershipRevision
+        // Snapshot hydration, cached heights and workspace inputs on MainActor.
+        // SwiftUI may request these prepared row values on its render thread.
+        let rows = viewModel.filteredMessages.map { message in
+            (id: message.id, content: transcriptMessageRow(
+                for: message,
+                proxy: proxy,
+                dividerAnchorId: dividerAnchorId,
+                generation: generation,
+                ownershipRevision: ownershipRevision
+            ))
+        }
         if viewModel.olderMessagesError != nil || !viewModel.hasOlderMessages {
             olderMessagesRow(proxy: proxy)
                 .id("older-messages")
         }
 
-        ForEach(viewModel.filteredMessages) { message in
-            // One stable lazy-stack target per message. A late divider changes
-            // its height without shifting the identity of all following rows.
-            VStack(spacing: Layout.transcriptRowSpacing) {
-                messageRow(for: message)
-                if message.id == dividerAnchorId {
-                    entryDivider(generation: generation, ownershipRevision: ownershipRevision)
-                }
-            }
-            .id(message.id)
-            .overlay(alignment: .top) { restorationMarker(for: message.id) }
-            .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
-                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
-            } action: { measurement in
-                preserveRowOffsetAfterDividerChange(messageId: message.id, measurement: measurement, proxy: proxy)
-            }
-            .onDisappear {
-                scrollState.viewportAnchor.remove(id: message.id, generation: generation, entryGeneration: scrollState.initialScrollGeneration, ownershipRevision: ownershipRevision)
-            }
+        ForEach(rows, id: \.id) { @Sendable row in
+            row.content
         }
 
         #if !os(visionOS)
@@ -78,6 +72,34 @@ extension ConversationTranscriptView {
         }
     }
 
+    private func transcriptMessageRow(
+        for message: ConversationMessage,
+        proxy: ScrollViewProxy,
+        dividerAnchorId: String?,
+        generation: Int,
+        ownershipRevision: Int
+    ) -> some View {
+        let marker = restorationMarker(for: message.id)
+        // One stable lazy-stack target per message. A late divider changes
+        // its height without shifting the identity of all following rows.
+        return VStack(spacing: Layout.transcriptRowSpacing) {
+            messageRow(for: message)
+            if message.id == dividerAnchorId {
+                entryDivider(dividerAnchorId: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
+            }
+        }
+        .id(message.id)
+        .overlay(alignment: .top) { @Sendable in marker }
+        .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
+            .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
+        } action: { measurement in
+            preserveRowOffsetAfterDividerChange(messageId: message.id, measurement: measurement, proxy: proxy)
+        }
+        .onDisappear {
+            scrollState.viewportAnchor.remove(id: message.id, generation: generation, entryGeneration: scrollState.initialScrollGeneration, ownershipRevision: ownershipRevision)
+        }
+    }
+
     private func restorationMarker(for messageId: String) -> some View {
         // A realized row's top marker lets SwiftUI own the final retained
         // offset even for partial or viewport-sized rows, without layout space.
@@ -88,11 +110,11 @@ extension ConversationTranscriptView {
             .accessibilityHidden(true)
     }
 
-    private func entryDivider(generation: Int, ownershipRevision: Int) -> some View {
+    private func entryDivider(dividerAnchorId: String?, generation: Int, ownershipRevision: Int) -> some View {
         NewMessagesDividerView()
             .id("new-messages-divider")
             .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
-                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: viewModel.newMessagesDividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
+                .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
             } action: { measurement in
                 guard !isUserInteracting, !isFollowing,
                       let geometry = scrollMomentumProxy.restingGeometry,
