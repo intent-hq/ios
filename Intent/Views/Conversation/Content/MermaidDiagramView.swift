@@ -35,6 +35,7 @@ struct MermaidStreamingPlaceholder: View {
             .overlay {
                 RoundedRectangle(cornerRadius: MermaidAppearance.cornerRadius)
                     .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+                    .allowsHitTesting(false)
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("mermaid.streaming")
@@ -53,6 +54,7 @@ private struct MermaidExpandedView: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { dismiss() }
+                            .accessibilityIdentifier("mermaid.done")
                     }
                 }
         }
@@ -65,7 +67,6 @@ private struct MermaidCanvas: View {
     var onExpand: (() -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     @State private var state = MermaidRenderState.loading
-    @State private var showsSource = false
     @State private var retry = UUID()
 
     private var inlineHeight: CGFloat {
@@ -74,72 +75,67 @@ private struct MermaidCanvas: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if showsSource || state.error != nil {
-                sourceView
+            if let error = state.error {
+                Text(error)
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(MermaidAppearance.spacing)
+            } else {
+                diagram
             }
-            MermaidWebView(source: source, dark: colorScheme == .dark, expanded: expanded, state: $state)
-                .id(retry)
-                .frame(height: state.error != nil ? 0 : expanded ? nil : inlineHeight)
-                .frame(maxHeight: expanded && state.error == nil ? .infinity : nil)
-                .overlay {
-                    if state.isLoading {
-                        ProgressView("Drawing diagram")
-                            .interFont(Constants.Typography.bodyXS)
-                    }
-                }
-                .accessibilityHidden(state.isLoading || state.error != nil)
-            controls
+            if state.error != nil || onExpand != nil {
+                Divider().allowsHitTesting(false)
+                controls
+                    .buttonStyle(.plain)
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            }
         }
         .background(Theme.background(for: colorScheme))
         .clipShape(RoundedRectangle(cornerRadius: MermaidAppearance.cornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: MermaidAppearance.cornerRadius)
                 .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+                .allowsHitTesting(false)
         }
     }
 
-    private var sourceView: some View {
-        VStack(alignment: .leading, spacing: MermaidAppearance.spacing) {
-            if let error = state.error {
-                Text(error)
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            }
-            ScrollView([.horizontal, .vertical]) {
-                Text(source)
-                    .font(.footnote.monospaced())
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: MermaidAppearance.maximumInlineHeight)
-            .accessibilityLabel("Diagram source")
-        }
-        .padding(MermaidAppearance.spacing)
-    }
-
-    private var controls: some View {
-        HStack(spacing: MermaidAppearance.spacing) {
-            Button(showsSource ? "Hide source" : "View source", systemImage: "chevron.left.forwardslash.chevron.right") {
-                showsSource.toggle()
-            }
-            .disabled(state.error != nil)
-            Spacer(minLength: 0)
-            if state.error != nil {
-                Button("Try again", systemImage: "arrow.clockwise") {
-                    state = .loading
-                    retry = UUID()
+    private var diagram: some View {
+        MermaidWebView(source: source, dark: colorScheme == .dark, expanded: expanded, state: $state)
+            .id(retry)
+            .frame(height: expanded ? nil : inlineHeight)
+            .frame(maxHeight: expanded ? .infinity : nil)
+            .overlay {
+                if state.isLoading {
+                    ProgressView("Drawing diagram")
+                        .interFont(Constants.Typography.bodyXS)
+                        .allowsHitTesting(false)
                 }
             }
-            if let onExpand {
-                Button("Expand diagram", systemImage: "arrow.up.left.and.arrow.down.right", action: onExpand)
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel("Expand diagram")
+            .accessibilityHidden(state.isLoading)
+    }
+
+    @ViewBuilder
+    private var controls: some View {
+        if state.error != nil {
+            Button {
+                state = .loading
+                retry = UUID()
+            } label: {
+                controlLabel("Try again", systemImage: "arrow.clockwise")
             }
+        } else if let onExpand {
+            Button(action: onExpand) {
+                controlLabel("Full screen", systemImage: "arrow.up.left.and.arrow.down.right")
+            }
+            .accessibilityIdentifier("mermaid.expand")
         }
-        .buttonStyle(.borderless)
-        .interFont(Constants.Typography.bodyXS)
-        .frame(minHeight: Constants.Accessibility.minimumTapTarget)
-        .padding(.horizontal, MermaidAppearance.spacing)
-        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+    }
+
+    private func controlLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget)
+            .contentShape(Rectangle())
     }
 }

@@ -21,7 +21,7 @@ enum MermaidRenderState: Equatable {
     static func message(_ body: Any, revision: String) -> Self? {
         guard let body = body as? [String: Any], body["revision"] as? String == revision else { return nil }
         if body["error"] is String {
-            return .failed("Unable to draw this diagram. You can still read its source.")
+            return .failed("Unable to draw this diagram.")
         }
         guard let height = body["height"] as? Double, height.isFinite, height > 0 else { return nil }
         return .rendered(CGFloat(height))
@@ -57,7 +57,10 @@ struct MermaidWebView: UIViewRepresentable {
         webView.scrollView.backgroundColor = .clear
         webView.scrollView.bounces = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.isDirectionalLockEnabled = false
+        webView.scrollView.bouncesZoom = true
         webView.allowsLinkPreview = false
+        webView.accessibilityIdentifier = "mermaid.webview"
         coordinator.webView = webView
         if let url = Self.pageURL {
             webView.loadFileURL(url, allowingReadAccessTo: Bundle.main.bundleURL)
@@ -95,7 +98,7 @@ struct MermaidWebView: UIViewRepresentable {
             timeoutTask?.cancel()
             publish(.loading)
             guard MermaidWebView.pageURL != nil else {
-                publish(.failed("The diagram renderer is unavailable. You can still read its source."))
+                publish(.failed("The diagram renderer is unavailable."))
                 return
             }
             startTimeout()
@@ -172,7 +175,7 @@ struct MermaidWebView: UIViewRepresentable {
 
         private func fail() {
             timeoutTask?.cancel()
-            publish(.failed("Unable to load this diagram. Try again or read its source."))
+            publish(.failed("Unable to load this diagram. Try again."))
         }
 
         private func publish(_ state: MermaidRenderState) {

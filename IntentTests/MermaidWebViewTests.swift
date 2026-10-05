@@ -33,7 +33,7 @@ struct MermaidWebViewTests {
         }
     }
 
-    @Test func invalidSyntaxReturnsSourceFallback() async throws {
+    @Test func invalidSyntaxReportsFailure() async throws {
         try await withRenderer(source: "not a diagram", dark: false) { _, state in
             #expect(state.error != nil)
             #expect(!state.isLoading)

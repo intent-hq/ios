@@ -97,7 +97,7 @@
       throw new Error('The diagram has no visible content.');
     }
     // Keep text at its measured size. Wide diagrams scroll horizontally instead
-    // of shrinking to fit a phone. WKWebView supplies expanded-view pinch zoom.
+    // of shrinking to fit a phone. WKWebView supplies inline and fullscreen pinch zoom.
     svg.setAttribute('width', String(width));
     svg.setAttribute('height', String(height));
     svg.style.width = `${width}px`;

@@ -58,6 +58,9 @@ body {
   width: max-content;
   min-width: 100vw;
   padding: 12px;
+  touch-action: pan-x pan-y pinch-zoom;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .expanded #diagram {
