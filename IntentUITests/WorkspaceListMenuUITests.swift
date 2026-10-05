@@ -116,6 +116,8 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             showSidebar.tap()
         }
         XCTAssertTrue(menu.waitForExistence(timeout: Self.timeout))
+        let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
+        if allowNotifications.waitForExistence(timeout: 2) { allowNotifications.tap() }
         return app
     }
 
