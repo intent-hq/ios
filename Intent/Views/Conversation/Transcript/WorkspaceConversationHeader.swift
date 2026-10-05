@@ -5,11 +5,12 @@ extension View {
     @ViewBuilder
     func workspacePhoneNavigation<Actions: View>(
         title: String,
+        createdAt: String?,
         onBack: @escaping () -> Void,
         @ViewBuilder actions: @escaping () -> Actions
     ) -> some View {
         #if os(iOS)
-        modifier(WorkspacePhoneNavigationModifier(title: title, onBack: onBack, actions: actions))
+        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, onBack: onBack, actions: actions))
         #else
         self
         #endif
@@ -19,6 +20,7 @@ extension View {
 #if os(iOS)
 private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
     let title: String
+    let createdAt: String?
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -34,6 +36,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
                         backLabel: "Back to workspaces",
                         backIdentifier: "workspaceDetail.back",
                         showsWorkspacePlaceholder: true,
+                        workspaceCreatedAt: createdAt,
                         onBack: onBack,
                         actions: actions
                     )
@@ -67,6 +70,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     let backLabel: LocalizedStringKey
     let backIdentifier: String
     var showsWorkspacePlaceholder = false
+    var workspaceCreatedAt: String?
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
@@ -89,7 +93,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
             .accessibilityIdentifier(backIdentifier)
             VStack(spacing: Design.Header.titleSpacing) {
                 if showsWorkspacePlaceholder {
-                    WorkspaceTitle(title: title) { title in
+                    WorkspaceTitle(title: title, createdAt: workspaceCreatedAt) { title in
                         WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
                     }
                 } else {

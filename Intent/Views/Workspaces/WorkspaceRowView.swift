@@ -137,7 +137,7 @@ struct WorkspaceRowView: View {
 
     @ViewBuilder
     private var title: some View {
-        WorkspaceTitle(title: workspace.title) { title in
+        WorkspaceTitle(title: workspace.title, createdAt: workspace.createdAt) { title in
             Text(title)
                 .interFont(Constants.Typography.bodyM.withFace(.semibold))
                 .tracking(titleTracking)

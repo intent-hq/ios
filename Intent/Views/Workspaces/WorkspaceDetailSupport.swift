@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WorkspaceDetailHeading: View {
     let title: String
+    let createdAt: String?
     let repositoryOwner: String?
     let repositoryName: String?
     var statusMessage: String?
@@ -11,7 +12,7 @@ struct WorkspaceDetailHeading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
-            WorkspaceTitle(title: title, rollingPlaceholderSize: Constants.Typography.heading2.size) { title in
+            WorkspaceTitle(title: title, createdAt: createdAt) { title in
                 Text(title)
                     .interFont(Constants.Typography.heading2)
                     .tracking(WorkspaceDetailStyle.titleTracking)
@@ -207,6 +208,7 @@ struct WorkspaceDetailHeader: View {
     var body: some View {
         WorkspaceDetailHeading(
             title: title,
+            createdAt: workspace?.createdAt,
             repositoryOwner: workspace?.repositoryOwner,
             repositoryName: workspace?.repositoryName,
             statusMessage: workspace?.statusMessage

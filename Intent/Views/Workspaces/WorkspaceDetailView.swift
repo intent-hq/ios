@@ -267,7 +267,11 @@ struct WorkspaceDetailView: View {
             }
         }
         #if !os(visionOS)
-        .workspacePhoneNavigation(title: workspaceTitle, onBack: coordinator.onBackToWorkspaceList) { workspaceActions }
+        .workspacePhoneNavigation(
+            title: workspaceTitle,
+            createdAt: workspace?.createdAt,
+            onBack: coordinator.onBackToWorkspaceList
+        ) { workspaceActions }
         #endif
     }
 }
@@ -286,7 +290,7 @@ private extension WorkspaceDetailView {
 
     var toolbarTitle: some View {
         VStack(spacing: WorkspaceDetailStyle.tabInset) {
-            WorkspaceTitle(title: workspaceTitle) { title in
+            WorkspaceTitle(title: workspaceTitle, createdAt: workspace?.createdAt) { title in
                 Text(title)
                     .interFont(Constants.Typography.bodyXSEmphasized)
             }
