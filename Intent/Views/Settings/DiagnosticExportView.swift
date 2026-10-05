@@ -53,8 +53,13 @@ struct DiagnosticExportView: View {
 
 private struct DiagnosticExportActions: View {
     @ScaledMetric private var iconSize: CGFloat = 17
+    @Environment(\.colorScheme) private var colorScheme
     let model: DiagnosticExportModel
     @Binding var confirmsClear: Bool
+
+    private var isShareDisabled: Bool {
+        model.isWorking || model.preview == nil || model.share != nil
+    }
 
     var body: some View {
         Section {
@@ -65,9 +70,14 @@ private struct DiagnosticExportActions: View {
                 } icon: {
                     icon(.upload)
                 }
+                .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget, alignment: .leading)
+                .contentShape(.rect)
             }
-                .buttonStyle(IntentButtonStyle())
-                .disabled(model.isWorking || model.preview == nil || model.share != nil)
+                .buttonStyle(IntentContentButtonStyle())
+                .foregroundStyle(isShareDisabled
+                    ? Theme.mutedForeground(for: colorScheme)
+                    : Theme.foreground(for: colorScheme))
+                .disabled(isShareDisabled)
                 .accessibilityIdentifier("diagnosticShareZIP")
             Button { model.refresh() } label: {
                 Label {
