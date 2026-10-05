@@ -7,9 +7,9 @@ extension ConversationTranscriptView {
             guard revision == scrollState.viewportOwnershipRevision,
                   !isUserInteracting, !isFollowing,
                   scrollMomentumProxy.scrollView?.window != nil else { return }
-            scrollState.retainViewportMessages(withIDs: Set(viewModel.filteredMessages.map(\.id)))
+            scrollState.retainViewportMessages(withIDs: viewModel.filteredMessageIDs)
             guard let target = scrollState.resumeViewportTarget() else { return }
-            guard viewModel.filteredMessages.contains(where: { $0.id == target }) else {
+            guard viewModel.filteredMessageIDs.contains(target) else {
                 scrollState.retireViewportRestoration()
                 return
             }

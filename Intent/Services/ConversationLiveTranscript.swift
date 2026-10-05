@@ -8,7 +8,27 @@ nonisolated struct InboundJSONValue: @unchecked Sendable {
 @MainActor
 @Observable
 final class ConversationLiveTranscript {
-    var messages: [ConversationMessage] = []
+    var messages: [ConversationMessage] = [] {
+        didSet { messageIDsNeedRefresh = true }
+    }
+    @ObservationIgnored private var cachedMessageIDs: Set<String> = []
+    @ObservationIgnored private var messageIDsNeedRefresh = true
+
+    /// Geometry callbacks share one membership snapshot until messages change.
+    /// Invalidate at the array owner so queued callbacks see deletions even
+    /// before SwiftUI's onChange runs, including same-count replacements.
+    var messageIDs: Set<String> {
+        _ = messages // Keep cached reads observable to SwiftUI consumers.
+        if messageIDsNeedRefresh {
+            let updatedIDs = Set(messages.lazy.map(\.id))
+            // Retain shared Set storage on content-only edits so consumers'
+            // equality guards stay constant-time on subsequent geometry ticks.
+            if updatedIDs != cachedMessageIDs { cachedMessageIDs = updatedIDs }
+            messageIDsNeedRefresh = false
+        }
+        return cachedMessageIDs
+    }
+
     var isStreaming = false {
         didSet {
             guard oldValue != isStreaming else { return }
