@@ -125,12 +125,12 @@ struct MermaidWebView: UIViewRepresentable {
         }
 
         func webView(_: WKWebView, didFail _: WKNavigation?, withError error: Error) {
-            AppLog.userInterface.error("Mermaid navigation failed: \(String(describing: error), privacy: .public)")
+            AppLog.userInterface.error("Mermaid navigation failed: \(String(describing: error))")
             fail()
         }
 
         func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation?, withError error: Error) {
-            AppLog.userInterface.error("Mermaid page load failed: \(String(describing: error), privacy: .public)")
+            AppLog.userInterface.error("Mermaid page load failed: \(String(describing: error))")
             fail()
         }
 
@@ -165,7 +165,7 @@ struct MermaidWebView: UIViewRepresentable {
                     )
                 } catch {
                     guard let self, revision == currentRevision, !Task.isCancelled else { return }
-                    AppLog.userInterface.error("Mermaid JavaScript call failed: \(String(describing: error), privacy: .public)")
+                    AppLog.userInterface.error("Mermaid JavaScript call failed: \(String(describing: error))")
                     fail()
                 }
             }
