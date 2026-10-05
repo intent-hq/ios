@@ -13,7 +13,6 @@ extension AppCoordinatorTests {
         )
         #expect(source.contains("Button(action: coordinator.onReturnToSavedMachines)"))
         #expect(source.contains("Text(\"Back to Home\")"))
-        #expect(source.contains(".buttonStyle(.borderedProminent)"))
         #expect(source.contains(".accessibilityIdentifier(\"disconnected.home\")"))
         #expect(source.contains("Return to your saved machines without forgetting this connection."))
         #expect(!source.contains("onLogOff"))

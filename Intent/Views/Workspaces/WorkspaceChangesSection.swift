@@ -36,7 +36,7 @@ struct WorkspaceChangesSection<Content: View>: View {
             .frame(maxWidth: .infinity, minHeight: CreateWorkspaceFormStyle.controlHeight, alignment: .leading)
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("changes.section.\(identifier)")
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .accessibilityHint(isExpanded ? "Double-tap to collapse this section" : "Double-tap to expand this section")

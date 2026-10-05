@@ -30,7 +30,7 @@ struct ConnectionPairingButtons: View {
                 .accessibilityIdentifier("\(accessibilityPrefix).manual")
             }
         }
-        .buttonStyle(ConnectionSheetButtonStyle())
+        .buttonStyle(IntentContentButtonStyle())
         .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
         .background(Constants.Connections.surface(for: colorScheme))
         .clipShape(.rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius))

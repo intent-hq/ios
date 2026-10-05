@@ -9,6 +9,7 @@ struct CreateWorkspaceNavigationButton: View {
     var identifier = "creation.branchBack"
     let onAction: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
     @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
 
     var body: some View {
@@ -19,10 +20,12 @@ struct CreateWorkspaceNavigationButton: View {
                 .frame(width: iconSize, height: iconSize)
                 .padding(CreateWorkspaceFormStyle.controlVerticalPadding)
                 .frame(minWidth: CreateWorkspaceFormStyle.controlHeight, minHeight: CreateWorkspaceFormStyle.controlHeight)
-                .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))
+                .foregroundStyle(isEnabled
+                    ? CreateWorkspaceFormStyle.foreground(for: colorScheme)
+                    : CreateWorkspaceFormStyle.disabledForeground(for: colorScheme))
                 .background { WorkspaceControlSurface() }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(control == .back ? "Back" : "Close")
         .accessibilityIdentifier(identifier)
     }
@@ -39,6 +42,7 @@ struct CreateWorkspaceSubmitButton: View {
     let isDisabled: Bool
     let onCreate: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var iconSize = CreateWorkspaceRepoStyle.iconSize
     @State private var labelSize: CGSize = .zero
 
@@ -50,7 +54,7 @@ struct CreateWorkspaceSubmitButton: View {
         Button(action: onCreate) {
             morphingLabel
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(isDisabled || isCreating)
         .accessibilityLabel(isCreating ? "Creating workspace" : "Create")
         .accessibilityIdentifier("creation.create")
@@ -71,11 +75,16 @@ struct CreateWorkspaceSubmitButton: View {
         }
         .frame(width: isCreating ? diameter : (labelSize.width > 0 ? labelSize.width : nil))
         .frame(height: max(diameter, labelSize.height))
-        .foregroundStyle(CreateWorkspaceFormStyle.primaryForeground)
-        .background(CreateWorkspaceFormStyle.primary, in: .rect(
-            cornerRadius: isCreating ? diameter / 2 : CreateWorkspaceFormStyle.cornerRadius
-        ))
-        .opacity(isDisabled && !isCreating ? 0.5 : 1)
+        .foregroundStyle(isDisabled && !isCreating
+            ? CreateWorkspaceFormStyle.disabledForeground(for: colorScheme)
+            : CreateWorkspaceFormStyle.primaryForeground)
+        .background {
+            RoundedRectangle(cornerRadius: isCreating ? diameter / 2 : CreateWorkspaceFormStyle.cornerRadius)
+                .fill(isDisabled && !isCreating
+                    ? CreateWorkspaceFormStyle.disabledBackground(for: colorScheme)
+                    : CreateWorkspaceFormStyle.primary)
+                .modifier(WorkspaceControlShadow())
+        }
         .accessibilityHidden(true)
         .animation(reduceMotion ? nil : .spring(duration: Motion.duration, bounce: Motion.bounce), value: isCreating)
     }

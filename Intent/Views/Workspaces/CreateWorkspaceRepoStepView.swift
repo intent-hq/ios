@@ -37,13 +37,14 @@ struct CreateWorkspaceNextButton: View {
                 .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
                 .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
                 .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
-                .foregroundStyle(isDisabled ? CreateWorkspaceRepoStyle.foreground(for: colorScheme) : CreateWorkspaceFormStyle.primaryForeground)
-                .background(isDisabled ? CreateWorkspaceRepoStyle.card(for: colorScheme) : CreateWorkspaceFormStyle.primary, in: .rect(
-                    cornerRadius: CreateWorkspaceFormStyle.cornerRadius
-                ))
-                .opacity(isDisabled ? 0.5 : 1)
+                .foregroundStyle(isDisabled ? CreateWorkspaceFormStyle.disabledForeground(for: colorScheme) : CreateWorkspaceFormStyle.primaryForeground)
+                .background {
+                    RoundedRectangle(cornerRadius: CreateWorkspaceFormStyle.cornerRadius)
+                        .fill(isDisabled ? CreateWorkspaceFormStyle.disabledBackground(for: colorScheme) : CreateWorkspaceFormStyle.primary)
+                        .modifier(WorkspaceControlShadow())
+                }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(isDisabled)
         .accessibilityLabel("Next")
         .accessibilityIdentifier("creation.next")

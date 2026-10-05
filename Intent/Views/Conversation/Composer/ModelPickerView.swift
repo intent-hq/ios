@@ -23,8 +23,9 @@ struct ModelPickerView: View {
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    IntentIconButton(icon: .close, label: "Cancel") { dismiss() }
                 }
+                .intentToolbarSurface()
             }
             .task {
                 await viewModel.refreshSelectableModels()
@@ -48,6 +49,7 @@ struct ModelPickerView: View {
             Button("Retry") {
                 Task { await viewModel.refreshSelectableModels() }
             }
+            .buttonStyle(IntentButtonStyle())
             .interFont(Constants.Typography.bodyS)
         }
     }
@@ -90,7 +92,9 @@ struct ModelPickerView: View {
                     selectionIndicator
                 }
             }
+            .contentShape(.rect)
         }
+        .buttonStyle(IntentContentButtonStyle())
     }
 
     private var selectionIndicator: some View {

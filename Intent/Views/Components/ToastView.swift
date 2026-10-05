@@ -11,10 +11,11 @@ struct ToastView: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: Constants.Toast.contentSpacing) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title2)
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(Constants.Pairing.onAccent, Constants.Pairing.accent)
+                Image(.checkCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
+                    .foregroundStyle(Constants.Pairing.accent)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Constants.Toast.textSpacing) {
@@ -39,7 +40,7 @@ struct ToastView: View {
             .padding(.vertical, Constants.Toast.verticalPadding)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: Constants.Toast.cornerRadius, style: .continuous))
         .shadow(

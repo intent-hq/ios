@@ -81,7 +81,7 @@ private struct PlainTaskRow: View {
                             - Constants.Notes.Content.taskIconSize
                     ) / 2))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Change status for \(line.text)")
             .accessibilityValue(line.markerStatus.label)
             MarkdownTextView(text: line.text, workspaceId: workspaceId)
@@ -156,6 +156,7 @@ private struct LinkedTaskCardRow: View {
                     minHeight: Constants.Accessibility.minimumTapTarget
                 )
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Change status for \(title)")
         .accessibilityValue(status.label)
     }
@@ -168,9 +169,12 @@ private struct LinkedTaskCardRow: View {
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
+                Image(.chevronRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Constants.Notes.Content.taskIconSize, height: Constants.Notes.Content.taskIconSize)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
             }
             .frame(
                 maxWidth: .infinity,
@@ -179,7 +183,7 @@ private struct LinkedTaskCardRow: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Open task \(title)")
     }
 }

@@ -148,7 +148,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                     .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 Button("Retry", action: onRetryProviders)
-                    .interFont(Constants.Typography.bodyS)
+                    .buttonStyle(IntentButtonStyle(variant: .secondary))
             } else if isLoadingProviders, providers.isEmpty {
                 ProgressView {
                     Text("Loading providers...").interFont(Constants.Typography.bodyS)
@@ -185,7 +185,7 @@ struct CreateWorkspaceSpecialistStepView: View {
         } label: {
             CreateWorkspaceChoiceLabel(title: selectedSpecialist?.name ?? String(localized: "None"))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Specialist")
         .accessibilityValue(selectedSpecialist?.name ?? String(localized: "None"))
         .accessibilityIdentifier("creation.specialistPicker")
@@ -224,7 +224,7 @@ struct CreateWorkspaceSpecialistStepView: View {
         } label: {
             CreateWorkspaceChoiceLabel(title: selectedReasoningEffort ?? String(localized: "Auto"))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(reasoningLevels.isEmpty || isLoadingProviders)
         .accessibilityLabel("Reasoning")
         .accessibilityValue(selectedReasoningEffort ?? String(localized: "Auto"))

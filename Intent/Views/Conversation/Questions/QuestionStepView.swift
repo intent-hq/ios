@@ -16,6 +16,7 @@ struct QuestionStepView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @ScaledMetric(relativeTo: .caption) private var actionIconSide: CGFloat = 12
     @ScaledMetric(relativeTo: .caption) private var checkboxSide =
         Constants.Conversation.QuestionWizard.checkboxSide
     @State private var freeTextFocused = false
@@ -84,7 +85,7 @@ struct QuestionStepView: View {
             .overlay(optionBorder(selected: selected))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(option.label)
         .accessibilityValue(selected ? "Selected" : "Not selected")
     }
@@ -109,8 +110,10 @@ struct QuestionStepView: View {
             .multilineTextAlignment(.leading)
             Spacer(minLength: 0)
             if !isMulti {
-                Image(systemName: "arrow.right")
-                    .font(.caption)
+                Image(.arrowRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: actionIconSide, height: actionIconSide)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.secondaryLabelOpacity))
                     .accessibilityHidden(true)
             }
@@ -160,8 +163,10 @@ struct QuestionStepView: View {
             )
             .overlay {
                 if selected {
-                    Image(systemName: "checkmark")
-                        .font(.caption.weight(.bold))
+                    Image(.check)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: actionIconSide, height: actionIconSide)
                         .foregroundStyle(.white)
                         .accessibilityHidden(true)
                 }
@@ -194,14 +199,18 @@ struct QuestionStepView: View {
     /// is shown only where bare Return actually submits.
     private var otherField: some View {
         HStack(spacing: Layout.otherFieldSpacing) {
-            Image(systemName: "pencil")
-                .font(.caption)
+            Image(.edit)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.secondaryLabelOpacity))
                 .accessibilityHidden(true)
             freeTextEditor
             if KeyCommandTextView.returnSubmitsNow {
-                Image(systemName: "return")
-                    .font(.caption)
+                Image(.enter)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: actionIconSide, height: actionIconSide)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.returnHintOpacity))
                     .accessibilityHidden(true)
             }

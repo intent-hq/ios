@@ -36,6 +36,7 @@ struct WorkspaceFileDiffView: View {
                 Text(errorMessage)
             } actions: {
                 Button("Retry") { Task { await load() } }
+                    .buttonStyle(IntentButtonStyle(variant: .secondary))
             }
         } else if hunks.isEmpty {
             ContentUnavailableView {

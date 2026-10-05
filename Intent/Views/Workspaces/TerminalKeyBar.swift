@@ -80,19 +80,22 @@ struct TerminalKeyBar: View {
 
     private var arrowKeys: some View {
         HStack(spacing: TerminalAppearance.groupSpacing) {
-            arrow(.left, image: "arrow.left", label: "Left arrow")
-            arrow(.up, image: "arrow.up", label: "Up arrow")
-            arrow(.down, image: "arrow.down", label: "Down arrow")
-            arrow(.right, image: "arrow.right", label: "Right arrow")
+            arrow(.left, image: .arrowLeft, label: "Left arrow")
+            arrow(.up, image: .arrowUp, label: "Up arrow")
+            arrow(.down, image: .arrowDown, label: "Down arrow")
+            arrow(.right, image: .arrowRight, label: "Right arrow")
         }
         .padding(.horizontal, TerminalAppearance.groupInset)
         .modifier(TerminalControlSurface())
         .disabled(!isEnabled)
     }
 
-    private func arrow(_ direction: MobileTerminalControls.Arrow, image: String, label: String) -> some View {
+    private func arrow(_ direction: MobileTerminalControls.Arrow, image: ImageResource, label: String) -> some View {
         Button { controls.arrow(direction) } label: {
-            Image(systemName: image)
+            Image(image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: TerminalAppearance.keyFontSize, height: TerminalAppearance.keyFontSize)
                 .frame(width: TerminalAppearance.controlSize, height: TerminalAppearance.controlSize)
         }
         .buttonStyle(TerminalControlStyle())

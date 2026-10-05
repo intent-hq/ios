@@ -141,7 +141,7 @@ struct WorkspaceTransferSheet: View {
             } label: {
                 CreateWorkspaceChoiceLabel(title: selectedDestination?.displayName ?? "Choose a machine")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .disabled(destinations.isEmpty)
             .accessibilityLabel("Destination")
             .accessibilityValue(selectedDestination?.displayName ?? "Choose a machine")

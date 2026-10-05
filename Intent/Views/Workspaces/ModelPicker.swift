@@ -16,12 +16,23 @@ struct ModelPicker: View {
                 } label: {
                     CreateWorkspaceChoiceLabel(title: selectedModel?.name ?? daemonDefaultLabel)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Model")
                 .accessibilityValue(selectedModel?.name ?? daemonDefaultLabel)
                 .accessibilityIdentifier("creation.modelPicker")
             } else {
-                picker.pickerStyle(.menu)
+                Menu {
+                    picker.pickerStyle(.inline)
+                } label: {
+                    HStack {
+                        Text("Model").interFont(Constants.Typography.bodyS)
+                        CreateWorkspaceChoiceLabel(title: selectedModel?.name ?? daemonDefaultLabel)
+                    }
+                }
+                .buttonStyle(IntentContentButtonStyle())
+                .accessibilityLabel("Model")
+                .accessibilityValue(selectedModel?.name ?? daemonDefaultLabel)
+                .accessibilityIdentifier("creation.modelPicker")
             }
         }
     }

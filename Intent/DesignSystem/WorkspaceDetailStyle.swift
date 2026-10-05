@@ -117,7 +117,7 @@ struct WorkspaceContentTabs: View {
                     : WorkspaceDetailStyle.foreground(for: colorScheme))
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .matchedGeometryEffect(id: value, in: selectionAnimation)
         .accessibilityAddTraits(selection == value ? .isSelected : [])
     }

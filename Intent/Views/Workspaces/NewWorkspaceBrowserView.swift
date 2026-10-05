@@ -16,12 +16,15 @@ struct NewWorkspaceBrowserView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    IntentIconButton(icon: .close, label: "Cancel") { dismiss() }
                 }
+                .intentToolbarSurface()
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Open", action: create)
+                        .buttonStyle(IntentButtonStyle())
                         .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+                .intentToolbarSurface()
             }
             .onAppear { addressFocused = true }
         }

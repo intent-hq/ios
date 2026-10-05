@@ -24,6 +24,7 @@ struct WorkspaceScriptsView: View {
                     VStack(alignment: .leading) {
                         Text(error).interFont(Constants.Typography.bodyXS)
                         Button("Retry") { Task { await store.refresh(workspaceId: workspaceId) } }
+                            .buttonStyle(IntentButtonStyle(variant: .secondary))
                             .disabled(!store.isConnected)
                     }
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -45,7 +46,7 @@ struct WorkspaceScriptsMenu: View {
                     Button {
                         Task { await store.launch(script) }
                     } label: {
-                        Label(script.name, systemImage: script.detectedURL == nil ? "play" : "globe")
+                        Label { Text(script.name) } icon: { Image(script.detectedURL == nil ? .play : .globe) }
                     }
                     .disabled(!store.isConnected || store.isLaunching(script) || store.isUpdating(script))
                     .accessibilityIdentifier("workspace.script.menu.\(script.id)")

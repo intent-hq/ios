@@ -167,7 +167,7 @@ struct ConnectionFailureView: View {
                     .frame(maxWidth: .infinity, minHeight: Constants.ConnectionFailure.controlHeight, alignment: .leading)
                     .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
         }
         .foregroundStyle(Constants.Connections.mutedForeground(for: colorScheme))
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -352,7 +352,7 @@ extension ConnectionFailureView {
                 isCurrentWindow: false
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
     }
 
     private var failureTitle: some View {

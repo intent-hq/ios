@@ -7,6 +7,7 @@ extension ConversationTranscriptView {
             Button("Couldn't load earlier messages — Retry") {
                 requestOlderMessages(proxy: proxy)
             }
+            .buttonStyle(IntentContentButtonStyle())
             .font(.footnote)
             .frame(maxWidth: .infinity)
             .accessibilityIdentifier("transcript.historyRetry")

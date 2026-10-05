@@ -80,14 +80,14 @@ struct GitHubRepoPickerView: View {
 
     private var newRepositoryButton: some View {
         Button(action: onCreateRepository) {
-            Image(systemName: "plus")
+            Image(.addIcon)
                 .resizable()
                 .scaledToFit()
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                 .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("New Repository")
         .accessibilityIdentifier("creation.newRepository")
     }
@@ -258,7 +258,7 @@ private struct GitHubRepoRow: View {
             .background(isSelected ? CreateWorkspaceRepoStyle.card(for: colorScheme) : .clear, in: .rect(cornerRadius: CreateWorkspaceFormStyle.cornerRadius))
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("creation.repository.\(repo.fullName)")
     }

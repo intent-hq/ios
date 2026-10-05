@@ -18,6 +18,7 @@ struct AgentMessageAttributionView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .caption2) private var disclosureIconSide: CGFloat = 11
 
     var body: some View {
         Group {
@@ -57,7 +58,7 @@ struct AgentMessageAttributionView: View {
     private var senderIdentity: some View {
         if let onOpenAgent {
             Button(action: onOpenAgent) { identity }
-                .buttonStyle(.plain)
+                .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Open \(attribution.displayName)'s conversation")
         } else {
             identity
@@ -84,14 +85,16 @@ struct AgentMessageAttributionView: View {
                         .truncationMode(.tail)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption2.weight(.semibold))
+                Image(isExpanded ? .chevronDown : .chevronRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: disclosureIconSide, height: disclosureIconSide)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .fixedSize(horizontal: workspaceDesign, vertical: workspaceDesign)
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(preview.isEmpty ? "sent a message" : "sent a message: \(preview)")
         .accessibilityValue(isExpanded ? "expanded" : "collapsed")
     }

@@ -122,7 +122,7 @@ struct ConnectionLossOverlay: View {
             .foregroundStyle(Color(.connectionLossActionForeground))
             .background(.white, in: .rect(cornerRadius: Constants.Root.reconnectPanelCornerRadius))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityHint("Return to your saved machines without forgetting this connection.")
         .accessibilityIdentifier("connection-loss.home")
     }

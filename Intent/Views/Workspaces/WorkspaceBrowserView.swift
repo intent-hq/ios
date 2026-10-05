@@ -63,8 +63,8 @@ struct WorkspaceBrowserView: View {
     private var addressBar: some View {
         VStack(alignment: .leading, spacing: BrowserAppearance.labelSpacing) {
             HStack(spacing: BrowserAppearance.labelSpacing) {
-                navigationButton("Back", systemImage: "chevron.left", isEnabled: page.canGoBack, action: page.goBack)
-                navigationButton("Forward", systemImage: "chevron.right", isEnabled: page.canGoForward, action: page.goForward)
+                navigationButton("Back", icon: .chevronLeft, isEnabled: page.canGoBack, action: page.goBack)
+                navigationButton("Forward", icon: .chevronRight, isEnabled: page.canGoForward, action: page.goForward)
                 TextField("Enter a URL", text: $addressInput)
                     .interFont(Constants.Typography.bodyS)
                     .keyboardType(.URL)
@@ -78,7 +78,7 @@ struct WorkspaceBrowserView: View {
                 if page.isLoading {
                     IntentLoadingIndicator(label: "Loading page")
                 }
-                navigationButton("Reload", systemImage: "arrow.clockwise", isEnabled: isConnected, action: reloadPage)
+                navigationButton("Reload", icon: .clockwiseArrow, isEnabled: isConnected, action: reloadPage)
             }
             .padding(.horizontal, BrowserAppearance.labelSpacing)
             .frame(minHeight: Constants.WorkspaceSearch.buttonSize)
@@ -91,13 +91,19 @@ struct WorkspaceBrowserView: View {
         .padding(.bottom, BrowserAppearance.rowSpacing)
     }
 
-    private func navigationButton(_ title: String, systemImage: String, isEnabled: Bool, action: @escaping () -> Void) -> some View {
+    private func navigationButton(_ title: String, icon: ImageResource, isEnabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
+                .foregroundStyle(isEnabled
+                    ? Theme.foreground(for: colorScheme)
+                    : CreateWorkspaceFormStyle.disabledForeground(for: colorScheme))
                 .frame(width: BrowserAppearance.controlSize, height: BrowserAppearance.controlSize)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(title)
         .disabled(!isEnabled)
     }
@@ -143,8 +149,9 @@ struct WorkspaceBrowserView: View {
     @ToolbarContentBuilder
     private var browserToolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button("Done") { dismiss() }
+            IntentIconButton(icon: .close, label: "Done") { dismiss() }
         }
+        .intentToolbarSurface()
     }
 
     private func unavailable(_ message: String) -> some View {
@@ -158,6 +165,7 @@ struct WorkspaceBrowserView: View {
             Text(message).interFont(Constants.Typography.bodyS)
         } actions: {
             Button("Try again") { retry = UUID() }
+                .buttonStyle(IntentButtonStyle(variant: .secondary))
                 .disabled(!isConnected)
         }
     }

@@ -19,6 +19,7 @@ struct SettingsHeader: View {
                     .frame(width: Constants.Accessibility.minimumTapTarget, height: Constants.Accessibility.minimumTapTarget)
                     .contentShape(.rect)
             }
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityIdentifier("settings.close")
             Text("Settings")
                 .interFont(Constants.Typography.heading2)

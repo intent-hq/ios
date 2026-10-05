@@ -9,6 +9,7 @@ struct SpecialistStepView: View {
     let onSelect: (SpecialistInfo) -> Void
     let onDismiss: () -> Void
     let onNext: () -> Void
+    @ScaledMetric(relativeTo: .body) private var selectionIconSize: CGFloat = 17
 
     var body: some View {
         ZStack {
@@ -19,17 +20,15 @@ struct SpecialistStepView: View {
         .toolbarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                }
-                .accessibilityLabel("Close")
+                IntentIconButton(icon: .close, label: "Close", action: onDismiss)
             }
+            .intentToolbarSurface()
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Next", action: onNext)
+                    .buttonStyle(IntentButtonStyle())
                     .disabled(selectedSpecialist == nil)
-                    .interFont(Constants.Typography.bodyS.withFace(.semibold))
             }
+            .intentToolbarSurface()
         }
     }
 
@@ -67,6 +66,7 @@ struct SpecialistStepView: View {
             .listRowBackground(Theme.card(for: colorScheme))
             ForEach(specialists) { specialist in
                 Button { onSelect(specialist) } label: { specialistRow(specialist) }
+                    .buttonStyle(IntentContentButtonStyle())
                     .listRowBackground(Theme.card(for: colorScheme))
                     .accessibilityAddTraits(
                         selectedSpecialist?.id == specialist.id ? .isSelected : []
@@ -100,9 +100,11 @@ struct SpecialistStepView: View {
             Spacer()
 
             if selectedSpecialist?.id == specialist.id {
-                Image(systemName: "checkmark")
+                Image(.check)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: selectionIconSize, height: selectionIconSize)
                     .foregroundStyle(Theme.primary(for: colorScheme))
-                    .fontWeight(.semibold)
                     .accessibilityHidden(true)
             }
         }

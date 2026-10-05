@@ -30,7 +30,7 @@ extension View {
     func visionCardRowButton(cornerRadius: CGFloat) -> some View {
         #if os(visionOS)
         return self
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .frame(minHeight: Constants.Accessibility.visionListRowMinimumHeight)
             .contentShape(.hoverEffect, .rect(cornerRadius: cornerRadius))
             .hoverEffect()

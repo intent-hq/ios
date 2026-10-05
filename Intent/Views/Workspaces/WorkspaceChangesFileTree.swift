@@ -59,7 +59,7 @@ struct WorkspaceChangesFileTree: View {
         return Button { toggleDirectory(node.path) } label: {
             directoryLabel(row, isCollapsed: isCollapsed)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Folder \(node.path), \(node.fileCount) files")
         .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
         .accessibilityHint(isCollapsed ? "Double-tap to expand this folder" : "Double-tap to collapse this folder")
@@ -68,9 +68,10 @@ struct WorkspaceChangesFileTree: View {
 
     private func directoryLabel(_ row: WorkspaceChangeTree.TreeRow, isCollapsed: Bool) -> some View {
         HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Image(systemName: "folder")
-                .font(.system(size: iconSize))
-                .frame(width: iconSize)
+            Image(.folder)
+                .resizable()
+                .scaledToFit()
+                .frame(width: iconSize, height: iconSize)
                 .foregroundStyle(secondary)
                 .accessibilityHidden(true)
             Text(row.depth >= Layout.maximumIndentationDepth ? row.node.path : row.node.name)
@@ -98,16 +99,17 @@ struct WorkspaceChangesFileTree: View {
         Button { onSelect(file) } label: {
             fileLabel(file, name: name)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityHint("Opens the diff for \(file.path)")
         .accessibilityIdentifier("changes.file.\(identifier).\(file.path)")
     }
 
     private func fileLabel(_ file: WorkspaceChange, name: String) -> some View {
         HStack(alignment: .top, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Image(systemName: "doc.text")
-                .font(.system(size: iconSize))
-                .frame(width: iconSize)
+            Image(.file)
+                .resizable()
+                .scaledToFit()
+                .frame(width: iconSize, height: iconSize)
                 .foregroundStyle(secondary)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {

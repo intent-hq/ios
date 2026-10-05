@@ -121,11 +121,12 @@ struct WorkspaceSwipeRow: View {
                 minimumHeight: badgeSize.height,
                 leadingSwipeProgress: leadingProgress
             ) { statusCenter = $0 }
+                .opacity(isUpdating ? Constants.ConnectionSheet.placeholderOpacity : 1)
                 .overlay(alignment: .trailing) {
                     if isUpdating { ProgressView().padding(.trailing) }
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(isUpdating)
         .accessibilityIdentifier("workspace.row.\(workspace.id)")
         .accessibilityValue(WorkspaceStatusIconView.accessibilitySummary(for: workspace))

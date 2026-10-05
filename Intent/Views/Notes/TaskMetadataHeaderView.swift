@@ -135,6 +135,7 @@ struct TaskMetadataHeaderView: View {
             .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
             .frame(minHeight: Constants.Accessibility.minimumTapTarget)
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Change task status")
         .accessibilityValue((note.taskDisplayStatus ?? .unknown).label)
     }
@@ -227,7 +228,7 @@ private struct TaskRelationChip: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Open related task \(title)")
         .accessibilityValue(
             variant == .conflict ? "Conflict" : unmet ? "Unmet dependency" : "Dependency"

@@ -152,7 +152,7 @@ struct NoteRowView: View {
                 .padding(.vertical, NoteRowLayout.tapTargetPadding)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .padding(.vertical, -NoteRowLayout.tapTargetPadding)
         .accessibilityLabel("Child notes for \(note.title)")
         .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
@@ -179,7 +179,7 @@ struct NoteRowView: View {
             .padding(.vertical, NoteRowLayout.tapTargetPadding)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("workspace.note.\(note.id)")
         .padding(.vertical, -NoteRowLayout.tapTargetPadding)
     }
