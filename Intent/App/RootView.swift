@@ -151,7 +151,10 @@ struct RootView: View {
                     WorkspaceListSidebar(
                         workspaceStore: session.workspaceStore,
                         isSearching: $isSearchingWorkspaces
-                    )
+                    ) {
+                        showingConnectionSwitcher = false
+                        if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
+                    }
                     .navigationSplitViewColumnWidth(
                         min: Constants.Root.sidebarMinimumWidth,
                         ideal: Constants.Root.sidebarIdealWidth,

@@ -140,6 +140,12 @@ struct WorkspaceListView: View {
         .refreshable {
             await workspaceStore.fetchAll()
         }
+        .overlay {
+            if viewModel.filteredWorkspaces.isEmpty, !viewModel.hasSearchQuery,
+               !(viewModel.isLoading && viewModel.workspaces.isEmpty) {
+                emptyState
+            }
+        }
     }
 
     private func prepareConnectionSwitcher() {
@@ -149,15 +155,13 @@ struct WorkspaceListView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label {
-                Text("No Workspaces").interFont(Constants.Typography.bodyM.withFace(.semibold))
-            } icon: {
-                Image(systemName: "rectangle.stack.badge.plus")
-            }
-        } description: {
-            Text("Create one in the desktop app.").interFont(Constants.Typography.bodyS)
+        Button("New workspace") {
+            showingConnectionSwitcher = false
+            if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
         }
+        .buttonStyle(IntentButtonStyle())
+        .disabled(!coordinator.canCreateWorkspace)
+        .accessibilityIdentifier("workspaces.empty.create")
     }
 
     private var pageHeader: some View {
@@ -202,8 +206,6 @@ struct WorkspaceListView: View {
         } else if viewModel.filteredWorkspaces.isEmpty {
             if viewModel.hasSearchQuery {
                 ContentUnavailableView.search
-            } else {
-                emptyState
             }
         } else {
             workspaceSections
