@@ -173,8 +173,8 @@
         diagram.replaceChildren(svg);
         renderedGeneration = currentGeneration;
         renderedRevision = revision;
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        if (isCurrent()) reportHeight();
+        // WebKit can suspend animation frames before a fullscreen view is visible.
+        reportHeight();
       } catch (error) {
         if (!isCurrent()) return;
         diagram.replaceChildren();

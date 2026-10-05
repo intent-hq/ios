@@ -131,6 +131,27 @@ try {
       await page.setViewportSize({ width: 700, height: 800 });
       const expanded = await render(diagrams.flowchart, { expanded: true, dark: true });
       assert.ok(expanded.message.height >= 800);
+      const withoutAnimationFrames = await page.evaluate(async source => {
+        const original = window.requestAnimationFrame;
+        window.requestAnimationFrame = () => 0;
+        let timeout;
+        try {
+          const deadline = new Promise((_, reject) => {
+            timeout = setTimeout(() => reject(new Error('Rendering must finish without animation frames')), 5000);
+          });
+          for (const revision of ['unpainted-first', 'unpainted-second']) {
+            await Promise.race([window.renderMermaid({ source, revision, expanded: true }), deadline]);
+          }
+          return window.messages.filter(message => message.revision?.startsWith('unpainted-'));
+        } finally {
+          clearTimeout(timeout);
+          window.requestAnimationFrame = original;
+        }
+      }, diagrams.flowchart);
+      for (const revision of ['unpainted-first', 'unpainted-second']) {
+        assert.ok(withoutAnimationFrames.some(message => message.revision === revision && message.height >= 800 && !message.error),
+          'Offscreen rendering must report completion and leave the queue usable');
+      }
       assert.match(await page.locator('meta[name=viewport]').getAttribute('content'), /user-scalable=yes/);
       assert.ok(await page.locator('marker[data-diagram-chevron=true]').count() > 0);
       assert.deepEqual(errors, [], 'No unhandled browser errors');
