@@ -48,7 +48,7 @@ private final class WorkspaceTitleShimmerView: UIView {
     private static let shimmerDuration: CFTimeInterval = 4
     private static let baseOpacity: CGFloat = 0.62
     private static let peakOpacity: CGFloat = 0.85
-    private static let sweepEnd: NSNumber = 0.8
+    private static let sweepEnd = 0.8
     private static let gradientWidthMultiplier: CGFloat = 3
     private let gradient = CAGradientLayer()
     private var isAnimating = false
@@ -60,10 +60,10 @@ private final class WorkspaceTitleShimmerView: UIView {
         gradient.startPoint = CGPoint(x: 0, y: 0.5)
         gradient.endPoint = CGPoint(x: 1, y: 0.5)
         gradient.locations = [
-            NSNumber(value: 1 / Double(Self.gradientWidthMultiplier)),
+            1 / Double(Self.gradientWidthMultiplier),
             0.5,
-            NSNumber(value: 2 / Double(Self.gradientWidthMultiplier))
-        ]
+            2 / Double(Self.gradientWidthMultiplier)
+        ].map { .init(value: $0) }
         layer.addSublayer(gradient)
     }
 
@@ -109,7 +109,7 @@ private final class WorkspaceTitleShimmerView: UIView {
         guard gradient.animation(forKey: Self.animationKey) == nil else { return }
         let shimmer = CAKeyframeAnimation(keyPath: "transform.translation.x")
         shimmer.values = [-bounds.width, bounds.width, bounds.width]
-        shimmer.keyTimes = [0, Self.sweepEnd, 1]
+        shimmer.keyTimes = [0, Self.sweepEnd, 1].map { .init(value: $0) }
         shimmer.duration = Self.shimmerDuration
         shimmer.repeatCount = .infinity
         gradient.add(shimmer, forKey: Self.animationKey)
