@@ -221,14 +221,20 @@ struct WorkspaceListView: View {
             }
             workspaceRows(viewModel.filteredWorkspaces)
         case .repo:
-            ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
-                groupHeading(repoName)
-                workspaceRows(workspaces, showRepo: false)
+            let groups = viewModel.groupedByRepo.map { repoName, workspaces in
+                (id: repoName, heading: groupHeading(repoName), rows: workspaceRows(workspaces, showRepo: false))
+            }
+            ForEach(groups, id: \.id) { @Sendable group in
+                group.heading
+                group.rows
             }
         case .status:
-            ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
-                groupHeading(statusLabel)
-                workspaceRows(workspaces, usesVisionHitTarget: false)
+            let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
+                (id: statusLabel, heading: groupHeading(statusLabel), rows: workspaceRows(workspaces, usesVisionHitTarget: false))
+            }
+            ForEach(groups, id: \.id) { @Sendable group in
+                group.heading
+                group.rows
             }
         }
     }
@@ -238,10 +244,13 @@ struct WorkspaceListView: View {
         showRepo: Bool = true,
         usesVisionHitTarget: Bool = true
     ) -> some View {
-        ForEach(Array(workspaces.enumerated()), id: \.element.id) { index, workspace in
+        // Snapshot store state and bindings here, not in SwiftUI's async row provider.
+        let rows = workspaces.enumerated().map { index, workspace in
             let nextId = index + 1 < workspaces.count ? workspaces[index + 1].id : nil
-            workspaceButton(workspace, nextWorkspaceId: nextId, showRepo: showRepo, usesVisionHitTarget: usesVisionHitTarget)
+            let content = workspaceButton(workspace, nextWorkspaceId: nextId, showRepo: showRepo, usesVisionHitTarget: usesVisionHitTarget)
+            return (id: workspace.id, content: content)
         }
+        return ForEach(rows, id: \.id) { @Sendable row in row.content }
     }
 
     private func groupHeading(_ title: String) -> some View {

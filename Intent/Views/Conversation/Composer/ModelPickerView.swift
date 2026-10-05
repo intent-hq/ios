@@ -53,32 +53,41 @@ struct ModelPickerView: View {
     }
 
     private func modelList(_ models: [ModelInfo]) -> some View {
-        List {
-            let grouped = Dictionary(grouping: models, by: \.provider)
-            let sortedProviders = grouped.keys.sorted()
+        let selectedModelId = viewModel.currentModelId
+        let grouped = Dictionary(grouping: models, by: \.provider)
+        let sections = grouped.keys.sorted().map { provider in
+            let rows = (grouped[provider] ?? []).map { model in
+                (id: model.id, content: modelButton(model, isSelected: selectedModelId == model.id))
+            }
+            let section = Section(header: Text(provider).interFont(Constants.Typography.eyebrow)) {
+                ForEach(rows, id: \.id) { @Sendable row in
+                    row.content
+                }
+            }
+            return (id: provider, content: section)
+        }
+        // Prepare row values on MainActor before SwiftUI requests them off-main.
+        return List {
+            ForEach(sections, id: \.id) { @Sendable section in
+                section.content
+            }
+        }
+    }
 
-            ForEach(sortedProviders, id: \.self) { provider in
-                Section(header: Text(provider).interFont(Constants.Typography.eyebrow)) {
-                    if let models = grouped[provider] {
-                        ForEach(models) { model in
-                            Button {
-                                Task {
-                                    await viewModel.setModel(model.id)
-                                    dismiss()
-                                }
-                            } label: {
-                                HStack {
-                                    Text(model.name)
-                                        .interFont(Constants.Typography.bodyS)
-                                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                                    Spacer()
-                                    if viewModel.currentModelId == model.id {
-                                        selectionIndicator
-                                    }
-                                }
-                            }
-                        }
-                    }
+    private func modelButton(_ model: ModelInfo, isSelected: Bool) -> some View {
+        Button {
+            Task {
+                await viewModel.setModel(model.id)
+                dismiss()
+            }
+        } label: {
+            HStack {
+                Text(model.name)
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                Spacer()
+                if isSelected {
+                    selectionIndicator
                 }
             }
         }
