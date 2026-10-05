@@ -116,22 +116,24 @@ struct CreateWorkspaceBranchStepView: View {
         Button {
             selectedBranch = branch
         } label: {
-            HStack(alignment: .top, spacing: CreateWorkspaceRepoStyle.rowSpacing) {
-                VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.rowTextSpacing) {
-                    Text(branch)
-                        .interFont(Constants.Typography.bodySEmphasized)
-                        .tracking(CreateWorkspaceRepoStyle.nameTracking)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.CreateWorkspace.branchNameLineLimit)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if branch == defaultBranch {
-                        Text("Default")
-                            .interFont(Constants.Typography.subtextXXS)
-                            .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+            HStack(spacing: CreateWorkspaceRepoStyle.rowSpacing) {
+                Text(branch)
+                    .interFont(Constants.Typography.bodySEmphasized)
+                    .tracking(CreateWorkspaceRepoStyle.nameTracking)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.CreateWorkspace.branchNameLineLimit)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .alignmentGuide(VerticalAlignment.center) { dimensions in
+                        let additionalLineHeight = dimensions[.lastTextBaseline] - dimensions[.firstTextBaseline]
+                        return dimensions[VerticalAlignment.center] - additionalLineHeight / 2
                     }
+                HStack(spacing: CreateWorkspaceRepoStyle.rowTextSpacing) {
+                    if branch == defaultBranch {
+                        defaultBranchBadge
+                    }
+                    CreateWorkspaceSelectionMark()
+                        .opacity(selectedBranch == branch ? 1 : 0)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                CreateWorkspaceSelectionMark()
-                    .opacity(selectedBranch == branch ? 1 : 0)
             }
             .padding(CreateWorkspaceFormStyle.pagePadding)
             .frame(minHeight: CreateWorkspaceRepoStyle.rowMinimumHeight)
@@ -141,6 +143,27 @@ struct CreateWorkspaceBranchStepView: View {
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityAddTraits(selectedBranch == branch ? .isSelected : [])
         .accessibilityIdentifier("creation.branch.\(branch)")
+    }
+
+    private var defaultBranchBadge: some View {
+        Text("Default")
+            .interFont(Constants.Typography.subtextXXS.withFace(.medium))
+            .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, Constants.WorkspaceRow.outlinedPillHorizontalPadding)
+            .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
+            .frame(minHeight: Constants.WorkspaceRow.outlinedPillMinimumHeight)
+            .overlay {
+                Capsule().strokeBorder(
+                    contrast == .increased
+                        ? Theme.border(for: colorScheme, contrast: contrast)
+                        : (colorScheme == .dark ? Color.white : Color.black).opacity(Constants.WorkspaceRow.pillOutlineOpacity),
+                    lineWidth: contrast == .increased
+                        ? Constants.WorkspaceRow.increasedContrastPillBorderWidth
+                        : Constants.WorkspaceRow.pillBorderWidth
+                )
+            }
     }
 
     @ViewBuilder
