@@ -17,10 +17,12 @@ struct WatcherMessageBodyView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Design.Watcher.sectionSpacing) {
-            prose(presentation.summary, isPreview: presentation.details != nil && !isExpanded)
-            if !presentation.checks.isEmpty {
-                checks
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: Design.Watcher.sectionSpacing) {
+                prose(presentation.summary, isPreview: presentation.details != nil && !isExpanded)
+                if !presentation.checks.isEmpty {
+                    checks
+                }
             }
             if let details = presentation.details {
                 disclosure(details)
@@ -119,13 +121,12 @@ struct WatcherMessageBodyView: View {
                     .accessibilityHidden(true)
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .padding(.vertical, Design.Watcher.disclosureHitInset)
-            .frame(minHeight: Design.minimumTapTarget)
+            .padding(.top, Design.Watcher.sectionSpacing)
+            .frame(minHeight: Design.minimumTapTarget, alignment: .bottom)
             .contentShape(Rectangle())
             .copyContextMenuPassthrough()
         }
         .buttonStyle(.plain)
-        .padding(.vertical, -Design.Watcher.disclosureHitInset)
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
     }
 }
