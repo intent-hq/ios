@@ -11,6 +11,17 @@ import tempfile
 
 
 CAPTURES = {
+    "ConnectionLossUITests": {
+        "testDifferentServerAllowsSameMachineReselection": (
+            "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
+        ),
+        "testRepairAllowsSameMachineReselection": (
+            "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
+        ),
+        "testLaunchHidesBackButSelectedMachineCanReturnHome": (
+            "connection-loss-connection-failure-back", "connection-loss-connecting-back",
+        ),
+    },
     "WorkspaceSwipeUITests": {
         "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
     },
@@ -45,6 +56,9 @@ CAPTURES = {
     },
     "CreateWorkspacePreferencesUITests": {
         "testCancelledFormRemembersAgentSettings": ("remembered-agent-settings",),
+    },
+    "CreateWorkspaceDraftUITests": {
+        "testDismissedPromptRestoresAndClearsAfterSuccessfulRetry": ("restored-workspace-draft",),
     },
     "WorkspaceChangesUITests": {
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (

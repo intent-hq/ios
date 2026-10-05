@@ -839,6 +839,91 @@ assert_contains "test-ios-unit real run carries the selector and the skip flag" 
 assert_contains "test-ios-unit summary row counts the selector's tests" "$(cat "$work/unitok.out")" \
   "  IntentTests/DemoFixturesTests         2         2        0       0"
 
+echo "# UI-only builds and runs exclude unit tests without bypassing selector validation"
+status=$(run_filtered uibuild "" build-for-testing-ui)
+assert_eq "UI-only build exits 0" "$status" 0
+assert_eq "UI-only build compiles once without launching tests" "$(argv_count uibuild)" 1
+assert_contains "UI-only build uses the UI scheme" "$(argv_line uibuild 1)" '[-scheme] [IntentUI]'
+assert_contains "UI-only build preserves signing" "$(argv_line uibuild 1)" \
+  '[CODE_SIGN_IDENTITY=] [CODE_SIGNING_REQUIRED=NO] [CODE_SIGNING_ALLOWED=NO]'
+status=$(run_filtered ui "" test-without-building-ui)
+assert_eq "UI-only run defaults to the whole UI bundle" "$status" 0
+assert_eq "UI-only run enumerates then executes" "$(argv_count ui)" 2
+assert_contains "UI enumeration excludes unit tests" "$(argv_line ui 1)" '[-skip-testing:IntentTests]'
+assert_contains "UI enumeration uses the UI scheme" "$(argv_line ui 1)" '[-scheme] [IntentUI]'
+assert_lacks "UI enumeration preserves the unfiltered UI catalog" "$(argv_line ui 1)" '-only-testing:'
+assert_contains "UI run remains serial" "$(argv_line ui 2)" '[-parallel-testing-enabled] [NO]'
+assert_contains "UI run uses the same scheme as its build" "$(argv_line ui 2)" '[-scheme] [IntentUI]'
+assert_contains "UI run selects all UI tests and excludes units" "$(argv_line ui 2)" \
+  '[-only-testing:IntentUITests] [-skip-testing:IntentTests]'
+assert_contains "UI run validates execution from the result bundle" "$(cat "$work/ui.out")" \
+  '  IntentUITests         1         1        0       0'
+assert_lock_free "UI-only run releases the simulator lock"
+status=$(run_filtered uisubset 'IntentUITests/ConversationTranscriptScrollUITests' test-without-building-ui)
+assert_eq "UI-only run supports a narrower UI selector" "$status" 0
+assert_contains "UI subset is forwarded" "$(argv_line uisubset 2)" \
+  '[-only-testing:IntentUITests/ConversationTranscriptScrollUITests] [-skip-testing:IntentTests]'
+status=$(run_filtered uiunits 'IntentTests/DemoFixturesTests' test-without-building-ui)
+assert_eq "UI-only run rejects unit selectors" "$status" 82
+assert_eq "excluded unit selector never runs tests" "$(argv_count uiunits)" 1
+assert_contains "UI-only rejection explains the command restriction" "$(cat "$work/uiunits.out")" \
+  'UI-only subcommands skip the IntentTests bundle'
+status=$(run_filtered uitypo 'IntentUITests/MissingTests' test-without-building-ui)
+assert_eq "UI-only run rejects a missing selector" "$status" 82
+assert_eq "missing UI selector never runs tests" "$(argv_count uitypo)" 1
+status=$(run_filtered uinobundle '' test-without-building-ui STUB_NO_BUNDLE=1 RESULT_BUNDLE="$work/ui-missing.xcresult")
+assert_eq "UI-only run cannot pass without result evidence" "$status" 83
+status=$(run_filtered uicrash '' test-without-building-ui STUB_MODE=marker STUB_THEN=pass \
+  STUB_STATE="$work/uicrash.state" STUB_NO_FAILING=1 DERIVED_DATA_DIR="$work/UI Derived Data" \
+  STUB_MARKER='Restarting after unexpected exit, crash, or test timeout in IntentUITests.ConversationTranscriptScrollUITests/testGoToEndButtonAppears(); summary will include totals from previous launches.')
+assert_eq "UI-only crash retry recovers" "$status" 0
+assert_eq "UI-only crash makes one enumeration and exactly two test calls" "$(argv_count uicrash)" 3
+assert_contains "UI retry stays serial and scoped to the interrupted suite" "$(retry_argv uicrash)" \
+  '[-only-testing:IntentUITests/ConversationTranscriptScrollUITests] [-skip-testing:IntentTests]'
+assert_contains "UI retry stays serial" "$(retry_argv uicrash)" '[-parallel-testing-enabled] [NO]'
+assert_contains "UI retry uses the same scheme" "$(retry_argv uicrash)" '[-scheme] [IntentUI]'
+while IFS= read -r line; do
+  assert_contains "UI enumeration, execution and retry share derived data" "$line" \
+    "[-derivedDataPath] [$work/UI Derived Data]"
+done < <(grep '^argv:' "$work/uicrash.args")
+assert_lock_free "UI-only crash retry releases the simulator lock"
+if python3 - <<'PY'
+from pathlib import Path
+import xml.etree.ElementTree as ET
+
+schemes = Path("Intent.xcodeproj/xcshareddata/xcschemes")
+full = ET.parse(schemes / "Intent.xcscheme").getroot()
+ui = ET.parse(schemes / "IntentUI.xcscheme").getroot()
+def structure(element):
+    return (element.tag, element.attrib, (element.text or "").strip(),
+            [structure(child) for child in element])
+def name(testable):
+    return testable.find("BuildableReference").get("BlueprintName")
+full_tests = full.findall("TestAction/Testables/TestableReference")
+ui_tests = ui.findall("TestAction/Testables/TestableReference")
+assert [name(t) for t in ui_tests] == ["IntentUITests"], "UI scheme must contain only the UI bundle"
+original = next(t for t in full_tests if name(t) == "IntentUITests")
+assert structure(original) == structure(ui_tests[0]), "UI coverage/skips must match the full scheme"
+assert full.find("TestAction").attrib == ui.find("TestAction").attrib, "Test configurations must match"
+app = full.find("BuildAction/BuildActionEntries/BuildActionEntry/BuildableReference")
+ui_builds = ui.findall("BuildAction/BuildActionEntries/BuildActionEntry")
+assert len(ui_builds) == 1 and ui_builds[0].get("buildForTesting") == "YES"
+assert structure(app) == structure(ui_builds[0].find("BuildableReference")), "Both schemes must build the same app"
+PY
+then
+  pass "UI scheme preserves full-scheme coverage and excludes unit build inputs"
+else
+  fail "UI scheme differs from the full scheme's UI test contract"
+fi
+for sub in build-for-testing-ui test-without-building-ui; do
+  status=$(run_filtered "release-$sub" '' "$sub" BUILD_CONFIGURATION=Release)
+  assert_eq "Release $sub exits 0" "$status" 0
+  while IFS= read -r line; do
+    assert_contains "Release $sub preserves configuration and testability" "$line" \
+      '[-configuration] [Release] [ENABLE_TESTABILITY=YES]'
+  done < <(grep '^argv:' "$work/release-$sub.args")
+done
+
 echo "# explicit configuration: default argv is unchanged; Release is not DEBUG"
 status=$(run_filtered defaultbuild "" build-ios)
 assert_eq "default iOS build exits 0" "$status" 0
@@ -900,8 +985,12 @@ for config in Profile release 'Release -sdk iphoneos'; do
 done
 echo "# derived data is shared within a job, including enumeration and retries"
 derived_data="$work/Derived Data"
-for sub in resolve build-ios build-visionos build-for-testing test-ios test-ios-unit test-without-building test-without-building-unit; do
-  status=$(run_filtered "derived-$sub" "IntentTests/DemoFixturesTests" "$sub" DERIVED_DATA_DIR="$derived_data")
+for sub in resolve build-ios build-visionos build-for-testing build-for-testing-ui test-ios test-ios-unit test-without-building test-without-building-unit test-without-building-ui; do
+  derived_selector=IntentTests/DemoFixturesTests
+  case "$sub" in
+    build-for-testing-ui|test-without-building-ui) derived_selector=IntentUITests ;;
+  esac
+  status=$(run_filtered "derived-$sub" "$derived_selector" "$sub" DERIVED_DATA_DIR="$derived_data")
   assert_eq "$sub with explicit derived data exits 0" "$status" 0
   args=$(grep '^argv:' "$work/derived-$sub.args" | grep -v -F '[-showsdks]')
   while IFS= read -r line; do

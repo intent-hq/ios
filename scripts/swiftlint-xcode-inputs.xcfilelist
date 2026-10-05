@@ -74,6 +74,7 @@ $(SRCROOT)/Intent/Models/WorkspaceAction.swift
 $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
 $(SRCROOT)/Intent/Models/WorkspaceChangeTree.swift
 $(SRCROOT)/Intent/Models/WorkspaceChanges.swift
+$(SRCROOT)/Intent/Models/WorkspaceCreationDraft.swift
 $(SRCROOT)/Intent/Models/WorkspaceDiff.swift
 $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
 $(SRCROOT)/Intent/Models/WorkspaceScript.swift
@@ -304,6 +305,7 @@ $(SRCROOT)/Intent/Views/Components/ToastView.swift
 $(SRCROOT)/Intent/Views/Components/WindowFeedbackSoundEmitter.swift
 $(SRCROOT)/Intent/Views/Connection/CertMismatchListView.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectingView.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionBackButton.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionFailureView.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossOverlay.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossPresenter.swift
@@ -402,7 +404,6 @@ $(SRCROOT)/Intent/Views/Onboarding/ManualTokenEntryView.swift
 $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift
 $(SRCROOT)/Intent/Views/Onboarding/Splash/SplashArtView.swift
-$(SRCROOT)/Intent/Views/Onboarding/Splash/SplashVideoBackground.swift
 $(SRCROOT)/Intent/Views/Settings/AcknowledgementsView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticExportView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticPreviewSection.swift
@@ -752,7 +753,6 @@ $(SRCROOT)/IntentTests/SharedWorkspaceStatusRaceTests.swift
 $(SRCROOT)/IntentTests/SharedWorkspaceStatusTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
-$(SRCROOT)/IntentTests/SplashVideoBackgroundTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift
@@ -814,6 +814,7 @@ $(SRCROOT)/IntentTests/WorkspaceChangesRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRootRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesStoreTests.swift
+$(SRCROOT)/IntentTests/WorkspaceCreationDraftTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationImagesTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
@@ -858,6 +859,7 @@ $(SRCROOT)/IntentTests/WorkspaceTransferStoreTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/AssistantNavigationUITests.swift
 $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
+$(SRCROOT)/IntentUITests/ConnectionFailureRecoveryUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossContrastAssertions.swift
 $(SRCROOT)/IntentUITests/ConnectionLossUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionSwitcherUITests.swift
@@ -870,6 +872,7 @@ $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+RecoveryResize.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
 $(SRCROOT)/IntentUITests/CreateNewRepositoryUITests.swift
+$(SRCROOT)/IntentUITests/CreateWorkspaceDraftUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspacePreferencesUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
 $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
@@ -893,3 +896,4 @@ $(SRCROOT)/IntentUITests/WorkspaceSearchUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceSwipeUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceTransferUITests.swift
+$(SRCROOT)/IntentUITests/WorkspaceWindowControlsUITests.swift

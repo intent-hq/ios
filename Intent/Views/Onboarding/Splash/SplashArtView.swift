@@ -79,11 +79,6 @@ struct SplashArtView: View {
     private var background: some View {
         if colorScheme == .dark {
             Theme.background(for: colorScheme)
-                .overlay {
-                    SplashVideoBackground(isPlaying: Self.shouldAnimate(
-                        scenePhase: scenePhase, reduceMotion: reduceMotion, hasAnimation: true
-                    ))
-                }
         } else {
             // Preserve the exported light artwork and both gradient endpoints.
             Image(.launchBackground)
