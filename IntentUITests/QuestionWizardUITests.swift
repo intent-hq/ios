@@ -78,6 +78,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(second.isHittable)
         tap(first)
         XCTAssertEqual(first.value as? String, "Selected")
+        attachScreenshot("questions-selected-answer", in: app)
         // Native modal snapshots may retain the presenting view's elements.
         // Existence alone does not indicate that a person can interact with them.
         for identifier in ["question.answer", "question.dismiss", "conversation.back", "conversation.actions.open"] {
