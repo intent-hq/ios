@@ -5,7 +5,10 @@ import Testing
 @MainActor
 struct WorkspaceTitleEditorTests {
     @Test func saveUsesTheSelectedWorkspaceAndOnlyChangesItsTitle() async throws {
-        let (connection, store, editor) = try fixture()
+        let fixture = try makeFixture()
+        let connection = fixture.connection
+        let store = fixture.store
+        let editor = fixture.editor
         editor.draft = "  Renamed workspace \n"
 
         await editor.save(connection: connection, store: store)
@@ -21,7 +24,10 @@ struct WorkspaceTitleEditorTests {
     }
 
     @Test func unchangedTitleClosesWithoutARequest() async throws {
-        let (connection, store, editor) = try fixture()
+        let fixture = try makeFixture()
+        let connection = fixture.connection
+        let store = fixture.store
+        let editor = fixture.editor
         editor.draft = " Original "
 
         await editor.save(connection: connection, store: store)
@@ -31,7 +37,10 @@ struct WorkspaceTitleEditorTests {
     }
 
     @Test func whitespaceOnlyTitleKeepsTheEditorOpen() async throws {
-        let (connection, store, editor) = try fixture()
+        let fixture = try makeFixture()
+        let connection = fixture.connection
+        let store = fixture.store
+        let editor = fixture.editor
         editor.draft = " \n "
 
         await editor.save(connection: connection, store: store)
@@ -43,7 +52,10 @@ struct WorkspaceTitleEditorTests {
     }
 
     @Test func unnamedWorkspaceCanBeDismissedWithoutSavingThePlaceholder() async throws {
-        let (connection, store, editor) = try fixture()
+        let fixture = try makeFixture()
+        let connection = fixture.connection
+        let store = fixture.store
+        let editor = fixture.editor
         editor.cancel()
         editor.begin(workspaceId: "selected", title: "")
 
@@ -54,7 +66,10 @@ struct WorkspaceTitleEditorTests {
     }
 
     @Test func failurePreservesTheDraftAndAllowsRetry() async throws {
-        let (connection, store, editor) = try fixture()
+        let fixture = try makeFixture()
+        let connection = fixture.connection
+        let store = fixture.store
+        let editor = fixture.editor
         editor.draft = "Renamed workspace"
         connection.errorMap["workspace.update"] = NSError(
             domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disconnected"]
@@ -75,7 +90,10 @@ struct WorkspaceTitleEditorTests {
 
     @Test(arguments: ["missing", "wrong-id", "wrong-title"])
     func unconfirmedResponseDoesNotPublishTheDraft(kind: String) async throws {
-        let (connection, store, editor) = try fixture()
+        let fixture = try makeFixture()
+        let connection = fixture.connection
+        let store = fixture.store
+        let editor = fixture.editor
         editor.draft = "Renamed workspace"
         connection.responseMap["workspace.update"] = kind == "missing" ? [:] : [
             "workspace": [
@@ -94,7 +112,10 @@ struct WorkspaceTitleEditorTests {
     }
 
     @Test func repeatedDoneSendsOneRequest() async throws {
-        let (connection, store, editor) = try fixture()
+        let fixture = try makeFixture()
+        let connection = fixture.connection
+        let store = fixture.store
+        let editor = fixture.editor
         connection.pendingMethods.insert("workspace.update")
         editor.draft = "Renamed workspace"
         let save = Task { await editor.save(connection: connection, store: store) }
@@ -109,7 +130,10 @@ struct WorkspaceTitleEditorTests {
     }
 
     @Test func leavingTheWorkspaceIgnoresItsLateSaveResponse() async throws {
-        let (connection, store, editor) = try fixture()
+        let fixture = try makeFixture()
+        let connection = fixture.connection
+        let store = fixture.store
+        let editor = fixture.editor
         connection.pendingMethods.insert("workspace.update")
         editor.draft = "Renamed workspace"
         let save = Task { await editor.save(connection: connection, store: store) }
@@ -129,7 +153,10 @@ struct WorkspaceTitleEditorTests {
     }
 
     @Test func staleListCannotUndoAConfirmedRename() async throws {
-        let (connection, store, editor) = try fixture()
+        let fixture = try makeFixture()
+        let connection = fixture.connection
+        let store = fixture.store
+        let editor = fixture.editor
         connection.pendingMethods.insert("workspace.list")
         let refresh = Task { await store.fetchAll() }
         try await connection.waitForPendingRequests("workspace.list")
@@ -144,19 +171,28 @@ struct WorkspaceTitleEditorTests {
         #expect(store.workspaces.first?.title == "Renamed workspace")
     }
 
-    private func fixture() throws -> (FakeConnectionManager, WorkspaceStore, WorkspaceTitleEditor) {
+    private struct Fixture {
+        let connection: FakeConnectionManager
+        let store: WorkspaceStore
+        let editor: WorkspaceTitleEditor
+    }
+
+    private func makeFixture() throws -> Fixture {
         let connection = FakeConnectionManager()
         connection.responseMap["workspace.update"] = response()
-        connection.responseMap["workspace.list"] = ["workspaces": [
-            ["id": "selected", "title": "Renamed workspace", "branch": "feature/original"]
-        ]]
+        connection.responseMap["workspace.list"] = [
+            "workspaces": [
+                ["id": "selected", "title": "Renamed workspace", "branch": "feature/original"]
+            ]
+        ]
         let store = WorkspaceStore(connectionManager: connection)
-        store.workspaces = [try #require(WorkspaceStore.parseWorkspace([
+        let workspace = try #require(WorkspaceStore.parseWorkspace([
             "id": "selected", "title": "Original", "branch": "feature/original"
-        ]))]
+        ]))
+        store.workspaces = [workspace]
         let editor = WorkspaceTitleEditor()
         editor.begin(workspaceId: "selected", title: "Original")
-        return (connection, store, editor)
+        return Fixture(connection: connection, store: store, editor: editor)
     }
 
     private func response() -> [String: Any] {
