@@ -48,15 +48,11 @@ struct WorkspaceListView: View {
         }
         .modifier(WorkspaceActionLauncher(
             isSearching: isSearching,
-            onCreateWorkspace: {
-                showingConnectionSwitcher = false
-                if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
-            },
-            onConnections: {
-                showingConnectionSwitcher = false
-                showingConnections = true
-            }
-        ))
+            onCreateWorkspace: createWorkspace
+        ) {
+            showingConnectionSwitcher = false
+            showingConnections = true
+        })
         .navigationTitle("Workspaces")
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
@@ -140,6 +136,12 @@ struct WorkspaceListView: View {
         .refreshable {
             await workspaceStore.fetchAll()
         }
+        .overlay {
+            if viewModel.filteredWorkspaces.isEmpty, !viewModel.hasSearchQuery,
+               !(viewModel.isLoading && viewModel.workspaces.isEmpty) {
+                emptyState
+            }
+        }
     }
 
     private func prepareConnectionSwitcher() {
@@ -149,15 +151,15 @@ struct WorkspaceListView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label {
-                Text("No Workspaces").interFont(Constants.Typography.bodyM.withFace(.semibold))
-            } icon: {
-                Image(systemName: "rectangle.stack.badge.plus")
-            }
-        } description: {
-            Text("Create one in the desktop app.").interFont(Constants.Typography.bodyS)
-        }
+        Button("New workspace", action: createWorkspace)
+            .buttonStyle(IntentButtonStyle(variant: .muted))
+            .disabled(!coordinator.canCreateWorkspace)
+            .accessibilityIdentifier("workspaces.empty.create")
+    }
+
+    private func createWorkspace() {
+        showingConnectionSwitcher = false
+        if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
     }
 
     private var pageHeader: some View {
@@ -177,7 +179,7 @@ struct WorkspaceListView: View {
                     }
             }
             Spacer(minLength: 0)
-            WorkspaceListMenu(showArchived: $viewModel.showArchived) {
+            WorkspaceListMenu(showArchived: $viewModel.showArchived, onCreateWorkspace: createWorkspace) {
                 prepareConnectionSwitcher()
                 openAgentHistory()
             } onRecentConnections: {
@@ -202,8 +204,6 @@ struct WorkspaceListView: View {
         } else if viewModel.filteredWorkspaces.isEmpty {
             if viewModel.hasSearchQuery {
                 ContentUnavailableView.search
-            } else {
-                emptyState
             }
         } else {
             workspaceSections
