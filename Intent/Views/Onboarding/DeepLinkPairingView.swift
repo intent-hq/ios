@@ -28,9 +28,9 @@ struct DeepLinkPairingView: View {
                 .toolbarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { coordinator.pendingDeepLinkPairing = nil }
-                            .interFont(Constants.Typography.bodyS)
+                        IntentIconButton(icon: .close, label: "Cancel") { coordinator.pendingDeepLinkPairing = nil }
                     }
+                    .intentToolbarSurface()
                 }
                 .onDisappear { pairingTask?.cancel() }
                 .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
@@ -98,6 +98,7 @@ struct DeepLinkPairingView: View {
                         .interFont(Constants.Typography.bodyS)
                 }
             }
+            .buttonStyle(IntentButtonStyle())
             .disabled(isValidating)
         } footer: {
             Text("Only connect if you opened this link yourself, e.g. from your Intent desktop app.")

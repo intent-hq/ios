@@ -99,6 +99,8 @@ private struct WorkspaceCreationPromptEditor: View {
 private struct WorkspaceCreationImagePreview: View {
     let image: WorkspaceCreationImages.Image
     let onRemove: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+    @ScaledMetric(relativeTo: .body) private var removeIconSize: CGFloat = 17
     private let previewSide: CGFloat = 72
     private let removeTarget: CGFloat = 44
 
@@ -111,10 +113,14 @@ private struct WorkspaceCreationImagePreview: View {
                 .clipShape(.rect(cornerRadius: CreateWorkspaceFormStyle.rowSpacing))
                 .accessibilityLabel("Attached image")
             Button(action: onRemove) {
-                Image(systemName: "xmark.circle.fill")
+                Image(.closeCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: removeIconSize, height: removeIconSize)
                     .frame(minWidth: removeTarget, minHeight: removeTarget)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
+            .opacity(isEnabled ? 1 : Constants.ConnectionSheet.placeholderOpacity)
             .accessibilityLabel("Remove image")
             .accessibilityIdentifier("creation.removeImage")
         }

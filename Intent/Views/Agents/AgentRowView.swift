@@ -282,7 +282,7 @@ struct DelegatedAgentsRow: View {
             .padding(.leading, WorkspaceDetailStyle.avatarSize + WorkspaceDetailStyle.avatarSpacing)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(summaryTitle)
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .visionListRowHitTarget()
@@ -335,6 +335,7 @@ enum AgentGroupSummary {
 }
 
 struct BackgroundAgentsHeader: View {
+    @ScaledMetric(relativeTo: .caption) private var chevronSize = Constants.Typography.subtextXXS.size
     let agents: [AgentSession]
     var totalCount: Int?
     var title = "background agents"
@@ -363,14 +364,16 @@ struct BackgroundAgentsHeader: View {
 
                 Spacer()
 
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption)
+                Image(isExpanded ? .chevronDown : .chevronRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: chevronSize, height: chevronSize)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
             }
             .padding(.vertical, Constants.AgentRow.backgroundVerticalPadding)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .visionListRowHitTarget()
     }

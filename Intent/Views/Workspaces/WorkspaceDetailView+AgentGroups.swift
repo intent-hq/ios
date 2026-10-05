@@ -69,6 +69,7 @@ extension WorkspaceDetailView {
                 Button("Retry") {
                     Task { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) }
                 }
+                .buttonStyle(IntentButtonStyle(variant: .secondary))
                 .accessibilityIdentifier(group.accessibilityIdentifier + ".retry")
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -85,7 +86,7 @@ extension WorkspaceDetailView {
         } label: {
             AgentRowView(agent: agent, colorScheme: colorScheme, indented: indented)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("workspace.agent.\(agent.id)")
         .visionListRowHitTarget()
         .contextMenu {

@@ -69,6 +69,7 @@ struct WorkspaceListSidebar: View {
                     openConnectionSwitcher()
                 }
             }
+            .intentToolbarSurface()
         }
         .onChange(of: viewModel.showArchived) { _, _ in revealedSwipeTarget = nil }
         .onDisappear {

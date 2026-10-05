@@ -46,7 +46,7 @@ struct WorkspaceRowView: View {
             } label: {
                 Image(systemName: "exclamationmark.triangle")
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("PR monitors may be out of date. Retry refresh")
         }
     }

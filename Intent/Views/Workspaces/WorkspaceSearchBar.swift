@@ -47,7 +47,7 @@ struct WorkspaceSearchBar: View {
                             : Constants.Pairing.foreground(for: colorScheme))
                         .contentShape(RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius, style: .circular))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IntentContentButtonStyle())
                 .matchedGeometryEffect(id: mode, in: selectionAnimation)
                 .accessibilityAddTraits(viewMode == mode ? .isSelected : [])
                 .accessibilityIdentifier("workspaces.viewMode.\(mode.rawValue)")
@@ -93,7 +93,7 @@ struct WorkspaceSearchButton: View {
                 }
                 .accessibilityHidden(true)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
@@ -128,7 +128,7 @@ struct WorkspaceSearchInput: View {
                     .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
                     .background { WorkspaceSearchSurface() }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Close search")
             .accessibilityIdentifier("\(identifierPrefix).cancel")
         }
@@ -163,7 +163,7 @@ struct WorkspaceSearchInput: View {
                         .accessibilityHidden(true)
                         .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Clear search")
                 .accessibilityIdentifier("\(identifierPrefix).clear")
             }

@@ -246,16 +246,9 @@ struct WorkspaceDetailView: View {
             }
             #else
             ToolbarItem(placement: .topBarLeading) {
-                Button(action: coordinator.onBackToWorkspaceList) {
-                    Image(.arrowLeft)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
-                        .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
-                        .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                }
-                .accessibilityLabel("Back to workspaces")
+                IntentIconButton(icon: .arrowLeft, label: "Back to workspaces", action: coordinator.onBackToWorkspaceList)
             }
+            .intentToolbarSurface()
             #endif
             ToolbarItem(placement: .principal) {
                 toolbarTitle
@@ -263,6 +256,7 @@ struct WorkspaceDetailView: View {
             ToolbarItem(placement: .primaryAction) {
                 workspaceActions
             }
+            .intentToolbarSurface()
         }
         #if !os(visionOS)
         .workspacePhoneNavigation(title: workspaceTitle, onBack: coordinator.onBackToWorkspaceList) { workspaceActions }
@@ -365,11 +359,11 @@ private extension WorkspaceDetailView {
 
     var toolbarWorkspacePicker: some View {
         Picker("Workspace Content", selection: $selectedTab) {
-            Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "person.2") }
+            Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(.agents) }
             .tag(WorkspaceTab.agents)
-            Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "doc.text") }
+            Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(.file) }
             .tag(WorkspaceTab.context)
-            Label { Text("Changes").interFont(Constants.Typography.bodyXS) } icon: { Image(systemName: "plus.forwardslash.minus") }
+            Label { Text("Changes").interFont(Constants.Typography.bodyXS) } icon: { Image(.gitDiff) }
             .tag(WorkspaceTab.changes)
         }
         .pickerStyle(.segmented)

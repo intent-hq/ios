@@ -66,6 +66,7 @@ struct AcknowledgementsView: View {
         }
         .navigationTitle("Acknowledgements")
         .toolbarTitleDisplayMode(.inline)
+        .intentNavigationBackButton()
     }
 
     private func acknowledgementCard(_ entry: Entry) -> some View {

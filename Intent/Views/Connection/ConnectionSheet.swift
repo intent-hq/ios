@@ -56,9 +56,11 @@ struct ConnectionSheet<Content: View>: View {
                 .frame(width: Constants.ConnectionSheet.closeSize, height: Constants.ConnectionSheet.closeSize)
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(isDismissDisabled)
-        .foregroundStyle(closeForeground ?? Constants.ConnectionSheet.defaultForeground(for: colorScheme))
+        .foregroundStyle(isDismissDisabled
+            ? Constants.ConnectionSheet.disabledForeground(for: colorScheme)
+            : (closeForeground ?? Constants.ConnectionSheet.defaultForeground(for: colorScheme)))
         .accessibilityLabel("Close")
         .accessibilityIdentifier("connection-sheet.close")
         .padding(.horizontal, Constants.ConnectionSheet.inset)

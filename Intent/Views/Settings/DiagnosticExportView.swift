@@ -18,8 +18,12 @@ struct DiagnosticExportView: View {
             .navigationTitle("Export logs")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { model.cancelPreparation(); dismiss() }
+                    IntentIconButton(icon: .close, label: "Done") {
+                        model.cancelPreparation()
+                        dismiss()
+                    }
                 }
+                .intentToolbarSurface()
             }
             .confirmationDialog("Clear local diagnostic logs?", isPresented: $confirmsClear, titleVisibility: .visible) {
                 Button("Clear logs", role: .destructive) { model.clearHistory() }
@@ -58,6 +62,7 @@ private struct DiagnosticExportActions: View {
                     icon(.upload)
                 }
             }
+                .buttonStyle(IntentButtonStyle())
                 .disabled(model.isWorking || model.preview == nil || model.share != nil)
                 .accessibilityIdentifier("diagnosticShareZIP")
             Button { model.refresh() } label: {
@@ -67,6 +72,7 @@ private struct DiagnosticExportActions: View {
                     icon(.clockwiseArrow)
                 }
             }
+                .buttonStyle(IntentButtonStyle(variant: .secondary))
                 .disabled(model.isWorking || model.share != nil)
             Button(role: .destructive) { confirmsClear = true } label: {
                 Label {
@@ -75,6 +81,7 @@ private struct DiagnosticExportActions: View {
                     icon(.delete)
                 }
             }
+                .buttonStyle(IntentButtonStyle(variant: .secondary))
                 .disabled(model.isWorking || model.share != nil)
                 .accessibilityIdentifier("diagnosticClear")
         }

@@ -82,12 +82,9 @@ struct DisconnectedView: View {
     private var homeButton: some View {
         Button(action: coordinator.onReturnToSavedMachines) {
             Text("Back to Home")
-                .interFont(Constants.Typography.bodyM.withFace(.semibold))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, Constants.Disconnected.buttonVerticalPadding)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
+        .buttonStyle(IntentButtonStyle())
         .accessibilityHint("Return to your saved machines without forgetting this connection.")
         .accessibilityIdentifier("disconnected.home")
         .padding(.horizontal, Constants.Disconnected.horizontalPadding)

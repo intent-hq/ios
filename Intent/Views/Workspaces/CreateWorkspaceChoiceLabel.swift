@@ -4,6 +4,7 @@ struct CreateWorkspaceChoiceLabel: View {
     let title: String
     var surface: Color?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
     @ScaledMetric(relativeTo: .caption) private var chevronSize: CGFloat = 16
 
     var body: some View {
@@ -18,7 +19,9 @@ struct CreateWorkspaceChoiceLabel: View {
                 .frame(width: chevronSize, height: chevronSize)
                 .accessibilityHidden(true)
         }
-        .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))
+        .foregroundStyle(isEnabled
+            ? CreateWorkspaceFormStyle.foreground(for: colorScheme)
+            : CreateWorkspaceFormStyle.disabledForeground(for: colorScheme))
         .multilineTextAlignment(.leading)
         .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
         .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
