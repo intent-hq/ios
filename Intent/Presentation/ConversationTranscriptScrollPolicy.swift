@@ -13,6 +13,7 @@ enum ConversationTranscriptScrollPolicy {
 
     enum MessageCountChangeDecision: Equatable {
         case none
+        case preserveViewport
         case rearmEntryScroll
         case rePinIfPastEnd
         case runEntryScroll
@@ -26,12 +27,38 @@ enum ConversationTranscriptScrollPolicy {
     static func messageCountChangeDecision(
         from oldCount: Int,
         to newCount: Int,
-        hasInitiallyScrolled: Bool
+        hasInitiallyScrolled: Bool,
+        isPrepend: Bool = false
     ) -> MessageCountChangeDecision {
+        if isPrepend { return .preserveViewport }
         if newCount == 0 { return .rearmEntryScroll }
         if newCount < oldCount { return .rePinIfPastEnd }
         if oldCount == 0, !hasInitiallyScrolled { return .runEntryScroll }
         return .none
+    }
+
+    /// Appends (including an append arriving with history) still follow the
+    /// live tail. A pure prepend must never treat the existing last user row
+    /// as a new send or re-arm entry scrolling.
+    static func isHistoryPrepend(from oldIDs: [String], to newIDs: [String]) -> Bool {
+        !oldIDs.isEmpty && newIDs.count > oldIDs.count && newIDs.suffix(oldIDs.count).elementsEqual(oldIDs)
+    }
+
+    private static let historyPrefetchScreenCount: CGFloat = 3
+
+    static func isNearHistoryTop(contentOffsetY: CGFloat, topInset: CGFloat, viewportHeight: CGFloat) -> Bool {
+        guard contentOffsetY.isFinite, topInset.isFinite, viewportHeight.isFinite, viewportHeight > 0 else { return false }
+        return contentOffsetY + topInset <= viewportHeight * historyPrefetchScreenCount
+    }
+
+    static func shouldLoadOlderMessages(
+        isNearTop: Bool,
+        hasInitiallyScrolled: Bool,
+        hasUserScrolled: Bool,
+        isFollowing: Bool,
+        canRequestPage: Bool
+    ) -> Bool {
+        isNearTop && hasInitiallyScrolled && hasUserScrolled && !isFollowing && canRequestPage
     }
 
     /// Sequencing of the entry scroll against the finder. A `scrollTo` issued
@@ -130,6 +157,17 @@ enum ConversationTranscriptScrollPolicy {
     /// queue a second one.
     static func shouldFollowOnScrolledAwayCleared(goToEndRequested: Bool) -> Bool {
         goToEndRequested
+    }
+
+    /// Only the explicit Go to End request chooses by distance. Sweeping
+    /// through more than one visible screen realizes intervening lazy rows
+    /// unnecessarily (#404). Other follows keep their own animation choice.
+    static func shouldAnimateGoToEnd(geometry: ViewportGeometry?) -> Bool {
+        guard let geometry else { return true }
+        let visibleHeight = geometry.containerHeight - geometry.verticalInsets
+        let distance = geometry.distanceToBottom
+        guard visibleHeight.isFinite, visibleHeight > 0, distance.isFinite else { return true }
+        return distance <= visibleHeight
     }
 
     /// Streaming deltas grow content that `.defaultScrollAnchor(.bottom)`

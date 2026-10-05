@@ -76,15 +76,22 @@ struct ProposalCardView: View {
 
     private func itemList(_ store: ProposalActionStore) -> some View {
         let completed = store.completed[store.receiptKey(proposal, messageId: messageId)] ?? []
+        let isBusy = store.isBusy
+        // Read selection and store state on MainActor, not in the row provider.
+        let rows = proposal.items.map { item in
+            let isCompleted = completed.contains(item.id)
+            let content = selectionButton(item, isCompleted: isCompleted, isSelected: selection.contains(item.id))
+                .disabled(item.disabled == true || isCompleted || isBusy)
+            return (id: item.id, content: content)
+        }
         return VStack(alignment: .leading, spacing: Layout.spacing) {
-            ForEach(proposal.items) { item in
-                selectionButton(item, isCompleted: completed.contains(item.id))
-                    .disabled(item.disabled == true || completed.contains(item.id) || store.isBusy)
+            ForEach(rows, id: \.id) { @Sendable row in
+                row.content
             }
         }
     }
 
-    private func selectionButton(_ item: ActionProposal.Item, isCompleted: Bool) -> some View {
+    private func selectionButton(_ item: ActionProposal.Item, isCompleted: Bool, isSelected: Bool) -> some View {
         Button {
             if selection.contains(item.id) { selection.remove(item.id) } else { selection.insert(item.id) }
         } label: {
@@ -95,15 +102,15 @@ struct ProposalCardView: View {
                     if isCompleted { Text("Applied").font(.caption) }
                 }
                 Spacer(minLength: 0)
-                ProposalSelectionSwitch(isOn: selection.contains(item.id))
+                ProposalSelectionSwitch(isOn: isSelected)
             }
             .frame(minHeight: Layout.minimumRowHeight)
             .contentShape(Rectangle())
             .copyContextMenuPassthrough()
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(selection.contains(item.id) ? .isSelected : [])
-        .accessibilityValue(selection.contains(item.id) ? "On" : "Off")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityValue(isSelected ? "On" : "Off")
         .accessibilityIdentifier("proposal.item.\(item.id)")
     }
 

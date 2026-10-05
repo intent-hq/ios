@@ -24,7 +24,7 @@ struct QuestionWizardCollapsedBanner: View {
 
     private var workspaceBanner: some View {
         VStack(alignment: .leading, spacing: Design.Question.notificationSpacing) {
-            Text("Agent has \(questionCount) questions")
+            workspaceTitle
                 .interFont(Constants.Typography.bodySEmphasized)
                 .tracking(Design.Typography.compactBodyTracking)
                 .foregroundStyle(Design.Palette.foreground(for: colorScheme))
@@ -48,6 +48,12 @@ struct QuestionWizardCollapsedBanner: View {
         .padding(.horizontal, Design.Question.horizontalPadding)
         .padding(.top, Design.Question.topPadding)
         .padding(.bottom, Design.Question.bottomPadding)
+    }
+
+    private var workspaceTitle: Text {
+        questionCount == 1
+            ? Text("Agent has a question")
+            : Text("Agent has \(questionCount) questions")
     }
 
     private var legacyBanner: some View {

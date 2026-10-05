@@ -20,9 +20,10 @@ struct WorkspaceQuestionButtonStyle: ButtonStyle {
             .foregroundStyle(primary ? Design.Palette.onAccent : Design.Palette.foreground(for: colorScheme))
             .padding(.horizontal, Design.Question.buttonHorizontalPadding)
             .padding(.vertical, Design.Question.buttonSpacing)
-            .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: Design.minimumTapTarget)
+            .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: Design.Question.buttonHeight)
             .background(primary ? Design.Palette.accent : Design.Palette.raisedSurface(for: colorScheme))
-            .clipShape(.capsule)
+            .clipShape(.rect(cornerRadius: Design.innerCornerRadius))
+            .frame(minWidth: Design.minimumTapTarget, minHeight: Design.minimumTapTarget)
             .contentShape(.rect)
             .opacity(isEnabled ? (configuration.isPressed ? Layout.pressedOpacity : 1) : Layout.disabledOpacity)
     }

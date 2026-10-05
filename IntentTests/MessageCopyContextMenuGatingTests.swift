@@ -181,6 +181,20 @@ struct CopyContextMenuOverlayHitTestTests {
         #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)
         #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
     }
+
+    @Test func overlayFindsButtonMarkerInsideProbedScrollContainer() {
+        let fixture = makeFixture(enabled: true)
+        let scrollView = UIScrollView(frame: fixture.host.bounds)
+        let wrapper = UIView(frame: .zero)
+        let marker = CopyContextMenuPassthroughMarker.MarkerView(
+            frame: CGRect(x: 0, y: 0, width: 50, height: 100)
+        )
+        wrapper.addSubview(marker)
+        scrollView.addSubview(wrapper)
+        fixture.host.insertSubview(scrollView, belowSubview: fixture.overlay)
+        #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)
+        #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === scrollView)
+    }
 }
 
 /// Window hit-testing and accessibility activation of `AssistantMessageView` (ios#344): a
