@@ -11,14 +11,12 @@ extension AgentAttentionKind {
 }
 
 extension AgentAvatarState {
-    /// Corner cue symbol for the needs-user states; nil for the others (the
-    /// running dot is drawn separately).
+    /// Discussion and blocker cues; questions use the row's status text.
     var cornerSymbol: String? {
         switch self {
-        case .question: return "questionmark.bubble.fill"
         case .attentionDiscussion: return AgentAttentionKind.discussion.systemImage
         case .attentionBlocker: return AgentAttentionKind.blocker.systemImage
-        case .idle, .running, .waiting, .failed, .completed: return nil
+        case .idle, .running, .waiting, .failed, .completed, .question: return nil
         }
     }
 
@@ -76,10 +74,7 @@ struct AgentRowView: View {
 
     private var avatarState: AgentAvatarState { AgentAvatarState.state(for: agent) }
 
-    /// The needs-user corner cue (question / discussion / blocker) is the
-    /// row's attention badge: a muted agent shows the `bell.slash` glyph by
-    /// its name instead. The running dot is activity, not attention, and is
-    /// unaffected.
+    /// Muting hides attention cues but preserves the running dot.
     private var cornerSymbol: String? {
         agent.notificationsMuted ? nil : avatarState.cornerSymbol
     }
