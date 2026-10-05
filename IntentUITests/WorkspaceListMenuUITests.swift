@@ -4,6 +4,53 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
     @MainActor
+    func testEmptyWorkspaceButtonOpensCreationAndReturns() {
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for appearance in ["light", "dark"] {
+            let app = launchWorkspaces(arguments: ["--demo-empty-workspaces", "-appThemePreference", appearance])
+            let create = app.buttons["workspaces.empty.create"]
+            XCTAssertTrue(create.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(create.isEnabled)
+            XCTAssertTrue(create.isHittable)
+            capture(app, named: "empty-workspaces-\(appearance)")
+            create.tap()
+            closeCreation(in: app)
+            XCTAssertTrue(create.waitForExistence(timeout: Self.timeout))
+            app.buttons["workspaces.search.open"].tap()
+            let search = app.textFields["workspaces.search.field"]
+            XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
+            search.typeText("no-matching-workspace")
+            XCTAssertTrue(create.waitForNonExistence(timeout: Self.timeout))
+            app.buttons["workspaces.search.cancel"].tap()
+            XCTAssertTrue(create.waitForExistence(timeout: Self.timeout))
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testNewWorkspaceMenuOpensCreationAndReturns() {
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for appearance in ["light", "dark"] {
+            let app = launchWorkspaces(arguments: ["-appThemePreference", appearance])
+            let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+            XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+            XCTAssertFalse(app.buttons["workspaces.empty.create"].exists)
+            app.buttons["workspaces.menu"].tap()
+            let create = app.buttons["workspaces.menu.create"]
+            XCTAssertTrue(create.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(create.isEnabled)
+            capture(app, named: "new-workspace-menu-\(appearance)")
+            create.tap()
+            closeCreation(in: app)
+            XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.buttons["workspaces.menu"].isHittable)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testRecentAgentsOpensAndClosesExistingDrawer() {
         let app = launchWorkspaces()
         app.buttons["workspaces.menu"].tap()
@@ -56,10 +103,11 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchWorkspaces() -> XCUIApplication {
+    private func launchWorkspaces(arguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-settings", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments += arguments
         app.launch()
         let menu = app.buttons["workspaces.menu"]
         if UIDevice.current.userInterfaceIdiom == .pad, !menu.waitForExistence(timeout: 2) {
@@ -69,6 +117,14 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         }
         XCTAssertTrue(menu.waitForExistence(timeout: Self.timeout))
         return app
+    }
+
+    @MainActor
+    private func closeCreation(in app: XCUIApplication) {
+        let title = app.staticTexts["creation.repositoryTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+        app.buttons["creation.close"].tap()
+        XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
     }
 
     @MainActor

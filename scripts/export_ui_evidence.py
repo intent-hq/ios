@@ -26,6 +26,8 @@ CAPTURES = {
         "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
     },
     "WorkspaceListMenuUITests": {
+        "testEmptyWorkspaceButtonOpensCreationAndReturns": ("empty-workspaces-light", "empty-workspaces-dark"),
+        "testNewWorkspaceMenuOpensCreationAndReturns": ("new-workspace-menu-light", "new-workspace-menu-dark"),
         "testRecentAgentsOpensAndClosesExistingDrawer": (
             "workspace-list-menu", "workspace-menu-recent-agents",
         ),
