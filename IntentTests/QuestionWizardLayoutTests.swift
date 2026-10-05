@@ -9,7 +9,7 @@ import UIKit
 })
 struct QuestionWizardLayoutTests {
     @Test(arguments: [CGFloat(320), CGFloat(390), CGFloat(600)])
-    func cardsStackWhenTheyFitAndScrollHorizontallyWhenHeightIsLimited(width: CGFloat) async throws {
+    func cardsStayStackedAndScrollVerticallyWhenHeightIsLimited(width: CGFloat) async throws {
         let tall = try await render(width: width, height: 1000)
         #expect(tall.options.count == 4)
         #expect(!tall.scrollsHorizontally)
@@ -23,9 +23,13 @@ struct QuestionWizardLayoutTests {
         #expect(tall.sendFrame.height >= 44)
 
         let compact = try await render(width: width, height: 400)
-        #expect(compact.scrollsHorizontally)
-        #expect(!compact.scrollsVertically)
-        #expect(compact.hostFrame.contains(compact.sendFrame))
+        #expect(!compact.scrollsHorizontally)
+        #expect(compact.scrollsVertically)
+        #expect(compact.options.count == 4)
+        for (previous, next) in zip(compact.options, compact.options.dropFirst()) {
+            #expect(previous.maxY < next.minY)
+            #expect(abs(previous.minX - next.minX) < 1)
+        }
         // Accessibility frame subtraction can report 43.99999999999997 for a 44pt target.
         #expect(compact.sendFrame.height >= 44 - 0.001, "Rendered action frame: \(compact.sendFrame)")
     }

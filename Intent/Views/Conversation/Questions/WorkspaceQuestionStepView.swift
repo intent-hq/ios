@@ -21,13 +21,11 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
         QuestionHeightLimit(maximumHeight: max(0, availableHeight)) {
             ViewThatFits(in: .vertical) {
                 if !dynamicTypeSize.isAccessibilitySize {
-                    content(horizontal: false)
-                        .fixedSize(horizontal: false, vertical: true)
-                    content(horizontal: true)
+                    content
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 ScrollView {
-                    content(horizontal: false)
+                    content
                 }
                 .scrollBounceBehavior(.basedOnSize)
             }
@@ -37,7 +35,8 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
     // The fit candidates contain only stateless controls. The free-text editor
     // lives outside this panel, so a layout change cannot replace its responder.
     // The final candidate scrolls the complete content, keeping the footer reachable.
-    private func content(horizontal: Bool) -> some View {
+    // Answers stay stacked even when the keyboard reduces the available height.
+    private var content: some View {
         VStack(alignment: .leading, spacing: Design.Question.contentSpacing) {
             VStack(alignment: .leading, spacing: Design.Question.titleSpacing) {
                 WorkspaceQuestionHeader(question: question)
@@ -49,16 +48,11 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
                         .accessibilityIdentifier("question.progress")
                 }
             }
-            VStack(
-                alignment: .leading,
-                spacing: horizontal ? Design.Question.carouselFooterSpacing : Design.Question.footerSpacing
-            ) {
+            VStack(alignment: .leading, spacing: Design.Question.footerSpacing) {
                 WorkspaceQuestionAnswerCards(
                     options: question.options,
                     selectedIndices: selectedIndices,
                     isMulti: question.multiSelect,
-                    horizontal: horizontal,
-                    availableHeight: availableHeight,
                     onSelect: onSelect
                 )
                 footer

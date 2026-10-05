@@ -97,16 +97,9 @@ extension Constants.Conversation.Design {
         static let answerSpacing: CGFloat = 8
         static let answerTextSpacing: CGFloat = 8
         static let footerSpacing: CGFloat = 20
-        static let carouselFooterSpacing: CGFloat = 24
-        // Reference widths only: the question layout owner adapts to available space and text size.
-        static let carouselAnswerWidth: CGFloat = 243
-        static let carouselAnswerMinimumHeight: CGFloat = 120
-        // Figma's compact row; oversized native text uses the readable vertical fallback (#570).
-        static let carouselAnswerHeight: CGFloat = 120
         static let buttonSpacing: CGFloat = 8
         static let buttonHorizontalPadding: CGFloat = 20
         static let buttonHeight: CGFloat = 40
-        static let carouselButtonHeight: CGFloat = 36
         static let borderWidth: CGFloat = 1
     }
 

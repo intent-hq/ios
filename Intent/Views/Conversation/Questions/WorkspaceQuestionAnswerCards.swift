@@ -4,32 +4,13 @@ struct WorkspaceQuestionAnswerCards: View {
     let options: [QuestionOption]
     let selectedIndices: [Int]
     let isMulti: Bool
-    let horizontal: Bool
-    let availableHeight: CGFloat
     let onSelect: (Int) -> Void
 
     private typealias Design = Constants.Conversation.Design
 
     var body: some View {
-        if horizontal {
-            QuestionCarouselFitLayout(
-                standardHeight: Design.Question.carouselAnswerHeight,
-                availableHeight: availableHeight
-            ) {
-                ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: Design.Question.answerSpacing) {
-                        cards
-                    }
-                    .scrollTargetLayout()
-                }
-                .scrollTargetBehavior(.viewAligned)
-                .scrollIndicators(.hidden)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        } else {
-            VStack(spacing: Design.Question.answerSpacing) {
-                cards
-            }
+        VStack(spacing: Design.Question.answerSpacing) {
+            cards
         }
     }
 
@@ -41,8 +22,7 @@ struct WorkspaceQuestionAnswerCards: View {
                 index: index,
                 option: options[index],
                 selected: selectedIndices.contains(index),
-                isMulti: isMulti,
-                horizontal: horizontal
+                isMulti: isMulti
             ) {
                 onSelect(index)
             }
@@ -61,7 +41,6 @@ private struct WorkspaceQuestionAnswerCard: View {
     let option: QuestionOption
     let selected: Bool
     let isMulti: Bool
-    let horizontal: Bool
     let onSelect: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -70,7 +49,6 @@ private struct WorkspaceQuestionAnswerCard: View {
     private typealias Design = Constants.Conversation.Design
 
     var body: some View {
-        let widthFraction = Constants.Conversation.QuestionWizard.Workspace.carouselWidthFraction
         Button(action: onSelect) {
             cardText
             .tracking(Design.Typography.smallTracking)
@@ -80,8 +58,8 @@ private struct WorkspaceQuestionAnswerCard: View {
             .padding(Design.Question.answerPadding)
             .frame(
                 maxWidth: .infinity,
-                minHeight: horizontal ? Design.Question.carouselAnswerHeight : Design.minimumTapTarget,
-                alignment: horizontal ? .topLeading : .leading
+                minHeight: Design.minimumTapTarget,
+                alignment: .leading
             )
             .background(selected ? Design.Palette.raisedSurface(for: colorScheme) : .clear)
             .clipShape(.rect(cornerRadius: Design.innerCornerRadius))
@@ -100,9 +78,6 @@ private struct WorkspaceQuestionAnswerCard: View {
         .accessibilityHint(option.description ?? "")
         .accessibilityValue(selected ? "Selected" : "Not selected")
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .containerRelativeFrame(horizontal ? .horizontal : []) { @Sendable length, _ in
-            length * widthFraction
-        }
         .accessibilityIdentifier("question.option.\(index)")
     }
 
@@ -126,29 +101,5 @@ private struct WorkspaceQuestionAnswerCard: View {
                     .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
             }
         }
-    }
-}
-
-/// Keep natural text measurement so no option (including off-screen ones) is clipped.
-/// Reject an oversized carousel in the step's ViewThatFits, instead of growing the
-/// standard height or keeping stateful measurements that can oscillate between candidates.
-private struct QuestionCarouselFitLayout: Layout {
-    let standardHeight: CGFloat
-    let availableHeight: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
-        guard let carousel = subviews.first else { return .zero }
-        var size = carousel.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
-        if size.height > standardHeight {
-            size.height = max(size.height, availableHeight + 1)
-        }
-        return size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
-        subviews.first?.place(
-            at: bounds.origin,
-            proposal: ProposedViewSize(width: bounds.width, height: nil)
-        )
     }
 }

@@ -5,45 +5,42 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
     @MainActor
-    func testHorizontalCardsKeepReferenceHeightAcrossSelectionAndBack() throws {
+    func testAnswersStayStackedAcrossKeyboardSelectionAndBack() throws {
         let app = try openQuestions(scenario: "question-cards", collapsed: false)
-        tap(app.textViews["Type your own answer…"].firstMatch)
         tap(app.buttons["question.skip"])
         XCTAssertTrue(app.staticTexts["Short answers"].waitForExistence(timeout: Self.timeout))
         let first = app.buttons["question.option.0"]
         let second = app.buttons["question.option.1"]
         XCTAssertTrue(second.waitForExistence(timeout: Self.timeout))
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "question-cards-compact-reference"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-        assertReferenceCards(first, second)
-
-        let carousel = app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch
-        carousel.swipeLeft()
-        let third = app.buttons["question.option.2"]
-        XCTAssertTrue(third.isHittable)
-        XCTAssertEqual(third.frame.height, 120, accuracy: 1, "Missing descriptions must not shrink cards")
-        carousel.swipeRight()
+        assertStackedCards(first, second)
         tap(first)
         XCTAssertTrue(app.staticTexts["Short answers"].exists, "Selecting must wait for explicit Next")
         XCTAssertEqual(first.value as? String, "Selected")
-        assertReferenceCards(first, second)
-        tap(app.buttons["question.next"])
+        assertStackedCards(first, second)
+
+        tap(app.textViews["Type your own answer…"].firstMatch)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        assertStackedCards(first, second)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "question-cards-stacked-keyboard"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        tapQuestionAction("question.next", in: app)
         XCTAssertTrue(app.staticTexts["Detailed answers"].waitForExistence(timeout: Self.timeout))
-        tap(app.buttons["question.back"])
+        tapQuestionAction("question.back", in: app)
         XCTAssertTrue(app.staticTexts["Short answers"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(first.value as? String, "Selected")
-        assertReferenceCards(first, second)
+        XCTAssertTrue(app.keyboards.firstMatch.isHittable)
+        assertStackedCards(first, second)
     }
 
     @MainActor
-    func testOversizedHorizontalAnswerUsesReadableVerticalFallback() throws {
+    func testLongAnswersScrollVerticallyWithoutClipping() throws {
         let app = try openQuestions(scenario: "question-cards", collapsed: false)
         tap(app.textViews["Type your own answer…"].firstMatch)
-        tap(app.buttons["question.skip"])
+        tapQuestionAction("question.skip", in: app)
         XCTAssertTrue(app.staticTexts["Short answers"].waitForExistence(timeout: Self.timeout))
-        tap(app.buttons["question.skip"])
+        tapQuestionAction("question.skip", in: app)
         XCTAssertTrue(app.staticTexts["Detailed answers"].waitForExistence(timeout: Self.timeout))
         let first = app.buttons["question.option.0"]
         let second = app.buttons["question.option.1"]
@@ -58,20 +55,20 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         scroll.swipeUp()
         let last = app.buttons["question.option.3"]
         XCTAssertTrue(last.isHittable)
-        XCTAssertGreaterThan(last.frame.height, shortHeight, "The vertical fallback must retain natural text heights")
+        XCTAssertGreaterThan(last.frame.height, shortHeight, "Long answers must retain natural text heights")
         tap(last)
         XCTAssertEqual(last.value as? String, "Selected")
-        if !app.buttons["question.next"].isHittable { scroll.swipeUp() }
-        tap(app.buttons["question.next"])
+        tapQuestionAction("question.next", in: app)
         assertSentMessage(in: app, contains: ["A: Full review"])
     }
 
     @MainActor
-    private func assertReferenceCards(_ first: XCUIElement, _ second: XCUIElement) {
-        XCTAssertGreaterThan(second.frame.minX, first.frame.minX, "This must exercise the horizontal carousel")
-        XCTAssertEqual(first.frame.minY, second.frame.minY, accuracy: 1)
-        XCTAssertEqual(first.frame.height, 120, accuracy: 1)
-        XCTAssertEqual(second.frame.height, 120, accuracy: 1)
+    private func assertStackedCards(_ first: XCUIElement, _ second: XCUIElement) {
+        XCTAssertLessThan(first.frame.maxY, second.frame.minY, "Answers must stay vertically stacked")
+        XCTAssertEqual(first.frame.minX, second.frame.minX, accuracy: 1)
+        XCTAssertEqual(first.frame.width, second.frame.width, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(first.frame.height, 44 - 0.001)
+        XCTAssertGreaterThanOrEqual(second.frame.height, 44 - 0.001)
     }
 
     @MainActor
@@ -283,11 +280,28 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     }
 
     @MainActor
+    private func tapQuestionAction(_ identifier: String, in app: XCUIApplication) {
+        let button = app.buttons[identifier]
+        XCTAssertTrue(button.waitForExistence(timeout: Self.timeout))
+        let scroll = app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch
+        if scroll.exists {
+            for _ in 0..<4 {
+                if scroll.frame.contains(button.frame) { break }
+                scroll.swipeUp()
+            }
+            XCTAssertTrue(scroll.frame.contains(button.frame), "The complete action must be reachable by vertical scrolling")
+        }
+        XCTAssertLessThanOrEqual(button.frame.maxY, app.textViews["Type your own answer…"].firstMatch.frame.minY)
+        XCTAssertTrue(button.isHittable)
+        tap(button)
+    }
+
+    @MainActor
     private func tapOption(_ index: Int, in app: XCUIApplication) {
         let option = app.buttons["question.option.\(index)"]
         XCTAssertTrue(option.waitForExistence(timeout: Self.timeout))
         if !option.isHittable {
-            app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch.swipeLeft()
+            app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch.swipeUp()
         }
         tap(option)
     }
