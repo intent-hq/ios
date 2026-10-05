@@ -31,7 +31,7 @@ struct PrMonitorWakeAttributionView: View {
                     .underline()
                     .lineLimit(1)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             Text("woke the agent")
                 .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))

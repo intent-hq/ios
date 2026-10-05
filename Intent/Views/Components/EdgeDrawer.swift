@@ -88,7 +88,7 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
                     Button { close() } label: {
                         Color.clear.contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(IntentContentButtonStyle())
                     .accessibilityLabel(closeLabel)
                     .accessibilityIdentifier(closeIdentifier)
                     .transition(.identity)

@@ -217,7 +217,7 @@ struct WorkspaceActionsMenu: View {
             }
             .disabled(isTerminalDisabled)
             Button(action: onCreateBrowser) {
-                Label { Text("New browser").interFont(Constants.Typography.bodyS) } icon: { Image(systemName: "globe") }
+                Label { Text("New browser").interFont(Constants.Typography.bodyS) } icon: { Image(.globe) }
             }
             WorkspaceScriptsMenu(workspaceId: workspaceId, store: scriptStore)
             Divider()
@@ -238,6 +238,7 @@ struct WorkspaceActionsMenu: View {
         } label: {
             ToolbarOverflowLabel()
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Workspace actions")
     }
 }
@@ -309,14 +310,14 @@ struct WorkspaceActionConfirmationSheet: View {
                 Text(actionLabel).interFont(Constants.Typography.bodyS)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(IntentButtonStyle())
             Button {
                 dismiss()
             } label: {
                 Text("Cancel").interFont(Constants.Typography.bodyS)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(IntentButtonStyle(variant: .secondary))
         }
         .padding(Constants.WorkspaceDetail.confirmationSheetPadding)
         .frame(width: Constants.WorkspaceDetail.confirmationSheetWidth)

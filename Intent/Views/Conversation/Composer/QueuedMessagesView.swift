@@ -83,6 +83,7 @@ struct QueuedMessagesView: View {
                 )
                 .contentShape(Rectangle())
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Save queued message edit")
     }
 
@@ -101,6 +102,7 @@ struct QueuedMessagesView: View {
                 )
                 .contentShape(Rectangle())
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Cancel queued message edit")
     }
 
@@ -120,6 +122,7 @@ struct QueuedMessagesView: View {
                 )
                 .contentShape(Rectangle())
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Edit queued message")
     }
 
@@ -127,8 +130,10 @@ struct QueuedMessagesView: View {
         Button {
             Task { await viewModel.sendQueuedMessageNow(messageId: message.id) }
         } label: {
-            Image(systemName: "paperplane.fill")
-                .font(.body)
+            Image(.arrowRight)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(Theme.primary(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,
@@ -136,6 +141,7 @@ struct QueuedMessagesView: View {
                 )
                 .contentShape(Rectangle())
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Send queued message now")
     }
 
@@ -154,6 +160,7 @@ struct QueuedMessagesView: View {
                 )
                 .contentShape(Rectangle())
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Remove queued message")
     }
 

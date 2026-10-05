@@ -65,7 +65,7 @@ struct ConnectionSwitcherList: View {
             )
             .contentShape(.rect(cornerRadius: ConnectionSwitcherStyle.cornerRadius))
         }
-        .buttonStyle(ConnectionSheetButtonStyle())
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(connection.displayName)
         .accessibilityAddTraits(connection.id == selectedID ? .isSelected : [])
         .accessibilityIdentifier("connection-switcher.connection.\(connection.id)")

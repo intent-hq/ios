@@ -83,8 +83,10 @@ private struct ConversationViewContent: View {
         conversationPresentation
             .navigationDestination(isPresented: $showDemoCover) {
                 Button("Return to conversation") { showDemoCover = false }
+                    .buttonStyle(IntentButtonStyle(variant: .secondary))
                     .accessibilityIdentifier("demo.conversation.return")
                     .navigationTitle("Conversation cover")
+                    .intentNavigationBackButton()
             }
             .navigationDestination(item: $childAgent) { dest in
                 ConversationView(
@@ -213,13 +215,10 @@ private extension ConversationViewContent {
     /// Keep the column's identity (including its scroll state) across width changes.
     private var conversationChrome: some View {
         legacyConversationChrome
+            .navigationBarBackButtonHidden(assistantStore == nil)
+            .nativeNavigationBackGesture(isEnabled: !usesWorkspaceDesign || !answeringWorkspaceQuestions)
             #if os(iOS)
             .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar, .tabBar)
-            .background {
-                if usesWorkspaceDesign {
-                    Color.clear.nativeNavigationBackGesture(isEnabled: !answeringWorkspaceQuestions)
-                }
-            }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if usesWorkspaceDesign {
                     WorkspaceConversationHeader(title: viewModel.agentName, onBack: { dismiss() }, actions: { agentMenu })
@@ -243,9 +242,16 @@ private extension ConversationViewContent {
             )
             .toolbar {
                 if !usesWorkspaceDesign {
+                    if assistantStore == nil {
+                        ToolbarItem(placement: .topBarLeading) {
+                            IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
+                        }
+                        .intentToolbarSurface()
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         agentMenu
                     }
+                    .intentToolbarSurface()
                 }
             }
     }
@@ -343,6 +349,7 @@ private extension ConversationViewContent {
         } label: {
             ToolbarOverflowLabel()
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(assistantStore == nil ? "Agent actions" : "Assistant actions")
         .accessibilityIdentifier(assistantStore == nil ? "conversation.actions.open" : "assistant.actions")
     }
@@ -458,12 +465,14 @@ private struct ConversationNoteSheet: View {
             workspaceId: workspaceId,
             noteTitle: noteTitle,
             session: session,
+            showsBackButton: !path.isEmpty,
             onNavigateToNote: navigate
         )
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Done", action: onDone)
+                IntentIconButton(icon: .close, label: "Done", action: onDone)
             }
+            .intentToolbarSurface()
         }
     }
 

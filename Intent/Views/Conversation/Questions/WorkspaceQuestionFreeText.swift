@@ -49,7 +49,7 @@ struct WorkspaceQuestionFreeText: View {
                 .frame(width: Design.minimumTapTarget, height: Design.minimumTapTarget)
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Write your own answer")
     }
 }

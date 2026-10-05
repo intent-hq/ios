@@ -273,7 +273,7 @@ struct ContentBlockBody: View, Equatable {
                         : Constants.Conversation.ContentBlock.loadedImageOpacity)
                     .copyContextMenuPassthrough()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel(imageNeedsHydration ? "Load attached image" : "Attached image")
             .contextMenu {
                 // A slim-truncated block only carries the low-res preview
@@ -326,7 +326,7 @@ struct ContentBlockBody: View, Equatable {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .copyContextMenuPassthrough()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .disabled(!imageNeedsHydration || isHydrating)
         } else {
             ImageDecodeFailureView()

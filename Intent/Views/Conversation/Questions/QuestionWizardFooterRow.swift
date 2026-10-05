@@ -16,6 +16,7 @@ struct QuestionWizardFooterRow: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .caption) private var actionIconSide: CGFloat = 12
 
     private typealias Layout = Constants.Conversation.QuestionWizard.Footer
     private typealias Design = Constants.Conversation.Design
@@ -78,8 +79,10 @@ struct QuestionWizardFooterRow: View {
     private var backButton: some View {
         Button(action: onBack) {
             HStack(spacing: Layout.buttonLabelSpacing) {
-                Image(systemName: "chevron.left")
-                    .font(.caption.weight(.semibold))
+                Image(.chevronLeft)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: actionIconSide, height: actionIconSide)
                     .accessibilityHidden(true)
                 Text("Back")
                     .interFont(Constants.Typography.subtextXXS)
@@ -93,7 +96,7 @@ struct QuestionWizardFooterRow: View {
                 minHeight: Constants.Accessibility.minimumTapTarget
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(index == 0)
     }
 
@@ -113,7 +116,7 @@ struct QuestionWizardFooterRow: View {
                     minHeight: Constants.Accessibility.minimumTapTarget
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
     }
 
     private var nextButton: some View {
@@ -121,8 +124,10 @@ struct QuestionWizardFooterRow: View {
             HStack(spacing: Layout.buttonLabelSpacing) {
                 Text(isLast ? "Send" : "Next")
                     .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
-                Image(systemName: isLast ? "arrow.up" : "arrow.right")
-                    .font(.caption.weight(.semibold))
+                Image(isLast ? .arrowUp : .arrowRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: actionIconSide, height: actionIconSide)
                     .accessibilityHidden(true)
             }
             .foregroundStyle(.white)
@@ -135,7 +140,7 @@ struct QuestionWizardFooterRow: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(nextDisabled || submitted || dismissed)
         .opacity(nextDisabled || submitted || dismissed ? Layout.nextButtonDisabledOpacity : 1)
     }

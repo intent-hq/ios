@@ -185,6 +185,27 @@ no_magic_numbers:
   allowed_numbers: [0.0, 1.0, 100.0, 0.5, 2.0]
 reporter: "xcode"
 custom_rules:
+  generic_button_style:
+    name: "Use Intent Button Styles"
+    # Match only the code token; lookahead keeps strings/comments out of the
+    # matched range while accepting whitespace and line breaks in the call.
+    # Constructors are also rejected outside buttonStyle (e.g. stored styles).
+    regex: '\b(?:buttonStyle(?=\s*\(\s*\.\s*(?:plain|bordered|borderedProminent|borderless|automatic|glass|glassProminent|link)\b)|(?:Plain|Bordered|BorderedProminent|Borderless|Default|Glass|GlassProminent|Link)ButtonStyle(?=\s*(?:\.\s*init\s*)?\())'
+    message: "Use IntentContentButtonStyle() for labels that own their layout and colors, or IntentButtonStyle for filled actions. Generic SwiftUI button styles can add unwanted enabled/disabled effects."
+    match_kinds:
+      - identifier
+      - typeidentifier
+    severity: error
+  intent_system_icon:
+    name: "Use Intent Icon Assets"
+    # Deliberately limited to Image calls with literal, exact equivalents.
+    # Native Label/Button systemImage arguments and other symbols stay allowed.
+    regex: '\bImage(?=\s*(?:\.\s*init\s*)?\(\s*systemName\s*:\s*"(?:plus|xmark|magnifyingglass|ellipsis|eye|eye\.slash)"\s*\))'
+    message: "Use Intent assets: Image(.addIcon) for plus, Image(.close) for xmark, Image(.search) for magnifyingglass, Image(.more) for ellipsis, Image(.eye) for eye, or Image(.eyeClosed) for eye.slash. Preserve the control's accessibility label."
+    match_kinds:
+      - identifier
+      - typeidentifier
+    severity: error
   geometry_reader_usage:
     name: "GeometryReader Is Banned"
     regex: '\bGeometryReader\b'

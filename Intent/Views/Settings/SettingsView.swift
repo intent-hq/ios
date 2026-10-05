@@ -83,7 +83,7 @@ private struct SettingsContent: View {
             .frame(maxWidth: .infinity)
         }
         .accessibilityIdentifier("settings.scroll")
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .foregroundStyle(SettingsStyle.foreground(for: colorScheme))
         .clipShape(UnevenRoundedRectangle(
             topLeadingRadius: SettingsStyle.surfaceRadius,

@@ -15,7 +15,7 @@ struct WorkspaceListMenu: View {
                 Label {
                     Text("Recent agents").interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "bubble.left.and.bubble.right")
+                    Image(.messageList)
                 }
             }
             .accessibilityIdentifier("workspaces.menu.recentAgents")
@@ -41,6 +41,7 @@ struct WorkspaceListMenu: View {
         } label: {
             ToolbarOverflowLabel()
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Workspace list options")
         .accessibilityIdentifier("workspaces.menu")
     }
@@ -50,7 +51,7 @@ struct WorkspaceListMenu: View {
             Label {
                 Text("New workspace").interFont(Constants.Typography.bodyS)
             } icon: {
-                Image(systemName: "plus.rectangle")
+                Image(.addIcon)
             }
         }
         .disabled(!coordinator.canCreateWorkspace)

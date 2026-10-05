@@ -84,6 +84,7 @@ struct MonitoredPrsRow: View {
         } label: {
             Label("Status unavailable · Retry", systemImage: "exclamationmark.triangle")
         }
+        .buttonStyle(IntentContentButtonStyle())
         .font(.caption2)
         .accessibilityLabel("PR monitors may be out of date. Retry refresh")
         .accessibilityIdentifier("monitoredPr.retry")
@@ -109,19 +110,19 @@ struct MonitoredPrsRow: View {
                     )
                 }
             } label: {
-                Label("Check and flush", systemImage: "arrow.triangle.2.circlepath")
+                Label("Check and flush", image: "ClockwiseArrow")
             }
             Button {
                 if let url = ExternalLink.url(from: Self.prUrl(monitor)) {
                     openURL(url)
                 }
             } label: {
-                Label("Open PR", systemImage: "arrow.up.right.square")
+                Label("Open PR", image: "External")
             }
             Button(role: .destructive) {
                 Task { await monitoredPrStore.cancel(monitorId: monitor.monitorId) }
             } label: {
-                Label("Cancel monitor", systemImage: "xmark")
+                Label("Cancel monitor", image: "Close")
             }
         } label: {
             if usesWorkspaceDesign {
@@ -133,7 +134,7 @@ struct MonitoredPrsRow: View {
                 chipLabel(monitor)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("monitoredPr.\(monitor.monitorId)")
         .accessibilityLabel(
             usesWorkspaceDesign

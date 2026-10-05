@@ -73,8 +73,10 @@ struct MobileTerminalView: View {
     private var header: some View {
         HStack(spacing: TerminalAppearance.headerSpacing) {
             Button { dismiss() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.title3.weight(.semibold))
+                Image(.arrowLeft)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
                     .frame(width: TerminalAppearance.controlSize, height: TerminalAppearance.controlSize)
             }
             .buttonStyle(TerminalControlStyle())
@@ -112,7 +114,7 @@ struct MobileTerminalView: View {
                 Label {
                     Text("Reconnect").interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "arrow.clockwise")
+                    Image(.clockwiseArrow)
                 }
             }
             .disabled(!hasPresented || !store.isConnected || !store.isActive(terminal))
@@ -122,14 +124,17 @@ struct MobileTerminalView: View {
                 Label {
                     Text("Close terminal").interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "xmark.circle")
+                    Image(.closeCircle)
                 }
             }
             .disabled(!store.isConnected || isClosing)
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.title3.weight(.semibold))
+            Image(.more)
+                .resizable()
+                .scaledToFit()
+                .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
                 .frame(width: TerminalAppearance.controlSize, height: TerminalAppearance.controlSize)
+                .accessibilityHidden(true)
         }
         .buttonStyle(TerminalControlStyle())
         .modifier(TerminalControlSurface())

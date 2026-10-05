@@ -429,9 +429,7 @@ struct CreationPickerControlsTests {
             diagnostics: SyntheticBadgeHostTrace(context: "picker layout=\(layout) dynamicType=\(dynamicTypeSize) isCreating=\(isCreating)")
         ) { hostView, window in
             let settled = try Self.settledPickerElements(in: hostView, window: window, layout: layout)
-            if layout == .workspace {
-                try CreationPickerRenderedGeometry(window: window).record(named: "workspace-\(dynamicTypeSize)")
-            }
+            try CreationPickerRenderedGeometry(window: window).record(named: "\(layout)-\(dynamicTypeSize)")
             return PickerLayoutSnapshot(
                 hostFrame: window.bounds,
                 provider: Self.snapshot(
@@ -502,11 +500,11 @@ struct CreationPickerControlsTests {
                         window.convert(element.accessibilityFrame, from: nil)
                     })
                 } catch {
-                    try rendered.record(named: "workspace-observation-failure")
+                    try rendered.record(named: "picker-observation-failure")
                     throw error
                 }
             } else {
-                frames = try [provider, model].map { try visibleControlFrame(of: $0, in: window) }
+                frames = try [provider, model].map { try visibleMenuRowFrame(of: $0, under: hostView, in: window) }
             }
             let providerFrame = frames[0]
             let modelFrame = frames[1]
@@ -528,12 +526,27 @@ struct CreationPickerControlsTests {
         throw PickerInspectionError.framesDidNotSettle(samples: Array(samples.suffix(requiredStableFrameSamples)))
     }
 
-    private static func visibleControlFrame(of element: NSObject, in window: UIWindow) throws -> CGRect {
-        let view = try #require(
-            element as? UIView,
-            "Hosted picker accessibility element did not expose its on-screen control view"
-        )
-        return view.visibleFrame(in: window)
+    private static func visibleMenuRowFrame(of element: NSObject, under root: UIView, in window: UIWindow) throws -> CGRect {
+        let accessibilityFrame = window.convert(element.accessibilityFrame, from: nil)
+        let center = CGPoint(x: accessibilityFrame.midX, y: accessibilityFrame.midY)
+        func matchingCells(under view: UIView) -> [UICollectionViewCell] {
+            if let cell = view as? UICollectionViewCell,
+               cell.window === window, !cell.isHidden,
+               window.convert(cell.bounds, from: cell).contains(center) {
+                return [cell]
+            }
+            return view.subviews.flatMap { matchingCells(under: $0) }
+        }
+        let cells = matchingCells(under: root)
+        try #require(cells.count == 1, "Each picker must occupy a distinct rendered list row")
+        let view = try #require(cells.first).contentView
+        var frame = window.convert(view.bounds, from: view)
+        var ancestor = view.superview
+        while let parent = ancestor {
+            if parent.clipsToBounds { frame = frame.intersection(window.convert(parent.bounds, from: parent)) }
+            ancestor = parent.superview
+        }
+        return frame
     }
 
     private static func pickerElement(identifier: String, in hostView: UIView) throws -> NSObject {
@@ -677,18 +690,6 @@ private struct PickerLayoutSnapshot {
         // Coordinate arithmetic can round a shared boundary by one representable value.
         let tolerance = max(upper.maxY.ulp, lower.minY.ulp)
         return upper.maxY <= lower.minY + tolerance
-    }
-}
-
-private extension UIView {
-    func visibleFrame(in window: UIWindow) -> CGRect {
-        var frame = window.convert(bounds, from: self)
-        var ancestor = superview
-        while let view = ancestor {
-            if view.clipsToBounds { frame = frame.intersection(window.convert(view.bounds, from: view)) }
-            ancestor = view.superview
-        }
-        return frame
     }
 }
 

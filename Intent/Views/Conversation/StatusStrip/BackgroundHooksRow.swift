@@ -39,6 +39,7 @@ struct BackgroundHooksRow: View {
                     } label: {
                         Label("Status unavailable · Retry", systemImage: "exclamationmark.triangle")
                     }
+                    .buttonStyle(IntentContentButtonStyle())
                     .font(.caption2)
                     .accessibilityLabel("Hooks may be out of date. Retry refresh")
                 }
@@ -70,18 +71,18 @@ struct BackgroundHooksRow: View {
             Button {
                 Task { await hookStore.runNow(hookId: hook.hookId) }
             } label: {
-                Label("Run now", systemImage: "play")
+                Label("Run now", image: "Play")
             }
             .disabled(hook.state == .running)
             Button(role: .destructive) {
                 Task { await hookStore.cancel(hookId: hook.hookId) }
             } label: {
-                Label("Cancel hook", systemImage: "xmark")
+                Label("Cancel hook", image: "Close")
             }
         } label: {
             chipLabel(hook)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
     }
 
     @ViewBuilder

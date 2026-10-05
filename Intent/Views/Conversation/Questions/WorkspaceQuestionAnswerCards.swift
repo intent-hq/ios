@@ -45,6 +45,7 @@ private struct WorkspaceQuestionAnswerCard: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.isEnabled) private var isEnabled
 
     private typealias Design = Constants.Conversation.Design
 
@@ -52,7 +53,9 @@ private struct WorkspaceQuestionAnswerCard: View {
         Button(action: onSelect) {
             cardText
             .tracking(Design.Typography.smallTracking)
-            .foregroundStyle(Design.Palette.foreground(for: colorScheme))
+            .foregroundStyle(isEnabled
+                ? Design.Palette.foreground(for: colorScheme)
+                : Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding(Design.Question.answerPadding)
@@ -73,7 +76,7 @@ private struct WorkspaceQuestionAnswerCard: View {
             }
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(option.label)
         .accessibilityHint(option.description ?? "")
         .accessibilityValue(selected ? "Selected" : "Not selected")

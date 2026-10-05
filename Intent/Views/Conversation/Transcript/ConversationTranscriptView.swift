@@ -16,6 +16,7 @@ struct ConversationTranscriptView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.workspaceTranscriptDesign) var usesWorkspaceDesign
+    @ScaledMetric(relativeTo: .caption) var actionIconSide: CGFloat = 12
 
     typealias Lifecycle = ConversationTranscriptRecoveryLifecycle
 

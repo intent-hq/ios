@@ -47,7 +47,7 @@ struct WorkspaceSearchBar: View {
                             : Constants.Pairing.foreground(for: colorScheme))
                         .contentShape(RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius, style: .circular))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IntentContentButtonStyle())
                 .matchedGeometryEffect(id: mode, in: selectionAnimation)
                 .accessibilityAddTraits(viewMode == mode ? .isSelected : [])
                 .accessibilityIdentifier("workspaces.viewMode.\(mode.rawValue)")
@@ -59,10 +59,7 @@ struct WorkspaceSearchBar: View {
                 .matchedGeometryEffect(id: viewMode, in: selectionAnimation, isSource: false)
         }
         .padding(segmentInset)
-        .background(
-            Constants.WorkspaceList.controlSurface(for: colorScheme),
-            in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-        )
+        .background { WorkspaceSearchSurface() }
         .animation(reduceMotion ? nil : .snappy(duration: Self.selectionAnimationDuration), value: viewMode)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Workspace view")
@@ -92,11 +89,11 @@ struct WorkspaceSearchButton: View {
                 .frame(width: height, height: height)
                 .contentShape(.rect)
                 .background {
-                    if showsBackground { WorkspaceControlSurface() }
+                    if showsBackground { WorkspaceSearchSurface() }
                 }
                 .accessibilityHidden(true)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
@@ -129,9 +126,9 @@ struct WorkspaceSearchInput: View {
                     .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                     .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                     .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
-                    .background { WorkspaceControlSurface() }
+                    .background { WorkspaceSearchSurface() }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Close search")
             .accessibilityIdentifier("\(identifierPrefix).cancel")
         }
@@ -166,7 +163,7 @@ struct WorkspaceSearchInput: View {
                         .accessibilityHidden(true)
                         .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Clear search")
                 .accessibilityIdentifier("\(identifierPrefix).clear")
             }
@@ -175,7 +172,16 @@ struct WorkspaceSearchInput: View {
         .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
         .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
         .frame(minHeight: Constants.WorkspaceSearch.expandedHeight)
-        .background { WorkspaceControlSurface() }
+        .background { WorkspaceSearchSurface() }
+    }
+}
+
+private struct WorkspaceSearchSurface: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
+            .fill(Constants.WorkspaceList.controlSurface(for: colorScheme))
     }
 }
 
@@ -185,6 +191,15 @@ struct WorkspaceControlSurface: View {
     var body: some View {
         RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
             .fill(Constants.Pairing.surface(for: colorScheme))
+            .modifier(WorkspaceControlShadow())
+    }
+}
+
+struct WorkspaceControlShadow: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
             .shadow(
                 color: .black.opacity(colorScheme == .light ? Constants.WorkspaceSearch.surfaceShadowOpacity : 0),
                 radius: Constants.WorkspaceSearch.surfaceShadowRadius,

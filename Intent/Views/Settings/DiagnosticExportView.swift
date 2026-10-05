@@ -15,12 +15,11 @@ struct DiagnosticExportView: View {
                     DiagnosticPreviewSection(preview: preview)
                 }
             }
+            // Preserve native diagnostic list actions; only navigation uses Intent button chrome.
+            // swiftlint:disable:next generic_button_style
+            .buttonStyle(.automatic)
             .navigationTitle("Export logs")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { model.cancelPreparation(); dismiss() }
-                }
-            }
+            .toolbar { exportToolbar }
             .confirmationDialog("Clear local diagnostic logs?", isPresented: $confirmsClear, titleVisibility: .visible) {
                 Button("Clear logs", role: .destructive) { model.clearHistory() }
                 Button("Cancel", role: .cancel) {}
@@ -30,16 +29,28 @@ struct DiagnosticExportView: View {
                     model.sharingFinished(id: id, failed: failed, cleaned: cleaned)
                 }
             }
-            .task { model.refresh() }
+            .task { model.refreshIfNeeded() }
             .task(id: model.preview?.snapshot.expiresAt) { await model.refreshWhenExpired() }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { model.refresh() }
+                if phase == .active { model.refreshIfNeeded() }
             }
             .onChange(of: model.share?.id) { _, value in
-                if value == nil { model.refreshIfExpired() }
+                if value == nil { model.refreshIfNeeded() }
             }
             .onDisappear { model.cancelPreparation() }
         }
+    }
+
+    @ToolbarContentBuilder
+    private var exportToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            IntentIconButton(icon: .close, label: "Close", showsBackground: false) {
+                model.cancelPreparation()
+                dismiss()
+            }
+            .accessibilityIdentifier("diagnosticClose")
+        }
+        .intentToolbarSurface()
     }
 }
 

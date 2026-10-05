@@ -34,6 +34,7 @@ struct IntentApp: App {
                 backendID: $backendID,
                 networkAvailability: DemoConnectionLoss.networkAvailability ?? .shared
             )
+                .buttonStyle(IntentContentButtonStyle())
                 #if os(visionOS)
                 .frame(
                     minWidth: Constants.Root.visionMinimumWindowWidth,
@@ -390,7 +391,7 @@ private struct RemovedBackendPlaceholderView: View {
                 Text("Close Window")
                     .interFont(Constants.Typography.bodyS)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(IntentButtonStyle(variant: .secondary))
         }
         .padding()
     }

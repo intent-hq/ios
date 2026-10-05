@@ -5,6 +5,7 @@ struct CreateWorkspaceSourceCard: View {
     let branch: String?
     let onEdit: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .body) private var textSize = Constants.Typography.bodySEmphasized.size
@@ -43,7 +44,8 @@ struct CreateWorkspaceSourceCard: View {
                 cornerRadius: CreateWorkspaceFormStyle.cornerRadius
             ))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
+        .opacity(isEnabled ? 1 : Constants.ConnectionSheet.placeholderOpacity)
         .accessibilityIdentifier("creation.sourceCard")
         .accessibilityLabel(branch.map { String(localized: "Source. Repository: \(repositoryFullName). Branch: \($0)") }
             ?? String(localized: "Source. New repository: \(repositoryFullName)"))

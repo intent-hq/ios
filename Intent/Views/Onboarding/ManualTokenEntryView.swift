@@ -203,7 +203,7 @@ struct ManualTokenEntryView: View {
         Button(action: pasteToken) {
             Image(.connectionClipboard)
                 // The exact export already has 30% white strokes.
-                .renderingMode(colorScheme == .dark ? .original : .template)
+                .renderingMode(colorScheme == .dark && !isValidating ? .original : .template)
                 .resizable()
                 .scaledToFit()
                 .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
@@ -213,9 +213,11 @@ struct ManualTokenEntryView: View {
                 )
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         // Preserve the visible light paste affordance rather than Figma's white-on-white export.
-        .foregroundStyle(Theme.foreground(for: colorScheme))
+        .foregroundStyle(isValidating
+            ? Constants.ConnectionSheet.disabledForeground(for: colorScheme)
+            : Theme.foreground(for: colorScheme))
         .accessibilityLabel("Paste API token")
     }
 
@@ -224,7 +226,7 @@ struct ManualTokenEntryView: View {
             isTokenVisible.toggle()
             focusedField = .token
         } label: {
-            Image(systemName: isTokenVisible ? "eye.slash" : "eye")
+            Image(isTokenVisible ? .eyeClosed : .eye)
                 .resizable()
                 .scaledToFit()
                 .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
@@ -233,10 +235,12 @@ struct ManualTokenEntryView: View {
                     height: Constants.ConnectionSheet.minimumTouchTarget
                 )
                 .contentShape(.rect)
+                .accessibilityHidden(true)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(Theme.foreground(for: colorScheme)
-            .opacity(colorScheme == .dark ? Constants.ConnectionSheet.placeholderOpacity : 1))
+        .buttonStyle(IntentContentButtonStyle())
+        .foregroundStyle(isValidating
+            ? Constants.ConnectionSheet.disabledForeground(for: colorScheme)
+            : Theme.foreground(for: colorScheme).opacity(colorScheme == .dark ? Constants.ConnectionSheet.placeholderOpacity : 1))
         .accessibilityLabel(isTokenVisible ? "Hide API token" : "Show API token")
         // Expand the trailing hit region inward, retaining the reference's 24pt glyph inset.
         .padding(.trailing, -Constants.ManualTokenEntry.pasteHitExpansion)
@@ -284,7 +288,7 @@ struct ManualTokenEntryView: View {
                 in: .rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius)
             )
         }
-        .buttonStyle(ConnectionSheetButtonStyle())
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(!isValidating && (host.isEmpty || token.isEmpty))
         .accessibilityIdentifier("manual.connect")
     }

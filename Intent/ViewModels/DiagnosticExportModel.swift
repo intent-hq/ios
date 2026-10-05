@@ -9,14 +9,25 @@ final class DiagnosticExportModel {
     private(set) var notice: LocalizedStringResource?
     var share: DiagnosticShareLease?
     private let store: DiagnosticStore
+    private let now: () -> Date
     @ObservationIgnored private var work: Task<Void, Never>?
 
-    init(store: DiagnosticStore = .shared) { self.store = store }
+    init(store: DiagnosticStore = .shared, now: @escaping () -> Date = { Date() }) {
+        self.store = store
+        self.now = now
+    }
+
+    private var hasCurrentPreview: Bool {
+        guard let snapshot = preview?.snapshot else { return false }
+        let timestamp = now()
+        return snapshot.metadata.generatedAt <= timestamp && timestamp < snapshot.expiresAt
+    }
 
     func refresh() {
         guard !isWorking, share == nil else { return }
+        let discardPreview = !hasCurrentPreview
         start { model in
-            model.preview = nil
+            if discardPreview { model.preview = nil }
             try await model.loadPreview()
         }
     }
@@ -68,19 +79,19 @@ final class DiagnosticExportModel {
 
     func cancelPreparation() { work?.cancel() }
 
-    func refreshIfExpired() {
-        if let preview, preview.snapshot.expiresAt <= Date() { refresh() }
+    func refreshIfNeeded() {
+        if !hasCurrentPreview { refresh() }
     }
 
     /// SwiftUI owns/cancels this wait. Expiry also gets rechecked by the writer
     /// at Share time (including expiry during ZIP preparation).
     func refreshWhenExpired() async {
         guard let deadline = preview?.snapshot.expiresAt else { return }
-        let delay = max(0, deadline.timeIntervalSinceNow)
+        let delay = max(0, deadline.timeIntervalSince(now()))
         do {
             try await Task.sleep(for: .seconds(delay))
             try Task.checkCancellation()
-            refresh()
+            refreshIfNeeded()
         } catch { /* View disappeared or a newer preview replaced this one. */ }
     }
 

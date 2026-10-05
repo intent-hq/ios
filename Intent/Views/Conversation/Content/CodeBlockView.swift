@@ -5,6 +5,7 @@ struct CodeBlockView: View {
     let language: String?
     @Environment(\.assistantMessageStreaming) private var isStreaming
     @State private var copied = false
+    @ScaledMetric(relativeTo: .caption) private var copyIconSide: CGFloat = 12
 
     var body: some View {
         if language == "mermaid" {
@@ -30,7 +31,7 @@ struct CodeBlockView: View {
                 HapticManager.impact(.light)
                 UIPasteboard.general.string = code
             } label: {
-                Label("Copy Code", systemImage: "doc.on.doc")
+                Label("Copy Code", image: "Copy")
             }
         }
     }
@@ -47,7 +48,10 @@ struct CodeBlockView: View {
                 copyCode()
             } label: {
                 HStack(spacing: Constants.Conversation.CodeBlock.copyLabelSpacing) {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    Image(copied ? .check : .copy)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: copyIconSide, height: copyIconSide)
                         .accessibilityHidden(true)
                     Text(copied ? "Copied" : "Copy")
                         .interFont(Constants.Typography.subtextXXS)
@@ -55,7 +59,7 @@ struct CodeBlockView: View {
                 .font(.caption)
                 .foregroundStyle(Constants.Colors.CodeBlock.action)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
         }
         .padding(.horizontal, Constants.Conversation.CodeBlock.horizontalPadding)
         .padding(.vertical, Constants.Conversation.CodeBlock.headerVerticalPadding)

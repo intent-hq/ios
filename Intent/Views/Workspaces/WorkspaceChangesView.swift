@@ -71,13 +71,23 @@ struct WorkspaceChangesView: View {
                 )
                 .navigationTitle(file.stage == "staged" ? "Staged Changes" : "Unstaged Changes")
                 .toolbarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { selectedFile = nil } } }
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        IntentIconButton(icon: .close, label: "Done") { selectedFile = nil }
+                    }
+                    .intentToolbarSurface()
+                }
             }
         }
         .sheet(item: $selectedCommit) { commit in
             NavigationStack {
                 WorkspaceCommitDiffView(loader: loader, commit: commit)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { selectedCommit = nil } } }
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            IntentIconButton(icon: .close, label: "Done") { selectedCommit = nil }
+                        }
+                        .intentToolbarSurface()
+                    }
             }
         }
     }
@@ -103,7 +113,7 @@ struct WorkspaceChangesView: View {
                 } label: {
                     CreateWorkspaceChoiceLabel(title: repositoryName, surface: WorkspaceDetailStyle.surface(for: colorScheme))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Repository")
                 .accessibilityValue(repositoryName)
                 .accessibilityIdentifier("changes.repository")
@@ -193,7 +203,7 @@ struct WorkspaceChangesView: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityHint("Opens the commit diff")
     }
 

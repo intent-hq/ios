@@ -197,7 +197,7 @@ struct ConnectionsView: View {
                 status: status
             )
         }
-        .buttonStyle(ConnectionSheetButtonStyle())
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("saved-connection.\(connection.id)")
         .accessibilityHint("Touch and hold for connection details and actions.")
         .contextMenu {

@@ -11,14 +11,12 @@ extension AgentAttentionKind {
 }
 
 extension AgentAvatarState {
-    /// Corner cue symbol for the needs-user states; nil for the others (the
-    /// running dot is drawn separately).
+    /// Discussion and blocker cues; questions use the row's status text.
     var cornerSymbol: String? {
         switch self {
-        case .question: return "questionmark.bubble.fill"
         case .attentionDiscussion: return AgentAttentionKind.discussion.systemImage
         case .attentionBlocker: return AgentAttentionKind.blocker.systemImage
-        case .idle, .running, .waiting, .failed, .completed: return nil
+        case .idle, .running, .waiting, .failed, .completed, .question: return nil
         }
     }
 
@@ -57,7 +55,11 @@ struct AgentNotificationsMuteButton: View {
                 Text(agent.notificationsMuteToggleTitle)
                     .interFont(Constants.Typography.bodyS)
             } icon: {
-                Image(systemName: agent.notificationsMuteToggleSymbol)
+                if agent.notificationsMuted {
+                    Image(.notification)
+                } else {
+                    Image(systemName: agent.notificationsMuteToggleSymbol)
+                }
             }
         }
     }
@@ -72,10 +74,7 @@ struct AgentRowView: View {
 
     private var avatarState: AgentAvatarState { AgentAvatarState.state(for: agent) }
 
-    /// The needs-user corner cue (question / discussion / blocker) is the
-    /// row's attention badge: a muted agent shows the `bell.slash` glyph by
-    /// its name instead. The running dot is activity, not attention, and is
-    /// unaffected.
+    /// Muting hides attention cues but preserves the running dot.
     private var cornerSymbol: String? {
         agent.notificationsMuted ? nil : avatarState.cornerSymbol
     }
@@ -282,7 +281,7 @@ struct DelegatedAgentsRow: View {
             .padding(.leading, WorkspaceDetailStyle.avatarSize + WorkspaceDetailStyle.avatarSpacing)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(summaryTitle)
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .visionListRowHitTarget()
@@ -296,23 +295,7 @@ struct DelegatedAgentsRow: View {
     }
 
     private var avatarStack: some View {
-        HStack(spacing: Constants.AgentRow.avatarOverlap) {
-            ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars).enumerated()), id: \.element.id) { index, agent in
-                AgentAvatarView(
-                    agentId: agent.id,
-                    size: WorkspaceDetailStyle.stackAvatarSize,
-                    specialist: agent.specialist,
-                    state: AgentAvatarState.state(for: agent),
-                    workspaceStyle: true
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: WorkspaceDetailStyle.stackAvatarSize * WorkspaceDetailStyle.avatarCornerRatio)
-                        .strokeBorder(WorkspaceDetailStyle.background(for: colorScheme), lineWidth: WorkspaceDetailStyle.stackBorderWidth)
-                }
-                .zIndex(Double(Constants.AgentRow.maximumHeaderAvatars - index))
-            }
-        }
-        .accessibilityHidden(true)
+        AgentGroupAvatarStack(agents: agents, totalCount: totalCount)
     }
 
     private var summaryTitle: String {
@@ -335,6 +318,7 @@ enum AgentGroupSummary {
 }
 
 struct BackgroundAgentsHeader: View {
+    @ScaledMetric(relativeTo: .caption) private var chevronSize = Constants.Typography.subtextXXS.size
     let agents: [AgentSession]
     var totalCount: Int?
     var title = "background agents"
@@ -346,16 +330,7 @@ struct BackgroundAgentsHeader: View {
     var body: some View {
         Button(action: onToggle) {
             HStack(spacing: Constants.AgentRow.headerSpacing) {
-                HStack(spacing: Constants.AgentRow.avatarOverlap) {
-                    ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars))) { agent in
-                        AgentAvatarView(
-                            agentId: agent.id,
-                            size: Constants.AgentRow.headerAvatarSize,
-                            specialist: agent.specialist,
-                            state: AgentAvatarState.state(for: agent)
-                        )
-                    }
-                }
+                AgentGroupAvatarStack(agents: agents, totalCount: totalCount)
 
                 Text("\(totalCount ?? agents.count) \(title)" + (runningCount > 0 ? " · \(runningCount) running" : ""))
                     .interFont(Constants.Typography.subtextXXS)
@@ -363,14 +338,16 @@ struct BackgroundAgentsHeader: View {
 
                 Spacer()
 
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption)
+                Image(isExpanded ? .chevronDown : .chevronRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: chevronSize, height: chevronSize)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
             }
             .padding(.vertical, Constants.AgentRow.backgroundVerticalPadding)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .visionListRowHitTarget()
     }
