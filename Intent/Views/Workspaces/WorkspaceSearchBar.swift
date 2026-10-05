@@ -25,7 +25,11 @@ struct WorkspaceSearchBar: View {
             HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
                 viewModeSwitcher
 
-                WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight)
+                WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight, showsBackground: false)
+                    .background(
+                        Constants.WorkspaceList.controlSurface(for: colorScheme),
+                        in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
+                    )
             }
         }
         .padding(.horizontal, horizontalPadding)
