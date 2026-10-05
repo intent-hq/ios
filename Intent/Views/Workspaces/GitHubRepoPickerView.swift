@@ -80,7 +80,7 @@ struct GitHubRepoPickerView: View {
 
     private var newRepositoryButton: some View {
         Button(action: onCreateRepository) {
-            Image(systemName: "plus")
+            Image(.addIcon)
                 .resizable()
                 .scaledToFit()
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
