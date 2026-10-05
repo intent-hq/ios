@@ -16,15 +16,7 @@ struct DiagnosticExportView: View {
                 }
             }
             .navigationTitle("Export logs")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    IntentIconButton(icon: .close, label: "Done") {
-                        model.cancelPreparation()
-                        dismiss()
-                    }
-                }
-                .intentToolbarSurface()
-            }
+            .toolbar { exportToolbar }
             .confirmationDialog("Clear local diagnostic logs?", isPresented: $confirmsClear, titleVisibility: .visible) {
                 Button("Clear logs", role: .destructive) { model.clearHistory() }
                 Button("Cancel", role: .cancel) {}
@@ -44,6 +36,17 @@ struct DiagnosticExportView: View {
             }
             .onDisappear { model.cancelPreparation() }
         }
+    }
+
+    @ToolbarContentBuilder
+    private var exportToolbar: some ToolbarContent {
+        ToolbarItem(placement: .confirmationAction) {
+            IntentIconButton(icon: .close, label: "Done") {
+                model.cancelPreparation()
+                dismiss()
+            }
+        }
+        .intentToolbarSurface()
     }
 }
 

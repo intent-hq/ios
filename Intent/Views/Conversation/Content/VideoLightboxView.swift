@@ -28,6 +28,7 @@ struct VideoLightboxView: View {
                             minHeight: Constants.Accessibility.minimumTapTarget
                         )
                         .contentShape(.rect)
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Close video")

@@ -134,6 +134,7 @@ struct MobileTerminalView: View {
                 .scaledToFit()
                 .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
                 .frame(width: TerminalAppearance.controlSize, height: TerminalAppearance.controlSize)
+                .accessibilityHidden(true)
         }
         .buttonStyle(TerminalControlStyle())
         .modifier(TerminalControlSurface())

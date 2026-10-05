@@ -57,7 +57,11 @@ struct AgentNotificationsMuteButton: View {
                 Text(agent.notificationsMuteToggleTitle)
                     .interFont(Constants.Typography.bodyS)
             } icon: {
-                Image(systemName: agent.notificationsMuteToggleSymbol)
+                if agent.notificationsMuted {
+                    Image(.notification)
+                } else {
+                    Image(systemName: agent.notificationsMuteToggleSymbol)
+                }
             }
         }
     }

@@ -29,7 +29,6 @@ struct ContextMentionChipView: View {
             providerIcon
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Constants.Conversation.ContextMention.iconOpacity))
-                .accessibilityHidden(true)
             Text(Self.displayTitle(mention.title))
                 .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                 .lineLimit(1)
@@ -48,8 +47,10 @@ struct ContextMentionChipView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: providerIconSide, height: providerIconSide)
+                .accessibilityHidden(true)
         } else {
             Image(systemName: Self.iconName(for: mention.provider))
+                .accessibilityHidden(true)
         }
     }
 

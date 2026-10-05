@@ -226,7 +226,7 @@ struct ManualTokenEntryView: View {
             isTokenVisible.toggle()
             focusedField = .token
         } label: {
-            Image(systemName: isTokenVisible ? "eye.slash" : "eye")
+            (isTokenVisible ? Image(systemName: "eye.slash") : Image(.eye))
                 .resizable()
                 .scaledToFit()
                 .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
