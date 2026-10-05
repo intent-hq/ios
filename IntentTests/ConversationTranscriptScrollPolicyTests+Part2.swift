@@ -6,6 +6,33 @@ import UIKit
 private let kTestAtBottomThreshold: CGFloat = 50
 
 extension ConversationTranscriptScrollPolicyTests {
+    /// Long button jumps must skip intermediate rows; short jumps retain
+    /// their animation. The boundary uses visible height, including insets.
+    @Test(arguments: [
+        (CGFloat(-20), true), (0, true), (50, true), (699, true),
+        (700, true), (701, false), (10_000, false)
+    ])
+    func goToEndAnimationIsLimitedToOneVisibleScreen(distance: CGFloat, animated: Bool) {
+        let viewport = ConversationTranscriptScrollPolicy.ViewportGeometry(
+            contentOffsetY: 10_000 + 80 - 800 - distance,
+            contentHeight: 10_000,
+            containerHeight: 800,
+            topInset: 20,
+            bottomInset: 80
+        )
+        #expect(ConversationTranscriptScrollPolicy.shouldAnimateGoToEnd(geometry: viewport) == animated)
+    }
+
+    @Test func goToEndKeepsAnimationUntilGeometryIsUsable() {
+        #expect(ConversationTranscriptScrollPolicy.shouldAnimateGoToEnd(geometry: nil))
+        for height: CGFloat in [0, 100, .infinity, .nan] {
+            let viewport = ConversationTranscriptScrollPolicy.ViewportGeometry(
+                contentOffsetY: 0, contentHeight: 10_000, containerHeight: height, topInset: 20, bottomInset: 80
+            )
+            #expect(ConversationTranscriptScrollPolicy.shouldAnimateGoToEnd(geometry: viewport))
+        }
+    }
+
     func executeFollow(
         forced: Bool = false,
         userIsScrolledAway: Bool = false,
