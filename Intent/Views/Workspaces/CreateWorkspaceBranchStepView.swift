@@ -25,6 +25,7 @@ struct CreateWorkspaceBranchStepView: View {
             searchText: $searchText,
             searchPlaceholder: "Search branches",
             searchIdentifier: "creation.branchSearch",
+            searchButtonShowsBackground: false,
             isSearchEnabled: !isLoading && loadError == nil,
             isLoading: isLoading,
             isNextDisabled: selectedBranch == nil,
