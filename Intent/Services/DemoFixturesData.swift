@@ -8,6 +8,7 @@ extension DemoFixtures {
     // swiftlint:disable no_magic_numbers
 
     static var workspaces: [[String: Any]] {
+        if ProcessInfo.processInfo.arguments.contains("--demo-empty-workspaces") { return [] }
         guard ProcessInfo.processInfo.arguments.contains("--demo-long-workspace-list") else { return baseWorkspaces }
         let extra = (0 ..< 20).map { index in
             var workspace = baseWorkspaces[index % baseWorkspaces.count]

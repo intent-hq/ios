@@ -14,6 +14,7 @@
 		AC000011AAAA000000000011 /* Intent in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000001AAAA000000000001 /* Intent */; };
 		AC000012AAAA000000000012 /* IntentTests in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000002AAAA000000000002 /* IntentTests */; };
 		AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000003AAAA000000000003 /* Info-visionOS.plist */; };
+		AC000014AAAA000000000014 /* IntentUITests in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000005AAAA000000000005 /* IntentUITests */; };
 		EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* Textual */; };
 /* End PBXBuildFile section */
 
@@ -44,6 +45,7 @@
 				AC000011AAAA000000000011 /* Intent in Copy Test Source Inputs */,
 				AC000012AAAA000000000012 /* IntentTests in Copy Test Source Inputs */,
 				AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */,
+				AC000014AAAA000000000014 /* IntentUITests in Copy Test Source Inputs */,
 			);
 			name = "Copy Test Source Inputs";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -55,6 +57,7 @@
 		AC000001AAAA000000000001 /* Intent */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Intent; sourceTree = SOURCE_ROOT; };
 		AC000002AAAA000000000002 /* IntentTests */ = {isa = PBXFileReference; lastKnownFileType = folder; path = IntentTests; sourceTree = SOURCE_ROOT; };
 		AC000003AAAA000000000003 /* Info-visionOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-visionOS.plist"; sourceTree = SOURCE_ROOT; };
+		AC000005AAAA000000000005 /* IntentUITests */ = {isa = PBXFileReference; lastKnownFileType = folder; path = IntentUITests; sourceTree = SOURCE_ROOT; };
 		EB655EC92F669E6B00176730 /* Intent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EDA2F669E6C00176730 /* IntentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EE42F669E6C00176730 /* IntentUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -73,6 +76,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		EB655ECB2F669E6B00176730 /* Intent */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFolders = (
+				Resources/Mermaid,
+			);
 			exceptions = (
 				EB655ECC2F669E6B00176730 /* Exceptions for "Intent" folder in "Intent" target */,
 			);
@@ -131,6 +137,7 @@
 				AC000001AAAA000000000001 /* Intent */,
 				AC000002AAAA000000000002 /* IntentTests */,
 				AC000003AAAA000000000003 /* Info-visionOS.plist */,
+				AC000005AAAA000000000005 /* IntentUITests */,
 			);
 			name = "Test Source Inputs";
 			sourceTree = "<group>";
@@ -317,6 +324,8 @@
 				"$(SRCROOT)/.swiftlint.yml",
 				"$(SRCROOT)/scripts/swiftlint-xcode.sh",
 				"$(SRCROOT)/Intent",
+				"$(SRCROOT)/Intent/AppIcon.icon",
+				"$(SRCROOT)/Intent/AppIcon.icon/Assets",
 				"$(SRCROOT)/IntentTests",
 				"$(SRCROOT)/IntentUITests",
 			);
@@ -404,6 +413,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=xros*]" = AppIcon.icon;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=xrsimulator*]" = AppIcon.icon;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/TailcatKit/build",
@@ -426,7 +437,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.4;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -452,6 +463,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=xros*]" = AppIcon.icon;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=xrsimulator*]" = AppIcon.icon;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/TailcatKit/build",
@@ -474,7 +487,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.4;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -627,7 +640,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1.4;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -655,7 +668,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1.4;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -677,7 +690,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.4;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -699,7 +712,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.4;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -777,7 +790,7 @@
 			repositoryURL = "https://github.com/intent-hq/textual";
 			requirement = {
 				kind = exactVersion;
-				version = "0.5.0-intent.2";
+				version = "0.5.0-intent.4";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

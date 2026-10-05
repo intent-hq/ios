@@ -5,6 +5,11 @@ struct WorkspaceRowView: View {
     let colorScheme: ColorScheme
     var showRepo: Bool = true
     var spacious = false
+    var timestampOpacity: Double = 1
+    var statusIconHidden = false
+    var minimumHeight: CGFloat = 0
+    var leadingSwipeProgress: CGFloat = 0
+    var onStatusCenterChanged: (CGFloat) -> Void = { _ in }
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Workspace-scoped PR monitors feeding the pill pool and the "+N"
@@ -50,6 +55,10 @@ struct WorkspaceRowView: View {
         HStack(alignment: Self.titleCenter, spacing: spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
             // Status icon with agent activity / unread dot overlays
             WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme)
+                .opacity(statusIconHidden ? 0 : 1)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.frame(in: .named(workspace.id)).midY
+                } action: { onStatusCenterChanged($0) }
 
             VStack(alignment: .leading, spacing: spacious ? Constants.WorkspaceRow.spaciousTitleSpacing : Constants.WorkspaceRow.titleSpacing) {
                 titleRow
@@ -65,23 +74,13 @@ struct WorkspaceRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             monitorRefreshButton
-
-            // Agent-set status screenshot (PROTOCOL §5.1 statusImageAssetId);
-            // mounted only when set so an unset workspace leaves no gap.
-            if let statusImageAssetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
-                WorkspaceStatusImageView(
-                    workspaceId: workspace.id,
-                    assetId: statusImageAssetId,
-                    style: .card
-                )
-                    .alignmentGuide(Self.titleCenter) { dimensions in
-                        dimensions[VerticalAlignment.center]
-                    }
-            }
         }
+        .offset(x: -(Constants.WorkspaceRow.statusIconSize + (spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing)) * leadingSwipeProgress)
         .contentShape(Rectangle())
         .padding(.vertical, spacious ? Constants.WorkspaceRow.spaciousPadding : Constants.WorkspaceRow.verticalPadding)
         .padding(.horizontal, spacious ? 0 : Constants.WorkspaceRow.horizontalPadding)
+        .frame(minHeight: minimumHeight)
+        .coordinateSpace(name: workspace.id)
         .visionAttentionCue(workspaceNeedsInput(workspace))
         .task(id: workspace.id) {
             guard !Task.isCancelled else { return }
@@ -99,9 +98,9 @@ struct WorkspaceRowView: View {
     private var hasMetadata: Bool {
         let hasRepository = showRepo && workspace.repositoryName != nil
         let hasPullRequests = prIndicator.pill != nil || prIndicator.otherMonitorCount > 0
-        let hasTimestamp = workspace.lastActivity != nil || workspace.updatedAt != nil
-        let showsMetadataTimestamp = !spacious || Self.usesExpandedMetadataLayout(for: dynamicTypeSize)
-        return hasRepository || hasPullRequests || (hasTimestamp && showsMetadataTimestamp)
+        let hasActivityLabel = workspace.status?.lowercased() == "archived" || workspace.lastActivity != nil || workspace.updatedAt != nil
+        let showsMetadataActivity = !spacious || Self.usesExpandedMetadataLayout(for: dynamicTypeSize)
+        return hasRepository || hasPullRequests || (hasActivityLabel && showsMetadataActivity)
     }
 
     nonisolated static func usesExpandedMetadataLayout(for size: DynamicTypeSize) -> Bool {
@@ -129,7 +128,7 @@ struct WorkspaceRowView: View {
             HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.metadataSpacing) {
                 title
                     .frame(maxWidth: .infinity, alignment: .leading)
-                timestampLabel
+                activityLabel
             }
         } else {
             title
@@ -158,7 +157,7 @@ struct WorkspaceRowView: View {
             pullRequestBadges(expanded: false)
             if !spacious {
                 Spacer(minLength: Constants.WorkspaceRow.metadataSpacing)
-                timestampLabel
+                activityLabel
             }
         }
     }
@@ -168,7 +167,7 @@ struct WorkspaceRowView: View {
             repositoryLabel(lineLimit: nil)
                 .fixedSize(horizontal: false, vertical: true)
             pullRequestBadges(expanded: true)
-            timestampLabel
+            activityLabel
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
@@ -306,8 +305,11 @@ struct WorkspaceRowView: View {
     }
 
     @ViewBuilder
-    private var timestampLabel: some View {
-        if let activity = workspace.lastActivity ?? workspace.updatedAt {
+    private var activityLabel: some View {
+        if workspace.status?.lowercased() == "archived" {
+            archivedBadge
+                .opacity(timestampOpacity)
+        } else if let activity = workspace.lastActivity ?? workspace.updatedAt {
             let value = relativeDate(from: activity)
             Text(value)
                 .interFont(Constants.Typography.subtextXXS)
@@ -318,18 +320,36 @@ struct WorkspaceRowView: View {
                 .lineLimit(1)
                 .fixedSize()
                 .accessibilityLabel("Updated \(value)")
+                .opacity(timestampOpacity)
         }
     }
+}
 
-    private func relativeDate(from isoString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let date = formatter.date(from: isoString) else {
-            // Try without fractional seconds
-            let basic = ISO8601DateFormatter()
-            guard let date = basic.date(from: isoString) else { return isoString }
-            return date.relativeFormatted
-        }
+private extension WorkspaceRowView {
+    var archivedBadge: some View {
+        Text("Archived")
+            .interFont(Constants.Typography.subtextXXS.withFace(.medium))
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, Constants.WorkspaceRow.outlinedPillHorizontalPadding)
+            .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
+            .frame(minHeight: Constants.WorkspaceRow.outlinedPillMinimumHeight)
+            .overlay {
+                Capsule().strokeBorder(
+                    colorSchemeContrast == .increased
+                        ? Theme.border(for: colorScheme, contrast: colorSchemeContrast)
+                        : (colorScheme == .dark ? Color.white : Color.black).opacity(Constants.WorkspaceRow.pillOutlineOpacity),
+                    lineWidth: colorSchemeContrast == .increased
+                        ? Constants.WorkspaceRow.increasedContrastPillBorderWidth
+                        : Constants.WorkspaceRow.pillBorderWidth
+                )
+            }
+            .accessibilityIdentifier("workspaceRow.archivedBadge")
+    }
+
+    func relativeDate(from isoString: String) -> String {
+        guard let date = ISO8601DateFormatter.lenientDate(from: isoString) else { return isoString }
         return date.relativeFormatted
     }
 }

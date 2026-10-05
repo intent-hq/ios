@@ -25,6 +25,32 @@ enum ComposerSubmitPolicy {
 class KeyCommandTextView: UITextView {
     var onSubmit: (() -> Void)?
     var onLayoutChange: (() -> Void)?
+    var onPasteImages: (() -> Void)?
+    var allowsImagePaste = true
+    var imagePasteboard: ImagePasteboard = .general
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(paste(_:)), imagePasteboard.hasImages() {
+            // Metadata only: never read clipboard contents on focus or render.
+            return isEditable && allowsImagePaste && onPasteImages != nil
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    override func paste(_ sender: Any?) {
+        guard isEditable else { return }
+        guard imagePasteboard.hasImages() else {
+            pasteStandardContent(sender)
+            return
+        }
+        // Edit-menu Paste and Command-V share this explicit user action.
+        guard allowsImagePaste, let onPasteImages else { return }
+        onPasteImages()
+    }
+
+    func pasteStandardContent(_ sender: Any?) {
+        super.paste(sender)
+    }
 
     /// Tracks whether Shift is currently held on a hardware keyboard.
     /// Used by the delegate to distinguish Shift+Return (newline) from
@@ -160,6 +186,7 @@ struct SubmittableTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
     var onSubmit: () -> Void
+    var onPasteImages: (() -> Void)?
     var onHeightChange: ((CGFloat) -> Void)?
     /// Reports the caret's UTF-16 offset (end of selection) on every
     /// selection change; used by visionOS dictation to insert at the caret.
@@ -173,11 +200,14 @@ struct SubmittableTextView: UIViewRepresentable {
     /// Opt-in foreground for a scoped composer design. Nil preserves UIKit's
     /// existing color without rewriting attributed text or changing editing policy.
     var textColor: UIColor?
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeUIView(context: Context) -> KeyCommandTextView {
         let textView = KeyCommandTextView()
         textView.delegate = context.coordinator
         textView.onSubmit = onSubmit
+        textView.onPasteImages = onPasteImages
+        textView.allowsImagePaste = isEnabled
         textView.accessibilityLabel = accessibilityLabel
         textView.accessibilityIdentifier = "composer.textView"
         textView.backgroundColor = .clear
@@ -215,6 +245,8 @@ struct SubmittableTextView: UIViewRepresentable {
 
         // Update onSubmit closure so it always captures current state
         textView.onSubmit = onSubmit
+        textView.onPasteImages = onPasteImages
+        textView.allowsImagePaste = isEnabled
         textView.accessibilityLabel = accessibilityLabel
         textView.updateTypography()
         if let textColor, textView.textColor != textColor {

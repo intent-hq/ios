@@ -13,6 +13,7 @@ struct ConnectionFailureView: View {
     @State private var retryTask: Task<Void, Never>?
     @State private var savedConnections: [StoredConnection] = []
     @State private var showingDiagnosticLogs = false
+    @State private var viewportHeight: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -41,27 +42,24 @@ struct ConnectionFailureView: View {
     }
 
     private var failureContent: some View {
-        // A minimum viewport height centers short content without capping scrollable Dynamic Type content.
-        // swiftlint:disable:next geometry_reader_usage
-        GeometryReader { geometry in
-            ScrollView {
-                FailurePageLayout {
-                    VStack(spacing: Constants.ConnectionFailure.contentSpacing) {
-                        VStack(spacing: Constants.ConnectionFailure.titleToControlsSpacing) {
-                            failureTitle
-                            failureControls
-                        }
-                        savedConnectionsSection
+        ScrollView {
+            FailurePageLayout {
+                VStack(spacing: Constants.ConnectionFailure.contentSpacing) {
+                    VStack(spacing: Constants.ConnectionFailure.titleToControlsSpacing) {
+                        failureTitle
+                        failureControls
                     }
-                    helpText
+                    savedConnectionsSection
                 }
-                .padding(.horizontal, Constants.ConnectionFailure.pagePadding)
-                .padding(.top, Constants.ConnectionFailure.pagePadding)
-                .padding(.bottom, Constants.ConnectionFailure.footerBottomPadding)
-                .frame(minHeight: geometry.size.height)
+                helpText
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .padding(.horizontal, Constants.ConnectionFailure.pagePadding)
+            .padding(.top, Constants.ConnectionFailure.pagePadding)
+            .padding(.bottom, Constants.ConnectionFailure.footerBottomPadding)
+            .frame(minHeight: viewportHeight)
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
         // The 48pt export hit target includes space below its text, leaving the
         // visible label above the home indicator while matching the mock's inset.
         .ignoresSafeArea(.container, edges: .bottom)
@@ -105,18 +103,16 @@ struct ConnectionFailureView: View {
                 stopAutoRetry()
                 coordinator.onLogOff()
             } label: {
-                primaryButtonLabel("Retry Log Off")
+                primaryButtonLabel("Retry Disconnect")
             }
         }
     }
 
     private var reconnectButton: some View {
-        Button {
-            stopAutoRetry()
-            coordinator.onReconnect()
-        } label: {
+        Button(action: returnToSavedMachines) {
             primaryButtonLabel(isCertMismatch ? "Re-pair Device" : "Connect to different server")
         }
+        .accessibilityIdentifier("connection-failure.reconnect")
     }
 
     private func primaryButtonLabel(_ title: LocalizedStringKey) -> some View {
@@ -156,7 +152,7 @@ struct ConnectionFailureView: View {
             )
                 .padding(.bottom, Constants.ConnectionFailure.helpHeadingExtraSpacing)
             Text(retryPolicy == .manualLogOff
-                 ? "Your saved connection and settings were kept so you can retry logging off."
+                 ? "Your saved connection and settings were kept so you can retry disconnecting."
                  : "• Make sure Intent is running on your Mac\n• Check that both devices are on the same network\n• Verify the WebSocket API is enabled in Settings")
                 .interFont(Constants.Typography.subtextXXS)
                 .tracking(Constants.Connections.infoTracking)
@@ -216,7 +212,7 @@ struct ConnectionFailureView: View {
     /// Whether the failure screen may dial the saved record on its own. A
     /// failed Log Off (`.manualLogOff`) never does: the user asked to
     /// disconnect, so re-establishing the session must be an explicit
-    /// action — "Retry Log Off" retries forgetting the record, it does not
+    /// action — "Retry Disconnect" retries forgetting the record, it does not
     /// reconnect (ios#235). Certificate failures route to re-pairing.
     static func shouldAutoRetry(
         retryPolicy: ConnectionFailureRetryPolicy,
@@ -336,19 +332,13 @@ struct ConnectionFailureView: View {
 
 extension ConnectionFailureView {
     private var homeButton: some View {
-        Button {
-            stopAutoRetry()
-            coordinator.onReturnToSavedMachines()
-        } label: {
-            Label("Back", systemImage: "chevron.backward")
-                .interFont(Constants.Typography.bodyS)
-                .frame(minHeight: Constants.ConnectionSheet.minimumTouchTarget)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Theme.primary(for: colorScheme))
-        .accessibilityLabel("Back to Home")
-        .accessibilityHint("Return to your saved machines without forgetting this connection.")
-        .accessibilityIdentifier("connection-failure.home")
+        ConnectionBackButton(action: returnToSavedMachines)
+            .accessibilityIdentifier("connection-failure.home")
+    }
+
+    private func returnToSavedMachines() {
+        stopAutoRetry()
+        coordinator.onReturnToSavedMachines()
     }
 
     private func savedConnectionRow(_ connection: StoredConnection) -> some View {

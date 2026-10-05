@@ -213,7 +213,9 @@ The Xcode wrapper supports these subcommands:
 | `build-ios` | Build for the generic iOS Simulator destination. |
 | `build-visionos` | Build for the generic visionOS Simulator destination. |
 | `build-for-testing` | Build the iOS test bundles for a later test-only run. |
+| `build-for-testing-ui` | Build the app and UI tests using the `IntentUI` scheme, without compiling the unit-test bundle. |
 | `test-without-building` | Run previously built unit and UI tests. |
+| `test-without-building-ui` | Run UI tests built with `build-for-testing-ui`; exclude unit tests from enumeration and execution. Defaults `ONLY_TESTING` to `IntentUITests` and verifies the selected results. |
 | `test-without-building-unit` | Run previously built tests without `IntentUITests`. |
 | `test-ios` | Build and run the complete unit and UI test gate. |
 | `test-ios-unit` | Build and run tests without `IntentUITests`. |
@@ -231,6 +233,15 @@ ONLY_TESTING='IntentTests/DemoFixturesTests' scripts/xcodebuild.sh test-ios-unit
 A selector whose tests were all skipped at runtime exits 0 with a notice. Inspect
 the per-selector summary and confirm a nonzero executed count before claiming that
 a green focused run executed the intended tests.
+
+CI run **Artifacts** retain `ios-ui-review-evidence` for 14 days on success or
+failure, including filtered runs. Open its PNGs directly; `manifest.json` records
+the tested checkout revision, suite/test, source bundle and retry origin. Only
+allowlisted `WorkspaceChangesUITests` captures are included: an absent image is
+not evidence that a view was captured (there is no commit-list capture). Existing
+`ios-agent-group-evidence` and `ios-transcript-recovery-evidence` remain separate.
+The capture allowlist and exporter live in `scripts/export_ui_evidence.py`; run
+`python3 scripts/test_export_ui_evidence.py` to check the export contract.
 
 For repeated focused runs, build once and reuse that build:
 

@@ -57,6 +57,9 @@ final class ConversationWatchedAgents {
             guard let snapshot = try await commands.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) else { return }
             guard !Task.isCancelled, generation == readGeneration, isCurrent() else { return }
             guard await awaitAuthority(), !Task.isCancelled, generation == readGeneration, isCurrent() else { return }
+            // Keep sparse field presence and each participant's canonical workspace.
+            // Bundled display rows never grant detail authority.
+            summaries.seed(snapshot.agents, since: snapshot.summaryBoundary)
             watchedAgentIds = snapshot.watchedAgentIds
             groups = snapshot.groups
             isWaitingForAgents = !watchedAgentIds.isEmpty

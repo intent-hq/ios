@@ -1,16 +1,18 @@
 import SwiftUI
 import UIKit
 
-struct WorkspaceScriptSwipeGesture: ViewModifier {
-    @Binding var translation: CGFloat
-    @Binding var isRevealed: Bool
+struct WorkspaceRowSwipeGesture: ViewModifier {
+    let onChanged: (CGFloat) -> Void
+    let onEnded: (CGFloat) -> Void
+    let onCancelled: () -> Void
     @GestureState private var fallbackTranslation: CGFloat = 0
 
     func body(content: Content) -> some View {
         #if os(iOS)
         content.gesture(HorizontalPan(
-            onChanged: { translation = $0 },
-            onEnded: finish
+            onChanged: onChanged,
+            onEnded: onEnded,
+            onCancelled: onCancelled
         ))
         #else
         content.simultaneousGesture(
@@ -22,20 +24,17 @@ struct WorkspaceScriptSwipeGesture: ViewModifier {
                 }
                 .onEnded { value in
                     guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                    finish(value.translation.width)
+                    onEnded(value.translation.width)
                 }
         )
-        .onChange(of: fallbackTranslation) { _, value in translation = value }
-        #endif
-    }
-
-    private func finish(_ distance: CGFloat) {
-        if distance < -BrowserAppearance.revealThreshold {
-            isRevealed = true
-        } else if distance > BrowserAppearance.revealThreshold {
-            isRevealed = false
+        .onChange(of: fallbackTranslation) { _, value in
+            if value == 0 {
+                onCancelled()
+            } else {
+                onChanged(value)
+            }
         }
-        translation = 0
+        #endif
     }
 }
 
@@ -43,6 +42,7 @@ struct WorkspaceScriptSwipeGesture: ViewModifier {
 private struct HorizontalPan: UIGestureRecognizerRepresentable {
     let onChanged: (CGFloat) -> Void
     let onEnded: (CGFloat) -> Void
+    let onCancelled: () -> Void
 
     func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
         let recognizer = UIPanGestureRecognizer()
@@ -60,7 +60,7 @@ private struct HorizontalPan: UIGestureRecognizerRepresentable {
         case .ended:
             onEnded(recognizer.translation(in: nil).x)
         case .cancelled, .failed:
-            onChanged(0)
+            onCancelled()
         default:
             break
         }
@@ -75,7 +75,7 @@ private struct HorizontalPan: UIGestureRecognizerRepresentable {
 
         func gestureRecognizer(
             _: UIGestureRecognizer,
-            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+            shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
             guard let scrollView = otherGestureRecognizer.view as? UIScrollView else { return false }
             return otherGestureRecognizer === scrollView.panGestureRecognizer

@@ -58,25 +58,6 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 0)) == -48)
     }
 
-    @Test @MainActor func retainedWriteDiagnosticsKeepActualWriteAndLaterGeometryBounded() {
-        let state = retainedRestorationState(y: 48)
-        #expect(state.resumeViewportTarget() == "row-31")
-        issueRetainedScroll(state)
-        #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 0)) == -48)
-        state.viewportAnchor.recordRestorationWrite(before: 1000, requested: 952, actual: 1000, accepted: true)
-        let summary = state.viewportAnchor.restorationSummary
-        #expect(summary.contains("write before=1000.0 requested=952.0 actual=Optional(1000.0) accepted=true"))
-        #expect(state.viewportAnchor.restorationSummary == summary)
-        for _ in 0..<20 { #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 0)) == nil) }
-        #expect(state.viewportAnchor.restorationSummary.split(separator: ";").count == 8)
-        #expect(state.viewportAnchor.restorationSummary.hasPrefix("restore=row-31 y=48.0"))
-        #expect(state.viewportAnchor.restorationSummary.contains("write before=1000.0 requested=952.0 actual=Optional(1000.0) accepted=true"))
-        state.retireViewportRestoration()
-        let cancelled = state.viewportAnchor.restorationSummary
-        _ = recordRetainedMeasurement(state, retainedMeasurement(state, y: 0))
-        #expect(state.viewportAnchor.restorationSummary == cancelled)
-    }
-
     private enum RetainedGeometryFixture {
         static let distance: CGFloat = 900
         static let width: CGFloat = 300

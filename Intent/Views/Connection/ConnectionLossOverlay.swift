@@ -19,6 +19,8 @@ struct ConnectionLossOverlay: View {
     }
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @State private var viewportHeight: CGFloat = 0
+    @State private var bottomBalancePadding: CGFloat = 0
     let mismatches: [HostCertMismatch]
     var networkStatus: NetworkAvailability.Status = .unknown
     // The source page can be light even though this overlay always renders dark.
@@ -26,31 +28,33 @@ struct ConnectionLossOverlay: View {
     let onHome: () -> Void
 
     var body: some View {
-        // Minimum viewport height centers short content but lets large text/warnings scroll.
-        // swiftlint:disable:next geometry_reader_usage
-        GeometryReader { geometry in
-            ScrollView {
-                VStack(spacing: Layout.markSpacing) {
-                    Image(.connectionLossMark)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: Layout.markSize, height: Layout.markSize)
-                        .accessibilityHidden(true)
-                    VStack(spacing: Layout.actionSpacing) {
-                        messages
-                        homeButton
-                    }
+        ScrollView {
+            VStack(spacing: Layout.markSpacing) {
+                Image(.connectionLossMark)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Layout.markSize, height: Layout.markSize)
+                    .accessibilityHidden(true)
+                VStack(spacing: Layout.actionSpacing) {
+                    messages
+                    homeButton
                 }
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: Layout.maximumContentWidth)
-                .padding(Layout.contentPadding)
-                // Balance the artwork around the full window center, not the
-                // asymmetric status-bar/home-indicator safe-area center.
-                .padding(.bottom, max(0, geometry.safeAreaInsets.top - geometry.safeAreaInsets.bottom))
-                .frame(maxWidth: .infinity, minHeight: geometry.size.height)
             }
-            .scrollBounceBehavior(.basedOnSize)
-            .clipped()
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: Layout.maximumContentWidth)
+            .padding(Layout.contentPadding)
+            // Balance the artwork around the full window center, not the
+            // asymmetric status-bar/home-indicator safe-area center.
+            .padding(.bottom, bottomBalancePadding)
+            .frame(maxWidth: .infinity, minHeight: viewportHeight)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .clipped()
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            max(0, geometry.safeAreaInsets.top - geometry.safeAreaInsets.bottom)
+        } action: { padding in
+            bottomBalancePadding = padding
         }
         .foregroundStyle(.white)
         .background {

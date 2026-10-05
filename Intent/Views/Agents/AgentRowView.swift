@@ -250,13 +250,7 @@ struct AgentRowView: View {
     }
 
     private func relativeDate(from isoString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let date = formatter.date(from: isoString) else {
-            let basic = ISO8601DateFormatter()
-            guard let date = basic.date(from: isoString) else { return isoString }
-            return date.relativeFormatted
-        }
+        guard let date = ISO8601DateFormatter.lenientDate(from: isoString) else { return isoString }
         return date.relativeFormatted
     }
 }

@@ -3,6 +3,7 @@ import XCTest
 private enum HomeActionMenuTestSupport {
     static let timeout: TimeInterval = 30
     static let maximumSwipes = 12
+    static let dragHoldDuration: TimeInterval = 0.1
     static let bytesPerPixel = 4
     static let bitsPerChannel = 8
     static let channelMaximum = 255.0
@@ -49,11 +50,27 @@ extension XCUIApplication {
         let tile = buttons["intent.menu.\(action)"]
         let carousel = scrollViews["intent.menu.tiles"]
         XCTAssertTrue(tile.waitForExistence(timeout: HomeActionMenuTestSupport.timeout), file: file, line: line)
-        let viewport = carousel.frame.intersection(frame)
+        var viewport = carousel.frame.intersection(frame)
         for _ in 0..<HomeActionMenuTestSupport.maximumSwipes {
-            if viewport.contains(CGPoint(x: tile.frame.midX, y: tile.frame.midY)) { break }
-            carousel.swipeLeft()
+            viewport = carousel.frame.intersection(frame)
+            let target = tile.frame
+            if viewport.contains(CGPoint(x: target.midX, y: target.midY)) { break }
+            // A fling can skip a tile, and the next target may be behind us.
+            // Drag toward its center, at most half a viewport, then remeasure.
+            let limit = viewport.width / 2
+            let distance = min(max(viewport.midX - target.midX, -limit), limit)
+            let start = coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+                dx: viewport.midX - frame.minX - distance / 2,
+                dy: viewport.midY - frame.minY
+            ))
+            start.press(
+                forDuration: HomeActionMenuTestSupport.dragHoldDuration,
+                thenDragTo: start.withOffset(CGVector(dx: distance, dy: 0)),
+                withVelocity: .slow,
+                thenHoldForDuration: HomeActionMenuTestSupport.dragHoldDuration
+            )
         }
+        viewport = carousel.frame.intersection(frame)
         XCTAssertTrue(
             viewport.contains(CGPoint(x: tile.frame.midX, y: tile.frame.midY)),
             "Horizontal swipes must bring \(action) into view: tile \(tile.frame), viewport \(viewport)",

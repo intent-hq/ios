@@ -17,14 +17,19 @@
 #   build-ios               Build for the generic iOS Simulator destination
 #   build-visionos          Build for the generic visionOS Simulator destination
 #   build-for-testing       Build the iOS test bundle (CI split step)
+#   build-for-testing-ui    Build the app and UI tests, skipping IntentTests
 #   test-without-building   Run iOS tests against a prior build-for-testing
 #   test-without-building-unit
 #                           test-without-building minus IntentUITests
+#   test-without-building-ui
+#                           Run and verify UI tests, skipping IntentTests
+#                           Both UI-only commands use the IntentUI scheme;
+#                           build-for-testing's skip flag alone still builds units.
 #   test-ios                build-for-testing then test-without-building
 #   test-ios-unit           test-ios minus the IntentUITests bundle (-skip-testing)
 #   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 #
-# iOS builds (build-ios, build-for-testing, test-ios, test-ios-unit) link the prebuilt,
+# iOS builds (build-ios, build-for-testing[-ui], test-ios, test-ios-unit) link the prebuilt,
 # gitignored TailcatKit/build/TailcatKit.xcframework. Those subcommands
 # preflight it: when missing, it is built via TailcatKit/build_xcframework.sh
 # if a Go toolchain is on PATH, otherwise the script exits naming that
@@ -51,7 +56,7 @@
 #                         kept and named (like the log) after a failing one.
 #   ONLY_TESTING          Whitespace-separated Target[/Class[/method]] identifiers;
 #                         each becomes one -only-testing: argument on the test
-#                         subcommands (test-without-building and its unit
+#                         subcommands (test-without-building and its unit/UI
 #                         variant, test-ios, test-ios-unit). Entries starting
 #                         with '-' are refused;
 #                         duplicates are collapsed. Before the filtered run the
@@ -73,6 +78,8 @@
 #                         result on a green run exits 83 (see the exit codes
 #                         below). Unset/empty skips all of this and leaves the
 #                         command line untouched.
+#                         test-without-building-ui defaults to IntentUITests
+#                         and excludes IntentTests from enumeration and execution.
 #   ONLY_TESTING_IDENTITIES_PATH
 #                         Optional JSON evidence of the resolver's matched test
 #                         identities, used by the filtered iPad proof lane.
@@ -131,6 +138,22 @@
 # holding the owner's PID while held) and is harmless. A waiter prints who
 # holds the lock and polls once a second. CI runs one job per VM, so the lock
 # is never contended there.
+#
+# Keyboard-resize UI test prerequisite (intent-hq/ios#385): the transcript
+# test enters a draft and requires a hittable software keyboard. An absent
+# keyboard skips; an existing off-screen keyboard or a visible keyboard
+# without transcript shrink still fails. The separate quarantine requires
+# TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1 to exercise that test at all.
+#
+# Simulator.app's I/O > Keyboard > Connect Hardware Keyboard preference can
+# affect presentation, but its value does not establish effective keyboard
+# state. This wrapper leaves host and device preferences unchanged. The global
+# preference can be inspected with
+#   defaults read com.apple.iphonesimulator ConnectHardwareKeyboard
+# and a device override can exist under DevicePreferences in the same domain.
+# The supported menu can detach the hardware keyboard; simctl has no equivalent
+# keyboard toggle. The hosted preference-on runs in #385 still showed a software
+# keyboard, so an observed keyboard is required regardless of the setting.
 #
 # Exit codes: xcodebuild's own status is passed through (65 = build or test
 # failure) except for these wrapper-specific codes, chosen outside sysexits(3)
@@ -201,9 +224,12 @@ Usage: scripts/xcodebuild.sh <subcommand>
   build-ios               Build for the generic iOS Simulator destination
   build-visionos          Build for the generic visionOS Simulator destination
   build-for-testing       Build the iOS test bundle (CI split step)
+  build-for-testing-ui    Build the app and UI tests, skipping IntentTests
   test-without-building   Run iOS tests against a prior build-for-testing
   test-without-building-unit
                           test-without-building minus IntentUITests
+  test-without-building-ui
+                          Run and verify UI tests, skipping IntentTests
   test-ios                build-for-testing then test-without-building
   test-ios-unit           test-ios minus the IntentUITests bundle (-skip-testing)
   pick-simulator          Print the chosen iPhone simulator UDID on stdout
@@ -293,7 +319,7 @@ common_args() {
     printf '%s\n' -configuration "$BUILD_CONFIGURATION"
     if [ "$BUILD_CONFIGURATION" = Release ]; then
       case "$subcommand" in
-        build-for-testing|test-without-building|test-without-building-unit|test-ios|test-ios-unit)
+        build-for-testing|build-for-testing-ui|test-without-building|test-without-building-unit|test-without-building-ui|test-ios|test-ios-unit)
           printf '%s\n' ENABLE_TESTABILITY=YES ;;
       esac
     fi
@@ -848,7 +874,8 @@ def matches(selector_parts, identifier):
 def excluded_by(selector, skips):
     return [skip for skip in skips if matches(skip.split("/"), selector)]
 def excluded_message(selector, skip):
-    return "ONLY_TESTING selector %r is excluded by -skip-testing:%s on this subcommand (unit-only subcommands skip the IntentUITests bundle; use test-ios or test-without-building for it)." % (selector, skip)
+    restriction = "unit-only subcommands skip the IntentUITests bundle" if skip == "IntentUITests" else "UI-only subcommands skip the IntentTests bundle"
+    return "ONLY_TESTING selector %r is excluded by -skip-testing:%s on this subcommand (%s; use test-ios or test-without-building for it)." % (selector, skip, restriction)
 '
 
 # Resolves the ONLY_TESTING selectors against the enumerated test catalog.
@@ -1272,12 +1299,19 @@ case "${BUILD_CONFIGURATION:-}" in
 esac
 
 case "$subcommand" in
+  build-for-testing-ui|test-without-building-ui)
+    PROJECT_ARGS=(-project Intent.xcodeproj -scheme IntentUI) ;;
+esac
+
+case "$subcommand" in
   resolve)               cmd_resolve ;;
   build-ios)             cmd_build_ios ;;
   build-visionos)        cmd_build_visionos ;;
   build-for-testing)     cmd_build_for_testing ;;
+  build-for-testing-ui)  cmd_build_for_testing ;;
   test-without-building) cmd_test_without_building ;;
   test-without-building-unit) cmd_test_without_building -skip-testing:IntentUITests ;;
+  test-without-building-ui) ONLY_TESTING=${ONLY_TESTING:-IntentUITests} cmd_test_without_building -skip-testing:IntentTests ;;
   test-ios)              parse_only_testing && cmd_build_for_testing && cmd_test_without_building ;;
   test-ios-unit)         parse_only_testing && cmd_build_for_testing && cmd_test_without_building -skip-testing:IntentUITests ;;
   pick-simulator)        pick_simulator ;;

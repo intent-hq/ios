@@ -6,15 +6,25 @@ import Observation
 @Observable class WorkspaceStore {
     static let shared = WorkspaceStore()
 
-    var workspaces: [Workspace] = []
+    var workspaces: [Workspace] = [] {
+        didSet { workspacesRevision &+= 1 }
+    }
+    /// Invalidates derived lists for replacements and in-place array mutations.
+    private(set) var workspacesRevision: UInt64 = 0
     var lastUpdated: Date?
     var isLoading = false
+    var showArchived = false
+    private(set) var updatingWorkspaceIDs: Set<String> = []
     var agentSummaries: AgentSummaryStore? {
         didSet {
             if let agentSummaries { agentSummaries.seedWorkspaces(workspaces, since: agentSummaries.beginRead()) }
         }
     }
 
+    /// Ids this backend reported deleted or archived (events or own actions);
+    /// unique across daemons, so consumers need not know which daemon replied.
+    var removedWorkspaceIds: AnyPublisher<String, Never> { removedWorkspaceSubject.eraseToAnyPublisher() }
+    @ObservationIgnored private let removedWorkspaceSubject = PassthroughSubject<String, Never>()
     @ObservationIgnored private var fetchTask: Task<Void, Never>?
     @ObservationIgnored private var fetchRevision = 0
     @ObservationIgnored private var fetchNeedsRefresh = false
@@ -89,6 +99,31 @@ import Observation
         await startFetch().value
     }
 
+    func perform(_ action: WorkspaceAction, workspaceId: String) async throws {
+        guard updatingWorkspaceIDs.insert(workspaceId).inserted else { return }
+        defer { updatingWorkspaceIDs.remove(workspaceId) }
+        let result = try await connectionManager.request(action.method, params: ["workspaceId": workspaceId])
+        let response = result as? [String: Any]
+        let succeeded: Bool
+        switch action {
+        case .archive:
+            let workspace = response?["workspace"] as? [String: Any]
+            succeeded = workspace?["id"] as? String == workspaceId
+                && (workspace?["status"] as? String)?.lowercased() == "archived"
+        case .delete:
+            succeeded = response?["success"] as? Bool == true
+        }
+        guard succeeded else {
+            throw NSError(domain: "WorkspaceAction", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "The server did not confirm the workspace \(action.rawValue). Please try again."
+            ])
+        }
+        workspaces.removeAll { $0.id == workspaceId }
+        removedWorkspaceSubject.send(workspaceId)
+        invalidateFetchForEvent()
+        await fetchAll()
+    }
+
     private func startFetch() -> Task<Void, Never> {
         if let fetchTask { return fetchTask }
         let task = Task { await self._fetchAll() }
@@ -124,7 +159,7 @@ import Observation
             let revision = fetchRevision
             do {
                 let summaryBoundary = agentSummaries?.beginRead()
-                let result = try await connectionManager.request("workspace.list")
+                let result = try await connectionManager.request("workspace.list", params: ["includeArchived": true])
                 if revision == fetchRevision {
                     fetchNeedsRefresh = false
                     publishFetchedWorkspaces(Self.parseWorkspaces(from: result), summaryBoundary: summaryBoundary)
@@ -235,6 +270,10 @@ extension WorkspaceStore {
 
         let eventWorkspaceId = event["workspaceId"] as? String
         let data = event["data"] as? [String: Any]
+
+        if let removedId = Self.removedWorkspaceId(type: eventType, workspaceId: eventWorkspaceId, data: data ?? [:]) {
+            removedWorkspaceSubject.send(removedId)
+        }
 
         // In-place patches apply in every mode (live or not) and before the
         // refetch decision, since they are the complete application of the event.

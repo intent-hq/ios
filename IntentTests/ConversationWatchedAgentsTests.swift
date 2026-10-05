@@ -170,3 +170,91 @@ extension ConversationWatchedAgentsTests {
         #expect(fixture.connection.traffic().calls("chat.subscribe").count == 1)
     }
 }
+
+extension ConversationWatchedAgentsTests {
+    @Test func bundledRowsAvoidDisplayDetailsButNeverSatisfyRouteDetails() async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        fixture.watchedIds = ["child"]
+        fixture.bundlesWatchedAgents = true
+        let model = fixture.makeViewModel()
+        await model.load()
+        let watched = model.store.watchedAgentCoordinator
+        #expect(watched.row("child").hasSummary)
+        watched.setVisible("child", visible: true, consumer: UUID())
+        #expect(await watched.selectedAgent("child")?.workspaceId == ConversationStartupFixture.workspaceId)
+        try await expectNever("bundled display detail") { fixture.connection.traffic().calls("agent.get").count > 1 }
+        #expect(fixture.details.cached(agentId: "child") == nil)
+        #expect(fixture.connection.traffic().calls("agent.get").first?.params["agentId"] as? String == ConversationStartupFixture.parentId)
+        _ = try await fixture.details.load(agentId: "child")
+        #expect(fixture.connection.traffic().calls("agent.get").count == 2)
+        #expect(fixture.details.cached(agentId: "child") != nil)
+    }
+
+    @Test(arguments: [false, true])
+    func absentOrEmptyBundleRetainsVisibleFallback(empty: Bool) async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        fixture.watchedIds = ["child"]
+        var response = fixture.subscriptions()
+        if empty { response["agents"] = [] as [[String: Any]] }
+        fixture.connection.responseForRequest = { method, _ in method == "agent.getSubscriptions" ? response : nil }
+        fixture.connection.responseMap["agent.get"] = ["agent": fixture.agent("child")]
+        let commands = ConversationCommands(connectionManager: fixture.connection)
+        let watched = ConversationWatchedAgents(commands: commands)
+        await watched.fetchSubscriptions(agentId: "parent", workspaceId: "workspace")
+        #expect(!watched.row("child").hasSummary)
+        watched.setVisible("child", visible: true, consumer: UUID())
+        try await waitUntil("legacy visible fallback") { watched.row("child").hasSummary }
+        #expect(fixture.connection.traffic().calls("agent.get").count == 1)
+    }
+
+    @Test func partialBundlePreservesMembershipAndCanonicalCrossWorkspaceIdentity() async {
+        let connection = RPCRecordingConnection()
+        let commands = ConversationCommands(connectionManager: connection)
+        let watched = ConversationWatchedAgents(commands: commands)
+        connection.responseMap["agent.getSubscriptions"] = [
+            "subscriptions": [["actorIds": ["child", "partial", "missing", "no-id"]]],
+            "delegationGroups": [["expectedAgentIds": ["group-only", "gone"], "deletedAgentIds": ["gone"]]],
+            "agents": [
+                ["id": "child", "name": "Across workspaces", "workspaceId": "canonical"],
+                ["id": "group-only", "name": "Group member", "workspaceId": "another"],
+                ["id": "partial", "name": "No workspace"],
+                ["id": "gone", "name": "Deleted member", "workspaceId": "canonical"],
+                ["id": "unrelated", "name": "Ignore", "workspaceId": "canonical"],
+                ["name": "Missing id", "workspaceId": "canonical"],
+                ["id": "", "name": "Empty id", "workspaceId": "canonical"]
+            ]
+        ]
+        await watched.fetchSubscriptions(agentId: "chief", workspaceId: Workspace.chiefWorkspaceId)
+        #expect(watched.watchedAgentIds == ["child", "gone", "group-only", "missing", "no-id", "partial"])
+        #expect(await watched.selectedAgent("child")?.workspaceId == "canonical")
+        #expect(watched.row("group-only").hasSummary)
+        #expect(!watched.row("partial").hasSummary)
+        #expect(watched.row("partial").workspaceId == nil)
+        #expect(!watched.row("missing").hasSummary)
+        #expect(commands.agentDetails.summaries.cached(agentId: "unrelated").isEmpty)
+        #expect(commands.agentDetails.summaries.cached(agentId: "").isEmpty)
+        watched.setVisible("gone", visible: true, consumer: UUID())
+        #expect(await watched.selectedAgent("gone") == nil)
+        #expect(connection.traffic().calls("agent.get").isEmpty)
+        connection.responseMap["agent.get"] = ["agent": ["id": "partial", "name": "Resolved", "workspaceId": "resolved"]]
+        #expect(await watched.selectedAgent("partial")?.workspaceId == "resolved")
+        #expect(connection.traffic().calls("agent.get").count == 1)
+    }
+
+    @Test func bundledSummariesStayWithinTheirBackend() async {
+        let first = ConversationCommands(connectionManager: RPCRecordingConnection())
+        let secondConnection = RPCRecordingConnection()
+        let second = ConversationCommands(connectionManager: secondConnection)
+        secondConnection.responseMap["agent.getSubscriptions"] = [
+            "subscriptions": [["actorIds": ["same-id"]]],
+            "agents": [["id": "same-id", "name": "Second backend", "workspaceId": "workspace"]]
+        ]
+        let watched = ConversationWatchedAgents(commands: second)
+        await watched.fetchSubscriptions(agentId: "parent", workspaceId: "workspace")
+        #expect(watched.row("same-id").hasSummary)
+        #expect(first.agentDetails.summaries.cached(agentId: "same-id").isEmpty)
+        #expect(second.agentDetails.cached(agentId: "same-id") == nil)
+    }
+}

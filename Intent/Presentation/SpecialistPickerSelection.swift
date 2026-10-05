@@ -1,10 +1,4 @@
 extension SpecialistPickerView {
-    /// Providers with `authenticated == false` are not selectable;
-    /// `nil` (unknown) stays selectable since probes can fail transiently.
-    static func isSelectable(_ provider: ProviderInfo) -> Bool {
-        provider.isSelectable
-    }
-
     static func selectableModels(
         provider: ProviderInfo?, providers: [ProviderInfo], models: [ModelInfo]
     ) -> [ModelInfo] {

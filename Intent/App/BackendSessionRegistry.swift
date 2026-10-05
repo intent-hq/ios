@@ -24,6 +24,7 @@ final class BackendSessionRegistry {
     @ObservationIgnored private let makeSession: SessionFactory
     @ObservationIgnored private var sessions: [BackendID: BackendSession] = [:]
     @ObservationIgnored private var attachCounts: [BackendID: Int] = [:]
+    @ObservationIgnored private var pendingConnectionSelections: Set<BackendID> = []
 
     /// Backends whose saved connection was removed while the app runs (user
     /// delete, log off, or a synced tombstone). Windows observe this to
@@ -45,6 +46,17 @@ final class BackendSessionRegistry {
     }
 
     // MARK: - Backend sessions
+
+    /// A user selection may create a new window/coordinator whose loading
+    /// route otherwise looks identical to cold-launch restoration. Never persisted.
+    func markConnectionSelected(_ id: BackendID) {
+        pendingConnectionSelections.insert(id)
+    }
+
+    func consumeConnectionSelection(for id: BackendID?) -> Bool {
+        guard let id else { return false }
+        return pendingConnectionSelections.remove(id) != nil
+    }
 
     /// The session for `id`, created on first attach and shared afterwards.
     /// Every attach must be balanced by a `detach(_:)`.
@@ -148,7 +160,8 @@ final class BackendSessionRegistry {
                     connection: connection,
                     backendID: backendID,
                     syncedRegistry: DemoMode.isEnabled ? SyncedBackendRegistry(accessGroup: nil) : SyncedBackendRegistry(),
-                    claimScreenRestoration: claim
+                    claimScreenRestoration: claim,
+                    agentHistory: .shared
                 )
             },
             githubRepoStore: GitHubRepoStore(connectionManager: connection),

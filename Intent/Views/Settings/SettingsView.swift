@@ -53,15 +53,12 @@ private struct SettingsContent: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
-    @AppStorage("appThemePreference") private var themePreference: String = "system"
     @State private var showLogOffConfirmation = false
     @ScaledMetric(relativeTo: .callout) private var iconSize = SettingsStyle.iconWidth
     var presentedAsSheet = false
 
     var body: some View {
         settingsSurface
-            .onAppear { coordinator.refreshSyncedBackends() }
-            .refreshable { coordinator.refreshSyncedBackends() }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showLogOffConfirmation) {
                 LogOffConfirmationSheet { coordinator.onLogOff() }
@@ -74,17 +71,9 @@ private struct SettingsContent: View {
             VStack(alignment: .leading, spacing: SettingsStyle.sectionSpacing) {
                 SettingsHeader(onClose: coordinator.onSettingsBack)
                     .padding(.bottom, SettingsStyle.headingSpacing - SettingsStyle.sectionSpacing)
-                SettingsSection(title: "APPEARANCE") {
-                    SettingsAppearanceSelector(selection: $themePreference)
+                if !session.connection.certMismatches.isEmpty {
+                    CertMismatchListView(mismatches: session.connection.certMismatches)
                 }
-                .padding(.bottom, SettingsStyle.appearanceBottomSpacing)
-                SettingsConnectionsSection(
-                    connections: coordinator.savedConnections,
-                    windowConnectionID: coordinator.windowConnectionID,
-                    status: session.connection.connectionState,
-                    mismatches: session.connection.certMismatches,
-                    onSelect: selectConnection
-                )
                 SettingsPairingSection()
                 SettingsSupportSection()
                 logOffButton
@@ -117,18 +106,10 @@ private struct SettingsContent: View {
         presentedAsSheet ? .clear : (colorScheme == .dark ? SettingsStyle.charcoal : SettingsStyle.lightChrome)
     }
 
-    private func selectConnection(_ id: UUID) {
-        if id == coordinator.windowConnectionID {
-            coordinator.onSettingsBack()
-        } else {
-            coordinator.onSwitchConnection(id: id)
-        }
-    }
-
     private var logOffButton: some View {
         Button { showLogOffConfirmation = true } label: {
             Label {
-                Text("Log Off").interFont(Constants.Typography.bodySEmphasized)
+                Text("Disconnect").interFont(Constants.Typography.bodySEmphasized)
             } icon: {
                 Image(.logout)
                     .resizable()

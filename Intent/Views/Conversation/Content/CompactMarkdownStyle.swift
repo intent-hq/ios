@@ -26,7 +26,7 @@ struct CompactMarkdownStyle: StructuredText.Style {
     let headingStyle = CompactHeadingStyle()
     let paragraphStyle = CompactParagraphStyle()
     let blockQuoteStyle = CompactBlockQuoteStyle()
-    let codeBlockStyle = CompactCodeBlockStyle()
+    let codeBlockStyle: MermaidCodeBlockStyle
     let listItemStyle: StructuredText.DefaultListItemStyle = .default
     let unorderedListMarker: StructuredText.HierarchicalSymbolListMarker = .hierarchical(
         .disc,
@@ -34,9 +34,13 @@ struct CompactMarkdownStyle: StructuredText.Style {
         .square
     )
     let orderedListMarker: StructuredText.DecimalListMarker = .decimal
-    let tableStyle: StructuredText.GitHubTableStyle = .gitHub
+    let tableStyle = CompactTableStyle()
     let tableCellStyle = CompactTableCellStyle()
     let thematicBreakStyle = CompactThematicBreakStyle()
+
+    init(mermaidSources: [String: String] = [:], pendingMermaidLanguage: String? = nil) {
+        codeBlockStyle = MermaidCodeBlockStyle(sources: mermaidSources, pendingLanguage: pendingMermaidLanguage)
+    }
 }
 
 extension StructuredText.Style where Self == CompactMarkdownStyle {
@@ -102,15 +106,72 @@ struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
     }
 }
 
+struct MermaidCodeBlockStyle: StructuredText.CodeBlockStyle {
+    let sources: [String: String]
+    let pendingLanguage: String?
+
+    @ViewBuilder
+    func makeBody(configuration: Configuration) -> some View {
+        if let language = configuration.languageHint, language == pendingLanguage {
+            MermaidStreamingPlaceholder()
+                .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
+        } else if let language = configuration.languageHint, let source = sources[language] {
+            // Overflow excludes this region from the surrounding text-selection overlay.
+            Overflow { overflow in
+                MermaidDiagramView(source: source)
+                    .frame(width: overflow.containerWidth)
+            }
+            .textual.textSelection(.disabled)
+            .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
+        } else {
+            CompactCodeBlockStyle().makeBody(configuration: configuration)
+        }
+    }
+}
+
+/// Keep the GitHub grid decoration, but let columns size independently of the
+/// transcript width. Textual's overflow container preserves selection gestures.
+struct CompactTableStyle: StructuredText.TableStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Overflow {
+            StructuredText.GitHubTableStyle()
+                .makeBody(configuration: configuration)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.Table.bottomMargin))
+    }
+}
+
 /// Inter body cells, a semibold header row, and the existing 0.72em/0.35em padding.
 struct CompactTableCellStyle: StructuredText.TableCellStyle {
+    @ScaledMetric(relativeTo: .body) private var maximumWidth = Constants.Markdown.TableCell.maximumWidth
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .interFont(Constants.Typography.bodyS.withFace(configuration.row == 0 ? .semibold : .regular))
-            .fixedSize(horizontal: false, vertical: true)
-            .textual.lineSpacing(.fontScaled(Constants.Markdown.lineSpacingScale))
-            .textual.padding(.horizontal, .fontScaled(Constants.Markdown.TableCell.horizontalPaddingScale))
-            .textual.padding(.vertical, .fontScaled(Constants.Markdown.TableCell.verticalPaddingScale))
+        CompactTableCellLayout(maximumWidth: maximumWidth) {
+            configuration.label
+                .interFont(Constants.Typography.bodyS.withFace(configuration.row == 0 ? .semibold : .regular))
+                .textual.lineSpacing(.fontScaled(Constants.Markdown.lineSpacingScale))
+        }
+        .textual.padding(.horizontal, .fontScaled(Constants.Markdown.TableCell.horizontalPaddingScale))
+        .textual.padding(.vertical, .fontScaled(Constants.Markdown.TableCell.verticalPaddingScale))
+    }
+}
+
+/// Measure and place with the same width proposal: capping an already measured
+/// ideal-width cell would leave its wrapped text taller than the grid row.
+private struct CompactTableCellLayout: Layout {
+    let maximumWidth: CGFloat
+
+    func sizeThatFits(proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        subviews.first?.sizeThatFits(.init(width: maximumWidth, height: nil)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        subviews.first?.place(
+            at: bounds.origin,
+            anchor: .topLeading,
+            proposal: .init(width: maximumWidth, height: nil)
+        )
     }
 }
 

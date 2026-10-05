@@ -13,15 +13,17 @@ struct ToastView: View {
             HStack(spacing: Constants.Toast.contentSpacing) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.green)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(Constants.Pairing.onAccent, Constants.Pairing.accent)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Constants.Toast.textSpacing) {
-                    Text(toast.agentName)
+                    Text(toast.workspaceName)
                         .interFont(Constants.Typography.bodyXS.withFace(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
-                    Text(toast.workspaceName)
+                    Text(toast.agentName)
                         .interFont(Constants.Typography.subtextXXS)
                         .foregroundStyle(.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
@@ -66,7 +68,7 @@ struct ToastView: View {
                     }
                 }
         )
-        .accessibilityLabel("\(toast.agentName) completed in \(toast.workspaceName)")
+        .accessibilityLabel("\(toast.workspaceName): \(toast.agentName) completed")
         .accessibilityHint("Opens the completed conversation")
         .accessibilityAction(named: "Dismiss") {
             onDismiss()

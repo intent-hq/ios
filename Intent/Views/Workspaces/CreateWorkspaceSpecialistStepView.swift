@@ -2,14 +2,14 @@ import SwiftUI
 
 struct CreateWorkspaceSpecialistStepView: View {
     let repositoryFullName: String
-    let branch: String
+    let branch: String?
     let specialists: [SpecialistInfo]
     let isLoadingSpecialists: Bool
     @Binding var selectedSpecialist: SpecialistInfo?
     let providers: [ProviderInfo]
     let isLoadingProviders: Bool
     let providerGuidance: String?
-    @Binding var selectedProvider: ProviderInfo?
+    let selectedProvider: ProviderInfo?
     let models: [ModelInfo]
     @Binding var selectedModel: ModelInfo?
     let reasoningLevels: [String]
@@ -32,24 +32,13 @@ struct CreateWorkspaceSpecialistStepView: View {
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .title) private var headingTracking = CreateWorkspaceFormStyle.headingTracking
     @ScaledMetric(relativeTo: .title) private var headingSize = Constants.Typography.heading2.size
+    @State private var createControlsHeight: CGFloat = 0
+    @State private var promptFocus = WorkspacePromptFocus()
 
     var body: some View {
         ZStack {
             CreateWorkspaceFormStyle.background(for: colorScheme).ignoresSafeArea()
             VStack(spacing: 0) {
-                CreateWorkspaceFormHeader(
-                    isCreateDisabled: CreateWorkspaceView.isCreateDisabled(
-                        isCreating: isCreating,
-                        isLoadingProviders: isLoadingProviders,
-                        providers: providers,
-                        selectedProvider: selectedProvider,
-                        allowsCreation: allowsCreation,
-                        isImportingImages: images.isImporting
-                    ),
-                    isCreating: isCreating,
-                    onBack: onBack,
-                    onCreate: onCreate
-                )
                 if isLoadingSpecialists {
                     ProgressView {
                         Text("Loading...").interFont(Constants.Typography.bodyS)
@@ -59,42 +48,71 @@ struct CreateWorkspaceSpecialistStepView: View {
                 } else {
                     optionsList
                         .disabled(isCreating)
+                        .allowsHitTesting(!promptFocus.isDismissing)
                 }
             }
-            if isCreating {
-                creatingOverlay
+            .overlay(alignment: .bottomTrailing) {
+                createControls
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { createControlsHeight = $0 }
             }
         }
         .navigationTitle("Create Workspace")
         .toolbar(.hidden, for: .navigationBar)
-        .interactiveDismissDisabled(isCreating)
+        .interactiveDismissDisabled(isCreating || promptFocus.isDismissing)
         .alert("Error", isPresented: $showError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "An unknown error occurred.")
         }
         .task { await onLoad() }
+        .onDisappear { promptFocus.cancelDismissal() }
+    }
+
+    private var createControls: some View {
+        HStack {
+            CreateWorkspaceNavigationButton(identifier: "creation.back", onAction: onBack)
+                .disabled(isCreating || promptFocus.isDismissing)
+            Spacer()
+            CreateWorkspaceSubmitButton(
+                isCreating: isCreating,
+                isDisabled: CreateWorkspaceView.isCreateDisabled(
+                    isCreating: isCreating || promptFocus.isDismissing,
+                    isLoadingProviders: isLoadingProviders,
+                    providers: providers,
+                    selectedProvider: selectedProvider,
+                    allowsCreation: allowsCreation,
+                    isImportingImages: images.isImporting
+                )
+            ) {
+                promptFocus.dismissKeyboard { onCreate() }
+            }
+        }
+        .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
+        .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
+        .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
     }
 
     private var optionsList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 pageHeading
+                    .padding(.top, CreateWorkspaceFormStyle.headingTopPadding)
                     .padding(.bottom, CreateWorkspaceFormStyle.headingSpacing)
-                CreateWorkspacePrompt(text: $messageText, attachments: images)
+                CreateWorkspacePrompt(text: $messageText, attachments: images, focus: promptFocus)
                 CreateWorkspaceSourceCard(repositoryFullName: repositoryFullName, branch: branch, onEdit: onBack)
                     .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
                 agentSection
-                    .padding(.top, CreateWorkspaceFormStyle.sectionSpacing)
+                    .padding(.top, CreateWorkspaceFormStyle.agentSectionSpacing)
             }
             .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))
             .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
             .padding(.top, CreateWorkspaceFormStyle.pagePadding)
-            .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
+            .padding(.bottom, CreateWorkspaceFormStyle.pagePadding + createControlsHeight)
         }
         #if !os(visionOS)
         .scrollDismissesKeyboard(.interactively)
         #endif
+        .accessibilityIdentifier("creation.form")
     }
 
     private var pageHeading: some View {
@@ -158,6 +176,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                 get: { selectedSpecialist?.id ?? "" },
                 set: { id in selectedSpecialist = specialists.first { $0.id == id } }
             )) {
+                Text("None").tag("")
                 ForEach(specialists) { specialist in
                     Text(specialist.name).interFont(Constants.Typography.bodyS).tag(specialist.id)
                 }
@@ -248,24 +267,29 @@ struct CreateWorkspaceSpecialistStepView: View {
         }
         .padding(.vertical, Constants.ModalPicker.rowVerticalPadding)
     }
-
-    private var creatingOverlay: some View {
-        Group {
-            Color.black.opacity(Constants.ModalPicker.loadingOverlayOpacity).ignoresSafeArea()
-            VStack(spacing: Constants.ModalPicker.loadingOverlaySpacing) {
-                ProgressView()
-                Text("Cloning repository…")
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-            }
-            .padding(Constants.ModalPicker.loadingOverlayPadding)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: Constants.ModalPicker.loadingOverlayCornerRadius))
-        }
-    }
 }
 
 extension CreateWorkspaceView {
+    static let createRequestTimeout: TimeInterval = 120
+
+    /// A failed cold load settles; an uncached load still in flight gates creation.
+    static func showsOptionsLoading(
+        storeIsLoading: Bool, storeHasLoaded: Bool, settled: Bool
+    ) -> Bool {
+        storeIsLoading || (!storeHasLoaded && !settled)
+    }
+
+    // swiftlint:disable discouraged_optional_boolean
+    /// A missing provider needs no load; a failed catalog falls back to the daemon default.
+    static func showsModelCatalogLoading(catalogCached: Bool?, settled: Bool) -> Bool {
+        catalogCached == false && !settled
+    }
+    // swiftlint:enable discouraged_optional_boolean
+
+    static func usesExpandedFormLayout(for size: DynamicTypeSize) -> Bool {
+        size.isAccessibilitySize
+    }
+
     struct InitialAgentInput {
         let specialist: SpecialistInfo?
         let provider: ProviderInfo?
@@ -277,10 +301,6 @@ extension CreateWorkspaceView {
 
     static var initialMessageLineCountRange: ClosedRange<Int> {
         1...Constants.CreateWorkspace.messageLineCountRange.upperBound
-    }
-
-    static func creationContextAccessibilityDescription(_ row: CreationContextRow) -> String {
-        "\(row.label): \(row.value.isEmpty ? "Not specified" : row.value)"
     }
 
     static func isCreateDisabled(
@@ -302,11 +322,20 @@ extension CreateWorkspaceView {
         idempotencyKey: String,
         initialAgent: InitialAgentInput
     ) -> [String: Any] {
-        var params: [String: Any] = [
-            "githubUrl": githubUrl,
-            "baseRef": baseRef,
-            "idempotencyKey": idempotencyKey
-        ]
+        buildCreateWorkspaceParams(
+            source: .github(url: githubUrl, baseRef: baseRef),
+            idempotencyKey: idempotencyKey,
+            initialAgent: initialAgent
+        )
+    }
+
+    static func buildCreateWorkspaceParams(
+        source: WorkspaceRepositorySource,
+        idempotencyKey: String,
+        initialAgent: InitialAgentInput
+    ) -> [String: Any] {
+        var params = source.parameters
+        params["idempotencyKey"] = idempotencyKey
         let trimmedMessage = initialAgent.message.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasMessage = !trimmedMessage.isEmpty
         if initialAgent.specialist != nil || hasMessage || initialAgent.model != nil

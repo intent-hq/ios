@@ -19,7 +19,9 @@ struct RootView: View {
     @State private var isSearchingWorkspaces = false
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
+    @State private var showingConnectionSwitcher = false
     @State private var conversationIsPopping = false
+    @State private var connectionSwitcherOpen = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
@@ -139,32 +141,41 @@ struct RootView: View {
             compactNavigationView
         } else {
             // iPad: NavigationSplitView with sidebar selection
-            NavigationSplitView {
-                WorkspaceListSidebar(
-                    workspaceStore: session.workspaceStore,
-                    isSearching: $isSearchingWorkspaces
-                )
-                .navigationSplitViewColumnWidth(
-                    min: Constants.Root.sidebarMinimumWidth,
-                    ideal: Constants.Root.sidebarIdealWidth,
-                    max: Constants.Root.sidebarMaximumWidth
-                )
-            } detail: {
-                detailContent
+            WorkspaceConnectionSwitcher(
+                isPresented: $showingConnectionSwitcher,
+                isEnabled: isWorkspaceFlow && !showingConnections && !showingCreateWorkspace
+                    && coordinator.selectedSection == .workspaces,
+                onReveal: prepareConnectionSwitcher
+            ) {
+                NavigationSplitView {
+                    WorkspaceListSidebar(
+                        workspaceStore: session.workspaceStore,
+                        isSearching: $isSearchingWorkspaces,
+                        onCreateWorkspace: createWorkspace
+                    )
+                    .navigationSplitViewColumnWidth(
+                        min: Constants.Root.sidebarMinimumWidth,
+                        ideal: Constants.Root.sidebarIdealWidth,
+                        max: Constants.Root.sidebarMaximumWidth
+                    )
+                } detail: {
+                    detailContent
+                }
+                .navigationSplitViewStyle(.automatic)
             }
-            .navigationSplitViewStyle(.automatic)
             .modifier(WorkspaceActionLauncher(
                 isSearching: isSearchingWorkspaces,
                 alignment: .trailing,
                 avoidsConversationInput: !conversationIsPopping,
-                onCreateWorkspace: { if coordinator.canCreateWorkspace { showingCreateWorkspace = true } },
-                onConnections: { showingConnections = true }
-            ))
+                onCreateWorkspace: createWorkspace
+            ) {
+                showingConnections = true
+            })
             .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
                 if shouldDismiss { showingCreateWorkspace = false }
             }
             .sheet(isPresented: $showingCreateWorkspace) {
-                CreateWorkspaceView(session: session)
+                CreateWorkspaceView(session: session, coordinator: coordinator)
                     .environment(coordinator)
             }
             .sheet(isPresented: $showingConnections) {
@@ -353,13 +364,19 @@ struct RootView: View {
     }
 }
 
-private extension RootView {
-    var showsSettingsSheet: Bool {
+extension RootView {
+    static func presentsSettingsSheet(currentScreen: AppScreen, sizeClass: UserInterfaceSizeClass?) -> Bool {
         #if os(iOS)
-        guard UIDevice.current.userInterfaceIdiom == .phone else { return false }
-        if case .settings = coordinator.currentScreen { return true }
+        guard sizeClass == .compact else { return false }
+        if case .settings = currentScreen { return true }
         #endif
         return false
+    }
+}
+
+private extension RootView {
+    var showsSettingsSheet: Bool {
+        Self.presentsSettingsSheet(currentScreen: coordinator.currentScreen, sizeClass: sizeClass)
     }
 
     var settingsPresented: Binding<Bool> {
@@ -373,28 +390,46 @@ private extension RootView {
         )
     }
 
+    var agentHistoryEnabled: Bool {
+        isWorkspaceFlow && !connectionSwitcherOpen && coordinator.selectedSection == .workspaces
+    }
+
     @ViewBuilder var workspaceFlowContent: some View {
-        workspaceNavigationContent
-            .sheet(isPresented: assistantPresented) {
-                AssistantView(session: session)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
-            .sheet(isPresented: settingsPresented) {
-                SettingsView(presentedAsSheet: true, contentColorScheme: colorScheme)
-                    // The system status bar sits over the dark backdrop; content retains the selected theme.
-                    .preferredColorScheme(.dark)
-                    .presentationBackground(SettingsStyle.surface(for: colorScheme))
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.hidden)
-                    .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
-            }
-            .background {
-                Color.clear.preference(
-                    key: ConnectionBackdropPreference.self,
-                    value: showsSettingsSheet ? ConnectionBackdropPreference.manualOpacity : 0
-                )
-            }
+        AgentHistoryDrawer(isEnabled: agentHistoryEnabled) {
+            workspaceNavigationContent
+        }
+        .onPreferenceChange(ConnectionSwitcherOpenPreference.self) { connectionSwitcherOpen = $0 }
+        .sheet(isPresented: assistantPresented) {
+            AssistantView(session: session)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: settingsPresented) {
+            SettingsView(presentedAsSheet: true, contentColorScheme: colorScheme)
+                // The system status bar sits over the dark backdrop; content retains the selected theme.
+                .preferredColorScheme(.dark)
+                .presentationBackground(SettingsStyle.surface(for: colorScheme))
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+                .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
+        }
+        .background {
+            Color.clear.preference(
+                key: ConnectionBackdropPreference.self,
+                value: showsSettingsSheet ? ConnectionBackdropPreference.manualOpacity : 0
+            )
+        }
+    }
+}
+
+private extension RootView {
+    func prepareConnectionSwitcher() {
+        isSearchingWorkspaces = false
+    }
+
+    func createWorkspace() {
+        showingConnectionSwitcher = false
+        if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
     }
 }
 

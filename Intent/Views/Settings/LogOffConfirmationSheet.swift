@@ -31,7 +31,7 @@ struct LogOffConfirmationSheet: View {
     private var heading: some View {
         VStack(spacing: SettingsStyle.sectionHeaderSpacing) {
             ConnectionSheetText(
-                "Log Off?",
+                "Disconnect?",
                 style: Constants.Typography.heading2,
                 tracking: Constants.Connections.headingTracking
             )
@@ -56,7 +56,7 @@ struct LogOffConfirmationSheet: View {
             .accessibilityIdentifier("log-off.cancel")
 
             Button(role: .destructive, action: confirmLogOff) {
-                actionLabel("Log Off", isDestructive: true)
+                actionLabel("Disconnect", isDestructive: true)
             }
             .accessibilityIdentifier("log-off.confirm")
         }
@@ -88,12 +88,12 @@ struct LogOffConfirmationSheet: View {
     }
 }
 
-#Preview("Log Off - Light") {
+#Preview("Disconnect - Light") {
     LogOffConfirmationSheet {}
         .environment(\.colorScheme, .light)
 }
 
-#Preview("Log Off - Dark") {
+#Preview("Disconnect - Dark") {
     LogOffConfirmationSheet {}
         .environment(\.colorScheme, .dark)
 }

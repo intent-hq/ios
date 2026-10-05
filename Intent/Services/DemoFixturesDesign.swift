@@ -16,11 +16,13 @@ enum DemoDesignScenario: String, CaseIterable {
     case conversation
     case empty
     case history
+    case mermaid
     case questionCards = "question-cards"
     case questionFlow = "question-flow"
     case questions
     case queue
     case streaming
+    case tables
     case tools
 
     static func requested(by arguments: [String]) -> Self? {

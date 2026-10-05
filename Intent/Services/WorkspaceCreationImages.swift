@@ -6,7 +6,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Sheet-owned, local images. No upload or workspace identity exists until Create.
+/// Draft-owned, local images. No upload or workspace identity exists until Create.
 @MainActor
 @Observable final class WorkspaceCreationImages {
     nonisolated struct Image: Identifiable, Sendable {
@@ -47,6 +47,7 @@ import UniformTypeIdentifiers
     private(set) var images: [Image] = []
     private(set) var isImporting = false
     var errorMessage: String?
+    @ObservationIgnored var imagePasteboard: ImagePasteboard = .general
     @ObservationIgnored private var importTask: Task<Void, Never>?
 
     var remainingCount: Int { Constants.Conversation.Composer.maximumImageSelectionCount - images.count }
@@ -76,8 +77,8 @@ import UniformTypeIdentifiers
 
     func addPaste() {
         guard !isImporting else { return }
-        let pasteboard = UIPasteboard.general
-        let imageTypes = (pasteboard.types(forItemSet: nil) ?? []).enumerated().compactMap { index, types in
+        let pasteboard = imagePasteboard
+        let imageTypes = pasteboard.itemTypes().enumerated().compactMap { index, types in
             types.first { UTType($0)?.conforms(to: .image) == true }.map { (index, $0) }
         }
         guard !imageTypes.isEmpty else {
@@ -92,7 +93,7 @@ import UniformTypeIdentifiers
         // run loop. Lazy pasteboard providers can fail after that action ends or
         // the clipboard changes. Decode/downsample stays off the main actor.
         let data = imageTypes.map { index, type in
-            pasteboard.data(forPasteboardType: type, inItemSet: IndexSet(integer: index))?.first
+            pasteboard.data(type, index)
         }
         add(data.map { value in
             { guard let value else { throw ImportError.unreadable }; return value }

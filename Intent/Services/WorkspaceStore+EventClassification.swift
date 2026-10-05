@@ -3,6 +3,21 @@ import Foundation
 extension WorkspaceStore {
     // MARK: - Event classification
 
+    /// The workspace an event deletes or archives: `workspace:deleted`, or a
+    /// `workspace:updated` whose delta sets `archived: true`.
+    nonisolated static func removedWorkspaceId(type: String, workspaceId: String?, data: [String: Any]) -> String? {
+        let id = (data["workspaceId"] as? String) ?? workspaceId
+        switch type {
+        case "workspace:deleted":
+            return id
+        case "workspace:updated":
+            let changes = data["changes"] as? [String: Any]
+            return changes?["archived"] as? Bool == true ? id : nil
+        default:
+            return nil
+        }
+    }
+
     /// A trailing colon denotes a channel prefix; other entries name exact events.
     nonisolated static let handledChannels = ["workspace:", "agent:", "host:members-changed"]
 

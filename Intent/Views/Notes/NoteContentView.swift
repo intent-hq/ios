@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Renders note content as interleaved markdown segments and native task rows
+/// Renders note content as interleaved markdown, Mermaid diagrams, and native task rows
 /// (plain checkbox rows + linked-task cards), matching the fe's
 /// `TaskItemNodeView` treatment instead of the old emoji marker substitution.
 struct NoteContentView: View {

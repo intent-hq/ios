@@ -3,13 +3,19 @@ import SwiftUI
 struct WorkspaceListSidebar: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.openAgentHistory) private var openAgentHistory
+    @Environment(\.openConnectionSwitcher) private var openConnectionSwitcher
     private let workspaceStore: WorkspaceStore
+    private let onCreateWorkspace: () -> Void
     @State private var viewModel: WorkspaceListViewModel
+    @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
+    @State private var workspaceSwipeProgress: [String: CGFloat] = [:]
     @Binding private var isSearching: Bool
     @FocusState private var searchFocused: Bool
 
-    init(workspaceStore: WorkspaceStore, isSearching: Binding<Bool>) {
+    init(workspaceStore: WorkspaceStore, isSearching: Binding<Bool>, onCreateWorkspace: @escaping () -> Void) {
         self.workspaceStore = workspaceStore
+        self.onCreateWorkspace = onCreateWorkspace
         _viewModel = State(initialValue: WorkspaceListViewModel(workspaceStore: workspaceStore))
         _isSearching = isSearching
     }
@@ -49,6 +55,22 @@ struct WorkspaceListSidebar: View {
             await workspaceStore.fetchAll()
         }
         .navigationTitle("Workspaces")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                WorkspaceListMenu(showArchived: $viewModel.showArchived, onCreateWorkspace: onCreateWorkspace) {
+                    searchFocused = false
+                    isSearching = false
+                    revealedSwipeTarget = nil
+                    openAgentHistory()
+                } onRecentConnections: {
+                    searchFocused = false
+                    isSearching = false
+                    revealedSwipeTarget = nil
+                    openConnectionSwitcher()
+                }
+            }
+        }
+        .onChange(of: viewModel.showArchived) { _, _ in revealedSwipeTarget = nil }
         .onDisappear {
             isSearching = false
             viewModel.searchText = ""
@@ -57,15 +79,10 @@ struct WorkspaceListSidebar: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label {
-                Text("No Workspaces").interFont(Constants.Typography.bodyM.withFace(.semibold))
-            } icon: {
-                Image(systemName: "rectangle.stack.badge.plus")
-            }
-        } description: {
-            Text("Create one in the desktop app.").interFont(Constants.Typography.bodyS)
-        }
+        Button("New workspace", action: onCreateWorkspace)
+            .buttonStyle(IntentButtonStyle(variant: .muted))
+            .disabled(!coordinator.canCreateWorkspace)
+            .accessibilityIdentifier("workspaces.empty.create")
     }
 
     @ViewBuilder
@@ -131,7 +148,7 @@ struct WorkspaceListSidebar: View {
     /// background that drew the gaze highlight (ios#339), so the hover effect
     /// is reapplied to the row content in the selection's rounded shape.
     private func sidebarRow(_ workspace: Workspace, showRepo: Bool = true) -> some View {
-        WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
+        sidebarRowContent(workspace, showRepo: showRepo)
             #if os(visionOS)
             .contentShape(
                 .hoverEffect,
@@ -157,6 +174,30 @@ struct WorkspaceListSidebar: View {
                     colorScheme: colorScheme
                 ))
             )
+    }
+
+    @ViewBuilder
+    private func sidebarRowContent(_ workspace: Workspace, showRepo: Bool) -> some View {
+        #if os(visionOS)
+        WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
+        #else
+        WorkspaceSwipeRow(
+            workspace: workspace,
+            showRepo: showRepo,
+            isUpdating: workspaceStore.updatingWorkspaceIDs.contains(workspace.id),
+            revealedTarget: $revealedSwipeTarget,
+            workspaceSwipeProgress: $workspaceSwipeProgress,
+            nextWorkspaceId: nil,
+            spacious: false,
+            showsTrailingActions: false
+        ) {
+            searchFocused = false
+            coordinator.onSelectWorkspace(workspace.id)
+        } onOpenRecentAgent: {
+            searchFocused = false
+            coordinator.onOpenRecentWorkspaceAgent(workspace.id)
+        } onAction: { _ in }
+        #endif
     }
 
     static func rowSelectionBackground(isSelected: Bool, colorScheme: ColorScheme) -> Color {

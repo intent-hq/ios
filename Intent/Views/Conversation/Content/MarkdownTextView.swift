@@ -13,8 +13,11 @@ struct MarkdownTextView: View {
     /// view value in `init` instead of on every `body` evaluation (the body
     /// also re-runs on lightbox state changes).
     private let markdownSource: String
+    private let mermaidSources: [String: String]
+    private let pendingDiagram: MermaidMarkdownContent.PendingDiagram?
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.assistantMessageStreaming) private var isStreaming
     /// The window's session, when present: workspace images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
@@ -24,7 +27,6 @@ struct MarkdownTextView: View {
     @State private var attachmentAttempt = 0
 
     private static let maximumBlockIndent = 3
-    private static let minimumFenceLength = 3
     private static let indentedCodeWidth = 4
     private static let listContinuationIndent = 2
     private static let tabWidth = 4
@@ -37,7 +39,12 @@ struct MarkdownTextView: View {
         self.text = text
         self.onOpenURL = onOpenURL
         self.workspaceId = workspaceId
-        self.markdownSource = Self.replacingTaskListMarkers(text)
+        let prepared = MermaidMarkdownContent(text)
+        self.markdownSource = Self.replacingTaskListMarkers(prepared.markdown)
+        self.mermaidSources = prepared.sources
+        self.pendingDiagram = prepared.pending.map { pending in
+            .init(markdown: Self.replacingTaskListMarkers(pending.markdown), language: pending.language)
+        }
     }
 
     /// Intent-file image fetcher bound to the session's loader when one is in
@@ -65,8 +72,12 @@ struct MarkdownTextView: View {
     }
 
     var body: some View {
-        let markdownView = StructuredText(markdown: markdownSource)
-            .textual.structuredTextStyle(.compact)
+        let pending = isStreaming ? pendingDiagram : nil
+        let markdownView = StructuredText(markdown: pending?.markdown ?? markdownSource)
+            .textual.structuredTextStyle(CompactMarkdownStyle(
+                mermaidSources: mermaidSources,
+                pendingMermaidLanguage: pending?.language
+            ))
             .textual.imageAttachmentLoader(
                 IntentFileAttachmentLoader(
                     workspaceId: workspaceId,
@@ -169,29 +180,23 @@ struct MarkdownTextView: View {
     /// code blocks.
     static func replacingTaskListMarkers(_ text: String) -> String {
         guard text.contains("[") else { return text }
-        var fenceMarker: Character?
+        var codeFence: MarkdownCodeFence?
         var inList = false
         func replaceMarker(in line: String) -> String {
             let indent = leadingIndentWidth(of: line)
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            if let marker = fenceMarker {
+            if let fence = codeFence {
                 if indent <= Self.maximumBlockIndent,
-                   trimmed.count >= Self.minimumFenceLength,
-                   trimmed.allSatisfy({ $0 == marker }) {
-                    fenceMarker = nil
+                   fence.closes(with: trimmed) {
+                    codeFence = nil
                 }
                 return line
             }
-            if indent <= Self.maximumBlockIndent || inList {
-                if trimmed.hasPrefix("```") {
-                    fenceMarker = "`"
-                    return line
-                }
-                if trimmed.hasPrefix("~~~") {
-                    fenceMarker = "~"
-                    return line
-                }
+            if indent <= Self.maximumBlockIndent || inList,
+               let fence = MarkdownCodeFence(opening: trimmed) {
+                codeFence = fence
+                return line
             }
             if trimmed.isEmpty { return line }
             if indent >= Self.indentedCodeWidth, !inList { return line }

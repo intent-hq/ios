@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WorkspaceDetailView: View {
     let workspaceId: String
+    private let persistence: PersistenceManager
     @Environment(AppCoordinator.self) var coordinator
     @State private var storedAgentStore: AgentStore
     @State private var storedViewModel: AgentListViewModel
@@ -16,14 +17,20 @@ struct WorkspaceDetailView: View {
     @State private var showNewBrowser = false
     @State private var showTransferWorkspace = false
     @State private var terminalCreationRequest: UUID?
-    @State private var selectedTab = WorkspaceTab.agents
+    @State private var selectedTab: WorkspaceTab
+    @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var noteStore: NoteStore
     @State private var scriptStore: WorkspaceScriptStore
     @State private var changesStore: WorkspaceChangesStore
     @Environment(BackendSession.self) private var session
 
-    init(workspaceId: String, session: BackendSession) {
+    init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared) {
         self.workspaceId = workspaceId
+        self.persistence = persistence
+        _selectedTab = State(initialValue: WorkspaceTab.restored(
+            persistedValue: persistence.loadWorkspaceTab(workspaceId: workspaceId),
+            fallback: .agents
+        ))
         let store = AgentStore(connectionManager: session.connection, summaries: session.agentSummaries, scopedLoading: true)
         _storedAgentStore = State(initialValue: store)
         _storedViewModel = State(initialValue: AgentListViewModel(list: store.list))
@@ -34,6 +41,7 @@ struct WorkspaceDetailView: View {
 
     var agentStore: AgentStore { storedAgentStore }
     var viewModel: AgentListViewModel { storedViewModel }
+    var currentTab: WorkspaceTab { selectedTab }
 
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
 
@@ -71,9 +79,6 @@ struct WorkspaceDetailView: View {
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: workspaceId) }
             Task { await noteStore.fetchNotes(workspaceId: workspaceId) }
-            if let savedTab = PersistenceManager.shared.loadWorkspaceTab(workspaceId: workspaceId) {
-                selectedTab = WorkspaceTab(persistedValue: savedTab)
-            }
         }
         .onDisappear {
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
@@ -93,6 +98,7 @@ struct WorkspaceDetailView: View {
             createdBrowser = nil
             showNewBrowser = false
             showTransferWorkspace = false
+            revealedSwipeTarget = nil
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: oldId,
@@ -109,13 +115,10 @@ struct WorkspaceDetailView: View {
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: newId) }
             Task { await noteStore.fetchNotes(workspaceId: newId) }
-            selectedTab = WorkspaceTab.restored(
-                persistedValue: PersistenceManager.shared.loadWorkspaceTab(workspaceId: newId),
-                fallback: .agents
-            )
+            restoreSelectedTab(workspaceId: newId)
         }
         .onChange(of: selectedTab) { _, newTab in
-            PersistenceManager.shared.saveWorkspaceTab(
+            persistence.saveWorkspaceTab(
                 workspaceId: workspaceId,
                 tab: newTab.persistedValue
             )
@@ -268,6 +271,17 @@ struct WorkspaceDetailView: View {
 }
 
 private extension WorkspaceDetailView {
+    func restoreSelectedTab(workspaceId: String) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            selectedTab = WorkspaceTab.restored(
+                persistedValue: persistence.loadWorkspaceTab(workspaceId: workspaceId),
+                fallback: .agents
+            )
+        }
+    }
+
     var toolbarTitle: some View {
         VStack(spacing: WorkspaceDetailStyle.tabInset) {
             Text(workspaceTitle)
@@ -391,13 +405,13 @@ private extension WorkspaceDetailView {
             agentSection(.background, title: "background agents")
             agentSection(.orphaned, title: "delegated agents")
             agentSection(.retired, title: "retired agents")
-            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore) { terminal in
+            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore, revealedTarget: $revealedSwipeTarget) { terminal in
                 selectedTerminal = terminal
             }
-            WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore) { browser in
+            WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore, revealedTarget: $revealedSwipeTarget) { browser in
                 selectedBrowser = browser
             }
-            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore)
+            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore, revealedTarget: $revealedSwipeTarget)
         }
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.bottom, WorkspaceDetailStyle.pageInset)

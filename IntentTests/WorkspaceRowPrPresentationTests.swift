@@ -3,6 +3,34 @@ import SwiftUI
 import Testing
 
 extension WorkspaceRowPresentationTests {
+    @Test(
+        .enabled("Requires the hosted SwiftUI accessibility tree") {
+            await SyntheticBadgeHost.publishesAccessibilityTree()
+        },
+        arguments: ["fractional", "whole", "invalid"]
+    )
+    func renderedRowTimestampsPreserveRelativeTimeAndInvalidFallback(format: String) async throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = format == "fractional"
+            ? [.withInternetDateTime, .withFractionalSeconds] : [.withInternetDateTime]
+        // Stay halfway between hour boundaries so rendering cannot change the label.
+        let timestamp = format == "invalid"
+            ? "not-a-timestamp" : formatter.string(from: Date(timeIntervalSinceNow: -9000))
+        let expected = format == "invalid" ? "not-a-timestamp" : "2h"
+        let agent = try #require(AgentSession.parseAgent([
+            "id": "row-timestamp-agent", "name": "Agent", "lastActivity": timestamp
+        ]))
+        let rows = VStack {
+            WorkspaceRowView(workspace: makeWorkspace(lastActivity: timestamp), colorScheme: .light)
+            AgentRowView(agent: agent, colorScheme: .light)
+        }
+        try await SyntheticBadgeHost.render(rows, width: 600, height: 240) { hostView, _ in
+            let labels = SyntheticBadgeHost.accessibilityElements(in: hostView).compactMap(\.accessibilityLabel)
+            #expect(labels.contains("Updated \(expected)"))
+            #expect(labels.contains(expected))
+        }
+    }
+
     @Test func denseMetadataFixturePreservesLongFieldsAndConcurrentCues() {
         let workspace = makeWorkspace(
             title: "Refine the workspace list hierarchy without losing important metadata",

@@ -65,13 +65,20 @@ final class AppCoordinatorLifecycleState {
 class AppCoordinator {
     var currentScreen: AppScreen = .loading {
         didSet {
+            navigationState.recentWorkspaceAgentRequestId = nil
+            recordAgentVisit()
             if !currentScreen.supportsConnectionLossOverlay {
                 resetConnectionLossEligibility()
             }
         }
     }
-    var selectedSection: AppSection = .workspaces
+    var selectedSection: AppSection = .workspaces {
+        didSet {
+            if selectedSection != oldValue { navigationState.recentWorkspaceAgentRequestId = nil }
+        }
+    }
     var assistantAgentId: String?
+    var workspaceCreationDraft: WorkspaceCreationDraft?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false {
         didSet {
@@ -98,10 +105,13 @@ class AppCoordinator {
     /// cold-start connect) restarts the attempt — SwiftUI would otherwise
     /// keep the existing ConnectingView and never re-run its task.
     private(set) var connectionAttemptId = 0
+    /// Only launch/restoration auto-connect hides Connecting's Back action.
+    var connectingStartedByLaunch = false
     var conversationRequestId = 0
 
     var selectedWorkspaceId: String? {
         didSet {
+            if selectedWorkspaceId != oldValue { navigationState.recentWorkspaceAgentRequestId = nil }
             if let workspaceId = selectedWorkspaceId,
                selectedWorkspaceId != oldValue,
                !navigationState.suppressWorkspaceNavigation {
@@ -123,6 +133,7 @@ class AppCoordinator {
     @ObservationIgnored private var reconnectOverlayTimeoutTask: Task<Void, Never>?
     @ObservationIgnored var invitedRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var savedConnectionsObserver: AnyCancellable?
+    @ObservationIgnored private var workspaceRemovalObserver: AnyCancellable?
 
     @ObservationIgnored let dependencies: AppCoordinatorDependencies
     @ObservationIgnored let lifecycleState = AppCoordinatorLifecycleState()
@@ -131,6 +142,10 @@ class AppCoordinator {
     @ObservationIgnored let connectionLossPresentation: ConnectionLossPresentation
     var canCreateWorkspace: Bool {
         dependencies.connection.connectionState == .connected && dependencies.connection.currentPrincipal?.canManageWorkspaces == true
+    }
+
+    func makeWorkspaceCreationDraft() -> WorkspaceCreationDraft {
+        workspaceCreationDraft ?? WorkspaceCreationDraft(backendID: backendID, persistence: dependencies.persistence)
     }
 
     /// Temporary transport recovery keeps the draft while submission remains
@@ -161,6 +176,8 @@ class AppCoordinator {
     @ObservationIgnored var returnWindowToSavedMachines: (() -> Void)?
 
     var agentDetails: AgentDetailStore
+    /// Shared across windows and backends; tests get one over their own persistence.
+    @ObservationIgnored let agentHistory: AgentHistoryStore
 
     init(
         workspaceStore: WorkspaceStore,
@@ -172,9 +189,11 @@ class AppCoordinator {
         backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
         connectionLossPresentation: ConnectionLossPresentation = ConnectionLossPresentation(),
         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
-        claimScreenRestoration: @escaping @MainActor () -> Bool = { true }
+        claimScreenRestoration: @escaping @MainActor () -> Bool = { true },
+        agentHistory: AgentHistoryStore? = nil
     ) {
         agentDetails = AgentDetailStore(connection: connection)
+        self.agentHistory = agentHistory ?? AgentHistoryStore(persistence: persistence)
         dependencies = AppCoordinatorDependencies(
             workspaceStore: workspaceStore,
             connection: connection,
@@ -191,6 +210,9 @@ class AppCoordinator {
         savedConnectionsObserver = persistence.connectionsDidChange.sink { [weak self] _ in
             self?.refreshSavedConnectionsPresentation()
         }
+        workspaceRemovalObserver = workspaceStore.removedWorkspaceIds.sink { [weak self] workspaceId in
+            self?.forgetHistory(ofWorkspace: workspaceId)
+        }
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
@@ -198,6 +220,7 @@ class AppCoordinator {
 
     /// Restarts the keyed ConnectingView task while preserving its transition order.
     func restartConnectionAttempt() {
+        connectingStartedByLaunch = false
         connectionAttemptId += 1
         currentScreen = .connecting
     }
@@ -403,6 +426,7 @@ extension AppCoordinator {
         withObservationTracking {
             _ = dependencies.workspaceStore.lastUpdated
             _ = dependencies.workspaceStore.workspaces
+            _ = dependencies.workspaceStore.showArchived
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -437,9 +461,8 @@ extension AppCoordinator {
             return
         }
 
-        // Check if workspace is archived or deleted
         let status = workspace.status?.lowercased() ?? ""
-        if status == "archived" || status == "deleted" {
+        if status == "deleted" || (status == "archived" && !dependencies.workspaceStore.showArchived) {
             handleMissingWorkspace()
         }
     }

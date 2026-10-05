@@ -37,6 +37,7 @@ jobs:
         id: select
         env:
           RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+          RUNNER_POOL_LABEL: intent-ios-build
         run: bash .github/scripts/select-macos-runner.sh
 
   warm-go-linux:

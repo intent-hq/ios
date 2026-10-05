@@ -5,9 +5,14 @@ extension Constants.WorkspaceList {
     static let titleTopSpacing: CGFloat = 64
     static let titleBottomSpacing: CGFloat = 64
     static let searchTitleSpacing: CGFloat = 16
+    static let recentTopSpacing: CGFloat = 12
     static let groupTopSpacing: CGFloat = 32
     static let groupBottomSpacing: CGFloat = 12
     static let emptyStateHeight: CGFloat = 240
+    static let swipeButtonSize: CGFloat = 48
+    static let swipeButtonIconSize: CGFloat = 24
+    static let swipeButtonCornerRadius: CGFloat = 20
+    static let swipeActionsLeadingSpacing: CGFloat = 32
 
     static func canvas(for scheme: ColorScheme) -> Color {
         scheme == .dark ? Constants.Pairing.background(for: scheme) : Theme.background(for: scheme)
@@ -26,6 +31,9 @@ extension Constants.WorkspaceSearch {
     static let inputTrailingInset: CGFloat = 4
     static let inputVerticalInset: CGFloat = 2
     static let compactSegmentInset: CGFloat = 2
+    static let surfaceShadowOpacity = 0.1
+    static let surfaceShadowRadius: CGFloat = 4
+    static let surfaceShadowOffset: CGFloat = 2
 }
 
 extension Constants.WorkspaceRow {

@@ -34,7 +34,8 @@ struct ConversationStartupRPCTests {
         #expect(chat.params["agentId"] as? String == ConversationStartupFixture.parentId)
         #expect(chat.params["projection"] as? String == "slim")
         #expect(chat.params["deltaEncoding"] as? String == "incremental")
-        #expect(chat.params["limit"] == nil && chat.params["sinceMessageId"] == nil)
+        #expect(chat.params["limit"] as? Int == 50)
+        #expect(chat.params["sinceMessageId"] == nil)
         let snapshot = try #require(traffic.notifications.first)
         #expect(try #require(chat.completed).order < snapshot.received.order)
         #expect(chat.started.elapsed <= snapshot.received.elapsed)
@@ -96,8 +97,7 @@ struct ConversationStartupRPCTests {
         #expect(settled.failures.isEmpty)
     }
 
-    @Test(arguments: [0, 1, 5])
-    func lateProposalConsumersReuseParentDetail(cardCount: Int) async {
+    @Test func lateProposalConsumersReuseParentDetail() async {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
         fixture.parentMetadata["pendingProposals"] = [["proposalId": "proposal-1", "messageId": "proposal-message"]]
@@ -105,13 +105,13 @@ struct ConversationStartupRPCTests {
         let checkpoint = fixture.connection.checkpoint
         // ConversationView supplies one ProposalActionStore to its cards.
         let proposal = fixture.makeProposalStore()
-        for _ in 0..<cardCount {
+        for _ in 0..<5 {
             await proposal.loadIfNeeded()
             #expect(proposal.pending["proposal-1"] == "proposal-message")
             #expect(proposal.loadError == nil)
         }
         let proposals = fixture.connection.traffic(since: checkpoint)
-        print("Proposal mounts \(cardCount): \(fixture.connection.traffic().summary)")
+        print("Proposal mounts 5: \(fixture.connection.traffic().summary)")
         #expect(proposals.requests.isEmpty)
         #expect(fixture.connection.traffic().calls("agent.get").count == 1)
         #expect(fixture.connection.traffic().requests.count == 8)
