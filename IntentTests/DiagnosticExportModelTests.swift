@@ -5,6 +5,50 @@ import Testing
 
 @MainActor
 struct DiagnosticExportModelTests {
+    @Test func lifecycleRefreshKeepsReviewedSnapshotUntilExplicitRefresh() async throws {
+        let clock = DiagnosticTestClock()
+        let store = DiagnosticStore(storage: DiagnosticTestStorage()) { clock.now() }
+        store.record(DiagnosticFixtures.event())
+        let model = DiagnosticExportModel(store: store, now: { clock.now() })
+        model.refreshIfNeeded()
+        await model.waitForWork()
+        let reviewed = try #require(model.preview).snapshot
+
+        clock.advance(1)
+        store.record(DiagnosticFixtures.event(operation: .workspaceCreate))
+        #expect(await store.snapshot().metadata.retainedRecords == 2)
+        for _ in 0..<3 { model.refreshIfNeeded() }
+        #expect(!model.isWorking)
+        #expect(model.preview?.snapshot.jsonLines == reviewed.jsonLines)
+        #expect(model.preview?.snapshot.metadata.generatedAt == reviewed.metadata.generatedAt)
+
+        model.refresh()
+        await model.waitForWork()
+        #expect(model.preview?.rows.count == 2)
+        #expect(model.preview?.snapshot.metadata.generatedAt == clock.now())
+    }
+
+    @Test(arguments: [false, true])
+    func lifecycleRefreshReloadsExpiredOrFuturePreview(rollback: Bool) async throws {
+        let clock = DiagnosticTestClock()
+        let store = DiagnosticStore(storage: DiagnosticTestStorage()) { clock.now() }
+        store.record(DiagnosticFixtures.event())
+        let model = DiagnosticExportModel(store: store, now: { clock.now() })
+        model.refreshIfNeeded()
+        await model.waitForWork()
+        #expect(try #require(model.preview).rows.count == 1)
+
+        clock.advance(rollback ? -1 : DiagnosticLimits.maximumAge)
+        model.refreshIfNeeded()
+        await model.waitForWork()
+        let refreshed = try #require(model.preview)
+        #expect(refreshed.rows.isEmpty)
+        #expect(refreshed.snapshot.metadata.generatedAt == clock.now())
+        #expect(refreshed.snapshot.expiresAt > clock.now())
+        model.refreshIfNeeded()
+        #expect(!model.isWorking)
+    }
+
     @Test func openingOnlyPreviewsAndExplicitSharingUsesThatSnapshot() async throws {
         let storage = DiagnosticTestStorage()
         let store = DiagnosticStore(storage: storage)

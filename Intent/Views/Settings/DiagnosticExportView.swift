@@ -15,6 +15,9 @@ struct DiagnosticExportView: View {
                     DiagnosticPreviewSection(preview: preview)
                 }
             }
+            // Preserve native diagnostic list actions; only navigation uses Intent button chrome.
+            // swiftlint:disable:next generic_button_style
+            .buttonStyle(.automatic)
             .navigationTitle("Export logs")
             .toolbar { exportToolbar }
             .confirmationDialog("Clear local diagnostic logs?", isPresented: $confirmsClear, titleVisibility: .visible) {
@@ -26,13 +29,13 @@ struct DiagnosticExportView: View {
                     model.sharingFinished(id: id, failed: failed, cleaned: cleaned)
                 }
             }
-            .task { model.refresh() }
+            .task { model.refreshIfNeeded() }
             .task(id: model.preview?.snapshot.expiresAt) { await model.refreshWhenExpired() }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { model.refresh() }
+                if phase == .active { model.refreshIfNeeded() }
             }
             .onChange(of: model.share?.id) { _, value in
-                if value == nil { model.refreshIfExpired() }
+                if value == nil { model.refreshIfNeeded() }
             }
             .onDisappear { model.cancelPreparation() }
         }
@@ -53,18 +56,21 @@ struct DiagnosticExportView: View {
 
 private struct DiagnosticExportActions: View {
     @ScaledMetric private var iconSize: CGFloat = 17
-    @Environment(\.colorScheme) private var colorScheme
     let model: DiagnosticExportModel
     @Binding var confirmsClear: Bool
-
-    private var isShareDisabled: Bool {
-        model.isWorking || model.preview == nil || model.share != nil
-    }
 
     var body: some View {
         Section {
             preparationStatus
-            shareZIPAction
+            Button { model.shareZIP() } label: {
+                Label {
+                    Text("Share ZIP").interFont(Constants.Typography.bodyS)
+                } icon: {
+                    icon(.upload)
+                }
+            }
+                .disabled(model.isWorking || model.preview == nil || model.share != nil)
+                .accessibilityIdentifier("diagnosticShareZIP")
             Button { model.refresh() } label: {
                 Label {
                     Text("Refresh").interFont(Constants.Typography.bodyS)
@@ -72,7 +78,6 @@ private struct DiagnosticExportActions: View {
                     icon(.clockwiseArrow)
                 }
             }
-                .buttonStyle(IntentButtonStyle(variant: .secondary))
                 .disabled(model.isWorking || model.share != nil)
             Button(role: .destructive) { confirmsClear = true } label: {
                 Label {
@@ -81,28 +86,9 @@ private struct DiagnosticExportActions: View {
                     icon(.delete)
                 }
             }
-                .buttonStyle(IntentButtonStyle(variant: .secondary))
                 .disabled(model.isWorking || model.share != nil)
                 .accessibilityIdentifier("diagnosticClear")
         }
-    }
-
-    private var shareZIPAction: some View {
-        Button { model.shareZIP() } label: {
-            Label {
-                Text("Share ZIP").interFont(Constants.Typography.bodyS)
-            } icon: {
-                icon(.upload)
-            }
-            .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget, alignment: .leading)
-            .contentShape(.rect)
-        }
-        .buttonStyle(IntentContentButtonStyle())
-        .foregroundStyle(isShareDisabled
-            ? Theme.mutedForeground(for: colorScheme)
-            : Theme.foreground(for: colorScheme))
-        .disabled(isShareDisabled)
-        .accessibilityIdentifier("diagnosticShareZIP")
     }
 
     private func icon(_ image: ImageResource) -> some View {
