@@ -185,10 +185,6 @@ struct RootView: View {
         }
     }
 
-    private func prepareConnectionSwitcher() {
-        isSearchingWorkspaces = false
-    }
-
     private var launchContent: some View {
         ZStack {
             // One SplashArtView spans loading and connecting. Keeping
@@ -427,6 +423,10 @@ private extension RootView {
 }
 
 private extension RootView {
+    func prepareConnectionSwitcher() {
+        isSearchingWorkspaces = false
+    }
+
     func createWorkspace() {
         showingConnectionSwitcher = false
         if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
