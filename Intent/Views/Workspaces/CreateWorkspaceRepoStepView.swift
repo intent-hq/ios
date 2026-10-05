@@ -44,7 +44,7 @@ struct CreateWorkspaceNextButton: View {
                         .modifier(WorkspaceControlShadow())
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ConnectionSheetButtonStyle())
         .disabled(isDisabled)
         .accessibilityLabel("Next")
         .accessibilityIdentifier("creation.next")
