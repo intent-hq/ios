@@ -632,6 +632,8 @@ $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionAnswerCards.swif
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionButtonStyle.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionFreeText.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionHeader.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionPendingBanner.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionPresentation.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/WorkspaceQuestionStepView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/AgentWaitingView.swift
@@ -799,6 +801,7 @@ $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/ComposerDraftBindingTests.swift
+$(SRCROOT)/IntentTests/ComposerFocusBindingTests.swift
 $(SRCROOT)/IntentTests/ComposerSubmitPolicyTests.swift
 $(SRCROOT)/IntentTests/ConnectionAdmissionRaceTests.swift
 $(SRCROOT)/IntentTests/ConnectionFailureViewTests.swift

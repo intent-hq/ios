@@ -5,13 +5,12 @@ struct ConversationColumnView: View {
     let onNavigateToNote: (String, String, String) -> Void
     let onNavigateToAgent: (String, String, String) -> Void
     var usesWorkspaceDesign = false
+    @Binding var answeringWorkspaceQuestions: Bool
     var onDemoCover: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var questionWizardCollapsed = false
     @State private var conversationHeight: CGFloat = 0
-    @State private var composerHeight: CGFloat = 0
-    @State private var accessoriesHeight: CGFloat = 0
     @State private var questionInputTop: CGFloat?
     @State private var composerInputTop: CGFloat?
     @State private var composerFocused = false
@@ -123,14 +122,10 @@ struct ConversationColumnView: View {
         VStack(spacing: 0) {
             accessoryRows
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { accessoriesHeight = $0 }
 
         questionRegion
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { questionInputTop = $0 }
             .preference(key: WorkspaceActionMenuInputTop.self, value: composerVisible || usesWorkspaceDesign ? nil : questionInputTop)
-            // Offer the measured question budget before the flexible transcript
-            // takes its share; otherwise VStack halves the remaining height and
-            // ViewThatFits rejects stacks that fit within workspaceQuestionHeight.
             .layoutPriority(usesWorkspaceDesign ? 1 : 0)
 
         if composerVisible || usesWorkspaceDesign {
@@ -156,12 +151,12 @@ struct ConversationColumnView: View {
                         usesWorkspaceDesign: usesWorkspaceDesign,
                         allowsSending: composerVisible
                     ) { composerFocused = $0 }
+                    .disabled(usesWorkspaceDesign && answeringWorkspaceQuestions)
                     .padding(.horizontal, usesWorkspaceDesign ? stickyHorizontalInset : 0)
                     .padding(.top, usesWorkspaceDesign && !workspaceQueueVisible ? Design.Composer.keyboardBottomSpacing : 0)
                     .padding(.bottom, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)
                 }
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerInputTop = $0 }
             .preference(key: WorkspaceActionMenuInputTop.self, value: composerInputTop)
         }
@@ -173,10 +168,6 @@ struct ConversationColumnView: View {
 
     private var stickyHorizontalInset: CGFloat {
         keyboardVisible || composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
-    }
-
-    private var workspaceQuestionHeight: CGFloat {
-        max(0, conversationHeight * (1 - Design.Column.transcriptHeightFraction) - composerHeight - accessoriesHeight)
     }
 
     @ViewBuilder
@@ -241,36 +232,46 @@ struct ConversationColumnView: View {
             .padding(.horizontal, Layout.questionBannerHorizontalPadding)
             .padding(.vertical, Layout.questionBannerVerticalPadding)
             #else
-            QuestionWizardView(
-                questions: pendingSet.questions,
-                collapsed: $questionWizardCollapsed,
-                containerHeight: conversationHeight,
-                workspaceAvailableHeight: usesWorkspaceDesign ? workspaceQuestionHeight : nil,
-                onComplete: { answers in
-                    let answeredId = pendingSet.messageId
-                    Task {
-                        await viewModel.submitQuestionAnswers(
-                            answers,
-                            answeredQuestionsMessageId: answeredId
-                        )
-                    }
-                },
-                onDismiss: {
-                    let dismissedId = pendingSet.messageId
-                    Task {
-                        await viewModel.dismissQuestions(messageId: dismissedId)
-                    }
+            if usesWorkspaceDesign {
+                WorkspaceQuestionPendingBanner(
+                    viewModel: viewModel,
+                    pendingSet: pendingSet
+                ) {
+                    answeringWorkspaceQuestions = true
                 }
-            )
-            .id(pendingSet.messageId)
-            .padding(.horizontal, usesWorkspaceDesign ? stickyHorizontalInset : Layout.questionWizardHorizontalPadding)
-            .padding(.top, usesWorkspaceDesign ? 0 : Layout.questionWizardTopPadding)
-            .padding(
-                .bottom,
-                usesWorkspaceDesign ? 0 : questionWizardCollapsed
-                    ? Layout.collapsedQuestionWizardBottomPadding
-                    : Layout.expandedQuestionWizardBottomPadding
-            )
+                .id(pendingSet.messageId)
+                .padding(.horizontal, stickyHorizontalInset)
+            } else {
+                QuestionWizardView(
+                    questions: pendingSet.questions,
+                    collapsed: $questionWizardCollapsed,
+                    containerHeight: conversationHeight,
+                    onComplete: { answers in
+                        let answeredId = pendingSet.messageId
+                        Task {
+                            await viewModel.submitQuestionAnswers(
+                                answers,
+                                answeredQuestionsMessageId: answeredId
+                            )
+                        }
+                    },
+                    onDismiss: {
+                        let dismissedId = pendingSet.messageId
+                        Task {
+                            await viewModel.dismissQuestions(messageId: dismissedId)
+                        }
+                    }
+                )
+                .id(pendingSet.messageId)
+                .padding(.horizontal, Layout.questionWizardHorizontalPadding)
+                .padding(.top, Layout.questionWizardTopPadding)
+                .padding(
+                    .bottom,
+                    questionWizardCollapsed
+                        ? Layout.collapsedQuestionWizardBottomPadding
+                        : Layout.expandedQuestionWizardBottomPadding
+                )
+            }
             #endif
         }
 

@@ -11,6 +11,7 @@ struct MessageInputView: View {
     private let allowsSending: Bool
     private let onFocusChange: ((Bool) -> Void)?
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
 
     @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
     @ScaledMetric(relativeTo: .caption) var attachmentIconSide: CGFloat = 12
@@ -101,6 +102,9 @@ struct MessageInputView: View {
         }
         .onChange(of: isFocused) { _, focused in
             onFocusChange?(focused)
+        }
+        .onChange(of: isEnabled) { _, enabled in
+            if !enabled { isFocused = false }
         }
         #if os(visionOS)
         .onDisappear {

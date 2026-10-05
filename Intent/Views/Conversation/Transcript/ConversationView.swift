@@ -64,6 +64,7 @@ private struct ConversationViewContent: View {
     @State private var presentedNote: NoteSheetInfo?
     @State private var childAgent: AgentDestination?
     @State private var showDemoCover = false
+    @State private var answeringWorkspaceQuestions = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -215,7 +216,7 @@ private extension ConversationViewContent {
     private var conversationChrome: some View {
         legacyConversationChrome
             .navigationBarBackButtonHidden(assistantStore == nil)
-            .nativeNavigationBackGesture()
+            .nativeNavigationBackGesture(isEnabled: !usesWorkspaceDesign || !answeringWorkspaceQuestions)
             #if os(iOS)
             .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar, .tabBar)
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -223,6 +224,11 @@ private extension ConversationViewContent {
                     WorkspaceConversationHeader(title: viewModel.agentName, onBack: { dismiss() }, actions: { agentMenu })
                 }
             }
+            .modifier(WorkspaceQuestionPresentation(
+                viewModel: viewModel,
+                isPresented: $answeringWorkspaceQuestions,
+                isEnabled: usesWorkspaceDesign
+            ))
             #endif
     }
 
@@ -256,7 +262,8 @@ private extension ConversationViewContent {
             viewModel: viewModel,
             onNavigateToNote: navigateToNote,
             onNavigateToAgent: navigateToAgent,
-            usesWorkspaceDesign: usesWorkspaceDesign
+            usesWorkspaceDesign: usesWorkspaceDesign,
+            answeringWorkspaceQuestions: $answeringWorkspaceQuestions
         ) { showDemoCover = true }
     }
 
