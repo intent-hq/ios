@@ -11,6 +11,11 @@ import tempfile
 
 
 CAPTURES = {
+    "WorkspaceTitleEditingUITests": {
+        "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
+            "Workspace title editing with keyboard and floating Done",
+        ),
+    },
     "WorkspaceSwipeUITests": {
         "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
     },

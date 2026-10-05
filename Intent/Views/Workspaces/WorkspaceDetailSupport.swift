@@ -1,25 +1,22 @@
 import SwiftUI
 
 struct WorkspaceDetailHeading: View {
+    let workspaceId: String
     let title: String
     let createdAt: String?
     let repositoryOwner: String?
     let repositoryName: String?
     var statusMessage: String?
+    @Bindable var titleEditor: WorkspaceTitleEditor
+    let onSaveTitle: () -> Void
+    @FocusState private var titleFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
-            WorkspaceTitle(title: title, createdAt: createdAt) { title in
-                Text(title)
-                    .interFont(Constants.Typography.heading2)
-                    .tracking(WorkspaceDetailStyle.titleTracking)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-            .accessibilityAddTraits(.isHeader)
+            editableTitle
             if let repositoryOwner, let repositoryName {
                 Text("\(repositoryOwner)/\(repositoryName)")
                     .interFont(Constants.Typography.subtextXXS)
@@ -41,6 +38,52 @@ struct WorkspaceDetailHeading: View {
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.top, dynamicTypeSize.isAccessibilitySize ? WorkspaceDetailStyle.headingSpacing : WorkspaceDetailStyle.headingTopSpacing)
         .padding(.bottom, WorkspaceDetailStyle.headingBottomSpacing)
+    }
+
+    @ViewBuilder
+    private var editableTitle: some View {
+        if titleEditor.isEditing {
+            TextField("New Workspace", text: $titleEditor.draft)
+                .textFieldStyle(.plain)
+                .interFont(Constants.Typography.heading2)
+                .tracking(WorkspaceDetailStyle.titleTracking)
+                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                .submitLabel(.done)
+                .focused($titleFocused)
+                .disabled(titleEditor.isSaving)
+                .onAppear { titleFocused = true }
+                .onChange(of: titleEditor.isSaving) { _, saving in
+                    if !saving { titleFocused = true }
+                }
+                .onSubmit(onSaveTitle)
+                .accessibilityLabel("Workspace name")
+                .accessibilityIdentifier("workspace.title.field")
+            if let error = titleEditor.errorMessage {
+                Text(error)
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("workspace.title.error")
+            }
+        } else {
+            WorkspaceTitle(title: title, createdAt: createdAt) { title in
+                Text(title)
+                    .interFont(Constants.Typography.heading2)
+                    .tracking(WorkspaceDetailStyle.titleTracking)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2, perform: beginEditing)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityHint("Double-tap to edit the workspace name")
+            .accessibilityAction(.default, beginEditing)
+            .accessibilityAction(named: "Edit workspace name", beginEditing)
+            .accessibilityIdentifier("workspace.title.heading")
+        }
+    }
+
+    private func beginEditing() {
+        titleEditor.begin(workspaceId: workspaceId, title: title)
     }
 }
 
@@ -204,14 +247,19 @@ struct WorkspaceDetailHeader: View {
     let workspace: Workspace?
     let title: String
     @Binding var selection: WorkspaceTab
+    let titleEditor: WorkspaceTitleEditor
+    let onSaveTitle: () -> Void
 
     var body: some View {
         WorkspaceDetailHeading(
+            workspaceId: workspaceId,
             title: title,
             createdAt: workspace?.createdAt,
             repositoryOwner: workspace?.repositoryOwner,
             repositoryName: workspace?.repositoryName,
-            statusMessage: workspace?.statusMessage
+            statusMessage: workspace?.statusMessage,
+            titleEditor: titleEditor,
+            onSaveTitle: onSaveTitle
         )
         if let assetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
             WorkspaceStatusImageView(workspaceId: workspaceId, assetId: assetId)

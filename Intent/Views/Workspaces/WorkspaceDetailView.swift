@@ -22,6 +22,7 @@ struct WorkspaceDetailView: View {
     @State private var noteStore: NoteStore
     @State private var scriptStore: WorkspaceScriptStore
     @State private var changesStore: WorkspaceChangesStore
+    @State private var titleEditor = WorkspaceTitleEditor()
     @Environment(BackendSession.self) private var session
 
     init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared) {
@@ -83,6 +84,7 @@ struct WorkspaceDetailView: View {
             Task { await noteStore.fetchNotes(workspaceId: workspaceId) }
         }
         .onDisappear {
+            titleEditor.cancel()
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
             // Remove only this workspace/connection pair, preserving other windows.
             if let connectionId = session.backendID?.connectionID {
@@ -93,6 +95,7 @@ struct WorkspaceDetailView: View {
             }
         }
         .onChange(of: workspaceId) { oldId, newId in
+            titleEditor.cancel()
             scriptStore.cancelPendingLaunch(workspaceId: oldId)
             terminalCreationRequest = nil
             selectedTerminal = nil
@@ -145,6 +148,11 @@ struct WorkspaceDetailView: View {
 
     var body: some View {
         lifecycleContent
+        .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
+            if titleEditor.isEditing {
+                WorkspaceTitleEditingControls(editor: titleEditor, onSave: saveTitle)
+            }
+        }
         #if os(visionOS)
         // Deliberate confirmation sheets (HIG): destructive/irreversible
         // workspace actions get a focused sheet with one primary action.
@@ -277,6 +285,10 @@ struct WorkspaceDetailView: View {
 }
 
 private extension WorkspaceDetailView {
+    func saveTitle() {
+        Task { await titleEditor.save(connection: session.connection, store: workspaceStore) }
+    }
+
     func restoreSelectedTab(workspaceId: String) {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
@@ -344,7 +356,9 @@ private extension WorkspaceDetailView {
                     workspaceId: workspaceId,
                     workspace: workspace,
                     title: workspaceTitle,
-                    selection: $selectedTab
+                    selection: $selectedTab,
+                    titleEditor: titleEditor,
+                    onSaveTitle: saveTitle
                 )
                 tabContent
             }

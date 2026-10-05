@@ -174,7 +174,7 @@ struct Workspace: Codable, Identifiable, Equatable {
     static let chiefWorkspaceId = "__chief__"
 
     let id: String
-    let title: String
+    var title: String
     let branch: String?
     let baseRef: String?
     let status: String?
