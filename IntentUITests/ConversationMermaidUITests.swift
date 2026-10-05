@@ -6,7 +6,7 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
         static let minimumTapHeight: CGFloat = 44
         static let edgeInset: CGFloat = 6
         static let minimumZoomRatio: CGFloat = 1.2
-        static let minimumPanDistance: CGFloat = 20
+        static let minimumPanPercentage = 2.0
         static let viewportInset: CGFloat = 12
         static let maximumScrolls = 12
         static let transcriptDragX: CGFloat = 0.02
@@ -49,7 +49,7 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
         verifyFullscreen(in: app, expand: expand, webView: webView)
         reveal(webView, expand: expand, in: transcript)
         try verifyPinch(in: app, diagram: diagram, webView: webView)
-        try verifyPan(in: app, diagram: diagram, webView: webView)
+        try verifyPan(in: app, webView: webView)
         XCTAssertFalse(app.buttons["mermaid.done"].exists, "Pinch and pan must work without opening fullscreen")
         XCTAssertTrue(expand.exists, "The diagram must remain embedded in the conversation")
     }
@@ -64,9 +64,10 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
             .tap()
         let done = app.buttons["mermaid.done"].firstMatch
         XCTAssertTrue(done.waitForExistence(timeout: Fixture.timeout), "The button's outer edge must open fullscreen")
-        let expandedDiagram = app.webViews["mermaid.webview"].images["Mermaid diagram"].firstMatch
-        XCTAssertTrue(expandedDiagram.waitForExistence(timeout: Fixture.timeout))
+        let expandedDiagram = app.webViews["mermaid.fullscreen.webview"].images["Mermaid diagram"].firstMatch
+        let rendered = expandedDiagram.waitForExistence(timeout: Fixture.timeout)
         capture(app, name: "mermaid-fullscreen-from-button-edge")
+        XCTAssertTrue(rendered, "The fullscreen renderer must draw its own diagram")
         done.tap()
         XCTAssertTrue(done.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(webView.waitForExistence(timeout: Fixture.timeout))
@@ -86,30 +87,36 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
     }
 
     @MainActor
-    private func verifyPan(in app: XCUIApplication, diagram: XCUIElement, webView: XCUIElement) throws {
-        let beforeHorizontal = try XCTUnwrap(relativeFrame(of: diagram, in: webView))
+    private func verifyPan(in app: XCUIApplication, webView: XCUIElement) throws {
+        let viewport = webView.frame
+        let beforeHorizontal = try XCTUnwrap(scrollPosition(in: webView, axis: "Horizontal"))
         drag(webView, from: CGVector(dx: Fixture.dragFar, dy: 0.5), to: CGVector(dx: Fixture.dragNear, dy: 0.5))
         let pannedHorizontally = waitUntil(timeout: Fixture.timeout) {
-            guard let after = relativeFrame(of: diagram, in: webView) else { return false }
-            return after.minX < beforeHorizontal.minX - Fixture.minimumPanDistance
+            guard let after = scrollPosition(in: webView, axis: "Horizontal") else { return false }
+            return after > beforeHorizontal + Fixture.minimumPanPercentage
         }
         capture(app, name: "mermaid-inline-after-horizontal-pan")
         XCTAssertTrue(pannedHorizontally, "Dragging left must move the SVG inside its web view")
 
-        let beforeVertical = try XCTUnwrap(relativeFrame(of: diagram, in: webView))
+        let beforeVertical = try XCTUnwrap(scrollPosition(in: webView, axis: "Vertical"))
         drag(webView, from: CGVector(dx: 0.5, dy: Fixture.dragFar), to: CGVector(dx: 0.5, dy: Fixture.dragNear))
         let pannedVertically = waitUntil(timeout: Fixture.timeout) {
-            guard let after = relativeFrame(of: diagram, in: webView) else { return false }
-            return after.minY < beforeVertical.minY - Fixture.minimumPanDistance
+            guard let after = scrollPosition(in: webView, axis: "Vertical") else { return false }
+            return after > beforeVertical + Fixture.minimumPanPercentage
         }
         capture(app, name: "mermaid-inline-after-vertical-pan")
         XCTAssertTrue(pannedVertically, "Dragging up must move the SVG relative to its web view, not just scroll the transcript")
+        XCTAssertEqual(webView.frame, viewport, "Chart gestures must not move the transcript viewport")
     }
 
     @MainActor
-    private func relativeFrame(of diagram: XCUIElement, in webView: XCUIElement) -> CGRect? {
-        guard let diagramFrame = frame(of: diagram), let viewport = frame(of: webView) else { return nil }
-        return diagramFrame.offsetBy(dx: -viewport.minX, dy: -viewport.minY)
+    private func scrollPosition(in webView: XCUIElement, axis: String) -> Double? {
+        // WebKit clamps offscreen SVG origins, but its own scroll indicator reports the actual position.
+        let indicator = webView.otherElements.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "\(axis) scroll bar,")
+        ).firstMatch
+        guard indicator.exists, let value = indicator.value as? String else { return nil }
+        return Double(value.replacingOccurrences(of: "%", with: ""))
     }
 
     @MainActor

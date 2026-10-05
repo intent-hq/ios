@@ -70,6 +70,7 @@ struct MermaidWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         webView.overrideUserInterfaceStyle = dark ? .dark : .light
+        webView.accessibilityIdentifier = expanded ? "mermaid.fullscreen.webview" : "mermaid.webview"
         context.coordinator.update(self)
     }
 
@@ -123,15 +124,18 @@ struct MermaidWebView: UIViewRepresentable {
                 ? .allow : .cancel
         }
 
-        func webView(_: WKWebView, didFail _: WKNavigation?, withError _: Error) {
+        func webView(_: WKWebView, didFail _: WKNavigation?, withError error: Error) {
+            AppLog.userInterface.error("Mermaid navigation failed: \(String(describing: error), privacy: .public)")
             fail()
         }
 
-        func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation?, withError _: Error) {
+        func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation?, withError error: Error) {
+            AppLog.userInterface.error("Mermaid page load failed: \(String(describing: error), privacy: .public)")
             fail()
         }
 
         func webViewWebContentProcessDidTerminate(_: WKWebView) {
+            AppLog.userInterface.error("Mermaid web content process terminated")
             ready = false
             fail()
         }
@@ -161,6 +165,7 @@ struct MermaidWebView: UIViewRepresentable {
                     )
                 } catch {
                     guard let self, revision == currentRevision, !Task.isCancelled else { return }
+                    AppLog.userInterface.error("Mermaid JavaScript call failed: \(String(describing: error), privacy: .public)")
                     fail()
                 }
             }

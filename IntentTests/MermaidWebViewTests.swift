@@ -18,10 +18,10 @@ struct MermaidWebViewTests {
         #expect(MermaidRenderState.message(["revision": "new", "error": "Syntax error"], revision: "new")?.error != nil)
     }
 
-    @Test(arguments: [false, true])
-    func bundledRendererDrawsOffline(dark: Bool) async throws {
+    @Test(arguments: [false, true], [false, true])
+    func bundledRendererDrawsOffline(dark: Bool, expanded: Bool) async throws {
         let source = "flowchart LR\n  start[Start] --> finish[Finish]"
-        try await withRenderer(source: source, dark: dark) { webView, state in
+        try await withRenderer(source: source, dark: dark, expanded: expanded) { webView, state in
             #expect(state.height != nil)
             #expect(state.error == nil)
             let result = try await webView.evaluateJavaScript("document.querySelector('svg')?.textContent")
@@ -34,7 +34,7 @@ struct MermaidWebViewTests {
     }
 
     @Test func invalidSyntaxReportsFailure() async throws {
-        try await withRenderer(source: "not a diagram", dark: false) { _, state in
+        try await withRenderer(source: "not a diagram", dark: false, expanded: false) { _, state in
             #expect(state.error != nil)
             #expect(!state.isLoading)
         }
@@ -42,7 +42,7 @@ struct MermaidWebViewTests {
 
     @Test func wideDiagramKeepsReadableScaleAndCanScroll() async throws {
         let source = "flowchart LR\n A[First step] --> B[Second step] --> C[Third step] --> D[Fourth step]"
-        try await withRenderer(source: source, dark: false) { webView, state in
+        try await withRenderer(source: source, dark: false, expanded: false) { webView, state in
             #expect(state.error == nil)
             let width = try await webView.evaluateJavaScript("document.documentElement.scrollWidth")
             let scrollWidth = try #require(width as? Double)
@@ -58,7 +58,7 @@ struct MermaidWebViewTests {
         flowchart LR
           node["</script><script>window.diagramInjected = true</script>"]
         """
-        try await withRenderer(source: source, dark: false) { webView, state in
+        try await withRenderer(source: source, dark: false, expanded: false) { webView, state in
             #expect(!state.isLoading)
             let injected = try await webView.evaluateJavaScript("window.diagramInjected === true")
             #expect(injected as? Bool == false)
@@ -68,6 +68,7 @@ struct MermaidWebViewTests {
     private func withRenderer(
         source: String,
         dark: Bool,
+        expanded: Bool,
         check: (WKWebView, MermaidRenderState) async throws -> Void
     ) async throws {
         _ = try #require(MermaidWebView.pageURL, "Mermaid folder must be copied into the app bundle")
@@ -76,7 +77,7 @@ struct MermaidWebViewTests {
         webView.frame = Self.viewport
         var state = MermaidRenderState.loading
         let binding = Binding(get: { state }, set: { state = $0 })
-        coordinator.update(MermaidWebView(source: source, dark: dark, expanded: false, state: binding))
+        coordinator.update(MermaidWebView(source: source, dark: dark, expanded: expanded, state: binding))
         defer { MermaidWebView.dismantleUIView(webView, coordinator: coordinator) }
         let deadline = ContinuousClock.now + MermaidAppearance.renderTimeout + .seconds(1)
         while state.isLoading, ContinuousClock.now < deadline {
