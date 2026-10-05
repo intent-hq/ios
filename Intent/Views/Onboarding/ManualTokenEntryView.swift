@@ -226,17 +226,8 @@ struct ManualTokenEntryView: View {
             isTokenVisible.toggle()
             focusedField = .token
         } label: {
-            Group {
-                if isTokenVisible {
-                    Image(systemName: "eye.slash")
-                        .resizable()
-                        .accessibilityHidden(true)
-                } else {
-                    Image(.eye)
-                        .resizable()
-                        .accessibilityHidden(true)
-                }
-            }
+            Image(isTokenVisible ? .eyeClosed : .eye)
+                .resizable()
                 .scaledToFit()
                 .frame(width: Constants.ConnectionSheet.glyphSize, height: Constants.ConnectionSheet.glyphSize)
                 .frame(
@@ -244,6 +235,7 @@ struct ManualTokenEntryView: View {
                     height: Constants.ConnectionSheet.minimumTouchTarget
                 )
                 .contentShape(.rect)
+                .accessibilityHidden(true)
         }
         .buttonStyle(IntentContentButtonStyle())
         .foregroundStyle(isValidating

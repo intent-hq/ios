@@ -200,8 +200,8 @@ custom_rules:
     name: "Use Intent Icon Assets"
     # Deliberately limited to Image calls with literal, exact equivalents.
     # Native Label/Button systemImage arguments and other symbols stay allowed.
-    regex: '\bImage(?=\s*(?:\.\s*init\s*)?\(\s*systemName\s*:\s*"(?:plus|xmark|magnifyingglass|ellipsis)"\s*\))'
-    message: "Use Intent assets: Image(.addIcon) for plus, Image(.close) for xmark, Image(.search) for magnifyingglass, or Image(.more) for ellipsis. Preserve the control's accessibility label."
+    regex: '\bImage(?=\s*(?:\.\s*init\s*)?\(\s*systemName\s*:\s*"(?:plus|xmark|magnifyingglass|ellipsis|eye|eye\.slash)"\s*\))'
+    message: "Use Intent assets: Image(.addIcon) for plus, Image(.close) for xmark, Image(.search) for magnifyingglass, Image(.more) for ellipsis, Image(.eye) for eye, or Image(.eyeClosed) for eye.slash. Preserve the control's accessibility label."
     match_kinds:
       - identifier
       - typeidentifier

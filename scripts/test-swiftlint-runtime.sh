@@ -117,7 +117,10 @@ fixture("raw string", '_ = #"button.buttonStyle(.plain); PlainButtonStyle()"#')
 fixture("native menu action", 'Button("Delete", systemImage: "trash", role: .destructive) {}')
 fixture("implicit button", 'Button("Continue") {}')
 
-icons = {"plus": "addIcon", "xmark": "close", "magnifyingglass": "search", "ellipsis": "more"}
+icons = {
+    "plus": "addIcon", "xmark": "close", "magnifyingglass": "search",
+    "ellipsis": "more", "eye": "eye", "eye.slash": "eyeClosed",
+}
 for symbol, asset in icons.items():
     fixture(symbol, f'_ = Image(systemName: "{symbol}")', icon_rule)
     fixture(f"qualified {symbol}", f'_ = SwiftUI.Image(systemName: "{symbol}")', icon_rule)
