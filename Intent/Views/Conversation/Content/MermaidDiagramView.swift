@@ -137,5 +137,6 @@ private struct MermaidCanvas: View {
         Label(title, systemImage: systemImage)
             .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget)
             .contentShape(Rectangle())
+            .copyContextMenuPassthrough()
     }
 }

@@ -116,8 +116,13 @@ struct MermaidCodeBlockStyle: StructuredText.CodeBlockStyle {
             MermaidStreamingPlaceholder()
                 .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
         } else if let language = configuration.languageHint, let source = sources[language] {
-            MermaidDiagramView(source: source)
-                .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
+            // Overflow excludes this region from the surrounding text-selection overlay.
+            Overflow { overflow in
+                MermaidDiagramView(source: source)
+                    .frame(width: overflow.containerWidth)
+            }
+            .textual.textSelection(.disabled)
+            .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
         } else {
             CompactCodeBlockStyle().makeBody(configuration: configuration)
         }
