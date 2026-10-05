@@ -88,6 +88,59 @@ struct AgentAvatarView: View {
     }
 }
 
+struct AgentGroupAvatarStack: View {
+    let agents: [AgentSession]
+    var totalCount: Int?
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let size = WorkspaceDetailStyle.stackAvatarSize
+
+    private var visibleCount: Int {
+        min(Constants.AgentRow.maximumHeaderAvatars, max(agents.count, totalCount ?? 0))
+    }
+
+    var body: some View {
+        HStack(spacing: Constants.AgentRow.avatarOverlap) {
+            ForEach(0..<visibleCount, id: \.self) { index in
+                avatar(at: index)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: size * WorkspaceDetailStyle.avatarCornerRatio)
+                            .strokeBorder(
+                                WorkspaceDetailStyle.background(for: colorScheme),
+                                lineWidth: WorkspaceDetailStyle.stackBorderWidth
+                            )
+                    }
+                    .zIndex(Double(Constants.AgentRow.maximumHeaderAvatars - index))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func avatar(at index: Int) -> some View {
+        if index < agents.count {
+            let agent = agents[index]
+            AgentAvatarView(
+                agentId: agent.id,
+                size: size,
+                specialist: agent.specialist,
+                state: AgentAvatarState.state(for: agent),
+                workspaceStyle: true
+            )
+        } else {
+            Image(.agents)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size * WorkspaceDetailStyle.avatarArtRatio, height: size * WorkspaceDetailStyle.avatarArtRatio)
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(WorkspaceDetailStyle.neutral)
+                .clipShape(.rect(cornerRadius: size * WorkspaceDetailStyle.avatarCornerRatio))
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 nonisolated private struct AgentAvatarStrokeShape: Shape {
     let glyphPath: Path
 

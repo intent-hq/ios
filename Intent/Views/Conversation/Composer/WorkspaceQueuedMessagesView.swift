@@ -116,6 +116,7 @@ private struct WorkspaceQueuedMessageRow: View {
 struct WorkspaceQueuePanel<Content: View>: View {
     let viewModel: ConversationViewModel
     let isVisible: Bool
+    var horizontalInset = Constants.Conversation.Design.horizontalInset
     @ViewBuilder let content: Content
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -126,7 +127,7 @@ struct WorkspaceQueuePanel<Content: View>: View {
         VStack(spacing: 0) {
             if isVisible {
                 WorkspaceQueuedMessagesView(viewModel: viewModel)
-                    .padding(.horizontal, Design.horizontalInset)
+                    .padding(.horizontal, horizontalInset)
                     .padding(.top, Design.Queue.topPadding)
                     .padding(.bottom, Design.Queue.composerSpacing)
             }

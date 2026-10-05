@@ -300,23 +300,7 @@ struct DelegatedAgentsRow: View {
     }
 
     private var avatarStack: some View {
-        HStack(spacing: Constants.AgentRow.avatarOverlap) {
-            ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars).enumerated()), id: \.element.id) { index, agent in
-                AgentAvatarView(
-                    agentId: agent.id,
-                    size: WorkspaceDetailStyle.stackAvatarSize,
-                    specialist: agent.specialist,
-                    state: AgentAvatarState.state(for: agent),
-                    workspaceStyle: true
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: WorkspaceDetailStyle.stackAvatarSize * WorkspaceDetailStyle.avatarCornerRatio)
-                        .strokeBorder(WorkspaceDetailStyle.background(for: colorScheme), lineWidth: WorkspaceDetailStyle.stackBorderWidth)
-                }
-                .zIndex(Double(Constants.AgentRow.maximumHeaderAvatars - index))
-            }
-        }
-        .accessibilityHidden(true)
+        AgentGroupAvatarStack(agents: agents, totalCount: totalCount)
     }
 
     private var summaryTitle: String {
@@ -351,16 +335,7 @@ struct BackgroundAgentsHeader: View {
     var body: some View {
         Button(action: onToggle) {
             HStack(spacing: Constants.AgentRow.headerSpacing) {
-                HStack(spacing: Constants.AgentRow.avatarOverlap) {
-                    ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars))) { agent in
-                        AgentAvatarView(
-                            agentId: agent.id,
-                            size: Constants.AgentRow.headerAvatarSize,
-                            specialist: agent.specialist,
-                            state: AgentAvatarState.state(for: agent)
-                        )
-                    }
-                }
+                AgentGroupAvatarStack(agents: agents, totalCount: totalCount)
 
                 Text("\(totalCount ?? agents.count) \(title)" + (runningCount > 0 ? " · \(runningCount) running" : ""))
                     .interFont(Constants.Typography.subtextXXS)

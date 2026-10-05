@@ -15,6 +15,7 @@ struct ConversationColumnView: View {
     @State private var questionInputTop: CGFloat?
     @State private var composerInputTop: CGFloat?
     @State private var composerFocused = false
+    @State private var keyboardVisible = false
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
 
     private typealias Layout = Constants.Conversation.Column
@@ -36,6 +37,12 @@ struct ConversationColumnView: View {
             proxy.size.height
         } action: { height in
             conversationHeight = height
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardVisible = false
         }
         .onChange(of: viewModel.pendingQuestions?.messageId) { _, newId in
             questionWizardCollapsed = false
@@ -134,18 +141,22 @@ struct ConversationColumnView: View {
                         monitoredPrStore: viewModel.monitoredPrStore,
                         usesWorkspaceDesign: true
                     )
-                    .padding(.horizontal, composerHorizontalInset)
+                    .padding(.horizontal, stickyHorizontalInset)
                     .padding(.top, Design.Composer.keyboardBottomSpacing)
                     .padding(.bottom, workspaceQueueVisible ? Design.Status.composerSpacing : 0)
                 }
-                WorkspaceQueuePanel(viewModel: viewModel, isVisible: workspaceQueueVisible) {
+                WorkspaceQueuePanel(
+                    viewModel: viewModel,
+                    isVisible: workspaceQueueVisible,
+                    horizontalInset: stickyHorizontalInset
+                ) {
                     MessageInputView(
                         viewModel: viewModel,
                         store: viewModel.store,
                         usesWorkspaceDesign: usesWorkspaceDesign,
                         allowsSending: composerVisible
                     ) { composerFocused = $0 }
-                    .padding(.horizontal, usesWorkspaceDesign ? composerHorizontalInset : 0)
+                    .padding(.horizontal, usesWorkspaceDesign ? stickyHorizontalInset : 0)
                     .padding(.top, usesWorkspaceDesign && !workspaceQueueVisible ? Design.Composer.keyboardBottomSpacing : 0)
                     .padding(.bottom, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)
                 }
@@ -160,8 +171,8 @@ struct ConversationColumnView: View {
         usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
     }
 
-    private var composerHorizontalInset: CGFloat {
-        composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
+    private var stickyHorizontalInset: CGFloat {
+        keyboardVisible || composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
     }
 
     private var workspaceQuestionHeight: CGFloat {
@@ -252,7 +263,7 @@ struct ConversationColumnView: View {
                 }
             )
             .id(pendingSet.messageId)
-            .padding(.horizontal, usesWorkspaceDesign ? Design.horizontalInset : Layout.questionWizardHorizontalPadding)
+            .padding(.horizontal, usesWorkspaceDesign ? stickyHorizontalInset : Layout.questionWizardHorizontalPadding)
             .padding(.top, usesWorkspaceDesign ? 0 : Layout.questionWizardTopPadding)
             .padding(
                 .bottom,
