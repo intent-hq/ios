@@ -231,6 +231,11 @@ extension ConversationTranscriptView {
         isInteracting: Bool,
         proxy: ScrollViewProxy
     ) {
+        // A history prepend's coarse restoration can briefly cross the bottom
+        // band. That layout is not a user returning to the tail (#711). Keep
+        // the reading position until the page settles; gestures and explicit
+        // follows still take ownership immediately.
+        if userIsScrolledAway, scrollState.olderMessagesTask != nil, !isInteracting, !isFollowing { return }
         let next = ConversationTranscriptScrollPolicy.scrolledAwayTransition(
             current: userIsScrolledAway,
             geometryAway: geometryAway,

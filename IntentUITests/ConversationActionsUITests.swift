@@ -2,17 +2,14 @@ import XCTest
 
 nonisolated final class ConversationActionsUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
-    private static let maximumSwipes = 8
 
     @MainActor
     func testHistoryNoticeAndActionCancellationPreserveConversation() {
         let app = launch(scenario: "history", appearance: "light")
         let transcript = app.scrollViews["transcript.scrollView"]
-        let history = app.staticTexts["transcript.historyNotice"]
-        for _ in 0..<Self.maximumSwipes where !history.isHittable { transcript.swipeDown() }
-        XCTAssertTrue(history.isHittable)
-        XCTAssertTrue(history.label.contains("3 of 103 messages"))
-        capture(app, named: "History-Notice-Light")
+        XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.staticTexts["transcript.historyNotice"].exists)
+        capture(app, named: "Conversation-History-Light")
 
         openActions(app)
         XCTAssertFalse(app.buttons["conversation.actions.model"].exists)

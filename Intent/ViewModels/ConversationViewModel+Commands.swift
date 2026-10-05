@@ -11,6 +11,7 @@ extension ConversationViewModel {
     var filteredMessages: [ConversationMessage] {
         store.messages
     }
+    var filteredMessageIDs: Set<String> { store.liveTranscript.messageIDs }
     var isStreaming: Bool { store.isStreaming }
     var isLoading: Bool { store.isLoading }
     /// Display-only filter: show only user-authored entries in the

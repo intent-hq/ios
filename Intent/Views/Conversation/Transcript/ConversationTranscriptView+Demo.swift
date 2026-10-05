@@ -16,6 +16,7 @@ extension ConversationTranscriptView {
             + " forcedRequests=\(scrollState.forcedFollowRequestCount)"
             + " phase=\(isUserInteracting ? "gesture" : "idle")"
             + " workspace=\(viewModel.store.workspaceId ?? "pending")"
+            + " historyCount=\(viewModel.filteredMessages.count) historyLoading=\(viewModel.isLoadingOlderMessages) olderAvailable=\(viewModel.hasOlderMessages)"
             + demoRecoveryResizeReport
     }
 
@@ -87,11 +88,11 @@ extension ConversationTranscriptView {
 }
 
 extension View {
-    /// Only the startup demo exposes this live query surface. The one-point
+    /// Only the startup/history demos expose this live query surface. The one-point
     /// overlay does not participate in transcript layout or receive gestures.
     @ViewBuilder
     func demoStartupGestureProbe(scrollState: ConversationTranscriptScrollState) -> some View {
-        if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript {
+        if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript || DemoFixtures.usesHistoryPages {
             overlay(alignment: .topLeading) {
                 TranscriptGestureProbe(scrollState: scrollState)
                     .frame(width: 1, height: 1)

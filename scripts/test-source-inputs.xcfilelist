@@ -406,6 +406,7 @@ $(SRCROOT)/Intent/Services/ConversationAttachmentPipeline.swift
 $(SRCROOT)/Intent/Services/ConversationCommands+QueueEvents.swift
 $(SRCROOT)/Intent/Services/ConversationCommands.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Fetch.swift
+$(SRCROOT)/Intent/Services/ConversationLiveTranscript+History.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Subscribe.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Commands.swift
@@ -431,6 +432,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesConversationStartup.swift
 $(SRCROOT)/Intent/Services/DemoFixturesData.swift
 $(SRCROOT)/Intent/Services/DemoFixturesDesign.swift
 $(SRCROOT)/Intent/Services/DemoFixturesDesignData.swift
+$(SRCROOT)/Intent/Services/DemoFixturesHistory.swift
 $(SRCROOT)/Intent/Services/DemoFixturesInlineImages.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
@@ -647,6 +649,7 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+DemoR
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+EntryScroll.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Follow.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Geometry.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+History.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Presentation.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Recovery.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView.swift
@@ -830,6 +833,7 @@ $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
 $(SRCROOT)/IntentTests/ConversationDeltaCompatibilityTests.swift
 $(SRCROOT)/IntentTests/ConversationDesignTests.swift
+$(SRCROOT)/IntentTests/ConversationHistoryTests.swift
 $(SRCROOT)/IntentTests/ConversationIncrementalDeltaTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
@@ -868,6 +872,7 @@ $(SRCROOT)/IntentTests/ConversationStoreTurnBoundaryTests.swift
 $(SRCROOT)/IntentTests/ConversationStreamingFixture.swift
 $(SRCROOT)/IntentTests/ConversationStreamingFixtureTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptGestureTests.swift
+$(SRCROOT)/IntentTests/ConversationTranscriptHistoryPolicyTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptRestorationApplicationTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptRestorationTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift

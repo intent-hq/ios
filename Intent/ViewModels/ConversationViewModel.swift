@@ -29,6 +29,14 @@ import SwiftUI
 
     var isTruncated: Bool { store.isTruncated }
     var totalMessageCount: Int { store.totalMessageCount }
+    var hasOlderMessages: Bool { store.hasOlderMessages }
+    var isLoadingOlderMessages: Bool { store.isLoadingOlderMessages }
+    var olderMessagesError: String? { store.olderMessagesError }
+
+    func loadOlderMessages() async {
+        await store.loadOlderMessages()
+    }
+
     var agentNotFound: Bool { store.agentNotFound || workspaceMismatch }
     var workspaceMismatch = false
     var activeAgentHooks: [BackgroundHook] {

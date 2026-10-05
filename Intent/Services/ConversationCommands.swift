@@ -138,6 +138,20 @@ extension ConversationCommands {
         return items.compactMap(ConversationMessage.parseMessage).first { $0.id == messageId }
     }
 
+    func fetchOlderMessages(
+        agentId: String, workspaceId: String?, nextToken: String
+    ) async throws -> (messages: [ConversationMessage], nextToken: String?) {
+        let pageSize = 50
+        var params: [String: Any] = ["agentId": agentId, "limit": pageSize, "nextToken": nextToken, "projection": "slim"]
+        if let workspaceId { params["workspaceId"] = workspaceId }
+        let result = try await connectionManager.request("agent.getConversation", params: params)
+        guard let response = result as? [String: Any],
+              let items = response["messages"] as? [[String: Any]] else {
+            throw URLError(.cannotParseResponse)
+        }
+        return (items.compactMap(ConversationMessage.parseMessage), response["nextToken"] as? String)
+    }
+
     func sendMessage(_ request: SendRequest) async throws -> SendAcceptance {
         let generation = resetGeneration
         let issuedQueueRevision = queueRevision
