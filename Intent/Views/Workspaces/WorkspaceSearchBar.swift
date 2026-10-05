@@ -25,11 +25,7 @@ struct WorkspaceSearchBar: View {
             HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
                 viewModeSwitcher
 
-                WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight, showsBackground: false)
-                    .background(
-                        Constants.WorkspaceList.controlSurface(for: colorScheme),
-                        in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-                    )
+                WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight)
             }
         }
         .padding(.horizontal, horizontalPadding)
@@ -63,10 +59,7 @@ struct WorkspaceSearchBar: View {
                 .matchedGeometryEffect(id: viewMode, in: selectionAnimation, isSource: false)
         }
         .padding(segmentInset)
-        .background(
-            Constants.WorkspaceList.controlSurface(for: colorScheme),
-            in: RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-        )
+        .background { WorkspaceSearchSurface() }
         .animation(reduceMotion ? nil : .snappy(duration: Self.selectionAnimationDuration), value: viewMode)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Workspace view")
@@ -96,7 +89,7 @@ struct WorkspaceSearchButton: View {
                 .frame(width: height, height: height)
                 .contentShape(.rect)
                 .background {
-                    if showsBackground { WorkspaceControlSurface() }
+                    if showsBackground { WorkspaceSearchSurface() }
                 }
                 .accessibilityHidden(true)
         }
@@ -133,7 +126,7 @@ struct WorkspaceSearchInput: View {
                     .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                     .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                     .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
-                    .background { WorkspaceControlSurface() }
+                    .background { WorkspaceSearchSurface() }
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close search")
@@ -179,7 +172,16 @@ struct WorkspaceSearchInput: View {
         .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
         .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
         .frame(minHeight: Constants.WorkspaceSearch.expandedHeight)
-        .background { WorkspaceControlSurface() }
+        .background { WorkspaceSearchSurface() }
+    }
+}
+
+private struct WorkspaceSearchSurface: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
+            .fill(Constants.WorkspaceList.controlSurface(for: colorScheme))
     }
 }
 
