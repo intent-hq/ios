@@ -8,6 +8,7 @@ struct WorkspaceQuestionHeader: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.isEnabled) private var isEnabled
 
     private typealias Design = Constants.Conversation.Design
 
@@ -46,10 +47,14 @@ struct WorkspaceQuestionHeader: View {
             Image(.more)
                 .resizable()
                 .frame(width: Design.smallIconSize, height: Design.smallIconSize)
+                .foregroundStyle(isEnabled
+                    ? Design.Palette.foreground(for: colorScheme)
+                    : Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
                 .frame(width: Design.minimumTapTarget, height: Design.minimumTapTarget)
                 .contentShape(.rect)
                 .accessibilityHidden(true)
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Question actions")
         .accessibilityIdentifier("question.actions")
     }

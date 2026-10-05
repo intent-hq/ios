@@ -24,7 +24,7 @@ struct ImageAttachmentThumbnail: View {
                 SquareImageThumbnail(image: uiImage, side: Self.side)
                     .copyContextMenuPassthrough()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .contextMenu {
                 ImageActionMenuItems(image: uiImage, originalData: imageData)
             }

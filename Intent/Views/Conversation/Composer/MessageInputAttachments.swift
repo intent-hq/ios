@@ -67,6 +67,7 @@ extension MessageInputView {
                 )
                 .contentShape(Rectangle())
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Remove image \(index + 1)")
     }
 
@@ -88,6 +89,7 @@ extension MessageInputView {
                             by: -Constants.Conversation.Composer.controlTarget / 2
                         ))
                 }
+                .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Remove \(file.displayName)")
             }
         }

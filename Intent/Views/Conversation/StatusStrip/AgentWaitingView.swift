@@ -5,6 +5,7 @@ struct AgentWaitingView: View {
     private let store: ConversationStore
     let onNavigateToAgent: ((String, String, String) -> Void)?
     @Environment(\.colorScheme) var colorScheme
+    @ScaledMetric(relativeTo: .caption2) private var disclosureIconSide: CGFloat = 11
     @State private var visibilityConsumer = UUID()
     @State private var selectionTask: Task<Void, Never>?
 
@@ -82,7 +83,7 @@ struct AgentWaitingView: View {
                         onNavigateToAgent?(selected.id, workspace, selected.agent.name)
                     }
                 } label: { agentRow(row) }
-                    .buttonStyle(.plain)
+                    .buttonStyle(IntentContentButtonStyle())
             } else {
                 agentRow(row)
             }
@@ -102,8 +103,10 @@ struct AgentWaitingView: View {
             agentDescription(row)
             Spacer()
             if onNavigateToAgent != nil, !row.isDeleted {
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
+                Image(.chevronRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: disclosureIconSide, height: disclosureIconSide)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
             }
@@ -207,13 +210,13 @@ struct AgentWaitingView: View {
         Button(role: .destructive) {
             Task { await viewModel.stopAgent(agentId: agent.id) }
         } label: {
-            Label("Stop Agent", systemImage: "stop.fill")
+            Label("Stop Agent", image: "StopFill")
         }
 
         Button {
             Task { await viewModel.cancelWait() }
         } label: {
-            Label("Cancel Wait", systemImage: "xmark")
+            Label("Cancel Wait", image: "Close")
         }
     }
 

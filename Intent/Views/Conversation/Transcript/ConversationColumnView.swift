@@ -76,6 +76,7 @@ struct ConversationColumnView: View {
     private var columnContent: some View {
         if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript || DemoFixtures.usesHistoryPages {
             Button("Open conversation cover", action: onDemoCover)
+                .buttonStyle(IntentButtonStyle(variant: .secondary))
                 .accessibilityIdentifier("demo.conversation.cover")
                 .accessibilityValue(
                     "metadata=\(viewModel.store.metadataReadyForEntry ? "ready" : "pending") "

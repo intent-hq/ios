@@ -14,6 +14,7 @@ struct MessageInputView: View {
 
     @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
     @ScaledMetric(relativeTo: .caption) var attachmentIconSide: CGFloat = 12
+    @ScaledMetric(relativeTo: .callout) private var suggestedPromptIconSide: CGFloat = 16
     private let sendArrowScale: CGFloat = 0.75
 
     @State private var isFocused: Bool = false
@@ -176,6 +177,7 @@ private extension MessageInputView {
                     minHeight: Constants.Conversation.Composer.controlTarget
                 )
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Stop response")
     }
 
@@ -206,6 +208,7 @@ private extension MessageInputView {
                     minHeight: Constants.Conversation.Composer.controlTarget
                 )
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Add attachment")
     }
 
@@ -285,6 +288,7 @@ private extension MessageInputView {
                             minHeight: Constants.Conversation.Composer.controlTarget
                         )
                 }
+                .buttonStyle(IntentContentButtonStyle())
                 .disabled(!hasSendableContent)
                 .accessibilityLabel("Send message")
             }
@@ -324,6 +328,7 @@ private extension MessageInputView {
                     minHeight: Constants.Conversation.Composer.controlTarget
                 )
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(dictation.isActive ? "Stop dictation" : "Dictate")
     }
 
@@ -392,8 +397,10 @@ private extension MessageInputView {
                         Task { await viewModel.sendSuggestedPrompt(prompt) }
                     } label: {
                         HStack(spacing: Constants.Conversation.Composer.suggestedPromptContentSpacing) {
-                            Image(systemName: "paperplane")
-                                .font(.callout)
+                            Image(.arrowRight)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: suggestedPromptIconSide, height: suggestedPromptIconSide)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 .accessibilityHidden(true)
                             Text(LocalizedStringKey(prompt))
@@ -409,7 +416,7 @@ private extension MessageInputView {
                         .contentShape(.hoverEffect, Capsule())
                         .hoverEffect(.highlight)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(IntentContentButtonStyle())
                 }
             }
             .padding(.horizontal, Constants.Conversation.Composer.suggestedPromptsHorizontalPadding)

@@ -53,9 +53,10 @@ private struct MermaidExpandedView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { dismiss() }
+                        IntentIconButton(icon: .close, label: "Done") { dismiss() }
                             .accessibilityIdentifier("mermaid.done")
                     }
+                    .intentToolbarSurface()
                 }
         }
     }
@@ -68,6 +69,7 @@ private struct MermaidCanvas: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var state = MermaidRenderState.loading
     @State private var retry = UUID()
+    @ScaledMetric(relativeTo: .caption) private var controlIconSide: CGFloat = 12
 
     private var inlineHeight: CGFloat {
         min(max(state.height ?? MermaidAppearance.minimumHeight, MermaidAppearance.minimumHeight), MermaidAppearance.maximumInlineHeight)
@@ -87,7 +89,7 @@ private struct MermaidCanvas: View {
             if state.error != nil || onExpand != nil {
                 Divider().allowsHitTesting(false)
                 controls
-                    .buttonStyle(.plain)
+                    .buttonStyle(IntentContentButtonStyle())
                     .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
@@ -123,20 +125,27 @@ private struct MermaidCanvas: View {
                 state = .loading
                 retry = UUID()
             } label: {
-                controlLabel("Try again", systemImage: "arrow.clockwise")
+                controlLabel("Try again", icon: .clockwiseArrow)
             }
         } else if let onExpand {
             Button(action: onExpand) {
-                controlLabel("Full screen", systemImage: "arrow.up.left.and.arrow.down.right")
+                controlLabel("Full screen", icon: .expand)
             }
             .accessibilityIdentifier("mermaid.expand")
         }
     }
 
-    private func controlLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-            .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget)
-            .contentShape(Rectangle())
-            .copyContextMenuPassthrough()
+    private func controlLabel(_ title: LocalizedStringKey, icon: ImageResource) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: controlIconSide, height: controlIconSide)
+        }
+        .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget)
+        .contentShape(Rectangle())
+        .copyContextMenuPassthrough()
     }
 }

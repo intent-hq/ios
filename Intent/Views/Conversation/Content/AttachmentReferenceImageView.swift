@@ -31,6 +31,7 @@ struct AttachmentReferenceImageView: View {
     /// resets the latch so the stale image can't survive the guard below.
     @State private var loadedKey: String?
     @State private var lightboxPresented = false
+    @ScaledMetric(relativeTo: .caption) private var retryIconSide: CGFloat = 12
 
     var body: some View {
         content
@@ -61,7 +62,7 @@ struct AttachmentReferenceImageView: View {
                 SquareImageThumbnail(image: image, side: side)
                     .copyContextMenuPassthrough()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .contextMenu {
                 ImageActionMenuItems(image: image)
             }
@@ -72,7 +73,10 @@ struct AttachmentReferenceImageView: View {
         } else if failed {
             Button { attempt += 1 } label: {
                 placeholder {
-                    Image(systemName: "arrow.clockwise")
+                    Image(.clockwiseArrow)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: retryIconSide, height: retryIconSide)
                     if style == .inline {
                         Text("Tap to retry")
                             .interFont(Constants.Typography.subtextXXS)
@@ -80,7 +84,7 @@ struct AttachmentReferenceImageView: View {
                 }
                 .copyContextMenuPassthrough()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Retry loading image")
         } else {
             placeholder {

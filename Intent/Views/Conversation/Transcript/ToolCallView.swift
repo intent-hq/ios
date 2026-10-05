@@ -13,6 +13,7 @@ struct ToolCallView: View {
     var onHydrate: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @ScaledMetric(relativeTo: .caption2) private var iconSize = Constants.Conversation.ToolCall.iconSize
+    @ScaledMetric(relativeTo: .caption2) private var hydrationIconSide: CGFloat = 11
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -86,7 +87,7 @@ struct ToolCallView: View {
             headerLabel
                 .copyContextMenuPassthrough()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
     }
 
@@ -125,8 +126,10 @@ struct ToolCallView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: Layout.disclosureFontSize))
+                Image(isExpanded ? .chevronDown : .chevronRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Layout.disclosureFontSize, height: Layout.disclosureFontSize)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.disclosureOpacity))
                     .accessibilityHidden(true)
             }
@@ -212,8 +215,10 @@ struct ToolCallView: View {
                     Text("Loading full content…")
                         .interFont(Constants.Typography.subtextXXS)
                 } else {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.caption2)
+                    Image(.download)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: hydrationIconSide, height: hydrationIconSide)
                         .accessibilityHidden(true)
                     Text(onHydrate != nil ? "Preview — tap to load full content" : "Preview")
                         .interFont(Constants.Typography.subtextXXS)
@@ -223,7 +228,7 @@ struct ToolCallView: View {
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .copyContextMenuPassthrough()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(isHydrating || onHydrate == nil)
     }
 

@@ -184,7 +184,7 @@ extension ConversationTranscriptView {
         } label: {
             goToEndLabel
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("transcript.goToEnd")
         .padding(.bottom, Layout.goToEndBottomPadding)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -200,8 +200,10 @@ extension ConversationTranscriptView {
             WorkspaceGoToEndLabel()
         } else {
             HStack(spacing: Layout.goToEndSpacing) {
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
+                Image(.chevronDown)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: actionIconSide, height: actionIconSide)
                 Text("Go to End")
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
             }
@@ -287,8 +289,10 @@ extension ConversationTranscriptView {
             Task { await viewModel.sendSuggestedPrompt(prompt) }
         } label: {
             HStack(spacing: Layout.suggestedPromptSpacing) {
-                Image(systemName: "paperplane")
-                    .font(.caption)
+                Image(.arrowRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: actionIconSide, height: actionIconSide)
                     .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
                     .accessibilityHidden(true)
                 Text(LocalizedStringKey(prompt))
@@ -309,7 +313,7 @@ extension ConversationTranscriptView {
                     )
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
     }
     #endif
 }

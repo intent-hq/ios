@@ -100,7 +100,7 @@ private struct WorkspaceQueuedMessageRow: View {
                 .frame(width: Design.minimumTapTarget, height: Design.minimumTapTarget)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(label)
     }
 

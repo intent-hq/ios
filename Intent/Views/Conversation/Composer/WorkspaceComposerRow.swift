@@ -103,6 +103,7 @@ struct WorkspaceAttachmentMenu: View {
     let onPhotos: () -> Void
     let onFiles: () -> Void
     var glyphAlignment: Alignment = .center
+    @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -119,9 +120,11 @@ struct WorkspaceAttachmentMenu: View {
                 .frame(width: Design.iconSize, height: Design.iconSize)
                 .accessibilityHidden(true)
                 .foregroundStyle(Design.Palette.placeholderForeground(for: colorScheme, contrast: contrast))
+                .opacity(isEnabled ? 1 : WorkspaceComposerMetrics.disabledOpacity)
                 .frame(minWidth: Design.minimumTapTarget, minHeight: Design.minimumTapTarget, alignment: glyphAlignment)
                 .contentShape(Rectangle())
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Add attachment")
         .accessibilityIdentifier("composer.attachment")
     }
@@ -156,7 +159,7 @@ private struct WorkspaceComposerAction: View {
             .frame(minWidth: Design.minimumTapTarget, minHeight: Design.minimumTapTarget)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(isStop ? "Stop response" : "Send message")
         .accessibilityIdentifier(isStop ? "composer.stop" : "composer.send")
     }

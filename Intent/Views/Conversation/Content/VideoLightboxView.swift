@@ -9,15 +9,17 @@ struct VideoLightboxView: View {
     @State private var audioLease: UUID?
     @State private var playbackFailed = false
     @State private var isClosing = false
+    @ScaledMetric(relativeTo: .body) private var closeIconSide: CGFloat = 17
 
     var body: some View {
         VideoPlayer(player: player)
             .background(.black)
             .safeAreaInset(edge: .top, alignment: .trailing) {
                 Button(action: close) {
-                    Label("Close video", systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                        .font(.body.weight(.semibold))
+                    Image(.close)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: closeIconSide, height: closeIconSide)
                         .foregroundStyle(.white)
                         .padding(Constants.Conversation.ImageLightbox.actionButtonPadding)
                         .background(.black, in: Circle())
@@ -27,6 +29,8 @@ struct VideoLightboxView: View {
                         )
                         .contentShape(.rect)
                 }
+                .buttonStyle(IntentContentButtonStyle())
+                .accessibilityLabel("Close video")
                 .padding(Constants.Conversation.ImageLightbox.actionContainerPadding)
             }
             .accessibilityAction(.escape, close)

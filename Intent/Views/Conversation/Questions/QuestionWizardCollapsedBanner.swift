@@ -10,6 +10,7 @@ struct QuestionWizardCollapsedBanner: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .caption) private var questionIconSide: CGFloat = 12
 
     private typealias Layout = Constants.Conversation.QuestionWizard.CollapsedBanner
     private typealias Design = Constants.Conversation.Design
@@ -63,8 +64,10 @@ struct QuestionWizardCollapsedBanner: View {
     private var expandButton: some View {
         Button(action: onExpand) {
             HStack(spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
-                Image(systemName: "questionmark.circle")
-                    .font(.caption)
+                Image(.questionCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: questionIconSide, height: questionIconSide)
                     .foregroundStyle(Theme.primary(for: colorScheme))
                 Text("Questions")
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
@@ -91,7 +94,7 @@ struct QuestionWizardCollapsedBanner: View {
             .frame(minHeight: Constants.Accessibility.minimumTapTarget)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Expand questions")
         .accessibilityValue("\(questionCount) questions")
     }
@@ -118,7 +121,7 @@ struct QuestionWizardDismissButton: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(dismissed)
         .opacity(dismissed ? Layout.disabledOpacity : 1)
     }

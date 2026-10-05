@@ -11,6 +11,7 @@ struct ImageLightboxView: View {
     /// info rows show the real file size.
     var data: Data?
     @Environment(\.dismiss) private var dismiss
+    @ScaledMetric(relativeTo: .body) private var actionIconSide: CGFloat = 17
 
     @State private var scale: CGFloat = 1
     @State private var gestureScale: CGFloat = 1
@@ -51,7 +52,7 @@ struct ImageLightboxView: View {
             Color.black
                 .ignoresSafeArea()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityHidden(true)
     }
 
@@ -104,8 +105,10 @@ struct ImageLightboxView: View {
         Menu {
             ImageActionMenuItems(image: image, originalData: data)
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.body.weight(.semibold))
+            Image(.more)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(.white)
                 .padding(Constants.Conversation.ImageLightbox.actionButtonPadding)
                 .background(.white.opacity(Constants.Conversation.ImageLightbox.actionButtonBackgroundOpacity), in: Circle())
@@ -114,13 +117,16 @@ struct ImageLightboxView: View {
                     minHeight: Constants.Accessibility.minimumTapTarget
                 )
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Image actions")
     }
 
     private var closeButton: some View {
         Button { dismiss() } label: {
-            Image(systemName: "xmark")
-                .font(.body.weight(.semibold))
+            Image(.close)
+                .resizable()
+                .scaledToFit()
+                .frame(width: actionIconSide, height: actionIconSide)
                 .foregroundStyle(.white)
                 .padding(Constants.Conversation.ImageLightbox.actionButtonPadding)
                 .background(.white.opacity(Constants.Conversation.ImageLightbox.actionButtonBackgroundOpacity), in: Circle())
@@ -129,6 +135,7 @@ struct ImageLightboxView: View {
                     minHeight: Constants.Accessibility.minimumTapTarget
                 )
         }
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Close image")
     }
 

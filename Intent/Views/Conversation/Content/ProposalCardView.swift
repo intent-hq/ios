@@ -101,7 +101,7 @@ struct ProposalCardView: View {
             .contentShape(Rectangle())
             .copyContextMenuPassthrough()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityAddTraits(selection.contains(item.id) ? .isSelected : [])
         .accessibilityValue(selection.contains(item.id) ? "On" : "Off")
         .accessibilityIdentifier("proposal.item.\(item.id)")
