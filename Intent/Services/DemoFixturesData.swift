@@ -163,8 +163,7 @@ extension DemoFixtures {
                 "content": """
                 ## Goal
 
-                Add a usage analytics dashboard to the console so admins can see \
-                seat activity, API call volume, and export the data for finance.
+                Add a usage analytics dashboard to the console so admins can see seat activity, API call volume, and export the data for finance.
 
                 ## Tasks
 
