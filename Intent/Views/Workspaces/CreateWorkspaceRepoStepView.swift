@@ -38,9 +38,11 @@ struct CreateWorkspaceNextButton: View {
                 .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
                 .frame(minHeight: CreateWorkspaceFormStyle.controlHeight)
                 .foregroundStyle(isDisabled ? CreateWorkspaceFormStyle.disabledForeground(for: colorScheme) : CreateWorkspaceFormStyle.primaryForeground)
-                .background(isDisabled ? CreateWorkspaceFormStyle.disabledBackground(for: colorScheme) : CreateWorkspaceFormStyle.primary, in: .rect(
-                    cornerRadius: CreateWorkspaceFormStyle.cornerRadius
-                ))
+                .background {
+                    RoundedRectangle(cornerRadius: CreateWorkspaceFormStyle.cornerRadius)
+                        .fill(isDisabled ? CreateWorkspaceFormStyle.disabledBackground(for: colorScheme) : CreateWorkspaceFormStyle.primary)
+                        .modifier(WorkspaceControlShadow())
+                }
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)

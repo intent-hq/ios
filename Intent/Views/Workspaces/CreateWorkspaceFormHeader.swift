@@ -72,9 +72,11 @@ struct CreateWorkspaceSubmitButton: View {
         .frame(width: isCreating ? diameter : (labelSize.width > 0 ? labelSize.width : nil))
         .frame(height: max(diameter, labelSize.height))
         .foregroundStyle(CreateWorkspaceFormStyle.primaryForeground)
-        .background(CreateWorkspaceFormStyle.primary, in: .rect(
-            cornerRadius: isCreating ? diameter / 2 : CreateWorkspaceFormStyle.cornerRadius
-        ))
+        .background {
+            RoundedRectangle(cornerRadius: isCreating ? diameter / 2 : CreateWorkspaceFormStyle.cornerRadius)
+                .fill(CreateWorkspaceFormStyle.primary)
+                .modifier(WorkspaceControlShadow())
+        }
         .opacity(isDisabled && !isCreating ? 0.5 : 1)
         .accessibilityHidden(true)
         .animation(reduceMotion ? nil : .spring(duration: Motion.duration, bounce: Motion.bounce), value: isCreating)

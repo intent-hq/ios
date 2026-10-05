@@ -191,6 +191,15 @@ struct WorkspaceControlSurface: View {
     var body: some View {
         RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
             .fill(Constants.Pairing.surface(for: colorScheme))
+            .modifier(WorkspaceControlShadow())
+    }
+}
+
+struct WorkspaceControlShadow: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
             .shadow(
                 color: .black.opacity(colorScheme == .light ? Constants.WorkspaceSearch.surfaceShadowOpacity : 0),
                 radius: Constants.WorkspaceSearch.surfaceShadowRadius,
