@@ -48,12 +48,11 @@ struct WorkspaceListView: View {
         }
         .modifier(WorkspaceActionLauncher(
             isSearching: isSearching,
-            onCreateWorkspace: createWorkspace,
-            onConnections: {
-                showingConnectionSwitcher = false
-                showingConnections = true
-            }
-        ))
+            onCreateWorkspace: createWorkspace
+        ) {
+            showingConnectionSwitcher = false
+            showingConnections = true
+        })
         .navigationTitle("Workspaces")
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in

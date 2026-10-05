@@ -9,15 +9,7 @@ struct WorkspaceListMenu: View {
 
     var body: some View {
         Menu {
-            Button(action: onCreateWorkspace) {
-                Label {
-                    Text("New workspace").interFont(Constants.Typography.bodyS)
-                } icon: {
-                    Image(systemName: "plus.rectangle")
-                }
-            }
-            .disabled(!coordinator.canCreateWorkspace)
-            .accessibilityIdentifier("workspaces.menu.create")
+            newWorkspaceAction
             Divider()
             Button(action: onRecentAgents) {
                 Label {
@@ -51,5 +43,17 @@ struct WorkspaceListMenu: View {
         }
         .accessibilityLabel("Workspace list options")
         .accessibilityIdentifier("workspaces.menu")
+    }
+
+    private var newWorkspaceAction: some View {
+        Button(action: onCreateWorkspace) {
+            Label {
+                Text("New workspace").interFont(Constants.Typography.bodyS)
+            } icon: {
+                Image(systemName: "plus.rectangle")
+            }
+        }
+        .disabled(!coordinator.canCreateWorkspace)
+        .accessibilityIdentifier("workspaces.menu.create")
     }
 }

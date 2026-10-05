@@ -150,11 +150,9 @@ struct RootView: View {
                 NavigationSplitView {
                     WorkspaceListSidebar(
                         workspaceStore: session.workspaceStore,
-                        isSearching: $isSearchingWorkspaces
-                    ) {
-                        showingConnectionSwitcher = false
-                        if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
-                    }
+                        isSearching: $isSearchingWorkspaces,
+                        onCreateWorkspace: createWorkspace
+                    )
                     .navigationSplitViewColumnWidth(
                         min: Constants.Root.sidebarMinimumWidth,
                         ideal: Constants.Root.sidebarIdealWidth,
@@ -169,9 +167,10 @@ struct RootView: View {
                 isSearching: isSearchingWorkspaces,
                 alignment: .trailing,
                 avoidsConversationInput: !conversationIsPopping,
-                onCreateWorkspace: { if coordinator.canCreateWorkspace { showingCreateWorkspace = true } },
-                onConnections: { showingConnections = true }
-            ))
+                onCreateWorkspace: createWorkspace
+            ) {
+                showingConnections = true
+            })
             .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
                 if shouldDismiss { showingCreateWorkspace = false }
             }
@@ -424,6 +423,13 @@ private extension RootView {
                 value: showsSettingsSheet ? ConnectionBackdropPreference.manualOpacity : 0
             )
         }
+    }
+}
+
+private extension RootView {
+    func createWorkspace() {
+        showingConnectionSwitcher = false
+        if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
     }
 }
 
