@@ -18,7 +18,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertEqual(first.value as? String, "Selected")
         assertStackedCards(first, second)
 
-        tap(app.textViews["Type your own answer…"].firstMatch)
+        tap(answerField(in: app))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
         assertStackedCards(first, second)
         attachScreenshot("question-cards-stacked-keyboard", in: app)
@@ -44,15 +44,21 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertEqual(first.frame.minX, second.frame.minX, accuracy: 1)
         let shortHeight = first.frame.height
 
-        let editor = app.textViews["Type your own answer…"].firstMatch
+        let editor = answerField(in: app)
         tap(editor)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
         let scroll = app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch
         let send = app.buttons["question.next"]
-        XCTAssertTrue(scroll.frame.contains(send.frame), "Focusing the editor must reveal the entire footer without swiping")
-        XCTAssertEqual(send.frame.maxY, scroll.frame.maxY - 20, accuracy: 1, "The panel must reach its bottom padding")
+        let header = app.staticTexts["Detailed answers"]
+        XCTAssertTrue(scroll.frame.contains(header.frame), "Focusing the editor must keep the question header fully visible")
+        XCTAssertEqual(header.frame.minY, scroll.frame.minY + 24, accuracy: 1, "The panel must stay at its top padding")
         XCTAssertLessThanOrEqual(scroll.frame.maxY, editor.frame.minY)
-        attachScreenshot("question-cards-focused-bottom", in: app)
+        attachScreenshot("question-cards-focused-top", in: app)
+        for _ in 0..<4 {
+            if scroll.frame.contains(send.frame) { break }
+            scroll.swipeUp()
+        }
+        XCTAssertTrue(scroll.frame.contains(send.frame), "Manual scrolling must still reveal the entire footer")
         let last = app.buttons["question.option.3"]
         XCTAssertTrue(last.isHittable)
         XCTAssertGreaterThan(last.frame.height, shortHeight, "Long answers must retain natural text heights")
@@ -97,7 +103,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(first.isHittable, "Backdrop taps and the back gesture must not dismiss unanswered questions")
         XCTAssertLessThan(first.frame.maxY, second.frame.minY)
         XCTAssertEqual(first.value as? String, "Selected")
-        tap(app.textViews["Type your own answer…"].firstMatch)
+        tap(answerField(in: app))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
         XCTAssertLessThan(first.frame.maxY, second.frame.minY, "The two-answer reference must also fit vertically above the keyboard")
         XCTAssertTrue(app.buttons["question.next"].isHittable)
@@ -119,7 +125,8 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertEqual(app.buttons["question.option.0"].value as? String, "Selected")
 
         tap(app.buttons["Write your own answer"])
-        let editor = app.textViews["Type your own answer…"].firstMatch
+        let editor = answerField(in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout), "The plus button must focus the native field")
         tap(editor)
         editor.typeText("Only after review")
         XCTAssertEqual(editor.value as? String, "Only after review")
@@ -195,7 +202,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(send.exists)
         XCTAssertFalse(send.isEnabled, "Pending questions require an explicit answer or dismissal")
         tap(app.buttons["question.answer"])
-        let answer = app.textViews["Type your own answer…"].firstMatch
+        let answer = answerField(in: app)
         tap(answer)
         answer.typeText("A separate\nanswer")
         XCTAssertEqual(answer.value as? String, "A separate\nanswer")
@@ -227,7 +234,9 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertEqual(composer.value as? String, draft)
         XCTAssertTrue(send.isEnabled, "Answering releases the ordinary-message send hold")
     }
+}
 
+extension QuestionWizardUITests {
     @MainActor
     private func attachScreenshot(_ name: String, in app: XCUIApplication) {
         let screenshot = XCTAttachment(screenshot: app.screenshot())
@@ -292,6 +301,10 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         element.tap()
     }
 
+    @MainActor private func answerField(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "question.freeText").firstMatch
+    }
+
     @MainActor
     private func tapQuestionAction(_ identifier: String, in app: XCUIApplication) {
         let button = app.buttons[identifier]
@@ -304,7 +317,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
             }
             XCTAssertTrue(scroll.frame.contains(button.frame), "The complete action must be reachable by vertical scrolling")
         }
-        XCTAssertLessThanOrEqual(button.frame.maxY, app.textViews["Type your own answer…"].firstMatch.frame.minY)
+        XCTAssertLessThanOrEqual(button.frame.maxY, answerField(in: app).frame.minY)
         XCTAssertTrue(button.isHittable)
         tap(button)
     }

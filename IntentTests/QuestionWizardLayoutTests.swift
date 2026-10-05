@@ -34,6 +34,46 @@ struct QuestionWizardLayoutTests {
         #expect(compact.sendFrame.height >= 44 - 0.001, "Rendered action frame: \(compact.sendFrame)")
     }
 
+    @Test func customAnswerCaretUsesTheDesignedTextEdge() async throws {
+        let empty = try await renderAnswerText("")
+        let typed = try await renderAnswerText("Message")
+        // The design puts the text origin 20pt inside the field. Check UIKit's
+        // real caret, not a duplicate of the padding formula or an ink threshold
+        // whose result changes with the placeholder's opacity and antialiasing.
+        #expect(abs(empty - 20) <= 1, "Empty caret x: \(empty)")
+        #expect(abs(typed - 20) <= 1, "Typed text origin x: \(typed)")
+    }
+
+    private func renderAnswerText(_ text: String) async throws -> CGFloat {
+        let view = AnswerTextHost(text: text)
+        .environment(\.colorScheme, .light)
+        .environment(\.dynamicTypeSize, .large)
+        return try await SyntheticBadgeHost.render(view, width: 320, height: 100, safeAreaRegions: []) { hostView, _ in
+            hostView.layoutIfNeeded()
+            let (editor, input) = try #require(textInput(in: hostView))
+            // No first responder is needed to measure the insertion rect.
+            let caret = editor.convert(input.caretRect(for: input.beginningOfDocument), to: hostView)
+            return caret.minX
+        }
+    }
+
+    private func textInput(in view: UIView) -> (UIView, any UITextInput)? {
+        if let input = view as? any UITextInput { return (view, input) }
+        for child in view.subviews {
+            if let result = textInput(in: child) { return result }
+        }
+        return nil
+    }
+
+    private struct AnswerTextHost: View {
+        let text: String
+        @FocusState private var focused: Bool
+
+        var body: some View {
+            WorkspaceQuestionFreeText(text: .constant(text), focused: $focused) {}
+        }
+    }
+
     @Test func accessibilityTextUsesVerticalScrollingAndKeepsSelectionSemantics() async throws {
         let rendered = try await render(width: 320, height: 400, typeSize: .accessibility3)
         #expect(rendered.scrollsVertically)
@@ -67,7 +107,6 @@ struct QuestionWizardLayoutTests {
             questionCount: 1,
             selectedIndices: [0],
             availableHeight: height,
-            answerFocused: false,
             onSelect: { _ in },
             footer: footer
         )

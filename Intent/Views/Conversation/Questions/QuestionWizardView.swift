@@ -31,7 +31,7 @@ struct QuestionWizardView: View {
     @State private var confirmingDismiss = false
     @State private var dismissed = false
     @State private var stepContentHeights: [Int: CGFloat] = [:]
-    @State private var answerFocused = false
+    @FocusState private var answerFocused: Bool
     @State private var answerComposerHeight: CGFloat = Constants.Conversation.Design.Composer.minimumHeight
 
     init(
@@ -83,7 +83,6 @@ struct QuestionWizardView: View {
                         questionCount: questions.count,
                         selectedIndices: drafts[idx].sel,
                         availableHeight: max(0, workspaceAvailableHeight - answerComposerHeight - Design.Composer.keyboardBottomSpacing * 2),
-                        answerFocused: answerFocused,
                         onSelect: selectOption,
                         footer: workspaceFooter
                     )
@@ -93,7 +92,6 @@ struct QuestionWizardView: View {
                     WorkspaceQuestionFreeText(
                         text: $drafts[idx].text,
                         focused: $answerFocused,
-                        onSubmit: handleNext,
                         onTextChange: markCurrentDraftUnskipped
                     )
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { answerComposerHeight = $0 }
