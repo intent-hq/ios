@@ -40,11 +40,12 @@ struct DiagnosticExportView: View {
 
     @ToolbarContentBuilder
     private var exportToolbar: some ToolbarContent {
-        ToolbarItem(placement: .confirmationAction) {
-            IntentIconButton(icon: .close, label: "Done") {
+        ToolbarItem(placement: .topBarLeading) {
+            IntentIconButton(icon: .close, label: "Close", showsBackground: false) {
                 model.cancelPreparation()
                 dismiss()
             }
+            .accessibilityIdentifier("diagnosticClose")
         }
         .intentToolbarSurface()
     }

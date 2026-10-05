@@ -11,6 +11,7 @@ struct IntentContentButtonStyle: ButtonStyle {
 struct IntentIconButton: View {
     let icon: ImageResource
     let label: LocalizedStringKey
+    var showsBackground = true
     let action: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isEnabled) private var isEnabled
@@ -25,7 +26,9 @@ struct IntentIconButton: View {
                     ? Constants.Pairing.foreground(for: colorScheme)
                     : CreateWorkspaceFormStyle.disabledForeground(for: colorScheme))
                 .frame(width: WorkspaceDetailStyle.controlSize, height: WorkspaceDetailStyle.controlSize)
-                .background { WorkspaceControlSurface() }
+                .background {
+                    if showsBackground { WorkspaceControlSurface() }
+                }
                 .contentShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
                 .accessibilityHidden(true)
         }
