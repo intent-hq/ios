@@ -86,30 +86,7 @@ struct WatcherMessageBodyView: View {
 
     private func disclosure(_ details: String) -> some View {
         VStack(alignment: .leading, spacing: Design.Watcher.sectionSpacing) {
-            Button {
-                onLayoutChange?()
-                isExpanded.toggle()
-            } label: {
-                HStack(spacing: Design.Transcript.disclosureSpacing) {
-                    Text(isExpanded ? "Hide details" : "Show details")
-                        .interFont(Constants.Typography.bodyS)
-                        .tracking(Design.Typography.bodyTracking)
-                    Spacer(minLength: 0)
-                    Image(isExpanded ? .chevronUp : .chevronDown)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: Design.toolIconSize, height: Design.toolIconSize)
-                        .accessibilityHidden(true)
-                }
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .padding(.vertical, Design.Watcher.disclosureHitInset)
-                .frame(minHeight: Design.minimumTapTarget)
-                .contentShape(Rectangle())
-                .copyContextMenuPassthrough()
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, -Design.Watcher.disclosureHitInset)
-            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            disclosureButton
             if isExpanded {
                 ScrollView(.vertical) {
                     if presentation.isJSON {
@@ -122,5 +99,32 @@ struct WatcherMessageBodyView: View {
                 .frame(height: detailsHeight)
             }
         }
+    }
+
+    private var disclosureButton: some View {
+        Button {
+            onLayoutChange?()
+            isExpanded.toggle()
+        } label: {
+            HStack(spacing: Design.Transcript.disclosureSpacing) {
+                Text(isExpanded ? "Hide details" : "Show details")
+                    .interFont(Constants.Typography.bodyS)
+                    .tracking(Design.Typography.bodyTracking)
+                Spacer(minLength: 0)
+                Image(isExpanded ? .chevronUp : .chevronDown)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Design.toolIconSize, height: Design.toolIconSize)
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .padding(.vertical, Design.Watcher.disclosureHitInset)
+            .frame(minHeight: Design.minimumTapTarget)
+            .contentShape(Rectangle())
+            .copyContextMenuPassthrough()
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, -Design.Watcher.disclosureHitInset)
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
     }
 }
