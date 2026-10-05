@@ -54,7 +54,7 @@ struct CreateWorkspaceBranchStepView: View {
                     .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
                     .multilineTextAlignment(.center)
                 Button("Retry", action: onRetry)
-                    .interFont(Constants.Typography.bodyS)
+                    .buttonStyle(IntentButtonStyle(variant: .secondary))
             }
             .padding(Constants.CreateWorkspace.errorStatePadding)
         } else {
@@ -124,7 +124,9 @@ struct CreateWorkspaceBranchStepView: View {
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.CreateWorkspace.branchNameLineLimit)
                         .fixedSize(horizontal: false, vertical: true)
                     if branch == defaultBranch {
-                        defaultBranchBadge
+                        Text("Default")
+                            .interFont(Constants.Typography.subtextXXS)
+                            .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -136,30 +138,9 @@ struct CreateWorkspaceBranchStepView: View {
             .background(selectedBranch == branch ? CreateWorkspaceRepoStyle.card(for: colorScheme) : .clear, in: .rect(cornerRadius: CreateWorkspaceFormStyle.cornerRadius))
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityAddTraits(selectedBranch == branch ? .isSelected : [])
         .accessibilityIdentifier("creation.branch.\(branch)")
-    }
-
-    private var defaultBranchBadge: some View {
-        Text("Default")
-            .interFont(Constants.Typography.subtextXXS.withFace(.medium))
-            .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, Constants.WorkspaceRow.outlinedPillHorizontalPadding)
-            .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
-            .frame(minHeight: Constants.WorkspaceRow.outlinedPillMinimumHeight)
-            .overlay {
-                Capsule().strokeBorder(
-                    contrast == .increased
-                        ? Theme.border(for: colorScheme, contrast: contrast)
-                        : (colorScheme == .dark ? Color.white : Color.black).opacity(Constants.WorkspaceRow.pillOutlineOpacity),
-                    lineWidth: contrast == .increased
-                        ? Constants.WorkspaceRow.increasedContrastPillBorderWidth
-                        : Constants.WorkspaceRow.pillBorderWidth
-                )
-            }
     }
 
     @ViewBuilder

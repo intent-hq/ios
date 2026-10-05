@@ -1,5 +1,39 @@
 import SwiftUI
 
+/// For controls whose labels own their layout and enabled/disabled colors.
+struct IntentContentButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? Constants.ConnectionSheet.pressedOpacity : 1)
+    }
+}
+
+struct IntentIconButton: View {
+    let icon: ImageResource
+    let label: LocalizedStringKey
+    let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Button(action: action) {
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
+                .foregroundStyle(isEnabled
+                    ? Constants.Pairing.foreground(for: colorScheme)
+                    : CreateWorkspaceFormStyle.disabledForeground(for: colorScheme))
+                .frame(width: WorkspaceDetailStyle.controlSize, height: WorkspaceDetailStyle.controlSize)
+                .background { WorkspaceControlSurface() }
+                .contentShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
+                .accessibilityHidden(true)
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .accessibilityLabel(label)
+    }
+}
+
 /// Filled actions from the Intent button palette, with explicit interaction states.
 struct IntentButtonStyle: ButtonStyle {
     enum Variant {

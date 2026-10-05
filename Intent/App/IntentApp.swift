@@ -390,7 +390,7 @@ private struct RemovedBackendPlaceholderView: View {
                 Text("Close Window")
                     .interFont(Constants.Typography.bodyS)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(IntentButtonStyle(variant: .secondary))
         }
         .padding()
     }

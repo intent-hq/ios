@@ -1,10 +1,45 @@
 import SwiftUI
 
 extension View {
+    func intentNavigationBackButton() -> some View {
+        modifier(IntentNavigationBackButtonModifier())
+    }
+
     @ViewBuilder
     func nativeNavigationBackGesture() -> some View {
         #if os(iOS)
         background(NavigationBackGesture())
+        #else
+        self
+        #endif
+    }
+}
+
+private struct IntentNavigationBackButtonModifier: ViewModifier {
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        content
+            .navigationBarBackButtonHidden()
+            .nativeNavigationBackGesture()
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
+                }
+                .intentToolbarSurface()
+            }
+    }
+}
+
+extension ToolbarContent {
+    @ToolbarContentBuilder
+    func intentToolbarSurface() -> some ToolbarContent {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
         #else
         self
         #endif
