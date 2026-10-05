@@ -1,11 +1,7 @@
 import SwiftUI
 
 struct CreateWorkspaceView: View {
-    private enum Route: Hashable {
-        case branches
-        case create
-        case newRepository
-    }
+    private typealias Route = WorkspaceCreationDraft.Route
 
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) private var dismiss
@@ -15,12 +11,7 @@ struct CreateWorkspaceView: View {
     /// listing, specialist/provider/model options, workspace.create) go
     /// through its connection so pinned windows never hit the default backend.
     private let session: BackendSession
-    @State private var navigationPath: [Route] = []
-    @State private var selectedRepo: GitHubRepo?
-    @State private var newRepositoryDraft = NewRepositoryDraft()
-    @State private var newRepositoryPath: String?
-    @State private var creationAttempts = WorkspaceCreationAttempts()
-    @State private var selectedBranch: String?
+    @State private var form: WorkspaceCreationDraft
     @State private var branchSearchText = ""
     @State private var completedBranchQuery: String?
     @State private var branchSearchResults: [String] = []
@@ -32,18 +23,15 @@ struct CreateWorkspaceView: View {
     /// Published only for loads that returned in the store generation they
     /// started in; a reconnect clear resets every marker.
     @State private var settledLoads = SpecialistPickerView.SettledLoads()
-    @State private var agentSelection: WorkspaceAgentSelection
-    @State private var messageText = ""
-    @State private var images = WorkspaceCreationImages()
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var catalogConsumer = UUID()
     @State private var catalogIsVisible = true
 
-    init(session: BackendSession) {
+    init(session: BackendSession, coordinator: AppCoordinator) {
         self.session = session
-        _agentSelection = State(initialValue: WorkspaceAgentSelection(backendID: session.backendID, persistence: .shared))
+        _form = State(initialValue: coordinator.makeWorkspaceCreationDraft())
     }
 
     /// The session-owned repo cache: it outlives this sheet so a reopen
@@ -63,16 +51,16 @@ struct CreateWorkspaceView: View {
     /// The selected provider's cached catalog; empty until loaded, which
     /// hides the model row (the daemon default applies).
     private var models: [ModelInfo] {
-        agentSelection.provider.flatMap { optionsStore.models(for: $0.id) } ?? []
+        form.agentSelection.provider.flatMap { optionsStore.models(for: $0.id) } ?? []
     }
     private var reasoningLevels: [String] {
         CreationSelectionPolicy.workspaceReasoningLevels(
-            provider: agentSelection.provider, model: agentSelection.model, models: models
+            provider: form.agentSelection.provider, model: form.agentSelection.model, models: models
         )
     }
     private var validatedReasoningEffort: String? {
         CreationSelectionPolicy.reconciledReasoningEffort(
-            current: agentSelection.reasoningEffort, effortLevels: reasoningLevels
+            current: form.agentSelection.reasoningEffort, effortLevels: reasoningLevels
         )
     }
     /// Derived from the store, never a local snapshot: a cache that warms
@@ -94,8 +82,8 @@ struct CreateWorkspaceView: View {
     /// never gates.
     private var isLoadingSelectedModelCatalog: Bool {
         Self.showsModelCatalogLoading(
-            catalogCached: agentSelection.provider.map { optionsStore.models(for: $0.id) != nil },
-            settled: agentSelection.provider.map { settledLoads.modelProviders.contains($0.id) } ?? false
+            catalogCached: form.agentSelection.provider.map { optionsStore.models(for: $0.id) != nil },
+            settled: form.agentSelection.provider.map { settledLoads.modelProviders.contains($0.id) } ?? false
         )
     }
     /// The branch step's state for the selected repo, owned by the store
@@ -103,7 +91,7 @@ struct CreateWorkspaceView: View {
     /// local snapshot: another sheet's load, a retry and the reconnect clear
     /// all reach this sheet through it, and nothing here can outlive them.
     private var branchState: GitHubBranchLoadState {
-        guard let repo = selectedRepo else { return GitHubBranchLoadState() }
+        guard let repo = form.selectedRepo else { return GitHubBranchLoadState() }
         return githubStore.branchState(owner: repo.owner, repo: repo.name)
     }
     /// Authoritative first (synchronous on a revisit), else the paint.
@@ -117,9 +105,10 @@ struct CreateWorkspaceView: View {
         navigationContent
         .onAppear { catalogIsVisible = true }
         .onDisappear {
+            coordinator.workspaceCreationDraft = form.resumable
             catalogIsVisible = false
             optionsStore.releaseCatalogs(consumer: catalogConsumer)
-            images.cancelImport()
+            form.images.cancelImport()
         }
         // The cached-first paint, the authoritative listing replacing it and
         // a background revalidation all land here: keep the selection if the
@@ -146,7 +135,7 @@ struct CreateWorkspaceView: View {
     }
 
     private var navigationContent: some View {
-        NavigationStack(path: $navigationPath) {
+        NavigationStack(path: $form.navigationPath) {
             repositoryStep
                 .navigationDestination(for: Route.self) { destination(for: $0) }
         }
@@ -164,21 +153,21 @@ struct CreateWorkspaceView: View {
             Task { await reconcileProviderSelection() }
         }
         .onChange(of: models) { _, models in
-            agentSelection.reconcileModels(models)
+            form.agentSelection.reconcileModels(models)
         }
         .onChange(of: reasoningLevels) { _, _ in
-            agentSelection.reconcileReasoning(effortLevels: reasoningLevels)
+            form.agentSelection.reconcileReasoning(effortLevels: reasoningLevels)
         }
     }
 
     private func reloadBranchesAfterInvalidation() {
-        guard navigationPath.contains(.branches) else { return }
+        guard form.navigationPath.contains(.branches) else { return }
         Task { await fetchBranches() }
     }
 
     private func reloadOptionsAfterInvalidation() {
         settledLoads.reset()
-        guard navigationPath.contains(.create) else { return }
+        guard form.navigationPath.contains(.create) else { return }
         Task { await fetchCreationOptions() }
     }
 }
@@ -186,13 +175,13 @@ struct CreateWorkspaceView: View {
 extension CreateWorkspaceView {
     private var repositoryStep: some View {
         let createRepository = {
-            navigationPath.append(.newRepository)
+            form.navigationPath.append(.newRepository)
         }
         return CreateWorkspaceRepoStepView(
             store: githubStore,
-            selectedRepo: $selectedRepo,
+            selectedRepo: $form.selectedRepo,
             onClose: { dismiss() },
-            onNext: { navigationPath.append(.branches) },
+            onNext: { form.navigationPath.append(.branches) },
             onRepoChanged: resetRepositoryState,
             onCreateRepository: createRepository
         )
@@ -200,14 +189,14 @@ extension CreateWorkspaceView {
 
     private var newRepositoryStep: some View {
         let advance: (String) -> Void = { path in
-            newRepositoryPath = path
-            navigationPath.append(.create)
+            form.newRepositoryPath = path
+            form.navigationPath.append(.create)
         }
         return CreateWorkspaceNewRepoView(
-            draft: $newRepositoryDraft,
+            draft: $form.newRepositoryDraft,
             connection: session.connection,
-            attempts: creationAttempts,
-            onBack: { navigationPath.removeLast() },
+            attempts: form.creationAttempts,
+            onBack: { form.navigationPath.removeLast() },
             onNext: advance
         )
     }
@@ -221,21 +210,21 @@ extension CreateWorkspaceView {
             branchStep
         case .create:
             CreateWorkspaceSpecialistStepView(
-                repositoryFullName: navigationPath.contains(.newRepository) ? (newRepositoryPath ?? "") : (selectedRepo?.fullName ?? ""),
-                branch: navigationPath.contains(.newRepository) ? nil : selectedBranch,
+                repositoryFullName: form.navigationPath.contains(.newRepository) ? (form.newRepositoryPath ?? "") : (form.selectedRepo?.fullName ?? ""),
+                branch: form.navigationPath.contains(.newRepository) ? nil : form.selectedBranch,
                 specialists: specialists,
                 isLoadingSpecialists: isLoadingOptions,
-                selectedSpecialist: Binding(get: { agentSelection.specialist }, set: { agentSelection.selectSpecialist($0) }),
+                selectedSpecialist: Binding(get: { form.agentSelection.specialist }, set: { form.agentSelection.selectSpecialist($0) }),
                 providers: providers,
                 isLoadingProviders: isLoadingOptions || providerOptions.isLoading || isLoadingSelectedModelCatalog,
                 providerGuidance: providerOptions.guidance,
-                selectedProvider: agentSelection.provider,
+                selectedProvider: form.agentSelection.provider,
                 models: models,
-                selectedModel: Binding(get: { agentSelection.model }, set: { agentSelection.selectModel($0) }),
+                selectedModel: Binding(get: { form.agentSelection.model }, set: { form.agentSelection.selectModel($0) }),
                 reasoningLevels: reasoningLevels,
-                selectedReasoningEffort: Binding(get: { agentSelection.reasoningEffort }, set: { agentSelection.selectReasoning($0) }),
-                messageText: $messageText,
-                images: images,
+                selectedReasoningEffort: Binding(get: { form.agentSelection.reasoningEffort }, set: { form.agentSelection.selectReasoning($0) }),
+                messageText: $form.messageText,
+                images: form.images,
                 isCreating: isCreating,
                 allowsCreation: coordinator.canCreateWorkspace,
                 errorMessage: errorMessage,
@@ -244,8 +233,8 @@ extension CreateWorkspaceView {
                 onSelectProvider: selectProvider,
                 onRetryProviders: { Task { await fetchCreationOptions() } },
                 onBack: {
-                    guard !isCreating, navigationPath.last == .create else { return }
-                    navigationPath.removeLast()
+                    guard !isCreating, form.navigationPath.last == .create else { return }
+                    form.navigationPath.removeLast()
                 },
                 onCreate: createWorkspace,
                 onLoad: fetchCreationOptions
@@ -255,24 +244,24 @@ extension CreateWorkspaceView {
 
     private var branchStep: some View {
         CreateWorkspaceBranchStepView(
-            repositoryFullName: selectedRepo?.fullName ?? "",
+            repositoryFullName: form.selectedRepo?.fullName ?? "",
             displayedBranches: displayedBranches,
             defaultBranch: branchListing?.defaultBranch,
             isLoading: isLoadingBranches,
             loadError: branchLoadError,
-            selectedBranch: $selectedBranch,
+            selectedBranch: $form.selectedBranch,
             searchText: $branchSearchText,
             colorScheme: colorScheme,
             onRetry: { Task { await fetchBranches() } },
-            onNext: { navigationPath.append(.create) },
+            onNext: { form.navigationPath.append(.create) },
             onLoad: { await fetchBranches() },
             onSearchTextChanged: scheduleBranchSearch
         )
     }
 
     private func reconcileBranchSelection(with listing: GitHubBranchListing) {
-        selectedBranch = Self.preselectedBranch(
-            current: selectedBranch,
+        form.selectedBranch = Self.preselectedBranch(
+            current: form.selectedBranch,
             branches: Self.orderedBranches(listing.branches, defaultBranch: listing.defaultBranch),
             defaultBranch: listing.defaultBranch
         )
@@ -289,14 +278,14 @@ extension CreateWorkspaceView {
     }
 
     private func resetRepositoryState() {
-        selectedBranch = nil
+        form.selectedBranch = nil
         branchSearchTask?.cancel()
         branchSearchText = ""
         completedBranchQuery = nil
         branchSearchResults = []
         // Warm the daemon's repo cache now so the branch step's cached-first
         // paint and the later workspace.create find it fresh (FE parity).
-        if let repo = selectedRepo {
+        if let repo = form.selectedRepo {
             githubStore.warmRepoCache(owner: repo.owner, repo: repo.name)
         }
     }
@@ -309,7 +298,7 @@ extension CreateWorkspaceView {
     /// per connection. Outcomes live in the store, so a repo change simply
     /// stops reading this repo's state.
     private func fetchBranches() async {
-        guard let repo = selectedRepo else { return }
+        guard let repo = form.selectedRepo else { return }
         githubStore.warmRepoCache(owner: repo.owner, repo: repo.name)
         if let cached = githubStore.cachedBranchListing(owner: repo.owner, repo: repo.name) {
             // Explicit, not only via onChange: an equal listing for another
@@ -324,7 +313,7 @@ extension CreateWorkspaceView {
     private func scheduleBranchSearch(for text: String) {
         branchSearchTask?.cancel()
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty, let repo = selectedRepo else {
+        guard !query.isEmpty, let repo = form.selectedRepo else {
             completedBranchQuery = nil
             branchSearchResults = []
             return
@@ -367,7 +356,7 @@ extension CreateWorkspaceView {
     /// re-defaults or clears it when the selected specialist left the
     /// pickable set.
     private func reconcileSpecialistSelection() {
-        agentSelection.reconcileSpecialist(catalog: optionsStore.specialists)
+        form.agentSelection.reconcileSpecialist(catalog: optionsStore.specialists)
     }
 
     /// Defaults the provider selection to a selectable provider (auggie
@@ -377,15 +366,15 @@ extension CreateWorkspaceView {
     /// provider's catalog shares a bare model id with the old one.
     private func reconcileProviderSelection() async {
         guard catalogIsVisible else { return }
-        agentSelection.reconcileProvider(state: providerOptions.state)
-        optionsStore.selectModelProvider(agentSelection.provider?.id, consumer: catalogConsumer)
-        guard !providerOptions.isLoading, let provider = agentSelection.provider else { return }
+        form.agentSelection.reconcileProvider(state: providerOptions.state)
+        optionsStore.selectModelProvider(form.agentSelection.provider?.id, consumer: catalogConsumer)
+        guard !providerOptions.isLoading, let provider = form.agentSelection.provider else { return }
         await loadModels(for: provider)
     }
 
     private func selectProvider(_ provider: ProviderInfo) {
-        guard providers.contains(provider), provider.isSelectable, provider.id != agentSelection.provider?.id else { return }
-        agentSelection.selectProvider(provider)
+        guard providers.contains(provider), provider.isSelectable, provider.id != form.agentSelection.provider?.id else { return }
+        form.agentSelection.selectProvider(provider)
         Task { await loadModels(for: provider) }
     }
 
@@ -393,7 +382,7 @@ extension CreateWorkspaceView {
     /// Create gate only when the load returned in the generation it started
     /// in — a completion from before a reconnect clear settles nothing.
     private func loadModels(for provider: ProviderInfo) async {
-        guard catalogIsVisible, agentSelection.provider?.id == provider.id, !Task.isCancelled else { return }
+        guard catalogIsVisible, form.agentSelection.provider?.id == provider.id, !Task.isCancelled else { return }
         optionsStore.selectModelProvider(provider.id, consumer: catalogConsumer)
         let generation = optionsStore.loadGeneration
         await optionsStore.loadModelsIfNeeded(providerId: provider.id, consumer: catalogConsumer)
@@ -402,15 +391,15 @@ extension CreateWorkspaceView {
             startedAt: generation,
             current: optionsStore.loadGeneration
         )
-        if generation == optionsStore.loadGeneration, agentSelection.provider?.id == provider.id {
-            agentSelection.reconcileModels(models)
+        if generation == optionsStore.loadGeneration, form.agentSelection.provider?.id == provider.id {
+            form.agentSelection.reconcileModels(models)
         }
     }
 }
 
 extension CreateWorkspaceView {
     private func createWorkspace() {
-        guard !isCreating, !images.isImporting, canSubmitProvider,
+        guard !isCreating, !form.images.isImporting, canSubmitProvider,
               let source = repositorySource else { return }
         isCreating = true
 
@@ -418,36 +407,36 @@ extension CreateWorkspaceView {
     }
 
     private var repositorySource: WorkspaceRepositorySource? {
-        if navigationPath.contains(.newRepository) {
-            guard let path = newRepositoryPath, path == newRepositoryDraft.repositoryPath else { return nil }
+        if form.navigationPath.contains(.newRepository) {
+            guard let path = form.newRepositoryPath, path == form.newRepositoryDraft.repositoryPath else { return nil }
             return .newRepository(path: path)
         }
-        guard let repo = selectedRepo, let branch = selectedBranch else { return nil }
+        guard let repo = form.selectedRepo, let branch = form.selectedBranch else { return nil }
         return .github(url: "https://github.com/\(repo.owner)/\(repo.name)", baseRef: branch)
     }
 
     private func performCreateWorkspace(source: WorkspaceRepositorySource) async {
         // Recheck at the request boundary: a refresh may have removed the selection after the tap but before this task ran.
-        guard canSubmitProvider, !images.isImporting else {
+        guard canSubmitProvider, !form.images.isImporting else {
             isCreating = false
             return
         }
         do {
-            let idempotencyKey = creationAttempts.requestKey(for: source)
+            let idempotencyKey = form.creationAttempts.requestKey(for: source)
             let params = Self.buildCreateWorkspaceParams(
                 source: source,
                 idempotencyKey: idempotencyKey,
                 initialAgent: InitialAgentInput(
-                    specialist: agentSelection.specialist,
-                    provider: agentSelection.provider,
-                    model: agentSelection.model,
-                    message: messageText,
+                    specialist: form.agentSelection.specialist,
+                    provider: form.agentSelection.provider,
+                    model: form.agentSelection.model,
+                    message: form.messageText,
                     reasoningEffort: validatedReasoningEffort,
-                    imageBlocks: images.images.map(\.block)
+                    imageBlocks: form.images.images.map(\.block)
                 )
             )
             try WorkspaceCreationImages.validateRequest(params)
-            creationAttempts.record(idempotencyKey, for: source)
+            form.creationAttempts.record(idempotencyKey, for: source)
             let result = try await session.connection.request(
                 "workspace.create",
                 params: params,
@@ -457,6 +446,8 @@ extension CreateWorkspaceView {
                let workspaceDictionary = dictionary["workspace"] as? [String: Any],
                let workspace = WorkspaceStore.parseWorkspace(workspaceDictionary) {
                 session.workspaceStore.addOrUpdate(workspace)
+                form.didCreateWorkspace = true
+                coordinator.workspaceCreationDraft = nil
                 HapticManager.notification(.success)
                 dismiss()
                 coordinator.onSelectWorkspace(workspace.id)
@@ -476,7 +467,7 @@ extension CreateWorkspaceView {
             isCreating: false,
             isLoadingProviders: isLoadingOptions || providerOptions.isLoading || isLoadingSelectedModelCatalog,
             providers: providers,
-            selectedProvider: agentSelection.provider,
+            selectedProvider: form.agentSelection.provider,
             allowsCreation: coordinator.canCreateWorkspace
         )
     }

@@ -62,6 +62,9 @@ CAPTURES = {
     "CreateWorkspacePreferencesUITests": {
         "testCancelledFormRemembersAgentSettings": ("remembered-agent-settings",),
     },
+    "CreateWorkspaceDraftUITests": {
+        "testDismissedPromptRestoresAndClearsAfterSuccessfulRetry": ("restored-workspace-draft",),
+    },
     "WorkspaceChangesUITests": {
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (
             "workspace-changes", "unstaged-diff", "commit-diff",
