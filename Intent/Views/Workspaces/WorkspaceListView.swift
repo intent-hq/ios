@@ -48,10 +48,7 @@ struct WorkspaceListView: View {
         }
         .modifier(WorkspaceActionLauncher(
             isSearching: isSearching,
-            onCreateWorkspace: {
-                showingConnectionSwitcher = false
-                if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
-            },
+            onCreateWorkspace: createWorkspace,
             onConnections: {
                 showingConnectionSwitcher = false
                 showingConnections = true
@@ -155,13 +152,15 @@ struct WorkspaceListView: View {
     }
 
     private var emptyState: some View {
-        Button("New workspace") {
-            showingConnectionSwitcher = false
-            if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
-        }
-        .buttonStyle(IntentButtonStyle())
-        .disabled(!coordinator.canCreateWorkspace)
-        .accessibilityIdentifier("workspaces.empty.create")
+        Button("New workspace", action: createWorkspace)
+            .buttonStyle(IntentButtonStyle())
+            .disabled(!coordinator.canCreateWorkspace)
+            .accessibilityIdentifier("workspaces.empty.create")
+    }
+
+    private func createWorkspace() {
+        showingConnectionSwitcher = false
+        if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
     }
 
     private var pageHeader: some View {
@@ -181,7 +180,7 @@ struct WorkspaceListView: View {
                     }
             }
             Spacer(minLength: 0)
-            WorkspaceListMenu(showArchived: $viewModel.showArchived) {
+            WorkspaceListMenu(showArchived: $viewModel.showArchived, onCreateWorkspace: createWorkspace) {
                 prepareConnectionSwitcher()
                 openAgentHistory()
             } onRecentConnections: {

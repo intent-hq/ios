@@ -1,12 +1,24 @@
 import SwiftUI
 
 struct WorkspaceListMenu: View {
+    @Environment(AppCoordinator.self) private var coordinator
     @Binding var showArchived: Bool
+    let onCreateWorkspace: () -> Void
     let onRecentAgents: () -> Void
     let onRecentConnections: () -> Void
 
     var body: some View {
         Menu {
+            Button(action: onCreateWorkspace) {
+                Label {
+                    Text("New workspace").interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(systemName: "plus.rectangle")
+                }
+            }
+            .disabled(!coordinator.canCreateWorkspace)
+            .accessibilityIdentifier("workspaces.menu.create")
+            Divider()
             Button(action: onRecentAgents) {
                 Label {
                     Text("Recent agents").interFont(Constants.Typography.bodyS)

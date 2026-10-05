@@ -57,7 +57,7 @@ struct WorkspaceListSidebar: View {
         .navigationTitle("Workspaces")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                WorkspaceListMenu(showArchived: $viewModel.showArchived) {
+                WorkspaceListMenu(showArchived: $viewModel.showArchived, onCreateWorkspace: onCreateWorkspace) {
                     searchFocused = false
                     isSearching = false
                     revealedSwipeTarget = nil
