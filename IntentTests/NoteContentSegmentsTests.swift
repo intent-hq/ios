@@ -158,3 +158,110 @@ struct NoteContentSegmentsTests {
         #expect(rewritten == "  - [x] [T](intent://local/task/t1)")
     }
 }
+
+extension NoteContentSegmentsTests {
+    @Test(arguments: ["```", "~~~"])
+    func closedMermaidFencesKeepSurroundingMarkdownTogether(marker: String) {
+        let source = "flowchart TD\n  A --> B"
+        let content = "# Plan\n\n\(marker)mermaid\n\(source)\n\(marker)\n\nAfter"
+        #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
+    }
+
+    @Test func adjacentDiagramsPreserveFollowingTaskLineNumber() throws {
+        let content = "```mermaid\nflowchart TD\n```\n~~~mermaid\nsequenceDiagram\n~~~\n- [ ] Review"
+        let segments = NoteContentSegmenter.segments(for: content)
+        try #require(segments.count == 2)
+        #expect(segments[0] == .markdown("```mermaid\nflowchart TD\n```\n~~~mermaid\nsequenceDiagram\n~~~"))
+        guard case .taskLine(let task) = segments[1] else {
+            Issue.record("expected task after both diagrams"); return
+        }
+        #expect(task.lineNumber == 7)
+        #expect(task.text == "Review")
+    }
+
+    @Test(arguments: ["```", "```swift", "~~~", "~~~swift", "```mermaid", "~~~mermaid", "```MERMAID", "~~~Mermaid", "```mermaid extra"])
+    func fencesKeepCheckboxesAsSource(opening: String) throws {
+        let closing = String(opening.prefix(3))
+        let code = "\(opening)\n- [ ] [Example](intent://local/task/example)\n\(closing)"
+        let segments = NoteContentSegmenter.segments(for: code + "\n- [x] Real task")
+        try #require(segments.count == 2)
+        #expect(segments[0] == .markdown(code))
+        guard case .taskLine(let task) = segments[1] else {
+            Issue.record("expected task after ordinary code"); return
+        }
+        #expect(task.lineNumber == 4)
+        #expect(task.marker == "x")
+    }
+
+    @Test func nestedMermaidFenceInsideLongerCodeFenceStaysSource() {
+        let content = "````markdown\n```mermaid\nflowchart TD\n```\n- [ ] Example\n````"
+        #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
+    }
+
+    @Test(arguments: ["```mermaid", "~~~mermaid", "```swift", "~~~"])
+    func unclosedFencesStaySourceAndProtectCheckboxes(opening: String) {
+        let content = "Intro\n\(opening)\nflowchart TD\n- [ ] Still code\n"
+        #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
+    }
+
+    @Test(arguments: ["```", "~~~~", "```` trailing", "````mermaid", "    ````", "\t````"])
+    func invalidClosersStayInsideMermaidSource(candidate: String) {
+        let source = "flowchart TD\n\(candidate)\n- [ ] Still code"
+        let content = "````mermaid\n\(source)\n````"
+        #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
+    }
+
+    @Test func longerClosersAndWhitespaceAreAccepted() {
+        let content = "````mermaid\nflowchart TD\n   ````` \t\n~~~mermaid\nsequenceDiagram\n ~~~~~\t"
+        #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
+        #expect(MermaidMarkdownContent(content).sources.count == 2)
+    }
+
+    @Test(arguments: ["    ```mermaid", "\t```mermaid", "```mer`maid", "``mermaid"])
+    func invalidOpenersRemainMarkdown(opening: String) {
+        let content = "\(opening)\nflowchart TD\n```"
+        #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
+    }
+
+    @Test func backticksInInfoDoNotOpenFence() throws {
+        let segments = NoteContentSegmenter.segments(for: "```mer`maid\n- [ ] Real task")
+        try #require(segments.count == 2)
+        #expect(segments[0] == .markdown("```mer`maid"))
+        guard case .taskLine(let task) = segments[1] else {
+            Issue.record("expected task after invalid opener"); return
+        }
+        #expect(task.lineNumber == 2)
+    }
+
+    @Test func tildeInfoCanContainBackticks() {
+        let content = "~~~a`b\n- [ ] Example\n~~~"
+        #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
+    }
+
+    @Test func openingIndentIsPreservedForMarkdownRenderer() {
+        let content = "   ``` mermaid \t\n   flowchart TD\n     A --> B\n B --> C\n   ```"
+        #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
+        #expect(Array(MermaidMarkdownContent(content).sources.values) == ["flowchart TD\n  A --> B\nB --> C"])
+        let ordinaryCode = "   ```swift\n   - [ ] Example\n   ```"
+        #expect(NoteContentSegmenter.segments(for: ordinaryCode) == [.markdown(ordinaryCode)])
+    }
+
+    @Test func crlfDiagramsPreserveTaskPositionsAndRewriteLineEndings() throws {
+        let content = "Intro\r\n```mermaid\r\nflowchart TD\r\n\r\n```\r\n- [ ] Review\r\n"
+        let segments = NoteContentSegmenter.segments(for: content)
+        try #require(segments.count == 2)
+        #expect(segments[0] == .markdown("Intro\n```mermaid\nflowchart TD\n\n```"))
+        guard case .taskLine(let task) = segments[1] else {
+            Issue.record("expected task after CRLF diagram"); return
+        }
+        #expect(task.lineNumber == 6)
+        let updated = NoteContentSegmenter.replacingCheckboxMarker(in: content, line: task.lineNumber, status: "done")
+        #expect(updated == content.replacingOccurrences(of: "- [ ] Review", with: "- [x] Review"))
+    }
+
+    @Test func emptyClosedMermaidFenceReachesDiagramRenderer() {
+        let content = "```mermaid\n```"
+        #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
+        #expect(Array(MermaidMarkdownContent(content).sources.values) == [""])
+    }
+}

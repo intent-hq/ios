@@ -88,6 +88,16 @@ struct MarkdownTextViewTests {
         #expect(replaced(text) == text)
     }
 
+    @Test func shorterInnerFenceDoesNotExposeCodeAsTasks() {
+        let text = "````mermaid\n```\n- [x] source\n````\n- [ ] task"
+        #expect(replaced(text) == "````mermaid\n```\n- [x] source\n````\n- ☐ task")
+    }
+
+    @Test func carriageReturnsDoNotPreventFenceClosure() {
+        let text = "```mermaid\r\n- [x] source\r\n```\r\n- [ ] task\r\n"
+        #expect(replaced(text) == "```mermaid\r\n- [x] source\r\n```\r\n- ☐ task\r\n")
+    }
+
     @Test func textWithoutBracketsIsReturnedVerbatim() {
         let text = "just some prose\nwith two lines"
         #expect(replaced(text) == text)

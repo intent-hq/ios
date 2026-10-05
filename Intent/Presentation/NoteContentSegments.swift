@@ -34,7 +34,7 @@ struct LinkedTaskRef: Equatable {
     let noteId: String
 }
 
-/// A run of note content: either ordinary markdown or a single checkbox line.
+/// A run of note content: markdown or a checkbox line.
 enum NoteContentSegment: Equatable {
     case markdown(String)
     case taskLine(NoteTaskLine)
@@ -46,7 +46,7 @@ enum NoteContentSegment: Equatable {
 /// at any indent. Only `-` bullets — the daemon's `task.update` line parser
 /// (note_ops.rs `parse_dash_checkbox`) rejects `*` bullets, so a `* [ ]` line
 /// must stay ordinary markdown rather than become a row whose status write
-/// would fail.
+/// would fail. Fences stay in Markdown so diagrams share its reference context.
 enum NoteContentSegmenter {
     /// Groups: 1 = leading indent, 2 = marker, 3 = text after the checkbox.
     private static let checkboxLineRegex = #/^([ \t]*)-\s+\[([ xX/])\]\s?(.*)$/#
@@ -64,14 +64,26 @@ enum NoteContentSegmenter {
             segments.append(.markdown(text))
         }
 
-        for (index, rawLine) in content.components(separatedBy: "\n").enumerated() {
-            let line = rawLine.hasSuffix("\r") ? String(rawLine.dropLast()) : rawLine
-            if let taskLine = taskLine(from: rawLine, lineNumber: index + 1) {
+        let lines = content.components(separatedBy: "\n").map { line in
+            line.hasSuffix("\r") ? String(line.dropLast()) : line
+        }
+        var index = 0
+        while index < lines.count {
+            let line = lines[index]
+            if let fence = MarkdownCodeFence(opening: line) {
+                var end = index + 1
+                while end < lines.count, !fence.closes(with: lines[end]) { end += 1 }
+                markdownBuffer.append(contentsOf: lines[index..<min(end + 1, lines.count)])
+                index = min(end + 1, lines.count)
+                continue
+            }
+            if let taskLine = taskLine(from: line, lineNumber: index + 1) {
                 flushMarkdown()
                 segments.append(.taskLine(taskLine))
             } else {
                 markdownBuffer.append(line)
             }
+            index += 1
         }
         flushMarkdown()
 

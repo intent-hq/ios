@@ -12,6 +12,24 @@ extension DemoDesignFixtures {
     | Baseline with descriptive theme names and a separate validation pass for every incoming document | 120 | 62.2% | 58.4% | 12 | 4.9 min | 512 MB |
     | Batched setup with shared context | 124 | 91.3% | 87.6% | 0 | 2.1 min | 384 MB |
     """
+    // Four long parallel paths keep both axes larger than the inline phone viewport.
+    static let mermaidDiagram = """
+    Before the interactive diagram.
+
+    ```mermaid
+    flowchart TB
+        A1[Collect requests] --> A2[Validate input] --> A3[Prepare records] --> A4[Write storage]
+        A4 --> A5[Read results] --> A6[Review changes] --> A7[Publish update] --> A8[Archive request]
+        B1[Collect events] --> B2[Validate events] --> B3[Prepare batches] --> B4[Write event log]
+        B4 --> B5[Read event log] --> B6[Review events] --> B7[Publish events] --> B8[Archive events]
+        C1[Collect metrics] --> C2[Validate metrics] --> C3[Prepare samples] --> C4[Write samples]
+        C4 --> C5[Read samples] --> C6[Review metrics] --> C7[Publish metrics] --> C8[Archive metrics]
+        D1[Collect reports] --> D2[Validate reports] --> D3[Prepare summaries] --> D4[Write summaries]
+        D4 --> D5[Read summaries] --> D6[Review reports] --> D7[Publish reports] --> D8[Archive reports]
+    ```
+
+    After the interactive diagram.
+    """
     static let blockerText = """
     The sub-15-minute hosted CI measurement is held because current GitHub permissions cannot verify \
     macos-15-xlarge access (runner inventory returns 403). The user is checking with an organization admin. \
@@ -87,6 +105,9 @@ extension DemoDesignFixtures {
             Self.message(id: "demo-design-user", role: "user", blocks: [DemoFixtures.textBlock(Self.userText)]),
             Self.message(id: "demo-design-tools", role: "assistant", blocks: Self.toolBlocks)
         ]
+        if scenario == .mermaid {
+            rows.append(Self.message(id: "demo-design-mermaid", role: "assistant", blocks: [DemoFixtures.textBlock(Self.mermaidDiagram)]))
+        }
         if scenario == .tables {
             let text = """
             Comparison results before the table.

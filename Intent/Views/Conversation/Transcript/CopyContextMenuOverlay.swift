@@ -110,6 +110,16 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
             defer { for view in toRestore { view.isUserInteractionEnabled = true } }
 
             let below = window.hitTest(convert(point, to: window), with: event)
+            // A scroll container can win the probe while a zero-framed wrapper
+            // hides a button marker beneath it. Deliver to that control first.
+            if let below,
+                let marker = below.passthroughMarkerDescendant(
+                    containing: convert(point, to: below),
+                    with: event,
+                    excluding: self
+                ) {
+                return marker
+            }
             // Pass-through: return the probed view rather than nil, so the
             // touch reaches it even when an intermediate wrapper would
             // otherwise hit-test positively for this region and claim it.
@@ -131,18 +141,6 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
                     excluding: self
                 ) {
                 return textInput
-            }
-            // Same skip can hide a pass-through marker (tappable image
-            // thumbnails, see `CopyContextMenuPassthroughMarker`) beneath a
-            // zero-framed wrapper; defer to it the same way so the touch
-            // reaches the SwiftUI Button above it instead of this overlay.
-            if let below, isDescendant(of: below),
-                let marker = below.passthroughMarkerDescendant(
-                    containing: convert(point, to: below),
-                    with: event,
-                    excluding: self
-                ) {
-                return marker
             }
             return self
         }
