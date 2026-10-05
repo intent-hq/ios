@@ -59,13 +59,13 @@ struct IntentButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(Constants.Typography.bodySEmphasized.font)
-            .foregroundStyle(foreground)
+            .foregroundStyle(foreground(for: configuration.role))
             .padding(.horizontal, Layout.horizontalPadding)
             .padding(.vertical, Layout.verticalPadding)
             .frame(minHeight: Layout.minimumHeight)
             .background {
                 RoundedRectangle(cornerRadius: Layout.cornerRadius)
-                    .fill(background)
+                    .fill(background(for: configuration.role))
                     .overlay {
                         if isEnabled, configuration.isPressed {
                             RoundedRectangle(cornerRadius: Layout.cornerRadius)
@@ -76,20 +76,23 @@ struct IntentButtonStyle: ButtonStyle {
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
     }
 
-    private var foreground: Color {
+    private func foreground(for role: ButtonRole?) -> Color {
         guard isEnabled else {
             return Theme.foreground(for: colorScheme).opacity(Layout.disabledForegroundOpacity)
+        }
+        if role == .destructive {
+            return variant == .primary ? .white : Theme.destructive(for: colorScheme)
         }
         return variant == .primary ? .black : Theme.foreground(for: colorScheme)
     }
 
-    private var background: Color {
+    private func background(for role: ButtonRole?) -> Color {
         guard isEnabled else {
             return Theme.foreground(for: colorScheme).opacity(Layout.disabledBackgroundOpacity)
         }
         switch variant {
         case .muted: return Theme.muted(for: colorScheme)
-        case .primary: return Color(.assistantAccent)
+        case .primary: return role == .destructive ? Theme.destructive(for: colorScheme) : Color(.assistantAccent)
         case .secondary: return Theme.card(for: colorScheme)
         }
     }

@@ -1,8 +1,8 @@
 import SwiftUI
 
 extension View {
-    func intentNavigationBackButton() -> some View {
-        modifier(IntentNavigationBackButtonModifier())
+    func intentNavigationBackButton(_ isVisible: Bool = true) -> some View {
+        modifier(IntentNavigationBackButtonModifier(isVisible: isVisible))
     }
 
     @ViewBuilder
@@ -16,6 +16,7 @@ extension View {
 }
 
 private struct IntentNavigationBackButtonModifier: ViewModifier {
+    let isVisible: Bool
     @Environment(\.dismiss) private var dismiss
 
     func body(content: Content) -> some View {
@@ -23,10 +24,12 @@ private struct IntentNavigationBackButtonModifier: ViewModifier {
             .navigationBarBackButtonHidden()
             .nativeNavigationBackGesture()
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
+                if isVisible {
+                    ToolbarItem(placement: .topBarLeading) {
+                        IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
+                    }
+                    .intentToolbarSurface()
                 }
-                .intentToolbarSurface()
             }
     }
 }

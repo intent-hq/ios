@@ -7,6 +7,7 @@ struct NoteDetailView: View {
     let noteId: String
     let workspaceId: String
     let noteTitle: String
+    let showsBackButton: Bool
     /// Optional closure to push a note onto the navigation stack (for note-to-note navigation).
     /// Parameters: (noteId, workspaceId, noteTitle)
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
@@ -22,11 +23,13 @@ struct NoteDetailView: View {
         workspaceId: String,
         noteTitle: String,
         session: BackendSession,
+        showsBackButton: Bool = true,
         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
     ) {
         self.noteId = noteId
         self.workspaceId = workspaceId
         self.noteTitle = noteTitle
+        self.showsBackButton = showsBackButton
         self.onNavigateToNote = onNavigateToNote
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
         _agentStore = State(initialValue: AgentStore(connectionManager: session.connection, summaries: session.agentSummaries))
@@ -52,7 +55,7 @@ struct NoteDetailView: View {
         .navigationTitle(noteTitle)
         .toolbar(.visible, for: .navigationBar)
         .toolbarTitleDisplayMode(.inline)
-        .intentNavigationBackButton()
+        .intentNavigationBackButton(showsBackButton)
         .workspaceNavigationSubtitle(title: noteTitle, workspaceId: workspaceId)
         .task {
             await loadNote()

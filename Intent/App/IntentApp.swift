@@ -34,6 +34,7 @@ struct IntentApp: App {
                 backendID: $backendID,
                 networkAvailability: DemoConnectionLoss.networkAvailability ?? .shared
             )
+                .buttonStyle(IntentContentButtonStyle())
                 #if os(visionOS)
                 .frame(
                     minWidth: Constants.Root.visionMinimumWindowWidth,
