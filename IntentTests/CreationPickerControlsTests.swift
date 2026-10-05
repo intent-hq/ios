@@ -428,10 +428,8 @@ struct CreationPickerControlsTests {
             height: layout == .workspace ? Self.pickerHostHeight : 1200,
             diagnostics: SyntheticBadgeHostTrace(context: "picker layout=\(layout) dynamicType=\(dynamicTypeSize) isCreating=\(isCreating)")
         ) { hostView, window in
-            let settled = try Self.settledPickerElements(in: hostView, window: window, layout: layout)
-            if layout == .workspace {
-                try CreationPickerRenderedGeometry(window: window).record(named: "workspace-\(dynamicTypeSize)")
-            }
+            let settled = try Self.settledPickerElements(in: hostView, window: window)
+            try CreationPickerRenderedGeometry(window: window).record(named: "\(layout)-\(dynamicTypeSize)")
             return PickerLayoutSnapshot(
                 hostFrame: window.bounds,
                 provider: Self.snapshot(
@@ -477,8 +475,7 @@ struct CreationPickerControlsTests {
 
     private static func settledPickerElements(
         in hostView: UIView,
-        window: UIWindow,
-        layout: PickerHostLayout
+        window: UIWindow
     ) throws -> SettledPickerElements {
         // SwiftUI can finish Dynamic Type reflow after the host appears.
         let deadline = Date(timeIntervalSinceNow: pickerSettleTimeout)
@@ -495,18 +492,14 @@ struct CreationPickerControlsTests {
             let provider = try pickerElement(identifier: "creation.providerPicker", in: hostView)
             let model = try pickerElement(identifier: "creation.modelPicker", in: hostView)
             let frames: [CGRect]
-            if layout == .workspace {
-                let rendered = try CreationPickerRenderedGeometry(window: window)
-                do {
-                    frames = try rendered.frames(associatedWith: [provider, model].map { element in
-                        window.convert(element.accessibilityFrame, from: nil)
-                    })
-                } catch {
-                    try rendered.record(named: "workspace-observation-failure")
-                    throw error
-                }
-            } else {
-                frames = try [provider, model].map { try visibleControlFrame(of: $0, in: window) }
+            let rendered = try CreationPickerRenderedGeometry(window: window)
+            do {
+                frames = try rendered.frames(associatedWith: [provider, model].map { element in
+                    window.convert(element.accessibilityFrame, from: nil)
+                })
+            } catch {
+                try rendered.record(named: "picker-observation-failure")
+                throw error
             }
             let providerFrame = frames[0]
             let modelFrame = frames[1]
@@ -526,14 +519,6 @@ struct CreationPickerControlsTests {
         }
 
         throw PickerInspectionError.framesDidNotSettle(samples: Array(samples.suffix(requiredStableFrameSamples)))
-    }
-
-    private static func visibleControlFrame(of element: NSObject, in window: UIWindow) throws -> CGRect {
-        let view = try #require(
-            element as? UIView,
-            "Hosted picker accessibility element did not expose its on-screen control view"
-        )
-        return view.visibleFrame(in: window)
     }
 
     private static func pickerElement(identifier: String, in hostView: UIView) throws -> NSObject {
@@ -677,18 +662,6 @@ private struct PickerLayoutSnapshot {
         // Coordinate arithmetic can round a shared boundary by one representable value.
         let tolerance = max(upper.maxY.ulp, lower.minY.ulp)
         return upper.maxY <= lower.minY + tolerance
-    }
-}
-
-private extension UIView {
-    func visibleFrame(in window: UIWindow) -> CGRect {
-        var frame = window.convert(bounds, from: self)
-        var ancestor = superview
-        while let view = ancestor {
-            if view.clipsToBounds { frame = frame.intersection(window.convert(view.bounds, from: view)) }
-            ancestor = view.superview
-        }
-        return frame
     }
 }
 
