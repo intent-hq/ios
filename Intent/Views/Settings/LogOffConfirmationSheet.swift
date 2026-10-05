@@ -60,7 +60,8 @@ struct LogOffConfirmationSheet: View {
             }
             .accessibilityIdentifier("log-off.confirm")
         }
-        .buttonStyle(ConnectionSheetButtonStyle())
+        .buttonStyle(IntentContentButtonStyle())
+        .opacity(isConfirming ? Constants.ConnectionSheet.placeholderOpacity : 1)
         .disabled(isConfirming)
     }
 

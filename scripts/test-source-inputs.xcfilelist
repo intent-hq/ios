@@ -125,6 +125,7 @@ $(SRCROOT)/Intent/Assets.xcassets/Expand2.imageset
 $(SRCROOT)/Intent/Assets.xcassets/External.imageset
 $(SRCROOT)/Intent/Assets.xcassets/External2.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Eye.imageset
+$(SRCROOT)/Intent/Assets.xcassets/EyeClosed.imageset
 $(SRCROOT)/Intent/Assets.xcassets/File.imageset
 $(SRCROOT)/Intent/Assets.xcassets/FileList.imageset
 $(SRCROOT)/Intent/Assets.xcassets/FlowerBurst.imageset

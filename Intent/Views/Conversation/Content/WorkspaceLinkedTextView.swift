@@ -9,6 +9,7 @@ struct WorkspaceLinkedTextView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.assistantMessageStreaming) private var isStreaming
     @Environment(\.proposalWorkspaceIDs) private var coveredIDs
+    @ScaledMetric(relativeTo: .body) private var iconSide: CGFloat = 17
 
     private enum Layout {
         static let spacing: CGFloat = 8
@@ -49,7 +50,10 @@ struct WorkspaceLinkedTextView: View {
             coordinator.onSelectWorkspace(id)
         } label: {
             HStack(spacing: Layout.spacing) {
-                Image(systemName: "rectangle.stack")
+                Image(.spaces)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSide, height: iconSide)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading) {
                     Text(workspace?.title ?? id)
@@ -61,15 +65,21 @@ struct WorkspaceLinkedTextView: View {
                     }
                 }
                 Spacer()
-                Image(systemName: "chevron.right")
+                Image(.chevronRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSide, height: iconSide)
                     .accessibilityHidden(true)
             }
+            .foregroundStyle(workspace == nil
+                ? Theme.mutedForeground(for: colorScheme)
+                : Theme.foreground(for: colorScheme))
             .padding(Layout.padding)
             .copyContextMenuPassthrough()
             .background(Theme.muted(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius))
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .disabled(workspace == nil)
         .accessibilityIdentifier("assistant.workspace.\(id)")
     }

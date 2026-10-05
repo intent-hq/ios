@@ -14,6 +14,7 @@ struct ProviderModelStepView: View {
     let colorScheme: ColorScheme
     let onRetryProviders: () -> Void
     let onCreate: () -> Void
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack {
@@ -23,13 +24,23 @@ struct ProviderModelStepView: View {
         }
         .navigationTitle("Provider & Model")
         .toolbarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(isCreating)
+        .navigationBarBackButtonHidden()
+        .background {
+            if !isCreating { Color.clear.nativeNavigationBackGesture() }
+        }
         .toolbar {
+            if !isCreating {
+                ToolbarItem(placement: .topBarLeading) {
+                    IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
+                }
+                .intentToolbarSurface()
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Create", action: onCreate)
+                    .buttonStyle(IntentButtonStyle())
                     .disabled(isCreateDisabled)
-                    .interFont(Constants.Typography.bodyS.withFace(.semibold))
             }
+            .intentToolbarSurface()
         }
     }
 
@@ -47,7 +58,7 @@ struct ProviderModelStepView: View {
                         .interFont(Constants.Typography.bodyXS)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     Button("Retry", action: onRetryProviders)
-                        .interFont(Constants.Typography.bodyS)
+                        .buttonStyle(IntentButtonStyle(variant: .secondary))
                 }
                 .listRowBackground(Theme.card(for: colorScheme))
             }

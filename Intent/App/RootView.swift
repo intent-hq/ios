@@ -273,7 +273,7 @@ struct RootView: View {
                     } label: {
                         Text("Retry").interFont(Constants.Typography.bodyXS)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(IntentButtonStyle(variant: .secondary))
                     .controlSize(.small)
                 }
                 .padding(.horizontal, Constants.Root.reconnectPanelSpacing)

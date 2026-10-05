@@ -9,6 +9,7 @@ struct ContextMentionChipView: View {
     let mention: ContextMention
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
+    @ScaledMetric(relativeTo: .caption2) private var providerIconSide: CGFloat = 11
 
     var body: some View {
         if let url = ExternalLink.url(from: mention.url) {
@@ -17,7 +18,7 @@ struct ContextMentionChipView: View {
             } label: {
                 chipLabel
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
         } else {
             chipLabel
         }
@@ -25,10 +26,9 @@ struct ContextMentionChipView: View {
 
     private var chipLabel: some View {
         HStack(spacing: Constants.Conversation.ContextMention.labelSpacing) {
-            Image(systemName: Self.iconName(for: mention.provider))
+            providerIcon
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Constants.Conversation.ContextMention.iconOpacity))
-                .accessibilityHidden(true)
             Text(Self.displayTitle(mention.title))
                 .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                 .lineLimit(1)
@@ -38,6 +38,20 @@ struct ContextMentionChipView: View {
         .padding(.vertical, Constants.Conversation.ContextMention.verticalPadding)
         .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.ContextMention.backgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ContextMention.cornerRadius))
+    }
+
+    @ViewBuilder
+    private var providerIcon: some View {
+        if mention.provider == "github" {
+            Image(.gitPr)
+                .resizable()
+                .scaledToFit()
+                .frame(width: providerIconSide, height: providerIconSide)
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: Self.iconName(for: mention.provider))
+                .accessibilityHidden(true)
+        }
     }
 
     /// Chip label: the decoded title hard-truncated to ~30 characters (the

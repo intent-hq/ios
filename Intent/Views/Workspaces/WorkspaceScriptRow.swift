@@ -73,9 +73,15 @@ struct WorkspaceScriptRow: View {
 
     @ViewBuilder private var menuActions: some View {
         if script.isActive {
-            Button("Stop script", systemImage: "stop.fill", action: stop).disabled(!canUpdate)
+            Button(action: stop) {
+                Label { Text("Stop script") } icon: { Image(.stopFill) }
+            }
+            .disabled(!canUpdate)
         }
-        Button("Delete script", systemImage: "trash", role: .destructive, action: remove).disabled(!canUpdate)
+        Button(role: .destructive, action: remove) {
+            Label { Text("Delete script") } icon: { Image(.delete) }
+        }
+        .disabled(!canUpdate)
     }
 
     private func stop() {
@@ -119,7 +125,10 @@ struct WorkspaceScriptRow: View {
             if store.isUpdating(script) || store.isLaunching(script) || ["starting", "restarting"].contains(script.status) {
                 ProgressView()
             } else {
-                Image(systemName: script.detectedURL == nil ? "play" : "globe")
+                Image(script.detectedURL == nil ? .play : .globe)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
                     .opacity(1 - Double(swipeProgress))
                     .accessibilityHidden(true)
             }

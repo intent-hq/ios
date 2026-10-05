@@ -20,6 +20,7 @@ struct AssistantView: View {
                     VStack {
                         Text(error).font(.callout)
                         Button("Retry") { Task { await store.refresh() } }
+                            .buttonStyle(IntentButtonStyle(variant: .secondary))
                     }
                     .padding()
                     .frame(maxWidth: .infinity)
@@ -48,6 +49,7 @@ struct AssistantView: View {
             newConversationButton
                 .accessibilityIdentifier("assistant.newConversation")
         }
+        .intentToolbarSurface()
         if selectedThread == nil {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -55,9 +57,11 @@ struct AssistantView: View {
                 } label: {
                     ToolbarOverflowLabel()
                 }
+                .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Assistant actions")
                 .accessibilityIdentifier("assistant.actions")
             }
+            .intentToolbarSurface()
         }
     }
 
@@ -83,14 +87,14 @@ struct AssistantView: View {
                 Text("Plan your work and get help across all your workspaces.")
             } actions: {
                 Button("Start a Conversation", action: createThread)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(IntentButtonStyle())
                     .disabled(store.isCreating || !store.hasLoaded)
             }
         }
     }
 
     private var newConversationButton: some View {
-        Button("New Conversation", systemImage: "square.and.pencil", action: createThread)
+        IntentIconButton(icon: .displayEdit, label: "New Conversation", action: createThread)
             .disabled(store.isCreating || !store.hasLoaded)
     }
 
@@ -109,12 +113,14 @@ struct AssistantHistoryMenu: View {
 
     var body: some View {
         Menu {
-            Button("New Conversation", systemImage: "square.and.pencil") {
+            Button {
                 Task {
                     if let id = await store.createThread() {
                         coordinator.assistantAgentId = id
                     }
                 }
+            } label: {
+                Label("New Conversation", image: "DisplayEdit")
             }
             .disabled(store.isCreating || !store.hasLoaded)
             .accessibilityIdentifier("assistant.history.newConversation")
@@ -124,7 +130,7 @@ struct AssistantHistoryMenu: View {
                     coordinator.assistantAgentId = thread.id
                 } label: {
                     if (coordinator.assistantAgentId ?? store.threads.first?.id) == thread.id {
-                        Label(thread.name, systemImage: "checkmark")
+                        Label(thread.name, image: "Check")
                     } else {
                         Text(thread.name)
                     }

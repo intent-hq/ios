@@ -57,13 +57,13 @@ struct ImageActionMenuItems: View {
                 HapticManager.notification(saved ? .success : .error)
             }
         } label: {
-            Label("Save Image", systemImage: "square.and.arrow.down")
+            Label("Save Image", image: "Download")
         }
         Button {
             UIPasteboard.general.image = image
             HapticManager.notification(.success)
         } label: {
-            Label("Copy Image", systemImage: "doc.on.doc")
+            Label("Copy Image", image: "Copy")
         }
         Section {
             Text(ImageInfoFormat.dimensionsText(for: image))

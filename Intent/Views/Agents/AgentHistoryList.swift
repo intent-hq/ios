@@ -89,6 +89,7 @@ struct AgentHistoryList: View {
 
             if hasEntries {
                 Button("Clear") { coordinator.agentHistory.clear() }
+                    .buttonStyle(IntentContentButtonStyle())
                     .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(secondaryForeground)
                     .accessibilityLabel("Clear agent history")
@@ -124,7 +125,7 @@ struct AgentHistoryList: View {
             )
             .contentShape(.rect(cornerRadius: ConnectionSwitcherStyle.cornerRadius))
         }
-        .buttonStyle(ConnectionSheetButtonStyle())
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(row.isCurrent ? .isSelected : [])
         .accessibilityIdentifier("agent-history.entry.\(row.id)")

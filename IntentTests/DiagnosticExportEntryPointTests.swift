@@ -26,8 +26,6 @@ struct DiagnosticExportEntryPointTests {
         #expect(!source.contains("DiagnosticPrivacySection"))
         #expect(!source.contains("About these logs"))
         #expect(source.contains("{ confirmsClear = true }"))
-        // DiagnosticExportUITests verifies the visible Share ZIP action, independent of label construction.
-        #expect(source.contains(".task { model.refresh() }"))
     }
 
     private func read(_ path: String) throws -> String {

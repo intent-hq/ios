@@ -22,6 +22,7 @@ struct WorkspaceCommitDiffView: View {
                     Text(errorMessage)
                 } actions: {
                     Button("Retry") { Task { await load() } }
+                        .buttonStyle(IntentButtonStyle(variant: .secondary))
                 }
             } else if files.isEmpty {
                 ContentUnavailableView("No Changed Files", systemImage: "doc.text")
@@ -63,7 +64,7 @@ struct WorkspaceCommitDiffView: View {
             } label: {
                 CreateWorkspaceChoiceLabel(title: selectedPath, surface: WorkspaceDetailStyle.surface(for: colorScheme))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("File")
             .accessibilityValue(selectedPath)
         }

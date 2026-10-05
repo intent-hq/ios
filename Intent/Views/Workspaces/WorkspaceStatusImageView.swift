@@ -85,7 +85,7 @@ struct WorkspaceStatusImageView: View {
                     .overlay(border)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel(Layout.accessibilityLabel)
             .accessibilityHint("Opens the image full size")
             .accessibilityIdentifier(Layout.accessibilityIdentifier)
@@ -102,7 +102,7 @@ struct WorkspaceStatusImageView: View {
                     text: "Status image unavailable — tap to retry"
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Status image unavailable")
             .accessibilityHint("Retries loading the image")
         } else {

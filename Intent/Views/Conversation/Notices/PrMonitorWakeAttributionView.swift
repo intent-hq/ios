@@ -46,6 +46,6 @@ struct PrMonitorWakeAttributionView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .copyContextMenuPassthrough()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
     }
 }

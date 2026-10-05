@@ -101,7 +101,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                     .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel(backLabel)
             .accessibilityIdentifier(backIdentifier)
             VStack(spacing: Design.Header.titleSpacing) {
@@ -113,7 +113,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
             actions()
-                .buttonStyle(.plain)
+                .buttonStyle(IntentContentButtonStyle())
                 .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
         }
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))

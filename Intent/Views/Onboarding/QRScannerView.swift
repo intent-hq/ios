@@ -28,9 +28,9 @@ struct QRScannerView: View {
                 .ignoresSafeArea()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                            .interFont(Constants.Typography.bodyS)
+                        IntentIconButton(icon: .close, label: "Cancel") { dismiss() }
                     }
+                    .intentToolbarSurface()
                 }
         }
     }
@@ -231,7 +231,7 @@ private struct QRScannerOverlay: View {
                 .padding(.horizontal, Constants.QRScanner.cancelHorizontalPadding)
                 .frame(minWidth: Constants.QRScanner.cancelWidth, minHeight: Constants.QRScanner.cancelHeight)
                 .background(.white, in: .rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius))
-                .buttonStyle(.plain)
+                .buttonStyle(IntentContentButtonStyle())
                 .padding(.leading, Constants.QRScanner.horizontalInset)
                 .padding(.top, Constants.QRScanner.cancelTopPadding)
         }

@@ -178,14 +178,18 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
     @MainActor
     func testHorizontalSwipeLocksVerticalScrollingUntilFingerLifts() {
         let app = launchWorkspaces(arguments: ["--demo-long-workspace-list"])
-        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
+        let workspaceId = "demo-ws-flaky-tests"
+        let row = app.buttons["workspace.row.\(workspaceId)"]
+        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
         let origin = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         origin.press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: 0, dy: -80)))
         XCTAssertTrue(row.isHittable)
 
-        let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
+        let archive = app.buttons["workspace.archive.\(workspaceId)"]
+        let search = app.buttons["workspaces.search.open"]
         let verticalDrifts: [CGFloat] = [-60, 60]
         for verticalDrift in verticalDrifts {
+            XCTAssertGreaterThan(row.frame.minY, search.frame.maxY, "The swipe row must remain below the pinned controls")
             let startingY = row.frame.minY
             let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
             let end = start.withOffset(CGVector(dx: -180, dy: verticalDrift))

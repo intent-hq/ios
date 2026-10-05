@@ -20,13 +20,13 @@ struct WorkspaceRowView: View {
     @State private var monitorConsumer = UUID()
     @ScaledMetric(relativeTo: .headline) private var titleTracking: CGFloat = -0.36
 
-    private enum TitleCenterAlignment: AlignmentID {
+    private enum FirstTitleLineCenterAlignment: AlignmentID {
         nonisolated static func defaultValue(in dimensions: ViewDimensions) -> CGFloat {
             dimensions[VerticalAlignment.center]
         }
     }
 
-    private static let titleCenter = VerticalAlignment(TitleCenterAlignment.self)
+    private static let firstTitleLineCenter = VerticalAlignment(FirstTitleLineCenterAlignment.self)
 
     private var monitorsSource: WorkspacePrMonitorsStore {
         session?.prMonitorsStore ?? .shared
@@ -46,13 +46,13 @@ struct WorkspaceRowView: View {
             } label: {
                 Image(systemName: "exclamationmark.triangle")
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("PR monitors may be out of date. Retry refresh")
         }
     }
 
     var body: some View {
-        HStack(alignment: Self.titleCenter, spacing: spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
+        HStack(alignment: Self.firstTitleLineCenter, spacing: spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
             // Status icon with agent activity / unread dot overlays
             WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme)
                 .opacity(statusIconHidden ? 0 : 1)
@@ -146,8 +146,9 @@ struct WorkspaceRowView: View {
                 : Theme.foreground(for: colorScheme))
             .lineLimit(Self.titleLineLimit(for: dynamicTypeSize))
             .fixedSize(horizontal: false, vertical: true)
-            .alignmentGuide(Self.titleCenter) { dimensions in
-                dimensions[VerticalAlignment.center]
+            .alignmentGuide(Self.firstTitleLineCenter) { dimensions in
+                let additionalLineHeight = dimensions[.lastTextBaseline] - dimensions[.firstTextBaseline]
+                return dimensions[VerticalAlignment.center] - additionalLineHeight / 2
             }
     }
 
@@ -237,7 +238,6 @@ struct WorkspaceRowView: View {
         @ViewBuilder
         private var badgeContent: some View {
             if let pill = indicator.pill {
-                let pillColor = WorkspaceRowView.pillColor(for: pill.status)
                 HStack(
                     alignment: .center,
                     spacing: Constants.WorkspaceRow.pillIconSpacing
@@ -246,7 +246,9 @@ struct WorkspaceRowView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: iconSize, height: iconSize)
-                        .foregroundStyle(pillColor)
+                        .foregroundStyle(colorScheme == .dark
+                            ? Constants.Pairing.mutedForeground(for: colorScheme)
+                            : WorkspaceDetailStyle.neutral)
                         .accessibilityHidden(true)
                     Text("PR\(pill.number.map { " #\($0)" } ?? "")")
                         .interFont(Constants.Typography.subtextXXS.withFace(.medium))

@@ -84,7 +84,7 @@ struct QuestionWizardHeaderRow: View {
                     minHeight: Constants.Accessibility.minimumTapTarget
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
     }
 
     private func segmentColor(_ segment: Int) -> Color {

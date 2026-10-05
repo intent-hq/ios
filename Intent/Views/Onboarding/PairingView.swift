@@ -234,7 +234,7 @@ struct PairingOptionButton: View {
             .clipShape(.rect(cornerRadius: Constants.Pairing.optionCornerRadius))
             .contentShape(.rect(cornerRadius: Constants.Pairing.optionCornerRadius))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .visionCardRowButton(cornerRadius: Constants.Pairing.optionCornerRadius)
     }
 

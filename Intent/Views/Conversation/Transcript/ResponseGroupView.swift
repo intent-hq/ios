@@ -79,6 +79,8 @@ struct ResponseGroupBody: View, Equatable {
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .caption) private var groupIconSide: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption2) private var disclosureIconSide: CGFloat = 11
     @State private var isExpanded: Bool
 
     /// Manual `==`: closures are excluded on purpose — the message builds
@@ -133,7 +135,7 @@ struct ResponseGroupBody: View, Equatable {
             headerLabel
                 .copyContextMenuPassthrough()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IntentContentButtonStyle())
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
     }
 
@@ -163,8 +165,10 @@ struct ResponseGroupBody: View, Equatable {
             .contentShape(Rectangle())
         } else {
             HStack(spacing: Layout.headerSpacing) {
-                Image(systemName: "rectangle.stack")
-                    .font(.caption)
+                Image(.fileList)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: groupIconSide, height: groupIconSide)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.iconOpacity))
                     .accessibilityHidden(true)
                 Text(group.name)
@@ -180,8 +184,10 @@ struct ResponseGroupBody: View, Equatable {
                         .clipShape(Capsule())
                 }
                 Spacer()
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption2)
+                Image(isExpanded ? .chevronDown : .chevronRight)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: disclosureIconSide, height: disclosureIconSide)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.disclosureOpacity))
                     .accessibilityHidden(true)
             }

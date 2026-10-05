@@ -14,12 +14,23 @@ struct ProviderPicker: View {
                 } label: {
                     CreateWorkspaceChoiceLabel(title: selectedProvider?.displayName ?? String(localized: "None"))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Provider")
                 .accessibilityValue(selectedProvider?.displayName ?? String(localized: "None"))
                 .accessibilityIdentifier("creation.providerPicker")
             } else {
-                picker.pickerStyle(.menu)
+                Menu {
+                    picker.pickerStyle(.inline)
+                } label: {
+                    HStack {
+                        Text("Provider").interFont(Constants.Typography.bodyS)
+                        CreateWorkspaceChoiceLabel(title: selectedProvider?.displayName ?? String(localized: "None"))
+                    }
+                }
+                .buttonStyle(IntentContentButtonStyle())
+                .accessibilityLabel("Provider")
+                .accessibilityValue(selectedProvider?.displayName ?? String(localized: "None"))
+                .accessibilityIdentifier("creation.providerPicker")
             }
         }
     }

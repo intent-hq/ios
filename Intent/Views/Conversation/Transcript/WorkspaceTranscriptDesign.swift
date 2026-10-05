@@ -70,7 +70,7 @@ struct WorkspaceThinkingView: View {
                     .contentShape(Rectangle())
                     .copyContextMenuPassthrough()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IntentContentButtonStyle())
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
             if isExpanded {

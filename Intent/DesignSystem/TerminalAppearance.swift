@@ -37,10 +37,11 @@ enum TerminalAppearance {
 
 struct TerminalControlStyle: ButtonStyle {
     var isSelected = false
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(isSelected ? TerminalAppearance.green : .white)
+            .foregroundStyle(isEnabled ? (isSelected ? TerminalAppearance.green : .white) : TerminalAppearance.muted)
             .background {
                 Capsule()
                     .fill(configuration.isPressed ? TerminalAppearance.pressedFill : .clear)

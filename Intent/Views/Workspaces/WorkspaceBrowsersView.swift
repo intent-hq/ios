@@ -27,6 +27,7 @@ struct WorkspaceBrowsersView: View {
                         Button("Retry") {
                             Task { await store.refresh(workspaceId: workspaceId) }
                         }
+                        .buttonStyle(IntentButtonStyle(variant: .secondary))
                         .disabled(!store.isConnected)
                     }
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -38,6 +39,8 @@ struct WorkspaceBrowsersView: View {
 }
 
 private struct WorkspaceBrowserRow: View {
+    @ScaledMetric(relativeTo: .title2) private var iconSize = WorkspaceDetailStyle.iconSize
+    @ScaledMetric(relativeTo: .caption) private var chevronSize = Constants.Typography.subtextXXS.size
     let browser: WorkspaceBrowser
     let store: WorkspaceBrowserStore
     @Binding var revealedTarget: WorkspaceSwipeTarget?
@@ -73,7 +76,9 @@ private struct WorkspaceBrowserRow: View {
         .visionListRowHitTarget()
         .accessibilityIdentifier("browser.row.\(browser.id)")
         .contextMenu {
-            Button("Delete browser", systemImage: "trash", role: .destructive) { store.remove(browser) }
+            Button(role: .destructive) { store.remove(browser) } label: {
+                Label { Text("Delete browser") } icon: { Image(.delete) }
+            }
         }
         .accessibilityAction(named: "Delete browser") { store.remove(browser) }
     }
@@ -96,8 +101,10 @@ private struct WorkspaceBrowserRow: View {
 
     private func row(swipeProgress: CGFloat) -> some View {
         HStack(spacing: BrowserAppearance.rowSpacing) {
-            Image(systemName: "globe")
-                .font(.title2)
+            Image(.globe)
+                .resizable()
+                .scaledToFit()
+                .frame(width: iconSize, height: iconSize)
                 .foregroundStyle(.tint)
                 .frame(width: BrowserAppearance.controlSize, height: BrowserAppearance.controlSize)
                 .accessibilityHidden(true)
@@ -117,8 +124,10 @@ private struct WorkspaceBrowserRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
+            Image(.chevronRight)
+                .resizable()
+                .scaledToFit()
+                .frame(width: chevronSize, height: chevronSize)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .opacity(1 - Double(swipeProgress))
                 .accessibilityHidden(true)
