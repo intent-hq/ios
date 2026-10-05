@@ -159,6 +159,17 @@ enum ConversationTranscriptScrollPolicy {
         goToEndRequested
     }
 
+    /// Only the explicit Go to End request chooses by distance. Sweeping
+    /// through more than one visible screen realizes intervening lazy rows
+    /// unnecessarily (#404). Other follows keep their own animation choice.
+    static func shouldAnimateGoToEnd(geometry: ViewportGeometry?) -> Bool {
+        guard let geometry else { return true }
+        let visibleHeight = geometry.containerHeight - geometry.verticalInsets
+        let distance = geometry.distanceToBottom
+        guard visibleHeight.isFinite, visibleHeight > 0, distance.isFinite else { return true }
+        return distance <= visibleHeight
+    }
+
     /// Streaming deltas grow content that `.defaultScrollAnchor(.bottom)`
     /// already keeps pinned, so a viewport at the bottom is never scrolled for
     /// them. A delta only re-pins a viewport that drifted past

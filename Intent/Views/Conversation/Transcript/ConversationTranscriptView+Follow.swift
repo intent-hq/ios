@@ -67,6 +67,13 @@ extension ConversationTranscriptView {
         }
     }
 
+    func followGoToEndRequest(proxy: ScrollViewProxy) {
+        let animated = ConversationTranscriptScrollPolicy.shouldAnimateGoToEnd(
+            geometry: scrollMomentumProxy.restingGeometry
+        )
+        scrollToBottom(proxy: proxy, forced: true, animated: animated)
+    }
+
     func followStreamingDeltaIfDrifted(proxy: ScrollViewProxy) {
         guard ConversationTranscriptScrollPolicy.shouldFollowStreamingDelta(
             hasInitiallyScrolled: hasInitiallyScrolled,

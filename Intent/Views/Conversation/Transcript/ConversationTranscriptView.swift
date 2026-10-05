@@ -117,7 +117,7 @@ private extension ConversationTranscriptView {
                 } else if ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
                     goToEndRequested: goToEndRequested
                 ) {
-                    scrollToBottom(proxy: proxy, forced: true)
+                    followGoToEndRequest(proxy: proxy)
                 }
             }
     }
