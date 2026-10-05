@@ -124,15 +124,12 @@ struct CreateWorkspaceBranchStepView: View {
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : Constants.CreateWorkspace.branchNameLineLimit)
                         .fixedSize(horizontal: false, vertical: true)
                     if branch == defaultBranch {
-                        Text("Default")
-                            .interFont(Constants.Typography.subtextXXS)
-                            .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+                        defaultBranchBadge
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if selectedBranch == branch {
-                    CreateWorkspaceSelectionMark()
-                }
+                CreateWorkspaceSelectionMark()
+                    .opacity(selectedBranch == branch ? 1 : 0)
             }
             .padding(CreateWorkspaceFormStyle.pagePadding)
             .frame(minHeight: CreateWorkspaceRepoStyle.rowMinimumHeight)
@@ -142,6 +139,27 @@ struct CreateWorkspaceBranchStepView: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(selectedBranch == branch ? .isSelected : [])
         .accessibilityIdentifier("creation.branch.\(branch)")
+    }
+
+    private var defaultBranchBadge: some View {
+        Text("Default")
+            .interFont(Constants.Typography.subtextXXS.withFace(.medium))
+            .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, Constants.WorkspaceRow.outlinedPillHorizontalPadding)
+            .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
+            .frame(minHeight: Constants.WorkspaceRow.outlinedPillMinimumHeight)
+            .overlay {
+                Capsule().strokeBorder(
+                    contrast == .increased
+                        ? Theme.border(for: colorScheme, contrast: contrast)
+                        : (colorScheme == .dark ? Color.white : Color.black).opacity(Constants.WorkspaceRow.pillOutlineOpacity),
+                    lineWidth: contrast == .increased
+                        ? Constants.WorkspaceRow.increasedContrastPillBorderWidth
+                        : Constants.WorkspaceRow.pillBorderWidth
+                )
+            }
     }
 
     @ViewBuilder
