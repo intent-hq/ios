@@ -34,25 +34,31 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     @MainActor
     func testLongAnswersScrollVerticallyWithoutClipping() throws {
         let app = try openQuestions(scenario: "question-cards", collapsed: false)
-        tap(app.textViews["Type your own answer…"].firstMatch)
         tapQuestionAction("question.skip", in: app)
         XCTAssertTrue(app.staticTexts["Short answers"].waitForExistence(timeout: Self.timeout))
         tapQuestionAction("question.skip", in: app)
         XCTAssertTrue(app.staticTexts["Detailed answers"].waitForExistence(timeout: Self.timeout))
         let first = app.buttons["question.option.0"]
         let second = app.buttons["question.option.1"]
-        attachScreenshot("question-cards-overflow", in: app)
         XCTAssertLessThan(first.frame.maxY, second.frame.minY)
         XCTAssertEqual(first.frame.minX, second.frame.minX, accuracy: 1)
         let shortHeight = first.frame.height
+
+        let editor = app.textViews["Type your own answer…"].firstMatch
+        tap(editor)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
         let scroll = app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch
-        scroll.swipeUp()
+        let send = app.buttons["question.next"]
+        XCTAssertTrue(scroll.frame.contains(send.frame), "Focusing the editor must reveal the entire footer without swiping")
+        XCTAssertEqual(send.frame.maxY, scroll.frame.maxY - 20, accuracy: 1, "The panel must reach its bottom padding")
+        XCTAssertLessThanOrEqual(scroll.frame.maxY, editor.frame.minY)
+        attachScreenshot("question-cards-focused-bottom", in: app)
         let last = app.buttons["question.option.3"]
         XCTAssertTrue(last.isHittable)
         XCTAssertGreaterThan(last.frame.height, shortHeight, "Long answers must retain natural text heights")
         tap(last)
         XCTAssertEqual(last.value as? String, "Selected")
-        tapQuestionAction("question.next", in: app)
+        tap(send)
         assertSentMessage(in: app, contains: ["A: Full review"])
     }
 

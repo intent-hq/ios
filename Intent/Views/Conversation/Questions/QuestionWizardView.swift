@@ -83,6 +83,7 @@ struct QuestionWizardView: View {
                         questionCount: questions.count,
                         selectedIndices: drafts[idx].sel,
                         availableHeight: max(0, workspaceAvailableHeight - answerComposerHeight - Design.Composer.keyboardBottomSpacing * 2),
+                        answerFocused: answerFocused,
                         onSelect: selectOption,
                         footer: workspaceFooter
                     )

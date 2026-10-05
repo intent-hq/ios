@@ -67,6 +67,7 @@ struct QuestionWizardLayoutTests {
             questionCount: 1,
             selectedIndices: [0],
             availableHeight: height,
+            answerFocused: false,
             onSelect: { _ in },
             footer: footer
         )

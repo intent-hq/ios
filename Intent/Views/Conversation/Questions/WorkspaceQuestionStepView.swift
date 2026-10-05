@@ -8,6 +8,7 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
     let questionCount: Int
     let selectedIndices: [Int]
     let availableHeight: CGFloat
+    let answerFocused: Bool
     let onSelect: (Int) -> Void
     let footer: Footer
 
@@ -16,6 +17,7 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     private typealias Design = Constants.Conversation.Design
+    private enum ScrollTarget { case content }
 
     var body: some View {
         QuestionHeightLimit(maximumHeight: max(0, availableHeight)) {
@@ -24,10 +26,24 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
                     content
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                ScrollView {
-                    content
-                }
-                .scrollBounceBehavior(.basedOnSize)
+                scrollingContent
+            }
+        }
+    }
+
+    private var scrollingContent: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                content.id(ScrollTarget.content)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            // Also runs if keyboard avoidance mounts the scrolling fit candidate
+            // after focus changed. The target includes the footer's bottom padding.
+            .onChange(of: answerFocused, initial: true) {
+                if answerFocused { proxy.scrollTo(ScrollTarget.content, anchor: .bottom) }
+            }
+            .onChange(of: availableHeight) {
+                if answerFocused { proxy.scrollTo(ScrollTarget.content, anchor: .bottom) }
             }
         }
     }
