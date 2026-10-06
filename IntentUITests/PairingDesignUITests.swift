@@ -41,7 +41,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     func testSavedConnectionActionsRemainAvailableWhenEmpty() throws {
         continueAfterFailure = false
         let app = try launchAtHome()
-        let saved = option("Saved Connections", in: app)
+        let saved = app.buttons["pairing.saved-connections"]
         XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
         saved.tap()
         verifySavedConnectionDeletion(option("Demo Mac", in: app), in: app)
@@ -56,7 +56,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         continueAfterFailure = false
         let app = try launchAtHome()
 
-        let saved = option("Saved Connections", in: app)
+        let saved = app.buttons["pairing.saved-connections"]
         let manual = option("Manual Connection", in: app)
         let scan = option("Scan QR Code", in: app)
         XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))

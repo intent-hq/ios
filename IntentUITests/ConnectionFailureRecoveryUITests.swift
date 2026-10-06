@@ -31,7 +31,7 @@ extension ConnectionLossUITests {
         capture(app, named: "failure-before-primary-exit")
         reconnect.tap()
 
-        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        let saved = app.buttons["pairing.saved-connections"]
         XCTAssertTrue(saved.waitForExistence(timeout: RecoveryFixture.timeout))
         XCTAssertFalse(app.buttons["connection-failure.home"].exists)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Manual Connection")).firstMatch.exists)

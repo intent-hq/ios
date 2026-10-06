@@ -108,6 +108,7 @@ struct PairingView: View {
     }
 
     private var pairingOptions: some View {
+        let savedConnectionCount = coordinator.savedConnections.count
         let options = PairingOption.available(
             showsSavedConnections: coordinator.pairingShowsSavedConnections
         )
@@ -132,10 +133,11 @@ struct PairingView: View {
             if options.contains(.savedConnections) {
                 PairingOptionButton(
                     icon: .connectSaved,
-                    title: "Saved Connections",
-                    subtitle: "Reconnect to paired daemon",
+                    title: savedConnectionCount == 1 ? "1 Saved Connection" : "\(savedConnectionCount) Saved Connections",
+                    subtitle: "Reconnect to your apps",
                     colorScheme: colorScheme
                 ) { showConnections = true }
+                .accessibilityIdentifier("pairing.saved-connections")
             }
             visionPairingHint
         }
