@@ -141,19 +141,21 @@ struct TaskMetadataHeaderView: View {
     }
 
     private var agentNames: some View {
-        VStack(alignment: .leading, spacing: Constants.Notes.Metadata.chipStackSpacing) {
-            ForEach(
-                Self.sortedAssigneeIds(note.assignedAgentIds, createdAt: resolveAgentCreatedAt),
-                id: \.self
-            ) { agentId in
-                Text(resolveAgentName(agentId) ?? Self.truncatedId(agentId))
-                    .interFont(Constants.Typography.bodyXSEmphasized)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                    .lineLimit(1)
-                    .padding(.horizontal, Constants.Notes.Metadata.chipHorizontalPadding)
-                    .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
-                    .background(Theme.muted(for: colorScheme))
-                    .clipShape(RoundedRectangle(cornerRadius: Constants.Notes.Metadata.chipCornerRadius))
+        let rows = Self.sortedAssigneeIds(note.assignedAgentIds, createdAt: resolveAgentCreatedAt).map { agentId in
+            let content = Text(resolveAgentName(agentId) ?? Self.truncatedId(agentId))
+                .interFont(Constants.Typography.bodyXSEmphasized)
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .lineLimit(1)
+                .padding(.horizontal, Constants.Notes.Metadata.chipHorizontalPadding)
+                .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
+                .background(Theme.muted(for: colorScheme))
+                .clipShape(RoundedRectangle(cornerRadius: Constants.Notes.Metadata.chipCornerRadius))
+            return (id: agentId, content: content)
+        }
+        // Resolve names and environment values on MainActor, before the row provider.
+        return VStack(alignment: .leading, spacing: Constants.Notes.Metadata.chipStackSpacing) {
+            ForEach(rows, id: \.id) { @Sendable row in
+                row.content
             }
         }
     }

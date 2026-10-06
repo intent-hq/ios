@@ -14,8 +14,9 @@ extension WorkspaceDetailView {
     }
 
     func agentTree(_ roots: [AgentSession]) -> some View {
-        ForEach(viewModel.visibleTree(roots)) { row in
-            VStack(spacing: WorkspaceDetailStyle.stackTopSpacing) {
+        // Resolve group membership, expansion and status before SwiftUI requests rows off-main.
+        let rows = viewModel.visibleTree(roots).map { row in
+            let content = VStack(spacing: WorkspaceDetailStyle.stackTopSpacing) {
                 agentButton(row.agent, indented: row.depth > 0)
                 let group = AgentListGroup.delegated(parentId: row.id)
                 if viewModel.count(for: group) > 0 || viewModel.isExpanded(group) {
@@ -31,7 +32,9 @@ extension WorkspaceDetailView {
                 }
             }
             .padding(.leading, CGFloat(max(0, row.depth - 1)) * WorkspaceDetailStyle.avatarSpacing)
+            return (id: row.id, content: content)
         }
+        return ForEach(rows, id: \.id) { @Sendable row in row.content }
     }
 
     @ViewBuilder
@@ -49,7 +52,10 @@ extension WorkspaceDetailView {
             if viewModel.isExpanded(group) {
                 agentGroupStatus(group)
                 if group == .retired {
-                    ForEach(viewModel.rows(for: group)) { agent in agentButton(agent) }
+                    let rows = viewModel.rows(for: group).map { agent in
+                        (id: agent.id, content: agentButton(agent))
+                    }
+                    ForEach(rows, id: \.id) { @Sendable row in row.content }
                 } else {
                     agentTree(viewModel.rows(for: group))
                 }

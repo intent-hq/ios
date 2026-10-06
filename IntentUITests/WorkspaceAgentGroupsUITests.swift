@@ -34,6 +34,14 @@ nonisolated final class WorkspaceAgentGroupsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["workspace.agent.groups-child"].waitForNonExistence(timeout: 15))
         XCTAssertFalse(app.buttons["workspace.agent.groups-grandchild"].exists)
 
+        // Rebuilding the parent's rows must preserve its nested expansion state.
+        reveal(app, id: "workspace.agents.children.groups-parent").tap()
+        XCTAssertTrue(app.buttons["workspace.agent.groups-child"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["workspace.agent.groups-grandchild"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.buttons["workspace.agents.children.groups-child"].value as? String, "Expanded")
+        reveal(app, id: "workspace.agents.children.groups-parent").tap()
+        XCTAssertTrue(app.buttons["workspace.agent.groups-grandchild"].waitForNonExistence(timeout: 15))
+
         reveal(app, id: "workspace.agents.background").tap()
         XCTAssertTrue(app.buttons["workspace.agent.groups-background"].waitForExistence(timeout: 15))
         XCTAssertFalse(app.buttons["workspace.agent.groups-background-child"].exists)

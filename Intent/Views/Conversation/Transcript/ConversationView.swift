@@ -322,7 +322,7 @@ private extension ConversationViewContent {
     private var nativeAgentMenu: some View {
         Menu {
             if let assistantStore {
-                AssistantHistoryMenu(store: assistantStore)
+                AssistantHistoryMenu(store: assistantStore, coordinator: coordinator)
                 Divider()
             }
             if let displayName = viewModel.currentModelDisplayName {
