@@ -36,6 +36,8 @@ final class ConversationLiveTranscript {
         }
     }
     var isLoading = false
+    var subscriptionLoadingStage: LoadingStage = .requesting
+    @ObservationIgnored var subscriptionAttempt = 0
     var streamingUpdateCount = 0
     var isTruncated = false
     var totalMessageCount = 0

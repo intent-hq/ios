@@ -14,6 +14,7 @@ extension ConversationViewModel {
     var filteredMessageIDs: Set<String> { store.liveTranscript.messageIDs }
     var isStreaming: Bool { store.isStreaming }
     var isLoading: Bool { store.isLoading }
+    var loadingStage: ConversationLiveTranscript.LoadingStage { store.loadingStage }
     /// Display-only filter: show only user-authored entries in the
     /// queued-messages section — daemon-originated wakes (hook, PR-monitor,
     /// event-notification) and agent-to-agent sends are hidden. The store

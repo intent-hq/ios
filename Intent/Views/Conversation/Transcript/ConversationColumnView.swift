@@ -91,33 +91,39 @@ struct ConversationColumnView: View {
                         + "anchor=\(viewModel.newMessagesDividerAnchorId ?? "none") consumer=\(viewModel.conversationConsumer)"
                 )
         }
-        if viewModel.isLoading, viewModel.filteredMessages.isEmpty {
-            ConversationLoadingView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if viewModel.filteredMessages.isEmpty {
-            ConversationEmptyView(viewModel: viewModel)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            ConversationTranscriptView(
-                viewModel: viewModel,
-                scrollState: transcriptScrollState,
-                onNavigateToNote: onNavigateToNote,
-                onNavigateToAgent: onNavigateToAgent
-            )
-            .environment(\.workspaceTranscriptDesign, usesWorkspaceDesign)
-            .overlay(alignment: .top) {
-                if usesWorkspaceDesign {
-                    LinearGradient(
-                        colors: [Design.Palette.background(for: colorScheme), Design.Palette.background(for: colorScheme).opacity(0)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: Design.Header.fadeHeight)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+        ZStack {
+            if viewModel.isLoading, viewModel.filteredMessages.isEmpty {
+                ConversationLoadingView(stage: viewModel.loadingStage)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(usesWorkspaceDesign ? Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme))
+                    .zIndex(1)
+            } else if viewModel.filteredMessages.isEmpty {
+                ConversationEmptyView(viewModel: viewModel)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ConversationTranscriptView(
+                    viewModel: viewModel,
+                    scrollState: transcriptScrollState,
+                    onNavigateToNote: onNavigateToNote,
+                    onNavigateToAgent: onNavigateToAgent
+                )
+                .environment(\.workspaceTranscriptDesign, usesWorkspaceDesign)
+                .overlay(alignment: .top) {
+                    if usesWorkspaceDesign {
+                        LinearGradient(
+                            colors: [Design.Palette.background(for: colorScheme), Design.Palette.background(for: colorScheme).opacity(0)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: Design.Header.fadeHeight)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                    }
                 }
             }
         }
+        // The conditional views use SwiftUI's default opacity transition.
+        .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.isLoading && viewModel.filteredMessages.isEmpty)
 
         VStack(spacing: 0) {
             accessoryRows
@@ -357,17 +363,33 @@ private struct PendingQuestionRecoveryPlaceholder: View {
 }
 
 private struct ConversationLoadingView: View {
+    let stage: ConversationLiveTranscript.LoadingStage
     @Environment(\.colorScheme) private var colorScheme
 
     private typealias Layout = Constants.Conversation.Column.Loading
 
+    private var stageText: Text {
+        switch stage {
+        case .idle: Text("Loading conversation…")
+        case .connecting: Text("Connecting…")
+        case .requesting: Text("Requesting conversation…")
+        case .receiving: Text("Receiving messages…")
+        case .retrying(let attempt): Text("Retrying (attempt \(attempt))…")
+        }
+    }
+
     var body: some View {
         VStack(spacing: Layout.contentSpacing) {
             ProgressView()
-            Text("Loading conversation...")
+            stageText
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .contentTransition(.opacity)
+                .animation(.easeInOut(duration: Layout.fadeDuration), value: stage)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(stageText)
     }
 }
 
