@@ -156,7 +156,7 @@ struct QRScannerView: View {
         // `certFingerprint=`); see PairingPayload.
         guard let payload = PairingPayload.parse(code) else {
             PairingDiagnostics.invalidInput()
-            errorMessage = "Invalid QR code. Make sure you're scanning the code from Intent Settings."
+            errorMessage = "Invalid QR code. Scan the code from Settings -> Mobile in the desktop app."
             errorAutoClearID = UUID()
             return
         }
@@ -282,7 +282,7 @@ private struct QRScannerOverlay: View {
                         .scaledToFit()
                         .frame(width: Constants.QRScanner.hintIconSize, height: Constants.QRScanner.hintIconSize)
                         .accessibilityHidden(true)
-                    Text("Point at the QR code in the Intent Settings")
+                    Text("Go to Settings -> Mobile in the desktop app to find the QR code.")
                         .interFont(Constants.Typography.bodyXS)
                 }
             }
