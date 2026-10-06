@@ -469,9 +469,6 @@ extension Constants.QRScanner {
     static let bracketArmLength: CGFloat = 70
     static let instructionTopPadding: CGFloat = 24
     static let hintIconSize: CGFloat = 16
-    static let cancelWidth: CGFloat = 92
-    static let cancelHeight: CGFloat = 48
-    static let cancelHorizontalPadding: CGFloat = 20
     static let cancelTopPadding: CGFloat = 12
 }
 

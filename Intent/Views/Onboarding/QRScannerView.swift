@@ -225,13 +225,7 @@ private struct QRScannerOverlay: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             if showsGuide { scanGuide }
-            Button("Cancel", action: onCancel)
-                .interFont(Constants.Typography.bodySEmphasized)
-                .foregroundStyle(.black)
-                .padding(.horizontal, Constants.QRScanner.cancelHorizontalPadding)
-                .frame(minWidth: Constants.QRScanner.cancelWidth, minHeight: Constants.QRScanner.cancelHeight)
-                .background(.white, in: .rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius))
-                .buttonStyle(IntentContentButtonStyle())
+            IntentIconButton(icon: .close, label: "Cancel", action: onCancel)
                 .padding(.leading, Constants.QRScanner.horizontalInset)
                 .padding(.top, Constants.QRScanner.cancelTopPadding)
         }
