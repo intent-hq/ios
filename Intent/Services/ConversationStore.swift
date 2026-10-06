@@ -27,6 +27,7 @@ import SwiftUI
         get { liveTranscript.isLoading }
         set { liveTranscript.isLoading = newValue }
     }
+    var loadingStage: ConversationLiveTranscript.LoadingStage { liveTranscript.loadingStage }
     var queuedMessages: [QueuedMessage] {
         get { commands.queuedMessages }
         set { commands.queuedMessages = newValue }

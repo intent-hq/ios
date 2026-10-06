@@ -11,6 +11,16 @@ extension DemoFixtures {
     static let startupSeenMessageId = "startup-row-25"
     private static let startupRowCount = 50
 
+    #if DEBUG
+    /// Withhold snapshots, not ACKs, to demonstrate receiving and timeout/retry
+    /// feedback. Once the file exists, the next subscription serves its snapshot.
+    static func startupSnapshotIsHeld(for method: String, params: [String: Any], arguments: [String]) -> Bool {
+        guard method == "chat.subscribe", params["agentId"] as? String == longConversationAgentId,
+              let file = triggerFile(from: arguments, prefix: "--demo-chat-delivery-trigger-file=") else { return false }
+        return !FileManager.default.fileExists(atPath: file.path)
+    }
+    #endif
+
     static var startupTranscriptMessages: [[String: Any]] {
         (0..<startupRowCount).map { index in
             [

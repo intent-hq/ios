@@ -3,6 +3,21 @@ import Foundation
 import Testing
 
 extension DemoFixturesTests {
+    #if DEBUG
+    @Test func startupSnapshotDeliveryGateIsOptInAndOpensForTheNextSubscribe() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let arguments = ["--demo-chat-delivery-trigger-file=" + file.path]
+        let params = ["agentId": DemoFixtures.longConversationAgentId]
+        #expect(!DemoFixtures.startupSnapshotIsHeld(for: "chat.subscribe", params: params, arguments: []))
+        #expect(DemoFixtures.startupSnapshotIsHeld(for: "chat.subscribe", params: params, arguments: arguments))
+        #expect(!DemoFixtures.startupSnapshotIsHeld(for: "agent.get", params: params, arguments: arguments))
+        #expect(!DemoFixtures.startupSnapshotIsHeld(for: "chat.subscribe", params: ["agentId": "another-agent"], arguments: arguments))
+        try Data().write(to: file)
+        #expect(!DemoFixtures.startupSnapshotIsHeld(for: "chat.subscribe", params: params, arguments: arguments))
+    }
+    #endif
+
     @Test func startupBarriersAreExplicitAndOnlyGateTheChosenAgentsReads() {
         let arguments = ["--demo-agent-detail-trigger-file=/tmp/metadata", "--demo-chat-snapshot-trigger-file=/tmp/snapshot"]
         let params = ["agentId": DemoFixtures.longConversationAgentId]

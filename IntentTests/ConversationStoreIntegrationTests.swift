@@ -22,11 +22,13 @@ struct ConversationStoreIntegrationTests {
     @Test(arguments: [0, 3, 50])
     func firstOpenAwaitsTheSnapshotAndNeverFetchesAPage(messageCount: Int) async throws {
         let fake = FakeConnectionManager()
+        fake.connectionState = .connected
         let store = ConversationStore(connectionManager: fake)
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
 
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(store.isLoading, "an acked registration still awaits its seq-0 snapshot")
+        #expect(store.loadingStage == .receiving)
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
         let wait = Task { await store.awaitLiveChatSnapshot() }
         try await waitUntil("the snapshot wait to park") { !store.liveTranscript.snapshotWaiters.isEmpty }
@@ -44,6 +46,7 @@ struct ConversationStoreIntegrationTests {
         #expect(store.messages.map(\.id) == messageIds)
         #expect(store.totalMessageCount == messageCount)
         #expect(!store.isLoading)
+        #expect(store.loadingStage == .idle)
         #expect(store.liveTranscript.snapshotWaiters.isEmpty)
         #expect(fake.paramsForMethod("chat.subscribe").count == 1)
         #expect(fake.paramsForMethod("chat.subscribe").first?["limit"] as? Int == 50)
@@ -61,6 +64,7 @@ struct ConversationStoreIntegrationTests {
 
         #expect(store.messages.isEmpty)
         #expect(!store.isLoading)
+        #expect(store.loadingStage == .idle, "a buffered snapshot must not be overwritten by the ack")
         #expect(store.liveTranscript.chatLive)
         try await expectNever("a re-registration after an accepted empty snapshot") {
             fake.paramsForMethod("chat.subscribe").count > 1
@@ -72,6 +76,7 @@ struct ConversationStoreIntegrationTests {
     /// schedule, whose snapshot then lands.
     @Test func missingSnapshotTimesOutAndResubscribesWithBackoff() async throws {
         let fake = FakeConnectionManager()
+        fake.connectionState = .connected
         let store = ConversationStore(connectionManager: fake)
         store.liveTranscript.snapshotTimeout = .milliseconds(50)
         store.liveTranscript.initialRetryDelay = .milliseconds(20)
@@ -82,10 +87,13 @@ struct ConversationStoreIntegrationTests {
         #expect(store.isLoading)
         // Park the retry's registration so the intermediate state is observed
         // before its snapshot can land.
-        fake.pendingMethods.insert("chat.subscribe")
+        fake.pendingMethods = ["chat.unsubscribe", "chat.subscribe"]
         fake.stubChatSnapshot(subscriptionId: "sub-2", messages: [conversationRow(id: "msg-1", text: "Hello")])
 
         await store.awaitLiveChatSnapshot()
+        try await fake.waitForPendingRequests("chat.unsubscribe")
+        #expect(store.loadingStage == .retrying(attempt: 2))
+        fake.resolvePending("chat.unsubscribe", with: [String: Any]())
         try await fake.waitForPendingRequests("chat.subscribe")
         #expect(store.isLoading, "the load stays open across the retry")
 
@@ -105,18 +113,21 @@ struct ConversationStoreIntegrationTests {
     /// the delay per consecutive failure.
     @Test func rejectedSubscribeRetriesWithBackoff() async throws {
         let fake = FakeConnectionManager()
+        fake.connectionState = .connected
         let store = ConversationStore(connectionManager: fake)
         store.liveTranscript.initialRetryDelay = .milliseconds(20)
         fake.errorMap["chat.subscribe"] = NSError(domain: "WebSocket", code: -32_000)
 
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(!store.liveTranscript.chatChannelActive)
+        #expect(store.loadingStage == .retrying(attempt: 2))
         #expect(store.liveTranscript.nextRetryDelay == .milliseconds(40))
 
         try await fake.waitForRequests("chat.subscribe", count: 2)
         try await waitUntil("the second failure to schedule a longer retry") {
             store.liveTranscript.nextRetryDelay == .milliseconds(80)
         }
+        #expect(store.loadingStage == .retrying(attempt: 3))
 
         fake.errorMap.removeValue(forKey: "chat.subscribe")
         fake.stubChatSnapshot(messages: [conversationRow(id: "msg-1", text: "Hello")])
@@ -125,6 +136,12 @@ struct ConversationStoreIntegrationTests {
         #expect(store.liveTranscript.nextRetryDelay == nil)
         #expect(fake.paramsForMethod("chat.subscribe").allSatisfy { $0["limit"] as? Int == 50 })
         #expect(!fake.didCallMethod("agent.getConversation"), "a rejected registration retries, it never fetches")
+
+        store.reset()
+        fake.errorMap["chat.subscribe"] = NSError(domain: "WebSocket", code: -32_000)
+        await store.subscribeLiveChat(agentId: "agent-2", workspaceId: "ws-1")
+        #expect(store.loadingStage == .retrying(attempt: 2), "a new load starts its attempt count over")
+        store.reset()
     }
 
     /// A delayed empty snapshot over a populated transcript is rejected: the

@@ -69,6 +69,28 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Snapshot application
 
+    @Test func loadingStageTracksConnectionAndIgnoresAckAfterReset() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.pendingMethods = ["chat.subscribe"]
+        fake.responseMap["chat.unsubscribe"] = [String: Any]()
+        let subscribe = Task { await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1") }
+        defer {
+            store.reset()
+            fake.failPending("chat.subscribe", with: CancellationError())
+        }
+        try await fake.waitForPendingRequests("chat.subscribe")
+        #expect(store.loadingStage == .connecting)
+
+        fake.connectionState = .connected
+        #expect(store.loadingStage == .requesting)
+        store.reset()
+        #expect(store.loadingStage == .idle)
+        fake.resolvePending("chat.subscribe", with: ["subscriptionId": "stale-sub"])
+        await subscribe.value
+        #expect(store.loadingStage == .idle, "a late ack must not restore the receiving stage")
+    }
+
     @Test func appliesObjectShapedSnapshot() async {
         let (store, _) = makeStore()
 

@@ -1,5 +1,7 @@
 import Foundation
 @testable import Intent
+import Observation
+import Synchronization
 import Testing
 
 extension ConversationViewModelTests {
@@ -230,6 +232,30 @@ extension ConversationViewModelTests {
             viewModel.newMessagesDividerAnchorId == "m1",
             "the divider anchors against the retried registration's snapshot"
         )
+    }
+
+    @Test func loadingStageChangesInvalidateTheViewModel() async throws {
+        let (viewModel, fake) = makeLoadableVM()
+        fake.connectionState = .connected
+        fake.pendingMethods = ["chat.subscribe"]
+        let subscribe = Task { await viewModel.store.subscribeLiveChat(agentId: viewModel.agentId) }
+        defer {
+            viewModel.store.reset()
+            fake.failPending("chat.subscribe", with: CancellationError())
+        }
+        try await fake.waitForPendingRequests("chat.subscribe")
+        #expect(viewModel.loadingStage == .requesting)
+        let stageChanges = Mutex(0)
+        withObservationTracking {
+            _ = viewModel.loadingStage
+        } onChange: {
+            stageChanges.withLock { $0 += 1 }
+        }
+
+        fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-2"])
+        await subscribe.value
+        #expect(viewModel.loadingStage == .receiving)
+        #expect(stageChanges.withLock { $0 } == 1, "the forwarded stage invalidates the loading view")
     }
 
     // MARK: - The chat channel is the transcript's only source

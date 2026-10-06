@@ -336,6 +336,9 @@ enum DemoFixtures {
 extension DemoFixtures {
     /// Chat snapshots, plus opt-in design scenario updates after commands.
     static func subscriptionPush(for method: String, params: [String: Any]) -> SubscriptionPush? {
+        #if DEBUG
+        if startupSnapshotIsHeld(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return nil }
+        #endif
         if let push = designScenario?.subscriptionPush(for: method, params: params) { return push }
         guard method == "chat.subscribe" else { return nil }
         let agentId = params["agentId"] as? String

@@ -1,6 +1,20 @@
 import Foundation
 
 extension ConversationLiveTranscript {
+    enum LoadingStage: Equatable {
+        case idle
+        case connecting
+        case requesting
+        case receiving
+        case retrying(attempt: Int)
+    }
+
+    var loadingStage: LoadingStage {
+        guard isLoading else { return .idle }
+        guard connectionManager.connectionState == .connected else { return .connecting }
+        return subscriptionLoadingStage
+    }
+
     /// Registers the sole transcript source: `chat.subscribe`, whose seq-0
     /// snapshot replaces the transcript and whose deltas keep it current.
     /// Returns once the registration is acked (its snapshot is then awaited
@@ -8,8 +22,11 @@ extension ConversationLiveTranscript {
     /// backoff retry is then scheduled). A registration opened over an empty
     /// transcript raises `isLoading` until its snapshot lands.
     func subscribe(agentId: String, workspaceId: String? = nil) async {
+        if self.agentId != agentId { subscriptionAttempt = 0 }
         bind(agentId: agentId, workspaceId: workspaceId)
         let generation = openRegistration()
+        subscriptionAttempt += 1
+        subscriptionLoadingStage = .requesting
         chatChannelActive = true
         chatSeeded = false
         snapshotPending = true
@@ -105,6 +122,7 @@ extension ConversationLiveTranscript {
             )
             // A snapshot that raced the ack has already seeded the channel.
             guard !chatSeeded else { return }
+            subscriptionLoadingStage = .receiving
             armSnapshotTimeout(generation: generation)
         case .success(nil):
             clearChannel()
@@ -155,6 +173,7 @@ extension ConversationLiveTranscript {
     }
 
     func prepareForReconnect() {
+        subscriptionLoadingStage = .requesting
         chatLive = false
         incrementalDeltas = false
         useFullDeltaEncoding = false
@@ -221,6 +240,8 @@ extension ConversationLiveTranscript {
     }
 
     private func scheduleRetry(generation: Int) {
+        // Include the initial registration: the first retry is attempt 2.
+        subscriptionLoadingStage = .retrying(attempt: subscriptionAttempt + 1)
         retryTask?.cancel()
         let delay = nextRetryDelay ?? initialRetryDelay
         nextRetryDelay = min(delay * 2, maxRetryDelay)
@@ -249,6 +270,7 @@ extension ConversationLiveTranscript {
     func resetBackoff() {
         cancelSnapshotRecovery()
         nextRetryDelay = nil
+        subscriptionAttempt = 0
     }
 
     // MARK: - Releasing registrations
