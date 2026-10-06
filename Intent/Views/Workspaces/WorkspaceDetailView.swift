@@ -22,6 +22,7 @@ struct WorkspaceDetailView: View {
     @State private var noteStore: NoteStore
     @State private var scriptStore: WorkspaceScriptStore
     @State private var changesStore: WorkspaceChangesStore
+    @State private var titleEditor = WorkspaceTitleEditor()
     @Environment(BackendSession.self) private var session
 
     init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared) {
@@ -58,9 +59,11 @@ struct WorkspaceDetailView: View {
     private var workspace: Workspace? { workspaceStore.workspaces.first { $0.id == workspaceId } }
 
     private var workspaceTitle: String {
-        guard let title = workspace?.title, !title.trimmingCharacters(in: .whitespaces).isEmpty else { return "<Untitled>" }
+        guard let title = workspace?.title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "" }
         return title
     }
+
+    private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
 
     private var lifecycleContent: some View {
         ZStack {
@@ -81,6 +84,7 @@ struct WorkspaceDetailView: View {
             Task { await noteStore.fetchNotes(workspaceId: workspaceId) }
         }
         .onDisappear {
+            titleEditor.cancel()
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
             // Remove only this workspace/connection pair, preserving other windows.
             if let connectionId = session.backendID?.connectionID {
@@ -91,6 +95,7 @@ struct WorkspaceDetailView: View {
             }
         }
         .onChange(of: workspaceId) { oldId, newId in
+            titleEditor.cancel()
             scriptStore.cancelPendingLaunch(workspaceId: oldId)
             terminalCreationRequest = nil
             selectedTerminal = nil
@@ -143,6 +148,11 @@ struct WorkspaceDetailView: View {
 
     var body: some View {
         lifecycleContent
+        .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
+            if titleEditor.isEditing {
+                WorkspaceTitleEditingControls(editor: titleEditor, onSave: saveTitle)
+            }
+        }
         #if os(visionOS)
         // Deliberate confirmation sheets (HIG): destructive/irreversible
         // workspace actions get a focused sheet with one primary action.
@@ -192,7 +202,7 @@ struct WorkspaceDetailView: View {
                 if workspaceStore.lastUpdated != nil, workspace == nil { coordinator.handleMissingWorkspace() }
             },
             content: {
-                WorkspaceTransferSheet(workspaceId: workspaceId, workspaceTitle: workspaceTitle, session: session)
+                WorkspaceTransferSheet(workspaceId: workspaceId, workspaceTitle: workspaceName, session: session)
                     .environment(coordinator)
                     .id(workspaceId)
             }
@@ -220,7 +230,7 @@ struct WorkspaceDetailView: View {
                 terminalStore.clearError(workspaceId: workspaceId)
             },
             content: { terminal in
-                MobileTerminalView(terminal: terminal, workspaceName: workspaceTitle, store: terminalStore)
+                MobileTerminalView(terminal: terminal, workspaceName: workspaceName, store: terminalStore)
             }
         )
         .alert("Terminal unavailable", isPresented: Binding(
@@ -231,7 +241,7 @@ struct WorkspaceDetailView: View {
         } message: {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
-        .navigationTitle(workspaceTitle)
+        .navigationTitle(workspaceName)
         .toolbarTitleDisplayMode(.inline)
         #if !os(visionOS)
         .navigationBarBackButtonHidden()
@@ -259,12 +269,20 @@ struct WorkspaceDetailView: View {
             .intentToolbarSurface()
         }
         #if !os(visionOS)
-        .workspacePhoneNavigation(title: workspaceTitle, onBack: coordinator.onBackToWorkspaceList) { workspaceActions }
+        .workspacePhoneNavigation(
+            title: workspaceTitle,
+            createdAt: workspace?.createdAt,
+            onBack: coordinator.onBackToWorkspaceList
+        ) { workspaceActions }
         #endif
     }
 }
 
 private extension WorkspaceDetailView {
+    func saveTitle() {
+        Task { await titleEditor.save(connection: session.connection, store: workspaceStore) }
+    }
+
     func restoreSelectedTab(workspaceId: String) {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
@@ -278,9 +296,11 @@ private extension WorkspaceDetailView {
 
     var toolbarTitle: some View {
         VStack(spacing: WorkspaceDetailStyle.tabInset) {
-            Text(workspaceTitle)
-                .interFont(Constants.Typography.bodyXSEmphasized)
-                .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+            WorkspaceTitle(title: workspaceTitle, createdAt: workspace?.createdAt) { title in
+                Text(title)
+                    .interFont(Constants.Typography.bodyXSEmphasized)
+            }
+            .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
             Text("Workspace")
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme))
@@ -330,7 +350,9 @@ private extension WorkspaceDetailView {
                     workspaceId: workspaceId,
                     workspace: workspace,
                     title: workspaceTitle,
-                    selection: $selectedTab
+                    selection: $selectedTab,
+                    titleEditor: titleEditor,
+                    onSaveTitle: saveTitle
                 )
                 tabContent
             }
