@@ -4,6 +4,11 @@ import Lottie
 /// The supplied compositions, decoded without Lottie's process-wide cache so
 /// their lifetime remains bounded by the visible splash's lease (ios#256).
 struct SplashAnimation {
+    enum PlaybackMode {
+        case twistThenPulse
+        case pulse
+    }
+
     let twist: LottieAnimation
     let pulse: LottieAnimation
 
@@ -24,17 +29,18 @@ struct SplashAnimation {
         self.pulse = pulse
     }
 
-    /// Play the entire twist once, then loop pulse using each JSON's own timing.
+    /// Optionally play the entire twist once, then loop pulse using each JSON's own timing.
     /// Pulse's first frame is a complete mark; twist's first frame is empty.
     func frame(
-        at elapsedTime: TimeInterval, animated: Bool
+        at elapsedTime: TimeInterval, animated: Bool, mode: PlaybackMode = .twistThenPulse
     ) -> (animation: LottieAnimation, frame: AnimationFrameTime) {
         guard animated else { return (pulse, pulse.startFrame) }
         let elapsed = elapsedTime.isFinite ? max(0, elapsedTime) : 0
-        if elapsed < twist.duration {
+        let introDuration = mode == .twistThenPulse ? twist.duration : 0
+        if elapsed < introDuration {
             return (twist, twist.frameTime(forTime: elapsed))
         }
-        let loopTime = (elapsed - twist.duration).truncatingRemainder(dividingBy: pulse.duration)
+        let loopTime = (elapsed - introDuration).truncatingRemainder(dividingBy: pulse.duration)
         return (pulse, pulse.frameTime(forTime: loopTime))
     }
 }

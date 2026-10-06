@@ -67,6 +67,7 @@ extension Constants.Conversation.Column {
     }
 
     enum Loading {
+        static let markDimension: CGFloat = 48
         static let contentSpacing: CGFloat = 12
         static let fadeDuration: Double = 0.2
     }

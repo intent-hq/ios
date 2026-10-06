@@ -30,7 +30,7 @@ struct QueuedMessagesView: View {
                 queuedMessageRow(message)
             }
         }
-        .background(Theme.card(for: colorScheme).opacity(Layout.backgroundOpacity))
+        .background(Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : Layout.backgroundOpacity))
     }
 
     @ViewBuilder

@@ -79,7 +79,7 @@ struct MessageInputView: View {
                 RoundedRectangle(cornerRadius: workspaceCornerRadius)
                     .fill(Constants.Conversation.Design.Palette.surface(for: colorScheme))
             } else {
-                Theme.card(for: colorScheme)
+                Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1)
             }
         }
         .photosPicker(

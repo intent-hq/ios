@@ -368,30 +368,30 @@ extension ConversationTranscriptScrollUITests {
     }
 
     private var startupMetadataGate: URL { hooksRowTriggerFile.appendingPathExtension("metadata") }
-    private var startupSnapshotGate: URL { hooksRowTriggerFile.appendingPathExtension("snapshot") }
+    var startupSnapshotGate: URL { hooksRowTriggerFile.appendingPathExtension("snapshot") }
 
     @MainActor
-    private func launchStartupConversation(metadataReady: Bool = false, holdSnapshot: Bool = false) throws -> XCUIApplication {
+    func launchStartupConversation(metadataReady: Bool = false, holdSnapshot: Bool = false, appearance: String? = nil) throws -> XCUIApplication {
         try? FileManager.default.removeItem(at: startupMetadataGate)
         try? FileManager.default.removeItem(at: startupSnapshotGate)
         if metadataReady { try Data().write(to: startupMetadataGate) }
         var arguments = ["--demo-startup-transcript", "--demo-agent-detail-trigger-file=" + startupMetadataGate.path]
         if holdSnapshot { arguments.append("--demo-chat-snapshot-trigger-file=" + startupSnapshotGate.path) }
-        return launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile, extraArguments: arguments)
+        return launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile, extraArguments: arguments + (appearance.map { ["-appThemePreference", $0] } ?? []))
     }
 
     @MainActor
-    private func finishStartup(_ app: XCUIApplication) {
+    func finishStartup(_ app: XCUIApplication) {
         app.terminate()
         try? FileManager.default.removeItem(at: startupMetadataGate)
         try? FileManager.default.removeItem(at: startupSnapshotGate)
     }
 
     @MainActor
-    private func startupControl(_ app: XCUIApplication) -> XCUIElement { app.buttons["demo.conversation.cover"].firstMatch }
+    func startupControl(_ app: XCUIApplication) -> XCUIElement { app.buttons["demo.conversation.cover"].firstMatch }
 
     @MainActor
-    private func startupReport(_ app: XCUIApplication) -> String { startupControl(app).value as? String ?? "" }
+    func startupReport(_ app: XCUIApplication) -> String { startupControl(app).value as? String ?? "" }
 
     @MainActor
     private func assertStartupViewportStays(

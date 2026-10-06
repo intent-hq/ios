@@ -63,7 +63,7 @@ struct ConversationColumnView: View {
             questionSheet
         }
         #endif
-        .background((usesWorkspaceDesign ? Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme)).ignoresSafeArea())
+        .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
             value: viewModel.store.isWaitingForAgents
@@ -92,10 +92,9 @@ struct ConversationColumnView: View {
                 )
         }
         ZStack {
-            if viewModel.isLoading, viewModel.filteredMessages.isEmpty {
+            if viewModel.showsLoadingState {
                 ConversationLoadingView(stage: viewModel.loadingStage)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(usesWorkspaceDesign ? Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme))
                     .zIndex(1)
             } else if viewModel.filteredMessages.isEmpty {
                 ConversationEmptyView(viewModel: viewModel)
@@ -123,7 +122,7 @@ struct ConversationColumnView: View {
             }
         }
         // The conditional views use SwiftUI's default opacity transition.
-        .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.isLoading && viewModel.filteredMessages.isEmpty)
+        .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)
 
         VStack(spacing: 0) {
             accessoryRows
@@ -343,6 +342,25 @@ struct ConversationColumnView: View {
     #endif
 }
 
+/// Owned by the screen outside its top safe-area inset, not by the transcript slot.
+struct ConversationBackground: View {
+    let isLoading: Bool
+    let usesWorkspaceDesign: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            (usesWorkspaceDesign ? Constants.Conversation.Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme))
+            if isLoading {
+                SplashBackground()
+                    .transition(.opacity)
+            }
+        }
+        .ignoresSafeArea()
+        .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: isLoading)
+    }
+}
+
 private struct PendingQuestionRecoveryPlaceholder: View {
     @Environment(\.colorScheme) private var colorScheme
 
@@ -380,7 +398,7 @@ private struct ConversationLoadingView: View {
 
     var body: some View {
         VStack(spacing: Layout.contentSpacing) {
-            ProgressView()
+            IntentLoadingIndicator(size: Layout.markDimension, playbackMode: .pulse)
             stageText
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))

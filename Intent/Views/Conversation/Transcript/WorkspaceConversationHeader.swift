@@ -48,6 +48,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 
 struct WorkspaceConversationHeader<Actions: View>: View {
     let title: String
+    var showsBackground = true
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
 
@@ -57,6 +58,7 @@ struct WorkspaceConversationHeader<Actions: View>: View {
             subtitle: "Agent",
             backLabel: "Back",
             backIdentifier: "conversation.back",
+            showsBackground: showsBackground,
             onBack: onBack,
             actions: actions
         )
@@ -69,6 +71,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     let subtitle: LocalizedStringKey
     let backLabel: LocalizedStringKey
     let backIdentifier: String
+    var showsBackground = true
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
     let onBack: () -> Void
@@ -80,7 +83,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
 
     var body: some View {
         windowAdaptedControls
-            .background(Design.Palette.background(for: colorScheme))
+            .background(Design.Palette.background(for: colorScheme).opacity(showsBackground ? 1 : 0))
     }
 
     @ViewBuilder

@@ -216,12 +216,19 @@ private extension ConversationViewContent {
     private var conversationChrome: some View {
         legacyConversationChrome
             .navigationBarBackButtonHidden(assistantStore == nil)
+            .toolbarBackground(viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
             .nativeNavigationBackGesture(isEnabled: !usesWorkspaceDesign || !answeringWorkspaceQuestions)
             #if os(iOS)
             .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar, .tabBar)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if usesWorkspaceDesign {
-                    WorkspaceConversationHeader(title: viewModel.agentName, onBack: { dismiss() }, actions: { agentMenu })
+                    WorkspaceConversationHeader(
+                        title: viewModel.agentName,
+                        showsBackground: !viewModel.showsLoadingState,
+                        onBack: { dismiss() },
+                        actions: { agentMenu }
+                    )
+                    .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: viewModel.showsLoadingState)
                 }
             }
             .modifier(WorkspaceQuestionPresentation(
@@ -230,6 +237,9 @@ private extension ConversationViewContent {
                 isEnabled: usesWorkspaceDesign
             ))
             #endif
+            .background {
+                ConversationBackground(isLoading: viewModel.showsLoadingState, usesWorkspaceDesign: usesWorkspaceDesign)
+            }
     }
 
     private var legacyConversationChrome: some View {
