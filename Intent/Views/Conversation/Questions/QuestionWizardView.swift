@@ -11,6 +11,7 @@ struct QuestionWizardView: View {
     let workspaceAvailableHeight: CGFloat?
     let onComplete: ([QuestionAnswer]) -> Void
     var onDismiss: (() -> Void)?
+    var onCollapse: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -26,6 +27,7 @@ struct QuestionWizardView: View {
     }
 
     @State private var idx = 0
+    @State private var movingForward = true
     @State private var drafts: [DraftAnswer]
     @State private var submitted = false
     @State private var confirmingDismiss = false
@@ -40,7 +42,8 @@ struct QuestionWizardView: View {
         containerHeight: CGFloat = 0,
         workspaceAvailableHeight: CGFloat? = nil,
         onComplete: @escaping ([QuestionAnswer]) -> Void,
-        onDismiss: (() -> Void)? = nil
+        onDismiss: (() -> Void)? = nil,
+        onCollapse: (() -> Void)? = nil
     ) {
         self.questions = questions
         self._collapsed = collapsed
@@ -48,6 +51,7 @@ struct QuestionWizardView: View {
         self.workspaceAvailableHeight = workspaceAvailableHeight
         self.onComplete = onComplete
         self.onDismiss = onDismiss
+        self.onCollapse = onCollapse
         _drafts = State(initialValue: questions.map { _ in DraftAnswer() })
     }
 
@@ -57,9 +61,6 @@ struct QuestionWizardView: View {
     private var multiStep: Bool { questions.count > 1 }
     private var hasFreeText: Bool {
         !drafts[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-    private var showNext: Bool {
-        Self.showsNext(isMulti: isMulti, isLast: isLast, hasFreeText: hasFreeText)
     }
     private var nextDisabled: Bool {
         (workspaceAvailableHeight != nil || isMulti || isLast) && drafts[idx].sel.isEmpty && !hasFreeText
@@ -76,33 +77,45 @@ struct QuestionWizardView: View {
     var body: some View {
         Group {
             if let workspaceAvailableHeight, !questions.isEmpty {
-                VStack(spacing: Design.Composer.keyboardBottomSpacing) {
-                    WorkspaceQuestionStepView(
-                        question: current,
-                        index: idx,
-                        questionCount: questions.count,
-                        selectedIndices: drafts[idx].sel,
-                        availableHeight: max(0, workspaceAvailableHeight - answerComposerHeight - Design.Composer.keyboardBottomSpacing * 2),
-                        onSelect: selectOption,
-                        footer: workspaceFooter
-                    )
-                    .id(idx)
-                    .background(Design.Palette.surface(for: colorScheme), in: .rect(cornerRadius: Design.cornerRadius))
-                    .clipShape(.rect(cornerRadius: Design.cornerRadius))
-                    WorkspaceQuestionFreeText(
-                        text: $drafts[idx].text,
-                        focused: $answerFocused,
-                        onTextChange: markCurrentDraftUnskipped
-                    )
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { answerComposerHeight = $0 }
+                if !collapsed {
+                    VStack(spacing: Design.Composer.keyboardBottomSpacing) {
+                        QuestionCardPager(count: questions.count, index: idx, cornerRadius: Design.cornerRadius, movingForward: movingForward) { step in
+                            WorkspaceQuestionStepView(
+                                question: questions[step],
+                                index: step,
+                                questionCount: questions.count,
+                                selectedIndices: drafts[step].sel,
+                                availableHeight: max(0, workspaceAvailableHeight - answerComposerHeight - Design.Composer.keyboardBottomSpacing * 2),
+                                onSelect: selectOption,
+                                footer: footer(for: step, usesWorkspaceDesign: true),
+                                onCollapse: onCollapse
+                            )
+                        }
+                        .modifier(WorkspaceQuestionSurface())
+                        WorkspaceQuestionFreeText(
+                            text: $drafts[idx].text,
+                            focused: $answerFocused,
+                            onTextChange: markCurrentDraftUnskipped
+                        )
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { answerComposerHeight = $0 }
+                    }
+                    .disabled(submitted)
+                    .padding(.horizontal, answerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset)
+                    .padding(.bottom, Design.Composer.keyboardBottomSpacing)
                 }
-                .disabled(submitted)
-                .padding(.horizontal, answerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset)
-                .padding(.bottom, Design.Composer.keyboardBottomSpacing)
             } else {
                 legacyWizard
             }
         }
+        .onChange(of: collapsed) { _, collapsed in
+            if collapsed { answerFocused = false }
+        }
+        .animation(
+            reduceMotion
+                ? .easeOut(duration: Constants.Conversation.QuestionWizard.Paging.crossfadeDuration)
+                : Design.Question.transitionAnimation,
+            value: idx
+        )
     }
 
     private var legacyWizard: some View {
@@ -119,7 +132,6 @@ struct QuestionWizardView: View {
                 )
         )
         .frame(maxWidth: .infinity)
-        .animation(wizardAnimation, value: idx)
         .animation(wizardAnimation, value: collapsed)
         .confirmationDialog(
             "Dismiss questions?",
@@ -155,62 +167,61 @@ struct QuestionWizardView: View {
                 usesWorkspaceDesign: workspaceAvailableHeight != nil
             )
         } else {
+            QuestionCardPager(count: questions.count, index: idx, cornerRadius: surfaceCornerRadius, movingForward: movingForward) { step in
+                legacyCard(for: step)
+            }
+        }
+    }
+
+    private func legacyCard(for step: Int) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             QuestionWizardHeaderRow(
                 questionCount: questions.count,
-                index: idx,
-                isMulti: isMulti,
+                index: step,
+                isMulti: questions[step].multiSelect,
                 showsDismiss: onDismiss != nil,
                 dismissed: dismissed,
                 onIgnore: { collapsed = true },
                 onDismiss: { confirmingDismiss = true }
             )
             QuestionStepView(
-                step: idx,
-                question: current,
-                selectedIndices: $drafts[idx].sel,
-                freeText: $drafts[idx].text,
-                isMulti: isMulti,
-                contentHeight: stepContentHeights[idx],
+                step: step,
+                question: questions[step],
+                selectedIndices: $drafts[step].sel,
+                freeText: $drafts[step].text,
+                isMulti: questions[step].multiSelect,
+                contentHeight: stepContentHeights[step],
                 maximumHeight: stepBodyMaxHeight,
                 onContentHeight: { step, height in
                     stepContentHeights[step] = height
                 },
                 onSelect: selectOption,
                 onSubmit: handleNext,
-                onTextChange: markCurrentDraftUnskipped
+                onTextChange: { drafts[step].skipped = false },
+                isActive: step == idx && !collapsed
             )
-                .id(idx)
-                .transition(.opacity)
-            QuestionWizardFooterRow(
-                index: idx,
-                multiStep: multiStep,
-                isMulti: isMulti,
-                isLast: isLast,
-                showNext: showNext,
-                nextDisabled: nextDisabled,
-                submitted: submitted,
-                dismissed: dismissed,
-                onBack: handleBack,
-                onSkip: handleSkip,
-                onNext: handleNext
-            )
+            footer(for: step)
         }
     }
 
-    private var workspaceFooter: some View {
-        QuestionWizardFooterRow(
-            index: idx,
+    private func footer(for step: Int, usesWorkspaceDesign: Bool = false) -> some View {
+        let isMulti = questions[step].multiSelect
+        let isLast = step == questions.count - 1
+        let hasText = !drafts[step].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return QuestionWizardFooterRow(
+            index: step,
             multiStep: multiStep,
             isMulti: isMulti,
             isLast: isLast,
-            showNext: true,
-            nextDisabled: nextDisabled,
+            showNext: usesWorkspaceDesign || Self.showsNext(isMulti: isMulti, isLast: isLast, hasFreeText: hasText),
+            nextDisabled: (usesWorkspaceDesign || isMulti || isLast) && drafts[step].sel.isEmpty && !hasText,
             submitted: submitted,
             dismissed: dismissed,
             onBack: handleBack,
             onSkip: handleSkip,
             onNext: handleNext,
-            usesWorkspaceDesign: true
+            usesWorkspaceDesign: usesWorkspaceDesign,
+            backVisible: idx > 0
         )
     }
 
@@ -232,6 +243,7 @@ struct QuestionWizardView: View {
             onComplete(buildAnswers())
             return
         }
+        movingForward = true
         idx += 1
     }
 
@@ -268,6 +280,7 @@ struct QuestionWizardView: View {
     }
 
     private func handleBack() {
+        movingForward = false
         idx = max(idx - 1, 0)
     }
 
@@ -300,7 +313,10 @@ struct QuestionWizardView: View {
     }
 
     private var wizardAnimation: Animation? {
-        reduceMotion && workspaceAvailableHeight != nil
-            ? nil : .easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration)
+        if reduceMotion {
+            return workspaceAvailableHeight != nil
+                ? nil : .easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration)
+        }
+        return Design.Question.transitionAnimation
     }
 }

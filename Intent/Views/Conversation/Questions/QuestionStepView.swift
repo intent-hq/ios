@@ -13,6 +13,7 @@ struct QuestionStepView: View {
     let onSelect: (Int) -> Void
     let onSubmit: () -> Void
     let onTextChange: () -> Void
+    var isActive = true
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -61,6 +62,9 @@ struct QuestionStepView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxHeight: contentHeight.map { min($0, maximumHeight) } ?? maximumHeight)
+        .onChange(of: isActive) { _, active in
+            if !active { freeTextFocused = false }
+        }
     }
 
     @ViewBuilder

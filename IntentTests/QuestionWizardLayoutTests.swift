@@ -8,6 +8,61 @@ import UIKit
     await SyntheticBadgeHost.publishesAccessibilityTree()
 })
 struct QuestionWizardLayoutTests {
+    @Test func composerPagingAutoAdvancesAndRestoresSelection() async throws {
+        let questions = [
+            Question(attachmentId: "first", header: "First", question: "Choose a direction", options: [
+                QuestionOption(label: "Forward"), QuestionOption(label: "Wait")
+            ]),
+            Question(attachmentId: "last", header: "Last", question: "Choose a check", options: [
+                QuestionOption(label: "Build"), QuestionOption(label: "Review")
+            ])
+        ]
+        let wizard = QuestionWizardView(questions: questions, collapsed: .constant(false)) { _ in }
+        try await SyntheticBadgeHost.render(wizard, width: 390, height: 700, safeAreaRegions: []) { host, _ in
+            #expect(button("Back", in: host) == nil)
+            #expect(button("Build", in: host) == nil, "Offscreen pages must not be exposed to VoiceOver")
+            let forward = try #require(button("Forward", in: host))
+            #expect(forward.accessibilityActivate())
+            let build = try waitForButton("Build", in: host)
+            #expect(host.convert(host.bounds, to: nil).contains(build.accessibilityFrame))
+            waitForRemoval("Forward", in: host)
+            #expect(button("Forward", in: host) == nil)
+            let back = try #require(button("Back", in: host))
+            #expect(back.accessibilityActivate())
+            let restored = try waitForButton("Forward", in: host)
+            #expect(restored.accessibilityValue == "Selected")
+            waitForRemoval("Build", in: host)
+            #expect(button("Back", in: host) == nil)
+            #expect(button("Build", in: host) == nil)
+        }
+    }
+
+    private func button(_ label: String, in host: UIView) -> NSObject? {
+        SyntheticBadgeHost.accessibilityElements(in: host).first { element in
+            element.accessibilityLabel == label && element.accessibilityTraits.contains(.button)
+        }
+    }
+
+    private func waitForButton(_ label: String, in host: UIView) throws -> NSObject {
+        let deadline = Date(timeIntervalSinceNow: 2)
+        while Date() < deadline {
+            if let control = button(label, in: host), host.convert(host.bounds, to: nil).contains(control.accessibilityFrame) {
+                return control
+            }
+            _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01))
+            host.layoutIfNeeded()
+        }
+        return try #require(button(label, in: host))
+    }
+
+    private func waitForRemoval(_ label: String, in host: UIView) {
+        let deadline = Date(timeIntervalSinceNow: 2)
+        while button(label, in: host) != nil, Date() < deadline {
+            _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01))
+            host.layoutIfNeeded()
+        }
+    }
+
     @Test(arguments: [CGFloat(320), CGFloat(390), CGFloat(600)])
     func cardsStayStackedAndScrollVerticallyWhenHeightIsLimited(width: CGFloat) async throws {
         let tall = try await render(width: width, height: 1000)
@@ -101,15 +156,17 @@ struct QuestionWizardLayoutTests {
         height: CGFloat,
         typeSize: DynamicTypeSize = .large
     ) async throws -> Rendered {
-        let view = WorkspaceQuestionStepView(
-            question: question,
-            index: 0,
-            questionCount: 1,
-            selectedIndices: [0],
-            availableHeight: height,
-            onSelect: { _ in },
-            footer: footer
-        )
+        let view = QuestionCardPager(count: 2, index: 0, cornerRadius: Constants.Conversation.Design.cornerRadius) { step in
+            WorkspaceQuestionStepView(
+                question: question,
+                index: step,
+                questionCount: 2,
+                selectedIndices: [0],
+                availableHeight: height,
+                onSelect: { _ in },
+                footer: footer
+            )
+        }
         .environment(\.dynamicTypeSize, typeSize)
         // This models the question region after the parent has already resolved safe areas.
         return try await SyntheticBadgeHost.render(view, width: width, height: height, safeAreaRegions: []) { hostView, _ in
@@ -148,6 +205,10 @@ struct QuestionWizardLayoutTests {
 
     private func inspect(_ hostView: UIView) throws -> Rendered {
         let elements = SyntheticBadgeHost.accessibilityElements(in: hostView)
+        let answerControls = elements.filter { element in
+            SyntheticBadgeHost.accessibilityIdentifier(of: element)?.hasPrefix("question.option.") == true
+        }
+        #expect(answerControls.count == 4, "Only the active card's answers should be exposed to accessibility")
         let first = try #require(elements.first { element in
             SyntheticBadgeHost.accessibilityIdentifier(of: element) == "question.option.0"
         })
