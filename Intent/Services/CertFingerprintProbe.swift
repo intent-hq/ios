@@ -175,7 +175,7 @@ enum CertFingerprintProbe {
         let tlsOptions = NWProtocolTLS.Options()
         sec_protocol_options_set_verify_block(
             tlsOptions.securityProtocolOptions,
-            { _, trustRef, complete in
+            { @Sendable _, trustRef, complete in
                 let serverTrust = sec_trust_copy_ref(trustRef).takeRetainedValue()
                 if let fingerprint = fingerprint(fromServerTrust: serverTrust) {
                     state.captured.withLock { $0 = fingerprint }
@@ -190,7 +190,7 @@ enum CertFingerprintProbe {
             port: port,
             using: NWParameters(tls: tlsOptions)
         )
-        connection.stateUpdateHandler = { connectionState in
+        connection.stateUpdateHandler = { @Sendable connectionState in
             switch connectionState {
             case .setup, .preparing:
                 break
@@ -247,11 +247,10 @@ enum CertFingerprintProbe {
     /// unreachable host, TLS handshake failure, or a handshake that presented
     /// no certificate.
     ///
-    /// Must be nonisolated: the module's default actor isolation is MainActor,
-    /// and the verify block / stateUpdateHandler closures formed here inherit
-    /// the function's isolation. boringssl invokes the verify block on the
-    /// probe's private queue, where an inherited MainActor assertion traps
-    /// (EXC_BREAKPOINT in dispatch_assert_queue_fail).
+    /// Keep probe setup off MainActor. The verify block and stateUpdateHandler
+    /// in makeProbeConnection are explicitly @Sendable because Network invokes
+    /// them on the probe's private queue; an inherited MainActor assertion
+    /// would trap there (EXC_BREAKPOINT in dispatch_assert_queue_fail).
     nonisolated static func probe(
         host: String,
         port: Int,

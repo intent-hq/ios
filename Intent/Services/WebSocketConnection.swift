@@ -65,7 +65,7 @@ actor WebSocketConnection {
             // self-signed), so SecTrustEvaluate is deliberately not called.
             sec_protocol_options_set_verify_block(
                 tlsOptions.securityProtocolOptions,
-                { _, trustRef, complete in
+                { @Sendable _, trustRef, complete in
                     let serverTrust = sec_trust_copy_ref(trustRef).takeRetainedValue()
                     guard SecTrustGetCertificateCount(serverTrust) > 0,
                           let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],

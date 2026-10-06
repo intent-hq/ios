@@ -2,13 +2,13 @@ import Foundation
 import Testing
 
 /// The Intent target builds with SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor.
-/// The SDK imports the block parameters of the APIs below as plain
-/// non-Sendable function types, so a closure literal passed to them is
-/// silently inferred MainActor-isolated (SE-0434 permits this — no compiler
+/// Some SDK block parameters below are imported as plain non-Sendable
+/// function types, so a closure literal passed to them can be silently
+/// inferred MainActor-isolated (SE-0434 permits this — no compiler
 /// setting diagnoses it) and the process aborts with
 /// `_dispatch_assert_queue_fail` when the framework invokes the closure off
-/// the main thread. The crash is device-only; the simulator never reproduces
-/// it. Fixed instance: 09c22b6 (SpeechDictationController). This test is the
+/// the main thread. These crashes are not reliably reproduced on a simulator.
+/// Fixed instance: 09c22b6 (SpeechDictationController). This test is the
 /// registry of known thread-hopping callback APIs and the guard that keeps
 /// their closures explicitly `@Sendable`.
 struct ObjCCallbackIsolationTests {
@@ -18,7 +18,8 @@ struct ObjCCallbackIsolationTests {
     /// setters take delegate objects, not closures, so any use fails here by
     /// design: audit the delegate's isolation, then teach this test the
     /// audited pattern. Extend this table when adopting another ObjC API
-    /// whose callback runs off the main thread.
+    /// whose callback runs off the main thread. Require explicit `@Sendable`
+    /// even in nonisolated helpers so moving a callback cannot inherit MainActor.
     private static let threadHoppingCallbackAPIs = [
         "installTap(",                              // AVAudioNode — realtime audio thread
         "recognitionTask(with",                     // SFSpeechRecognizer — Speech-owned queue
@@ -29,6 +30,8 @@ struct ObjCCallbackIsolationTests {
         ".addObserver(forName",                    // NotificationCenter — posting thread
         ".pathUpdateHandler =",                    // Network — connection/monitor queue
         ".viabilityUpdateHandler =",               // NWConnection — connection queue
+        ".stateUpdateHandler =",                   // NWConnection/NWListener — configured queue
+        "sec_protocol_options_set_verify_block(",  // Network TLS — supplied verification queue
         ".completionWithItemsHandler ="            // UIActivityViewController — defensive isolation boundary
     ]
 
@@ -52,8 +55,8 @@ struct ObjCCallbackIsolationTests {
                     else { continue }
                     violations.append(
                         "\(file.path):\(index + 1): closure passed to `\(api)` must open "
-                            + "with `{ @Sendable` (or the call must be awaited) — it is "
-                            + "otherwise inferred MainActor-isolated and crashes on device "
+                            + "with `{ @Sendable`, even in a nonisolated helper (or the call must be awaited) — "
+                            + "otherwise moving it into a MainActor context can cause a crash "
                             + "when invoked off-main; see 09c22b6."
                     )
                 }
@@ -77,7 +80,9 @@ struct ObjCCallbackIsolationTests {
     ) -> Bool {
         let line = lines[lineIndex]
         let assignment = line[matchRange.lowerBound...]
-        if assignment.hasPrefix(".pathUpdateHandler =") || assignment.hasPrefix(".viabilityUpdateHandler =") {
+        if assignment.hasPrefix(".pathUpdateHandler =")
+            || assignment.hasPrefix(".viabilityUpdateHandler =")
+            || assignment.hasPrefix(".stateUpdateHandler =") {
             if assignment.split(separator: "=", maxSplits: 1).last?.trimmingCharacters(in: .whitespaces) == "nil" {
                 return true
             }

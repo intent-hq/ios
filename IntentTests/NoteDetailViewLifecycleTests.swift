@@ -73,6 +73,60 @@ final class NoteDetailViewLifecycleTests {
         )
     }
 
+    @Test(.enabled("Hosted SwiftUI accessibility is available") {
+        await SyntheticBadgeHost.publishesAccessibilityTree()
+    })
+    func mountedNoteUpdatesLinkedTaskAndAssigneeWithoutReplacingContent() async throws {
+        #if targetEnvironment(simulator)
+            let accessibilityOwner = try SyntheticBadgeAccessibilityRuntime.shared.acquire()
+            defer { SyntheticBadgeAccessibilityRuntime.shared.release(accessibilityOwner) }
+        #endif
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = try #require(SyntheticBadgeHostScene.resolve(in: scenes))
+        let fake = FakeConnectionManager()
+        let note: [String: Any] = [
+            "id": "n-1", "title": "Plan",
+            "content": "- [ ] [Fallback task](intent://local/task/linked)",
+            "metadata": ["task": ["status": "in_progress", "assignedAgentIds": ["agent-1", "unknown"]]],
+            "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z"
+        ]
+        var linked: [String: Any] = [
+            "id": "linked", "title": "Original task", "content": "",
+            "metadata": ["task": ["status": "blocked"]],
+            "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z"
+        ]
+        fake.responseMap["note.get"] = ["note": note]
+        fake.responseMap["note.list"] = ["notes": [note, linked]]
+        fake.responseMap["agent.list"] = ["agents": [["id": "agent-1", "name": "Original agent"]]]
+        fake.responseMap["workspace.list"] = ["workspaces": []]
+        let host = Host(connection: fake, persistence: persistence, scene: scene) { _ in }
+        defer { host.tearDown() }
+
+        try await Self.waitUntil("initial linked task and assignee") {
+            host.hasLabel("Original agent") && host.hasLabel("unknown")
+                && host.hasLabel("Open task Original task")
+                && host.hasLabel("Change status for Original task", value: "Blocked")
+        }
+
+        linked["title"] = "Renamed task"
+        linked["metadata"] = ["task": ["status": "complete"]]
+        linked["updatedAt"] = "2026-01-02T00:00:00Z"
+        fake.responseMap["note.list"] = ["notes": [note, linked]]
+        fake.responseMap["agent.list"] = ["agents": [["id": "agent-1", "name": "Renamed agent"]]]
+        deliverNoteUpdated(on: fake)
+        fake.deliverEvent(method: "events.event", params: [
+            "event": ["type": "agent:renamed", "workspaceId": "ws-1", "agentId": "agent-1"]
+        ])
+
+        try await Self.waitUntil("updated linked task and assignee") {
+            host.hasLabel("Renamed agent") && host.hasLabel("Open task Renamed task")
+                && host.hasLabel("Change status for Renamed task", value: "Complete")
+        }
+        #expect(!host.hasLabel("Original agent"))
+        #expect(!host.hasLabel("Open task Original task"))
+        #expect(host.hasLabel("unknown"), "unresolved assignees keep their ID fallback")
+    }
+
     private func deliverNoteUpdated(on fake: FakeConnectionManager) {
         fake.deliverEvent(method: "events.event", params: [
             "event": ["type": "note:updated", "workspaceId": "ws-1", "noteId": "n-1"]
@@ -106,6 +160,7 @@ final class NoteDetailViewLifecycleTests {
         init(
             connection: FakeConnectionManager,
             persistence: PersistenceManager,
+            scene: UIWindowScene? = nil,
             observeStore: (NoteStore) -> Void
         ) {
             let fileLoader = WorkspaceFileImageLoader(connection: connection)
@@ -145,21 +200,42 @@ final class NoteDetailViewLifecycleTests {
             ))
             let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
             controller.view.frame = window.bounds
-            controller.beginAppearanceTransition(true, animated: false)
-            window.addSubview(controller.view)
-            window.isHidden = false
-            controller.endAppearanceTransition()
+            if let scene {
+                // Accessibility needs a connected scene and real controller containment.
+                window.windowScene = scene
+                window.rootViewController = controller
+                window.isHidden = false
+            } else {
+                controller.beginAppearanceTransition(true, animated: false)
+                window.addSubview(controller.view)
+                window.isHidden = false
+                controller.endAppearanceTransition()
+            }
             controller.view.layoutIfNeeded()
             self.controller = controller
             self.window = window
         }
 
+        func hasLabel(_ label: String, value: String? = nil) -> Bool {
+            guard let view = controller?.view else { return false }
+            view.layoutIfNeeded()
+            return SyntheticBadgeHost.accessibilityElements(in: view).contains { element in
+                element.accessibilityLabel == label && (value == nil || element.accessibilityValue == value)
+            }
+        }
+
         func tearDown() {
             guard let controller, let window else { return }
-            controller.beginAppearanceTransition(false, animated: false)
-            controller.view.removeFromSuperview()
-            window.isHidden = true
-            controller.endAppearanceTransition()
+            if window.windowScene != nil {
+                window.isHidden = true
+                window.rootViewController = nil
+                window.windowScene = nil
+            } else {
+                controller.beginAppearanceTransition(false, animated: false)
+                controller.view.removeFromSuperview()
+                window.isHidden = true
+                controller.endAppearanceTransition()
+            }
             self.controller = nil
             self.window = nil
         }

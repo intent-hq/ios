@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct WorkspaceListMenu: View {
-    @Environment(AppCoordinator.self) private var coordinator
     @Binding var showArchived: Bool
+    // Native toolbar hosts must not rely on inherited observable objects (#745).
+    let canCreateWorkspace: Bool
     let onCreateWorkspace: () -> Void
     let onRecentAgents: () -> Void
     let onRecentConnections: () -> Void
@@ -54,7 +55,7 @@ struct WorkspaceListMenu: View {
                 Image(.addIcon)
             }
         }
-        .disabled(!coordinator.canCreateWorkspace)
+        .disabled(!canCreateWorkspace)
         .accessibilityIdentifier("workspaces.menu.create")
     }
 }

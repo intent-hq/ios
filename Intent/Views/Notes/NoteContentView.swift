@@ -22,27 +22,36 @@ struct NoteContentView: View {
 
     var body: some View {
         let segments = NoteContentSegmenter.segments(for: content)
+        let rows = segments.enumerated().map { offset, segment in
+            (id: offset, content: segmentContent(segment))
+        }
+        // Linked notes resolve on MainActor; row providers only return prepared values.
         VStack(alignment: .leading, spacing: Constants.Notes.Content.segmentSpacing) {
-            ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                switch segment {
-                case .markdown(let text):
-                    MarkdownTextView(text: text, onOpenURL: onOpenURL, workspaceId: workspaceId)
-                case .taskLine(let line):
-                    if let linked = line.linkedTask {
-                        LinkedTaskCardRow(
-                            line: line,
-                            linked: linked,
-                            resolvedNote: resolveNote(linked.noteId),
-                            onOpen: { onOpenTaskNote(linked.noteId) },
-                            onSetStatus: { onSetTaskNoteStatus(linked.noteId, $0) }
-                        )
-                    } else {
-                        PlainTaskRow(
-                            line: line,
-                            workspaceId: workspaceId
-                        ) { onSetLineStatus(line.lineNumber, $0) }
-                    }
-                }
+            ForEach(rows, id: \.id) { @Sendable row in
+                row.content
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func segmentContent(_ segment: NoteContentSegment) -> some View {
+        switch segment {
+        case .markdown(let text):
+            MarkdownTextView(text: text, onOpenURL: onOpenURL, workspaceId: workspaceId)
+        case .taskLine(let line):
+            if let linked = line.linkedTask {
+                LinkedTaskCardRow(
+                    line: line,
+                    linked: linked,
+                    resolvedNote: resolveNote(linked.noteId),
+                    onOpen: { onOpenTaskNote(linked.noteId) },
+                    onSetStatus: { onSetTaskNoteStatus(linked.noteId, $0) }
+                )
+            } else {
+                PlainTaskRow(
+                    line: line,
+                    workspaceId: workspaceId
+                ) { onSetLineStatus(line.lineNumber, $0) }
             }
         }
     }

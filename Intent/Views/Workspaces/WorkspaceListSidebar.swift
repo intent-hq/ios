@@ -57,7 +57,11 @@ struct WorkspaceListSidebar: View {
         .navigationTitle("Workspaces")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                WorkspaceListMenu(showArchived: $viewModel.showArchived, onCreateWorkspace: onCreateWorkspace) {
+                WorkspaceListMenu(
+                    showArchived: $viewModel.showArchived,
+                    canCreateWorkspace: coordinator.canCreateWorkspace,
+                    onCreateWorkspace: onCreateWorkspace
+                ) {
                     searchFocused = false
                     isSearching = false
                     revealedSwipeTarget = nil
@@ -101,12 +105,10 @@ struct WorkspaceListSidebar: View {
         )) {
             switch viewModel.viewMode {
             case .recent:
-                ForEach(viewModel.filteredWorkspaces) { workspace in
-                    sidebarRow(workspace)
-                }
+                sidebarRows(viewModel.filteredWorkspaces)
             case .repo:
-                ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
-                    Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
+                let groups = viewModel.groupedByRepo.map { repoName, workspaces in
+                    let content = Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
                         RepoOwnerAvatarView(
                             owner: workspaces.first?.repositoryOwner,
                             size: Constants.WorkspaceList.sidebarSectionAvatarSize
@@ -114,19 +116,19 @@ struct WorkspaceListSidebar: View {
                         Text(repoName)
                             .interFont(Constants.Typography.eyebrow)
                     }) {
-                        ForEach(workspaces) { workspace in
-                            sidebarRow(workspace, showRepo: false)
-                        }
+                        sidebarRows(workspaces, showRepo: false)
                     }
+                    return (id: repoName, content: content)
                 }
+                ForEach(groups, id: \.id) { @Sendable group in group.content }
             case .status:
-                ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
-                    Section(header: Text(statusLabel).interFont(Constants.Typography.eyebrow)) {
-                        ForEach(workspaces) { workspace in
-                            sidebarRow(workspace)
-                        }
+                let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
+                    let content = Section(header: Text(statusLabel).interFont(Constants.Typography.eyebrow)) {
+                        sidebarRows(workspaces)
                     }
+                    return (id: statusLabel, content: content)
                 }
+                ForEach(groups, id: \.id) { @Sendable group in group.content }
             }
         }
         .listStyle(.sidebar)
@@ -141,6 +143,14 @@ struct WorkspaceListSidebar: View {
         #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
         .contentMargins(.bottom, isSearching ? 0 : AssistantLaunchButton.scrollClearance, for: .scrollContent)
+    }
+
+    private func sidebarRows(_ workspaces: [Workspace], showRepo: Bool = true) -> some View {
+        // Snapshot selection, updating state and bindings outside every row provider.
+        let rows = workspaces.map { workspace in
+            (id: workspace.id, content: sidebarRow(workspace, showRepo: showRepo))
+        }
+        return ForEach(rows, id: \.id) { @Sendable row in row.content }
     }
 
     /// Shared row modifiers for every view mode. The explicit row background

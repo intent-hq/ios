@@ -53,7 +53,7 @@ struct AssistantView: View {
         if selectedThread == nil {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    AssistantHistoryMenu(store: store)
+                    AssistantHistoryMenu(store: store, coordinator: coordinator)
                 } label: {
                     ToolbarOverflowLabel()
                 }
@@ -109,9 +109,15 @@ struct AssistantView: View {
 
 struct AssistantHistoryMenu: View {
     let store: AssistantStore
-    @Environment(AppCoordinator.self) private var coordinator
+    // Explicit input survives native toolbar hosting without environment inheritance (#745).
+    let coordinator: AppCoordinator
 
     var body: some View {
+        let threads = store.threads
+        let selectedThreadId = coordinator.assistantAgentId ?? threads.first?.id
+        let rows = threads.map { thread in
+            (id: thread.id, content: threadButton(thread, isSelected: selectedThreadId == thread.id))
+        }
         Menu {
             Button {
                 Task {
@@ -125,20 +131,25 @@ struct AssistantHistoryMenu: View {
             .disabled(store.isCreating || !store.hasLoaded)
             .accessibilityIdentifier("assistant.history.newConversation")
             Divider()
-            ForEach(store.threads) { thread in
-                Button {
-                    coordinator.assistantAgentId = thread.id
-                } label: {
-                    if (coordinator.assistantAgentId ?? store.threads.first?.id) == thread.id {
-                        Label(thread.name, image: "Check")
-                    } else {
-                        Text(thread.name)
-                    }
-                }
+            // SwiftUI may request menu rows off-main; return only prepared values.
+            ForEach(rows, id: \.id) { @Sendable row in
+                row.content
             }
         } label: {
             Label("Assistant conversations", systemImage: "bubble.left.and.bubble.right")
         }
         .accessibilityIdentifier("assistant.conversations")
+    }
+
+    private func threadButton(_ thread: AgentSession, isSelected: Bool) -> some View {
+        Button {
+            coordinator.assistantAgentId = thread.id
+        } label: {
+            if isSelected {
+                Label(thread.name, image: "Check")
+            } else {
+                Text(thread.name)
+            }
+        }
     }
 }

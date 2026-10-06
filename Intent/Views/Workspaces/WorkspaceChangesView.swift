@@ -151,19 +151,25 @@ struct WorkspaceChangesView: View {
     }
 
     private var commitsSection: some View {
-        WorkspaceChangesSection(title: "Commits", count: store.commits.count, identifier: "commits", isExpanded: $areCommitsExpanded) {
-            if store.commits.isEmpty {
+        let commits = store.commits
+        let divider = rowDivider
+        // The overlay must not reread the store when SwiftUI requests a commit row.
+        let rows = commits.map { commit in
+            let showsDivider = commit.id != commits.last?.id
+            let content = commitRow(commit)
+                .overlay(alignment: .bottom) {
+                    if showsDivider { divider }
+                }
+            return (id: commit.id, content: content)
+        }
+        return WorkspaceChangesSection(title: "Commits", count: commits.count, identifier: "commits", isExpanded: $areCommitsExpanded) {
+            if commits.isEmpty {
                 Text("No workspace commits yet")
                     .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(secondary)
             }
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(store.commits) { commit in
-                    commitRow(commit)
-                        .overlay(alignment: .bottom) {
-                            if commit.id != store.commits.last?.id { rowDivider }
-                        }
-                }
+                ForEach(rows, id: \.id) { @Sendable row in row.content }
             }
             if store.hasMoreCommits {
                 Button {

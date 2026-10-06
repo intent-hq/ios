@@ -179,7 +179,7 @@ struct WorkspaceListView: View {
                     }
             }
             Spacer(minLength: 0)
-            WorkspaceListMenu(showArchived: $viewModel.showArchived, onCreateWorkspace: createWorkspace) {
+            WorkspaceListMenu(showArchived: $viewModel.showArchived, canCreateWorkspace: coordinator.canCreateWorkspace, onCreateWorkspace: createWorkspace) {
                 prepareConnectionSwitcher()
                 openAgentHistory()
             } onRecentConnections: {

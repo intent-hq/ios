@@ -1072,6 +1072,7 @@ $(SRCROOT)/IntentTests/TestBundleInputsTests.swift
 $(SRCROOT)/IntentTests/TestSourceInputs.swift
 $(SRCROOT)/IntentTests/TextInputDescendantWalkTests.swift
 $(SRCROOT)/IntentTests/ToolClassifierClassificationTests.swift
+$(SRCROOT)/IntentTests/ToolbarEnvironmentTests.swift
 $(SRCROOT)/IntentTests/TranscriptDecodingMeasurementTests.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+EdgeSequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Follow.swift
