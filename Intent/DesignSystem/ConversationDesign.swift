@@ -41,6 +41,12 @@ extension Constants.Conversation.Design {
         static let expandedContentIndent = Constants.Conversation.Design.toolIconSize + Self.toolLabelSpacing
     }
 
+    enum Watcher {
+        static let sectionSpacing: CGFloat = 20
+        static let rowSpacing: CGFloat = 12
+        static let attributionSpacing: CGFloat = 4
+    }
+
     enum Composer {
         static let minimumHeight: CGFloat = 56
         static let leadingPadding: CGFloat = 20

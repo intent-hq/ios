@@ -8,6 +8,7 @@ struct UserMessageView: View {
     let message: ConversationMessage
     let workspaceId: String
     var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
+    var onLayoutChange: (() -> Void)?
     @Binding var isAgentMessageExpanded: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(BackendSession.self) private var session
@@ -31,11 +32,13 @@ struct UserMessageView: View {
         message: ConversationMessage,
         workspaceId: String,
         onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?,
-        isAgentMessageExpanded: Binding<Bool>
+        isAgentMessageExpanded: Binding<Bool>,
+        onLayoutChange: (() -> Void)? = nil
     ) {
         self.message = message
         self.workspaceId = workspaceId
         self.onNavigateToAgent = onNavigateToAgent
+        self.onLayoutChange = onLayoutChange
         self._isAgentMessageExpanded = isAgentMessageExpanded
         let blocks = message.contentBlocks
         let hookWake = message.hookWakeAttribution
@@ -54,7 +57,10 @@ struct UserMessageView: View {
 
     var body: some View {
         if workspaceDesign {
-            WorkspaceUserBubbleLayout(usesFullWidth: dynamicTypeSize.isAccessibilitySize, layoutDirection: layoutDirection) {
+            WorkspaceUserBubbleLayout(
+                usesFullWidth: dynamicTypeSize.isAccessibilitySize || hookWake != nil || prWake != nil,
+                layoutDirection: layoutDirection
+            ) {
                 bubble
             }
         } else {
@@ -63,7 +69,8 @@ struct UserMessageView: View {
     }
 
     private var bubble: some View {
-        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+        VStack(alignment: .leading, spacing: hookWake != nil || prWake != nil
+            ? Design.Watcher.sectionSpacing : Layout.contentSpacing) {
             attributionHeader
             if agentMessage == nil || isAgentMessageExpanded {
                 messageContents
@@ -168,7 +175,11 @@ struct UserMessageView: View {
             }
             return MessageBlockPartitioning.stripSupervisorTags(text)
         }()
-        if (hookWake == nil && prWake == nil) || !display.isEmpty {
+        if hookWake != nil || prWake != nil {
+            if !display.isEmpty {
+                WatcherMessageBodyView(text: display, onLayoutChange: onLayoutChange)
+            }
+        } else {
             let rows = MessageView.userTextRows(display)
             if rows.contains(where: { row in
                 if case .chips = row { return true }

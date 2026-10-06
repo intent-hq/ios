@@ -11,6 +11,11 @@ import tempfile
 
 
 CAPTURES = {
+    "WatcherMessageUITests": {
+        "testWatcherDetailsExpandAndCollapseWithoutLosingTheReport": (
+            "Watcher summary", "Watcher expanded details", "Watcher final state",
+        ),
+    },
     "WorkspaceTitleEditingUITests": {
         "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
             "Workspace title editing with keyboard and floating Done",

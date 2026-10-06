@@ -24,6 +24,7 @@ enum DemoDesignScenario: String, CaseIterable {
     case streaming
     case tables
     case tools
+    case watcher
 
     static func requested(by arguments: [String]) -> Self? {
         let prefix = "--demo-design-scenario="

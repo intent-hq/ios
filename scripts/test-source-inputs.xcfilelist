@@ -362,6 +362,7 @@ $(SRCROOT)/Intent/Presentation/SplashPlaybackState.swift
 $(SRCROOT)/Intent/Presentation/SuggestedPrompts.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier+Classification.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
+$(SRCROOT)/Intent/Presentation/WatcherMessagePresentation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceAgentSelection.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceLinks.swift
 $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
@@ -623,6 +624,7 @@ $(SRCROOT)/Intent/Views/Conversation/Notices/NewMessagesDividerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/PrMonitorWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/QuestionsDismissedNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/SystemNoticeBannerView.swift
+$(SRCROOT)/Intent/Views/Conversation/Notices/WatcherMessageBodyView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionStepView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardCollapsedBanner.swift
@@ -1084,6 +1086,7 @@ $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
 $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
+$(SRCROOT)/IntentTests/WatcherMessagePresentationTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceActionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAgentLoadingTests.swift

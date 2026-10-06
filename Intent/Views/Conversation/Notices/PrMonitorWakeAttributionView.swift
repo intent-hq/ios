@@ -7,6 +7,8 @@ import SwiftUI
 /// fallback; gated by the `ExternalLink` http/https allowlist) — the iOS
 /// counterpart of cloudlands-fe's `PrMonitorWakeAttributionHeader`.
 struct PrMonitorWakeAttributionView: View {
+    private typealias Design = Constants.Conversation.Design
+
     let attribution: PrMonitorWakeAttribution
     /// `<owner>/<repo>` of the conversation's workspace, or nil when unknown
     /// (the chip label then falls back to the bare `#<n>` form).
@@ -15,26 +17,35 @@ struct PrMonitorWakeAttributionView: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
+        HStack(alignment: .firstTextBaseline, spacing: Design.Watcher.rowSpacing) {
             Image(systemName: "arrow.triangle.pull")
-                .font(.caption2)
+                .font(.subheadline)
+                .frame(width: Design.toolIconSize)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .accessibilityHidden(true)
-            Button {
-                if let url = ExternalLink.url(from: attribution.resolvedUrl) {
-                    openURL(url)
-                }
-            } label: {
-                Text(attribution.chipLabel(workspaceRepo: workspaceRepo))
-                    .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                    .underline()
-                    .lineLimit(1)
+            VStack(alignment: .leading, spacing: Design.Watcher.attributionSpacing) {
+                prLink
+                Text("woke the agent")
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
-            .buttonStyle(IntentContentButtonStyle())
-            Text("woke the agent")
-                .interFont(Constants.Typography.subtextXXS)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .tracking(Design.Typography.smallTracking)
         }
+    }
+
+    private var prLink: some View {
+        Button {
+            if let url = ExternalLink.url(from: attribution.resolvedUrl) {
+                openURL(url)
+            }
+        } label: {
+            Text(attribution.chipLabel(workspaceRepo: workspaceRepo))
+                .interFont(Constants.Typography.bodyXSEmphasized)
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .underline()
+                .fixedSize(horizontal: false, vertical: true)
+                .copyContextMenuPassthrough()
+        }
+        .buttonStyle(IntentContentButtonStyle())
     }
 }

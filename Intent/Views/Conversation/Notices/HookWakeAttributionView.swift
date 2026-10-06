@@ -1,26 +1,34 @@
 import SwiftUI
 
-/// Compact attribution header for background-hook wake messages
-/// (`metadata.type == "hook_wake"`, PROTOCOL §5.40): bolt icon + hook name +
-/// "woke the agent" state label. Non-interactive — the iOS counterpart of
-/// cloudlands-fe's `HookWakeAttributionHeader`.
 struct HookWakeAttributionView: View {
+    private typealias Design = Constants.Conversation.Design
+
     let attribution: HookWakeAttribution
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
+        HStack(alignment: .firstTextBaseline, spacing: Design.Watcher.rowSpacing) {
             Image(systemName: "bolt.fill")
-                .font(.caption2)
+                .font(.subheadline)
+                .frame(width: Design.toolIconSize)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .accessibilityHidden(true)
-            Text(attribution.displayName)
-                .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-                .lineLimit(1)
-            Text(attribution.stateLabel)
-                .interFont(Constants.Typography.subtextXXS)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            VStack(alignment: .leading, spacing: Design.Watcher.attributionSpacing) {
+                Text(displayName)
+                    .interFont(Constants.Typography.bodyXSEmphasized)
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(attribution.stateLabel)
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .tracking(Design.Typography.smallTracking)
         }
+    }
+
+    private var displayName: String {
+        let name = attribution.rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? attribution.displayName : name
     }
 }

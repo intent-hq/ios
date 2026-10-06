@@ -78,12 +78,7 @@ struct MessageRowContent: View, Equatable {
                 // bubble (display-only; FE parity: EventWakeupBanner).
                 EventWakeBannerView(attribution: eventWake)
             } else if isUser {
-                UserMessageView(
-                    message: message,
-                    workspaceId: workspaceId,
-                    onNavigateToAgent: onNavigateToAgent,
-                    isAgentMessageExpanded: agentMessageExpansion
-                )
+                userMessage
             } else if message.role == .assistant {
                 AssistantMessageView(
                     message: message,
@@ -100,6 +95,16 @@ struct MessageRowContent: View, Equatable {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var userMessage: some View {
+        UserMessageView(
+            message: message,
+            workspaceId: workspaceId,
+            onNavigateToAgent: onNavigateToAgent,
+            isAgentMessageExpanded: agentMessageExpansion,
+            onLayoutChange: onLayoutChange
+        )
     }
 
     private var agentMessageExpansion: Binding<Bool> {
