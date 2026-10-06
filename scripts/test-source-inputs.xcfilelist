@@ -1121,6 +1121,7 @@ $(SRCROOT)/IntentTests/WorkspacePrMonitorsStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspacePrPillTests.swift
 $(SRCROOT)/IntentTests/WorkspaceProviderOptionsTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowAccessibilitySupportTests.swift
+$(SRCROOT)/IntentTests/WorkspaceRowColorTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowLayoutPolicyTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPrIndicatorTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowPrPresentationTests.swift

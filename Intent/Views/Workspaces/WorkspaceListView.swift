@@ -5,6 +5,7 @@ struct WorkspaceListView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.legibilityWeight) private var legibilityWeight
     @Environment(\.isAgentHistoryOpen) private var isAgentHistoryOpen
@@ -194,8 +195,7 @@ struct WorkspaceListView: View {
         .padding(.horizontal, Constants.WorkspaceList.pageInset)
     }
 
-    @ViewBuilder
-    private var workspaceContent: some View {
+    @ViewBuilder private var workspaceContent: some View {
         if viewModel.isLoading, viewModel.workspaces.isEmpty {
             ProgressView {
                 Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
@@ -256,7 +256,7 @@ struct WorkspaceListView: View {
     private func groupHeading(_ title: String) -> some View {
         Text(title.uppercased())
             .interFont(Constants.Typography.eyebrow)
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .foregroundStyle(Constants.WorkspaceList.secondaryText(for: colorScheme, contrast: colorSchemeContrast))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, Constants.WorkspaceList.groupTopSpacing)
             .padding(.bottom, Constants.WorkspaceList.groupBottomSpacing)

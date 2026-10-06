@@ -178,7 +178,7 @@ struct WorkspaceRowView: View {
             let displayName = workspace.repositoryOwner.map { "\($0)/\(repo)" } ?? repo
             Text(displayName)
                 .interFont(Constants.Typography.subtextXXS)
-                .foregroundStyle(Theme.mutedForeground(
+                .foregroundStyle(Constants.WorkspaceList.secondaryText(
                     for: colorScheme,
                     contrast: colorSchemeContrast
                 ))
@@ -254,7 +254,7 @@ struct WorkspaceRowView: View {
                         .tracking(tracking)
                 }
                 .font(.caption.weight(.medium))
-                .foregroundStyle(Theme.mutedForeground(
+                .foregroundStyle(Constants.WorkspaceList.secondaryText(
                     for: colorScheme,
                     contrast: colorSchemeContrast
                 ))
@@ -276,7 +276,7 @@ struct WorkspaceRowView: View {
                 Text("+\(indicator.otherMonitorCount)")
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .tracking(tracking)
-                    .foregroundStyle(Theme.mutedForeground(
+                    .foregroundStyle(Constants.WorkspaceList.secondaryText(
                         for: colorScheme,
                         contrast: colorSchemeContrast
                     ))
@@ -314,7 +314,7 @@ struct WorkspaceRowView: View {
             let value = relativeDate(from: activity)
             Text(value)
                 .interFont(Constants.Typography.subtextXXS)
-                .foregroundStyle(Theme.mutedForeground(
+                .foregroundStyle(Constants.WorkspaceList.secondaryText(
                     for: colorScheme,
                     contrast: colorSchemeContrast
                 ))
@@ -330,7 +330,7 @@ private extension WorkspaceRowView {
     var archivedBadge: some View {
         Text("Archived")
             .interFont(Constants.Typography.subtextXXS.withFace(.medium))
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast))
+            .foregroundStyle(Constants.WorkspaceList.secondaryText(for: colorScheme, contrast: colorSchemeContrast))
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, Constants.WorkspaceRow.outlinedPillHorizontalPadding)

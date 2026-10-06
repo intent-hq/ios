@@ -412,6 +412,7 @@ extension WorkspaceRowPresentationTests {
     func makeWorkspace(
         title: String = "Workspace",
         repositoryName: String? = nil,
+        status: String? = nil,
         displayStatus: String? = nil,
         activity: String? = nil,
         attention: String? = nil,
@@ -426,7 +427,7 @@ extension WorkspaceRowPresentationTests {
             title: title,
             branch: nil,
             baseRef: nil,
-            status: nil,
+            status: status,
             activity: activity,
             displayStatus: displayStatus,
             attention: attention,

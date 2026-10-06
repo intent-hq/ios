@@ -21,6 +21,12 @@ extension Constants.WorkspaceList {
     static func controlSurface(for scheme: ColorScheme) -> Color {
         scheme == .dark ? Constants.Pairing.surface(for: scheme) : Constants.Pairing.background(for: scheme)
     }
+
+    static func secondaryText(for scheme: ColorScheme, contrast: ColorSchemeContrast) -> Color {
+        contrast == .increased
+            ? Theme.mutedForeground(for: scheme, contrast: contrast)
+            : Constants.Pairing.mutedForeground(for: scheme)
+    }
 }
 
 extension Constants.WorkspaceSearch {
