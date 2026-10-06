@@ -133,8 +133,8 @@ struct PairingView: View {
             if options.contains(.savedConnections) {
                 PairingOptionButton(
                     icon: .connectSaved,
-                    title: savedConnectionCount == 1 ? "1 saved connection" : "\(savedConnectionCount) saved connections",
-                    subtitle: "Reconnect to your apps",
+                    title: "Save Connections",
+                    subtitle: savedConnectionCount == 1 ? "1 available backend" : "\(savedConnectionCount) available backends",
                     colorScheme: colorScheme
                 ) { showConnections = true }
                 .accessibilityIdentifier("pairing.saved-connections")
