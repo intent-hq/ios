@@ -476,6 +476,9 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusSwipeBadge.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSwipeContainer.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSwipeRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTab.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceTitle.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceTitleEditingControls.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceTitleEditor.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTransferSheet.swift
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
 $(SRCROOT)/IntentTests/AgentAvatarPulseTests.swift
@@ -863,6 +866,8 @@ $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSwipePolicyTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTabTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTitleEditorTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTitleShimmerTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTranscriptDesignTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTransferFixture.swift
 $(SRCROOT)/IntentTests/WorkspaceTransferRaceTests.swift
@@ -909,5 +914,6 @@ $(SRCROOT)/IntentUITests/WorkspaceScriptUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceSearchUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceSwipeUITests.swift
+$(SRCROOT)/IntentUITests/WorkspaceTitleEditingUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceTransferUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceWindowControlsUITests.swift

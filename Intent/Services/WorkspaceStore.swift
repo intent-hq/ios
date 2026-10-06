@@ -38,10 +38,7 @@ import Observation
     @ObservationIgnored private var workspaceLive = false
     @ObservationIgnored private var resnapshotInProgress = false
 
-    /// Internal (not private) so `BackendSessionRegistry` can construct one
-    /// additional instance per pinned backend session over that session's
-    /// connection; `.shared` remains the process-wide default over
-    /// `ConnectionManager.shared`.
+    /// Each pinned backend session owns a store over its own connection.
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
         observeConnection()
@@ -192,11 +189,7 @@ import Observation
 
     // MARK: - Upsert
 
-    /// Upserts a workspace (e.g. from a workspace.create response): replaces the
-    /// existing row when the id is already present — the live subscription delta
-    /// may have added it before the RPC response returned — otherwise inserts at
-    /// the top. Also seeds the live reconciler so the row isn't dropped by the
-    /// next delta apply. The virtual Chief of Staff workspace is never inserted.
+    /// Upserts a row and seeds the live reconciler, excluding the virtual workspace.
     func addOrUpdate(_ workspace: Workspace) {
         guard workspace.id != Workspace.chiefWorkspaceId else { return }
         if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) {
@@ -205,6 +198,13 @@ import Observation
             workspaces.insert(workspace, at: 0)
         }
         workspaceReconciler?.seed(id: workspace.id, value: workspace)
+    }
+
+    func applyConfirmedTitle(_ title: String, workspaceId: String) {
+        guard var workspace = workspaces.first(where: { $0.id == workspaceId }) else { return }
+        workspace.title = title
+        addOrUpdate(workspace)
+        invalidateFetchForEvent()
     }
 }
 

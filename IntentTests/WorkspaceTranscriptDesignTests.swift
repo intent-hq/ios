@@ -17,7 +17,7 @@ struct WorkspaceTranscriptDesignTests {
             Color.clear
                 .onAppear { appearances += 1 }
                 .navigationTitle("Workspace")
-                .workspacePhoneNavigation(title: "Workspace", onBack: {}, actions: { Text("Actions") })
+                .workspacePhoneNavigation(title: "Workspace", createdAt: nil, onBack: {}, actions: { Text("Actions") })
         }
         let controller = UIHostingController(rootView: content.environment(\.horizontalSizeClass, .regular))
         let window = UIWindow(windowScene: scene)

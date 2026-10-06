@@ -5,11 +5,12 @@ extension View {
     @ViewBuilder
     func workspacePhoneNavigation<Actions: View>(
         title: String,
+        createdAt: String?,
         onBack: @escaping () -> Void,
         @ViewBuilder actions: @escaping () -> Actions
     ) -> some View {
         #if os(iOS)
-        modifier(WorkspacePhoneNavigationModifier(title: title, onBack: onBack, actions: actions))
+        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, onBack: onBack, actions: actions))
         #else
         self
         #endif
@@ -19,6 +20,7 @@ extension View {
 #if os(iOS)
 private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
     let title: String
+    let createdAt: String?
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -33,6 +35,8 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
                         subtitle: "Workspace",
                         backLabel: "Back to workspaces",
                         backIdentifier: "workspaceDetail.back",
+                        showsWorkspacePlaceholder: true,
+                        workspaceCreatedAt: createdAt,
                         onBack: onBack,
                         actions: actions
                     )
@@ -65,6 +69,8 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     let subtitle: LocalizedStringKey
     let backLabel: LocalizedStringKey
     let backIdentifier: String
+    var showsWorkspacePlaceholder = false
+    var workspaceCreatedAt: String?
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
@@ -105,7 +111,13 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
             .accessibilityLabel(backLabel)
             .accessibilityIdentifier(backIdentifier)
             VStack(spacing: Design.Header.titleSpacing) {
-                WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
+                if showsWorkspacePlaceholder {
+                    WorkspaceTitle(title: title, createdAt: workspaceCreatedAt) { title in
+                        WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
+                    }
+                } else {
+                    WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
+                }
                 WorkspaceHeaderText(Text(subtitle), style: Constants.Typography.bodyXS)
                     .foregroundStyle(Design.Palette.subtitleForeground(for: colorScheme, contrast: contrast))
             }

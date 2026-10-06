@@ -16,6 +16,11 @@ CAPTURES = {
             "Watcher summary", "Watcher expanded details", "Watcher final state",
         ),
     },
+    "WorkspaceTitleEditingUITests": {
+        "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
+            "Workspace title editing with keyboard and floating Done",
+        ),
+    },
     "ConnectionLossUITests": {
         "testDifferentServerAllowsSameMachineReselection": (
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
