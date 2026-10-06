@@ -25,7 +25,9 @@ struct WorkspaceQuestionPresentation: ViewModifier {
     }
 
     private var presentationAnimation: Animation {
-        .easeInOut(duration: Design.Question.presentationDuration)
+        reduceMotion
+            ? .easeInOut(duration: Design.Question.presentationCrossfadeDuration)
+            : Design.Question.transitionAnimation
     }
 
     func body(content: Content) -> some View {
@@ -95,8 +97,8 @@ extension EnvironmentValues {
     @Entry var workspaceQuestionSubmitting = false
 }
 
-/// Only the rounded surface changes frame; labels and controls crossfade at
-/// their natural sizes instead of stretching with the banner.
+/// The surface changes size while its whole contents travel with its top edge.
+/// Matching position only keeps the header and controls at their natural sizes.
 struct WorkspaceQuestionSurface: ViewModifier {
     var isPanel = true
     @Environment(\.workspaceQuestionNamespace) private var namespace
@@ -106,7 +108,7 @@ struct WorkspaceQuestionSurface: ViewModifier {
     private typealias Design = Constants.Conversation.Design
 
     func body(content: Content) -> some View {
-        content.background {
+        positionedContent(content).background {
             if let namespace {
                 if panelPresented == isPanel {
                     RoundedRectangle(cornerRadius: Design.cornerRadius)
@@ -117,6 +119,21 @@ struct WorkspaceQuestionSurface: ViewModifier {
                 RoundedRectangle(cornerRadius: Design.cornerRadius)
                     .fill(Design.Palette.surface(for: colorScheme))
             }
+        }
+    }
+
+    @ViewBuilder
+    private func positionedContent(_ content: Content) -> some View {
+        if let namespace {
+            content.matchedGeometryEffect(
+                id: "question-content",
+                in: namespace,
+                properties: .position,
+                anchor: .topLeading,
+                isSource: panelPresented == isPanel
+            )
+        } else {
+            content
         }
     }
 }

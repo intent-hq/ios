@@ -27,7 +27,9 @@ struct QuestionCardPager<Page: View>: View {
         }
         .clipShape(.rect(cornerRadius: cornerRadius))
         .animation(
-            .easeOut(duration: reduceMotion ? Motion.crossfadeDuration : Motion.duration),
+            reduceMotion
+                ? .easeOut(duration: Motion.crossfadeDuration)
+                : Constants.Conversation.Design.Question.transitionAnimation,
             value: index
         )
     }

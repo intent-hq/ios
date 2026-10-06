@@ -89,7 +89,9 @@ extension Constants.Conversation.Design {
     }
 
     enum Question {
-        static let presentationDuration: TimeInterval = 0.35
+        private static let transitionStartX = 0.6
+        static let transitionAnimation = Animation.timingCurve(transitionStartX, 0, 0, 1, duration: 0.5)
+        static let presentationCrossfadeDuration: TimeInterval = 0.35
         static let backdropBlur: CGFloat = 15
         static let backdropOpacity: Double = 0.3
         static let modalTopInset: CGFloat = 24

@@ -111,9 +111,9 @@ struct QuestionWizardView: View {
             if collapsed { answerFocused = false }
         }
         .animation(
-            .easeOut(duration: reduceMotion
-                ? Constants.Conversation.QuestionWizard.Paging.crossfadeDuration
-                : Constants.Conversation.QuestionWizard.Paging.duration),
+            reduceMotion
+                ? .easeOut(duration: Constants.Conversation.QuestionWizard.Paging.crossfadeDuration)
+                : Design.Question.transitionAnimation,
             value: idx
         )
     }
@@ -313,7 +313,10 @@ struct QuestionWizardView: View {
     }
 
     private var wizardAnimation: Animation? {
-        reduceMotion && workspaceAvailableHeight != nil
-            ? nil : .easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration)
+        if reduceMotion {
+            return workspaceAvailableHeight != nil
+                ? nil : .easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration)
+        }
+        return Design.Question.transitionAnimation
     }
 }
