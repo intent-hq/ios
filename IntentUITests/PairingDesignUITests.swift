@@ -79,7 +79,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
 
         scan.tap()
         XCTAssertTrue(app.staticTexts[Self.scannerUnavailable].waitForExistence(timeout: Self.timeout))
-        XCTAssertFalse(app.staticTexts["Find QR code in Settings -> Mobile"].exists)
+        XCTAssertFalse(app.staticTexts["Find QR code in Settings -> Mobile\nin the Intent desktop app"].exists)
         XCTAssertTrue(app.buttons["Cancel"].isHittable)
         capture(app, named: "scanner-full-screen")
         app.buttons["Cancel"].tap()

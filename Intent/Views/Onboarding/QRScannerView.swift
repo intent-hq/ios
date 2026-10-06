@@ -282,14 +282,9 @@ private struct QRScannerOverlay: View {
                         .scaledToFit()
                         .frame(width: Constants.QRScanner.hintIconSize, height: Constants.QRScanner.hintIconSize)
                         .accessibilityHidden(true)
-                    Text("Find QR code in Settings -> Mobile")
+                    Text("Find QR code in Settings -> Mobile\nin the Intent desktop app")
                         .interFont(Constants.Typography.bodyXS)
                 }
-            }
-            if !isValidating, errorMessage == nil {
-                Text("Hold your device steady")
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(.white.opacity(0.5))
             }
         }
         .font(.subheadline)
