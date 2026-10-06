@@ -350,8 +350,8 @@ extension AppCoordinator {
     }
 
     func onReconnect() {
-        pairingShowsSavedConnections = !dependencies.persistence.loadConnections().isEmpty
         currentScreen = .pairing
+        refreshSavedConnectionsPresentation()
     }
 
     /// Leave this remote session without forgetting its pairing. Unlike Log

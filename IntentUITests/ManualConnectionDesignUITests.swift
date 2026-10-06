@@ -58,7 +58,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         }
         assertReference(in: app)
         XCTAssertFalse(app.buttons["manual.connect"].isEnabled)
-        XCTAssertEqual(app.textFields["manual.port"].value as? String, "5180")
+        XCTAssertEqual(app.textFields["manual.port"].value as? String, "5181")
         XCTAssertTrue(app.buttons["Paste API token"].exists)
         capture(app, named: "empty")
 

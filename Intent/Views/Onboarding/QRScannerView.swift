@@ -156,7 +156,7 @@ struct QRScannerView: View {
         // `certFingerprint=`); see PairingPayload.
         guard let payload = PairingPayload.parse(code) else {
             PairingDiagnostics.invalidInput()
-            errorMessage = "Invalid QR code. Make sure you're scanning the code from Intent Settings."
+            errorMessage = "Invalid QR code. Scan the code from Settings -> Mobile in the desktop app."
             errorAutoClearID = UUID()
             return
         }
@@ -225,13 +225,7 @@ private struct QRScannerOverlay: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             if showsGuide { scanGuide }
-            Button("Cancel", action: onCancel)
-                .interFont(Constants.Typography.bodySEmphasized)
-                .foregroundStyle(.black)
-                .padding(.horizontal, Constants.QRScanner.cancelHorizontalPadding)
-                .frame(minWidth: Constants.QRScanner.cancelWidth, minHeight: Constants.QRScanner.cancelHeight)
-                .background(.white, in: .rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius))
-                .buttonStyle(IntentContentButtonStyle())
+            IntentIconButton(icon: .close, label: "Cancel", action: onCancel)
                 .padding(.leading, Constants.QRScanner.horizontalInset)
                 .padding(.top, Constants.QRScanner.cancelTopPadding)
         }
@@ -282,14 +276,9 @@ private struct QRScannerOverlay: View {
                         .scaledToFit()
                         .frame(width: Constants.QRScanner.hintIconSize, height: Constants.QRScanner.hintIconSize)
                         .accessibilityHidden(true)
-                    Text("Point at the QR code in the Intent Settings")
+                    Text("Find QR code in Settings -> Mobile\nin the Intent desktop app")
                         .interFont(Constants.Typography.bodyXS)
                 }
-            }
-            if !isValidating, errorMessage == nil {
-                Text("Hold your device steady")
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(.white.opacity(0.5))
             }
         }
         .font(.subheadline)

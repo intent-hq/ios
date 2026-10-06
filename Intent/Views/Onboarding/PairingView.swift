@@ -108,15 +108,16 @@ struct PairingView: View {
     }
 
     private var pairingOptions: some View {
+        let savedConnectionCount = coordinator.savedConnections.count
         let options = PairingOption.available(
-            showsSavedConnections: coordinator.pairingShowsSavedConnections
+            showsSavedConnections: coordinator.pairingShowsSavedConnections && savedConnectionCount > 0
         )
         return VStack(spacing: Constants.Pairing.optionsSpacing) {
             if options.contains(.qrScan) {
                 PairingOptionButton(
                     icon: .connectQR,
                     title: "Scan QR Code",
-                    subtitle: "Fastest way to connect",
+                    subtitle: "Go to Settings -> Mobile in the desktop app",
                     isProminent: true,
                     colorScheme: colorScheme
                 ) { showQRScanner = true }
@@ -133,9 +134,10 @@ struct PairingView: View {
                 PairingOptionButton(
                     icon: .connectSaved,
                     title: "Saved Connections",
-                    subtitle: "Reconnect to paired daemon",
+                    subtitle: savedConnectionCount == 1 ? "1 available backend" : "\(savedConnectionCount) available backends",
                     colorScheme: colorScheme
                 ) { showConnections = true }
+                .accessibilityIdentifier("pairing.saved-connections")
             }
             visionPairingHint
         }
