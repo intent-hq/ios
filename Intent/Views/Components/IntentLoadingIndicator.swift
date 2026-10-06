@@ -17,11 +17,11 @@ struct IntentLoadingIndicator: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: lease?.animation.minimumFrameDuration, paused: !shouldAnimate)) { _ in
             if let animation = lease?.animation {
-                // Keep the existing intro's paused position; pulse-only loaders rest on the complete mark.
-                let animated = playbackMode == .pulse ? shouldAnimate : !reduceMotion
+                // Keep the existing intro's paused position; looping loaders rest on the complete mark.
+                let animated = playbackMode == .twistThenPulse ? !reduceMotion : shouldAnimate
                 let sample = animation.frame(at: playback.elapsedTime, animated: animated, mode: playbackMode)
                 SplashFrameView(animation: sample.animation, frame: sample.frame, colorScheme: colorScheme)
-            } else if playbackMode == .pulse {
+            } else if playbackMode != .twistThenPulse {
                 ProgressView()
             } else {
                 IntentLogo().fill(Theme.foreground(for: colorScheme))

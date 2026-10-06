@@ -37,7 +37,48 @@ struct SplashAnimationTests {
         }
     }
 
-    @Test(arguments: [SplashAnimation.PlaybackMode.twistThenPulse, .pulse])
+    @Test func twistLoopsAtItsOwnDurationWithoutTheEmptyOpeningFrame() throws {
+        let animation = try #require(SplashAnimation())
+        for cycle in [0, 1, 4] {
+            let start = Double(cycle) * animation.twist.duration
+            for (offset, expectedFrame) in [
+                (0.0, animation.twist.startFrame + 1),
+                (animation.twist.duration / 2, (animation.twist.startFrame + animation.twist.endFrame) / 2),
+                (animation.twist.duration - 1 / animation.twist.framerate, animation.twist.endFrame - 1)
+            ] {
+                let sample = animation.frame(at: start + offset, animated: true, mode: .twistLoop)
+                #expect(sample.animation === animation.twist)
+                #expect(abs(sample.frame - expectedFrame) < 1e-6)
+            }
+        }
+    }
+
+    @Test(arguments: [-1.0, Double.infinity, Double.nan])
+    func invalidTwistTimesSkipTheEmptyOpeningFrame(elapsed: TimeInterval) throws {
+        let animation = try #require(SplashAnimation())
+        let sample = animation.frame(at: elapsed, animated: true, mode: .twistLoop)
+        #expect(sample.animation === animation.twist)
+        #expect(sample.frame == animation.twist.startFrame + 1)
+    }
+
+    @Test func twistLoopSeamRendersVisibleArtwork() throws {
+        let animation = try #require(SplashAnimation())
+        let sample = animation.frame(at: animation.twist.duration, animated: true, mode: .twistLoop)
+        let view = LottieAnimationView(animation: sample.animation, configuration: .init(renderingEngine: .mainThread))
+        view.layoutIfNeeded()
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(bounds: view.bounds, format: format)
+        for (frame, isVisible) in [(animation.twist.startFrame, false), (sample.frame, true)] {
+            view.currentFrame = frame
+            view.forceDisplayUpdate()
+            let image = renderer.image { view.layer.render(in: $0.cgContext) }
+            let pixels = try backgroundPixels(#require(image.cgImage))
+            #expect(pixels.contains { $0[3] > 0 } == isVisible)
+        }
+    }
+
+    @Test(arguments: [SplashAnimation.PlaybackMode.twistThenPulse, .pulse, .twistLoop])
     func disabledAnimationAlwaysShowsTheCompleteMark(mode: SplashAnimation.PlaybackMode) throws {
         let animation = try #require(SplashAnimation())
         for elapsed in [0, 0.5, 20] {
@@ -84,6 +125,43 @@ struct SplashAnimationTests {
 
     private func loader(scenePhase: ScenePhase) -> some View {
         IntentLoadingIndicator(size: 48, playbackMode: .pulse)
+            .environment(\.scenePhase, scenePhase)
+    }
+
+    @Test func twistLoaderRestsWhenSceneIsInactive() async throws {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = try #require(SyntheticBadgeHostScene.resolve(in: scenes))
+        let controller = UIHostingController(rootView: twistLoader())
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 200, height: 200)
+        window.rootViewController = controller
+        defer { window.isHidden = true; window.rootViewController = nil; window.windowScene = nil }
+        window.isHidden = false
+        window.layoutIfNeeded()
+        controller.view.layoutIfNeeded()
+        try await waitUntil("twist loader renders") { lottieView(in: controller.view) != nil }
+        let rendered = try #require(lottieView(in: controller.view))
+        let animation = try #require(SplashAnimation())
+
+        for phase in [ScenePhase.inactive, .background] {
+            controller.rootView = twistLoader()
+            try await waitUntil("active twist advances") {
+                rendered.animation?.endFrame == animation.twist.endFrame
+                    && rendered.currentFrame > animation.twist.startFrame + 1
+            }
+            controller.rootView = twistLoader(scenePhase: phase)
+            try await waitUntil("paused twist shows complete mark") {
+                rendered.animation?.endFrame == animation.pulse.endFrame
+                    && rendered.currentFrame == animation.pulse.startFrame
+            }
+            try await expectNever("paused twist advances", within: .milliseconds(150)) {
+                rendered.currentFrame != animation.pulse.startFrame || rendered.isAnimationPlaying
+            }
+        }
+    }
+
+    private func twistLoader(scenePhase: ScenePhase = .active) -> some View {
+        IntentLoadingIndicator(size: 48, playbackMode: .twistLoop)
             .environment(\.scenePhase, scenePhase)
     }
 
