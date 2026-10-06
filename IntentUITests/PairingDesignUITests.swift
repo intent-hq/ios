@@ -49,6 +49,9 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["saved-connections.empty"].exists)
         XCTAssertFalse(option("Demo Mac", in: app).exists)
         capture(app, named: "empty-direct-actions")
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(option("Manual Connection", in: app).waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(saved.exists)
     }
 
     @MainActor
@@ -139,17 +142,20 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     ) {
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout), file: file, line: line)
         machine.press(forDuration: 1)
-        app.buttons["Delete"].tap()
-        let confirmation = app.alerts["Delete Connection?"]
+        let remove = app.buttons["Remove Connection"]
+        XCTAssertTrue(remove.waitForExistence(timeout: Self.timeout), file: file, line: line)
+        remove.tap()
+        let confirmation = app.alerts["Remove Connection?"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout), file: file, line: line)
         confirmation.buttons["Cancel"].tap()
         XCTAssertTrue(
             machine.waitForExistence(timeout: Self.timeout), "Cancel must keep the saved connection", file: file, line: line
         )
         machine.press(forDuration: 1)
-        app.buttons["Delete"].tap()
+        XCTAssertTrue(remove.waitForExistence(timeout: Self.timeout), file: file, line: line)
+        remove.tap()
         XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout), file: file, line: line)
-        confirmation.buttons["Delete"].tap()
+        confirmation.buttons["Remove"].tap()
         XCTAssertTrue(machine.waitForNonExistence(timeout: Self.timeout), file: file, line: line)
         XCTAssertTrue(app.staticTexts["saved-connections.empty"].exists, file: file, line: line)
     }

@@ -110,7 +110,7 @@ struct PairingView: View {
     private var pairingOptions: some View {
         let savedConnectionCount = coordinator.savedConnections.count
         let options = PairingOption.available(
-            showsSavedConnections: coordinator.pairingShowsSavedConnections
+            showsSavedConnections: coordinator.pairingShowsSavedConnections && savedConnectionCount > 0
         )
         return VStack(spacing: Constants.Pairing.optionsSpacing) {
             if options.contains(.qrScan) {
@@ -133,7 +133,7 @@ struct PairingView: View {
             if options.contains(.savedConnections) {
                 PairingOptionButton(
                     icon: .connectSaved,
-                    title: savedConnectionCount == 1 ? "1 Saved Connection" : "\(savedConnectionCount) Saved Connections",
+                    title: savedConnectionCount == 1 ? "1 saved connection" : "\(savedConnectionCount) saved connections",
                     subtitle: "Reconnect to your apps",
                     colorScheme: colorScheme
                 ) { showConnections = true }
