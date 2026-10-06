@@ -282,7 +282,7 @@ private struct QRScannerOverlay: View {
                         .scaledToFit()
                         .frame(width: Constants.QRScanner.hintIconSize, height: Constants.QRScanner.hintIconSize)
                         .accessibilityHidden(true)
-                    Text("Go to Settings -> Mobile in the desktop app to find the QR code.")
+                    Text("Find QR in Settings → Mobile")
                         .interFont(Constants.Typography.bodyXS)
                 }
             }
