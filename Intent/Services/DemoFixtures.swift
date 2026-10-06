@@ -303,7 +303,7 @@ enum DemoFixtures {
         case "agent.getMessageBlock" where params["agentId"] as? String == longConversationAgentId:
             return longConversationBlockHydrationGate
         default:
-            return nil
+            return assistantListGate(for: method, params: params)
         }
     }
 
@@ -430,7 +430,7 @@ extension DemoFixtures {
             return createAssistantAgent()
         case "agent.list":
             let workspaceId = params["workspaceId"] as? String
-            if workspaceId == Workspace.chiefWorkspaceId { return ["agents": assistantAgents] }
+            if workspaceId == Workspace.chiefWorkspaceId { return assistantListResponse() }
             return DemoAgentListFixtures.response(rows: workspaceId == longConversationWorkspaceId ? longConversationAgents : agents, params: params)
         case "agent.get":
             let agentId = params["agentId"] as? String

@@ -22,9 +22,11 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
     func testAssistantButtonOpensAndReturnsToWorkspaces() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
+        app.launchArguments += ["-appThemePreference", ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] ?? "light"]
         app.launch()
 
         showWorkspaceList(in: app)
+        let isCompact = !app.navigationBars["Workspaces"].exists
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
         let launcher = app.buttons["intent.menu.open"]
@@ -43,12 +45,21 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.firstMatch.waitForNonExistence(timeout: Fixture.timeout))
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        let header = isCompact
+            ? app.otherElements["assistant.header"].firstMatch
+            : app.navigationBars["Assistant"].firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["assistant.newConversation"].isHittable)
+        XCTAssertFalse(app.buttons["conversation.back"].exists)
+        if isCompact {
+            XCTAssertFalse(app.navigationBars["Assistant"].exists)
+        }
         let assistantScreenshot = XCTAttachment(screenshot: app.screenshot())
         assistantScreenshot.name = "Global Assistant on iOS"
         assistantScreenshot.lifetime = .keepAlways
         add(assistantScreenshot)
 
-        let sheetTop = app.navigationBars["Assistant"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+        let sheetTop = header.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
         sheetTop.press(forDuration: Fixture.dismissDuration, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: Fixture.dismissEnd)))
         XCTAssertTrue(actions.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
@@ -60,6 +71,41 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         assistantTile.tap()
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(actions.exists)
+    }
+
+    @MainActor
+    func testAssistantComposerKeepsHeaderActionsReachable() {
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchArguments += ["--demo-data", "-appThemePreference", appearance]
+            app.launch()
+            let launcher = app.buttons["intent.menu.open"]
+            XCTAssertTrue(launcher.waitForExistence(timeout: Fixture.timeout))
+            launcher.tap()
+            let assistantTile = app.buttons["intent.menu.assistant"]
+            XCTAssertTrue(assistantTile.waitForExistence(timeout: Fixture.timeout))
+            assistantTile.tap()
+
+            let composer = app.textViews["composer.textView"]
+            XCTAssertTrue(composer.waitForExistence(timeout: Fixture.timeout))
+            composer.tap()
+            let message = "Help me plan my next workspace."
+            composer.typeText(message)
+            let send = app.buttons["composer.send"]
+            XCTAssertTrue(send.isHittable)
+            send.tap()
+            let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+            XCTAssertTrue(transcript.staticTexts[message].waitForExistence(timeout: Fixture.timeout))
+            XCTAssertEqual(composer.value as? String, "")
+            XCTAssertTrue(app.buttons["assistant.newConversation"].isHittable)
+            XCTAssertTrue(app.buttons["assistant.actions"].isHittable)
+
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Assistant chat sent message \(appearance)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            app.terminate()
+        }
     }
 
     @MainActor
@@ -199,6 +245,10 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertTrue(link.label.contains(Fixture.workspaceTitle))
         XCTAssertFalse(app.buttons["assistant.workspace.missing-workspace"].isEnabled)
         XCTAssertTrue(app.staticTexts["Ready when you are."].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Assistant workspace links"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
         link.tap()
         XCTAssertTrue(app.staticTexts["Test Stabilizer"].firstMatch.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["assistant.actions"].waitForNonExistence(timeout: Fixture.timeout))

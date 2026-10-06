@@ -5,6 +5,10 @@ struct ProposalSelectionSwitch: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.workspaceTranscriptDesign) private var usesWorkspaceDesign
+
+    private typealias Palette = Constants.Conversation.Design.Palette
 
     private enum Layout {
         static let width: CGFloat = 56
@@ -24,18 +28,29 @@ struct ProposalSelectionSwitch: View {
                     .padding(.horizontal, Layout.inset)
             }
             .frame(width: Layout.width, height: Layout.height)
+            .overlay {
+                if usesWorkspaceDesign {
+                    Capsule().strokeBorder(Palette.border(for: colorScheme, contrast: contrast))
+                }
+            }
             .animation(reduceMotion ? nil : .easeInOut(duration: Layout.animationDuration), value: isOn)
             .accessibilityHidden(true)
             .allowsHitTesting(false)
     }
 
     private var trackColor: Color {
+        if usesWorkspaceDesign {
+            return isEnabled && isOn ? Palette.accent : Palette.raisedSurface(for: colorScheme)
+        }
         guard isEnabled else { return Color(uiColor: .systemGray5) }
         guard isOn else { return Color(uiColor: .systemGray3) }
         return colorScheme == .dark ? .black : Color(.assistantAccent)
     }
 
     private var thumbColor: Color {
+        if usesWorkspaceDesign {
+            return isEnabled && isOn ? Palette.onAccent : Palette.secondaryForeground(for: colorScheme, contrast: contrast)
+        }
         guard isEnabled else { return Theme.background(for: colorScheme) }
         guard isOn else { return .white }
         return colorScheme == .dark ? Color(.assistantAccent) : .black
