@@ -133,7 +133,7 @@ struct PairingView: View {
             if options.contains(.savedConnections) {
                 PairingOptionButton(
                     icon: .connectSaved,
-                    title: "Save Connections",
+                    title: "Saved Connections",
                     subtitle: savedConnectionCount == 1 ? "1 available backend" : "\(savedConnectionCount) available backends",
                     colorScheme: colorScheme
                 ) { showConnections = true }
