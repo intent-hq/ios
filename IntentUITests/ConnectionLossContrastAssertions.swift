@@ -18,8 +18,6 @@ extension ConnectionLossUITests {
         capture(app, named: "launch-connecting-without-back")
         try trigger("loss", in: directory)
         assertFailureBackReturnsHome(in: app, timeout: timeout)
-        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
-        saved.tap()
         let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
         XCTAssertTrue(machine.waitForExistence(timeout: timeout))
         machine.tap()
@@ -31,11 +29,10 @@ extension ConnectionLossUITests {
         XCTAssertLessThan(back.frame.maxY, app.frame.midY)
         capture(app, named: "connecting-back")
         back.tap()
-        XCTAssertTrue(saved.waitForExistence(timeout: timeout))
+        XCTAssertTrue(machine.waitForExistence(timeout: timeout))
         XCTAssertFalse(back.exists)
         // Release the abandoned user-initiated connection's data wait after leaving.
         try trigger("initial-data", in: directory)
-        saved.tap()
         XCTAssertTrue(machine.waitForExistence(timeout: timeout))
         XCTAssertFalse(app.buttons["intent.menu.open"].exists, "A late startup completion must not leave Home")
         XCTAssertFalse(app.staticTexts["Can’t Connect"].exists)
@@ -98,8 +95,8 @@ extension ConnectionLossUITests {
         XCTAssertLessThan(back.frame.maxY, app.staticTexts["Can’t Connect"].frame.minY)
         capture(app, named: "connection-failure-back")
         back.tap()
-        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
-        XCTAssertTrue(saved.waitForExistence(timeout: timeout))
+        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
+        XCTAssertTrue(machine.waitForExistence(timeout: timeout))
         XCTAssertFalse(back.exists)
         XCTAssertFalse(app.staticTexts["Can’t Connect"].exists)
         capture(app, named: "connection-failure-returned-home")

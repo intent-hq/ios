@@ -39,7 +39,6 @@ struct PairingView: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var showQRScanner = false
     @State private var showManualEntry = false
-    @State private var showConnections = false
     @State private var verticalSafeAreaDifference: CGFloat = 0
     @ScaledMetric(relativeTo: .title) private var headingCapHeight = PairingTextMetrics.headingCapHeight
     @ScaledMetric(relativeTo: .body) private var bodyCapHeight = PairingTextMetrics.bodyCapHeight
@@ -51,12 +50,10 @@ struct PairingView: View {
                 .toolbar(.hidden, for: .navigationBar)
                 .fullScreenCover(isPresented: $showQRScanner) { QRScannerView() }
                 .sheet(isPresented: $showManualEntry) { ManualTokenEntryView() }
-                .sheet(isPresented: $showConnections) { ConnectionsView() }
         }
         .preference(
             key: ConnectionBackdropPreference.self,
-            value: showManualEntry ? ConnectionBackdropPreference.manualOpacity
-                : (showConnections ? ConnectionBackdropPreference.savedOpacity : 0)
+            value: showManualEntry ? ConnectionBackdropPreference.manualOpacity : 0
         )
     }
 
@@ -116,7 +113,7 @@ struct PairingView: View {
                 PairingOptionButton(
                     icon: .connectQR,
                     title: "Scan QR Code",
-                    subtitle: "Fastest way to connect",
+                    subtitle: "Go to Settings -> Mobile in the desktop app",
                     isProminent: true,
                     colorScheme: colorScheme
                 ) { showQRScanner = true }
@@ -130,12 +127,7 @@ struct PairingView: View {
                 ) { showManualEntry = true }
             }
             if options.contains(.savedConnections) {
-                PairingOptionButton(
-                    icon: .connectSaved,
-                    title: "Saved Connections",
-                    subtitle: "Reconnect to paired daemon",
-                    colorScheme: colorScheme
-                ) { showConnections = true }
+                SavedConnectionsList(showsEmptyState: false, showsHeading: true)
             }
             visionPairingHint
         }

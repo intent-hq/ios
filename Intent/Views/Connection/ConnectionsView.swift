@@ -93,17 +93,8 @@ enum ConnectionPairing {
 /// Saved daemon connections and direct actions to pair another daemon.
 struct ConnectionsView: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(BackendSession.self) private var session
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
-    // False on iPhone, so the Open in New Window action never appears there.
-    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
-    @Environment(\.openWindow) private var openWindow
-    @State private var connections: [StoredConnection] = []
-    @State private var connectionShowingDetails: StoredConnection?
-    @State private var connectionPendingDelete: StoredConnection?
-    @State private var showDeleteError = false
-    @ScaledMetric private var menuIconSize: CGFloat = 17
 
     var body: some View {
         ConnectionSheet(
@@ -120,48 +111,78 @@ struct ConnectionsView: View {
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("saved-connections.title")
                 VStack(spacing: Constants.Connections.cardsToPairingSpacing) {
-                    connectionsList
+                    SavedConnectionsList { dismiss() }
                     ConnectionPairingActions(colorScheme: colorScheme, onPaired: handlePaired)
                 }
             }
         }
-        .sheet(item: $connectionShowingDetails) { connection in
-            SavedConnectionDetails(connection: connection)
-        }
-        .alert(
-            "Delete Connection?",
-            isPresented: Binding(
-                get: { connectionPendingDelete != nil },
-                set: { if !$0 { connectionPendingDelete = nil } }
-            ),
-            presenting: connectionPendingDelete
-        ) { connection in
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) { delete(connection) }
-        } message: { connection in
-            Text(connection.id == windowConnectionId
-                ? "This is the current connection. Deleting it will disconnect you."
-                : "This removes the saved connection. You'll need to pair again to reconnect.")
-        }
-        .alert("Couldn’t Delete Connection", isPresented: $showDeleteError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("The saved connection could not be removed. Please try again.")
-        }
-        .onAppear {
-            // Pull in registry changes synced from other devices while
-            // the sheet was closed, then show the merged list.
-            coordinator.refreshSyncedBackends()
-            reload()
-        }
-        .onReceive(coordinator.dependencies.persistence.connectionsDidChange) { reload() }
+    }
+
+    private func handlePaired(_ connection: StoredConnection) {
+        dismiss()
+        coordinator.onPaired(connection)
+    }
+}
+
+struct SavedConnectionsList: View {
+    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(BackendSession.self) private var session
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
+    @Environment(\.openWindow) private var openWindow
+    var showsEmptyState = true
+    var showsHeading = false
+    var onSelection: () -> Void = {}
+    @State private var connections: [StoredConnection] = []
+    @State private var connectionShowingDetails: StoredConnection?
+    @State private var connectionPendingDelete: StoredConnection?
+    @State private var showDeleteError = false
+    @ScaledMetric private var menuIconSize: CGFloat = 17
+
+    var body: some View {
+        connectionsList
+            .sheet(item: $connectionShowingDetails) { connection in
+                SavedConnectionDetails(connection: connection)
+            }
+            .alert(
+                "Delete Connection?",
+                isPresented: Binding(
+                    get: { connectionPendingDelete != nil },
+                    set: { if !$0 { connectionPendingDelete = nil } }
+                ),
+                presenting: connectionPendingDelete
+            ) { connection in
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) { delete(connection) }
+            } message: { connection in
+                Text(connection.id == windowConnectionId
+                    ? "This is the current connection. Deleting it will disconnect you."
+                    : "This removes the saved connection. You'll need to pair again to reconnect.")
+            }
+            .alert("Couldn’t Delete Connection", isPresented: $showDeleteError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("The saved connection could not be removed. Please try again.")
+            }
+            .onAppear {
+                coordinator.refreshSyncedBackends()
+                reload()
+            }
+            .onReceive(coordinator.dependencies.persistence.connectionsDidChange) { reload() }
     }
 
     private var connectionsList: some View {
         // Prepare rows on MainActor before SwiftUI requests them during async layout.
         let rows = connections.map { (id: $0.id, content: connectionRow($0)) }
-        return VStack(spacing: Constants.Connections.cardSpacing) {
-            if connections.isEmpty {
+        return VStack(alignment: .leading, spacing: Constants.Connections.cardSpacing) {
+            if !connections.isEmpty, showsHeading {
+                Text("Saved Connections")
+                    .interFont(Constants.Typography.eyebrow)
+                    .foregroundStyle(Constants.Connections.sectionForeground(for: colorScheme, contrast: contrast))
+                    .accessibilityAddTraits(.isHeader)
+            }
+            if connections.isEmpty, showsEmptyState {
                 Text("No saved connections. Add a connection below to get started.")
                     .interFont(Constants.Typography.bodyS)
                     // No empty-state design reference: preserve its existing semantic light color.
@@ -189,7 +210,7 @@ struct ConnectionsView: View {
             if connection.id != windowConnectionId {
                 coordinator.onSwitchConnection(id: connection.id)
             }
-            dismiss()
+            onSelection()
         } label: {
             SavedConnectionCard(
                 name: connection.displayName,
@@ -239,7 +260,7 @@ struct ConnectionsView: View {
     private func openInNewWindowButton(_ connection: StoredConnection) -> some View {
         Button {
             openWindow(value: BackendID(connection: connection))
-            dismiss()
+            onSelection()
         } label: {
             Label {
                 Text("Open in New Window").interFont(Constants.Typography.bodyS)
@@ -249,11 +270,6 @@ struct ConnectionsView: View {
         }
     }
 
-    private func handlePaired(_ connection: StoredConnection) {
-        dismiss()
-        coordinator.onPaired(connection)
-    }
-
     private func delete(_ connection: StoredConnection) {
         let wasBound = connection.id == windowConnectionId
         guard coordinator.onDeleteConnection(id: connection.id) else {
@@ -261,7 +277,7 @@ struct ConnectionsView: View {
             return
         }
         reload()
-        if wasBound { dismiss() }
+        if wasBound { onSelection() }
     }
 
     private func reload() {
