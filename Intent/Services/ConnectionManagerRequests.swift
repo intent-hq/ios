@@ -187,7 +187,7 @@ extension ConnectionManager {
             let code = parsedCode ?? -1
             let topMessage = error["message"] as? String ?? "Unknown error"
             let errorData = error["data"] as? [String: Any]
-            let dataMessage = errorData?["message"] as? String
+            let dataMessage = (error["data"] as? String) ?? (errorData?["message"] as? String)
             let effectiveMessage = dataMessage.flatMap { $0.isEmpty ? nil : $0 } ?? topMessage
             let description = parsedCode == nil ? effectiveMessage : "\(effectiveMessage) (\(code))"
             var userInfo: [String: Any] = [NSLocalizedDescriptionKey: description]

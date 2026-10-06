@@ -52,11 +52,12 @@ struct CreateWorkspaceBranchStepView: View {
                 Text(loadError)
                     .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(CreateWorkspaceRepoStyle.secondary(for: colorScheme, contrast: contrast))
-                    .multilineTextAlignment(.center)
                 Button("Retry", action: onRetry)
                     .buttonStyle(IntentButtonStyle(variant: .secondary))
             }
+            .multilineTextAlignment(.center)
             .padding(Constants.CreateWorkspace.errorStatePadding)
+            .frame(maxWidth: .infinity)
         } else {
             VStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
                 sourceSection
