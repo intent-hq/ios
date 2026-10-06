@@ -1,6 +1,13 @@
 import SwiftUI
 
 extension Constants.Conversation.QuestionWizard {
+    enum Paging {
+        static let duration = 0.35
+        static let crossfadeDuration = 0.15
+        nonisolated static let cardSpacing: CGFloat = 16
+        static let backButtonOffset: CGFloat = 8
+    }
+
     enum Workspace {
         static let pressedOpacity = 0.8
         static let disabledOpacity = 0.5

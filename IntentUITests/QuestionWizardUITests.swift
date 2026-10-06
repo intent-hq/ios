@@ -91,10 +91,9 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         tap(first)
         XCTAssertEqual(first.value as? String, "Selected")
         attachScreenshot("questions-selected-answer", in: app)
-        // Native modal snapshots may retain the presenting view's elements.
-        // Existence alone does not indicate that a person can interact with them.
+        // The in-place panel must exclude the conversation from interaction.
         for identifier in ["question.answer", "question.dismiss", "conversation.back", "conversation.actions.open"] {
-            XCTAssertFalse(app.buttons[identifier].isHittable, "The native modal must block \(identifier)")
+            XCTAssertFalse(app.buttons[identifier].isHittable, "The question panel must block \(identifier)")
         }
         XCTAssertFalse(app.scrollViews["transcript.scrollView"].isHittable)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
@@ -115,10 +114,12 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         let app = try openQuestions()
         tap(app.buttons["question.answer"])
         XCTAssertFalse(app.buttons["question.next"].isEnabled)
+        XCTAssertFalse(app.buttons["question.back"].exists, "The first question has no Back control")
         tap(app.buttons["question.option.0"])
         XCTAssertTrue(app.staticTexts["Question One"].exists)
         tap(app.buttons["question.next"])
         XCTAssertTrue(app.staticTexts["Question Two"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["question.back"].isHittable)
         tapOption(0, in: app)
         tapOption(1, in: app)
         tap(app.buttons["question.back"])
@@ -130,10 +131,25 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         tap(editor)
         editor.typeText("Only after review")
         XCTAssertEqual(editor.value as? String, "Only after review")
+        tap(app.buttons["question.collapse"])
+        XCTAssertTrue(app.buttons["question.answer"].waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.buttons["question.next"].exists, "The collapsed panel must be hidden from accessibility")
+        XCTAssertTrue(app.textViews["composer.textView"].isHittable)
+        attachScreenshot("questions-collapsed-with-draft", in: app)
+        tap(app.buttons["question.answer"])
+        XCTAssertTrue(app.buttons["question.next"].waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(editor.value as? String, "Only after review", "Collapsing must preserve the answer draft")
+        XCTAssertEqual(app.buttons["question.option.0"].value as? String, "Selected")
+        attachScreenshot("questions-reopened-with-draft", in: app)
         tap(app.buttons["question.next"])
         XCTAssertTrue(app.staticTexts["Question Two"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(app.buttons["question.option.0"].value as? String, "Selected")
         XCTAssertEqual(app.buttons["question.option.1"].value as? String, "Selected")
+        tap(app.buttons["question.back"])
+        XCTAssertEqual(editor.value as? String, "Only after review", "Back must preserve the typed answer")
+        XCTAssertFalse(app.buttons["question.back"].exists)
+        tap(app.buttons["question.next"])
+        XCTAssertTrue(app.staticTexts["Question Two"].waitForExistence(timeout: Self.timeout))
         tap(app.buttons["question.next"])
 
         assertSentMessage(in: app, contains: [
@@ -141,6 +157,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
             "A: Local tests, Hosted benchmark"
         ])
         XCTAssertTrue(app.buttons["question.next"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.buttons["question.answer"].exists, "Submitting must remove the pending banner")
     }
 
     @MainActor
@@ -214,7 +231,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         if questionScroll.exists, !questionScroll.frame.contains(next.frame) {
             questionScroll.swipeUp()
         }
-        for identifier in ["question.back", "question.skip", "question.next"] {
+        for identifier in ["question.skip", "question.next"] {
             let button = app.buttons[identifier]
             XCTAssertLessThanOrEqual(button.frame.maxY, answer.frame.minY, "The complete footer must stay above the editor")
             if questionScroll.exists {

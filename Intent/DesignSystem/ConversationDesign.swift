@@ -89,6 +89,7 @@ extension Constants.Conversation.Design {
     }
 
     enum Question {
+        static let presentationDuration: TimeInterval = 0.35
         static let backdropBlur: CGFloat = 15
         static let backdropOpacity: Double = 0.3
         static let modalTopInset: CGFloat = 24

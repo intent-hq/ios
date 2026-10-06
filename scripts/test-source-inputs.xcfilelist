@@ -626,6 +626,7 @@ $(SRCROOT)/Intent/Views/Conversation/Notices/QuestionsDismissedNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/SystemNoticeBannerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/WatcherMessageBodyView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions
+$(SRCROOT)/Intent/Views/Conversation/Questions/QuestionCardPager.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionStepView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardCollapsedBanner.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardFooterRow.swift

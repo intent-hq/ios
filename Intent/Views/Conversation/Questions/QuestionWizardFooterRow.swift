@@ -13,9 +13,11 @@ struct QuestionWizardFooterRow: View {
     let onSkip: () -> Void
     let onNext: () -> Void
     var usesWorkspaceDesign = false
+    var backVisible = true
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .caption) private var actionIconSide: CGFloat = 12
 
     private typealias Layout = Constants.Conversation.QuestionWizard.Footer
@@ -34,10 +36,11 @@ struct QuestionWizardFooterRow: View {
             ? AnyLayout(VStackLayout(alignment: .trailing, spacing: Design.Question.buttonSpacing))
             : AnyLayout(HStackLayout(spacing: Design.Question.buttonSpacing))
         return layout {
-            if multiStep {
+            if multiStep, index > 0 {
                 Button("Back", action: onBack)
                     .buttonStyle(WorkspaceQuestionButtonStyle())
-                    .disabled(index == 0)
+                    .opacity(backVisible ? 1 : 0)
+                    .offset(x: reduceMotion || backVisible ? 0 : -Constants.Conversation.QuestionWizard.Paging.backButtonOffset)
                     .accessibilityIdentifier("question.back")
             }
             if !dynamicTypeSize.isAccessibilitySize {
@@ -59,8 +62,10 @@ struct QuestionWizardFooterRow: View {
 
     private var legacyFooter: some View {
         HStack(spacing: Layout.contentSpacing) {
-            if multiStep {
+            if multiStep, index > 0 {
                 backButton
+                    .opacity(backVisible ? 1 : 0)
+                    .offset(x: reduceMotion || backVisible ? 0 : -Constants.Conversation.QuestionWizard.Paging.backButtonOffset)
             }
             if !isMulti, !isLast {
                 selectionInstruction
