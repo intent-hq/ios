@@ -14,7 +14,6 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         let scan = app.buttons["saved-connections.scan"]
         let manual = app.buttons["saved-connections.manual"]
         XCTAssertTrue(manual.waitForExistence(timeout: Self.timeout))
-        verifySavedCardGeometry(option("Demo Mac", in: app), in: app)
         XCTAssertEqual(scan.label, "Scan QR Code")
         XCTAssertEqual(manual.label, "Manual Connection")
         for row in [scan, manual] {
@@ -42,21 +41,13 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     func testSavedConnectionActionsRemainAvailableWhenEmpty() throws {
         continueAfterFailure = false
         let app = try launchAtHome()
+        let saved = option("Saved Connections", in: app)
+        XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
+        saved.tap()
         verifySavedConnectionDeletion(option("Demo Mac", in: app), in: app)
-        XCTAssertFalse(app.staticTexts["saved-connections.empty"].exists)
-        XCTAssertFalse(app.staticTexts["Saved Connections"].exists)
+        try verifyDirectConnectionActions(in: app)
+        XCTAssertTrue(app.staticTexts["saved-connections.empty"].exists)
         XCTAssertFalse(option("Demo Mac", in: app).exists)
-        for (title, destination, closeIdentifier) in [
-            ("Manual Connection", "manual.title", "connection-sheet.close"),
-            ("Scan QR Code", Self.scannerUnavailable, "Cancel")
-        ] {
-            let action = option(title, in: app)
-            XCTAssertTrue(action.isHittable)
-            action.tap()
-            XCTAssertTrue(app.staticTexts[destination].waitForExistence(timeout: Self.timeout))
-            try closePresentedSheet(in: app, identifier: closeIdentifier)
-            XCTAssertTrue(action.waitForExistence(timeout: Self.timeout))
-        }
         capture(app, named: "empty-direct-actions")
     }
 
@@ -65,14 +56,15 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         continueAfterFailure = false
         let app = try launchAtHome()
 
-        let machine = option("Demo Mac", in: app)
+        let saved = option("Saved Connections", in: app)
         let manual = option("Manual Connection", in: app)
         let scan = option("Scan QR Code", in: app)
-        XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(scan.isHittable)
         XCTAssertTrue(manual.isHittable)
-        XCTAssertTrue(machine.isHittable)
-        XCTAssertFalse(option("Saved Connections", in: app).exists)
+        XCTAssertTrue(saved.isHittable)
+        XCTAssertLessThan(scan.frame.maxY, manual.frame.minY)
+        XCTAssertLessThan(manual.frame.maxY, saved.frame.minY)
         capture(app, named: "saved-on")
 
         manual.tap()
@@ -80,7 +72,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(app.textFields["manual.host"].exists)
         capture(app, named: "manual-sheet")
         app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
 
         scan.tap()
         XCTAssertTrue(app.staticTexts[Self.scannerUnavailable].waitForExistence(timeout: Self.timeout))
@@ -88,24 +80,34 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Cancel"].isHittable)
         capture(app, named: "scanner-full-screen")
         app.buttons["Cancel"].tap()
+        XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
+
+        saved.tap()
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
+        let machine = option("Demo Mac", in: app)
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(app.staticTexts["Pair New"].exists)
         XCTAssertFalse(app.staticTexts["Connected"].exists, "Home is unbound; another window must not lend its badge")
         XCTAssertTrue(machine.isHittable)
         XCTAssertGreaterThanOrEqual(machine.frame.height, 44)
-        capture(app, named: "saved-inline")
+        verifySavedCardGeometry(machine, in: app)
+        capture(app, named: "saved-sheet")
         machine.press(forDuration: 1)
         app.buttons["Connection Details"].tap()
         XCTAssertTrue(app.staticTexts["saved-connection.details-title"].waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
         try closePresentedSheet(in: app)
         XCTAssertTrue(app.staticTexts["saved-connection.details-title"].waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
 
+        // Remove only this test's in-memory fixture through the real saved sheet.
+        saved.tap()
         verifySavedConnectionDeletion(machine, in: app)
+        app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(manual.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(scan.isHittable)
-        XCTAssertFalse(app.staticTexts["Saved Connections"].exists)
+        XCTAssertFalse(saved.exists)
         capture(app, named: "saved-off")
     }
 
@@ -149,6 +151,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout), file: file, line: line)
         confirmation.buttons["Delete"].tap()
         XCTAssertTrue(machine.waitForNonExistence(timeout: Self.timeout), file: file, line: line)
+        XCTAssertTrue(app.staticTexts["saved-connections.empty"].exists, file: file, line: line)
     }
 
     @MainActor

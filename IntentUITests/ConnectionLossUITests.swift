@@ -88,8 +88,8 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         capture(app, named: "sustained-background-loss")
         try assertConnectionLossSubtitleContrast(in: app, sourceImage: sourceImage)
         app.buttons[Fixture.homeIdentifier].tap()
-        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         capture(app, named: "source-after-home")
     }
@@ -233,13 +233,15 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         assertNetworkTitle("No network connection", identifier: "connection-loss.status", in: app)
         app.buttons[Fixture.homeIdentifier].tap()
 
-        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         XCTAssertFalse(app.staticTexts["creation.repositoryTitle"].exists)
         XCTAssertFalse(app.staticTexts["connection-network.status"].exists, "Home is not an offline failure screen")
         try trigger("network-restored", in: directory)
         try trigger("recover", in: directory)
+        saved.tap()
+        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
         XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
         capture(app, named: "home-saved-machine-retained")
         machine.tap()
@@ -343,8 +345,8 @@ extension ConnectionLossUITests {
         XCTAssertTrue(home.isHittable)
         capture(app, named: "largest-text-home-visible")
         home.tap()
-        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
         XCTAssertFalse(home.exists)
     }
 
