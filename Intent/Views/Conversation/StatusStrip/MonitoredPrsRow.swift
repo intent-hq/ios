@@ -74,7 +74,7 @@ struct MonitoredPrsRow: View {
             .padding(.vertical, Constants.Conversation.StatusStrip.verticalPadding)
         }
         .scrollIndicators(.hidden)
-        .background(Theme.card(for: colorScheme).opacity(Constants.Conversation.StatusStrip.backgroundOpacity))
+        .background(Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : Constants.Conversation.StatusStrip.backgroundOpacity))
         .opacity(Constants.Conversation.StatusStrip.contentOpacity)
     }
 

@@ -38,7 +38,7 @@ struct AgentWaitingView: View {
             waitingHeader
             waitingList
         }
-        .background(Theme.card(for: colorScheme))
+        .background(Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1))
     }
 
     private var waitingHeader: some View {

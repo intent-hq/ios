@@ -134,7 +134,9 @@ struct WorkspaceQueuePanel<Content: View>: View {
             content
         }
         .background {
-            if isVisible { Design.Palette.background(for: colorScheme).ignoresSafeArea(edges: .bottom) }
+            if isVisible, !viewModel.showsLoadingState {
+                Design.Palette.background(for: colorScheme).ignoresSafeArea(edges: .bottom)
+            }
         }
         .overlay(alignment: .top) {
             if isVisible {

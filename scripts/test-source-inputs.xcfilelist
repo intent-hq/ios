@@ -1043,6 +1043,7 @@ $(SRCROOT)/IntentTests/SharedWorkspaceStatusRaceTests.swift
 $(SRCROOT)/IntentTests/SharedWorkspaceStatusTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
+$(SRCROOT)/IntentTests/SplashAnimationTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift

@@ -39,7 +39,7 @@ struct SplashArtView: View {
     }
 
     var body: some View {
-        background
+        SplashBackground()
             .overlay {
                 TimelineView(.animation(
                     minimumInterval: animation?.minimumFrameDuration,
@@ -74,9 +74,13 @@ struct SplashArtView: View {
             lease = nil
         }
     }
+}
 
-    @ViewBuilder
-    private var background: some View {
+/// Shared launch artwork for the splash and conversation loading state.
+struct SplashBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
         if colorScheme == .dark {
             Theme.background(for: colorScheme)
         } else {
