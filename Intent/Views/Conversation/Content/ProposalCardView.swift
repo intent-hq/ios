@@ -55,6 +55,7 @@ struct ProposalCardView: View {
             if usesWorkspaceDesign {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .strokeBorder(Design.Palette.border(for: colorScheme, contrast: contrast))
+                    .allowsHitTesting(false)
             }
         }
         .task { await store?.loadIfNeeded() }

@@ -93,7 +93,7 @@ struct AssistantConversationHeader<Actions: View>: View {
     var body: some View {
         WorkspaceNavigationHeader(
             title: title,
-            subtitle: "Assistant",
+            subtitle: title == "Assistant" ? nil : "Assistant",
             showsBackground: showsBackground
         ) {
             HStack(spacing: 0) {
@@ -116,7 +116,7 @@ struct AssistantConversationHeader<Actions: View>: View {
 /// Workspace, agent and Assistant navigation share the native top safe area and control geometry.
 struct WorkspaceNavigationHeader<Actions: View>: View {
     let title: String
-    let subtitle: LocalizedStringKey
+    let subtitle: LocalizedStringKey?
     var backLabel: LocalizedStringKey = "Back"
     var backIdentifier = "conversation.back"
     var showsBackground = true
@@ -171,8 +171,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 } else {
                     WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
                 }
-                WorkspaceHeaderText(Text(subtitle), style: Constants.Typography.bodyXS)
-                    .foregroundStyle(Design.Palette.subtitleForeground(for: colorScheme, contrast: contrast))
+                subtitleText
             }
             .tracking(Design.Typography.smallTracking)
             .frame(maxWidth: .infinity)
@@ -184,6 +183,13 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))
         .padding(.horizontal, Design.horizontalInset)
         .padding(.vertical, Design.Header.verticalPadding)
+    }
+
+    @ViewBuilder private var subtitleText: some View {
+        if let subtitle {
+            WorkspaceHeaderText(Text(subtitle), style: Constants.Typography.bodyXS)
+                .foregroundStyle(Design.Palette.subtitleForeground(for: colorScheme, contrast: contrast))
+        }
     }
 }
 

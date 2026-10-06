@@ -53,6 +53,7 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         XCTAssertFalse(app.buttons["conversation.back"].exists)
         if isCompact {
             XCTAssertFalse(app.navigationBars["Assistant"].exists)
+            XCTAssertEqual(header.staticTexts.matching(NSPredicate(format: "label == %@", "Assistant")).count, 1)
         }
         let assistantScreenshot = XCTAttachment(screenshot: app.screenshot())
         assistantScreenshot.name = "Global Assistant on iOS"
