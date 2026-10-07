@@ -17,13 +17,7 @@ struct ConversationView: View {
     ) {
         self.onAgentUnavailable = onAgentUnavailable
         self.assistantStore = assistantStore
-        _proposals = State(initialValue: ProposalActionStore(
-            connection: session.connection,
-            agentId: agentId,
-            workspaceId: workspaceId,
-            details: session.agentDetails,
-            workspaceStore: session.workspaceStore
-        ))
+        _proposals = State(initialValue: ProposalActionStore(connection: session.connection, agentId: agentId, workspaceId: workspaceId, details: session.agentDetails, workspaceStore: session.workspaceStore))
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
             workspaceId: workspaceId,
