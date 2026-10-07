@@ -10,7 +10,6 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
     let onRetry: () async -> Void
     @Environment(\.colorScheme) private var colorScheme
     @State private var timing: ConversationConnectionStatusTiming<Phase>
-    @State private var isExpanded = false
 
     private typealias Layout = Constants.Conversation.Column.Loading
 
@@ -32,14 +31,12 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
             let isDelayed = timing.isDelayed(phase: phase, at: context.date)
             VStack(alignment: .leading, spacing: Layout.rowSpacing) {
                 ConversationConnectionStatusHeader(
-                    phase: phase, message: message, elapsed: isDelayed ? elapsed : nil, isExpanded: $isExpanded
+                    phase: phase, message: message, elapsed: isDelayed ? elapsed : nil
                 )
 
-                if isExpanded {
-                    VStack(alignment: .leading, spacing: Layout.contentSpacing) {
-                        ForEach(ConversationConnectionStep.allCases, id: \.self) { step in
-                            ConversationConnectionStepRow(step: step, currentStep: currentStep)
-                        }
+                VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+                    ForEach(ConversationConnectionStep.allCases, id: \.self) { step in
+                        ConversationConnectionStepRow(step: step, currentStep: currentStep)
                     }
                 }
 
@@ -63,42 +60,31 @@ private struct ConversationConnectionStatusHeader<Phase: Equatable>: View {
     let phase: Phase
     let message: LocalizedStringResource
     let elapsed: String?
-    @Binding var isExpanded: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private typealias Layout = Constants.Conversation.Column.Loading
 
     var body: some View {
-        Button {
-            isExpanded.toggle()
-        } label: {
-            HStack(alignment: .top, spacing: Layout.contentSpacing) {
-                ProgressView()
-                    .controlSize(.small)
-                    .frame(width: Layout.iconDimension, height: Layout.iconDimension)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: Layout.detailSpacing) {
-                    Text(message)
-                        .contentTransition(.opacity)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: Layout.fadeDuration), value: phase)
-                    if let elapsed {
-                        Text("Elapsed: \(elapsed) · Taking longer than usual")
-                            .interFont(Constants.Typography.bodyXS)
-                            .monospacedDigit()
-                    }
+        HStack(alignment: .top, spacing: Layout.contentSpacing) {
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: Layout.iconDimension, height: Layout.iconDimension)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Layout.detailSpacing) {
+                Text(message)
+                    .contentTransition(.opacity)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: Layout.fadeDuration), value: phase)
+                if let elapsed {
+                    Text("Elapsed: \(elapsed) · Taking longer than usual")
+                        .interFont(Constants.Typography.bodyXS)
+                        .monospacedDigit()
                 }
-                .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.forward")
-                    .accessibilityHidden(true)
             }
-            .frame(maxWidth: .infinity, minHeight: Layout.minimumTapHeight, alignment: .leading)
-            .contentShape(Rectangle())
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .buttonStyle(IntentContentButtonStyle())
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(elapsed.map { Text("\(Text(message)), elapsed: \($0), Taking longer than usual") } ?? Text(message))
-        .accessibilityValue(isExpanded ? Text("Expanded") : Text("Collapsed"))
-        .accessibilityHint("Show or hide connection steps")
         .accessibilityIdentifier("conversation.connectionStatus")
     }
 }

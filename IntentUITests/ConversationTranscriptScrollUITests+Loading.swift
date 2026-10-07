@@ -14,22 +14,17 @@ extension ConversationTranscriptScrollUITests {
         defer { finishStartup(app) }
         let opened = enterLongConversation(in: app, context: "inline loading status", waitForTranscript: false)
         let block = app.otherElements["conversation.connectionStatusBlock"].firstMatch
-        let status = block.buttons["conversation.connectionStatus"]
+        let status = block.otherElements["conversation.connectionStatus"]
         let retry = block.buttons["conversation.retryNow"]
         let composer = app.textViews[Fixture.composerIdentifier].firstMatch
         XCTAssertTrue(status.waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertEqual(status.label, "Asking the daemon", "Only the current message is announced before the idle threshold")
-        XCTAssertEqual(status.value as? String, "Collapsed")
-        XCTAssertFalse(block.otherElements["Connecting to the daemon, Done"].exists)
+        XCTAssertFalse(block.buttons["conversation.connectionStatus"].exists, "The status is not a disclosure control")
         XCTAssertFalse(retry.exists)
         attachLoading(app.screenshot(), named: "Conversation loading before idle \(appearance)")
+        assertConnectionSteps(in: block, status: status)
         XCTAssertFalse(opened.transcript.exists, "The snapshot must remain held while checking loading status")
         XCTAssertFalse(composer.exists, "Loading must hide the message bar")
-
-        status.tap()
-        assertExpandedSteps(in: block, status: status)
-        status.tap()
-        XCTAssertEqual(status.value as? String, "Collapsed")
 
         XCTAssertTrue(retry.waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertTrue(status.label.hasPrefix("Asking the daemon, elapsed: "))
@@ -37,17 +32,8 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertTrue(retry.isHittable)
         XCTAssertTrue(block.frame.contains(status.frame))
         XCTAssertTrue(block.frame.contains(retry.frame), "Retry must stay within the same loading group")
+        assertConnectionSteps(in: block, status: status)
         attachLoading(app.screenshot(), named: "Conversation loading after idle \(appearance)")
-
-        // The trailing chevron and the message row share the same disclosure target.
-        status.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
-        assertExpandedSteps(in: block, status: status)
-        XCTAssertTrue(retry.isHittable)
-        attachLoading(app.screenshot(), named: "Conversation loading expanded after idle \(appearance)")
-        status.tap()
-        XCTAssertEqual(status.value as? String, "Collapsed")
-        XCTAssertFalse(block.otherElements["Connecting to the daemon, Done"].exists)
-        XCTAssertTrue(retry.isHittable, "Collapsing steps must not hide Retry Now")
 
         try Data().write(to: startupSnapshotGate)
         XCTAssertTrue(opened.transcript.waitForExistence(timeout: Fixture.settleTimeout))
@@ -58,11 +44,10 @@ extension ConversationTranscriptScrollUITests {
     }
 
     @MainActor
-    private func assertExpandedSteps(in block: XCUIElement, status: XCUIElement) {
-        XCTAssertEqual(status.value as? String, "Expanded")
+    private func assertConnectionSteps(in block: XCUIElement, status: XCUIElement) {
         for label in ["Connecting to the daemon, Done", "Asking the daemon, Current", "Receiving messages, Pending"] {
             let step = block.otherElements[label]
-            XCTAssertTrue(step.exists, "Expanded loading steps must announce their progress state")
+            XCTAssertTrue(step.exists, "Loading steps must always be visible and announce their progress state")
             XCTAssertTrue(block.frame.contains(step.frame))
             XCTAssertGreaterThanOrEqual(step.frame.minY, status.frame.maxY)
         }

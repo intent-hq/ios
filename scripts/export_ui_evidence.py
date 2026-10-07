@@ -15,7 +15,6 @@ CAPTURES = {
         "testLoadingStatusShowsIdleDelayAndRestoresComposer": (
             "Conversation loading before idle light", "Conversation loading after idle light",
             "Conversation loading before idle dark", "Conversation loading after idle dark",
-            "Conversation loading expanded after idle light", "Conversation loading expanded after idle dark",
         ),
     },
     "WatcherMessageUITests": {

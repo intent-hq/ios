@@ -10,7 +10,7 @@ struct ConversationConnectionStepTests {
         (.retrying(attempt: 1), .requesting),
         (.retrying(attempt: 3), .requesting)
     ])
-    func disclosureTracksProgressIncludingRetries(
+    func stepsTrackProgressIncludingRetries(
         stage: ConversationLiveTranscript.LoadingStage, expectedStep: ConversationConnectionStep
     ) {
         #expect(ConversationConnectionStep(stage: stage) == expectedStep)
