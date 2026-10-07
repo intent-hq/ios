@@ -328,6 +328,9 @@ $(SRCROOT)/Intent/Views/Connection/DisconnectedView.swift
 $(SRCROOT)/Intent/Views/Connection/LoadingView.swift
 $(SRCROOT)/Intent/Views/Connection/SavedConnectionCard.swift
 $(SRCROOT)/Intent/Views/Connection/SavedConnectionDetails.swift
+$(SRCROOT)/Intent/Views/Conversation/AssistantEmptyState.swift
+$(SRCROOT)/Intent/Views/Conversation/AssistantErrorBanner.swift
+$(SRCROOT)/Intent/Views/Conversation/AssistantStateContent.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputAttachments.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputView.swift
@@ -365,6 +368,7 @@ $(SRCROOT)/Intent/Views/Conversation/Notices/PrMonitorWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/QuestionsDismissedNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/SystemNoticeBannerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/WatcherMessageBodyView.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/QuestionCardPager.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionStepView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardCollapsedBanner.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardFooterRow.swift
@@ -886,6 +890,7 @@ $(SRCROOT)/IntentTests/WorkspaceVideoDownloadTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/AssistantNavigationUITests.swift
 $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
+$(SRCROOT)/IntentUITests/AssistantStateUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionFailureRecoveryUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossContrastAssertions.swift
 $(SRCROOT)/IntentUITests/ConnectionLossUITests.swift

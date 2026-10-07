@@ -18,7 +18,7 @@ extension ConnectionLossUITests {
         capture(app, named: "launch-connecting-without-back")
         try trigger("loss", in: directory)
         assertFailureBackReturnsHome(in: app, timeout: timeout)
-        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        let saved = app.buttons["pairing.saved-connections"]
         saved.tap()
         let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
         XCTAssertTrue(machine.waitForExistence(timeout: timeout))
@@ -98,7 +98,7 @@ extension ConnectionLossUITests {
         XCTAssertLessThan(back.frame.maxY, app.staticTexts["Can’t Connect"].frame.minY)
         capture(app, named: "connection-failure-back")
         back.tap()
-        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Saved Connections")).firstMatch
+        let saved = app.buttons["pairing.saved-connections"]
         XCTAssertTrue(saved.waitForExistence(timeout: timeout))
         XCTAssertFalse(back.exists)
         XCTAssertFalse(app.staticTexts["Can’t Connect"].exists)

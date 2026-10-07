@@ -5,11 +5,11 @@ struct WorkspaceQuestionPendingBanner: View {
     let pendingSet: PendingQuestionSet
     let onAnswer: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.workspaceQuestionPanelPresented) private var panelPresented
+    @Environment(\.workspaceQuestionSubmitting) private var submitting
     @State private var confirmingDismiss = false
     @State private var dismissing = false
-
-    private typealias Design = Constants.Conversation.Design
+    @AccessibilityFocusState private var bannerFocused: Bool
 
     var body: some View {
         QuestionWizardCollapsedBanner(
@@ -20,7 +20,16 @@ struct WorkspaceQuestionPendingBanner: View {
             onDismiss: { confirmingDismiss = true },
             usesWorkspaceDesign: true
         )
-        .background(Design.Palette.surface(for: colorScheme), in: .rect(cornerRadius: Design.cornerRadius))
+        .opacity(panelPresented ? 0 : 1)
+        .modifier(WorkspaceQuestionSurface(isPanel: false))
+        .opacity(submitting ? 0 : 1)
+        .allowsHitTesting(!panelPresented && !submitting)
+        .accessibilityElement(children: .contain)
+        .accessibilityHidden(panelPresented || submitting)
+        .accessibilityFocused($bannerFocused)
+        .onChange(of: panelPresented) { wasPresented, presented in
+            if wasPresented, !presented, !submitting { bannerFocused = true }
+        }
         .confirmationDialog("Dismiss questions?", isPresented: $confirmingDismiss, titleVisibility: .visible) {
             Button("Dismiss questions", role: .destructive) {
                 dismissing = true

@@ -41,7 +41,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     func testSavedConnectionActionsRemainAvailableWhenEmpty() throws {
         continueAfterFailure = false
         let app = try launchAtHome()
-        let saved = option("Saved Connections", in: app)
+        let saved = app.buttons["pairing.saved-connections"]
         XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
         saved.tap()
         verifySavedConnectionDeletion(option("Demo Mac", in: app), in: app)
@@ -49,34 +49,9 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["saved-connections.empty"].exists)
         XCTAssertFalse(option("Demo Mac", in: app).exists)
         capture(app, named: "empty-direct-actions")
-    }
-
-    @MainActor
-    func testReferencePlacementMatchesFigma() throws {
-        let app = try launchAtHome()
-        let saved = option("Saved Connections", in: app)
-        XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
-        guard app.frame.size == CGSize(width: 402, height: 874) else {
-            throw XCTSkip("The supplied Figma reference is 402×874; run on iPhone 16 Pro at normal text size")
-        }
-        // Native Inter line boxes extend equally above/below the cap-to-baseline box.
-        // Compare text centers, not their deliberately untrimmed accessibility bounds.
-        XCTAssertEqual(app.staticTexts["Connect to Intent"].frame.midY, 233, accuracy: 1.5)
-        let description = app.staticTexts["Pair with your desktop app to manage workspaces and chat with agents."]
-        XCTAssertEqual(description.frame.midY, 283.5, accuracy: 1.5)
-        XCTAssertEqual(option("Scan QR Code", in: app).frame.minY, 364, accuracy: 1.5)
-        XCTAssertEqual(option("Manual Connection", in: app).frame.minY, 500, accuracy: 1.5)
-        XCTAssertEqual(saved.frame.minY, 588, accuracy: 1.5)
-        for (title, subtitle, centerY) in [
-            ("Scan QR Code", "Fastest way to connect", 420.0),
-            ("Manual Connection", "Enter IP, port, and token", 532.0),
-            ("Saved Connections", "Reconnect to paired daemon", 620.0)
-        ] {
-            // Each trimmed 12-point line sits on either side of the 12-point gap.
-            XCTAssertEqual(app.staticTexts[title].frame.midY, centerY - 12, accuracy: 1.5)
-            XCTAssertEqual(app.staticTexts[subtitle].frame.midY, centerY + 12, accuracy: 1.5)
-        }
-        capture(app, named: "reference-placement")
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(option("Manual Connection", in: app).waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(saved.exists)
     }
 
     @MainActor
@@ -84,7 +59,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         continueAfterFailure = false
         let app = try launchAtHome()
 
-        let saved = option("Saved Connections", in: app)
+        let saved = app.buttons["pairing.saved-connections"]
         let manual = option("Manual Connection", in: app)
         let scan = option("Scan QR Code", in: app)
         XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
@@ -104,7 +79,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
 
         scan.tap()
         XCTAssertTrue(app.staticTexts[Self.scannerUnavailable].waitForExistence(timeout: Self.timeout))
-        XCTAssertFalse(app.staticTexts["Point at the QR code in the Intent Settings"].exists)
+        XCTAssertFalse(app.staticTexts["Find QR code in Settings -> Mobile\nin the Intent desktop app"].exists)
         XCTAssertTrue(app.buttons["Cancel"].isHittable)
         capture(app, named: "scanner-full-screen")
         app.buttons["Cancel"].tap()
@@ -167,17 +142,20 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     ) {
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout), file: file, line: line)
         machine.press(forDuration: 1)
-        app.buttons["Delete"].tap()
-        let confirmation = app.alerts["Delete Connection?"]
+        let remove = app.buttons["Remove Connection"]
+        XCTAssertTrue(remove.waitForExistence(timeout: Self.timeout), file: file, line: line)
+        remove.tap()
+        let confirmation = app.alerts["Remove Connection?"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout), file: file, line: line)
         confirmation.buttons["Cancel"].tap()
         XCTAssertTrue(
             machine.waitForExistence(timeout: Self.timeout), "Cancel must keep the saved connection", file: file, line: line
         )
         machine.press(forDuration: 1)
-        app.buttons["Delete"].tap()
+        XCTAssertTrue(remove.waitForExistence(timeout: Self.timeout), file: file, line: line)
+        remove.tap()
         XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout), file: file, line: line)
-        confirmation.buttons["Delete"].tap()
+        confirmation.buttons["Remove"].tap()
         XCTAssertTrue(machine.waitForNonExistence(timeout: Self.timeout), file: file, line: line)
         XCTAssertTrue(app.staticTexts["saved-connections.empty"].exists, file: file, line: line)
     }

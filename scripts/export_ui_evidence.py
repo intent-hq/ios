@@ -16,6 +16,25 @@ CAPTURES = {
             "Sent video poster", "Sent video full-screen playback",
         ),
     },
+    "AssistantStateUITests": {
+        "testLoadingFailureRetriesToEmptyAndStartsConversation": (
+            "Assistant loading light", "Assistant error light", "Assistant empty light",
+            "Assistant loading dark", "Assistant error dark", "Assistant empty dark",
+        ),
+        "testStateActionsRemainReachableWithAccessibilityText": (
+            "Assistant loading accessibility", "Assistant error accessibility", "Assistant empty accessibility",
+        ),
+    },
+    "AssistantProposalUITests": {
+        "testArchiveSelectionAndSavedOutcome": ("Assistant switches on", "Assistant switches off"),
+    },
+    "AssistantNavigationUITests": {
+        "testWorkspaceBlockOpensWorkspaceOverview": ("Assistant workspace links",),
+        "testAssistantButtonOpensAndReturnsToWorkspaces": ("Global Assistant on iOS",),
+        "testAssistantComposerKeepsHeaderActionsReachable": (
+            "Assistant chat sent message light", "Assistant chat sent message dark",
+        ),
+    },
     "WatcherMessageUITests": {
         "testWatcherDetailsExpandAndCollapseWithoutLosingTheReport": (
             "Watcher summary", "Watcher expanded details", "Watcher final state",

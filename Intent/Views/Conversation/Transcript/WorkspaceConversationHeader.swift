@@ -49,32 +49,80 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 struct WorkspaceConversationHeader<Actions: View>: View {
     let title: String
     var showsBackground = true
+    var assistantStore: AssistantStore?
     let onBack: () -> Void
+    @ViewBuilder let actions: () -> Actions
+    @Environment(AppCoordinator.self) private var coordinator
+
+    var body: some View {
+        if let assistantStore {
+            AssistantConversationHeader(
+                title: title,
+                showsBackground: showsBackground,
+                canCreateConversation: !assistantStore.isCreating && assistantStore.hasLoaded,
+                onNewConversation: {
+                    Task {
+                        if let id = await assistantStore.createThread() {
+                            coordinator.assistantAgentId = id
+                        }
+                    }
+                },
+                actions: actions
+            )
+        } else {
+            WorkspaceNavigationHeader(
+                title: title,
+                subtitle: "Agent",
+                backLabel: "Back",
+                backIdentifier: "conversation.back",
+                showsBackground: showsBackground,
+                onBack: onBack,
+                actions: actions
+            )
+        }
+    }
+}
+
+struct AssistantConversationHeader<Actions: View>: View {
+    let title: String
+    var showsBackground = true
+    let canCreateConversation: Bool
+    let onNewConversation: () -> Void
     @ViewBuilder let actions: () -> Actions
 
     var body: some View {
         WorkspaceNavigationHeader(
             title: title,
-            subtitle: "Agent",
-            backLabel: "Back",
-            backIdentifier: "conversation.back",
-            showsBackground: showsBackground,
-            onBack: onBack,
-            actions: actions
-        )
+            subtitle: title == "Assistant" ? nil : "Assistant",
+            showsBackground: showsBackground
+        ) {
+            HStack(spacing: 0) {
+                IntentIconButton(
+                    icon: .displayEdit,
+                    label: "New Conversation",
+                    showsBackground: false,
+                    action: onNewConversation
+                )
+                .disabled(!canCreateConversation)
+                .accessibilityIdentifier("assistant.newConversation")
+                actions()
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("assistant.header")
     }
 }
 
-/// Workspace and agent navigation share the native top safe area and control geometry.
+/// Workspace, agent and Assistant navigation share the native top safe area and control geometry.
 struct WorkspaceNavigationHeader<Actions: View>: View {
     let title: String
-    let subtitle: LocalizedStringKey
-    let backLabel: LocalizedStringKey
-    let backIdentifier: String
+    let subtitle: LocalizedStringKey?
+    var backLabel: LocalizedStringKey = "Back"
+    var backIdentifier = "conversation.back"
     var showsBackground = true
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
-    let onBack: () -> Void
+    var onBack: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -102,17 +150,19 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
 
     private var controls: some View {
         HStack(spacing: 0) {
-            Button(action: onBack) {
-                Image(.arrowLeft)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: Design.iconSize, height: Design.iconSize)
-                    .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
-                    .contentShape(Rectangle())
+            if let onBack {
+                Button(action: onBack) {
+                    Image(.arrowLeft)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: Design.iconSize, height: Design.iconSize)
+                        .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(IntentContentButtonStyle())
+                .accessibilityLabel(backLabel)
+                .accessibilityIdentifier(backIdentifier)
             }
-            .buttonStyle(IntentContentButtonStyle())
-            .accessibilityLabel(backLabel)
-            .accessibilityIdentifier(backIdentifier)
             VStack(spacing: Design.Header.titleSpacing) {
                 if showsWorkspacePlaceholder {
                     WorkspaceTitle(title: title, createdAt: workspaceCreatedAt) { title in
@@ -121,19 +171,25 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 } else {
                     WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
                 }
-                WorkspaceHeaderText(Text(subtitle), style: Constants.Typography.bodyXS)
-                    .foregroundStyle(Design.Palette.subtitleForeground(for: colorScheme, contrast: contrast))
+                subtitleText
             }
             .tracking(Design.Typography.smallTracking)
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
             actions()
                 .buttonStyle(IntentContentButtonStyle())
-                .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
+                .frame(minWidth: Design.Header.controlSize, minHeight: Design.Header.controlSize)
         }
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))
         .padding(.horizontal, Design.horizontalInset)
         .padding(.vertical, Design.Header.verticalPadding)
+    }
+
+    @ViewBuilder private var subtitleText: some View {
+        if let subtitle {
+            WorkspaceHeaderText(Text(subtitle), style: Constants.Typography.bodyXS)
+                .foregroundStyle(Design.Palette.subtitleForeground(for: colorScheme, contrast: contrast))
+        }
     }
 }
 

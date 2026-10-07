@@ -398,7 +398,7 @@ private struct ConversationLoadingView: View {
 
     var body: some View {
         VStack(spacing: Layout.contentSpacing) {
-            IntentLoadingIndicator(size: Layout.markDimension, playbackMode: .pulse)
+            IntentLoadingIndicator(size: Layout.markDimension, playbackMode: .twistLoop)
             stageText
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))

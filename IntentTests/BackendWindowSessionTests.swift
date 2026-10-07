@@ -151,7 +151,8 @@ extension BackendSessionRegistryTests {
     @Test(arguments: [false, true])
     func returnHomeThenReselectSameBackendReattaches(hasSurvivingWindow: Bool) throws {
         let registry = makeRegistry()
-        let backend = BackendID(UUID())
+        let stored = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 4242))
+        let backend = BackendID(stored.id)
         let window = BackendWindowSession(registry: registry)
         window.bind(to: backend)
         let original = try #require(window.session)
@@ -174,6 +175,8 @@ extension BackendSessionRegistryTests {
         #expect(home.currentScreenDescription == "pairing", "Home must skip the launch splash and automatic connection")
         #expect(home.routingState.hasLoadCompleted, "Deep links at Home must not wait for a skipped loading screen")
         #expect(home.backendID == nil)
+        #expect(home.savedConnections.map(\.id) == [stored.id])
+        #expect(home.pairingShowsSavedConnections)
         home.retargetWindow = { selected = $0 }
         home.onSwitchConnection(id: backend.connectionID)
         #expect(selected == backend)

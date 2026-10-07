@@ -7,6 +7,7 @@ struct SplashAnimation {
     enum PlaybackMode {
         case twistThenPulse
         case pulse
+        case twistLoop
     }
 
     let twist: LottieAnimation
@@ -29,13 +30,19 @@ struct SplashAnimation {
         self.pulse = pulse
     }
 
-    /// Optionally play the entire twist once, then loop pulse using each JSON's own timing.
+    /// Play the selected sequence using each JSON's own timing.
     /// Pulse's first frame is a complete mark; twist's first frame is empty.
     func frame(
         at elapsedTime: TimeInterval, animated: Bool, mode: PlaybackMode = .twistThenPulse
     ) -> (animation: LottieAnimation, frame: AnimationFrameTime) {
         guard animated else { return (pulse, pulse.startFrame) }
         let elapsed = elapsedTime.isFinite ? max(0, elapsedTime) : 0
+        if mode == .twistLoop {
+            let loopTime = elapsed.truncatingRemainder(dividingBy: twist.duration)
+            // Skip the empty opening frame without changing the composition's duration.
+            let firstVisibleFrame = twist.startFrame + 1
+            return (twist, max(firstVisibleFrame, twist.frameTime(forTime: loopTime)))
+        }
         let introDuration = mode == .twistThenPulse ? twist.duration : 0
         if elapsed < introDuration {
             return (twist, twist.frameTime(forTime: elapsed))

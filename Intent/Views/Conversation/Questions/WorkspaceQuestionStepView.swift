@@ -10,6 +10,7 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
     let availableHeight: CGFloat
     let onSelect: (Int) -> Void
     let footer: Footer
+    var onCollapse: (() -> Void)?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
@@ -42,14 +43,23 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
     // Answers stay stacked even when the keyboard reduces the available height.
     private var content: some View {
         VStack(alignment: .leading, spacing: Design.Question.contentSpacing) {
-            VStack(alignment: .leading, spacing: Design.Question.titleSpacing) {
-                WorkspaceQuestionHeader(question: question)
-                if questionCount > 1 {
-                    Text("Question \(index + 1) of \(questionCount)")
-                        .interFont(Constants.Typography.bodyXS)
-                        .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("question.progress")
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: Design.Question.titleSpacing) {
+                    WorkspaceQuestionHeader(question: question)
+                    if questionCount > 1 {
+                        Text("Question \(index + 1) of \(questionCount)")
+                            .interFont(Constants.Typography.bodyXS)
+                            .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("question.progress")
+                    }
+                }
+                if let onCollapse {
+                    Spacer(minLength: 0)
+                    Button("Collapse questions", systemImage: "chevron.down", action: onCollapse)
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(WorkspaceQuestionButtonStyle())
+                        .accessibilityIdentifier("question.collapse")
                 }
             }
             VStack(alignment: .leading, spacing: Design.Question.footerSpacing) {
