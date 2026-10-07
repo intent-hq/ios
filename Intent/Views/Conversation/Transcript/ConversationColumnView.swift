@@ -349,8 +349,8 @@ private struct ConversationConnectionLoadingView: View {
     private var message: LocalizedStringResource {
         switch viewModel.loadingStage {
         case .idle: "Loading conversation"
-        case .connecting: "Connecting to the daemon"
-        case .requesting: "Asking the daemon"
+        case .connecting: "Connecting"
+        case .requesting: "Requesting messages"
         case .receiving: "Receiving messages"
         case .retrying(let attempt): "Retrying (attempt \(attempt))"
         }

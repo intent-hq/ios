@@ -16,8 +16,8 @@ enum ConversationConnectionStep: Int, CaseIterable {
 
     var title: LocalizedStringResource {
         switch self {
-        case .connecting: "Connecting to the daemon"
-        case .requesting: "Asking the daemon"
+        case .connecting: "Connecting"
+        case .requesting: "Requesting messages"
         case .receiving: "Receiving messages"
         }
     }

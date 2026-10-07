@@ -18,7 +18,7 @@ extension ConversationTranscriptScrollUITests {
         let retry = block.buttons["conversation.retryNow"]
         let composer = app.textViews[Fixture.composerIdentifier].firstMatch
         XCTAssertTrue(status.waitForExistence(timeout: Fixture.settleTimeout))
-        XCTAssertEqual(status.label, "Asking the daemon, Current", "The active step must announce its progress state")
+        XCTAssertEqual(status.label, "Requesting messages, Current", "The active step must announce its progress state")
         XCTAssertFalse(block.buttons["conversation.connectionStatus"].exists, "The status is not a disclosure control")
         XCTAssertFalse(retry.exists)
         attachLoading(app.screenshot(), named: "Conversation loading before idle \(appearance)")
@@ -27,7 +27,7 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertFalse(composer.exists, "Loading must hide the message bar")
 
         XCTAssertTrue(retry.waitForExistence(timeout: Fixture.settleTimeout))
-        XCTAssertTrue(status.label.hasPrefix("Asking the daemon, Current, elapsed: "))
+        XCTAssertTrue(status.label.hasPrefix("Requesting messages, Current, elapsed: "))
         XCTAssertTrue(status.label.contains("Taking longer than usual"))
         XCTAssertTrue(retry.isHittable)
         XCTAssertTrue(block.frame.contains(status.frame))
@@ -46,7 +46,7 @@ extension ConversationTranscriptScrollUITests {
     @MainActor
     private func assertConnectionSteps(in block: XCUIElement) {
         var previousBottom = block.frame.minY
-        let steps = [("Connecting to the daemon", "Done"), ("Asking the daemon", "Current"), ("Receiving messages", "Pending")]
+        let steps = [("Connecting", "Done"), ("Requesting messages", "Current"), ("Receiving messages", "Pending")]
         for (title, state) in steps {
             let matches = block.otherElements.matching(NSPredicate(format: "label == %@ OR label BEGINSWITH %@", title, "\(title),"))
             XCTAssertEqual(matches.count, 1, "Each step must appear once, without a duplicate header")
