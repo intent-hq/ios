@@ -52,7 +52,11 @@ extension ConnectionManager {
             response = .failure(error)
         }
         guard hostRefreshIsCurrent(context) else { return }
-        if !admission.principal.isOwner, case .success(let result) = response {
+        applyHostStatusResponse(response, token: token, port: port, context: context)
+    }
+
+    private func applyHostStatusResponse(_ response: Result<Any, Error>, token: String, port: Int, context: HostRefreshContext) {
+        if !context.admission.principal.isOwner, case .success(let result) = response {
             persistDisplayName(from: result, token: token, port: port, shared: true)
         }
         switch Self.hostRouteRefreshDecision(
