@@ -75,6 +75,7 @@ $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
 $(SRCROOT)/Intent/Models/WorkspaceChangeTree.swift
 $(SRCROOT)/Intent/Models/WorkspaceChanges.swift
 $(SRCROOT)/Intent/Models/WorkspaceCreationDraft.swift
+$(SRCROOT)/Intent/Models/WorkspaceCreationProposal.swift
 $(SRCROOT)/Intent/Models/WorkspaceDiff.swift
 $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
 $(SRCROOT)/Intent/Models/WorkspaceScript.swift
@@ -189,6 +190,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
 $(SRCROOT)/Intent/Services/DemoFixturesTranscriptVideo.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
+$(SRCROOT)/Intent/Services/DemoFixturesWorkspaceProposal.swift
 $(SRCROOT)/Intent/Services/DemoMode.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/DemoRepositoryScriptFixtures.swift
@@ -360,6 +362,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/MermaidWebView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalCardView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalSelectionSwitch.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/VideoLightboxView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceCreationProposalView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceLinkedTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/ConversationConnectionStatusBlock.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AgentMessageAttributionView.swift
@@ -852,6 +855,7 @@ $(SRCROOT)/IntentTests/WorkspaceChangesRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationDraftTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationImagesTests.swift
+$(SRCROOT)/IntentTests/WorkspaceCreationProposalTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationVideosTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
@@ -864,6 +868,7 @@ $(SRCROOT)/IntentTests/WorkspaceListViewModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceParsingTests.swift
 $(SRCROOT)/IntentTests/WorkspacePrMonitorsStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspacePrPillTests.swift
+$(SRCROOT)/IntentTests/WorkspaceProposalStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceProviderOptionsTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowAccessibilitySupportTests.swift
 $(SRCROOT)/IntentTests/WorkspaceRowLayoutPolicyTests.swift

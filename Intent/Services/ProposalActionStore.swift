@@ -6,6 +6,7 @@ final class ProposalActionStore {
     private let connection: ConnectionManagerRouting
     private let agentId: String
     private let workspaceId: String
+    private let workspaceStore: WorkspaceStore?
     let details: AgentDetailStore
     var pending: [String: String] {
         var result: [String: String] = [:]
@@ -21,12 +22,22 @@ final class ProposalActionStore {
     private(set) var errors: [String: String] = [:]
     private(set) var isBusy = false
     private(set) var loadError: String?
+    private(set) var createdWorkspaces: [String: Workspace] = [:]
+    private var creationRequests: [String: [String: Any]] = [:]
 
-    init(connection: ConnectionManagerRouting, agentId: String, workspaceId: String, details: AgentDetailStore? = nil) {
+    var canCreateWorkspace: Bool {
+        connection.connectionState == .connected && connection.currentPrincipal?.canManageWorkspaces == true
+    }
+
+    init(
+        connection: ConnectionManagerRouting, agentId: String, workspaceId: String,
+        details: AgentDetailStore? = nil, workspaceStore: WorkspaceStore? = nil
+    ) {
         self.connection = connection
         self.agentId = agentId
         self.workspaceId = workspaceId
         self.details = details ?? AgentDetailStore(connection: connection)
+        self.workspaceStore = workspaceStore
     }
 
     func isPending(_ proposal: ActionProposal, messageId: String) -> Bool {
@@ -35,6 +46,47 @@ final class ProposalActionStore {
 
     func receiptKey(_ proposal: ActionProposal, messageId: String) -> String {
         "\(messageId):\(proposal.id)"
+    }
+
+    func hasCreationAttempt(_ proposal: ActionProposal, messageId: String) -> Bool {
+        creationRequests[receiptKey(proposal, messageId: messageId)] != nil
+    }
+
+    func submittedEdits(_ proposal: ActionProposal, messageId: String) -> WorkspaceProposalEdits? {
+        guard let request = creationRequests[receiptKey(proposal, messageId: messageId)] else { return nil }
+        return WorkspaceProposalEdits(
+            title: request["title"] as? String ?? "",
+            initialPrompt: (request["initialAgent"] as? [String: Any])?["prompt"] as? String ?? ""
+        )
+    }
+
+    func createWorkspace(_ proposal: ActionProposal, messageId: String, edits: WorkspaceProposalEdits) async {
+        guard !isBusy, canCreateWorkspace, let creation = proposal.workspaceCreation else { return }
+        isBusy = true
+        defer { isBusy = false }
+        errors[proposal.id] = nil
+        let key = receiptKey(proposal, messageId: messageId)
+        do {
+            try await load()
+            guard canCreateWorkspace, isPending(proposal, messageId: messageId) else { return }
+            if createdWorkspaces[key] == nil {
+                let params = try creationRequests[key] ?? creation.request(
+                    edits: edits, fallbackKey: "ios-proposal:\(workspaceId):\(agentId):\(key)"
+                )
+                creationRequests[key] = params
+                let response = try await connection.request("workspace.create", params: params, timeout: CreateWorkspaceView.createRequestTimeout)
+                guard let result = response as? [String: Any], let row = result["workspace"] as? [String: Any],
+                      let workspace = WorkspaceStore.parseWorkspace(row), !workspace.id.isEmpty else {
+                    throw ProposalError.invalidResponse
+                }
+                createdWorkspaces[key] = workspace
+                workspaceStore?.addOrUpdate(workspace)
+            }
+            try await resolve(proposal, outcome: "applied", detail: createdWorkspaces[key].map { "Created workspace \($0.id)." })
+        } catch {
+            errors[proposal.id] = createdWorkspaces[key] == nil ? error.localizedDescription
+                : "Workspace created, but the confirmation could not be saved. Retry to confirm. \(error.localizedDescription)"
+        }
     }
 
     func refresh() async {
@@ -82,9 +134,10 @@ final class ProposalActionStore {
     }
 
     func dismiss(_ proposal: ActionProposal, messageId: String) async {
-        guard !isBusy else { return }
+        guard !isBusy, !hasCreationAttempt(proposal, messageId: messageId) else { return }
         isBusy = true
         defer { isBusy = false }
+        errors[proposal.id] = nil
         do {
             try await load()
             guard isPending(proposal, messageId: messageId) else { return }
@@ -92,10 +145,12 @@ final class ProposalActionStore {
         } catch { errors[proposal.id] = error.localizedDescription }
     }
 
-    private func resolve(_ proposal: ActionProposal, outcome: String) async throws {
-        let response = try await connection.request("agent.resolveProposal", params: [
+    private func resolve(_ proposal: ActionProposal, outcome: String, detail: String? = nil) async throws {
+        var params: [String: Any] = [
             "agentId": agentId, "workspaceId": workspaceId, "proposalId": proposal.id, "outcome": outcome
-        ])
+        ]
+        if let detail { params["detail"] = detail }
+        let response = try await connection.request("agent.resolveProposal", params: params)
         guard let result = response as? [String: Any], result["success"] as? Bool == true,
               let recorded = result["outcome"] as? String else { throw ProposalError.invalidResponse }
         var resolutions = resolutions

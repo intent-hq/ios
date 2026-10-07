@@ -7,6 +7,7 @@ struct ActionProposal: Decodable {
         let applyLabel: String?
         let bulkItems: [Item]
         let warnings: [String]
+        var workspaceCreate: [String: AnyCodable] = [:]
     }
 
     struct Item: Decodable, Identifiable {
@@ -23,6 +24,7 @@ struct ActionProposal: Decodable {
     let applyToolCallId: String?
 
     var id: String { applyToolCallId ?? preview.title }
+    var workspaceCreation: WorkspaceCreationProposal? { WorkspaceCreationProposal(self) }
     var workspaceIDs: [String] { payload["ids"]?.value as? [String] ?? [] }
     var method: String? {
         guard kind == "bulk-op", !workspaceIDs.isEmpty else { return nil }
@@ -67,7 +69,7 @@ extension ActionProposal.Item {
 
 extension ActionProposal.Preview {
     private enum CodingKeys: String, CodingKey {
-        case applyLabel, bulkItems, summary, title, warnings
+        case applyLabel, bulkItems, summary, title, warnings, workspaceCreate
     }
 
     init(from decoder: Decoder) throws {
@@ -77,5 +79,6 @@ extension ActionProposal.Preview {
         applyLabel = try container.decodeIfPresent(String.self, forKey: .applyLabel)
         bulkItems = try container.decodeIfPresent([ActionProposal.Item].self, forKey: .bulkItems) ?? []
         warnings = try container.decodeIfPresent([String].self, forKey: .warnings) ?? []
+        workspaceCreate = try container.decodeIfPresent([String: AnyCodable].self, forKey: .workspaceCreate) ?? [:]
     }
 }

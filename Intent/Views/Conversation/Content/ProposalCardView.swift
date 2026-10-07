@@ -69,7 +69,9 @@ struct ProposalCardView: View {
     }
 
     @ViewBuilder private func proposalContent(_ store: ProposalActionStore) -> some View {
-        if store.isPending(proposal, messageId: messageId) {
+        if let creation = proposal.workspaceCreation {
+            WorkspaceCreationProposalView(proposal: proposal, creation: creation, store: store, messageId: messageId)
+        } else if store.isPending(proposal, messageId: messageId) {
             if proposal.method != nil {
                 itemList(store)
             } else {
