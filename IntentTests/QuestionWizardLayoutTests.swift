@@ -125,7 +125,13 @@ struct QuestionWizardLayoutTests {
         @FocusState private var focused: Bool
 
         var body: some View {
-            WorkspaceQuestionFreeText(text: .constant(text), focused: $focused) {}
+            WorkspaceQuestionFreeText(
+                text: .constant(text),
+                focused: $focused,
+                isLast: true,
+                onSubmit: {},
+                onTextChange: {}
+            )
         }
     }
 
