@@ -100,6 +100,19 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(self.export(source), {"review": 1, "agent-groups": 0, "recovery": 0})
         self.assertEqual(self.manifest()["files"][0]["capture"], "nested-file-tree")
 
+    def test_video_smoke_retains_only_its_named_poster_and_player_captures(self):
+        video_test = "TranscriptVideoUITests/testSentVideoPosterOpensFullScreenPlayback()"
+        source = self.bundle(records=[
+            record(test=video_test, attachments=[
+                attachment("Sent video poster"), attachment("Sent video full-screen playback"),
+                attachment("Automatic screenshot"), attachment("Sent video poster-private-account"),
+            ]),
+            record(test="RealAccountTests/testOpen()", attachments=[attachment("Sent video poster")]),
+        ])
+        self.assertEqual(self.export(source), {"review": 2, "agent-groups": 0, "recovery": 0})
+        self.assertEqual({entry["capture"] for entry in self.manifest()["files"]},
+                         {"Sent video poster", "Sent video full-screen playback"})
+
     def test_existing_group_images_and_recovery_json_remain_separate(self):
         recovery = {"test": "testControlledRecovery", "cycle": 1, "goToEndPresent": False,
                     "endRowPosition": "INSIDE", "endRecovery": {"reason": "recovered", "corrections": 1}}

@@ -75,7 +75,7 @@ struct ManualTokenEntryView: View {
     /// of the first-run coordinator flow.
     var onPaired: ((StoredConnection) -> Void)?
     @State private var host = ""
-    @State private var port = "5180"
+    @State private var port = "5181"
     @State private var token = ""
     @State private var isTokenVisible = false
     @State private var isValidating = false
@@ -160,7 +160,7 @@ struct ManualTokenEntryView: View {
 
     private var portField: some View {
         ManualConnectionField(label: "PORT") {
-            TextField("5180", text: $port, prompt: placeholder("5180"))
+            TextField("5181", text: $port, prompt: placeholder("5181"))
                 .interFont(Constants.Typography.bodySEmphasized)
                 .accessibilityLabel("Port")
                 .accessibilityIdentifier("manual.port")

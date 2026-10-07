@@ -69,6 +69,41 @@ extension ConnectionManagerTests {
         #expect(error.localizedDescription == "unknown agent id: gone (-32602)")
     }
 
+    @Test func parseInboundFrameErrorWithStringDataPreservesServerDetail() {
+        let responseID = 10
+        let internalErrorCode = -32_603
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","id":10,"error":{"code":-32603,"message":"Internal error",\
+        "data":"source control api error: 503: Service Unavailable"}}
+        """)
+        guard case let .error(id, error)? = frame else {
+            Issue.record("Expected .error, got \(String(describing: frame))")
+            return
+        }
+        #expect(id == responseID)
+        #expect(error.domain == "WebSocket")
+        #expect(error.code == internalErrorCode)
+        #expect(error.intentErrorDataCode == nil)
+        #expect(error.localizedDescription == "source control api error: 503: Service Unavailable (-32603)")
+        #expect(DiagnosticErrorOwnership.failure(for: error) == DiagnosticFailure(
+            origin: .remoteRPC, classification: .remoteRejected, code: .internalError
+        ))
+    }
+
+    @Test(arguments: ["\"\"", "null", "42", "[]", "{}"])
+    func parseInboundFrameEmptyOrUnsupportedDataUsesTopLevelMessage(errorData: String) {
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","id":10,"error":{"code":-32603,"message":"Internal error",\
+        "data":\(errorData)}}
+        """)
+        guard case let .error(_, error)? = frame else {
+            Issue.record("Expected .error, got \(String(describing: frame))")
+            return
+        }
+        #expect(error.intentErrorDataCode == nil)
+        #expect(error.localizedDescription == "Internal error (-32603)")
+    }
+
     @Test func parseInboundFrameEmptyDataMessageUsesTopLevelMessage() {
         let frame = ConnectionManager.parseInboundFrame("""
         {"jsonrpc":"2.0","id":10,"error":{"code":-32602,"message":"Invalid params",\

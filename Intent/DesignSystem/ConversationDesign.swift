@@ -1,8 +1,8 @@
 import SwiftUI
 
 extension Constants.Conversation {
-    /// Opt-in workspace-agent styling from the approved 402pt Figma frames.
-    /// Existing conversation constants stay unchanged for Assistant and other callers.
+    /// Compact iOS workspace-agent and Assistant styling from the approved 402pt Figma frames.
+    /// Existing conversation constants stay unchanged for regular-width and visionOS callers.
     /// Heights are visual baselines, not text caps; preserve Dynamic Type and platform hit targets.
     enum Design {
         static let horizontalInset: CGFloat = 24
@@ -89,6 +89,9 @@ extension Constants.Conversation.Design {
     }
 
     enum Question {
+        private static let transitionStartX = 0.6
+        static let transitionAnimation = Animation.timingCurve(transitionStartX, 0, 0, 1, duration: 0.5)
+        static let presentationCrossfadeDuration: TimeInterval = 0.35
         static let backdropBlur: CGFloat = 15
         static let backdropOpacity: Double = 0.3
         static let modalTopInset: CGFloat = 24

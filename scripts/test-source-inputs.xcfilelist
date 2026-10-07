@@ -405,6 +405,7 @@ $(SRCROOT)/Intent/Services/ConnectionManagerRequests.swift
 $(SRCROOT)/Intent/Services/ConnectionPrincipal.swift
 $(SRCROOT)/Intent/Services/ConnectionSubscriptionRouter.swift
 $(SRCROOT)/Intent/Services/ConnectionTypes.swift
+$(SRCROOT)/Intent/Services/ConversationAttachmentPipeline+Photos.swift
 $(SRCROOT)/Intent/Services/ConversationAttachmentPipeline.swift
 $(SRCROOT)/Intent/Services/ConversationCommands+QueueEvents.swift
 $(SRCROOT)/Intent/Services/ConversationCommands.swift
@@ -440,6 +441,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesInlineImages.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
+$(SRCROOT)/Intent/Services/DemoFixturesTranscriptVideo.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoMode.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
@@ -449,6 +451,7 @@ $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/DemoWorkspaceActionFixtures.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
 $(SRCROOT)/Intent/Services/ImagePasteboard.swift
+$(SRCROOT)/Intent/Services/ImportedPhotoVideo.swift
 $(SRCROOT)/Intent/Services/InvitedImportOutcome.swift
 $(SRCROOT)/Intent/Services/InvitedLegacyMigration.swift
 $(SRCROOT)/Intent/Services/InvitedSessionRegistry.swift
@@ -488,6 +491,7 @@ $(SRCROOT)/Intent/Services/WebSocketTransportError.swift
 $(SRCROOT)/Intent/Services/WorkspaceBrowserStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceChangesStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceCreationImages.swift
+$(SRCROOT)/Intent/Services/WorkspaceCreationVideoSubmission.swift
 $(SRCROOT)/Intent/Services/WorkspaceDiffLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
@@ -587,6 +591,9 @@ $(SRCROOT)/Intent/Views/Connection/LoadingView.swift
 $(SRCROOT)/Intent/Views/Connection/SavedConnectionCard.swift
 $(SRCROOT)/Intent/Views/Connection/SavedConnectionDetails.swift
 $(SRCROOT)/Intent/Views/Conversation
+$(SRCROOT)/Intent/Views/Conversation/AssistantEmptyState.swift
+$(SRCROOT)/Intent/Views/Conversation/AssistantErrorBanner.swift
+$(SRCROOT)/Intent/Views/Conversation/AssistantStateContent.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputAttachments.swift
@@ -598,6 +605,7 @@ $(SRCROOT)/Intent/Views/Conversation/Composer/WorkspaceComposerRow.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/WorkspaceQueuedMessagesView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content
 $(SRCROOT)/Intent/Views/Conversation/Content/AttachmentReferenceImageView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/AttachmentReferenceVideoView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ChatImageActions.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/CodeBlockView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/CompactMarkdownStyle.swift
@@ -628,6 +636,7 @@ $(SRCROOT)/Intent/Views/Conversation/Notices/QuestionsDismissedNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/SystemNoticeBannerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/WatcherMessageBodyView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions
+$(SRCROOT)/Intent/Views/Conversation/Questions/QuestionCardPager.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionStepView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardCollapsedBanner.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardFooterRow.swift
@@ -731,6 +740,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesSection.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceConnectionSwitcher.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceCreationVideoPreview.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+AgentGroups.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
@@ -790,6 +800,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorWorkspaceValidationTests.swift
 $(SRCROOT)/IntentTests/AssistantStoreTests.swift
 $(SRCROOT)/IntentTests/AttachmentImageLoaderTests.swift
 $(SRCROOT)/IntentTests/AttachmentUploadServiceTests.swift
+$(SRCROOT)/IntentTests/AttachmentUploadServiceVideoTests.swift
 $(SRCROOT)/IntentTests/BackendKeychainConformanceSupport.swift
 $(SRCROOT)/IntentTests/BackendKeychainConformanceTests.swift
 $(SRCROOT)/IntentTests/BackendKeychainFixtureTests.swift
@@ -1113,6 +1124,7 @@ $(SRCROOT)/IntentTests/WorkspaceChangesRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationDraftTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationImagesTests.swift
+$(SRCROOT)/IntentTests/WorkspaceCreationVideosTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffTests.swift
@@ -1155,3 +1167,4 @@ $(SRCROOT)/IntentTests/WorkspaceTranscriptDesignTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTransferFixture.swift
 $(SRCROOT)/IntentTests/WorkspaceTransferRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTransferStoreTests.swift
+$(SRCROOT)/IntentTests/WorkspaceVideoDownloadTests.swift

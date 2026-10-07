@@ -86,10 +86,13 @@ struct MessageInputView: View {
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
             maxSelectionCount: Constants.Conversation.Composer.maximumImageSelectionCount,
-            matching: .images
+            matching: viewModel.workspaceId == Workspace.chiefWorkspaceId ? .images : .any(of: [.images, .videos])
         )
         .onChange(of: viewModel.selectedPhotoItems) { _, _ in
-            Task { await viewModel.loadSelectedPhotos() }
+            viewModel.loadSelectedPhotos()
+        }
+        .onDisappear {
+            viewModel.cancelPhotoImport()
         }
         .fileImporter(
             isPresented: $isFilePickerPresented,
@@ -136,6 +139,10 @@ private extension MessageInputView {
             dictationHintRow(hint)
         }
         #endif
+        if viewModel.isLoadingPhotos {
+            ProgressView("Loading attachments…")
+                .padding(.top, Constants.Conversation.Composer.pendingImagesTopPadding)
+        }
         if !viewModel.pendingImages.isEmpty {
             pendingImagesRow
         }
@@ -246,6 +253,7 @@ private extension MessageInputView {
         (!viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || viewModel.hasPendingAttachments)
             && !viewModel.isUploadingFiles
+            && !viewModel.isLoadingPhotos
             && isConnectionReadyForSending
             && allowsSending
     }
@@ -457,7 +465,8 @@ private extension MessageInputView {
             // files, but the text view's submit callback still lands here —
             // pendingFiles clears only after success, so a second send
             // would duplicate the uploads.
-            guard !viewModel.isUploadingFiles, isConnectionReadyForSending, allowsSending else { return }
+            guard !viewModel.isUploadingFiles, !viewModel.isLoadingPhotos,
+                  isConnectionReadyForSending, allowsSending else { return }
             let text = viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty || viewModel.hasPendingAttachments else {
                 isFocused = true

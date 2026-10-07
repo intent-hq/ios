@@ -129,7 +129,7 @@ struct ConnectionsView: View {
             SavedConnectionDetails(connection: connection)
         }
         .alert(
-            "Delete Connection?",
+            "Remove Connection?",
             isPresented: Binding(
                 get: { connectionPendingDelete != nil },
                 set: { if !$0 { connectionPendingDelete = nil } }
@@ -137,13 +137,13 @@ struct ConnectionsView: View {
             presenting: connectionPendingDelete
         ) { connection in
             Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) { delete(connection) }
+            Button("Remove", role: .destructive) { delete(connection) }
         } message: { connection in
             Text(connection.id == windowConnectionId
-                ? "This is the current connection. Deleting it will disconnect you."
+                ? "This is the current connection. Removing it will disconnect you."
                 : "This removes the saved connection. You'll need to pair again to reconnect.")
         }
-        .alert("Couldn’t Delete Connection", isPresented: $showDeleteError) {
+        .alert("Couldn’t Remove Connection", isPresented: $showDeleteError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("The saved connection could not be removed. Please try again.")
@@ -199,7 +199,7 @@ struct ConnectionsView: View {
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("saved-connection.\(connection.id)")
-        .accessibilityHint("Touch and hold for connection details and actions.")
+        .accessibilityHint("Touch and hold for connection details or to remove this connection.")
         .contextMenu {
             Button { connectionShowingDetails = connection } label: {
                 Label {
@@ -216,7 +216,7 @@ struct ConnectionsView: View {
             }
             Button(role: .destructive) { connectionPendingDelete = connection } label: {
                 Label {
-                    Text("Delete").interFont(Constants.Typography.bodyS)
+                    Text("Remove Connection").interFont(Constants.Typography.bodyS)
                 } icon: {
                     Image(.delete)
                         .resizable()
@@ -230,7 +230,7 @@ struct ConnectionsView: View {
             if supportsMultipleWindows {
                 openInNewWindowButton(connection)
             }
-            Button("Delete", role: .destructive) { connectionPendingDelete = connection }
+            Button("Remove Connection", role: .destructive) { connectionPendingDelete = connection }
         }
     }
 

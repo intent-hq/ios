@@ -73,6 +73,9 @@ extension MessageInputView {
 
     private func pendingFile(_ file: PendingFile, index: Int) -> some View {
         HStack(spacing: Constants.Conversation.Composer.pendingFileContentSpacing) {
+            if let video = file.video {
+                pendingVideoPoster(video)
+            }
             if let progress = viewModel.fileUploadProgress[file.id] {
                 uploadingFileContent(file, progress: progress)
             } else {
@@ -118,12 +121,14 @@ extension MessageInputView {
 
     @ViewBuilder
     private func pendingFileContent(_ file: PendingFile) -> some View {
-        Image(.file)
-            .resizable()
-            .scaledToFit()
-            .frame(width: attachmentIconSide, height: attachmentIconSide)
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .accessibilityHidden(true)
+        if file.video == nil {
+            Image(.file)
+                .resizable()
+                .scaledToFit()
+                .frame(width: attachmentIconSide, height: attachmentIconSide)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .accessibilityHidden(true)
+        }
         VStack(alignment: .leading, spacing: 0) {
             Text(file.displayName)
                 .interFont(Constants.Typography.subtextXXS)
@@ -134,5 +139,25 @@ extension MessageInputView {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
         }
+    }
+
+    private func pendingVideoPoster(_ video: ImportedPhotoVideo) -> some View {
+        ZStack {
+            if let poster = video.poster {
+                Image(uiImage: poster)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Rectangle().fill(Theme.mutedForeground(for: colorScheme))
+            }
+            Image(systemName: "play.fill")
+                .foregroundStyle(.white)
+        }
+        .frame(
+            width: Constants.Conversation.Composer.pendingImageSide,
+            height: Constants.Conversation.Composer.pendingImageSide
+        )
+        .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.pendingImageCornerRadius))
+        .accessibilityLabel("Video attachment")
     }
 }

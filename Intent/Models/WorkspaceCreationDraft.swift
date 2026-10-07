@@ -17,6 +17,7 @@ struct WorkspaceCreationDraft {
     var messageText = ""
     var agentSelection: WorkspaceAgentSelection
     var images = WorkspaceCreationImages()
+    var videoSubmission: WorkspaceCreationVideoSubmission?
     var didCreateWorkspace = false
 
     init(backendID: BackendID?, persistence: PersistenceManager) {
@@ -25,7 +26,8 @@ struct WorkspaceCreationDraft {
 
     var resumable: Self? {
         guard navigationPath.last == .create,
-              !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !images.videos.isEmpty || videoSubmission != nil,
               !didCreateWorkspace else { return nil }
         return self
     }

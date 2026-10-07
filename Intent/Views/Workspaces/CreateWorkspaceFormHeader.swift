@@ -40,6 +40,7 @@ struct CreateWorkspaceSubmitButton: View {
 
     let isCreating: Bool
     let isDisabled: Bool
+    var title: LocalizedStringKey = "Create"
     let onCreate: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -56,7 +57,7 @@ struct CreateWorkspaceSubmitButton: View {
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(isDisabled || isCreating)
-        .accessibilityLabel(isCreating ? "Creating workspace" : "Create")
+        .accessibilityLabel(isCreating ? "Creating workspace" : title)
         .accessibilityIdentifier("creation.create")
     }
 
@@ -96,7 +97,7 @@ struct CreateWorkspaceSubmitButton: View {
                 .scaledToFit()
                 .frame(width: iconSize, height: iconSize)
                 .accessibilityHidden(true)
-            Text("Create")
+            Text(title)
                 .interFont(Constants.Typography.bodySEmphasized)
         }
         .padding(.horizontal, CreateWorkspaceFormStyle.controlPadding)
