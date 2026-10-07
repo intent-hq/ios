@@ -380,11 +380,9 @@ private struct ConversationLoadingView: View {
 
     private var stageText: Text {
         switch stage {
-        case .idle: Text("Loading conversation…")
         case .connecting: Text("Connecting…")
-        case .requesting: Text("Requesting conversation…")
-        case .receiving: Text("Receiving messages…")
-        case .retrying(let attempt): Text("Retrying (attempt \(attempt))…")
+        case .idle, .requesting, .receiving: Text("Loading recent messages…")
+        case .retrying(let attempt): Text("Retrying — attempt \(attempt)…")
         }
     }
 
@@ -400,6 +398,7 @@ private struct ConversationLoadingView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(stageText)
+        .accessibilityIdentifier("conversation.loading")
     }
 }
 

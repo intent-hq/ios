@@ -52,11 +52,45 @@ struct ConversationTranscriptView: View {
                     goToEndButton(proxy: proxy)
                 }
             }
+            .overlay(alignment: .top) {
+                loadingStatus
+                    .padding(.horizontal, Layout.transcriptHorizontalPadding)
+                    .padding(.top, Layout.LoadingStatus.topPadding)
+                    .allowsHitTesting(false)
+            }
         }
     }
 }
 
 private extension ConversationTranscriptView {
+    @ViewBuilder
+    var loadingStatus: some View {
+        if !hasInitiallyScrolled, !viewModel.isLoading {
+            loadingStatusLabel("Restoring your place…")
+                .accessibilityIdentifier("transcript.restoringPosition")
+        } else if viewModel.isLoadingOlderMessages {
+            loadingStatusLabel("Loading earlier messages…")
+                .accessibilityIdentifier("transcript.historyLoading")
+        }
+    }
+
+    func loadingStatusLabel(_ title: LocalizedStringKey) -> some View {
+        HStack(spacing: Layout.LoadingStatus.spacing) {
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityHidden(true)
+            Text(title)
+                .interFont(Constants.Typography.bodyXS)
+                .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        .padding(.horizontal, Layout.LoadingStatus.horizontalPadding)
+        .padding(.vertical, Layout.LoadingStatus.verticalPadding)
+        .background(Theme.card(for: colorScheme), in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(title))
+    }
+
     /// The follow handlers stay gated until the entry-scroll decision finishes,
     /// so stream updates cannot yank the viewport away from the unread divider.
     /// Only discrete transitions scroll; streaming deltas ride the bottom anchor

@@ -1,6 +1,13 @@
 import SwiftUI
 
 extension Constants.Conversation.Transcript {
+    enum LoadingStatus {
+        static let spacing: CGFloat = 8
+        static let horizontalPadding: CGFloat = 12
+        static let verticalPadding: CGFloat = 8
+        static let topPadding: CGFloat = 8
+    }
+
     static let transcriptRowSpacing: CGFloat = 16
     static let transcriptHorizontalPadding: CGFloat = 16
     static let transcriptTopPadding: CGFloat = 24

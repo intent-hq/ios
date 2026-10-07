@@ -30,8 +30,9 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         let offset = try XCTUnwrap(geometryValue("offset", in: geometry))
         let viewport = try XCTUnwrap(geometryValue("viewport", in: geometry))
         XCTAssertGreaterThan(offset, viewport, "Prefetch must begin while more than one screen from the top: \(geometry)")
-        XCTAssertFalse(app.staticTexts["Loading earlier messages"].exists)
-        XCTAssertFalse(app.progressIndicators["transcript.historyLoading"].exists)
+        let loadingStatus = app.descendants(matching: .any).matching(identifier: "transcript.historyLoading").firstMatch
+        XCTAssertTrue(loadingStatus.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertEqual(loadingStatus.label, "Loading earlier messages…")
         XCTAssertFalse(beginning.exists, "The beginning label must not replace a pending page")
         let anchor = try XCTUnwrap(rows(intersecting: opened.transcript).first { row in
             row.label.hasPrefix("History message") && isInside(row.frame, opened.transcript)
@@ -43,6 +44,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         })
         try Data().write(to: pageGate)
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { followReport(in: opened).contains("historyCount=20 historyLoading=false") })
+        XCTAssertFalse(loadingStatus.exists)
         let measuredAfter = waitUntilSteady(timeout: Fixture.settleTimeout, tolerance: Fixture.rePinTolerance) {
             frame(of: visible)?.minY ?? .nan
         }
@@ -60,20 +62,20 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         XCTAssertEqual(beginning.label, "Beginning of conversation")
         XCTAssertTrue(followReport(in: opened).contains("olderAvailable=false"))
         XCTAssertFalse(app.buttons["transcript.historyRetry"].exists)
-        XCTAssertFalse(app.progressIndicators["transcript.historyLoading"].exists)
+        XCTAssertFalse(loadingStatus.exists)
         assertRetainedHistoryAndFreshEntry(in: app, opened: opened)
     }
 
     @MainActor
-    func testPendingHistoryHasNoLoadingRowAndChainsPagesFromTop() throws {
+    func testPendingHistoryShowsStatusAndChainsPagesFromTop() throws {
         let app = launchHistory()
         let opened = openLongConversation(in: app)
-        waitUntilSettled(on: opened.lastMessage, named: "last message", in: opened, context: "silent loading entry", allowPreservedEntry: true)
+        waitUntilSettled(on: opened.lastMessage, named: "last message", in: opened, context: "history loading entry", allowPreservedEntry: true)
         let oldestLoaded = message(in: app, containing: "History message 21.")
         scrollUp(in: opened) { isVisible(oldestLoaded, in: opened.transcript) }
         XCTAssertTrue(followReport(in: opened).contains("historyCount=10 historyLoading=true"))
-        XCTAssertFalse(app.progressIndicators["transcript.historyLoading"].exists)
-        XCTAssertFalse(app.staticTexts["Loading earlier messages"].exists)
+        let loadingStatus = app.descendants(matching: .any).matching(identifier: "transcript.historyLoading").firstMatch
+        XCTAssertTrue(loadingStatus.waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertFalse(app.buttons["transcript.historyRetry"].exists)
         XCTAssertFalse(app.staticTexts["transcript.historyBeginning"].exists)
 
@@ -81,6 +83,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
             followReport(in: opened).contains("historyCount=30 historyLoading=false olderAvailable=false")
         }, "A short older page must prefetch the next page without another gesture")
+        XCTAssertFalse(loadingStatus.exists)
         XCTAssertTrue(isVisible(oldestLoaded, in: opened.transcript), "Chained prepends must retain the visible message")
     }
 
@@ -94,6 +97,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         scrollUp(in: opened) { retry.exists && retry.isHittable }
         XCTAssertEqual(retry.label, "Couldn't load earlier messages — Retry")
         XCTAssertTrue(followReport(in: opened).contains("historyCount=10"))
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "transcript.historyLoading").firstMatch.exists)
         XCTAssertFalse(app.staticTexts["transcript.historyBeginning"].exists)
         try Data().write(to: retryGate)
         retry.tap()

@@ -29,11 +29,14 @@ extension ConversationTranscriptScrollUITests {
 
     @MainActor
     private func assertLoadingBackground(appearance: String) throws {
-        let app = try launchStartupConversation(metadataReady: true, holdSnapshot: true, appearance: appearance)
+        let app = try launchStartupConversation(holdSnapshot: true, appearance: appearance)
         defer { finishStartup(app) }
         let opened = enterLongConversation(in: app, context: "full-screen loading", waitForTranscript: false)
         XCTAssertTrue(startupControl(app).waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertFalse(opened.transcript.exists, "The snapshot must remain held while checking loading chrome")
+        let loadingStatus = app.descendants(matching: .any).matching(identifier: "conversation.loading").firstMatch
+        XCTAssertTrue(loadingStatus.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertEqual(loadingStatus.label, "Loading recent messages…")
 
         let loading = app.screenshot()
         attachBackground(loading, named: "Conversation loading full-screen \(appearance)")
@@ -42,6 +45,9 @@ extension ConversationTranscriptScrollUITests {
         try Data().write(to: startupSnapshotGate)
         XCTAssertTrue(opened.transcript.waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { self.startupReport(app).contains("positioned=true") })
+        XCTAssertTrue(startupReport(app).contains("metadata=pending"), "Late metadata must not keep the loading status visible")
+        XCTAssertFalse(loadingStatus.exists)
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "transcript.restoringPosition").firstMatch.exists)
         let loaded = app.screenshot()
         attachBackground(loaded, named: "Conversation loaded solid background \(appearance)")
         try assertSolidBackground(loaded, appearance: appearance)
