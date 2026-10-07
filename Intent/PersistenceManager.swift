@@ -254,8 +254,14 @@ extension PersistenceManager {
     func updateConnectionDisplayName(id: UUID, displayName: String) -> Bool {
         guard var connections = loadConnectionsWithOutcome().connections else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
+        let shared = connections[index].invitedPersonKey != nil
+        if connections[index].displayName == displayName,
+           !shared || Self.invitedRecord(connections[index])?.object["hostname"] as? String == displayName { return true }
         connections[index].displayName = displayName
-        return saveConnectionsLocked(connections)
+        if shared { queueInvitedDisplayNamePublication(&connections[index], displayName: displayName) }
+        guard saveConnectionsLocked(connections) else { return false }
+        if shared { publishPendingInvitedSessions() }
+        return true
     }
 
     @discardableResult

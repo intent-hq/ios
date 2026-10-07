@@ -55,6 +55,29 @@ struct ConnectionPairingTests {
         #expect(ConnectionPairing.displayName(fromHostStatus: status) == "Clement's Mac Studio")
     }
 
+    @Test(arguments: [" Team server \n", "", " \n"])
+    func sharedNamesPreferCollaborationNameWithHostnameFallback(override: String) {
+        let status: [String: Any] = ["collaborationName": override, "prettyHostname": "Mac Studio", "hostname": "studio.local"]
+        #expect(ConnectionPairing.displayName(fromHostStatus: status, shared: true) == (override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Mac Studio" : "Team server"))
+        #expect(ConnectionPairing.displayName(fromHostStatus: status) == "Mac Studio")
+    }
+
+    @Test @MainActor func sharedPairingSavesGuestStatusNameWithoutRequestingHostStatus() async throws {
+        let store = try InvitedSessionFixtures.Store(MemorySyncedKeychain())
+        defer { store.close() }
+        let fake = FakeConnectionManager()
+        fake.responseMap["client.hello"] = ["server": ["capabilities": ["hostMembership": 1]]]
+        fake.responseMap["principal.me"] = ["id": "B", "isAdministrator": false, "hostRole": "member", "hostMembershipRevision": 1]
+        fake.responseMap["system.status"] = ["collaborationName": "Shared Studio", "prettyHostname": "Mac Studio"]
+        let server = PairedServer(hosts: [], port: 443, name: "Intent", pairedAt: Date(), certFingerprint: InvitedSessionFixtures.pin, tcAddress: "tcRoute")
+        try await fake.connect(hosts: [], port: server.port, token: "B-token", certFingerprint: server.certFingerprint, tcAddress: server.tcAddress)
+        let saved = try await ConnectionPairing.finalize(server: server, token: "B-token", connection: fake, persistence: store.persistence)
+        #expect(saved.displayName == "Shared Studio")
+        #expect(!fake.requestLog.contains { $0.method == "host.status" })
+        #expect(PersistenceManager.invitedRecord(saved)?.object["hostname"] as? String == "Shared Studio")
+        #expect(store.relaunch().loadConnections().first?.displayName == "Shared Studio")
+    }
+
     @Test func nilSelectionFallsBackToHostPortInStoredConnection() {
         let server = PairedServer(
             hosts: ["10.0.0.1"],

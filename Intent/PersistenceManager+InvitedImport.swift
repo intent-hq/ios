@@ -86,18 +86,21 @@ extension PersistenceManager {
         let hosts = (record.object["hosts"] as? [String] ?? []).compactMap(SyncedBackendConnectionMerge.usableHost)
         let route = record.object["tcAddress"] as? String
         guard !hosts.isEmpty || route != nil else { return nil }
+        let name = [record.object["hostname"], record.object["label"]]
+            .compactMap { ($0 as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? "\(record.object["host"] as? String ?? "Intent"):\(port)"
         let millisecondsPerSecond: Double = 1000
         var result = StoredConnection(
             server: PairedServer(
                 hosts: hosts,
                 port: port,
-                name: "Intent",
+                name: name,
                 pairedAt: Date(timeIntervalSince1970: record.pairedAt / millisecondsPerSecond),
                 certFingerprint: record.fingerprint,
                 tcAddress: route
             ),
             token: record.token,
-            displayName: record.object["label"] as? String,
+            displayName: name,
             syncUpdatedAt: record.updatedAt
         )
         result.invitedSyncPayload = record.data
