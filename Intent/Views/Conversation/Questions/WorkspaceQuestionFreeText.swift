@@ -34,9 +34,7 @@ struct WorkspaceQuestionFreeText: View {
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 focusButton
             } else {
-                Button(isLast ? "Send" : "Next", action: onSubmit)
-                    .buttonStyle(WorkspaceQuestionButtonStyle(primary: true))
-                    .accessibilityIdentifier("question.freeText.submit")
+                submitButton
             }
         }
         .padding(.leading, Design.Composer.leadingPadding)
@@ -45,6 +43,19 @@ struct WorkspaceQuestionFreeText: View {
         .frame(minHeight: Design.Composer.minimumHeight)
         .background(Design.Palette.surface(for: colorScheme), in: .rect(cornerRadius: Design.cornerRadius))
         .onChange(of: text) { _, _ in onTextChange() }
+    }
+
+    private var submitButton: some View {
+        Button(action: onSubmit) {
+            Image(.arrowRight)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Design.iconSize, height: Design.iconSize)
+                .accessibilityHidden(true)
+        }
+        .buttonStyle(WorkspaceQuestionButtonStyle(primary: true))
+        .accessibilityLabel(isLast ? "Send" : "Next")
+        .accessibilityIdentifier("question.freeText.submit")
     }
 
     private var focusButton: some View {
