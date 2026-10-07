@@ -9,6 +9,7 @@ extension DemoFixtures {
 /// are still controlled by the real screen and user interactions.
 enum DemoDesignScenario: String, CaseIterable {
     case agentGroups = "agent-groups"
+    case agentGroupsLarge = "agent-groups-large"
     case agentGroupsRetry = "agent-groups-retry"
     case blocker
     case composer
@@ -127,6 +128,9 @@ final class DemoDesignFixtures {
     }
 
     private func agentListResponse(params: [String: Any]) -> [String: Any] {
+        if scenario == .agentGroupsLarge {
+            return DemoAgentListFixtures.response(rows: DemoAgentListFixtures.largeGroupRows, params: params)
+        }
         if scenario == .agentGroupsRetry, params["scope"] as? String == "background", !failedBackgroundRead {
             failedBackgroundRead = true
             return ["error": "Temporary demo failure"]

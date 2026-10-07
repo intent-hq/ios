@@ -14,24 +14,26 @@ extension WorkspaceDetailView {
     }
 
     func agentTree(_ roots: [AgentSession]) -> some View {
-        // Resolve group membership, expansion and status before SwiftUI requests rows off-main.
+        // Snapshot values on-main; defer row bodies until the lazy stack requests them.
         let rows = viewModel.visibleTree(roots).map { row in
-            let content = VStack(spacing: WorkspaceDetailStyle.stackTopSpacing) {
-                agentButton(row.agent, indented: row.depth > 0)
-                let group = AgentListGroup.delegated(parentId: row.id)
-                if viewModel.count(for: group) > 0 || viewModel.isExpanded(group) {
-                    DelegatedAgentsRow(
-                        agents: viewModel.rows(for: group),
-                        totalCount: viewModel.count(for: group),
-                        runningCount: viewModel.runningCount(for: group),
-                        isExpanded: viewModel.isExpanded(group),
-                        colorScheme: colorScheme
-                    ) { Task { await toggleAgentGroup(group) } }
-                    .accessibilityIdentifier(group.accessibilityIdentifier)
-                    if viewModel.isExpanded(group) { agentGroupStatus(group) }
-                }
-            }
-            .padding(.leading, CGFloat(max(0, row.depth - 1)) * WorkspaceDetailStyle.avatarSpacing)
+            let group = AgentListGroup.delegated(parentId: row.id)
+            let count = viewModel.count(for: group)
+            let expanded = viewModel.isExpanded(group)
+            let content = WorkspaceAgentTreeRow(
+                button: agentButton(row.agent, indented: row.depth > 0),
+                depth: row.depth,
+                group: count > 0 || expanded ? WorkspaceAgentGroupSnapshot(
+                    agents: Array(viewModel.rows(for: group).prefix(Constants.AgentRow.maximumHeaderAvatars)),
+                    totalCount: count,
+                    runningCount: viewModel.runningCount(for: group),
+                    isExpanded: expanded,
+                    identifier: group.accessibilityIdentifier,
+                    status: agentGroupLoadStatus(group)
+                ) : nil,
+                colorScheme: colorScheme,
+                onToggle: { Task { await toggleAgentGroup(group) } },
+                onRetry: { Task { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) } }
+            )
             return (id: row.id, content: content)
         }
         return ForEach(rows, id: \.id) { @Sendable row in row.content }
@@ -65,39 +67,32 @@ extension WorkspaceDetailView {
 
     @ViewBuilder
     private func agentGroupStatus(_ group: AgentListGroup) -> some View {
-        if agentStore.list.loadingGroups.contains(group) {
-            ProgressView("Loading agents…")
-                .font(.caption)
-                .accessibilityIdentifier(group.accessibilityIdentifier + ".loading")
-        } else if let error = agentStore.list.errors[group] {
-            VStack {
-                Text(error).interFont(Constants.Typography.subtextXXS)
-                Button("Retry") {
-                    Task { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) }
-                }
-                .buttonStyle(IntentButtonStyle(variant: .secondary))
-                .accessibilityIdentifier(group.accessibilityIdentifier + ".retry")
-            }
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        } else if agentStore.isAgentGroupLoaded(group), viewModel.rows(for: group).isEmpty {
-            Text("No agents in this group")
-                .interFont(Constants.Typography.subtextXXS)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        WorkspaceAgentGroupStatus(status: agentGroupLoadStatus(group), identifier: group.accessibilityIdentifier) {
+            Task { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) }
         }
     }
 
-    func agentButton(_ agent: AgentSession, indented: Bool = false) -> some View {
-        Button {
-            coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
-        } label: {
-            AgentRowView(agent: agent, colorScheme: colorScheme, indented: indented)
+    private func agentGroupLoadStatus(_ group: AgentListGroup) -> WorkspaceAgentGroupSnapshot.LoadStatus {
+        if agentStore.list.loadingGroups.contains(group) {
+            return .loading
         }
-        .buttonStyle(IntentContentButtonStyle())
-        .accessibilityIdentifier("workspace.agent.\(agent.id)")
-        .visionListRowHitTarget()
-        .contextMenu {
-            AgentNotificationsMuteButton(agent: agent) { toggleNotificationsMuted(agent) }
+        if let error = agentStore.list.errors[group] {
+            return .failed(error)
         }
+        if agentStore.isAgentGroupLoaded(group), viewModel.rows(for: group).isEmpty {
+            return .empty
+        }
+        return .ready
+    }
+
+    func agentButton(_ agent: AgentSession, indented: Bool = false) -> WorkspaceAgentButton {
+        WorkspaceAgentButton(
+            agent: agent,
+            colorScheme: colorScheme,
+            indented: indented,
+            onSelect: { coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name) },
+            onMute: { toggleNotificationsMuted(agent) }
+        )
     }
 
     private func toggleNotificationsMuted(_ agent: AgentSession) {
