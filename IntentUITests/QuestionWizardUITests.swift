@@ -172,6 +172,11 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertFalse(submit.exists, "Whitespace alone must not offer submission")
         let firstAnswer = "Use the staging repository\nand keep production unchanged"
         editor.typeText(firstAnswer)
+        // Input delivery and the accessibility value can settle after typeText returns.
+        let typedAnswer = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", " \n" + firstAnswer), object: editor
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [typedAnswer], timeout: Self.timeout), .completed)
         XCTAssertEqual(editor.value as? String, " \n" + firstAnswer, "Return must preserve multiline answers")
         XCTAssertTrue(submit.waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(submit.label, "Next")
