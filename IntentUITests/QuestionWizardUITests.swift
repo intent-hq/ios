@@ -161,6 +161,44 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     }
 
     @MainActor
+    func testCustomAnswersSubmitBesideTheKeyboardWithoutScrolling() throws {
+        let app = try openQuestions(collapsed: false)
+        let editor = answerField(in: app)
+        let submit = app.buttons["question.freeText.submit"]
+        tap(editor)
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        editor.typeText(" \n")
+        XCTAssertFalse(submit.exists, "Whitespace alone must not offer submission")
+        let firstAnswer = "Use the staging repository\nand keep production unchanged"
+        editor.typeText(firstAnswer)
+        XCTAssertEqual(editor.value as? String, " \n" + firstAnswer, "Return must preserve multiline answers")
+        XCTAssertTrue(submit.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(submit.label, "Next")
+        XCTAssertTrue(submit.isHittable)
+        XCTAssertLessThanOrEqual(submit.frame.maxY, keyboard.frame.minY)
+        attachScreenshot("questions-custom-answer-next", in: app)
+        tap(submit)
+
+        XCTAssertTrue(app.staticTexts["Question Two"].waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(submit.exists, "The next question starts with an empty custom answer")
+        editor.typeText("Run the focused checks")
+        XCTAssertTrue(submit.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(submit.label, "Send")
+        XCTAssertTrue(submit.isHittable)
+        XCTAssertLessThanOrEqual(submit.frame.maxY, keyboard.frame.minY)
+        attachScreenshot("questions-custom-answer-send", in: app)
+        tap(submit)
+
+        assertSentMessage(in: app, contains: [
+            "A: (Other) " + firstAnswer,
+            "A: (Other) Run the focused checks"
+        ])
+        XCTAssertTrue(submit.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.buttons["question.answer"].exists)
+    }
+
+    @MainActor
     func testSkipClearsAnEarlierSelection() throws {
         let app = try openQuestions()
         tap(app.buttons["question.answer"])

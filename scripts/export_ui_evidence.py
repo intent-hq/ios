@@ -17,6 +17,11 @@ CAPTURES = {
             "Conversation loading before idle dark", "Conversation loading after idle dark",
         ),
     },
+    "QuestionWizardUITests": {
+        "testCustomAnswersSubmitBesideTheKeyboardWithoutScrolling": (
+            "questions-custom-answer-next", "questions-custom-answer-send",
+        ),
+    },
     "TranscriptVideoUITests": {
         "testSentVideoPosterOpensFullScreenPlayback": (
             "Sent video poster", "Sent video full-screen playback",
