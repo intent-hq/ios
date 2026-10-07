@@ -3,6 +3,7 @@ import Observation
 
 @MainActor @Observable
 final class ProposalActionStore {
+    private static let invalidParametersCode = -32_602
     private let connection: ConnectionManagerRouting
     private let agentId: String
     private let workspaceId: String
@@ -30,8 +31,11 @@ final class ProposalActionStore {
     }
 
     init(
-        connection: ConnectionManagerRouting, agentId: String, workspaceId: String,
-        details: AgentDetailStore? = nil, workspaceStore: WorkspaceStore? = nil
+        connection: ConnectionManagerRouting,
+        agentId: String,
+        workspaceId: String,
+        details: AgentDetailStore? = nil,
+        workspaceStore: WorkspaceStore? = nil
     ) {
         self.connection = connection
         self.agentId = agentId
@@ -74,11 +78,7 @@ final class ProposalActionStore {
                     edits: edits, fallbackKey: "ios-proposal:\(workspaceId):\(agentId):\(key)"
                 )
                 creationRequests[key] = params
-                let response = try await connection.request("workspace.create", params: params, timeout: CreateWorkspaceView.createRequestTimeout)
-                guard let result = response as? [String: Any], let row = result["workspace"] as? [String: Any],
-                      let workspace = WorkspaceStore.parseWorkspace(row), !workspace.id.isEmpty else {
-                    throw ProposalError.invalidResponse
-                }
+                let workspace = try await requestWorkspace(params, receiptKey: key)
                 createdWorkspaces[key] = workspace
                 workspaceStore?.addOrUpdate(workspace)
             }
@@ -87,6 +87,24 @@ final class ProposalActionStore {
             errors[proposal.id] = createdWorkspaces[key] == nil ? error.localizedDescription
                 : "Workspace created, but the confirmation could not be saved. Retry to confirm. \(error.localizedDescription)"
         }
+    }
+
+    private func requestWorkspace(_ params: [String: Any], receiptKey: String) async throws -> Workspace {
+        let response: Any
+        do {
+            response = try await connection.request("workspace.create", params: params, timeout: CreateWorkspaceView.createRequestTimeout)
+        } catch {
+            let failure = error as NSError
+            if failure.domain == "WebSocket", failure.code == Self.invalidParametersCode {
+                creationRequests[receiptKey] = nil
+            }
+            throw error
+        }
+        guard let result = response as? [String: Any], let row = result["workspace"] as? [String: Any],
+              let workspace = WorkspaceStore.parseWorkspace(row), !workspace.id.isEmpty else {
+            throw ProposalError.invalidResponse
+        }
+        return workspace
     }
 
     func refresh() async {

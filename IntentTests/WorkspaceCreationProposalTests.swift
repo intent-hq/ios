@@ -109,8 +109,10 @@ struct WorkspaceCreationProposalTests {
     @Test func neverDispatchesAnArbitraryProposalOperation() throws {
         let original = try WorkspaceProposalFixture.proposal()
         let proposal = ActionProposal(
-            kind: original.kind, payload: ["operation": AnyCodable("arbitrary.method")],
-            preview: original.preview, applyToolCallId: original.applyToolCallId
+            kind: original.kind,
+            payload: ["operation": AnyCodable("arbitrary.method")],
+            preview: original.preview,
+            applyToolCallId: original.applyToolCallId
         )
         #expect(proposal.workspaceCreation == nil)
     }

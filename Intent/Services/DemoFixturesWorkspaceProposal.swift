@@ -1,7 +1,7 @@
 import Foundation
 
 extension DemoFixtures {
-    private static var proposedWorkspace: [String: Any]?
+    private static var proposedWorkspace: [String: Any] = [:]
     private static var proposedWorkspaceRequest: AnyCodable?
 
     static var workspaceProposalReplyBlocks: [[String: Any]] {
@@ -28,10 +28,10 @@ extension DemoFixtures {
 
     static func workspaceProposalResponse(for method: String, params: [String: Any]) -> Any? {
         guard ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-proposal") else { return nil }
-        if method == "workspace.list", let proposedWorkspace { return ["workspaces": workspaces + [proposedWorkspace]] }
+        if method == "workspace.list", !proposedWorkspace.isEmpty { return ["workspaces": workspaces + [proposedWorkspace]] }
         guard method == "workspace.create" else { return nil }
         if let proposedWorkspaceRequest {
-            guard proposedWorkspaceRequest == AnyCodable(params), let proposedWorkspace else { return [String: Any]() }
+            guard proposedWorkspaceRequest == AnyCodable(params), !proposedWorkspace.isEmpty else { return [String: Any]() }
             return ["workspace": proposedWorkspace]
         }
         proposedWorkspaceRequest = AnyCodable(params)
@@ -40,6 +40,6 @@ extension DemoFixtures {
             "repositoryPath": params["repositoryPath"] ?? "", "status": "active"
         ]
         if ProcessInfo.processInfo.arguments.contains("--demo-workspace-proposal-retry") { return [String: Any]() }
-        return ["workspace": proposedWorkspace ?? [:]]
+        return ["workspace": proposedWorkspace]
     }
 }

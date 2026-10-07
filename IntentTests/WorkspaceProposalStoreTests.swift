@@ -71,6 +71,33 @@ struct WorkspaceProposalStoreTests {
         #expect(store.resolutions[proposal.id] == "applied")
     }
 
+    @Test func rejectedCreationAllowsCorrectionAndDismissal() async throws {
+        let connection = connection()
+        connection.errorMap["workspace.create"] = NSError(domain: "WebSocket", code: -32_602)
+        let store = store(connection)
+        let proposal = try WorkspaceProposalFixture.proposal()
+        await apply(proposal, to: store)
+        #expect(!store.hasCreationAttempt(proposal, messageId: "message"))
+        #expect(store.submittedEdits(proposal, messageId: "message") == nil)
+        await apply(proposal, to: store, title: "Corrected title")
+        #expect(connection.paramsForMethod("workspace.create").last?["title"] as? String == "Corrected title")
+        connection.responseMap["agent.resolveProposal"] = ["success": true, "outcome": "dismissed"]
+        await store.dismiss(proposal, messageId: "message")
+        #expect(store.resolutions[proposal.id] == "dismissed")
+    }
+
+    @Test func transportAndMetadataErrorsKeepUncertainRequestLocked() async throws {
+        let connection = connection()
+        connection.errorMap["workspace.create"] = NSError(domain: NSURLErrorDomain, code: -32_602)
+        let store = store(connection)
+        let proposal = try WorkspaceProposalFixture.proposal()
+        await apply(proposal, to: store)
+        #expect(store.hasCreationAttempt(proposal, messageId: "message"))
+        connection.errorMap["agent.get"] = NSError(domain: "WebSocket", code: -32_602)
+        await apply(proposal, to: store)
+        #expect(store.hasCreationAttempt(proposal, messageId: "message"))
+    }
+
     @Test func fallbackKeySurvivesStoreRecreation() async throws {
         let connection = connection()
         connection.responseMap["workspace.create"] = [:] as [String: Any]

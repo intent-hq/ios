@@ -29,29 +29,7 @@ struct WorkspaceCreationProposalView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.spacing) {
-            if store.isPending(proposal, messageId: messageId) {
-                reviewFields
-                ForEach(proposal.preview.warnings, id: \.self) { warning in
-                    Text(warning).font(.callout)
-                }
-                if let error = store.errors[proposal.id] {
-                    Text(error).foregroundStyle(Theme.destructive(for: colorScheme))
-                        .accessibilityIdentifier("proposal.error")
-                }
-                actions
-            } else if let outcome = store.resolutions[proposal.id] {
-                Text(outcome == "applied" ? "Workspace created" : "Dismissed")
-                    .accessibilityIdentifier("proposal.outcome")
-                if outcome == "dismissed", workspace != nil {
-                    Text("The workspace was created before the proposal was dismissed.")
-                }
-            } else if let error = store.loadError {
-                Text(error)
-                Button("Retry") { Task { await store.refresh() } }
-                    .buttonStyle(IntentButtonStyle(variant: .secondary))
-            } else {
-                Text("Waiting for confirmation availability…")
-            }
+            statusContent
             if let workspace {
                 Button {
                     coordinator.onSelectWorkspace(workspace.id)
@@ -68,6 +46,33 @@ struct WorkspaceCreationProposalView: View {
             }
         } message: {
             Text("The agent will be told that you dismissed it.")
+        }
+    }
+
+    @ViewBuilder
+    private var statusContent: some View {
+        if store.isPending(proposal, messageId: messageId) {
+            reviewFields
+            ForEach(proposal.preview.warnings, id: \.self) { warning in
+                Text(warning).font(.callout)
+            }
+            if let error = store.errors[proposal.id] {
+                Text(error).foregroundStyle(Theme.destructive(for: colorScheme))
+                    .accessibilityIdentifier("proposal.error")
+            }
+            actions
+        } else if let outcome = store.resolutions[proposal.id] {
+            Text(outcome == "applied" ? "Workspace created" : "Dismissed")
+                .accessibilityIdentifier("proposal.outcome")
+            if outcome == "dismissed", workspace != nil {
+                Text("The workspace was created before the proposal was dismissed.")
+            }
+        } else if let error = store.loadError {
+            Text(error)
+            Button("Retry") { Task { await store.refresh() } }
+                .buttonStyle(IntentButtonStyle(variant: .secondary))
+        } else {
+            Text("Waiting for confirmation availability…")
         }
     }
 
