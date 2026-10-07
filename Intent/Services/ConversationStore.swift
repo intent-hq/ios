@@ -28,6 +28,11 @@ import SwiftUI
         set { liveTranscript.isLoading = newValue }
     }
     var loadingStage: ConversationLiveTranscript.LoadingStage { liveTranscript.loadingStage }
+
+    func retryNow() async {
+        await liveTranscript.retryNow()
+    }
+
     var queuedMessages: [QueuedMessage] {
         get { commands.queuedMessages }
         set { commands.queuedMessages = newValue }

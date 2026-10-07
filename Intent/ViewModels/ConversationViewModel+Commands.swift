@@ -16,6 +16,11 @@ extension ConversationViewModel {
     var isLoading: Bool { store.isLoading }
     var showsLoadingState: Bool { isLoading && filteredMessages.isEmpty }
     var loadingStage: ConversationLiveTranscript.LoadingStage { store.loadingStage }
+
+    func retryNow() async {
+        await store.retryNow()
+    }
+
     /// Display-only filter: show only user-authored entries in the
     /// queued-messages section — daemon-originated wakes (hook, PR-monitor,
     /// event-notification) and agent-to-agent sends are hidden. The store

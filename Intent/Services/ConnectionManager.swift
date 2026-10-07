@@ -188,6 +188,16 @@ extension ConnectionManager {
 
     // MARK: - Connection lifecycle
 
+    /// A manual retry skips transport backoff without replacing an already
+    /// connected socket or an initial connection attempt. Pin failures still
+    /// require the pairing flow, never an untrusted reconnect.
+    func retryConnection() {
+        guard connectionState != .connected, connectionState != .connecting,
+              !certMismatchDetected, !hosts.isEmpty || tcAddress != nil,
+              port != nil, token != nil else { return }
+        startReconnection()
+    }
+
     func connect(
         hosts: [String],
         port: Int,

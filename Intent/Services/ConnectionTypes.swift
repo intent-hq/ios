@@ -47,6 +47,7 @@ protocol ConnectionManagerRouting: AnyObject {
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
     var globalSubscriptionPublisher: AnyPublisher<ConnectionManager.GlobalSubscriptionState, Never> { get }
 
+    func retryConnection()
     func request(_ method: String, params: [String: Any], timeout: TimeInterval) async throws -> Any
     @discardableResult func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID
     func removeEventHandler(id: UUID)

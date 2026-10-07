@@ -26,6 +26,8 @@ import SwiftUI
     let agentId: String
     let workspaceId: String
     var agentName: String
+    /// Owned by this conversation, not by a loading stage or retry attempt.
+    let loadingStartedAt = Date()
 
     var isTruncated: Bool { store.isTruncated }
     var totalMessageCount: Int { store.totalMessageCount }

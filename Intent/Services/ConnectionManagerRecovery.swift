@@ -296,7 +296,7 @@ extension ConnectionManager {
         startReconnection(disconnectTime: disconnectTime, startingAttempt: startingAttempt)
     }
 
-    private func startReconnection(
+    func startReconnection(
         disconnectTime: CFAbsoluteTime? = nil,
         startingAttempt: Int = ConnectionManager.initialReconnectAttempt
     ) {

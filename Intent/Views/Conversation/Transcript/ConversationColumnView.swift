@@ -93,8 +93,7 @@ struct ConversationColumnView: View {
         }
         ZStack {
             if viewModel.showsLoadingState {
-                ConversationLoadingView(stage: viewModel.loadingStage)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ConversationConnectionLoadingView(viewModel: viewModel, usesWorkspaceDesign: usesWorkspaceDesign)
                     .zIndex(1)
             } else if viewModel.filteredMessages.isEmpty {
                 ConversationEmptyView(viewModel: viewModel)
@@ -133,7 +132,7 @@ struct ConversationColumnView: View {
             .preference(key: WorkspaceActionMenuInputTop.self, value: composerVisible || usesWorkspaceDesign ? nil : questionInputTop)
             .layoutPriority(usesWorkspaceDesign ? 1 : 0)
 
-        if composerVisible || usesWorkspaceDesign {
+        if !viewModel.showsLoadingState, composerVisible || usesWorkspaceDesign {
             VStack(spacing: 0) {
                 if usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
                     MonitoredPrsRow(
@@ -177,7 +176,7 @@ struct ConversationColumnView: View {
 
     @ViewBuilder
     private var accessoryRows: some View {
-        if !usesWorkspaceDesign { Divider() }
+        if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
 
         if viewModel.store.isWaitingForAgents {
             VStack(spacing: 0) {
@@ -191,7 +190,8 @@ struct ConversationColumnView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
 
-        if !usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
+        if !usesWorkspaceDesign, !viewModel.showsLoadingState,
+           !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
             VStack(spacing: 0) {
                 MonitoredPrsRow(
                     viewModel: viewModel,
@@ -342,6 +342,26 @@ struct ConversationColumnView: View {
     #endif
 }
 
+private struct ConversationConnectionLoadingView: View {
+    let viewModel: ConversationViewModel
+    let usesWorkspaceDesign: Bool
+
+    var body: some View {
+        ScrollView {
+            ConversationConnectionStatusBlock(
+                stage: viewModel.loadingStage,
+                startedAt: viewModel.loadingStartedAt,
+                onRetry: viewModel.retryNow
+            )
+            .id(viewModel.conversationConsumer)
+            .padding(.horizontal, usesWorkspaceDesign
+                ? Constants.Conversation.Design.horizontalInset : Constants.Conversation.Transcript.transcriptHorizontalPadding)
+            .padding(.vertical, Constants.Conversation.Transcript.transcriptTopPadding)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
 /// Owned by the screen outside its top safe-area inset, not by the transcript slot.
 struct ConversationBackground: View {
     let isLoading: Bool
@@ -349,15 +369,8 @@ struct ConversationBackground: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        ZStack {
-            (usesWorkspaceDesign ? Constants.Conversation.Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme))
-            if isLoading {
-                SplashBackground()
-                    .transition(.opacity)
-            }
-        }
-        .ignoresSafeArea()
-        .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: isLoading)
+        (usesWorkspaceDesign ? Constants.Conversation.Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme))
+            .ignoresSafeArea()
     }
 }
 
@@ -377,37 +390,6 @@ private struct PendingQuestionRecoveryPlaceholder: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Layout.verticalPadding)
         .accessibilityElement(children: .combine)
-    }
-}
-
-private struct ConversationLoadingView: View {
-    let stage: ConversationLiveTranscript.LoadingStage
-    @Environment(\.colorScheme) private var colorScheme
-
-    private typealias Layout = Constants.Conversation.Column.Loading
-
-    private var stageText: Text {
-        switch stage {
-        case .idle: Text("Loading conversation…")
-        case .connecting: Text("Connecting…")
-        case .requesting: Text("Requesting conversation…")
-        case .receiving: Text("Receiving messages…")
-        case .retrying(let attempt): Text("Retrying (attempt \(attempt))…")
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: Layout.contentSpacing) {
-            IntentLoadingIndicator(size: Layout.markDimension, playbackMode: .pulse)
-            stageText
-                .interFont(Constants.Typography.bodyXS)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .multilineTextAlignment(.center)
-                .contentTransition(.opacity)
-                .animation(.easeInOut(duration: Layout.fadeDuration), value: stage)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(stageText)
     }
 }
 
