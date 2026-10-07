@@ -225,7 +225,8 @@ extension CreateWorkspaceView {
                 selectedReasoningEffort: Binding(get: { form.agentSelection.reasoningEffort }, set: { form.agentSelection.selectReasoning($0) }),
                 messageText: $form.messageText,
                 images: form.images,
-                isCreating: isCreating,
+                isCreating: isCreating || form.videoSubmission?.isSubmitting == true,
+                videoSubmission: form.videoSubmission,
                 allowsCreation: coordinator.canCreateWorkspace,
                 errorMessage: errorMessage,
                 showError: $showError,
@@ -233,7 +234,8 @@ extension CreateWorkspaceView {
                 onSelectProvider: selectProvider,
                 onRetryProviders: { Task { await fetchCreationOptions() } },
                 onBack: {
-                    guard !isCreating, form.navigationPath.last == .create else { return }
+                    guard !isCreating, form.videoSubmission?.isSubmitting != true, form.navigationPath.last == .create else { return }
+                    if form.videoSubmission != nil { dismiss(); return }
                     form.navigationPath.removeLast()
                 },
                 onCreate: createWorkspace,
@@ -399,7 +401,8 @@ extension CreateWorkspaceView {
 
 extension CreateWorkspaceView {
     private func createWorkspace() {
-        guard !isCreating, !form.images.isImporting, canSubmitProvider,
+        guard !isCreating, !form.images.isImporting, coordinator.canCreateWorkspace,
+              form.videoSubmission != nil || canSubmitProvider,
               let source = repositorySource else { return }
         isCreating = true
 
@@ -417,11 +420,16 @@ extension CreateWorkspaceView {
 
     private func performCreateWorkspace(source: WorkspaceRepositorySource) async {
         // Recheck at the request boundary: a refresh may have removed the selection after the tap but before this task ran.
-        guard canSubmitProvider, !form.images.isImporting else {
+        guard coordinator.canCreateWorkspace, form.videoSubmission != nil || canSubmitProvider, !form.images.isImporting else {
             isCreating = false
             return
         }
         do {
+            if let submission = form.videoSubmission {
+                finishCreation(try await submission.submit())
+                isCreating = false
+                return
+            }
             let idempotencyKey = form.creationAttempts.requestKey(for: source)
             let params = Self.buildCreateWorkspaceParams(
                 source: source,
@@ -437,6 +445,13 @@ extension CreateWorkspaceView {
             )
             try WorkspaceCreationImages.validateRequest(params)
             form.creationAttempts.record(idempotencyKey, for: source)
+            if !form.images.videos.isEmpty {
+                let submission = try WorkspaceCreationVideoSubmission(connection: session.connection, params: params, videos: form.images.videos)
+                form.videoSubmission = submission
+                finishCreation(try await submission.submit())
+                isCreating = false
+                return
+            }
             let result = try await session.connection.request(
                 "workspace.create",
                 params: params,
@@ -445,12 +460,7 @@ extension CreateWorkspaceView {
             if let dictionary = result as? [String: Any],
                let workspaceDictionary = dictionary["workspace"] as? [String: Any],
                let workspace = WorkspaceStore.parseWorkspace(workspaceDictionary) {
-                session.workspaceStore.addOrUpdate(workspace)
-                form.didCreateWorkspace = true
-                coordinator.workspaceCreationDraft = nil
-                HapticManager.notification(.success)
-                dismiss()
-                coordinator.onSelectWorkspace(workspace.id)
+                finishCreation(workspace)
             } else {
                 errorMessage = "Failed to parse workspace response."
                 showError = true
@@ -460,6 +470,15 @@ extension CreateWorkspaceView {
             showError = true
         }
         isCreating = false
+    }
+
+    private func finishCreation(_ workspace: Workspace) {
+        session.workspaceStore.addOrUpdate(workspace)
+        form.didCreateWorkspace = true
+        coordinator.workspaceCreationDraft = nil
+        HapticManager.notification(.success)
+        dismiss()
+        coordinator.onSelectWorkspace(workspace.id)
     }
 
     private var canSubmitProvider: Bool {

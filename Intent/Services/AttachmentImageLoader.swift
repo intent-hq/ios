@@ -1,8 +1,7 @@
 import Foundation
 import UIKit
 
-/// Loads attachment-reference image blocks (`{ type: "image", attachmentId }`
-/// with no inline `data`, PROTOCOL §5.5): resolves the attachment-registry
+/// Loads attachment-reference images and videos (PROTOCOL §5.5): resolves the attachment-registry
 /// row to its workspace-relative path via `file.getAttachmentInfo` (§5.9),
 /// then fetches and decodes the bytes through `WorkspaceFileImageLoader`
 /// (`file.readChunk`). Attachment rows are immutable (id → path never
@@ -58,6 +57,18 @@ final class AttachmentImageLoader {
             fileLoader.forgetFailure(workspaceId: workspaceId, path: path)
         }
         return try await image(workspaceId: workspaceId, attachmentId: attachmentId)
+    }
+
+    func video(workspaceId: String, attachmentId: String, mimeType: String? = nil) async throws -> WorkspaceVideo {
+        let path = try await resolvePath(workspaceId: workspaceId, attachmentId: attachmentId)
+        return try await fileLoader.video(workspaceId: workspaceId, path: path, mimeType: mimeType)
+    }
+
+    func retryVideo(workspaceId: String, attachmentId: String, mimeType: String? = nil) async throws -> WorkspaceVideo {
+        if let path = pathCache[Self.key(workspaceId, attachmentId)] {
+            fileLoader.forgetFailure(workspaceId: workspaceId, path: path)
+        }
+        return try await video(workspaceId: workspaceId, attachmentId: attachmentId, mimeType: mimeType)
     }
 
     private static func key(_ workspaceId: String, _ attachmentId: String) -> String {

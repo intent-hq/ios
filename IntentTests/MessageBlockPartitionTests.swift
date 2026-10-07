@@ -2,8 +2,8 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// User-row block partitioning: text renders first, image attachments render
-/// after as a thumbnail row, file attachments last as chips, regardless of
+/// User-row block partitioning: text renders first, image/video attachments render
+/// after as thumbnails, file attachments last as chips, regardless of
 /// block order in the payload.
 struct MessageBlockPartitionTests {
     private func textBlock(_ text: String) -> ContentBlock {
@@ -73,7 +73,51 @@ struct MessageBlockPartitionTests {
         let result = MessageView.partitionUserBlocks([])
         #expect(result.text.isEmpty)
         #expect(result.images.isEmpty)
+        #expect(result.videos.isEmpty)
         #expect(result.files.isEmpty)
+    }
+
+    @Test(arguments: ["recording.MOV", "clip.mp4", "clip.m4v", "opaque-name"])
+    func attachmentBackedVideoFileAndImageBlocksBecomeVideos(_ name: String) {
+        let mime: String? = name == "opaque-name" ? "video/mp4" : nil
+        let file = ContentBlock(type: .file, mimeType: mime, fileName: name, attachmentId: "video-file")
+        let image = ContentBlock(type: .image, mimeType: mime, fileName: name, attachmentId: "video-image")
+        let result = MessageBlockPartitioning.partitionUserBlocks([
+            file, imageBlock(), textBlock("Watch this"), fileBlock("notes.pdf"), image
+        ])
+
+        #expect(result.videos.map(\.attachmentId) == ["video-file", "video-image"])
+        #expect(result.images.map(\.mimeType) == ["image/png"])
+        #expect(result.files.map(\.fileName) == ["notes.pdf"])
+        #expect(result.text.map(\.text) == ["Watch this"])
+    }
+
+    @Test(arguments: ["clip.WEBM", "opaque-name"])
+    func unsupportedVideoFormatsStayFileChips(_ name: String) {
+        let mime: String? = name == "opaque-name" ? "VIDEO/WEBM; codecs=vp9" : nil
+        let blocks = [
+            ContentBlock(type: .image, mimeType: mime, fileName: name, attachmentId: "webm-image"),
+            ContentBlock(type: .file, mimeType: mime, fileName: name, attachmentId: "webm-file")
+        ]
+        let result = MessageBlockPartitioning.partitionUserBlocks(blocks)
+
+        #expect(result.files == blocks)
+        #expect(result.images.isEmpty)
+        #expect(result.videos.isEmpty)
+    }
+
+    @Test func videoRenderingRequiresAnAttachmentReferenceAndFileOrImageType() {
+        let file = ContentBlock(type: .file, mimeType: "video/mp4", fileName: "clip.mp4")
+        let image = ContentBlock(type: .image, data: "aGk=", mimeType: "video/mp4")
+        let emptyID = ContentBlock(type: .file, fileName: "clip.mov", attachmentId: "")
+        let text = ContentBlock(type: .text, text: "Caption", mimeType: "video/mp4", attachmentId: "text")
+        let code = ContentBlock(type: .code, mimeType: "video/mp4", attachmentId: "code")
+        let result = MessageBlockPartitioning.partitionUserBlocks([file, image, emptyID, text, code])
+
+        #expect(result.videos.isEmpty)
+        #expect(result.files == [file, emptyID])
+        #expect(result.images == [image])
+        #expect(result.text == [text])
     }
 }
 

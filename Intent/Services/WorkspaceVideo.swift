@@ -39,21 +39,44 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
         return ext == "webm" || UTType(filenameExtension: ext)?.conforms(to: .movie) == true
     }
 
-    @concurrent
-    static func prepare(data: Data, path: String, mimeType: String? = nil) async throws -> WorkspaceVideo {
+    static func isWebM(path: String, mimeType: String? = nil) -> Bool {
+        let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
+        let mime = mimeType?.lowercased().split(separator: ";").first?.trimmingCharacters(in: .whitespaces)
+        return ext == "webm" || mime == "video/webm"
+    }
+
+    static func temporaryURL(path: String, mimeType: String? = nil) throws -> URL {
         let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
         let mime = mimeType?.lowercased().split(separator: ";").first.map(String.init)
-        guard ext != "webm", mime != "video/webm" else {
+        guard !isWebM(path: path, mimeType: mimeType) else {
             throw WorkspaceFileImageLoader.LoadError.notAVideo
         }
         let suffix = mime.flatMap { UTType(mimeType: $0)?.preferredFilenameExtension } ?? ext
-        let url = FileManager.default.temporaryDirectory
+        return FileManager.default.temporaryDirectory
             .appendingPathComponent("chat-video-\(UUID().uuidString)")
             .appendingPathExtension(suffix)
+    }
+
+    @concurrent
+    static func prepare(data: Data, path: String, mimeType: String? = nil) async throws -> WorkspaceVideo {
+        let url = try temporaryURL(path: path, mimeType: mimeType)
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+        return try await prepare(fileURL: url, byteCount: data.count)
+    }
+
+    /// Takes ownership of a completed temporary download, removing it on failure
+    /// or when the last cache/thumbnail/player owner releases the prepared video.
+    @concurrent
+    static func prepare(fileURL: URL, byteCount: Int) async throws -> WorkspaceVideo {
         var retained = false
-        defer { if !retained { try? FileManager.default.removeItem(at: url) } }
-        try data.write(to: url, options: .atomic)
-        let asset = AVURLAsset(url: url)
+        defer { if !retained { try? FileManager.default.removeItem(at: fileURL) } }
+        try Task.checkCancellation()
+        let asset = AVURLAsset(url: fileURL)
         guard try await asset.load(.isPlayable) else {
             throw WorkspaceFileImageLoader.LoadError.notAVideo
         }
@@ -69,7 +92,7 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
         let duration = try await asset.load(.duration)
         let frame = try await generator.image(at: duration > posterTime ? posterTime : .zero)
         try Task.checkCancellation()
-        let video = WorkspaceVideo(url: url, poster: UIImage(cgImage: frame.image), byteCount: data.count)
+        let video = WorkspaceVideo(url: fileURL, poster: UIImage(cgImage: frame.image), byteCount: byteCount)
         retained = true
         return video
     }

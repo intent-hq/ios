@@ -197,7 +197,10 @@ extension ConversationViewModel {
     func addImage(_ image: UIImage) { attachmentPipeline.addImage(image) }
     func pasteImages() { attachmentPipeline.pasteImages() }
     func removeImage(at index: Int) { attachmentPipeline.removeImage(at: index) }
-    func loadSelectedPhotos() async { await attachmentPipeline.loadSelectedPhotos() }
+    func loadSelectedPhotos() { attachmentPipeline.startLoadingSelectedPhotos(workspaceId: workspaceId) }
+    func cancelPhotoImport() { attachmentPipeline.cancelPhotoImport() }
+
+    var isLoadingPhotos: Bool { attachmentPipeline.isLoadingPhotos }
 
     var hasPendingAttachments: Bool { attachmentPipeline.hasPendingAttachments }
 

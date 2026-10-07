@@ -121,6 +121,9 @@ struct UserMessageView: View {
         if !partitioned.images.isEmpty {
             imageAttachments(partitioned.images)
         }
+        if !partitioned.videos.isEmpty {
+            videoAttachments(partitioned.videos)
+        }
         if !partitioned.files.isEmpty {
             fileAttachments(partitioned.files)
         }
@@ -142,6 +145,21 @@ struct UserMessageView: View {
         ) {
             ForEach(images) { block in
                 ImageAttachmentThumbnail(block: block, workspaceId: workspaceId)
+            }
+        }
+        .padding(.top, Layout.attachmentSectionTopPadding)
+    }
+
+    private func videoAttachments(_ videos: [ContentBlock]) -> some View {
+        VStack(alignment: .leading, spacing: Layout.attachmentGridSpacing) {
+            ForEach(videos) { block in
+                AttachmentReferenceVideoView(
+                    workspaceId: workspaceId,
+                    attachmentId: block.attachmentId,
+                    name: block.fileName ?? "Attachment",
+                    mimeType: block.mimeType,
+                    fallback: fileAttachmentChip(block)
+                )
             }
         }
         .padding(.top, Layout.attachmentSectionTopPadding)
@@ -209,7 +227,8 @@ struct UserMessageView: View {
     /// A plain bubble measures its existing padding from the cap top to the final baseline.
     private var usesTrimmedMessageText: Bool {
         workspaceDesign && hookWake == nil && prWake == nil && agentMessage == nil
-            && partitioned.text.count == 1 && partitioned.images.isEmpty && partitioned.files.isEmpty
+            && partitioned.text.count == 1 && partitioned.images.isEmpty
+            && partitioned.videos.isEmpty && partitioned.files.isEmpty
     }
 
     private var workspaceTextCapHeight: CGFloat {

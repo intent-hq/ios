@@ -55,7 +55,7 @@ final class AttachmentUploadService {
     nonisolated static let transferTimeout: TimeInterval = 5 * 60 // swiftlint:disable:this no_magic_numbers
 
     /// Fraction (0–1) of chunks acknowledged by the daemon. Only the chunked
-    /// (> 25 MB) path reports progress.
+    /// path reports progress.
     typealias ProgressCallback = @MainActor (Double) -> Void
 
     struct ChunkedPlacementMetadata {
@@ -198,12 +198,13 @@ extension AttachmentUploadService {
     }
 
     /// Place a file payload, streaming chunks off disk via `FileHandle` on
-    /// the chunked (> 25 MB) path.
+    /// the chunked path. Photos videos force this path at every size.
     func placeFile(
         workspaceId: String,
         fileName: String,
         fileURL: URL,
         mimeType: String? = nil,
+        forceChunked: Bool = false,
         onProgress: ProgressCallback? = nil
     ) async throws -> PlacedAttachment {
         try await Self.placeFromFile(
@@ -214,6 +215,7 @@ extension AttachmentUploadService {
                 mimeType: mimeType
             ),
             fileURL: fileURL,
+            forceChunked: forceChunked,
             onProgress: onProgress
         )
     }
@@ -253,13 +255,14 @@ extension AttachmentUploadService {
     nonisolated private static func placeFromFile(
         context: PlacementContext,
         fileURL: URL,
+        forceChunked: Bool,
         onProgress: ProgressCallback?
     ) async throws -> PlacedAttachment {
         let size = try fileSize(of: fileURL)
         guard size <= maxAttachmentBytes else {
             throw UploadError.payloadTooLarge(size: size)
         }
-        if size <= maxSingleShotBytes {
+        if !forceChunked, size <= maxSingleShotBytes {
             let data = try Data(contentsOf: fileURL)
             return try await placeSingleShot(
                 context: context,

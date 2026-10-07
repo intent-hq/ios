@@ -3,6 +3,7 @@ import Foundation
 struct UserBlockPartition {
     let text: [ContentBlock]
     let images: [ContentBlock]
+    let videos: [ContentBlock]
     let files: [ContentBlock]
 }
 
@@ -103,11 +104,33 @@ enum MessageBlockPartitioning {
     static func partitionUserBlocks(
         _ blocks: [ContentBlock]
     ) -> UserBlockPartition {
-        UserBlockPartition(
-            text: blocks.filter { $0.type == .text },
-            images: blocks.filter { $0.type == .image },
-            files: blocks.filter { $0.type == .file }
-        )
+        var text: [ContentBlock] = []
+        var images: [ContentBlock] = []
+        var videos: [ContentBlock] = []
+        var files: [ContentBlock] = []
+        for block in blocks {
+            switch block.type {
+            case .text:
+                text.append(block)
+            case .image, .file:
+                let path = block.fileName ?? ""
+                if let attachmentId = block.attachmentId, !attachmentId.isEmpty,
+                   WorkspaceVideo.isVideo(path: path, mimeType: block.mimeType) {
+                    if WorkspaceVideo.isWebM(path: path, mimeType: block.mimeType) {
+                        files.append(block)
+                    } else {
+                        videos.append(block)
+                    }
+                } else if block.type == .image {
+                    images.append(block)
+                } else {
+                    files.append(block)
+                }
+            default:
+                break
+            }
+        }
+        return UserBlockPartition(text: text, images: images, videos: videos, files: files)
     }
 
     private static let groupTagRegex = #/<group:([^>\r\n<]+)>|<\/group(:[^>\r\n<]+)?>/#

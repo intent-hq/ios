@@ -17,6 +17,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     @Binding var messageText: String
     let images: WorkspaceCreationImages
     let isCreating: Bool
+    var videoSubmission: WorkspaceCreationVideoSubmission?
     let allowsCreation: Bool
     let errorMessage: String?
     @Binding var showError: Bool
@@ -47,7 +48,7 @@ struct CreateWorkspaceSpecialistStepView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     optionsList
-                        .disabled(isCreating)
+                        .disabled(isCreating || videoSubmission != nil)
                         .allowsHitTesting(!promptFocus.isDismissing)
                 }
             }
@@ -70,19 +71,24 @@ struct CreateWorkspaceSpecialistStepView: View {
 
     private var createControls: some View {
         HStack {
-            CreateWorkspaceNavigationButton(identifier: "creation.back", onAction: onBack)
+            CreateWorkspaceNavigationButton(
+                control: videoSubmission == nil ? .back : .close, identifier: "creation.back", onAction: onBack
+            )
                 .disabled(isCreating || promptFocus.isDismissing)
             Spacer()
             CreateWorkspaceSubmitButton(
                 isCreating: isCreating,
-                isDisabled: CreateWorkspaceView.isCreateDisabled(
+                isDisabled: videoSubmission != nil
+                    ? (isCreating || promptFocus.isDismissing || !allowsCreation)
+                    : CreateWorkspaceView.isCreateDisabled(
                     isCreating: isCreating || promptFocus.isDismissing,
                     isLoadingProviders: isLoadingProviders,
                     providers: providers,
                     selectedProvider: selectedProvider,
                     allowsCreation: allowsCreation,
                     isImportingImages: images.isImporting
-                )
+                ),
+                title: submitTitle
             ) {
                 promptFocus.dismissKeyboard { onCreate() }
             }
@@ -92,6 +98,11 @@ struct CreateWorkspaceSpecialistStepView: View {
         .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
     }
 
+    private var submitTitle: LocalizedStringKey {
+        guard let videoSubmission else { return "Create" }
+        return videoSubmission.needsStatusCheck ? "Check status" : "Retry"
+    }
+
     private var optionsList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -99,6 +110,15 @@ struct CreateWorkspaceSpecialistStepView: View {
                     .padding(.top, CreateWorkspaceFormStyle.headingTopPadding)
                     .padding(.bottom, CreateWorkspaceFormStyle.headingSpacing)
                 CreateWorkspacePrompt(text: $messageText, attachments: images, focus: promptFocus)
+                if let videoSubmission {
+                    if videoSubmission.isUploading {
+                        ProgressView(value: videoSubmission.uploadProgress) { Text("Uploading videos…") }
+                            .accessibilityIdentifier("creation.videoUploadProgress")
+                    } else if !isCreating {
+                        Text("Your prompt and attachments are saved. Continue this submission before starting another workspace.")
+                            .interFont(Constants.Typography.bodyXS)
+                    }
+                }
                 CreateWorkspaceSourceCard(repositoryFullName: repositoryFullName, branch: branch, onEdit: onBack)
                     .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
                 agentSection

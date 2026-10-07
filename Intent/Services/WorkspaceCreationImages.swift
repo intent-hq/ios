@@ -6,7 +6,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Draft-owned, local images. No upload or workspace identity exists until Create.
+/// Draft-owned Photos media. Videos stay on disk until the workspace exists.
 @MainActor
 @Observable final class WorkspaceCreationImages {
     nonisolated struct Image: Identifiable, Sendable {
@@ -20,14 +20,16 @@ import UniformTypeIdentifiers
     }
 
     nonisolated enum ImportError: LocalizedError {
-        case requestTooLarge, tooLarge, tooMany, unreadable
+        case requestTooLarge, tooLarge, tooMany, unreadable, unreadableVideo
 
         var errorDescription: String? {
             switch self {
             case .unreadable:
                 return "Could not read this image. Choose a different image or try again."
+            case .unreadableVideo:
+                return "Could not read this video. Choose a different video or try again."
             case .tooMany:
-                return "You can attach up to 5 images. Remove an image before adding more."
+                return "You can attach up to 5 images or videos. Remove an attachment before adding more."
             case .tooLarge:
                 return "These images are too large. Choose smaller images or remove an attachment."
             case .requestTooLarge:
@@ -37,6 +39,11 @@ import UniformTypeIdentifiers
     }
 
     typealias Loader = @MainActor () async throws -> Data
+    enum Media {
+        case image(Data)
+        case video(ImportedPhotoVideo)
+    }
+    typealias MediaLoader = @MainActor () async throws -> Media
 
     // Bound compressed source reads and prepared draft memory independently of
     // the daemon's frame limit. JSONSerialization may also escape base64 slashes.
@@ -45,22 +52,30 @@ import UniformTypeIdentifiers
     static let maximumRequestBytes = 39 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
     nonisolated private static let maximumPixelSize = 4096
     private(set) var images: [Image] = []
+    private(set) var videos: [PendingFile] = []
     private(set) var isImporting = false
     var errorMessage: String?
     @ObservationIgnored var imagePasteboard: ImagePasteboard = .general
     @ObservationIgnored private var importTask: Task<Void, Never>?
 
-    var remainingCount: Int { Constants.Conversation.Composer.maximumImageSelectionCount - images.count }
+    var remainingCount: Int { Constants.Conversation.Composer.maximumImageSelectionCount - images.count - videos.count }
 
     func remove(_ id: UUID) {
         images.removeAll { $0.id == id }
+        videos.removeAll { $0.id == id }
     }
 
     func addPhotos(_ items: [PhotosPickerItem]) {
-        add(items.map { item in
+        addMedia(items.map { item in
             {
+                if item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
+                    guard let video = try await item.loadTransferable(type: ImportedPhotoVideo.self) else {
+                        throw ImportError.unreadableVideo
+                    }
+                    return .video(video)
+                }
                 guard let data = try await item.loadTransferable(type: Data.self) else { throw ImportError.unreadable }
-                return data
+                return .image(data)
             }
         })
     }
@@ -104,6 +119,11 @@ import UniformTypeIdentifiers
     /// Each batch is atomic: a bad selection never silently drops one of its images.
     @discardableResult
     func add(_ loaders: [Loader]) -> Task<Void, Never>? {
+        addMedia(loaders.map { load in { .image(try await load()) } })
+    }
+
+    @discardableResult
+    func addMedia(_ loaders: [MediaLoader]) -> Task<Void, Never>? {
         guard !loaders.isEmpty, !isImporting else { return nil }
         guard loaders.count <= remainingCount else {
             errorMessage = ImportError.tooMany.localizedDescription
@@ -114,16 +134,25 @@ import UniformTypeIdentifiers
         let task = Task {
             do {
                 var prepared: [Image] = []
+                var preparedVideos: [PendingFile] = []
                 for load in loaders {
-                    let data = try await load()
+                    let media = try await load()
                     try Task.checkCancellation()
-                    let image = try await Self.prepare(data, quality: Constants.Conversation.Composer.imageCompressionQuality)
+                    switch media {
+                    case let .image(data):
+                        prepared.append(try await Self.prepare(data, quality: Constants.Conversation.Composer.imageCompressionQuality))
+                    case let .video(video):
+                        guard video.size <= ImportedPhotoVideo.maxBytes else { throw ImportedPhotoVideo.ImportError.tooLarge }
+                        preparedVideos.append(PendingFile(
+                            url: video.url, displayName: video.url.lastPathComponent, size: Int64(video.size), video: video
+                        ))
+                    }
                     try Task.checkCancellation()
-                    prepared.append(image)
                 }
                 guard images.reduce(0, { $0 + $1.jpeg.count }) + prepared.reduce(0, { $0 + $1.jpeg.count })
                     <= Self.maximumJPEGBytes else { throw ImportError.tooLarge }
                 images.append(contentsOf: prepared)
+                videos.append(contentsOf: preparedVideos)
             } catch {
                 if !Task.isCancelled { errorMessage = error.localizedDescription }
             }

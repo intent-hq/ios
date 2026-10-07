@@ -11,6 +11,11 @@ import tempfile
 
 
 CAPTURES = {
+    "TranscriptVideoUITests": {
+        "testSentVideoPosterOpensFullScreenPlayback": (
+            "Sent video poster", "Sent video full-screen playback",
+        ),
+    },
     "WatcherMessageUITests": {
         "testWatcherDetailsExpandAndCollapseWithoutLosingTheReport": (
             "Watcher summary", "Watcher expanded details", "Watcher final state",
