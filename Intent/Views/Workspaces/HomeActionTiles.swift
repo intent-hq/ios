@@ -24,7 +24,7 @@ struct HomeActionTiles: View {
     @ScaledMetric(relativeTo: .body) private var titleTracking: CGFloat = -0.32
     @ScaledMetric(relativeTo: .body) private var titleSize = Constants.Typography.bodySEmphasized.size
 
-    private enum Layout {
+    nonisolated private enum Layout {
         static let inset: CGFloat = 24
         static let spacing: CGFloat = 8
         static let maximumTileWidth: CGFloat = 192

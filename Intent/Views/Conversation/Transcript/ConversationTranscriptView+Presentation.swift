@@ -89,7 +89,8 @@ extension ConversationTranscriptView {
             }
         }
         .id(message.id)
-        .overlay(alignment: .top) { @Sendable in marker }
+        // Pass the prepared marker directly, without a render-thread closure capture (#737).
+        .overlay(marker, alignment: .top)
         .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
             .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
         } action: { measurement in

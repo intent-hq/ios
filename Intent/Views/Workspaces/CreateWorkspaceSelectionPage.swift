@@ -1,6 +1,6 @@
 import SwiftUI
 
-private enum CreateWorkspaceCoordinates {
+nonisolated private enum CreateWorkspaceCoordinates {
     static let content = "creation.selectionContent"
 }
 
