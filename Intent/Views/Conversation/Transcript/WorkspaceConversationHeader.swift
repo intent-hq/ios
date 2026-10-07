@@ -48,7 +48,6 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 
 struct WorkspaceConversationHeader<Actions: View>: View {
     let title: String
-    var showsBackground = true
     var assistantStore: AssistantStore?
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
@@ -58,7 +57,6 @@ struct WorkspaceConversationHeader<Actions: View>: View {
         if let assistantStore {
             AssistantConversationHeader(
                 title: title,
-                showsBackground: showsBackground,
                 canCreateConversation: !assistantStore.isCreating && assistantStore.hasLoaded,
                 onNewConversation: {
                     Task {
@@ -75,7 +73,6 @@ struct WorkspaceConversationHeader<Actions: View>: View {
                 subtitle: "Agent",
                 backLabel: "Back",
                 backIdentifier: "conversation.back",
-                showsBackground: showsBackground,
                 onBack: onBack,
                 actions: actions
             )
@@ -85,7 +82,6 @@ struct WorkspaceConversationHeader<Actions: View>: View {
 
 struct AssistantConversationHeader<Actions: View>: View {
     let title: String
-    var showsBackground = true
     let canCreateConversation: Bool
     let onNewConversation: () -> Void
     @ViewBuilder let actions: () -> Actions
@@ -93,8 +89,7 @@ struct AssistantConversationHeader<Actions: View>: View {
     var body: some View {
         WorkspaceNavigationHeader(
             title: title,
-            subtitle: title == "Assistant" ? nil : "Assistant",
-            showsBackground: showsBackground
+            subtitle: title == "Assistant" ? nil : "Assistant"
         ) {
             HStack(spacing: 0) {
                 IntentIconButton(
@@ -119,7 +114,6 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     let subtitle: LocalizedStringKey?
     var backLabel: LocalizedStringKey = "Back"
     var backIdentifier = "conversation.back"
-    var showsBackground = true
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
     var onBack: (() -> Void)?
@@ -131,7 +125,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
 
     var body: some View {
         windowAdaptedControls
-            .background(Design.Palette.background(for: colorScheme).opacity(showsBackground ? 1 : 0))
+            .background(Design.Palette.background(for: colorScheme))
     }
 
     @ViewBuilder

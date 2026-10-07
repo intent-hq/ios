@@ -2,27 +2,26 @@ import UIKit
 import XCTest
 
 extension ConversationTranscriptScrollUITests {
-    // Exported artwork samples and screen-relative positions are intentional fixture data.
+    // Background colors and screen-relative positions are intentional fixture data.
     // swiftlint:disable no_magic_numbers
     private enum BackgroundSample {
-        static let bottom = CGPoint(x: 0.75, y: 0.99)
         static let colorTolerance = 4
-        static let solidChannelTolerance = 8
         static let channelCount = 4
         static let colorChannelCount = 3
         static let bitsPerComponent = 8
-        static let dark = [28, 28, 36]
-        static let artwork: [(CGPoint, [Int])] = [
-            (CGPoint(x: 0.75, y: 0.01), [243, 242, 241]),
-            (CGPoint(x: 0.99, y: 0.10), [242, 240, 237]),
-            (CGPoint(x: 0.99, y: 0.90), [232, 239, 139]),
-            (bottom, [231, 244, 117])
+        static let light = [255, 255, 255]
+        static let dark = [22, 22, 22]
+        static let points = [
+            CGPoint(x: 0.75, y: 0.01),
+            CGPoint(x: 0.99, y: 0.10),
+            CGPoint(x: 0.99, y: 0.90),
+            CGPoint(x: 0.75, y: 0.99)
         ]
     }
     // swiftlint:enable no_magic_numbers
 
     @MainActor
-    func testLoadingGradientCoversChromeAndRestoresSolidBackground() throws {
+    func testConversationBackgroundStaysSolidWhileLoading() throws {
         for appearance in ["light", "dark"] {
             try assertLoadingBackground(appearance: appearance)
         }
@@ -38,24 +37,25 @@ extension ConversationTranscriptScrollUITests {
 
         let loading = app.screenshot()
         attachBackground(loading, named: "Conversation loading full-screen \(appearance)")
-        // Sample outside the controls, including the top and bottom safe areas.
-        // These are the exported artwork colors at each screen-relative height.
-        for (point, lightColor) in BackgroundSample.artwork {
-            let expected = appearance == "light" ? lightColor : BackgroundSample.dark
-            let actual = try backgroundPixel(loading, at: point)
-            XCTAssertTrue(
-                zip(actual, expected).allSatisfy { abs($0 - $1) <= BackgroundSample.colorTolerance },
-                "Loading artwork must cover the chrome at \(point): got \(actual), expected \(expected)"
-            )
-        }
+        try assertSolidBackground(loading, appearance: appearance)
 
         try Data().write(to: startupSnapshotGate)
         XCTAssertTrue(opened.transcript.waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { self.startupReport(app).contains("positioned=true") })
         let loaded = app.screenshot()
         attachBackground(loaded, named: "Conversation loaded solid background \(appearance)")
-        let bottom = try backgroundPixel(loaded, at: BackgroundSample.bottom)
-        XCTAssertLessThanOrEqual(abs(bottom[0] - bottom[2]), BackgroundSample.solidChannelTolerance, "The yellow loading artwork must leave after messages arrive")
+        try assertSolidBackground(loaded, appearance: appearance)
+    }
+
+    private func assertSolidBackground(_ screenshot: XCUIScreenshot, appearance: String) throws {
+        let expected = appearance == "light" ? BackgroundSample.light : BackgroundSample.dark
+        for point in BackgroundSample.points {
+            let actual = try backgroundPixel(screenshot, at: point)
+            XCTAssertTrue(
+                zip(actual, expected).allSatisfy { abs($0 - $1) <= BackgroundSample.colorTolerance },
+                "Conversation background must stay solid at \(point): got \(actual), expected \(expected)"
+            )
+        }
     }
 
     private func attachBackground(_ screenshot: XCUIScreenshot, named name: String) {

@@ -344,20 +344,12 @@ struct ConversationColumnView: View {
 
 /// Owned by the screen outside its top safe-area inset, not by the transcript slot.
 struct ConversationBackground: View {
-    let isLoading: Bool
     let usesWorkspaceDesign: Bool
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        ZStack {
-            (usesWorkspaceDesign ? Constants.Conversation.Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme))
-            if isLoading {
-                SplashBackground()
-                    .transition(.opacity)
-            }
-        }
-        .ignoresSafeArea()
-        .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: isLoading)
+        (usesWorkspaceDesign ? Constants.Conversation.Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme))
+            .ignoresSafeArea()
     }
 }
 
