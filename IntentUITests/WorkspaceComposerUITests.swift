@@ -25,6 +25,11 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Fixture.timeout))
         let message = "Make the logo bigger\nand keep its proportions"
         composer.typeText(message)
+        // Input delivery and the accessibility value can settle after typeText returns.
+        let typedMessage = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", message), object: composer
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [typedMessage], timeout: Fixture.timeout), .completed)
         XCTAssertEqual(composer.value as? String, message, "Return on iPhone inserts a newline instead of sending")
         XCTAssertTrue(send.waitForExistence(timeout: Fixture.timeout))
         assertReachable(send, in: app)
