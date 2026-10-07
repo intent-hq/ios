@@ -102,8 +102,10 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         try Data().write(to: retryGate)
         retry.tap()
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { followReport(in: opened).contains("historyCount=30 historyLoading=false") })
-        let older = message(in: app, containing: "History message 11.")
-        scrollUp(in: opened) { isVisible(older, in: opened.transcript) }
+        let first = message(in: app, containing: "History message 1.")
+        let beginning = app.staticTexts["transcript.historyBeginning"]
+        scrollUp(in: opened) { isVisible(first, in: opened.transcript) && isVisible(beginning, in: opened.transcript) }
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "transcript.historyLoading").firstMatch.exists)
         XCTAssertFalse(retry.exists)
     }
 
