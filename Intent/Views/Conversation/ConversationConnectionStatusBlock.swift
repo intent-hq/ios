@@ -9,9 +9,11 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
     let startedAt: Date
     let onRetry: () async -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
     @State private var timing: ConversationConnectionStatusTiming<Phase>
 
     private typealias Layout = Constants.Conversation.Column.Loading
+    private typealias Palette = Constants.Conversation.Design.Palette
 
     init(
         phase: Phase,
@@ -48,6 +50,7 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
                 if isDelayed {
                     Text("Elapsed: \(elapsed) · Taking longer than usual")
                         .interFont(Constants.Typography.bodyXS)
+                        .foregroundStyle(Palette.secondaryForeground(for: colorScheme, contrast: contrast))
                         .monospacedDigit()
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityHidden(true) // Announced with the current step instead.
@@ -55,7 +58,6 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
                 }
             }
             .interFont(Constants.Typography.bodyS)
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("conversation.connectionStatusBlock")
@@ -73,8 +75,17 @@ private struct ConversationConnectionStepRow<Phase: Equatable>: View {
     let title: LocalizedStringResource
     let elapsed: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     private typealias Layout = Constants.Conversation.Column.Loading
+    private typealias Palette = Constants.Conversation.Design.Palette
+
+    private var titleColor: Color {
+        step == currentStep
+            ? Palette.foreground(for: colorScheme)
+            : Palette.secondaryForeground(for: colorScheme, contrast: contrast)
+    }
 
     private var state: Text {
         if step.rawValue < currentStep.rawValue { Text("Done") } else if step == currentStep { Text("Current") } else { Text("Pending") }
@@ -94,13 +105,25 @@ private struct ConversationConnectionStepRow<Phase: Equatable>: View {
                 if step == currentStep {
                     ProgressView()
                         .controlSize(.small)
+                        .tint(Palette.foreground(for: colorScheme))
+                } else if step.rawValue < currentStep.rawValue {
+                    Image(.checkCircle)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(colorScheme == .dark ? Palette.accent : Palette.foreground(for: colorScheme))
                 } else {
-                    Image(systemName: step.rawValue < currentStep.rawValue ? "checkmark.circle.fill" : "circle")
+                    Image(.waiting)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Palette.secondaryForeground(for: colorScheme, contrast: contrast))
                 }
             }
             .frame(width: Layout.iconDimension, height: Layout.iconDimension)
             .accessibilityHidden(true)
             Text(title)
+                .foregroundStyle(titleColor)
                 .contentTransition(.opacity)
                 .animation(reduceMotion ? nil : .easeInOut(duration: Layout.fadeDuration), value: phase)
                 .fixedSize(horizontal: false, vertical: true)
