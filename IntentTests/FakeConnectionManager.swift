@@ -214,6 +214,9 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     private(set) var disconnectCallCount = 0
     private(set) var refreshHostRoutesCallCount = 0
+    private(set) var retryConnectionCallCount = 0
+
+    func retryConnection() { retryConnectionCallCount += 1 }
 
     func connectDemo(serveFixtures _: Bool) {
         globalSubscriptionState = .subscribed

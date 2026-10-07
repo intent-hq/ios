@@ -67,8 +67,12 @@ extension Constants.Conversation.Column {
     }
 
     enum Loading {
-        static let markDimension: CGFloat = 48
+        static let iconDimension: CGFloat = 20
         static let contentSpacing: CGFloat = 12
+        static let rowSpacing: CGFloat = 16
+        static let retryTopPadding: CGFloat = 12
+        static let slowThreshold: TimeInterval = 8
+        static let timelineInterval: TimeInterval = 1
         static let fadeDuration: Double = 0.2
     }
 

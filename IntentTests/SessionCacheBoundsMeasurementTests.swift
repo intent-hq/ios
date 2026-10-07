@@ -58,6 +58,8 @@ struct SessionCacheBoundsMeasurementTests {
 
         var requestCount = 0
 
+        func retryConnection() {}
+
         func request(_ method: String, params: [String: Any], timeout _: TimeInterval) async throws -> Any {
             requestCount += 1
             guard method == "file.getAttachmentInfo" else {

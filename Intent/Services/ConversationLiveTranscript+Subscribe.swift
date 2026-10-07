@@ -15,6 +15,20 @@ extension ConversationLiveTranscript {
         return subscriptionLoadingStage
     }
 
+    /// Bypasses snapshot/backoff waits. Supersede the old registration before
+    /// releasing it so late replies and already-running recovery cannot win.
+    func retryNow() async {
+        guard agentId != nil, !Task.isCancelled else { return }
+        cancelSnapshotRecovery()
+        registrationGeneration &+= 1
+        guard connectionManager.connectionState == .connected else {
+            prepareForReconnect()
+            connectionManager.retryConnection()
+            return
+        }
+        await resnapshot(for: registrationGeneration)
+    }
+
     /// Registers the sole transcript source: `chat.subscribe`, whose seq-0
     /// snapshot replaces the transcript and whose deltas keep it current.
     /// Returns once the registration is acked (its snapshot is then awaited

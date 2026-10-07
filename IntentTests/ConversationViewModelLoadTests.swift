@@ -46,6 +46,27 @@ extension ConversationViewModelTests {
         ["id": id, "role": "assistant", "contentBlocks": [["type": "text", "text": id]]]
     }
 
+    @Test func manualRetryPreservesDraftAndElapsedStartAcrossLoadingStages() async {
+        let (viewModel, fake) = makeLoadableVM()
+        fake.connectionState = .connected
+        let startedAt = viewModel.loadingStartedAt
+        viewModel.messageText = "Unsent draft"
+        fake.chatSnapshotMap.removeAll()
+        await viewModel.store.subscribeLiveChat(agentId: "test-agent", workspaceId: "test-ws")
+        #expect(viewModel.showsLoadingState)
+        #expect(viewModel.loadingStage == .receiving)
+        fake.stubChatSnapshot(subscriptionId: "retry")
+
+        await viewModel.retryNow()
+
+        #expect(!viewModel.showsLoadingState)
+        #expect(viewModel.messageText == "Unsent draft")
+        #expect(viewModel.loadingStartedAt == startedAt)
+        #expect(fake.paramsForMethod("chat.subscribe").count == 2)
+        viewModel.messageText = ""
+        viewModel.store.reset()
+    }
+
     @Test func loadNotFoundRaisesAgentNotFound() async {
         let notFound = NSError(
             domain: "WebSocket",

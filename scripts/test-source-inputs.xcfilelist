@@ -338,6 +338,8 @@ $(SRCROOT)/Intent/PersistenceManager+InvitedSessions.swift
 $(SRCROOT)/Intent/PersistenceManager+Screens.swift
 $(SRCROOT)/Intent/PersistenceManager.swift
 $(SRCROOT)/Intent/Presentation
+$(SRCROOT)/Intent/Presentation/ConversationConnectionStatusTiming.swift
+$(SRCROOT)/Intent/Presentation/ConversationConnectionStep.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Geometry.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Landing.swift
@@ -622,6 +624,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/ProposalCardView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalSelectionSwitch.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/VideoLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceLinkedTextView.swift
+$(SRCROOT)/Intent/Views/Conversation/ConversationConnectionStatusBlock.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices
 $(SRCROOT)/Intent/Views/Conversation/Notices/AgentMessageAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AttentionNoticeView.swift
@@ -849,6 +852,8 @@ $(SRCROOT)/IntentTests/ConversationBudgetFixture.swift
 $(SRCROOT)/IntentTests/ConversationCatalogFailureTests.swift
 $(SRCROOT)/IntentTests/ConversationCatalogLifecycleTests.swift
 $(SRCROOT)/IntentTests/ConversationCatalogReuseTests.swift
+$(SRCROOT)/IntentTests/ConversationConnectionStatusTimingTests.swift
+$(SRCROOT)/IntentTests/ConversationConnectionStepTests.swift
 $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
 $(SRCROOT)/IntentTests/ConversationDeltaCompatibilityTests.swift
@@ -857,6 +862,7 @@ $(SRCROOT)/IntentTests/ConversationHistoryTests.swift
 $(SRCROOT)/IntentTests/ConversationIncrementalDeltaTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
+$(SRCROOT)/IntentTests/ConversationRetryNowTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupAuthorityTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupBudgetConditionalTests.swift
