@@ -30,17 +30,22 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
             let elapsed = timing.elapsed(at: context.date).formatted(.time(pattern: .minuteSecond))
             let isDelayed = timing.isDelayed(phase: phase, at: context.date)
             VStack(alignment: .leading, spacing: Layout.rowSpacing) {
-                ConversationConnectionStatusHeader(
-                    phase: phase, message: message, elapsed: isDelayed ? elapsed : nil
-                )
-
                 VStack(alignment: .leading, spacing: Layout.contentSpacing) {
                     ForEach(ConversationConnectionStep.allCases, id: \.self) { step in
-                        ConversationConnectionStepRow(step: step, currentStep: currentStep)
+                        ConversationConnectionStepRow(
+                            phase: phase, step: step, currentStep: currentStep,
+                            title: step == currentStep ? message : step.title,
+                            elapsed: step == currentStep && isDelayed ? elapsed : nil
+                        )
                     }
                 }
 
                 if isDelayed {
+                    Text("Elapsed: \(elapsed) · Taking longer than usual")
+                        .interFont(Constants.Typography.bodyXS)
+                        .monospacedDigit()
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true) // Announced with the current step instead.
                     ConversationConnectionRetryButton(onRetry: onRetry)
                 }
             }
@@ -56,61 +61,49 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
     }
 }
 
-private struct ConversationConnectionStatusHeader<Phase: Equatable>: View {
+private struct ConversationConnectionStepRow<Phase: Equatable>: View {
     let phase: Phase
-    let message: LocalizedStringResource
+    let step: ConversationConnectionStep
+    let currentStep: ConversationConnectionStep
+    let title: LocalizedStringResource
     let elapsed: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private typealias Layout = Constants.Conversation.Column.Loading
 
-    var body: some View {
-        HStack(alignment: .top, spacing: Layout.contentSpacing) {
-            ProgressView()
-                .controlSize(.small)
-                .frame(width: Layout.iconDimension, height: Layout.iconDimension)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Layout.detailSpacing) {
-                Text(message)
-                    .contentTransition(.opacity)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: Layout.fadeDuration), value: phase)
-                if let elapsed {
-                    Text("Elapsed: \(elapsed) · Taking longer than usual")
-                        .interFont(Constants.Typography.bodyXS)
-                        .monospacedDigit()
-                }
-            }
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(elapsed.map { Text("\(Text(message)), elapsed: \($0), Taking longer than usual") } ?? Text(message))
-        .accessibilityIdentifier("conversation.connectionStatus")
-    }
-}
-
-private struct ConversationConnectionStepRow: View {
-    let step: ConversationConnectionStep
-    let currentStep: ConversationConnectionStep
-
     private var state: Text {
         if step.rawValue < currentStep.rawValue { Text("Done") } else if step == currentStep { Text("Current") } else { Text("Pending") }
     }
 
-    private var symbol: String {
-        if step.rawValue < currentStep.rawValue { "checkmark.circle.fill" } else if step == currentStep { "circle.inset.filled" } else { "circle" }
+    private var accessibilitySummary: Text {
+        if let elapsed {
+            Text("\(Text(title)), \(state), elapsed: \(elapsed), Taking longer than usual")
+        } else {
+            Text("\(Text(title)), \(state)")
+        }
     }
 
     var body: some View {
-        HStack(spacing: Constants.Conversation.Column.Loading.contentSpacing) {
-            Image(systemName: symbol)
-                .frame(width: Constants.Conversation.Column.Loading.iconDimension)
-                .accessibilityHidden(true)
-            Text(step.title)
+        HStack(spacing: Layout.contentSpacing) {
+            Group {
+                if step == currentStep {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: step.rawValue < currentStep.rawValue ? "checkmark.circle.fill" : "circle")
+                }
+            }
+            .frame(width: Layout.iconDimension, height: Layout.iconDimension)
+            .accessibilityHidden(true)
+            Text(title)
+                .contentTransition(.opacity)
+                .animation(reduceMotion ? nil : .easeInOut(duration: Layout.fadeDuration), value: phase)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .interFont(Constants.Typography.bodyXS)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(Text(step.title)), \(state)"))
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityIdentifier(step == currentStep ? "conversation.connectionStatus" : "conversation.connectionStep.\(step.rawValue)")
     }
 }
 

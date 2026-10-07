@@ -1,6 +1,6 @@
 import Foundation
 
-/// Ordered transcript-loading steps, independent of the header's current message.
+/// Ordered transcript-loading steps; the active row can show a more specific message.
 enum ConversationConnectionStep: Int, CaseIterable {
     case connecting
     case requesting

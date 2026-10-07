@@ -18,21 +18,21 @@ extension ConversationTranscriptScrollUITests {
         let retry = block.buttons["conversation.retryNow"]
         let composer = app.textViews[Fixture.composerIdentifier].firstMatch
         XCTAssertTrue(status.waitForExistence(timeout: Fixture.settleTimeout))
-        XCTAssertEqual(status.label, "Asking the daemon", "Only the current message is announced before the idle threshold")
+        XCTAssertEqual(status.label, "Asking the daemon, Current", "The active step must announce its progress state")
         XCTAssertFalse(block.buttons["conversation.connectionStatus"].exists, "The status is not a disclosure control")
         XCTAssertFalse(retry.exists)
         attachLoading(app.screenshot(), named: "Conversation loading before idle \(appearance)")
-        assertConnectionSteps(in: block, status: status)
+        assertConnectionSteps(in: block)
         XCTAssertFalse(opened.transcript.exists, "The snapshot must remain held while checking loading status")
         XCTAssertFalse(composer.exists, "Loading must hide the message bar")
 
         XCTAssertTrue(retry.waitForExistence(timeout: Fixture.settleTimeout))
-        XCTAssertTrue(status.label.hasPrefix("Asking the daemon, elapsed: "))
+        XCTAssertTrue(status.label.hasPrefix("Asking the daemon, Current, elapsed: "))
         XCTAssertTrue(status.label.contains("Taking longer than usual"))
         XCTAssertTrue(retry.isHittable)
         XCTAssertTrue(block.frame.contains(status.frame))
         XCTAssertTrue(block.frame.contains(retry.frame), "Retry must stay within the same loading group")
-        assertConnectionSteps(in: block, status: status)
+        assertConnectionSteps(in: block)
         attachLoading(app.screenshot(), named: "Conversation loading after idle \(appearance)")
 
         try Data().write(to: startupSnapshotGate)
@@ -44,12 +44,18 @@ extension ConversationTranscriptScrollUITests {
     }
 
     @MainActor
-    private func assertConnectionSteps(in block: XCUIElement, status: XCUIElement) {
-        for label in ["Connecting to the daemon, Done", "Asking the daemon, Current", "Receiving messages, Pending"] {
-            let step = block.otherElements[label]
+    private func assertConnectionSteps(in block: XCUIElement) {
+        var previousBottom = block.frame.minY
+        let steps = [("Connecting to the daemon", "Done"), ("Asking the daemon", "Current"), ("Receiving messages", "Pending")]
+        for (title, state) in steps {
+            let matches = block.otherElements.matching(NSPredicate(format: "label == %@ OR label BEGINSWITH %@", title, "\(title),"))
+            XCTAssertEqual(matches.count, 1, "Each step must appear once, without a duplicate header")
+            let step = matches.firstMatch
             XCTAssertTrue(step.exists, "Loading steps must always be visible and announce their progress state")
+            XCTAssertTrue(step.label.hasPrefix("\(title), \(state)"))
             XCTAssertTrue(block.frame.contains(step.frame))
-            XCTAssertGreaterThanOrEqual(step.frame.minY, status.frame.maxY)
+            XCTAssertGreaterThanOrEqual(step.frame.minY, previousBottom)
+            previousBottom = step.frame.maxY
         }
     }
 
