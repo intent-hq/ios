@@ -2,9 +2,11 @@ import Foundation
 
 /// Ordered transcript-loading steps; the active row can show a more specific message.
 enum ConversationConnectionStep: Int, CaseIterable {
-    case connecting
-    case requesting
-    case receiving
+    case connecting = 0
+    case receiving = 2
+    case requesting = 1
+
+    static let allCases: [Self] = [.connecting, .requesting, .receiving]
 
     init(stage: ConversationLiveTranscript.LoadingStage) {
         switch stage {

@@ -14,8 +14,11 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
     private typealias Layout = Constants.Conversation.Column.Loading
 
     init(
-        phase: Phase, message: LocalizedStringResource, currentStep: ConversationConnectionStep,
-        startedAt: Date, onRetry: @escaping () async -> Void
+        phase: Phase,
+        message: LocalizedStringResource,
+        currentStep: ConversationConnectionStep,
+        startedAt: Date,
+        onRetry: @escaping () async -> Void
     ) {
         self.phase = phase
         self.message = message
@@ -33,7 +36,9 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
                 VStack(alignment: .leading, spacing: Layout.contentSpacing) {
                     ForEach(ConversationConnectionStep.allCases, id: \.self) { step in
                         ConversationConnectionStepRow(
-                            phase: phase, step: step, currentStep: currentStep,
+                            phase: phase,
+                            step: step,
+                            currentStep: currentStep,
                             title: step == currentStep ? message : step.title,
                             elapsed: step == currentStep && isDelayed ? elapsed : nil
                         )
