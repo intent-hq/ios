@@ -10,6 +10,12 @@ struct WorkspaceCreationProposalView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var edits: WorkspaceProposalEdits
     @State private var confirmingDismiss = false
+    @State private var activeCreationAction: CreationAction?
+
+    private enum CreationAction: String {
+        case create = "Create"
+        case retry = "Retry"
+    }
 
     private enum Layout {
         static let spacing: CGFloat = 12
@@ -26,6 +32,7 @@ struct WorkspaceCreationProposalView: View {
 
     private var workspace: Workspace? { store.createdWorkspaces[store.receiptKey(proposal, messageId: messageId)] }
     private var hasAttempt: Bool { store.hasCreationAttempt(proposal, messageId: messageId) }
+    private var actionTitle: String { (activeCreationAction ?? (hasAttempt ? .retry : .create)).rawValue }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.spacing) {
@@ -102,7 +109,7 @@ struct WorkspaceCreationProposalView: View {
     private var actions: some View {
         let layout = dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout())
         return layout {
-            if !hasAttempt {
+            if !hasAttempt || activeCreationAction == .create {
                 Button {
                     confirmingDismiss = true
                 } label: {
@@ -112,15 +119,25 @@ struct WorkspaceCreationProposalView: View {
                 .accessibilityIdentifier("proposal.dismiss")
             }
             Button {
-                Task { await store.createWorkspace(proposal, messageId: messageId, edits: edits) }
+                guard activeCreationAction == nil else { return }
+                activeCreationAction = hasAttempt ? .retry : .create
+                Task {
+                    defer { activeCreationAction = nil }
+                    await store.createWorkspace(proposal, messageId: messageId, edits: edits)
+                }
             } label: {
-                Text(store.isBusy ? "Creating…" : hasAttempt ? "Retry" : "Create").copyContextMenuPassthrough()
+                Text(actionTitle)
+                    .copyContextMenuPassthrough()
+                    .opacity(activeCreationAction == nil ? 1 : 0)
+                    .overlay {
+                        if activeCreationAction != nil { ProgressView().accessibilityHidden(true) }
+                    }
             }
             .buttonStyle(IntentButtonStyle())
             .disabled(!store.canCreateWorkspace)
+            .accessibilityLabel(activeCreationAction != nil ? "Creating workspace" : actionTitle)
             .accessibilityIdentifier("proposal.apply")
-            if store.isBusy { ProgressView("Creating workspace…") }
         }
-        .disabled(store.isBusy)
+        .disabled(store.isBusy || activeCreationAction != nil)
     }
 }
