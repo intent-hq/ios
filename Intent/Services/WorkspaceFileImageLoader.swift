@@ -64,7 +64,7 @@ final class WorkspaceFileImageLoader {
 
     /// Bytes requested per `file.readChunk` call (well under the daemon's
     /// 16 MiB decoded cap; most images resolve in a single round-trip).
-    static let chunkLength = 4 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    nonisolated static let chunkLength = 4 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
     /// Refuse to assemble files past this size — transcript images should be
     /// far smaller, and this bounds memory on a pathological path.
     nonisolated static let maxFileBytes = 32 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
@@ -75,9 +75,8 @@ final class WorkspaceFileImageLoader {
     /// Decoded-memory budget for the cache (a 2048×2048 BGRA image is ~16 MB).
     /// Videos charge only their poster; their temp files have a separate count bound.
     static let cacheTotalCostLimit = 64 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
-    /// Eight videos × the 32 MiB per-file limit bounds cache-owned temp files to
-    /// 256 MiB per backend session's loader. Attachments/players may retain evicted
-    /// files until they release them.
+    /// Eight videos bound cache-owned temp files per backend session.
+    /// Attachments/players may retain evicted files until they release them.
     private static let cacheVideoCountLimit = 8
 
     // NSCache requires a reference-type key; NSString preserves that Foundation contract.
@@ -134,11 +133,16 @@ final class WorkspaceFileImageLoader {
         }
     }
 
-    func video(workspaceId: String, path: String) async throws -> WorkspaceVideo {
+    func video(workspaceId: String, path: String, mimeType: String? = nil) async throws -> WorkspaceVideo {
         let key = "video\u{0}" + Self.fileKey(workspaceId: workspaceId, path: path)
         let media = try await cachedMedia(key: key) { [chunkRequester] in
-            let data = try await Self.fetchBytes(chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
-            return .video(try await WorkspaceVideo.prepare(data: data, path: path))
+            .video(try await Self.fetchVideo(
+                chunkRequester: chunkRequester,
+                workspaceId: workspaceId,
+                path: path,
+                mimeType: mimeType,
+                limit: ImportedPhotoVideo.maxBytes
+            ))
         }
         guard case .video(let video) = media else { throw LoadError.notAVideo }
         return video
@@ -281,6 +285,51 @@ final class WorkspaceFileImageLoader {
         } catch {
             if isVideo, !(error is CancellationError) { throw LoadError.notAVideo }
             throw error
+        }
+    }
+
+    /// Stream videos to disk on the global executor; only one decoded chunk is
+    /// held in memory. Image and saved-asset assembly keep their smaller cap.
+    @concurrent
+    nonisolated private static func fetchVideo(
+        chunkRequester: ChunkRequester, workspaceId: String, path: String, mimeType: String?, limit: Int
+    ) async throws -> WorkspaceVideo {
+        let url = try WorkspaceVideo.temporaryURL(path: path, mimeType: mimeType)
+        var retained = false
+        defer { if !retained { try? FileManager.default.removeItem(at: url) } }
+        try Data().write(to: url, options: .atomic)
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        let byteCount = try await writeVideoBytes(
+            chunkRequester: chunkRequester, workspaceId: workspaceId, path: path, to: handle, limit: limit
+        )
+        try handle.close()
+        let video = try await WorkspaceVideo.prepare(fileURL: url, byteCount: byteCount)
+        retained = true
+        return video
+    }
+
+    @concurrent
+    nonisolated private static func writeVideoBytes(
+        chunkRequester: ChunkRequester, workspaceId: String, path: String, to handle: FileHandle, limit: Int
+    ) async throws -> Int {
+        var offset = 0
+        var expectedSize: Int?
+        while true {
+            try Task.checkCancellation()
+            let result = try await chunkRequester.request(workspaceId: workspaceId, path: path, offset: offset)
+            try Task.checkCancellation()
+            guard result.size <= limit else { throw LoadError.fileTooLarge }
+            guard result.size >= 0, result.bytesRead >= 0, result.bytesRead <= chunkLength,
+                  expectedSize == nil || expectedSize == result.size,
+                  let chunk = Data(base64Encoded: result.content), chunk.count == result.bytesRead,
+                  offset <= result.size, chunk.count <= result.size - offset
+            else { throw LoadError.malformedResponse }
+            expectedSize = result.size
+            try handle.write(contentsOf: chunk)
+            offset += chunk.count
+            if offset == result.size { return offset }
+            guard !chunk.isEmpty else { throw LoadError.malformedResponse }
         }
     }
 

@@ -55,6 +55,7 @@ enum ComposerImageRecovery {
     enum FilePlacementError: LocalizedError {
         case fileTooLarge(name: String)
         case placementFailed(name: String, underlying: Error)
+        case videoUnavailableInAssistant
 
         var errorDescription: String? {
             switch self {
@@ -62,6 +63,8 @@ enum ComposerImageRecovery {
                 return "\"\(name)\" is too large to send (over 1 GiB)."
             case let .placementFailed(name, underlying):
                 return "\"\(name)\" could not be uploaded. \(underlying.localizedDescription)"
+            case .videoUnavailableInAssistant:
+                return "Videos can only be attached in a workspace conversation, not in the Assistant."
             }
         }
     }
@@ -71,6 +74,8 @@ enum ComposerImageRecovery {
     }
     @ObservationIgnored private(set) var imageSelectionRevision = 0
     var selectedPhotoItems: [PhotosPickerItem] = []
+    var isLoadingPhotos = false
+    @ObservationIgnored var photoImportTask: Task<Void, Never>?
     var pendingFiles: [PendingFile] = []
     var fileUploadProgress: [UUID: Double] = [:]
     var imagePlacementError: String?
@@ -100,6 +105,7 @@ enum ComposerImageRecovery {
     }
 
     deinit {
+        photoImportTask?.cancel()
         for url in securityScopedURLs {
             stopSecurityScopedAccess(url)
         }
@@ -149,16 +155,6 @@ enum ComposerImageRecovery {
     func removeImage(at index: Int) {
         guard pendingImages.indices.contains(index) else { return }
         pendingImages.remove(at: index)
-    }
-
-    func loadSelectedPhotos() async {
-        for item in selectedPhotoItems {
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let image = UIImage(data: data) {
-                pendingImages.append(image)
-            }
-        }
-        selectedPhotoItems.removeAll()
     }
 
     func addFiles(_ urls: [URL]) {
@@ -294,6 +290,7 @@ enum ComposerImageRecovery {
     func buildFileBlocks(from files: [PendingFile], workspaceId: String) async throws
         -> OutgoingFilePayload {
         guard !files.isEmpty else { return .none }
+        try validateVideos(in: files, workspaceId: workspaceId)
         for file in files { fileUploadProgress[file.id] = 0 }
         defer { fileUploadProgress.removeAll() }
 
@@ -304,11 +301,14 @@ enum ComposerImageRecovery {
             }
             let placed: AttachmentUploadService.PlacedAttachment
             do {
+                var fileURL = file.url
+                fileURL.removeAllCachedResourceValues()
                 placed = try await uploadService.placeFile(
                     workspaceId: workspaceId,
                     fileName: file.displayName,
-                    fileURL: file.url,
-                    mimeType: Self.mimeType(for: file.url)
+                    fileURL: fileURL,
+                    mimeType: Self.mimeType(for: file.url),
+                    forceChunked: file.video != nil
                 ) { [weak self] fraction in
                     self?.fileUploadProgress[file.id] = fraction
                 }
@@ -327,7 +327,8 @@ enum ComposerImageRecovery {
                 "fileName": placed.fileName,
                 "size": placed.size
             ]
-            if let mimeType = placed.mimeType { block["mimeType"] = mimeType }
+            let videoMIME = Self.mimeType(for: file.url).flatMap { $0.hasPrefix("video/") ? $0 : nil }
+            if let mimeType = placed.mimeType ?? videoMIME { block["mimeType"] = mimeType }
             blocks.append(block)
         }
         return .attachments(blocks)

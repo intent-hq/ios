@@ -356,6 +356,7 @@ extension DemoFixtures {
         if agentId == "demo-agent-implementor", let messages = DemoBrowserFixtures.conversationMessages { return messages }
         if usesStartupTranscript, agentId == longConversationAgentId { return startupTranscriptMessages }
         if let designScenario, agentId == DemoDesignFixtures.agentId { return designScenario.messages }
+        if usesTranscriptVideo, agentId == "demo-agent-implementor" { return transcriptVideoMessages }
         if inlineImageConversationRequested(by: ProcessInfo.processInfo.arguments),
            agentId == inlineImageAgentId {
             return inlineImageConversationMessages
@@ -371,6 +372,7 @@ extension DemoFixtures {
         params: [String: Any],
         snapshotAnchor: Date = Date()
     ) -> Any {
+        if let response = transcriptVideoResponse(for: method, params: params) { return response }
         if let response = DemoWorkspaceActionFixtures.response(for: method, params: params) { return response }
         if let response = designScenario?.response(for: method, params: params)
             ?? DemoTerminalFixtures.response(for: method, params: params)

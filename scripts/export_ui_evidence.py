@@ -11,6 +11,11 @@ import tempfile
 
 
 CAPTURES = {
+    "TranscriptVideoUITests": {
+        "testSentVideoPosterOpensFullScreenPlayback": (
+            "Sent video poster", "Sent video full-screen playback",
+        ),
+    },
     "AssistantStateUITests": {
         "testLoadingFailureRetriesToEmptyAndStartsConversation": (
             "Assistant loading light", "Assistant error light", "Assistant empty light",

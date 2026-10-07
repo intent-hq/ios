@@ -13,14 +13,8 @@ struct CreateWorkspacePrompt: View {
     var body: some View {
         VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
             WorkspaceCreationPromptEditor(text: $text, attachments: attachments, focus: focus)
-            if !attachments.images.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack {
-                        ForEach(attachments.images) { image in
-                            WorkspaceCreationImagePreview(image: image) { attachments.remove(image.id) }
-                        }
-                    }
-                }
+            if !attachments.images.isEmpty || !attachments.videos.isEmpty {
+                attachmentPreviews
             }
             HStack {
                 WorkspaceAttachmentMenu(
@@ -30,7 +24,7 @@ struct CreateWorkspacePrompt: View {
                 )
                 .disabled(attachments.isImporting || attachments.remainingCount == 0)
                 if attachments.isImporting {
-                    ProgressView("Preparing images…")
+                    ProgressView("Preparing attachments…")
                         .interFont(Constants.Typography.bodyXS)
                 }
                 Spacer(minLength: 0)
@@ -50,7 +44,7 @@ struct CreateWorkspacePrompt: View {
             isPresented: $showsPhotos,
             selection: $selectedPhotos,
             maxSelectionCount: max(1, attachments.remainingCount),
-            matching: .images
+            matching: .any(of: [.images, .videos])
         )
         .onChange(of: selectedPhotos) { _, items in
             attachments.addPhotos(items)
@@ -58,6 +52,19 @@ struct CreateWorkspacePrompt: View {
         }
         .fileImporter(isPresented: $showsFiles, allowedContentTypes: [.image], allowsMultipleSelection: true) { result in
             attachments.addFiles(result)
+        }
+    }
+
+    private var attachmentPreviews: some View {
+        ScrollView(.horizontal) {
+            HStack {
+                ForEach(attachments.images) { image in
+                    WorkspaceCreationImagePreview(image: image) { attachments.remove(image.id) }
+                }
+                ForEach(attachments.videos) { video in
+                    WorkspaceCreationVideoPreview(file: video) { attachments.remove(video.id) }
+                }
+            }
         }
     }
 }

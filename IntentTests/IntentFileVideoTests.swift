@@ -65,7 +65,7 @@ struct IntentFileVideoTests {
             connection.errorMap["file.readChunk"] = URLError(.fileDoesNotExist)
         } else {
             connection.responseMap["file.readChunk"] = Self.chunk(Data([0]), size:
-                failure == "oversized" ? WorkspaceFileImageLoader.maxFileBytes + 1 : 1)
+                failure == "oversized" ? ImportedPhotoVideo.maxBytes + 1 : 1)
         }
         let fileLoader = WorkspaceFileImageLoader(connection: connection)
         var loader = IntentFileAttachmentLoader(workspaceId: failure == "no-workspace" ? nil : "ws", fallback: .image())
@@ -133,6 +133,53 @@ struct IntentFileVideoTests {
         #expect(try Data(contentsOf: video.url) == bytes)
         #expect(connection.paramsForMethod("file.readChunk").count == 2)
         #expect(connection.paramsForMethod("file.readChunk").last?["workspaceId"] as? String == "linked")
+    }
+
+    @Test func attachmentReferenceVideoResolvesAndCachesExtensionlessFile() async throws {
+        let bytes = try await Self.videoBytes()
+        let connection = FakeConnectionManager()
+        let path = ".intent/attachments/opaque-id"
+        connection.responseMap["file.getAttachmentInfo"] = ["path": path, "exists": true]
+        connection.responseMap["file.readChunk"] = Self.chunk(bytes, size: bytes.count)
+        let loader = AttachmentImageLoader(
+            connection: connection, fileLoader: WorkspaceFileImageLoader(connection: connection)
+        )
+
+        let video = try await loader.video(workspaceId: "linked", attachmentId: "attachment-id", mimeType: "video/mp4")
+        #expect(video.poster.size.width == 16)
+        #expect(video.url.pathExtension == "mp4")
+        #expect(try Data(contentsOf: video.url) == bytes)
+        #expect(try await AVURLAsset(url: video.url).load(.isPlayable))
+        let cached = try await loader.video(workspaceId: "linked", attachmentId: "attachment-id", mimeType: "video/mp4")
+        #expect(cached === video)
+        let info = connection.paramsForMethod("file.getAttachmentInfo")
+        #expect(info.count == 1)
+        #expect(info.first?["attachmentId"] as? String == "attachment-id")
+        let chunks = connection.paramsForMethod("file.readChunk")
+        #expect(chunks.count == 1)
+        #expect(chunks.first?["path"] as? String == path)
+        #expect(chunks.first?["workspaceId"] as? String == "linked")
+    }
+
+    @Test(arguments: ["file.getAttachmentInfo", "file.readChunk"])
+    func attachmentReferenceVideoRetriesFailedResolutionOrFetch(_ method: String) async throws {
+        let connection = FakeConnectionManager()
+        let path = ".intent/attachments/clip.mov"
+        connection.responseMap["file.getAttachmentInfo"] = ["path": path, "exists": true]
+        connection.errorMap[method] = URLError(.timedOut)
+        let loader = AttachmentImageLoader(
+            connection: connection, fileLoader: WorkspaceFileImageLoader(connection: connection)
+        )
+        await #expect(throws: URLError(.timedOut)) {
+            _ = try await loader.video(workspaceId: "ws", attachmentId: "attachment-id")
+        }
+        let bytes = try await Self.videoBytes()
+        connection.errorMap[method] = nil
+        connection.responseMap["file.readChunk"] = Self.chunk(bytes, size: bytes.count)
+        let video = try await loader.retryVideo(workspaceId: "ws", attachmentId: "attachment-id")
+
+        #expect(try Data(contentsOf: video.url) == bytes)
+        #expect(connection.paramsForMethod(method).count == 2)
     }
 
     @Test func videoCacheCostIncludesOnlyDecodedPoster() async throws {
@@ -219,7 +266,7 @@ struct IntentFileVideoTests {
     }
 
     /// A single deterministic H.264 frame; no network or checked-in binary fixture.
-    private static func videoBytes(side: Int = 16, duration: Double = 1) async throws -> Data {
+    static func videoBytes(side: Int = 16, duration: Double = 1) async throws -> Data {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("video-test-\(UUID()).mp4")
         defer { try? FileManager.default.removeItem(at: url) }
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
