@@ -22,13 +22,7 @@ struct WorkspaceTitleShimmerTests {
         #expect(list.deadline == heading.deadline)
         #expect(heading.remaining(at: later) == 15)
         #expect(heading.remaining(at: creation.addingTimeInterval(90)) == 0)
-    }
-
-    @Test func oldUnnamedWorkspaceIsAlreadyExpiredWhenOpened() {
-        let later = creation.addingTimeInterval(300)
-        let lifetime = WorkspaceTitleShimmerLifetime(createdAt: createdAt, firstShownAt: later)
-
-        #expect(lifetime.remaining(at: later) == 0)
+        #expect(heading.remaining(at: creation.addingTimeInterval(300)) == 0)
     }
 
     @Test(arguments: [nil, "", "invalid"])

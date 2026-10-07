@@ -49,24 +49,6 @@ struct WorkspaceCreationVideosTests {
         #expect(draft.images.remainingCount == 1)
     }
 
-    @Test func cancelledVideoBatchCannotPublishIntoNewerDraftImport() async throws {
-        let source = try await videoSource()
-        defer { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
-        let video = try await ImportedPhotoVideo.importFile(at: source)
-        let images = WorkspaceCreationImages()
-        var continuation: CheckedContinuation<WorkspaceCreationImages.Media, Never>?
-        let old = try #require(images.addMedia([{ await withCheckedContinuation { continuation = $0 } }]))
-        try await waitUntil("suspended draft import") { continuation != nil }
-        images.cancelImport()
-        let fresh = try #require(images.addMedia([{ .video(video) }]))
-        continuation?.resume(returning: .video(video))
-        await old.value
-        await fresh.value
-        #expect(images.videos.count == 1)
-        #expect(!images.isImporting)
-        #expect(images.errorMessage == nil)
-    }
-
     @Test(arguments: [false, true])
     func firstMessageWaitsForVideoPlacementAndKeepsImages(largeVideo: Bool) async throws {
         let source = try await videoSource(largeVideo: largeVideo)

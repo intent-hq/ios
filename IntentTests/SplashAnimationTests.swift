@@ -53,12 +53,14 @@ struct SplashAnimationTests {
         }
     }
 
-    @Test(arguments: [-1.0, Double.infinity, Double.nan])
-    func invalidTwistTimesSkipTheEmptyOpeningFrame(elapsed: TimeInterval) throws {
+    @Test(arguments: [SplashAnimation.PlaybackMode.pulse, .twistLoop], [-1.0, Double.infinity, Double.nan])
+    func invalidTimesStartAtFirstVisibleFrame(mode: SplashAnimation.PlaybackMode, elapsed: TimeInterval) throws {
         let animation = try #require(SplashAnimation())
-        let sample = animation.frame(at: elapsed, animated: true, mode: .twistLoop)
-        #expect(sample.animation === animation.twist)
-        #expect(sample.frame == animation.twist.startFrame + 1)
+        let expectedAnimation = mode == .twistLoop ? animation.twist : animation.pulse
+        let expectedFrame = mode == .twistLoop ? animation.twist.startFrame + 1 : animation.pulse.startFrame
+        let sample = animation.frame(at: elapsed, animated: true, mode: mode)
+        #expect(sample.animation === expectedAnimation)
+        #expect(sample.frame == expectedFrame)
     }
 
     @Test func twistLoopSeamRendersVisibleArtwork() throws {
@@ -88,18 +90,11 @@ struct SplashAnimationTests {
         }
     }
 
-    @Test(arguments: [-1.0, Double.infinity, Double.nan])
-    func invalidPulseTimesStartAtTheCompleteMark(elapsed: TimeInterval) throws {
-        let animation = try #require(SplashAnimation())
-        let sample = animation.frame(at: elapsed, animated: true, mode: .pulse)
-        #expect(sample.animation === animation.pulse)
-        #expect(sample.frame == animation.pulse.startFrame)
-    }
-
-    @Test func pulseLoaderRestsWhenSceneIsInactive() async throws {
+    @Test(arguments: [SplashAnimation.PlaybackMode.pulse, .twistLoop])
+    func loaderRestsWhenSceneIsInactive(mode: SplashAnimation.PlaybackMode) async throws {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let scene = try #require(SyntheticBadgeHostScene.resolve(in: scenes))
-        let controller = UIHostingController(rootView: loader(scenePhase: .active))
+        let controller = UIHostingController(rootView: loader(mode: mode))
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 200, height: 200)
         window.rootViewController = controller
@@ -107,61 +102,31 @@ struct SplashAnimationTests {
         window.isHidden = false
         window.layoutIfNeeded()
         controller.view.layoutIfNeeded()
-        try await waitUntil("pulse loader renders") { lottieView(in: controller.view) != nil }
-        let rendered = try #require(lottieView(in: controller.view))
-        let pulse = try #require(SplashAnimation()).pulse
-        #expect(rendered.animation?.endFrame == pulse.endFrame)
-
-        for phase in [ScenePhase.inactive, .background] {
-            controller.rootView = loader(scenePhase: .active)
-            try await waitUntil("active pulse advances") { rendered.currentFrame > pulse.startFrame }
-            controller.rootView = loader(scenePhase: phase)
-            try await waitUntil("paused pulse shows complete mark") { rendered.currentFrame == pulse.startFrame }
-            try await expectNever("paused pulse advances", within: .milliseconds(150)) {
-                rendered.currentFrame != pulse.startFrame || rendered.isAnimationPlaying
-            }
-        }
-    }
-
-    private func loader(scenePhase: ScenePhase) -> some View {
-        IntentLoadingIndicator(size: 48, playbackMode: .pulse)
-            .environment(\.scenePhase, scenePhase)
-    }
-
-    @Test func twistLoaderRestsWhenSceneIsInactive() async throws {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let scene = try #require(SyntheticBadgeHostScene.resolve(in: scenes))
-        let controller = UIHostingController(rootView: twistLoader())
-        let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 200, height: 200)
-        window.rootViewController = controller
-        defer { window.isHidden = true; window.rootViewController = nil; window.windowScene = nil }
-        window.isHidden = false
-        window.layoutIfNeeded()
-        controller.view.layoutIfNeeded()
-        try await waitUntil("twist loader renders") { lottieView(in: controller.view) != nil }
+        try await waitUntil("\(mode) loader renders") { lottieView(in: controller.view) != nil }
         let rendered = try #require(lottieView(in: controller.view))
         let animation = try #require(SplashAnimation())
+        let activeAnimation = mode == .twistLoop ? animation.twist : animation.pulse
+        let firstFrame = mode == .twistLoop ? animation.twist.startFrame + 1 : animation.pulse.startFrame
 
         for phase in [ScenePhase.inactive, .background] {
-            controller.rootView = twistLoader()
-            try await waitUntil("active twist advances") {
-                rendered.animation?.endFrame == animation.twist.endFrame
-                    && rendered.currentFrame > animation.twist.startFrame + 1
+            controller.rootView = loader(mode: mode)
+            try await waitUntil("active \(mode) advances") {
+                rendered.animation?.endFrame == activeAnimation.endFrame
+                    && rendered.currentFrame > firstFrame
             }
-            controller.rootView = twistLoader(scenePhase: phase)
-            try await waitUntil("paused twist shows complete mark") {
+            controller.rootView = loader(mode: mode, scenePhase: phase)
+            try await waitUntil("paused \(mode) shows complete mark") {
                 rendered.animation?.endFrame == animation.pulse.endFrame
                     && rendered.currentFrame == animation.pulse.startFrame
             }
-            try await expectNever("paused twist advances", within: .milliseconds(150)) {
+            try await expectNever("paused \(mode) advances", within: .milliseconds(150)) {
                 rendered.currentFrame != animation.pulse.startFrame || rendered.isAnimationPlaying
             }
         }
     }
 
-    private func twistLoader(scenePhase: ScenePhase = .active) -> some View {
-        IntentLoadingIndicator(size: 48, playbackMode: .twistLoop)
+    private func loader(mode: SplashAnimation.PlaybackMode, scenePhase: ScenePhase = .active) -> some View {
+        IntentLoadingIndicator(size: 48, playbackMode: mode)
             .environment(\.scenePhase, scenePhase)
     }
 
