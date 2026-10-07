@@ -4,7 +4,7 @@ import Observation
 @MainActor @Observable
 final class ProposalActionStore {
     private static let invalidParametersCode = -32_602
-    private let connection: ConnectionManagerRouting
+    private let connection: SessionConnectionManaging
     private let agentId: String
     private let workspaceId: String
     private let workspaceStore: WorkspaceStore?
@@ -31,7 +31,7 @@ final class ProposalActionStore {
     }
 
     init(
-        connection: ConnectionManagerRouting,
+        connection: SessionConnectionManaging,
         agentId: String,
         workspaceId: String,
         details: AgentDetailStore? = nil,
