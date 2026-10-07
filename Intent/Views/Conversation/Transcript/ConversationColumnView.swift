@@ -361,6 +361,7 @@ private struct ConversationConnectionLoadingView: View {
             ConversationConnectionStatusBlock(
                 phase: viewModel.loadingStage,
                 message: message,
+                currentStep: ConversationConnectionStep(stage: viewModel.loadingStage),
                 startedAt: viewModel.loadingStartedAt,
                 onRetry: viewModel.retryNow
             )

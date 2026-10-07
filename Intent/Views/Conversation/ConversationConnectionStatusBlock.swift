@@ -5,17 +5,22 @@ import SwiftUI
 struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
     let phase: Phase
     let message: LocalizedStringResource
+    let currentStep: ConversationConnectionStep
     let startedAt: Date
     let onRetry: () async -> Void
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var timing: ConversationConnectionStatusTiming<Phase>
+    @State private var isExpanded = false
 
     private typealias Layout = Constants.Conversation.Column.Loading
 
-    init(phase: Phase, message: LocalizedStringResource, startedAt: Date, onRetry: @escaping () async -> Void) {
+    init(
+        phase: Phase, message: LocalizedStringResource, currentStep: ConversationConnectionStep,
+        startedAt: Date, onRetry: @escaping () async -> Void
+    ) {
         self.phase = phase
         self.message = message
+        self.currentStep = currentStep
         self.startedAt = startedAt
         self.onRetry = onRetry
         _timing = State(initialValue: ConversationConnectionStatusTiming(phase: phase, startedAt: startedAt))
@@ -26,28 +31,27 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
             let elapsed = timing.elapsed(at: context.date).formatted(.time(pattern: .minuteSecond))
             let isDelayed = timing.isDelayed(phase: phase, at: context.date)
             VStack(alignment: .leading, spacing: Layout.rowSpacing) {
-                HStack(alignment: .top, spacing: Layout.contentSpacing) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(width: Layout.iconDimension, height: Layout.iconDimension)
-                        .accessibilityHidden(true)
-                    Text(message)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .contentTransition(.opacity)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: Layout.fadeDuration), value: phase)
+                ConversationConnectionStatusHeader(
+                    phase: phase, message: message, elapsed: isDelayed ? elapsed : nil, isExpanded: $isExpanded
+                )
+
+                if isExpanded {
+                    VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+                        ForEach(ConversationConnectionStep.allCases, id: \.self) { step in
+                            ConversationConnectionStepRow(step: step, currentStep: currentStep)
+                        }
+                    }
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(isDelayed
-                    ? Text("\(Text(message)), elapsed: \(elapsed), Taking longer than usual") : Text(message))
-                .accessibilityIdentifier("conversation.connectionStatus")
 
                 if isDelayed {
-                    ConversationConnectionDelayDetails(elapsed: elapsed, onRetry: onRetry)
+                    ConversationConnectionRetryButton(onRetry: onRetry)
                 }
             }
             .interFont(Constants.Typography.bodyS)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("conversation.connectionStatusBlock")
         }
         .onChange(of: phase) { _, newPhase in
             timing.update(phase: newPhase, at: Date())
@@ -55,32 +59,90 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
     }
 }
 
-private struct ConversationConnectionDelayDetails: View {
-    let elapsed: String
-    let onRetry: () async -> Void
-    @State private var retryInProgress = false
+private struct ConversationConnectionStatusHeader<Phase: Equatable>: View {
+    let phase: Phase
+    let message: LocalizedStringResource
+    let elapsed: String?
+    @Binding var isExpanded: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private typealias Layout = Constants.Conversation.Column.Loading
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.rowSpacing) {
-            Text("Elapsed: \(elapsed) · Taking longer than usual")
-                .monospacedDigit()
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("conversation.connectionDetails")
-                .accessibilityHidden(true)
-
-            Button("Retry Now") {
-                retryInProgress = true
-                Task {
-                    await onRetry()
-                    retryInProgress = false
+        Button {
+            isExpanded.toggle()
+        } label: {
+            HStack(alignment: .top, spacing: Layout.contentSpacing) {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: Layout.iconDimension, height: Layout.iconDimension)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: Layout.detailSpacing) {
+                    Text(message)
+                        .contentTransition(.opacity)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: Layout.fadeDuration), value: phase)
+                    if let elapsed {
+                        Text("Elapsed: \(elapsed) · Taking longer than usual")
+                            .interFont(Constants.Typography.bodyXS)
+                            .monospacedDigit()
+                    }
                 }
+                .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.forward")
+                    .accessibilityHidden(true)
             }
-            .buttonStyle(IntentButtonStyle())
-            .disabled(retryInProgress)
-            .padding(.top, Layout.retryTopPadding)
-            .accessibilityIdentifier("conversation.retryNow")
+            .frame(maxWidth: .infinity, minHeight: Layout.minimumTapHeight, alignment: .leading)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(IntentContentButtonStyle())
+        .accessibilityLabel(elapsed.map { Text("\(Text(message)), elapsed: \($0), Taking longer than usual") } ?? Text(message))
+        .accessibilityValue(isExpanded ? Text("Expanded") : Text("Collapsed"))
+        .accessibilityHint("Show or hide connection steps")
+        .accessibilityIdentifier("conversation.connectionStatus")
+    }
+}
+
+private struct ConversationConnectionStepRow: View {
+    let step: ConversationConnectionStep
+    let currentStep: ConversationConnectionStep
+
+    private var state: Text {
+        if step.rawValue < currentStep.rawValue { Text("Done") } else if step == currentStep { Text("Current") } else { Text("Pending") }
+    }
+
+    private var symbol: String {
+        if step.rawValue < currentStep.rawValue { "checkmark.circle.fill" } else if step == currentStep { "circle.inset.filled" } else { "circle" }
+    }
+
+    var body: some View {
+        HStack(spacing: Constants.Conversation.Column.Loading.contentSpacing) {
+            Image(systemName: symbol)
+                .frame(width: Constants.Conversation.Column.Loading.iconDimension)
+                .accessibilityHidden(true)
+            Text(step.title)
+        }
+        .interFont(Constants.Typography.bodyXS)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(Text(step.title)), \(state)"))
+    }
+}
+
+private struct ConversationConnectionRetryButton: View {
+    let onRetry: () async -> Void
+    @State private var retryInProgress = false
+
+    var body: some View {
+        Button("Retry Now") {
+            retryInProgress = true
+            Task {
+                await onRetry()
+                retryInProgress = false
+            }
+        }
+        .buttonStyle(IntentButtonStyle())
+        .disabled(retryInProgress)
+        .padding(.top, Constants.Conversation.Column.Loading.retryTopPadding)
+        .accessibilityIdentifier("conversation.retryNow")
     }
 }
