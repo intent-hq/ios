@@ -90,7 +90,7 @@ extension ConnectionManagerTests {
         ))
     }
 
-    @Test(arguments: ["\"\"", "null", "42", "[]", "{}"])
+    @Test(arguments: ["\"\"", "null", "42", "[]", "{}", "{\"message\":\"\"}"])
     func parseInboundFrameEmptyOrUnsupportedDataUsesTopLevelMessage(errorData: String) {
         let frame = ConnectionManager.parseInboundFrame("""
         {"jsonrpc":"2.0","id":10,"error":{"code":-32603,"message":"Internal error",\
@@ -102,18 +102,6 @@ extension ConnectionManagerTests {
         }
         #expect(error.intentErrorDataCode == nil)
         #expect(error.localizedDescription == "Internal error (-32603)")
-    }
-
-    @Test func parseInboundFrameEmptyDataMessageUsesTopLevelMessage() {
-        let frame = ConnectionManager.parseInboundFrame("""
-        {"jsonrpc":"2.0","id":10,"error":{"code":-32602,"message":"Invalid params",\
-        "data":{"message":""}}}
-        """)
-        guard case let .error(_, error)? = frame else {
-            Issue.record("Expected .error, got \(String(describing: frame))")
-            return
-        }
-        #expect(error.localizedDescription == "Invalid params (-32602)")
     }
 
     @Test func parseInboundFrameErrorWithoutCodeUsesFallbackAndPlainDescription() {
