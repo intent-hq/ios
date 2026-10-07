@@ -68,7 +68,7 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
         let apply = app.buttons["proposal.apply"]
         XCTAssertTrue(apply.waitForExistence(timeout: Self.timeout))
-        XCTAssertEqual(apply.label, "Create workspace")
+        XCTAssertEqual(apply.label, "Create")
         captureSwitches(in: app, name: "Workspace proposal review")
         apply.tap()
         let outcome = app.staticTexts["proposal.outcome"]

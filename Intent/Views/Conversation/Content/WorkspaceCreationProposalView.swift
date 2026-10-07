@@ -114,7 +114,7 @@ struct WorkspaceCreationProposalView: View {
             Button {
                 Task { await store.createWorkspace(proposal, messageId: messageId, edits: edits) }
             } label: {
-                Text(store.isBusy ? "Creating…" : hasAttempt ? "Retry" : "Create workspace").copyContextMenuPassthrough()
+                Text(store.isBusy ? "Creating…" : hasAttempt ? "Retry" : "Create").copyContextMenuPassthrough()
             }
             .buttonStyle(IntentButtonStyle())
             .disabled(!store.canCreateWorkspace)
