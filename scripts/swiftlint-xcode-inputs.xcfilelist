@@ -88,6 +88,7 @@ $(SRCROOT)/Intent/PersistenceManager+InvitedImport.swift
 $(SRCROOT)/Intent/PersistenceManager+InvitedSessions.swift
 $(SRCROOT)/Intent/PersistenceManager+Screens.swift
 $(SRCROOT)/Intent/PersistenceManager.swift
+$(SRCROOT)/Intent/Presentation/ConversationConnectionStatusTiming.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Geometry.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Landing.swift
@@ -565,6 +566,7 @@ $(SRCROOT)/IntentTests/ConversationBudgetFixture.swift
 $(SRCROOT)/IntentTests/ConversationCatalogFailureTests.swift
 $(SRCROOT)/IntentTests/ConversationCatalogLifecycleTests.swift
 $(SRCROOT)/IntentTests/ConversationCatalogReuseTests.swift
+$(SRCROOT)/IntentTests/ConversationConnectionStatusTimingTests.swift
 $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
 $(SRCROOT)/IntentTests/ConversationDeltaCompatibilityTests.swift

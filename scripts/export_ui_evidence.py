@@ -11,6 +11,12 @@ import tempfile
 
 
 CAPTURES = {
+    "ConversationTranscriptScrollUITests": {
+        "testLoadingStatusShowsIdleDelayAndRestoresComposer": (
+            "Conversation loading before idle light", "Conversation loading after idle light",
+            "Conversation loading before idle dark", "Conversation loading after idle dark",
+        ),
+    },
     "WatcherMessageUITests": {
         "testWatcherDetailsExpandAndCollapseWithoutLosingTheReport": (
             "Watcher summary", "Watcher expanded details", "Watcher final state",

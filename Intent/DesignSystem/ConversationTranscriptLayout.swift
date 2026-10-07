@@ -70,9 +70,7 @@ extension Constants.Conversation.Column {
         static let iconDimension: CGFloat = 20
         static let contentSpacing: CGFloat = 12
         static let rowSpacing: CGFloat = 16
-        static let detailSpacing: CGFloat = 4
         static let retryTopPadding: CGFloat = 12
-        static let minimumTapHeight: CGFloat = 44
         static let slowThreshold: TimeInterval = 8
         static let timelineInterval: TimeInterval = 1
         static let fadeDuration: Double = 0.2

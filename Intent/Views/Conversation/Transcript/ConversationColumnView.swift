@@ -346,10 +346,21 @@ private struct ConversationConnectionLoadingView: View {
     let viewModel: ConversationViewModel
     let usesWorkspaceDesign: Bool
 
+    private var message: LocalizedStringResource {
+        switch viewModel.loadingStage {
+        case .idle: "Loading conversation"
+        case .connecting: "Connecting to the daemon"
+        case .requesting: "Asking the daemon"
+        case .receiving: "Receiving messages"
+        case .retrying(let attempt): "Retrying (attempt \(attempt))"
+        }
+    }
+
     var body: some View {
         ScrollView {
             ConversationConnectionStatusBlock(
-                stage: viewModel.loadingStage,
+                phase: viewModel.loadingStage,
+                message: message,
                 startedAt: viewModel.loadingStartedAt,
                 onRetry: viewModel.retryNow
             )
