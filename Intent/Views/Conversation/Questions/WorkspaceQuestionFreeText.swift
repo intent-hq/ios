@@ -4,6 +4,8 @@ import SwiftUI
 struct WorkspaceQuestionFreeText: View {
     @Binding var text: String
     let focused: FocusState<Bool>.Binding
+    let isLast: Bool
+    let onSubmit: () -> Void
     let onTextChange: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -29,7 +31,13 @@ struct WorkspaceQuestionFreeText: View {
             .submitLabel(.return)
             .accessibilityLabel("Type your own answer…")
             .accessibilityIdentifier("question.freeText")
-            focusButton
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                focusButton
+            } else {
+                Button(isLast ? "Send" : "Next", action: onSubmit)
+                    .buttonStyle(WorkspaceQuestionButtonStyle(primary: true))
+                    .accessibilityIdentifier("question.freeText.submit")
+            }
         }
         .padding(.leading, Design.Composer.leadingPadding)
         .padding(.trailing, Design.Composer.activeTrailingPadding)

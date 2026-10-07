@@ -92,12 +92,7 @@ struct QuestionWizardView: View {
                             )
                         }
                         .modifier(WorkspaceQuestionSurface())
-                        WorkspaceQuestionFreeText(
-                            text: $drafts[idx].text,
-                            focused: $answerFocused,
-                            onTextChange: markCurrentDraftUnskipped
-                        )
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { answerComposerHeight = $0 }
+                        workspaceAnswerComposer
                     }
                     .disabled(submitted)
                     .padding(.horizontal, answerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset)
@@ -116,6 +111,17 @@ struct QuestionWizardView: View {
                 : Design.Question.transitionAnimation,
             value: idx
         )
+    }
+
+    private var workspaceAnswerComposer: some View {
+        WorkspaceQuestionFreeText(
+            text: $drafts[idx].text,
+            focused: $answerFocused,
+            isLast: isLast,
+            onSubmit: handleNext,
+            onTextChange: markCurrentDraftUnskipped
+        )
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { answerComposerHeight = $0 }
     }
 
     private var legacyWizard: some View {
