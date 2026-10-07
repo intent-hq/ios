@@ -4,7 +4,8 @@ enum WorkspaceDetailStyle {
     static let pageInset: CGFloat = 24
     static let headingTopSpacing: CGFloat = 64
     static let headingSpacing: CGFloat = 12
-    static let headingBottomSpacing: CGFloat = 24
+    static let headingTextSpacing: CGFloat = 20
+    static let headingBottomSpacing: CGFloat = 32
     static let sectionSpacing: CGFloat = 48
     static let sectionHeadingSpacing: CGFloat = 24
     static let titleTracking: CGFloat = -0.56
@@ -32,6 +33,7 @@ enum WorkspaceDetailStyle {
     static let noteTextSpacing: CGFloat = 4
     static let noteTitleSpacing: CGFloat = 8
     static let notePreviewSpacing: CGFloat = 12
+    static let noteChildrenSpacing: CGFloat = 36
     static let taskRowSpacing: CGFloat = 24
     static let checkboxCornerRadius: CGFloat = 8
     static let checkboxStrokeWidth: CGFloat = 2

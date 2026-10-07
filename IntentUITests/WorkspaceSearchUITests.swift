@@ -115,7 +115,9 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
 
     @MainActor
     func testFilterStaysPinnedAfterTitleScrollsAway() {
-        let app = launchWorkspaces(arguments: ["--demo-long-workspace-list"])
+        let app = launchWorkspaces(arguments: [
+            "--demo-long-workspace-list", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"
+        ])
         let list = app.scrollViews["workspaces.list"]
         let title = app.staticTexts["workspaces.title"]
         let search = app.buttons["workspaces.search.open"]
@@ -125,6 +127,13 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         expanded.name = "Workspace header expanded"
         expanded.lifetime = .keepAlways
         add(expanded)
+        let menu = app.buttons["workspaces.menu"]
+        // Figma: the menu is centered on the 29pt cap-trimmed title, then 64pt to the filters.
+        XCTAssertEqual(search.frame.minY - menu.frame.midY, 78.5, accuracy: 2)
+        XCTAssertTrue(menu.isHittable)
+        // Accessibility frame conversion can round a 44pt target just below 44.
+        XCTAssertGreaterThanOrEqual(menu.frame.width, 44 - 0.001)
+        XCTAssertGreaterThanOrEqual(menu.frame.height, 44 - 0.001)
         for _ in 0 ..< Fixture.scrollAttempts where title.isHittable {
             list.swipeUp()
         }
@@ -151,6 +160,8 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         app.launchArguments += ["-appThemePreference", ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] ?? "light"]
         app.launch()
         XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.waitForExistence(timeout: Fixture.timeout))
+        let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
+        if allowNotifications.waitForExistence(timeout: 2) { allowNotifications.tap() }
         return app
     }
 }
