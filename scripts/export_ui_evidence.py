@@ -38,6 +38,7 @@ CAPTURES = {
     },
     "AssistantProposalUITests": {
         "testArchiveSelectionAndSavedOutcome": ("Assistant switches on", "Assistant switches off"),
+        "testCreateWorkspaceFromProposalAndOpenIt": ("Workspace proposal review", "Workspace proposal created"),
     },
     "AssistantNavigationUITests": {
         "testWorkspaceBlockOpensWorkspaceOverview": ("Assistant workspace links",),

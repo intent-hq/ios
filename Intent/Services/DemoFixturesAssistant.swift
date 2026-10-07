@@ -129,6 +129,7 @@ extension DemoFixtures {
     }
 
     private static var assistantReplyBlocks: [[String: Any]] {
+        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-proposal") { return workspaceProposalReplyBlocks }
         if ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal") { return proposalReplyBlocks }
         if ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-links") {
             return [
@@ -140,7 +141,8 @@ extension DemoFixtures {
     }
 
     private static var assistantMetadata: [String: Any] {
-        guard ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal") else { return ["specialist": "chief-of-staff"] }
+        guard ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal")
+            || ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-proposal") else { return ["specialist": "chief-of-staff"] }
         if let proposalOutcome { return ["proposalResolutions": ["demo-proposal": proposalOutcome]] }
         return ["pendingProposals": [["proposalId": "demo-proposal", "messageId": "demo-assistant-message"]]]
     }
@@ -162,7 +164,9 @@ extension DemoFixtures {
     }
 
     static func proposalResponse(for method: String, params: [String: Any]) -> Any? {
-        guard ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal") else { return nil }
+        if let response = workspaceProposalResponse(for: method, params: params) { return response }
+        guard ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal")
+            || ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-proposal") else { return nil }
         switch method {
         case "workspace.archive": return ["workspace": ["id": params["workspaceId"] ?? ""]]
         case "agent.resolveProposal":

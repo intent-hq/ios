@@ -64,6 +64,40 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
     }
 
     @MainActor
+    func testCreateWorkspaceFromProposalAndOpenIt() {
+        let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
+        let apply = app.buttons["proposal.apply"]
+        XCTAssertTrue(apply.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(apply.label, "Create")
+        captureSwitches(in: app, name: "Workspace proposal review")
+        apply.tap()
+        let outcome = app.staticTexts["proposal.outcome"]
+        XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(outcome.label, "Workspace created")
+        let open = app.buttons["proposal.openWorkspace"]
+        XCTAssertTrue(open.exists)
+        captureSwitches(in: app, name: "Workspace proposal created")
+        open.tap()
+        XCTAssertTrue(open.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Investigate Mermaid tests"].firstMatch.waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    func testWorkspaceProposalRetriesLostResponse() {
+        let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal", "--demo-workspace-proposal-retry"])
+        let apply = app.buttons["proposal.apply"]
+        XCTAssertTrue(apply.waitForExistence(timeout: Self.timeout))
+        apply.tap()
+        XCTAssertTrue(app.staticTexts["proposal.error"].waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(apply.label, "Retry")
+        apply.tap()
+        let outcome = app.staticTexts["proposal.outcome"]
+        XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(outcome.label, "Workspace created")
+        XCTAssertTrue(app.buttons["proposal.openWorkspace"].exists)
+    }
+
+    @MainActor
     private func captureSwitches(in app: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
