@@ -307,7 +307,7 @@ extension WorkspaceEntryUITests {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=context"]
         app.launch()
-        let workspace = app.staticTexts["Workspace agent design"].firstMatch
+        let workspace = app.staticTexts["Build Spec Writer Page"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: 30))
         workspace.tap()
         let context = app.buttons["Context"].firstMatch
@@ -318,6 +318,7 @@ extension WorkspaceEntryUITests {
         let task = app.buttons["workspace.note.context-task-1"]
         XCTAssertTrue(disclosure.waitForExistence(timeout: 15))
         XCTAssertTrue(task.waitForExistence(timeout: 15))
+        assertContextTreeSpacing(in: app)
         for _ in 0..<6 where !task.isHittable { app.swipeUp() }
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Context with single-line and wrapped task labels"
@@ -343,5 +344,21 @@ extension WorkspaceEntryUITests {
         XCTAssertTrue(spec.waitForExistence(timeout: 15))
         spec.tap()
         XCTAssertTrue(app.navigationBars["Spec"].waitForExistence(timeout: 15))
+    }
+
+    @MainActor
+    private func assertContextTreeSpacing(in app: XCUIApplication) {
+        let spec = app.buttons["workspace.note.spec"]
+        let first = app.buttons["workspace.note.context-task-0"]
+        let second = app.buttons["workspace.note.context-task-1"]
+        let last = app.buttons["workspace.note.context-task-2"]
+        let preferences = app.buttons["workspace.note.preferences"]
+        XCTAssertTrue(preferences.waitForExistence(timeout: 15))
+        // Buttons extend 10pt above/below their visible rows for a full touch target.
+        XCTAssertEqual(first.frame.minY - spec.frame.maxY, 16, accuracy: 1, "36pt root-to-children gap")
+        XCTAssertEqual(second.frame.minY - first.frame.maxY, 4, accuracy: 1, "24pt nested row gap")
+        XCTAssertEqual(last.frame.minY - second.frame.maxY, 4, accuracy: 1, "24pt nested row gap")
+        XCTAssertEqual(preferences.frame.minY - last.frame.maxY, 28, accuracy: 1, "48pt root note gap")
+        XCTAssertEqual(first.frame.minX - preferences.frame.minX, 48, accuracy: 1, "48pt child indentation")
     }
 }

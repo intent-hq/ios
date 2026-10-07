@@ -180,13 +180,13 @@ struct WorkspaceListView: View {
                     }
             }
             Spacer(minLength: 0)
-            WorkspaceListMenu(showArchived: $viewModel.showArchived, canCreateWorkspace: coordinator.canCreateWorkspace, onCreateWorkspace: createWorkspace) {
-                prepareConnectionSwitcher()
-                openAgentHistory()
-            } onRecentConnections: {
-                prepareConnectionSwitcher()
-                showingConnectionSwitcher = true
+            if isSearching { pageMenu } else {
+                // Reserve the menu's width without inflating the cap-trimmed title height.
+                Color.clear.frame(width: Constants.Accessibility.minimumTapTarget, height: 0)
             }
+        }
+        .overlay(alignment: .trailing) {
+            if !isSearching { pageMenu }
         }
         .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
         .padding(.bottom, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleBottomSpacing)
@@ -320,5 +320,17 @@ struct WorkspaceListView: View {
     private struct PendingAction {
         let workspace: Workspace
         let action: WorkspaceAction
+    }
+}
+
+private extension WorkspaceListView {
+    var pageMenu: some View {
+        WorkspaceListMenu(showArchived: $viewModel.showArchived, canCreateWorkspace: coordinator.canCreateWorkspace, onCreateWorkspace: createWorkspace) {
+            prepareConnectionSwitcher()
+            openAgentHistory()
+        } onRecentConnections: {
+            prepareConnectionSwitcher()
+            showingConnectionSwitcher = true
+        }
     }
 }

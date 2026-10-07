@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 struct WorkspaceDetailHeading: View {
@@ -15,22 +16,19 @@ struct WorkspaceDetailHeading: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
+        VStack(alignment: .leading, spacing: titleEditor.isEditing
+            ? WorkspaceDetailStyle.headingSpacing : WorkspaceDetailStyle.headingTextSpacing) {
             editableTitle
             if let repositoryOwner, let repositoryName {
-                Text("\(repositoryOwner)/\(repositoryName)")
-                    .interFont(Constants.Typography.subtextXXS)
+                WorkspaceDetailHeadingText("\(repositoryOwner)/\(repositoryName)", style: Constants.Typography.subtextXXS)
                     .foregroundStyle(colorScheme == .light && colorSchemeContrast == .standard
                         ? WorkspaceDetailStyle.neutral
                         : WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
-                    .fixedSize(horizontal: false, vertical: true)
             }
             if let summary = statusMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty {
-                Text(summary)
-                    .interFont(Constants.Typography.bodyS)
+                WorkspaceDetailHeadingText(summary, style: Constants.Typography.bodyS)
                     .tracking(WorkspaceDetailStyle.bodyTracking)
                     .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
-                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("workspaceDetail.summary")
             }
         }
@@ -66,10 +64,8 @@ struct WorkspaceDetailHeading: View {
             }
         } else {
             WorkspaceTitle(title: title, createdAt: createdAt) { title in
-                Text(title)
-                    .interFont(Constants.Typography.heading2)
+                WorkspaceDetailHeadingText(title, style: Constants.Typography.heading2)
                     .tracking(WorkspaceDetailStyle.titleTracking)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
             .contentShape(Rectangle())
@@ -84,6 +80,29 @@ struct WorkspaceDetailHeading: View {
 
     private func beginEditing() {
         titleEditor.begin(workspaceId: workspaceId, title: title)
+    }
+}
+
+private struct WorkspaceDetailHeadingText: View {
+    let text: String
+    let style: Constants.Typography.Style
+    @Environment(\.legibilityWeight) private var legibilityWeight
+    @ScaledMetric private var fontSize: CGFloat
+
+    init(_ text: String, style: Constants.Typography.Style) {
+        self.text = text
+        self.style = style
+        _fontSize = ScaledMetric(wrappedValue: style.size, relativeTo: style.relativeTo)
+    }
+
+    var body: some View {
+        let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
+        let font = CTFontCreateWithName(face.rawValue as CFString, fontSize, nil)
+        WorkspaceTextTrimLayout(capHeight: CTFontGetCapHeight(font)) {
+            Text(text)
+                .interFont(style)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

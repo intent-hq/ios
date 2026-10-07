@@ -100,7 +100,7 @@ struct NoteTreeNodeView: View {
                         .environment(coordinator)
                     }
                 }
-                .padding(.top, depth == 0 ? WorkspaceDetailStyle.pageInset : WorkspaceDetailStyle.taskRowSpacing)
+                .padding(.top, depth == 0 ? WorkspaceDetailStyle.noteChildrenSpacing : WorkspaceDetailStyle.taskRowSpacing)
             }
         }
     }
@@ -197,8 +197,10 @@ struct NoteRowView: View {
                 note.title,
                 style: depth == 0 ? Constants.Typography.bodyM : Constants.Typography.bodyS,
                 lineLimit: NoteRowLayout.titleLineLimit(usesAccessibilityLayout: usesAccessibilityLayout),
-                alignsWithCheckbox: true
+                alignsWithCheckbox: depth == 0
             )
+                // Center short nested titles on the checkbox; wrapped titles retain their cap-top alignment.
+                .frame(minHeight: depth > 0 ? WorkspaceDetailStyle.iconSize : nil)
                 .tracking(depth == 0 ? WorkspaceDetailStyle.rowTitleTracking : WorkspaceDetailStyle.bodyTracking)
                 .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
             if !visibleTags.isEmpty {

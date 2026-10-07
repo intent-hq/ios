@@ -39,7 +39,7 @@ extension DemoDesignFixtures {
     """
 
     var workspace: [String: Any] {
-        [
+        var result: [String: Any] = [
             "id": Self.workspaceId, "title": "Workspace agent design", "branch": "design/agent-conversation",
             "baseRef": "main", "status": "active", "activity": isStreaming ? "agent_running" : "idle",
             "displayStatus": hasQuestions || scenario == .blocker ? "needs_attention" : "in_progress",
@@ -48,6 +48,11 @@ extension DemoDesignFixtures {
             "repositoryOwner": "intent-ha", "repositoryName": "ios",
             "agentSummary": ["count": 1, "agents": [agent]]
         ]
+        if scenario == .context {
+            result["title"] = "Build Spec Writer Page"
+            result["taskStats"] = ["total": 3, "completed": 3, "inProgress": 0]
+        }
+        return result
     }
 
     var agent: [String: Any] {
@@ -71,10 +76,14 @@ extension DemoDesignFixtures {
             "Verify plugin build and interaction coverage"
         ]
         let spec: [String: Any] = [
-            "id": "spec", "title": "Spec", "isDefault": true, "content": "# Goal",
+            "id": "spec", "title": "Spec", "isDefault": true, "content": "# Implementation Plan",
             "createdAt": Self.timestamp, "updatedAt": Self.timestamp
         ]
-        return [spec] + titles.enumerated().map { index, title in
+        let preferences: [String: Any] = [
+            "id": "preferences", "title": "Preferences", "content": "# Document Preferences",
+            "createdAt": Self.timestamp, "updatedAt": Self.timestamp
+        ]
+        return [spec, preferences] + titles.enumerated().map { index, title in
             [
                 "id": "context-task-\(index)", "title": title, "parentId": "spec",
                 "content": "Task details for \(title).", "metadata": ["task": ["status": "complete"]],
