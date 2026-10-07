@@ -538,6 +538,7 @@ $(SRCROOT)/Intent/Utils/TcAddressDisplay.swift
 $(SRCROOT)/Intent/Utils/WorkspaceActivityTime.swift
 $(SRCROOT)/Intent/Utils/WorkspaceAssetLink.swift
 $(SRCROOT)/Intent/ViewModels
+$(SRCROOT)/Intent/ViewModels/AgentListIndex.swift
 $(SRCROOT)/Intent/ViewModels/AgentListViewModel.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Commands.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Lifecycle.swift
@@ -724,6 +725,7 @@ $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalKeyBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceActionLauncher.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceAgentTreeRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAttentionCue.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserPage.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserView.swift
@@ -763,6 +765,7 @@ $(SRCROOT)/IntentTests/AgentAvatarPulseTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
 $(SRCROOT)/IntentTests/AgentGroupingTests.swift
 $(SRCROOT)/IntentTests/AgentHistoryTests.swift
+$(SRCROOT)/IntentTests/AgentListScaleTests.swift
 $(SRCROOT)/IntentTests/AgentListViewModelTests.swift
 $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
 $(SRCROOT)/IntentTests/AgentSessionDisplayTests.swift
