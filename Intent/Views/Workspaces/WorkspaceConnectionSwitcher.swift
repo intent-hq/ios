@@ -1,7 +1,17 @@
 import SwiftUI
 
 extension EnvironmentValues {
-    @Entry var openConnectionSwitcher: () -> Void = {}
+    @Entry var openConnectionSwitcher = OpenConnectionSwitcherAction()
+}
+
+/// Stores the drawer's state rather than an incomparable environment closure.
+struct OpenConnectionSwitcherAction {
+    var isPresented: Binding<Bool>?
+    var isEnabled = false
+
+    func callAsFunction() {
+        if isEnabled { isPresented?.wrappedValue = true }
+    }
 }
 
 /// True while the Connections switcher is open, so the global agent history
@@ -40,9 +50,10 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
             )
         } content: {
             content
-                .environment(\.openConnectionSwitcher) {
-                    if canReveal { isPresented = true }
-                }
+                .environment(\.openConnectionSwitcher, OpenConnectionSwitcherAction(
+                    isPresented: $isPresented,
+                    isEnabled: canReveal
+                ))
         }
         .preference(key: ConnectionSwitcherOpenPreference.self, value: isPresented)
     }
