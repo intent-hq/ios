@@ -7,6 +7,9 @@ struct WorkspaceLinkedTextView: View {
     @Environment(BackendSession.self) private var session
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.legibilityWeight) private var legibilityWeight
+    @Environment(\.workspaceTranscriptDesign) private var usesWorkspaceDesign
     @Environment(\.assistantMessageStreaming) private var isStreaming
     @Environment(\.proposalWorkspaceIDs) private var coveredIDs
     @ScaledMetric(relativeTo: .body) private var iconSide: CGFloat = 17
@@ -15,6 +18,13 @@ struct WorkspaceLinkedTextView: View {
         static let spacing: CGFloat = 8
         static let padding: CGFloat = 12
         static let cornerRadius: CGFloat = 12
+    }
+
+    private typealias Design = Constants.Conversation.Design
+
+    private var cornerRadius: CGFloat { usesWorkspaceDesign ? Design.innerCornerRadius : Layout.cornerRadius }
+    private var secondaryForeground: Color {
+        usesWorkspaceDesign ? Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast) : Theme.mutedForeground(for: colorScheme)
     }
 
     var body: some View {
@@ -57,11 +67,11 @@ struct WorkspaceLinkedTextView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading) {
                     Text(workspace?.title ?? id)
-                        .font(.body.weight(.medium))
+                        .font(usesWorkspaceDesign ? Constants.Typography.bodySEmphasized.font(legibilityWeight: legibilityWeight) : .body.weight(.medium))
                     if workspace == nil {
                         Text("Workspace unavailable")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(usesWorkspaceDesign ? Constants.Typography.subtextXXS.font(legibilityWeight: legibilityWeight) : .caption)
+                            .foregroundStyle(usesWorkspaceDesign ? AnyShapeStyle(secondaryForeground) : AnyShapeStyle(.secondary))
                     }
                 }
                 Spacer()
@@ -72,14 +82,21 @@ struct WorkspaceLinkedTextView: View {
                     .accessibilityHidden(true)
             }
             .foregroundStyle(workspace == nil
-                ? Theme.mutedForeground(for: colorScheme)
-                : Theme.foreground(for: colorScheme))
-            .padding(Layout.padding)
+                ? secondaryForeground
+                : usesWorkspaceDesign ? Design.Palette.foreground(for: colorScheme) : Theme.foreground(for: colorScheme))
+            .padding(usesWorkspaceDesign ? Design.Transcript.bubblePadding : Layout.padding)
             .copyContextMenuPassthrough()
-            .background(Theme.muted(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius))
-            .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+            .background(usesWorkspaceDesign ? Design.Palette.surface(for: colorScheme) : Theme.muted(for: colorScheme), in: .rect(cornerRadius: cornerRadius))
+            .contentShape(.rect(cornerRadius: cornerRadius))
         }
         .buttonStyle(IntentContentButtonStyle())
+        .overlay {
+            if usesWorkspaceDesign {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(Design.Palette.border(for: colorScheme, contrast: contrast))
+                    .allowsHitTesting(false)
+            }
+        }
         .disabled(workspace == nil)
         .accessibilityIdentifier("assistant.workspace.\(id)")
     }

@@ -1,8 +1,8 @@
 import SwiftUI
 
 extension Constants.Conversation {
-    /// Opt-in workspace-agent styling from the approved 402pt Figma frames.
-    /// Existing conversation constants stay unchanged for Assistant and other callers.
+    /// Compact iOS workspace-agent and Assistant styling from the approved 402pt Figma frames.
+    /// Existing conversation constants stay unchanged for regular-width and visionOS callers.
     /// Heights are visual baselines, not text caps; preserve Dynamic Type and platform hit targets.
     enum Design {
         static let horizontalInset: CGFloat = 24

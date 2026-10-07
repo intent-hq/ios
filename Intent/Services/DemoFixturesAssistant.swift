@@ -5,8 +5,10 @@ extension DemoFixtures {
     private static let assistantHistoryCount = 30
     private static var createdAssistantAgents: [[String: Any]] = []
     private static var proposalOutcome: String?
+    private static var assistantListFailed = false
 
     static var assistantAgents: [[String: Any]] {
+        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-empty") { return createdAssistantAgents }
         let history: [[String: Any]] = ProcessInfo.processInfo.arguments.contains("--demo-assistant-history")
             ? (0..<assistantHistoryCount).map { index in
                 [
@@ -40,6 +42,20 @@ extension DemoFixtures {
         ]
         createdAssistantAgents.append(agent)
         return ["agent": agent]
+    }
+
+    /// Exercise the Assistant's real loading, retry and first-conversation flow.
+    static func assistantListGate(for method: String, params: [String: Any]) -> ResponseGate? {
+        guard method == "agent.list", params["workspaceId"] as? String == Workspace.chiefWorkspaceId else { return nil }
+        return triggerFile(from: ProcessInfo.processInfo.arguments, prefix: "--demo-assistant-list-trigger-file=").map(ResponseGate.triggerFile)
+    }
+
+    static func assistantListResponse() -> [String: Any] {
+        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-list-retry"), !assistantListFailed {
+            assistantListFailed = true
+            return [:]
+        }
+        return ["agents": assistantAgents]
     }
 
     static func streamAssistantPromptsIfRequested(in store: ConversationStore) async {

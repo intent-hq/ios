@@ -3,6 +3,7 @@ import SwiftUI
 struct AssistantView: View {
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var store: AssistantStore { session.assistantStore }
 
@@ -10,21 +11,30 @@ struct AssistantView: View {
         store.threads.first { $0.id == coordinator.assistantAgentId } ?? store.threads.first
     }
 
+    private var usesWorkspaceDesign: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .compact
+        #else
+        false
+        #endif
+    }
+
     var body: some View {
         NavigationStack {
             content
             .navigationTitle("Assistant")
-            .toolbar { assistantToolbar }
+            .toolbar {
+                if !usesWorkspaceDesign { assistantToolbar }
+            }
+            .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar)
             .safeAreaInset(edge: .top) {
-                if let error = store.errorMessage {
-                    VStack {
-                        Text(error).font(.callout)
-                        Button("Retry") { Task { await store.refresh() } }
-                            .buttonStyle(IntentButtonStyle(variant: .secondary))
+                if usesWorkspaceDesign, selectedThread == nil {
+                    VStack(spacing: 0) {
+                        emptyHeader
+                        errorBanner
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(.regularMaterial)
+                } else {
+                    errorBanner
                 }
             }
         }
@@ -40,6 +50,39 @@ struct AssistantView: View {
         .onChange(of: coordinator.assistantAgentId) { _, agentId in
             if let agentId, !store.threads.contains(where: { $0.id == agentId }) {
                 Task { await store.refresh() }
+            }
+        }
+    }
+
+    private var emptyHeader: some View {
+        AssistantConversationHeader(
+            title: "Assistant",
+            canCreateConversation: !store.isCreating && store.hasLoaded,
+            onNewConversation: createThread
+        ) {
+            Menu {
+                AssistantHistoryMenu(store: store, coordinator: coordinator)
+            } label: {
+                ToolbarOverflowLabel()
+            }
+            .accessibilityLabel("Assistant actions")
+            .accessibilityIdentifier("assistant.actions")
+        }
+    }
+
+    @ViewBuilder private var errorBanner: some View {
+        if let error = store.errorMessage {
+            if usesWorkspaceDesign {
+                AssistantErrorBanner(error: error) { Task { await store.refresh() } }
+            } else {
+                VStack {
+                    Text(error).font(.callout)
+                    Button("Retry") { Task { await store.refresh() } }
+                        .buttonStyle(IntentButtonStyle(variant: .secondary))
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)
             }
         }
     }
@@ -78,6 +121,12 @@ struct AssistantView: View {
                 coordinator.assistantAgentId = store.threads.first?.id
             }
             .id(thread.id)
+        } else if usesWorkspaceDesign {
+            AssistantStateContent(
+                isLoading: store.isLoading || (!store.hasLoaded && store.errorMessage == nil),
+                canCreateConversation: !store.isCreating && store.hasLoaded,
+                onCreateConversation: createThread
+            )
         } else if store.isLoading || (!store.hasLoaded && store.errorMessage == nil) {
             ProgressView("Loading Assistant…")
         } else {

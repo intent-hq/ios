@@ -206,7 +206,6 @@ private extension ConversationViewContent {
     private var usesWorkspaceDesign: Bool {
         #if os(iOS)
         horizontalSizeClass == .compact
-            && assistantStore == nil && viewModel.workspaceId != Workspace.chiefWorkspaceId
         #else
         false
         #endif
@@ -219,12 +218,14 @@ private extension ConversationViewContent {
             .toolbarBackground(viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
             .nativeNavigationBackGesture(isEnabled: !usesWorkspaceDesign || !answeringWorkspaceQuestions)
             #if os(iOS)
-            .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar, .tabBar)
+            .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar)
+            .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if usesWorkspaceDesign {
                     WorkspaceConversationHeader(
                         title: viewModel.agentName,
                         showsBackground: !viewModel.showsLoadingState,
+                        assistantStore: assistantStore,
                         onBack: { dismiss() },
                         actions: { agentMenu }
                     )
