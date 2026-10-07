@@ -5,7 +5,10 @@ import Observation
 @Observable class AgentListViewModel {
     private static let noAttentionRank = 3
 
-    var agents: [AgentSession] = []
+    var agents: [AgentSession] = [] {
+        didSet { index = AgentListIndex(agents: agents) }
+    }
+    private var index = AgentListIndex(agents: [])
     let list: AgentListState
     var expandedGroups: Set<AgentListGroup> = []
 
@@ -19,61 +22,45 @@ import Observation
         return nil
     }
 
-    private var activeAgents: [AgentSession] { agents.filter { $0.retiredAt == nil } }
+    private var activeAgents: [AgentSession] { index.active }
 
     private func isRoot(_ agent: AgentSession) -> Bool {
         guard let parent = Self.parent(of: agent) else { return true }
         // Only a complete legacy response can infer a missing parent.
-        return list.scopeCounts == nil && !activeAgents.contains { $0.id == parent }
+        return list.scopeCounts == nil && index.byID[parent] == nil
     }
 
     var foregroundAgents: [AgentSession] {
-        activeAgents.filter { !$0.isBackground && isRoot($0) }
-            .sorted { firstAgent, secondAgent in
-                // Agents needing the user first (blocker, question, discussion)
-                let rankA = Self.attentionRank(firstAgent)
-                let rankB = Self.attentionRank(secondAgent)
-                if rankA != rankB { return rankA < rankB }
-                // Then coordinator (spec-writer) first
-                if firstAgent.specialist == "spec-writer", secondAgent.specialist != "spec-writer" { return true }
-                if firstAgent.specialist != "spec-writer", secondAgent.specialist == "spec-writer" { return false }
-                // Then by last activity (most recent first)
-                return Self.byLastActivity(firstAgent, secondAgent)
-            }
+        index.foregroundOrder.filter { !$0.isBackground && isRoot($0) }
     }
 
     func delegatedAgents(for parentId: String) -> [AgentSession] {
-        activeAgents.filter { Self.parent(of: $0) == parentId }
-            .sorted(by: Self.byAttentionThenLastActivity)
+        index.children[parentId] ?? []
     }
 
     var standaloneBackgroundAgents: [AgentSession] {
         activeAgents.filter { $0.isBackground && isRoot($0) }
-            .sorted(by: Self.byAttentionThenLastActivity)
     }
 
     var orphanedAgents: [AgentSession] {
         guard list.scopeCounts != nil else { return [] }
         if list.delegatedCounts?.orphaned != nil {
-            let liveIds = Set(activeAgents.map(\.id))
             return activeAgents.filter { agent in
                 guard list.orphanedAgentIds.contains(agent.id), let parent = Self.parent(of: agent) else { return false }
                 // A restored parent may arrive while the orphan refresh is
                 // pending or failed. Stale membership must not duplicate its
                 // children; cache absence alone still never adds an orphan.
-                return !liveIds.contains(parent)
+                return index.byID[parent] == nil
             }
-            .sorted(by: Self.byAttentionThenLastActivity)
         }
         // Old scoped daemons return the whole delegated bin. Its roots may
         // have unloaded parents, or background parents in a collapsed bin.
         let hiddenBackground = !expandedGroups.contains(.background)
         return activeAgents.filter { agent in
             guard let parent = Self.parent(of: agent) else { return false }
-            guard let parentRow = activeAgents.first(where: { $0.id == parent }) else { return true }
+            guard let parentRow = index.byID[parent] else { return true }
             return hiddenBackground && parentRow.isBackground && Self.parent(of: parentRow) == nil
         }
-        .sorted(by: Self.byAttentionThenLastActivity)
     }
 
     func rows(for group: AgentListGroup) -> [AgentSession] {
@@ -145,22 +132,23 @@ import Observation
     func visibleTree(_ roots: [AgentSession]) -> [TreeRow] {
         var result: [TreeRow] = []
         var visited: Set<String> = []
-        func append(_ rows: [AgentSession], depth: Int) {
-            for agent in rows where visited.insert(agent.id).inserted {
-                result.append(TreeRow(agent: agent, depth: depth))
-                if isExpanded(.delegated(parentId: agent.id)) {
-                    append(delegatedAgents(for: agent.id), depth: depth + 1)
-                }
+        var pending = roots.reversed().map { TreeRow(agent: $0, depth: 0) }
+        while let row = pending.popLast() {
+            guard visited.insert(row.id).inserted else { continue }
+            result.append(row)
+            if isExpanded(.delegated(parentId: row.id)) {
+                pending.append(contentsOf: delegatedAgents(for: row.id).reversed().map { child in
+                    TreeRow(agent: child, depth: row.depth + 1)
+                })
             }
         }
-        append(roots, depth: 0)
         return result
     }
 
     /// Sort rank for agents whose avatar state `needsUser`: blocker (0),
     /// question (1), discussion (2); every other state ranks last (3), mirroring
     /// the cloudlands hover card that groups attention rows above the rest.
-    private static func attentionRank(_ agent: AgentSession) -> Int {
+    static func attentionRank(_ agent: AgentSession) -> Int {
         let state = AgentAvatarState.state(for: agent)
         guard state.needsUser else { return Self.noAttentionRank }
         switch state {

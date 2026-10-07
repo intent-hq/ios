@@ -12,6 +12,29 @@ nonisolated final class WorkspaceAgentGroupsUITests: XCTestCase {
     }
 
     @MainActor
+    func testLargeWorkspaceStaysResponsiveWhileExpandingAndScrolling() {
+        let app = launch(scenario: "agent-groups-large")
+        let children = app.buttons["workspace.agents.children.groups-parent"]
+        XCTAssertTrue(app.buttons["workspace.agent.large-parent-0000"].exists)
+        capture(app, name: "Large workspace with 1200 top-level agents")
+        children.tap()
+        let firstChild = app.buttons["workspace.agent.large-child-0000"]
+        XCTAssertTrue(firstChild.waitForExistence(timeout: 15))
+        app.swipeUp()
+        app.swipeUp()
+        XCTAssertEqual(app.state, .runningForeground)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace.agent.large-child-")).firstMatch.exists)
+        capture(app, name: "Large delegated group after scrolling")
+        app.swipeDown()
+        app.swipeDown()
+        for _ in 0..<4 where !children.isHittable { app.swipeDown() }
+        XCTAssertTrue(children.isHittable)
+        children.tap()
+        XCTAssertEqual(children.value as? String, "Collapsed")
+        XCTAssertTrue(app.buttons["workspace.agent.large-parent-0000"].waitForExistence(timeout: 15))
+    }
+
+    @MainActor
     func testSectionsLoadOnExpansionAndKeepNestedChildrenWithTheirParent() {
         let app = launch(scenario: "agent-groups")
         let parent = app.buttons["workspace.agent.groups-parent"]

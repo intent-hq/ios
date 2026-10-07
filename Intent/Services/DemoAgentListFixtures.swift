@@ -68,6 +68,17 @@ enum DemoAgentListFixtures {
         ]
     }
 
+    static var largeGroupRows: [[String: Any]] {
+        let count = 1200
+        return groupRows + (0..<count).flatMap { index in
+            let suffix = String(format: "%04d", index)
+            return [
+                row("large-parent-" + suffix, name: "Agent " + suffix),
+                row("large-child-" + suffix, name: "Delegated agent " + suffix, parent: "groups-parent")
+            ]
+        }
+    }
+
     private static func row(
         _ id: String, name: String, parent: String? = nil, background: Bool = false, retired: Bool = false
     ) -> [String: Any] {

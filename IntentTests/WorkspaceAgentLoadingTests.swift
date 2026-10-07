@@ -7,6 +7,27 @@ import UIKit
 @MainActor
 @Suite(.serialized)
 struct WorkspaceAgentLoadingTests {
+    @Test(arguments: [false, true])
+    func largeWorkspaceLoadsAllRowsAndKeepsExpansionResponsive(legacy: Bool) async throws {
+        let fake = AgentGroupFixtureConnection()
+        fake.legacyAllActive = legacy
+        fake.rows = DemoAgentListFixtures.largeGroupRows
+        let host = Host(connection: fake)
+        defer { host.tearDown() }
+        let rootCount = legacy ? 1203 : 1201
+        try await waitUntil("large workspace loads") {
+            host.view.agentStore.hasLoaded && host.view.viewModel.foregroundAgents.count == rootCount
+        }
+        await host.view.toggleAgentGroup(.delegated(parentId: "groups-parent"))
+        try await waitUntil("large delegated group reaches the view") {
+            host.view.viewModel.delegatedAgents(for: "groups-parent").count == 1201
+        }
+        let model = host.view.viewModel
+        #expect(model.visibleTree(model.foregroundAgents).count == rootCount + 1201)
+        await host.view.toggleAgentGroup(.delegated(parentId: "groups-parent"))
+        #expect(model.visibleTree(model.foregroundAgents).count == rootCount)
+    }
+
     @Test func actualViewLoadsOnlyTopLevelThenOnlyExpandedGroupsAndResetsOnWorkspaceSwitch() async throws {
         let fake = AgentGroupFixtureConnection()
         let host = Host(connection: fake)
