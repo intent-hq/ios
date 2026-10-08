@@ -24,14 +24,15 @@ enum ConnectionPairing {
         }
     }
 
-    /// Picks the connection display name from a `host.status` result:
+    /// Picks the connection display name from a status result:
     /// `prettyHostname` (user-facing, e.g. "Clement's Mac Studio") when present
     /// and non-blank, else `hostname`, else nil (caller falls back to host:port).
     /// Values are trimmed so whitespace-only names never win. Older daemons
-    /// don't report `prettyHostname`.
-    static func displayName(fromHostStatus result: Any) -> String? {
+    /// don't report `prettyHostname`. Shared connections prefer `collaborationName`.
+    static func displayName(fromHostStatus result: Any, shared: Bool = false) -> String? {
         guard let status = result as? [String: Any] else { return nil }
-        for key in ["prettyHostname", "hostname"] {
+        let keys = shared ? ["collaborationName", "prettyHostname", "hostname"] : ["prettyHostname", "hostname"]
+        for key in keys {
             if let raw = status[key] as? String {
                 let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty { return trimmed }
@@ -57,8 +58,8 @@ enum ConnectionPairing {
         let personKey = principal.isOwner ? nil : try server.certFingerprint.map { try InvitedSyncKey.session(fingerprint: $0, principalId: principal.id) }
         let floor = personKey.flatMap { persistence.invitedJournal.floors[$0] } ?? 0
         var displayName: String?
-        if let result = try? await connection.request("host.status") {
-            displayName = Self.displayName(fromHostStatus: result)
+        if let result = try? await connection.request(principal.isOwner ? "host.status" : "system.status") {
+            displayName = Self.displayName(fromHostStatus: result, shared: !principal.isOwner)
         }
         try Task.checkCancellation()
         try connection.validatePairingAdmission(receipt)
@@ -70,7 +71,7 @@ enum ConnectionPairing {
                 lastConnectedAt: Date()
             )
         candidate.principal = principal
-        try persistence.prepareInvitedPairing(&candidate)
+        try persistence.prepareInvitedPairing(&candidate, hostname: displayName)
         try Task.checkCancellation()
         try connection.validatePairingAdmission(receipt)
         let outcome = persistence.upsertConnectionWithOutcome(candidate)

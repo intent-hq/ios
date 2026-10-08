@@ -37,18 +37,18 @@ extension ConnectionManagerTests {
 
     @Test @MainActor func removalOnTheWirePreventsDelayedPairingSave() async throws {
         let server = try await LoopbackWebSocketServer.start(tlsIdentity: ManualTokenEntryViewTests.fixtureIdentity())
-        server.holdHostStatus()
+        server.holdSystemStatus()
         server.setPrincipal(["id": "B", "isAdministrator": false, "hostRole": "member", "hostMembershipRevision": 1])
         let store = try InvitedSessionFixtures.Store(MemorySyncedKeychain())
         let manager = ConnectionManager(persistence: store.persistence)
-        defer { server.releaseHostStatus(); manager.disconnect(); server.stop(); store.close() }
+        defer { server.releaseSystemStatus(); manager.disconnect(); server.stop(); store.close() }
         let pin = ManualTokenEntryViewTests.fixtureIdentityFingerprint
         let payload = PairingPayload(hosts: ["127.0.0.1"], port: server.port, token: "B-token", certFingerprint: pin, tcAddress: nil)
         let pairing = Task { try await PairingFlow.connect(payload: payload, certFingerprint: pin, connectionManager: manager, persistence: store.persistence) }
-        try await waitUntil("both post-connect and pairing status requests suspended", timeout: .seconds(5)) { server.heldStatusCount >= 2 }
+        try await waitUntil("both post-connect and pairing status requests suspended", timeout: .seconds(5)) { server.heldSystemStatusCount >= 2 }
         try server.emitRemoval(of: "B")
         try await waitUntil("membership removal disconnected the admitted socket") { manager.connectionState == .disconnected }
-        server.releaseHostStatus()
+        server.releaseSystemStatus()
         if case .success = await pairing.result { Issue.record("Revoked pairing was saved") }
         #expect(store.persistence.loadConnections().isEmpty)
         #expect(store.persistence.invitedJournal.clock == 0)

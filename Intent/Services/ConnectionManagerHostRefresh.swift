@@ -40,7 +40,9 @@ extension ConnectionManager {
 
         // Refresh the stored display name first: it must run even when the
         // localIps flow below bails out (older daemon, transport hiccup).
-        await refreshStoredDisplayName(token: token, port: port, context: context)
+        if admission.principal.isOwner {
+            await refreshStoredDisplayName(token: token, port: port, context: context)
+        }
         guard hostRefreshIsCurrent(context) else { return }
 
         let response: Result<Any, Error>
@@ -50,6 +52,13 @@ extension ConnectionManager {
             response = .failure(error)
         }
         guard hostRefreshIsCurrent(context) else { return }
+        applyHostStatusResponse(response, token: token, port: port, context: context)
+    }
+
+    private func applyHostStatusResponse(_ response: Result<Any, Error>, token: String, port: Int, context: HostRefreshContext) {
+        if !context.admission.principal.isOwner, case .success(let result) = response {
+            persistDisplayName(from: result, token: token, port: port, shared: true)
+        }
         switch Self.hostRouteRefreshDecision(
             response: response,
             requestedGeneration: context.generation,
@@ -157,18 +166,21 @@ extension ConnectionManager {
     /// token + port. Failures are non-fatal: older daemons and transport errors
     /// are skipped silently and the existing name is kept.
     private func refreshStoredDisplayName(token: String, port: Int, context: HostRefreshContext) async {
-        guard let result = try? await request("host.status"),
-              let name = ConnectionPairing.displayName(fromHostStatus: result) else {
+        guard let result = try? await request("host.status") else {
             return
         }
 
         // A reconnect, credential import, or local route edit can supersede
         // this reply while the admitted socket remains otherwise usable.
         guard hostRefreshIsCurrent(context) else { return }
+        persistDisplayName(from: result, token: token, port: port, shared: false)
+    }
 
+    private func persistDisplayName(from result: Any, token: String, port: Int, shared: Bool) {
+        guard let name = ConnectionPairing.displayName(fromHostStatus: result, shared: shared) else { return }
         if let stored = savedConnection(token: token, port: port),
             stored.token == token, stored.server.port == port,
-            stored.displayName != name {
+            stored.displayName != name || shared {
             AppLog.connection.debug("[ConnectionManager] Display name refreshed")
             if !persistence.updateConnectionDisplayName(
                 id: stored.id,

@@ -37,7 +37,7 @@ extension PersistenceManager {
 
     /// Called only after explicit pairing and authoritative identity discovery.
     /// A successful full read is required before a new intent can beat removals.
-    func prepareInvitedPairing(_ connection: inout StoredConnection) throws {
+    func prepareInvitedPairing(_ connection: inout StoredConnection, hostname: String? = nil) throws {
         guard let principal = connection.principal, !principal.isOwner else { return }
         guard invitedJournalAvailable, let key = connection.invitedPersonKey, let pin = connection.server.certFingerprint,
               let locals = loadConnectionsWithOutcome().connections else { throw InvitedPersistenceError.syncUnavailable }
@@ -71,7 +71,7 @@ extension PersistenceManager {
             "removedThrough": journal.floors[key] ?? 0, "deleted": false, "deletedAt": NSNull()
         ]
         object.merge(pairing) { _, new in new }
-        object["hostname"] = previous?.object["hostname"] ?? NSNull()
+        object["hostname"] = hostname as Any? ?? previous?.object["hostname"] ?? NSNull()
         object["detectHosts"] = previous?.object["detectHosts"] ?? true
         object["tcAddress"] = route
         object["tcUpdatedAt"] = routeClock
@@ -195,6 +195,20 @@ extension PersistenceManager {
             record.object["tcAddress"] = newRoute as Any? ?? NSNull()
             record.object["tcUpdatedAt"] = clock
         }
+        connection.invitedSyncPayload = record.data
+        connection.pendingSyncUpdatedAt = clock
+    }
+
+    func queueInvitedDisplayNamePublication(_ connection: inout StoredConnection, displayName: String) {
+        guard invitedJournalAvailable, var record = Self.invitedRecord(connection), let key = record.personKey,
+              record.object["hostname"] as? String != displayName else { return }
+        var journal = invitedJournal
+        journal.observe([record])
+        if let snapshot = invitedRegistry?.read(), !snapshot.removalStateUnknown { journal.observe(snapshot.records) }
+        guard record.pairedAt > (journal.floors[key] ?? 0), let clock = try? journal.nextClock(now: Date()) else { return }
+        invitedJournal = journal
+        record.object["hostname"] = displayName
+        record.object["updatedAt"] = clock
         connection.invitedSyncPayload = record.data
         connection.pendingSyncUpdatedAt = clock
     }

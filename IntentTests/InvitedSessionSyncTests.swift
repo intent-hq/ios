@@ -4,6 +4,76 @@ import Security
 import Testing
 
 @MainActor struct InvitedSessionSyncTests {
+    @Test(arguments: [
+        (" Mac Studio \n", "tcRoute", "Mac Studio"),
+        ("", "Studio", "Studio"),
+        (" \n", " Studio ", "Studio"),
+        ("", " \n", "old.example:443")
+    ])
+    func importedNameUsesHostnameBeforeAddressLabel(hostname: String, label: String, expected: String) throws {
+        let record = try InvitedSessionFixtures.session(changes: ["hostname": hostname, "label": label])
+        let imported = try #require(PersistenceManager.connection(fromInvited: record))
+        #expect(imported.displayName == expected)
+        #expect(imported.server.name == expected)
+    }
+
+    @Test(arguments: [false, true])
+    func learnedNameSurvivesCloudFailureReimportAndRelaunch(alreadyNamed: Bool) async throws {
+        let cloud = MemorySyncedKeychain()
+        let initial = try InvitedSessionFixtures.session(changes: ["label": "tcRoute", "hosts": [], "tcAddress": "tcRoute", "tcUpdatedAt": 100])
+        cloud.items[initial.account] = initial.data
+        let store = try InvitedSessionFixtures.Store(cloud)
+        defer { store.close() }
+        _ = await store.persistence.refreshInvitedSessions { _ in InvitedSessionFixtures.principal() }
+        var saved = try #require(store.persistence.loadConnections().first)
+        if alreadyNamed {
+            saved.displayName = "Mac Studio"
+            #expect(store.persistence.saveConnectionsLocked([saved]))
+        }
+        cloud.writeFailure = errSecInteractionNotAllowed
+        #expect(store.persistence.updateConnectionDisplayName(id: saved.id, displayName: "Mac Studio"))
+        let named = try #require(store.persistence.loadConnections().first)
+        let payload = try #require(PersistenceManager.invitedRecord(named))
+        #expect(payload.object["hostname"] as? String == "Mac Studio")
+        #expect(payload.pairedAt == initial.pairedAt)
+        #expect(payload.token == initial.token)
+        #expect(payload.routeClock == initial.routeClock)
+        #expect(named.pendingSyncUpdatedAt == payload.updatedAt)
+        #expect(store.persistence.updateConnectionDisplayName(id: named.id, displayName: "Mac Studio"))
+        #expect(store.persistence.loadConnections().first?.pendingSyncUpdatedAt == named.pendingSyncUpdatedAt)
+        let relaunched = store.relaunch()
+        _ = await relaunched.refreshInvitedSessions { _ in InvitedSessionFixtures.principal() }
+        #expect(relaunched.loadConnections().first?.id == saved.id)
+        #expect(relaunched.loadConnections().first?.displayName == "Mac Studio")
+        cloud.writeFailure = nil
+        relaunched.publishPendingInvitedSessions()
+        let published = try #require(cloud.items[initial.account].flatMap { InvitedSyncRecord.parse(account: initial.account, data: $0) })
+        #expect(published.object["hostname"] as? String == "Mac Studio")
+        #expect(published.pairedAt == initial.pairedAt)
+        #expect(published.token == initial.token)
+        let fresh = try InvitedSessionFixtures.Store(cloud)
+        defer { fresh.close() }
+        _ = await fresh.persistence.refreshInvitedSessions { _ in InvitedSessionFixtures.principal() }
+        #expect(fresh.persistence.loadConnections().first?.displayName == "Mac Studio")
+        #expect(fresh.persistence.activeConnection() == nil)
+    }
+
+    @Test func failedNameSaveKeepsLocalAndCloudRecords() async throws {
+        let cloud = MemorySyncedKeychain()
+        let initial = try InvitedSessionFixtures.session()
+        cloud.items[initial.account] = initial.data
+        let store = try InvitedSessionFixtures.Store(cloud)
+        defer { store.close() }
+        _ = await store.persistence.refreshInvitedSessions { _ in InvitedSessionFixtures.principal() }
+        let saved = try #require(store.persistence.loadConnections().first)
+        let writes = cloud.writeCount
+        store.storage.setSaveFailure(true)
+        #expect(!store.persistence.updateConnectionDisplayName(id: saved.id, displayName: "Updated Studio"))
+        #expect(store.persistence.loadConnections() == [saved])
+        #expect(cloud.items[initial.account] == initial.data)
+        #expect(cloud.writeCount == writes)
+    }
+
     @Test func importingAnExplicitRouteClearRemovesTheSavedTunnel() async throws {
         let cloud = MemorySyncedKeychain()
         let initial = try InvitedSessionFixtures.session(changes: ["tcAddress": "tcOld", "tcUpdatedAt": 100])
