@@ -23,6 +23,10 @@ struct ConversationConnectionStatusTiming<Phase: Equatable> {
         .seconds(max(0, date.timeIntervalSince(startedAt)))
     }
 
+    func showsProgress(at date: Date) -> Bool {
+        date.timeIntervalSince(startedAt) >= Constants.Conversation.Column.Loading.statusThreshold
+    }
+
     func isDelayed(phase: Phase, at date: Date) -> Bool {
         // Hide immediately on a new input, before SwiftUI delivers onChange.
         phase == self.phase

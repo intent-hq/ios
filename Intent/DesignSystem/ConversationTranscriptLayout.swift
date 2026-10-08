@@ -71,6 +71,7 @@ extension Constants.Conversation.Column {
         static let contentSpacing: CGFloat = 12
         static let rowSpacing: CGFloat = 16
         static let retryTopPadding: CGFloat = 12
+        static let statusThreshold: TimeInterval = 5
         static let slowThreshold: TimeInterval = 8
         static let timelineInterval: TimeInterval = 1
         static let fadeDuration: Double = 0.2

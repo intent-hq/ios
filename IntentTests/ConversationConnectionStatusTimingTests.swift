@@ -3,6 +3,20 @@ import Foundation
 import Testing
 
 struct ConversationConnectionStatusTimingTests {
+    @Test func progressAppearsAfterFiveSecondsIndependentOfPhaseChanges() {
+        let start = Date(timeIntervalSince1970: 0)
+        var timing = ConversationConnectionStatusTiming(phase: "connecting", startedAt: start)
+        #expect(!timing.showsProgress(at: start))
+        timing.update(phase: "requesting", at: start.addingTimeInterval(4))
+        #expect(!timing.showsProgress(at: start.addingTimeInterval(4.99)))
+        #expect(timing.showsProgress(at: start.addingTimeInterval(5)))
+        #expect(!timing.isDelayed(phase: "requesting", at: start.addingTimeInterval(5)))
+
+        timing.update(phase: "receiving", at: start.addingTimeInterval(6))
+        #expect(timing.showsProgress(at: start.addingTimeInterval(6)))
+        #expect(!timing.isDelayed(phase: "receiving", at: start.addingTimeInterval(6)))
+    }
+
     @Test func phaseChangesRestartIdleDelayWithoutResettingTotalElapsed() {
         let start = Date(timeIntervalSince1970: 0)
         var timing = ConversationConnectionStatusTiming(phase: "connecting", startedAt: start)
@@ -32,6 +46,7 @@ struct ConversationConnectionStatusTimingTests {
         timing.update(phase: .retrying(attempt: 1), at: start.addingTimeInterval(5))
         #expect(timing.isDelayed(phase: .retrying(attempt: 1), at: start.addingTimeInterval(8)))
         timing.update(phase: .retrying(attempt: 2), at: start.addingTimeInterval(10))
+        #expect(timing.showsProgress(at: start.addingTimeInterval(10)))
         #expect(!timing.isDelayed(phase: .retrying(attempt: 2), at: start.addingTimeInterval(17.99)))
         #expect(timing.isDelayed(phase: .retrying(attempt: 2), at: start.addingTimeInterval(18)))
         #expect(timing.elapsed(at: start.addingTimeInterval(18)) == .seconds(18))
@@ -42,6 +57,9 @@ struct ConversationConnectionStatusTimingTests {
         let timing = ConversationConnectionStatusTiming(phase: "connecting", startedAt: start)
         #expect(timing.elapsed(at: start.addingTimeInterval(-1)) == .zero)
         #expect(timing.elapsed(at: start) == .zero)
+        #expect(!timing.showsProgress(at: start))
+        #expect(!timing.showsProgress(at: start.addingTimeInterval(4.99)))
+        #expect(timing.showsProgress(at: start.addingTimeInterval(5)))
         #expect(!timing.isDelayed(phase: "connecting", at: start))
         #expect(timing.isDelayed(phase: "connecting", at: start.addingTimeInterval(8)))
     }

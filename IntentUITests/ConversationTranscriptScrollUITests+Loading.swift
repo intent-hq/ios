@@ -24,8 +24,9 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertFalse(opened.transcript.exists, "The snapshot must remain held while checking loading status")
         XCTAssertFalse(composer.exists, "Loading must hide the message bar")
 
-        XCTAssertTrue(retry.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(status.waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertFalse(skeleton.exists)
+        XCTAssertTrue(retry.waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertTrue(status.label.hasPrefix("Requesting messages, Current, elapsed: "))
         XCTAssertTrue(status.label.contains("Taking longer than usual"))
         XCTAssertTrue(retry.isHittable)

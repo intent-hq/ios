@@ -35,10 +35,10 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
             let elapsed = timing.elapsed(at: context.date).formatted(.time(pattern: .minuteSecond))
             let isDelayed = timing.isDelayed(phase: phase, at: context.date)
             VStack(alignment: .leading, spacing: Layout.rowSpacing) {
-                if !isDelayed {
-                    ConversationLoadingSkeleton()
+                if timing.showsProgress(at: context.date) {
+                    progressSteps(elapsed: isDelayed ? elapsed : nil)
                 } else {
-                    progressSteps(elapsed: elapsed)
+                    ConversationLoadingSkeleton()
                 }
 
                 if isDelayed {
@@ -61,7 +61,7 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
         }
     }
 
-    private func progressSteps(elapsed: String) -> some View {
+    private func progressSteps(elapsed: String?) -> some View {
         VStack(alignment: .leading, spacing: Layout.contentSpacing) {
             ForEach(ConversationConnectionStep.allCases, id: \.self) { step in
                 ConversationConnectionStepRow(
