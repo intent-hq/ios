@@ -38,17 +38,7 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
                 if !isDelayed {
                     ConversationLoadingSkeleton()
                 } else {
-                    VStack(alignment: .leading, spacing: Layout.contentSpacing) {
-                        ForEach(ConversationConnectionStep.allCases, id: \.self) { step in
-                            ConversationConnectionStepRow(
-                                phase: phase,
-                                step: step,
-                                currentStep: currentStep,
-                                title: step == currentStep ? message : step.title,
-                                elapsed: step == currentStep && isDelayed ? elapsed : nil
-                            )
-                        }
-                    }
+                    progressSteps(elapsed: elapsed)
                 }
 
                 if isDelayed {
@@ -70,6 +60,20 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
             timing.update(phase: newPhase, at: Date())
         }
     }
+
+    private func progressSteps(elapsed: String) -> some View {
+        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+            ForEach(ConversationConnectionStep.allCases, id: \.self) { step in
+                ConversationConnectionStepRow(
+                    phase: phase,
+                    step: step,
+                    currentStep: currentStep,
+                    title: step == currentStep ? message : step.title,
+                    elapsed: step == currentStep ? elapsed : nil
+                )
+            }
+        }
+    }
 }
 
 private struct ConversationLoadingSkeleton: View {
@@ -81,8 +85,10 @@ private struct ConversationLoadingSkeleton: View {
         static let lineSpacing: CGFloat = 12
         static let paragraphSpacing: CGFloat = 32
         static let cornerRadius: CGFloat = 4
-        static let firstParagraph: [CGFloat] = [0.9, 1, 0.96, 0.62]
-        static let secondParagraph: [CGFloat] = [1, 0.88, 0.72]
+        static let longLine: CGFloat = 0.9
+        static let shortLine: CGFloat = 0.62
+        static let firstParagraph: [CGFloat] = [longLine, 1, longLine, shortLine]
+        static let secondParagraph: [CGFloat] = [1, longLine, shortLine]
     }
 
     var body: some View {
