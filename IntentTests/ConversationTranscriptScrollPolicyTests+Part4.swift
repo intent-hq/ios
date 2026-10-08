@@ -114,8 +114,8 @@ extension ConversationTranscriptScrollPolicyTests {
         let short = geometry(offsetY: 7_200, contentHeight: 10_000)
         #expect(recovery(short, correctionsLeft: 3) == .continue(.followToEnd))
         #expect(recovery(short, correctionsSpent: 1) == .continue(.recover(pageOffsetY: 6_500)))
-        #expect(recovery(short, correctionsSpent: 1, userIsScrolledAway: true) == .finish(.notNeeded))
-        #expect(recovery(short, correctionsSpent: 1, isInteracting: true) == .continue(.settling))
+        #expect(recovery(short, userIsScrolledAway: true, correctionsSpent: 1) == .finish(.notNeeded))
+        #expect(recovery(short, isInteracting: true, correctionsSpent: 1) == .continue(.settling))
         #expect(recovery(short, correctionsLeft: 0, correctionsSpent: 3) == .finish(.giveUp))
     }
 
@@ -127,7 +127,7 @@ extension ConversationTranscriptScrollPolicyTests {
             correctionsSpent: 1,
             previousPageOffsetY: 8_600
         ) == .continue(.recover(pageOffsetY: 6_600)))
-        #expect(recovery(shrunk, correctionsSpent: 1, isInteracting: true) == .continue(.settling))
+        #expect(recovery(shrunk, isInteracting: true, correctionsSpent: 1) == .continue(.settling))
         #expect(recovery(shrunk, correctionsLeft: 0, correctionsSpent: 3) == .finish(.giveUp))
     }
 
