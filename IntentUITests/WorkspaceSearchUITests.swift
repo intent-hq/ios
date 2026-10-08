@@ -29,7 +29,9 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             XCTAssertGreaterThanOrEqual(control.frame.height, 44 - 0.001)
         }
         for (left, right) in zip(controls, controls.dropFirst()) {
-            XCTAssertFalse(left.frame.intersects(right.frame), "Each control must own a separate target")
+            let overlap = left.frame.intersection(right.frame)
+            // iOS segments share edges; tolerate subpixel accessibility frame rounding.
+            XCTAssertFalse(overlap.width > 0.001 && overlap.height > 0.001, "Each control must own a separate target")
         }
         for mode in ["Repo", "Status", "Recent"] {
             let selected = app.buttons["workspaces.viewMode.\(mode)"]
