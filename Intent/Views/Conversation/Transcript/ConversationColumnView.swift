@@ -414,10 +414,6 @@ private struct ConversationEmptyView: View {
     var body: some View {
         if let name = viewModel.specialistName {
             VStack(spacing: Layout.contentSpacing) {
-                Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(.largeTitle)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .accessibilityHidden(true)
                 Text(name)
                     .interFont(Constants.Typography.bodyM)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -436,24 +432,7 @@ private struct ConversationEmptyView: View {
                 }
             }
         } else {
-            VStack(spacing: Layout.contentSpacing) {
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.largeTitle)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .accessibilityHidden(true)
-                Text("No messages yet")
-                    .interFont(Constants.Typography.bodyM)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                Text("Messages will appear here as the agent works.")
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                if let displayName = viewModel.currentModelDisplayName {
-                    Text("Using \(displayName)")
-                        .interFont(Constants.Typography.subtextXXS)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.modelCaptionOpacity))
-                        .padding(.top, Layout.modelCaptionTopPadding)
-                }
-            }
+            Color.clear
         }
     }
 }

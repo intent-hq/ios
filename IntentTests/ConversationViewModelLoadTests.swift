@@ -46,6 +46,35 @@ extension ConversationViewModelTests {
         ["id": id, "role": "assistant", "contentBlocks": [["type": "text", "text": id]]]
     }
 
+    @Test func emptyConversationWaitsForAnAuthoritativeSnapshotBeforeShowingTheComposer() async {
+        let (viewModel, _) = makeLoadableVM()
+        #expect(!viewModel.isLoading)
+        #expect(viewModel.showsLoadingState)
+
+        await viewModel.load()
+
+        #expect(viewModel.store.liveTranscript.chatSeeded)
+        #expect(viewModel.messages.isEmpty)
+        #expect(!viewModel.showsLoadingState)
+        viewModel.conversationDisappeared()
+        viewModel.store.reset()
+        #expect(viewModel.showsLoadingState)
+    }
+
+    @Test func cachedMessagesStayVisibleWhileTheirSnapshotRefreshes() async {
+        let (viewModel, fake) = makeLoadableVM()
+        viewModel.store.messages = [textMessage(role: .assistant, text: "Cached response")]
+        #expect(!viewModel.showsLoadingState)
+        fake.chatSnapshotMap.removeAll()
+
+        await viewModel.store.subscribeLiveChat(agentId: "test-agent", workspaceId: "test-ws")
+
+        #expect(!viewModel.store.liveTranscript.chatSeeded)
+        #expect(!viewModel.showsLoadingState)
+        #expect(viewModel.messages.count == 1)
+        viewModel.store.reset()
+    }
+
     @Test func manualRetryPreservesDraftAndElapsedStartAcrossLoadingStages() async {
         let (viewModel, fake) = makeLoadableVM()
         fake.connectionState = .connected
@@ -84,6 +113,7 @@ extension ConversationViewModelTests {
         await viewModel.load()
 
         #expect(viewModel.agentNotFound, "not-found at load must surface agentNotFound")
+        #expect(!viewModel.showsLoadingState)
     }
 
     @Test func loadBare32602DoesNotRaiseAgentNotFound() async {

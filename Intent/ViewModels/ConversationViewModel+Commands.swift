@@ -14,7 +14,9 @@ extension ConversationViewModel {
     var filteredMessageIDs: Set<String> { store.liveTranscript.messageIDs }
     var isStreaming: Bool { store.isStreaming }
     var isLoading: Bool { store.isLoading }
-    var showsLoadingState: Bool { isLoading && filteredMessages.isEmpty }
+    var showsLoadingState: Bool {
+        !agentNotFound && filteredMessages.isEmpty && (isLoading || !store.liveTranscript.chatSeeded)
+    }
     var loadingStage: ConversationLiveTranscript.LoadingStage { store.loadingStage }
 
     func retryNow() async {
