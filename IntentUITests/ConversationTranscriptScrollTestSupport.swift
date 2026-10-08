@@ -199,6 +199,7 @@ struct FooterBaseline {
 
 /// `--demo-end-derealization-mode=` values (DemoFixtures.EndDerealizationMode).
 enum EndDerealizationMode: String {
+    case deepRelease = "deep-release"
     case hold
     case release
 }

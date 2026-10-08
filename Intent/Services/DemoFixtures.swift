@@ -219,15 +219,16 @@ enum DemoFixtures {
         from: ProcessInfo.processInfo.arguments
     )
 
-    /// `--demo-end-derealization-mode=<release|hold>`, `release` by default.
     static let configuredEndDerealizationMode = endDerealizationMode(from: ProcessInfo.processInfo.arguments)
 
     static let endDerealizationTriggerArgumentPrefix = "--demo-end-derealization-trigger-file="
 
     static let endDerealizationModeArgumentPrefix = "--demo-end-derealization-mode="
+    private static let deepReleaseViewports: CGFloat = 2.5
 
     /// What the withdrawn end row waits on before it is put back.
     enum EndDerealizationMode: String, Equatable {
+        case deepRelease = "deep-release"
         /// Kept withdrawn so the recovery spends its whole budget and the
         /// give-up path (Go to End) runs.
         case hold
@@ -242,7 +243,7 @@ enum DemoFixtures {
     }
 
     /// `.release` unless the arguments carry a well-formed
-    /// `--demo-end-derealization-mode=<release|hold>`; the last one wins.
+    /// `--demo-end-derealization-mode=<release|deep-release|hold>`; the last one wins.
     static func endDerealizationMode(from arguments: [String]) -> EndDerealizationMode {
         let prefix = endDerealizationModeArgumentPrefix
         return arguments
@@ -269,6 +270,7 @@ enum DemoFixtures {
         let movedUpBy = withdrawnOffsetY - contentOffsetY
         if isInteracting { return abs(movedUpBy) >= 1 }
         switch mode {
+        case .deepRelease: return movedUpBy >= containerHeight * deepReleaseViewports
         case .release: return movedUpBy >= containerHeight / 2
         case .hold: return false
         }

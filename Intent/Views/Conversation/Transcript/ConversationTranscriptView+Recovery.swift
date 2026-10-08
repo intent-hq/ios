@@ -17,8 +17,8 @@ extension ConversationTranscriptView {
     /// so every geometry-driven path stays silent. Armed by the lifecycle
     /// when the end row derealizes, or when a follow drains with the end
     /// row still unrealized (the row it cancelled the recovery over yields
-    /// no new edge); each correction pages the live scroll view up a
-    /// viewport so rows realize above, then follows back to the end, and
+    /// no new edge); corrections search progressively above prior attempts
+    /// so rows realize, then follow back to the end, and
     /// the loop re-verifies from two fresh reads, a bounded number of times
     /// (see `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryStep`).
     /// The loop keeps the deadline and the correction budget and reports
@@ -42,6 +42,7 @@ extension ConversationTranscriptView {
             + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
         var correctionsLeft = Constants.Conversation.Transcript.followLandingRetries
         var previous: ScrollViewMomentumProxy.RestingGeometry?
+        var previousPageOffsetY: CGFloat?
         while true {
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
             guard !Task.isCancelled else { return }
@@ -56,6 +57,7 @@ extension ConversationTranscriptView {
                 userIsScrolledAway: userIsScrolledAway,
                 correctionsLeft: correctionsLeft,
                 correctionsSpent: scrollState.unrealizedEndRecoveryCorrections,
+                previousPageOffsetY: previousPageOffsetY,
                 timedOut: ContinuousClock.now >= deadline
             )
             previous = geometry
@@ -69,8 +71,9 @@ extension ConversationTranscriptView {
                     guard !effects.isEmpty else { continue }
                     correctionsLeft -= 1
                     scrollState.unrealizedEndRecoveryCorrections += 1
-                case .recover:
+                case .recover(let pageOffsetY):
                     guard !effects.isEmpty else { continue }
+                    previousPageOffsetY = pageOffsetY
                     correctionsLeft -= 1
                     scrollState.unrealizedEndRecoveryCorrections += 1
                     guard await followBackAfterPageUp(token, proxy: proxy) else { return }

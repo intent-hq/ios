@@ -12,6 +12,8 @@ import tempfile
 
 CAPTURES = {
     "ConversationTranscriptScrollUITests": {
+        "testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath": ("Transcript recovered release",),
+        "testBlankEndSeveralScreensDeepIsRecovered": ("Transcript recovered deep-release",),
         "testLoadingStatusShowsIdleDelayAndRestoresComposer": (
             "Conversation loading before idle light", "Conversation loading after idle light",
             "Conversation loading before idle dark", "Conversation loading after idle dark",

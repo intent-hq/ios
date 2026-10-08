@@ -4,7 +4,7 @@ import Testing
 import UIKit
 
 // Geometry regression values intentionally mirror the observed scroll offsets.
-// swiftlint:disable no_magic_numbers number_separator trailing_newline
+// swiftlint:disable no_magic_numbers number_separator
 
 extension ConversationTranscriptScrollPolicyTests {
     typealias RecoveryStep = ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep
@@ -20,6 +20,7 @@ extension ConversationTranscriptScrollPolicyTests {
         userIsScrolledAway: Bool = false,
         correctionsLeft: Int = 2,
         correctionsSpent: Int = 0,
+        previousPageOffsetY: CGFloat? = nil,
         timedOut: Bool = false
     ) -> RecoveryStep {
         ConversationTranscriptScrollPolicy.unrealizedEndRecoveryStep(
@@ -32,6 +33,7 @@ extension ConversationTranscriptScrollPolicyTests {
             userIsScrolledAway: userIsScrolledAway,
             correctionsLeft: correctionsLeft,
             correctionsSpent: correctionsSpent,
+            previousPageOffsetY: previousPageOffsetY,
             timedOut: timedOut,
             atBottomThreshold: 50,
             landingTolerance: 1
@@ -43,7 +45,7 @@ extension ConversationTranscriptScrollPolicyTests {
     @Test func blankViewportAtTheBottomIsPagedUpAndFollowedBack() {
         #expect(recovery(geometry(offsetY: 2_300, contentHeight: 3_000)) == .continue(.recover(pageOffsetY: 1_600)))
         #expect(recovery(geometry(offsetY: 2_299.5, contentHeight: 3_000)) == .continue(.recover(pageOffsetY: 1_599.5)))
-        #expect(recovery(geometry(offsetY: 2_340, contentHeight: 3_000)) == .continue(.recover(pageOffsetY: 1_640)))
+        #expect(recovery(geometry(offsetY: 2_340, contentHeight: 3_000)) == .continue(.recover(pageOffsetY: 1_600)))
         #expect(recovery(geometry(offsetY: 300)) == .continue(.recover(pageOffsetY: 0)))
         #expect(recovery(geometry(offsetY: 50, contentHeight: 750, topInset: 59))
             == .continue(.recover(pageOffsetY: -59)))
@@ -68,18 +70,65 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(recovery(nil, isEndRealized: true) == .finish(.notNeeded))
     }
 
-    /// Geometry already owned by a clamp or growth re-pin is waited out, while
-    /// content shorter than the viewport needs no recovery.
-    @Test func recoveryWaitsOutGeometriesOtherPathsOwn() {
+    @Test func recoveryWaitsForPastEndClampingAndIgnoresShortContent() {
         #expect(recovery(geometry(offsetY: 351)) == .continue(.settling))
         #expect(recovery(geometry(offsetY: 600)) == .continue(.settling))
-        #expect(recovery(geometry(offsetY: 249)) == .continue(.settling))
-        #expect(recovery(geometry(offsetY: 0)) == .continue(.settling))
+        #expect(recovery(geometry(offsetY: 249)) == .continue(.followToEnd))
+        #expect(recovery(geometry(offsetY: 0)) == .continue(.followToEnd))
         #expect(recovery(geometry(offsetY: 0), timedOut: true) == .finish(.giveUp))
         #expect(recovery(geometry(offsetY: 0, contentHeight: 400)) == .finish(.notNeeded))
         #expect(recovery(geometry(offsetY: 0, contentHeight: 650, containerHeight: 780)) == .finish(.notNeeded))
         #expect(recovery(geometry(offsetY: 0, contentHeight: 650, containerHeight: 780, topInset: 150))
-            == .continue(.settling))
+            == .continue(.followToEnd))
+    }
+
+    @Test func unsuccessfulFollowKeepsSearchingAboveThePreviousPage() {
+        let initial = geometry(offsetY: 9_300, contentHeight: 10_000)
+        #expect(recovery(initial, correctionsLeft: 3) == .continue(.recover(pageOffsetY: 8_600)))
+
+        // The end jump may move nowhere, or return to the same bad estimate.
+        for offset in [CGFloat(8_600), 9_300, 9_600] {
+            #expect(recovery(
+                geometry(offsetY: offset, contentHeight: offset + 700),
+                correctionsSpent: 1,
+                previousPageOffsetY: 8_600
+            ) == .continue(.recover(pageOffsetY: 7_900)))
+        }
+        #expect(recovery(
+            geometry(offsetY: 8_600, contentHeight: 10_000),
+            correctionsSpent: 1,
+            previousPageOffsetY: 8_600
+        ) == .continue(.recover(pageOffsetY: 7_900)))
+        #expect(recovery(
+            initial, correctionsLeft: 1, correctionsSpent: 2, previousPageOffsetY: 7_900
+        ) == .continue(.recover(pageOffsetY: 0)))
+        #expect(recovery(
+            geometry(offsetY: 9_300, contentHeight: 10_000, topInset: 59),
+            correctionsLeft: 1,
+            correctionsSpent: 2,
+            previousPageOffsetY: 7_900
+        ) == .continue(.recover(pageOffsetY: -59)))
+    }
+
+    @Test func shortFailedLandingCanRecoverWithoutAUserGesture() {
+        let short = geometry(offsetY: 7_200, contentHeight: 10_000)
+        #expect(recovery(short, correctionsLeft: 3) == .continue(.followToEnd))
+        #expect(recovery(short, correctionsSpent: 1) == .continue(.recover(pageOffsetY: 6_500)))
+        #expect(recovery(short, correctionsSpent: 1, userIsScrolledAway: true) == .finish(.notNeeded))
+        #expect(recovery(short, correctionsSpent: 1, isInteracting: true) == .continue(.settling))
+        #expect(recovery(short, correctionsLeft: 0, correctionsSpent: 3) == .finish(.giveUp))
+    }
+
+    @Test func recoveryContinuesWhenRemeasurementMovesTheEndAboveItsOffset() {
+        let shrunk = geometry(offsetY: 8_600, contentHeight: 8_000)
+        #expect(recovery(shrunk) == .continue(.settling))
+        #expect(recovery(
+            shrunk,
+            correctionsSpent: 1,
+            previousPageOffsetY: 8_600
+        ) == .continue(.recover(pageOffsetY: 6_600)))
+        #expect(recovery(shrunk, correctionsSpent: 1, isInteracting: true) == .continue(.settling))
+        #expect(recovery(shrunk, correctionsLeft: 0, correctionsSpent: 3) == .finish(.giveUp))
     }
 
     @Test func recoveryWaitsForRestAndForGesturesAndFollows() {
@@ -268,4 +317,4 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(scrollView.contentOffset.y == 1_600)
     }
 }
-// swiftlint:enable no_magic_numbers number_separator trailing_newline
+// swiftlint:enable no_magic_numbers number_separator

@@ -109,10 +109,20 @@ extension ConversationTranscriptScrollUITests {
     /// controlled episode, not an entry-time one, is the one that resolved.
     @MainActor
     func testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath() throws {
-        let context = "controlled end derealization, release mode"
+        try assertControlledEndRecovery(mode: .release, minimumCorrections: 1)
+    }
+
+    @MainActor
+    func testBlankEndSeveralScreensDeepIsRecovered() throws {
+        try assertControlledEndRecovery(mode: .deepRelease, minimumCorrections: 2)
+    }
+
+    @MainActor
+    private func assertControlledEndRecovery(mode: EndDerealizationMode, minimumCorrections: Int) throws {
+        let context = "controlled end derealization, \(mode.rawValue) mode"
         let app = launchDemoApp(
             hooksRowTriggerFile: hooksRowTriggerFile,
-            endDerealization: EndDerealization(triggerFile: endDerealizationTriggerFile, mode: .release)
+            endDerealization: EndDerealization(triggerFile: endDerealizationTriggerFile, mode: mode)
         )
         let endRow = EndRow.lastSuggestedPrompt(in: app)
         let opened = openLongConversation(
@@ -151,7 +161,7 @@ extension ConversationTranscriptScrollUITests {
         )
         XCTAssertGreaterThanOrEqual(
             terminal.corrections,
-            1,
+            minimumCorrections,
             "\(recovered): recovered without spending a correction — \(terminal.raw)"
         )
         XCTAssertGreaterThan(
@@ -184,6 +194,10 @@ extension ConversationTranscriptScrollUITests {
             in: opened,
             context: recovered
         )
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Transcript recovered \(mode.rawValue)"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     /// The same controlled derealization in `hold` mode: the fixture never

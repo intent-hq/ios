@@ -664,6 +664,10 @@ extension DemoFixturesTests {
         #expect(!restore(.hold, offset: 400))
         #expect(!restore(.hold, offset: 1_400))
 
+        #expect(!restore(.deepRelease, offset: 400))
+        #expect(!restore(.deepRelease, offset: -200))
+        #expect(restore(.deepRelease, offset: -500))
+
         #expect(!restore(.release, offset: 1_000, interacting: true))
         #expect(!restore(.hold, offset: 1_000.5, interacting: true))
         #expect(restore(.release, offset: 999, interacting: true))
