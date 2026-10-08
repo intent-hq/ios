@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Own one disposable iPad for the optional, filtered, non-gating CI lane."""
+"""Own disposable CI simulators and verify the optional filtered iPad lane."""
 
 import json
 import os
@@ -10,10 +10,18 @@ import sys
 import uuid
 
 
-def write_json(path, value):
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2) + "\n")
-    temporary.replace(path)
+def write_json(path, value, exclusive=False):
+    temporary = path.with_name(path.name + "." + str(uuid.uuid4()) + ".tmp")
+    try:
+        temporary.write_text(json.dumps(value, indent=2) + "\n")
+        if exclusive:
+            # Publish complete intent without replacing another allocation's
+            # receipt, even if two callers accidentally share an evidence dir.
+            os.link(temporary, path)
+        else:
+            temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def run(args):
@@ -27,10 +35,15 @@ def checked(args):
     return result.stdout
 
 
-def validate(env):
+def simulator_family(env):
     family = env.get("SIMULATOR_FAMILY", "iphone")
     if family not in ("iphone", "ipad"):
         raise ValueError("simulator_family must be iphone or ipad")
+    return family
+
+
+def validate(env):
+    family = simulator_family(env)
     selectors = list(dict.fromkeys(env.get("ONLY_TESTING", "").split()))
     if family == "ipad":
         pattern = r"(?:IntentTests|IntentUITests)/[A-Za-z_]\w*(?:/[A-Za-z_]\w*(?:\([^()\s]*\))?)?"
@@ -45,11 +58,16 @@ def device_rows(document):
     return [(runtime, device) for runtime, devices in document["devices"].items() for device in devices]
 
 
-def choose_ipad(document):
+def available_runtimes(document, sdk_major=None):
+    return {item["identifier"]: item for item in document["runtimes"]
+            if item.get("isAvailable") is True and ".SimRuntime.iOS-" in item["identifier"]
+            and (sdk_major is None or item["version"].split(".")[0] == sdk_major)}
+
+
+def choose_ipad(document, sdk_major=None):
     # An available installed device establishes a compatible type/runtime pair.
     # Create a new instance of that pair; never boot or reuse the listed device.
-    runtimes = {item["identifier"]: item for item in document["runtimes"]
-                if item.get("isAvailable") is True and ".SimRuntime.iOS-" in item["identifier"]}
+    runtimes = available_runtimes(document, sdk_major)
     types = {item["identifier"]: item for item in document["devicetypes"]
              if item.get("productFamily") == "iPad" or item.get("name", "").startswith("iPad")}
     choices = [(runtime, device) for runtime, device in device_rows(document)
@@ -63,20 +81,59 @@ def choose_ipad(document):
     return {"runtime": runtimes[runtime], "deviceType": types[device["deviceTypeIdentifier"]]}
 
 
+def choose_ci(document, family, sdk_version):
+    if not re.fullmatch(r"\d+(?:\.\d+)*", sdk_version):
+        raise ValueError("Cannot determine the selected Xcode's iOS simulator SDK version")
+    sdk_major = sdk_version.split(".")[0]
+    if family == "ipad":
+        return choose_ipad(document, sdk_major)
+    runtimes = available_runtimes(document, sdk_major)
+    device_type = next((item for item in document["devicetypes"]
+                        if item["identifier"] == "com.apple.CoreSimulator.SimDeviceType.iPhone-16"), None)
+    if not runtimes or device_type is None:
+        raise ValueError(f"No iPhone 16 device type or available iOS {sdk_major}.x simulator runtime for selected Xcode")
+    runtime = max(runtimes.values(), key=lambda item: tuple(int(part) for part in item["version"].split(".")))
+    return {"runtime": runtime, "deviceType": device_type}
+
+
 def prepare(env, directory):
     family, selectors = validate(env)
     if family != "ipad":
         raise ValueError("prepare is reserved for the iPad lane; default iPhone selection stays in xcodebuild.sh")
+    prepare_owned(env, directory, family, selectors)
+
+
+def prepare_ci(env, directory):
+    # Ordinary CI includes unfiltered iPad regressions. Keep its allocation
+    # separate from the strict dispatch request and execution-proof contracts.
+    prepare_owned(env, directory, simulator_family(env), [], compatible_sdk=True)
+
+
+def owned_devices(document, plan):
+    preexisting = {udid.upper() for udid in plan["preexisting"]}
+    return [device for runtime, device in device_rows(document)
+            if device.get("name") == plan["name"]
+            and runtime == plan["runtime"]["identifier"]
+            and device.get("deviceTypeIdentifier") == plan["deviceType"]["identifier"]
+            and device["udid"].upper() not in preexisting]
+
+
+def prepare_owned(env, directory, family, selectors, compatible_sdk=False):
     if (directory / "ownership.json").exists():
-        raise ValueError("An iPad ownership receipt already exists; refusing another simulator")
+        raise ValueError("A simulator ownership receipt already exists; refusing another simulator")
     document = json.loads(checked(["xcrun", "simctl", "list", "--json"]))
     write_json(directory / "available-simulators.json", document)
-    selection = choose_ipad(document)
-    plan = dict(selection, name="Intent CI iPad " + str(uuid.uuid4()), selectors=selectors,
+    sdk_version = checked(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"]).strip() if compatible_sdk else None
+    selection = choose_ci(document, family, sdk_version) if compatible_sdk else choose_ipad(document)
+    identity = "-".join(re.sub(r"[^A-Za-z0-9_.-]", "_", env.get(key, "local")) for key in (
+        "GITHUB_JOB", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT"))
+    label = "iPad" if family == "ipad" else "iPhone"
+    plan = dict(selection, name=f"Intent CI {label} {identity} {uuid.uuid4()}", family=family,
+                sdkVersion=sdk_version, selectors=selectors,
                 preexisting=[device["udid"] for _, device in device_rows(document)],
                 createdUDID=None, createAttempted=False,
                 provenance={key: env.get(key) for key in (
-                    "GITHUB_SHA", "GITHUB_REF", "GITHUB_HEAD_REF", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")})
+                    "GITHUB_SHA", "GITHUB_REF", "GITHUB_HEAD_REF", "GITHUB_JOB", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")})
     plan["checkout"] = checked(["git", "rev-parse", "HEAD"]).strip()
     plan["tree"] = checked(["git", "rev-parse", "HEAD^{tree}"]).strip()
     plan["parents"] = checked(["git", "show", "-s", "--format=%P", "HEAD"]).strip().split()
@@ -84,20 +141,24 @@ def prepare(env, directory):
     # Persist the unique creation intent first so always-cleanup can recover
     # from termination between simctl creation and recording its returned UDID.
     plan["createAttempted"] = True
-    write_json(directory / "ownership.json", plan)
+    write_json(directory / "ownership.json", plan, exclusive=True)
     result = run(["xcrun", "simctl", "create", plan["name"],
                   selection["deviceType"]["identifier"], selection["runtime"]["identifier"]])
     write_json(directory / "creation.json", {"exitCode": result.returncode, "stdout": result.stdout, "stderr": result.stderr})
     if result.returncode:
         raise RuntimeError("simctl create failed; retained creation output and ownership intent for cleanup")
     udid = result.stdout.strip()
-    if not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", udid) or udid in plan["preexisting"]:
+    if (not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", udid)
+            or udid.upper() in {item.upper() for item in plan["preexisting"]}):
         raise ValueError("simctl did not return a new simulator UDID")
+    matches = owned_devices(json.loads(checked(["xcrun", "simctl", "list", "--json"])), plan)
+    if len(matches) != 1 or matches[0]["udid"].upper() != udid.upper():
+        raise ValueError("Created simulator does not match its ownership intent; refusing to export its UDID")
     plan["createdUDID"] = udid
     write_json(directory / "ownership.json", plan)
     with Path(env["GITHUB_ENV"]).open("a") as output:
         output.write(f"SIM_UDID={udid}\n")
-    print(f"Fresh non-gating iPad: {selection['deviceType']['name']} / {selection['runtime']['name']} / {udid}")
+    print(f"Fresh owned {label}: {selection['deviceType']['name']} / {selection['runtime']['name']} / {udid}")
 
 
 def cleanup(directory):
@@ -109,17 +170,14 @@ def cleanup(directory):
     if not plan.get("createAttempted"):
         raise ValueError("Missing creation intent; refusing simulator cleanup")
     document = json.loads(checked(["xcrun", "simctl", "list", "--json"]))
-    matches = [device for runtime, device in device_rows(document)
-               if device.get("name") == plan["name"]
-               and runtime == plan["runtime"]["identifier"]
-               and device.get("deviceTypeIdentifier") == plan["deviceType"]["identifier"]
-               and device["udid"] not in plan["preexisting"]]
+    matches = owned_devices(document, plan)
     if not matches:
-        if any(device["udid"] == plan["createdUDID"] for _, device in device_rows(document)):
+        if any(device["udid"].upper() == (plan["createdUDID"] or "").upper() for _, device in device_rows(document)):
             raise ValueError("Created UDID has different ownership metadata; refusing cleanup")
         write_json(directory / "cleanup.json", {"result": "owned simulator absent", "udid": plan["createdUDID"]})
         return
-    if len(matches) != 1 or plan["createdUDID"] not in (None, matches[0]["udid"]):
+    if len(matches) != 1 or (plan["createdUDID"] is not None
+                             and plan["createdUDID"].upper() != matches[0]["udid"].upper()):
         raise ValueError("Simulator ownership does not match; refusing cleanup")
     udid = matches[0]["udid"]
     # This also recovers a successful create whose receipt write was interrupted.
@@ -240,10 +298,10 @@ def verify_execution(env, directory):
 
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ("validate", "prepare", "cleanup", "verify"):
-        raise ValueError("usage: ci_simulator.py validate|prepare|cleanup|verify")
+    if len(sys.argv) != 2 or sys.argv[1] not in ("validate", "prepare", "prepare-ci", "cleanup", "verify"):
+        raise ValueError("usage: ci_simulator.py validate|prepare|prepare-ci|cleanup|verify")
     action = sys.argv[1]
-    directory = Path(os.environ["IPAD_EVIDENCE_DIR"])
+    directory = Path(os.environ.get("SIMULATOR_EVIDENCE_DIR") or os.environ["IPAD_EVIDENCE_DIR"])
     directory.mkdir(parents=True, exist_ok=True)
     try:
         if action == "validate":
@@ -252,6 +310,8 @@ def main():
             validate(os.environ)
         elif action == "prepare":
             prepare(os.environ, directory)
+        elif action == "prepare-ci":
+            prepare_ci(os.environ, directory)
         elif action == "cleanup":
             cleanup(directory)
         else:

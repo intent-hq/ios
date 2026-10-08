@@ -201,19 +201,22 @@ jobs:
       SPM_CLONE_DIR: build/SourcePackages
       RESULT_BUNDLE: TestResults
       SIMULATOR_FAMILY: ${{ github.event_name == 'workflow_dispatch' && inputs.simulator_family || 'iphone' }}
+      SIM_LOCK_TIMEOUT: '60'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       # Persistent runners must not mix Swift objects from different branches.
       - name: Use isolated build directory
-        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-unit" >> "$GITHUB_ENV"
+        run: |
+          echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-unit" >> "$GITHUB_ENV"
+          echo "SIMULATOR_EVIDENCE_DIR=$RUNNER_TEMP/intent-simulator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-unit" >> "$GITHUB_ENV"
 
       - name: Validate simulator request
         env:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
-          export IPAD_EVIDENCE_DIR="$RUNNER_TEMP/ipad-evidence"
+          export IPAD_EVIDENCE_DIR="$SIMULATOR_EVIDENCE_DIR"
           printf 'IPAD_EVIDENCE_DIR=%s\n' "$IPAD_EVIDENCE_DIR" >> "$GITHUB_ENV"
           python3 scripts/ci_simulator.py validate
 
@@ -283,22 +286,14 @@ jobs:
           xcodebuild -downloadComponent MetalToolchain
           xcrun metal -v
 
-      # iPhone selection follows the runner's existing route. The optional iPad lane
-      # creates a fresh device and records its ownership before exporting the
-      # UDID used by the same pre-boot and test wrapper paths.
-      - name: Pick simulator device
+      - name: Create owned simulator
         env:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
           if [ "$SIMULATOR_FAMILY" = ipad ]; then
             python3 scripts/ci_simulator.py prepare
           else
-            if [ '${{ runner.environment }}' = self-hosted ]; then
-              udid=$(.github/scripts/select-local-simulator.sh)
-            else
-              udid=$(scripts/xcodebuild.sh pick-simulator)
-            fi
-            echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+            python3 scripts/ci_simulator.py prepare-ci
           fi
 
       # Kick off the simulator boot early so it overlaps with package
@@ -309,7 +304,7 @@ jobs:
       # launching. Output goes to a log file that the "Simulator state" step
       # prints later, so a failed or slow boot is visible instead of silent.
       - name: Pre-boot simulator
-        run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
+        run: xcrun simctl boot "$SIM_UDID" > "$SIMULATOR_EVIDENCE_DIR/boot.log" 2>&1 || true &
 
       # The gomobile bind output (and the tcecho helper binary) are
       # deterministic for a given wrapper source + module graph + Go
@@ -457,7 +452,7 @@ jobs:
       - name: Simulator state
         run: |
           echo "--- simctl boot output:"
-          cat /tmp/simboot.log 2>/dev/null || echo "(no output)"
+          cat "$SIMULATOR_EVIDENCE_DIR/boot.log" 2>/dev/null || echo "(no output)"
           echo "--- device:"
           xcrun simctl list devices | grep -F "$SIM_UDID" || true
 
@@ -469,16 +464,16 @@ jobs:
           echo "Filtered test run (non-gating): ONLY_TESTING='$ONLY_TESTING'" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Keychain conformance and existing registry/publisher tests
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.only_testing != 'IntentUITests' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && inputs.only_testing != 'IntentUITests' }}
         env:
           RESULT_BUNDLE: TestResults-keychain
           ONLY_TESTING: IntentTests/BackendKeychainConformanceTests IntentTests/BackendKeychainFixtureTests IntentTests/SyncedBackendRegistryTests IntentTests/SyncedBackendPublisherTests
         run: |
           if [ "$SIMULATOR_FAMILY" = ipad ]; then
             set -o pipefail
-            scripts/xcodebuild.sh test-ios-unit 2>&1 | tee "$IPAD_EVIDENCE_DIR/keychain.log"
+            scripts/xcodebuild.sh test-without-building-unit 2>&1 | tee "$IPAD_EVIDENCE_DIR/keychain.log"
           else
-            scripts/xcodebuild.sh test-ios-unit
+            scripts/xcodebuild.sh test-without-building-unit
           fi
 
       # The script removes any existing result bundle at RESULT_BUNDLE
@@ -640,9 +635,19 @@ jobs:
           echo "timed out waiting for the Go unit tests / SwiftLint jobs" >&2
           exit 1
 
-      - name: Clean up owned iPad simulator
-        if: always() && env.SIMULATOR_FAMILY == 'ipad'
+      - name: Clean up owned simulator
+        if: always() && env.SIMULATOR_EVIDENCE_DIR != ''
         run: python3 scripts/ci_simulator.py cleanup
+
+      - name: Upload simulator ownership evidence
+        if: always() && env.SIMULATOR_EVIDENCE_DIR != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-unit-simulator-evidence
+          path: |
+            ${{ env.SIMULATOR_EVIDENCE_DIR }}/*.json
+            ${{ env.SIMULATOR_EVIDENCE_DIR }}/boot.log
+          if-no-files-found: warn
 
       - name: Upload iPad execution evidence
         if: always() && env.SIMULATOR_FAMILY == 'ipad'
@@ -676,12 +681,16 @@ jobs:
       GIT_TERMINAL_PROMPT: '0'
       SPM_CLONE_DIR: build/SourcePackages
       RESULT_BUNDLE: UITestResults
+      SIMULATOR_FAMILY: iphone
+      SIM_LOCK_TIMEOUT: '60'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Use isolated build directory
-        run: echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui" >> "$GITHUB_ENV"
+        run: |
+          echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui" >> "$GITHUB_ENV"
+          echo "SIMULATOR_EVIDENCE_DIR=$RUNNER_TEMP/intent-simulator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui" >> "$GITHUB_ENV"
 
       - name: Select Xcode
         run: |
@@ -706,17 +715,11 @@ jobs:
           xcodebuild -downloadComponent MetalToolchain
           xcrun metal -v
 
-      - name: Pick simulator device
-        run: |
-          if [ '${{ runner.environment }}' = self-hosted ]; then
-            udid=$(.github/scripts/select-local-simulator.sh)
-          else
-            udid=$(scripts/xcodebuild.sh pick-simulator)
-          fi
-          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+      - name: Create owned iPhone simulator
+        run: python3 scripts/ci_simulator.py prepare-ci
 
       - name: Pre-boot simulator
-        run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
+        run: xcrun simctl boot "$SIM_UDID" > "$SIMULATOR_EVIDENCE_DIR/boot.log" 2>&1 || true &
 
       - name: Cache TailcatKit.xcframework
         id: tailcat-cache
@@ -769,7 +772,7 @@ jobs:
       - name: Simulator state
         run: |
           echo "--- simctl boot output:"
-          cat /tmp/simboot.log 2>/dev/null || echo "(no output)"
+          cat "$SIMULATOR_EVIDENCE_DIR/boot.log" 2>/dev/null || echo "(no output)"
           echo "--- device:"
           xcrun simctl list devices | grep -F "$SIM_UDID" || true
 
@@ -787,19 +790,40 @@ jobs:
           fi
           scripts/xcodebuild.sh test-without-building-ui
 
+      - name: Clean up owned iPhone simulator
+        if: always() && env.SIMULATOR_EVIDENCE_DIR != ''
+        run: python3 scripts/ci_simulator.py cleanup
+
       - name: Run iPad menu regression tests
         env:
           RESULT_BUNDLE: IPadMenuTestResults
+          SIMULATOR_FAMILY: ipad
+          SIMULATOR_EVIDENCE_DIR: ${{ runner.temp }}/intent-simulator-${{ github.run_id }}-${{ github.run_attempt }}-ui-ipad
           ONLY_TESTING: >-
             IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsSendAndMenuAvailable
             IntentUITests/HomeActionMenuUITests/testIPadQuestionsKeepNextAndSendAvailable
         run: |
-          SIM_UDID=$(xcrun simctl list devices available --json | jq -er '
-            [.devices | to_entries[] | select(.key | contains("iOS"))
-              | .value[] | select(.name | startswith("iPad"))]
-            | last | .udid // error("No available iPad simulator")')
+          python3 scripts/ci_simulator.py prepare-ci
+          SIM_UDID=$(jq -er '.createdUDID' "$SIMULATOR_EVIDENCE_DIR/ownership.json")
           export SIM_UDID
           scripts/xcodebuild.sh test-without-building-ui
+
+      - name: Clean up owned iPad simulator
+        if: always() && env.SIMULATOR_EVIDENCE_DIR != ''
+        env:
+          SIMULATOR_EVIDENCE_DIR: ${{ runner.temp }}/intent-simulator-${{ github.run_id }}-${{ github.run_attempt }}-ui-ipad
+        run: python3 scripts/ci_simulator.py cleanup
+
+      - name: Upload simulator ownership evidence
+        if: always() && env.SIMULATOR_EVIDENCE_DIR != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ui-simulator-evidence
+          path: |
+            ${{ env.SIMULATOR_EVIDENCE_DIR }}/*.json
+            ${{ env.SIMULATOR_EVIDENCE_DIR }}/boot.log
+            ${{ runner.temp }}/intent-simulator-${{ github.run_id }}-${{ github.run_attempt }}-ui-ipad/*.json
+          if-no-files-found: warn
 
       - name: Upload UI test results
         if: failure()
