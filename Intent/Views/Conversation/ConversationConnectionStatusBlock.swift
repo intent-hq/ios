@@ -78,6 +78,7 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
 
 private struct ConversationLoadingSkeleton: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .body) private var lineHeight = Layout.lineHeight
 
     private enum Layout {
@@ -106,7 +107,7 @@ private struct ConversationLoadingSkeleton: View {
         VStack(alignment: .leading, spacing: Layout.lineSpacing) {
             ForEach(widths.indices, id: \.self) { index in
                 RoundedRectangle(cornerRadius: Layout.cornerRadius)
-                    .fill(Theme.muted(for: colorScheme))
+                    .fill(Constants.Conversation.Design.Palette.border(for: colorScheme, contrast: contrast))
                     .frame(height: lineHeight)
                     .scaleEffect(x: widths[index], y: 1, anchor: .leading)
             }
