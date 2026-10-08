@@ -11,6 +11,13 @@ import tempfile
 
 
 CAPTURES = {
+    "ConversationMermaidUITests": {
+        "testFullscreenButtonEdgeAndInlinePinchAndPan": (
+            "mermaid-final-state", "mermaid-inline-before-gestures",
+            "mermaid-fullscreen-from-button-edge", "mermaid-inline-after-pinch",
+            "mermaid-inline-after-horizontal-pan", "mermaid-inline-after-vertical-pan",
+        ),
+    },
     "ConversationTranscriptScrollUITests": {
         "testLoadingStatusShowsIdleDelayAndRestoresComposer": (
             "Conversation loading before idle light", "Conversation loading after idle light",
@@ -161,14 +168,17 @@ def capture_matches(name, capture, extension):
     ))
 
 
+def screenshot_artifact(suite):
+    return "agent-groups" if suite == "WorkspaceAgentGroupsUITests" else "review"
+
+
 def permitted_attachment(suite, test, attachment):
     name = attachment.get("suggestedHumanReadableName") or attachment.get("exportedFileName", "")
     if not isinstance(name, str):
         return None
     for capture in CAPTURES.get(suite, {}).get(test, ()):
         if capture_matches(name, capture, "png"):
-            kind = "agent-groups" if suite == "WorkspaceAgentGroupsUITests" else "review"
-            return kind, capture, "png"
+            return screenshot_artifact(suite), capture, "png"
     if suite in RECOVERY_SUITES:
         capture = re.fullmatch(
             rf"(transcript-recovery-evidence-{re.escape(test)}-\d+)(?:_\d+_{UUID})?\.json", name,
@@ -186,12 +196,19 @@ def retain_export(exported, source, bundle_index, retry, manifests, output_root)
     document = json.loads((exported / "manifest.json").read_text())
     if not isinstance(document, list):
         raise ValueError("attachment manifest must be a list")
+    observed = {}
+    retained = {}
     for record in document:
         identity = test_identity(record.get("testIdentifier")) if isinstance(record, dict) else None
         if identity is None:
             continue
         suite, test = identity
-        for attachment in record.get("attachments", []):
+        observed.setdefault(identity, record["testIdentifier"])
+        attachments = record.get("attachments", [])
+        if not isinstance(attachments, list):
+            warning(f"Invalid attachment list for {suite}/{test} in {source}")
+            continue
+        for attachment in attachments:
             if not isinstance(attachment, dict):
                 continue
             permitted = permitted_attachment(suite, test, attachment)
@@ -234,6 +251,21 @@ def retain_export(exported, source, bundle_index, retry, manifests, output_root)
                 "capture": capture,
                 "exportedFileName": filename,
             })
+            if extension == "png":
+                retained.setdefault(identity, set()).add(capture)
+    for (suite, test), identifier in observed.items():
+        missing = sorted(set(CAPTURES.get(suite, {}).get(test, ())) - retained.get((suite, test), set()))
+        if not missing:
+            continue
+        manifests[screenshot_artifact(suite)]["missingCaptures"].append({
+            "suite": suite,
+            "testIdentifier": identifier,
+            "sourceBundle": str(source),
+            "retry": retry,
+            "captures": missing,
+        })
+        warning(f"Missing fixture captures for {identifier} in {source} (retry={retry}): "
+                + ", ".join(missing) + ". Captures may not have been reached before a test failure.")
 
 
 def bundle_paths(bundle):
@@ -248,11 +280,12 @@ def export_evidence(bundles, output_root, revision, env=None, run=subprocess.run
     # Refuse reuse so an empty/failed export can never upload a previous run's images.
     output_root.mkdir(parents=True, exist_ok=False)
     manifests = {kind: {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "revision": revision,
         "runId": env.get("GITHUB_RUN_ID"),
         "runAttempt": env.get("GITHUB_RUN_ATTEMPT"),
         "files": [],
+        "missingCaptures": [],
     } for kind in ARTIFACTS}
     seen = set()
     for bundle in bundles:
@@ -282,12 +315,15 @@ def export_evidence(bundles, output_root, revision, env=None, run=subprocess.run
     counts = {}
     for kind, manifest in manifests.items():
         counts[kind] = len(manifest["files"])
-        if manifest["files"]:
+        if manifest["files"] or manifest["missingCaptures"]:
+            (output_root / kind).mkdir(parents=True, exist_ok=True)
             (output_root / kind / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if env.get("GITHUB_OUTPUT"):
         with open(env["GITHUB_OUTPUT"], "a") as output:
             for kind, count in counts.items():
                 output.write(f"{kind}_count={count}\n")
+                available = bool(count or manifests[kind]["missingCaptures"])
+                output.write(f"{kind}_available={str(available).lower()}\n")
     print("Retained UI evidence: " + json.dumps(counts))
     return counts
 
