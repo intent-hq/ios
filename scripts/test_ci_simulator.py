@@ -2,6 +2,7 @@
 """Disposable simulator/CI contract tests; no Xcode or real devices are used."""
 
 import copy
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -9,14 +10,17 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import unittest
 from unittest.mock import patch
+import uuid
 
 import ci_simulator as route
 
 
 RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-26-2"
 TYPE = "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4"
+PHONE_TYPE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16"
 OLD = "11111111-1111-4111-8111-111111111111"
 NEW = "22222222-2222-4222-8222-222222222222"
 SELECTORS = "IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsSendAndMenuAvailable IntentTests/PersonalPairingPermissionsTests"
@@ -40,23 +44,33 @@ class Host:
         self.calls = []
         self.fail_create = False
         self.fail_delete = False
+        self.sdk_version = "26.2"
+        self.lock = threading.Lock()
+        self.created = 0
         self.results = result_document(CASES)
         self.retry_results = result_document([])
         self.document = {
             "runtimes": [{"identifier": RUNTIME, "version": "26.2", "name": "iOS 26.2", "isAvailable": True}],
-            "devicetypes": [{"identifier": TYPE, "name": "iPad Pro (M4)", "productFamily": "iPad"}],
+            "devicetypes": [{"identifier": TYPE, "name": "iPad Pro (M4)", "productFamily": "iPad"},
+                            {"identifier": PHONE_TYPE, "name": "iPhone 16", "productFamily": "iPhone"}],
             "devices": {RUNTIME: [{"udid": OLD, "name": "My existing iPad", "deviceTypeIdentifier": TYPE, "isAvailable": True}]},
         }
 
     def __call__(self, args):
+        with self.lock:
+            return self.call(args)
+
+    def call(self, args):
         self.calls.append(args)
         status, output = 0, ""
         if args == ["xcrun", "simctl", "list", "--json"]:
             output = json.dumps(self.document)
         elif args[:3] == ["xcrun", "simctl", "create"]:
-            self.document["devices"][args[5]].append({"udid": NEW, "name": args[3],
+            udid = NEW if self.created == 0 else str(uuid.uuid4()).upper()
+            self.created += 1
+            self.document["devices"].setdefault(args[5], []).append({"udid": udid, "name": args[3],
                 "deviceTypeIdentifier": args[4], "isAvailable": True})
-            status, output = int(self.fail_create), NEW + "\n"
+            status, output = int(self.fail_create), udid + "\n"
         elif args[:3] == ["xcrun", "simctl", "delete"]:
             status = int(self.fail_delete)
             if not status:
@@ -70,11 +84,358 @@ class Host:
             output = "c" * 40 + "\n"
         elif args == ["xcodebuild", "-version"]:
             output = "Xcode 26.3\nBuild version test\n"
+        elif args == ["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"]:
+            output = self.sdk_version + "\n"
         elif args[:6] == ["xcrun", "xcresulttool", "get", "test-results", "tests", "--path"]:
             output = json.dumps(self.retry_results if args[6].endswith("-retry") else self.results)
         else:
             raise AssertionError(f"Unexpected host command: {args}")
         return subprocess.CompletedProcess(args, status, output, "injected failure" if status else "")
+
+
+class OrdinaryCITests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.directory = Path(self.temp.name)
+        self.host = Host()
+        self.patcher = patch.object(route, "run", self.host)
+        self.patcher.start()
+        self.addCleanup(self.patcher.stop)
+
+    def allocation(self, family="iphone", name="job"):
+        directory = self.directory / name
+        directory.mkdir()
+        env = {"SIMULATOR_FAMILY": family, "GITHUB_ENV": str(directory / "environment"),
+               "GITHUB_JOB": name, "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2",
+               "GITHUB_EVENT_NAME": "pull_request"}
+        return env, directory
+
+    def test_unfiltered_ci_allocates_both_families_and_keeps_existing_devices(self):
+        for family, device_type in (("iphone", PHONE_TYPE), ("ipad", TYPE)):
+            with self.subTest(family=family):
+                env, directory = self.allocation(family, family)
+                route.prepare_ci(env, directory)
+                plan = json.loads((directory / "ownership.json").read_text())
+                self.assertEqual(plan["family"], family)
+                self.assertEqual(plan["sdkVersion"], "26.2")
+                self.assertEqual(plan["deviceType"]["identifier"], device_type)
+                self.assertEqual(plan["runtime"]["identifier"], RUNTIME)
+                self.assertIn(f"{family}-123-2", plan["name"])
+                self.assertEqual(plan["provenance"]["GITHUB_JOB"], family)
+                self.assertEqual((directory / "environment").read_text(), f"SIM_UDID={plan['createdUDID']}\n")
+                route.cleanup(directory)
+                route.cleanup(directory)  # Idempotent after deletion.
+                self.assertEqual([device["udid"] for _, device in route.device_rows(self.host.document)], [OLD])
+        self.assertFalse(any("boot" in call for call in self.host.calls))
+
+    def test_iphone_creation_does_not_require_a_preexisting_phone(self):
+        self.host.document["devices"] = {}
+        env, directory = self.allocation()
+        del env["SIMULATOR_FAMILY"]
+        route.prepare_ci(env, directory)
+        self.assertEqual(json.loads((directory / "ownership.json").read_text())["family"], "iphone")
+
+    def test_both_families_use_newest_available_ios_runtime_matching_sdk_major(self):
+        for version, available in (("26.3.1", True), ("26.4", False), ("27.0", True), ("18.6", True)):
+            runtime = RUNTIME.rsplit("iOS-", 1)[0] + "iOS-" + version.replace(".", "-")
+            self.host.document["runtimes"].append({"identifier": runtime, "version": version,
+                                                  "name": "iOS " + version, "isAvailable": available})
+            self.host.document["devices"][runtime] = copy.deepcopy(self.host.document["devices"][RUNTIME])
+        self.host.document["runtimes"].append({"identifier": "com.apple.CoreSimulator.SimRuntime.tvOS-26-9",
+                                              "version": "26.9", "name": "tvOS 26.9", "isAvailable": True})
+        for family in ("iphone", "ipad"):
+            with self.subTest(family=family):
+                env, directory = self.allocation(family, family)
+                route.prepare_ci(env, directory)
+                plan = json.loads((directory / "ownership.json").read_text())
+                self.assertEqual(plan["runtime"]["version"], "26.3.1")
+                self.assertIn(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"], self.host.calls)
+
+    def test_unusable_sdk_or_runtime_fails_before_creation_for_both_families(self):
+        for family in ("iphone", "ipad"):
+            for version in ("", "not-a-version", "27.0", "18.6"):
+                with self.subTest(family=family, sdk=version):
+                    env, directory = self.allocation(family, family + version)
+                    self.host.sdk_version = version
+                    with self.assertRaises(ValueError):
+                        route.prepare_ci(env, directory)
+                    self.assertFalse((directory / "ownership.json").exists())
+                    self.assertFalse((directory / "environment").exists())
+        self.assertFalse(any("create" in call for call in self.host.calls))
+
+    def test_missing_family_device_never_falls_back(self):
+        for family in ("iphone", "ipad"):
+            with self.subTest(family=family):
+                self.host.document = copy.deepcopy(Host().document)
+                if family == "iphone":
+                    self.host.document["devicetypes"][1].update(identifier=PHONE_TYPE + "-Pro", name="iPhone 16 Pro")
+                else:
+                    self.host.document["devices"][RUNTIME][0]["isAvailable"] = False
+                env, directory = self.allocation(family, family)
+                with self.assertRaises(ValueError):
+                    route.prepare_ci(env, directory)
+        self.assertFalse(any("create" in call for call in self.host.calls))
+
+    def test_invalid_family_is_rejected_without_host_commands(self):
+        env, directory = self.allocation("visionos")
+        with self.assertRaises(ValueError):
+            route.prepare_ci(env, directory)
+        self.assertEqual(self.host.calls, [])
+
+    def test_concurrent_jobs_get_distinct_devices_and_cleanup_only_their_own(self):
+        first = self.allocation(name="unit")
+        second = self.allocation(name="ui")
+        barrier = threading.Barrier(2, timeout=10)
+        local = threading.local()
+
+        def simultaneous_inventory(args):
+            result = self.host(args)
+            if args == ["xcrun", "simctl", "list", "--json"] and not getattr(local, "listed", False):
+                local.listed = True
+                barrier.wait()  # Both jobs see the same pre-creation inventory.
+            return result
+
+        with patch.object(route, "run", simultaneous_inventory), ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(route.prepare_ci, *item) for item in (first, second)]
+            for future in futures:
+                future.result(timeout=15)
+        plans = [json.loads((directory / "ownership.json").read_text()) for _, directory in (first, second)]
+        self.assertNotEqual(plans[0]["name"], plans[1]["name"])
+        self.assertNotEqual(plans[0]["createdUDID"], plans[1]["createdUDID"])
+        self.assertEqual(plans[0]["preexisting"], plans[1]["preexisting"])
+        route.cleanup(first[1])
+        self.assertEqual({device["udid"] for _, device in route.device_rows(self.host.document)},
+                         {OLD, plans[1]["createdUDID"]})
+        route.cleanup(second[1])
+        self.assertEqual([device["udid"] for _, device in route.device_rows(self.host.document)], [OLD])
+
+    def test_shared_evidence_directory_cannot_overwrite_another_creation_intent(self):
+        env, directory = self.allocation()
+        barrier = threading.Barrier(2, timeout=10)
+        original = route.write_json
+
+        def simultaneous_intent(path, value, **kwargs):
+            if kwargs.get("exclusive"):
+                barrier.wait()
+            original(path, value, **kwargs)
+
+        with patch.object(route, "write_json", simultaneous_intent), ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(route.prepare_ci, env, directory) for _ in range(2)]
+            outcomes = [future.exception(timeout=15) for future in futures]
+        self.assertEqual(sum(error is None for error in outcomes), 1)
+        self.assertEqual(sum(isinstance(error, FileExistsError) for error in outcomes), 1)
+        self.assertEqual(self.host.created, 1)
+        route.cleanup(directory)
+        self.assertEqual([device["udid"] for _, device in route.device_rows(self.host.document)], [OLD])
+
+    def test_creation_failure_and_interrupted_evidence_or_export_are_recoverable(self):
+        for family in ("iphone", "ipad"):
+            for failure in ("create", "creation.json", "ownership.json", "export"):
+                with self.subTest(family=family, failure=failure):
+                    env, directory = self.allocation(family, family + failure)
+                    original = route.write_json
+
+                    def fail_write(path, value, **kwargs):
+                        if path.name == failure and not kwargs.get("exclusive"):
+                            raise OSError("injected post-create write failure")
+                        original(path, value, **kwargs)
+
+                    self.host.fail_create = failure == "create"
+                    if failure == "export":
+                        env["GITHUB_ENV"] = str(directory / "absent" / "environment")
+                    with patch.object(route, "write_json", fail_write), self.assertRaises((OSError, RuntimeError)):
+                        route.prepare_ci(env, directory)
+                    self.assertFalse((directory / "environment").exists())
+                    route.cleanup(directory)
+                    self.assertEqual([device["udid"] for _, device in route.device_rows(self.host.document)], [OLD])
+
+    def test_create_requires_complete_receipt_before_mutating_host(self):
+        env, directory = self.allocation()
+        original = route.write_json
+
+        def reject_intent(path, value, **kwargs):
+            if kwargs.get("exclusive"):
+                raise OSError("cannot save creation intent")
+            original(path, value, **kwargs)
+
+        with patch.object(route, "write_json", reject_intent), self.assertRaises(OSError):
+            route.prepare_ci(env, directory)
+        route.cleanup(directory)
+        self.assertEqual(self.host.created, 0)
+        self.assertFalse(any("shutdown" in call or "delete" in call for call in self.host.calls))
+
+    def test_atomic_receipt_replace_failure_preserves_recoverable_intent(self):
+        env, directory = self.allocation()
+        original = Path.replace
+
+        def fail_replace(path, target):
+            if target == directory / "ownership.json":
+                raise OSError("interrupted atomic receipt replacement")
+            return original(path, target)
+
+        with patch.object(Path, "replace", fail_replace), self.assertRaises(OSError):
+            route.prepare_ci(env, directory)
+        self.assertIsNone(json.loads((directory / "ownership.json").read_text())["createdUDID"])
+        route.cleanup(directory)
+        self.assertIn(["xcrun", "simctl", "delete", NEW], self.host.calls)
+
+    def test_returned_preexisting_or_unowned_udid_is_never_exported(self):
+        for reply in (OLD, "invalid", "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"):
+            with self.subTest(reply=reply):
+                env, directory = self.allocation(name=reply)
+
+                def wrong_reply(args):
+                    result = self.host(args)
+                    if args[:3] == ["xcrun", "simctl", "create"]:
+                        result.stdout = reply + "\n"
+                    return result
+
+                with patch.object(route, "run", wrong_reply), self.assertRaises(ValueError):
+                    route.prepare_ci(env, directory)
+                self.assertFalse((directory / "environment").exists())
+                route.cleanup(directory)
+                self.assertEqual([device["udid"] for _, device in route.device_rows(self.host.document)], [OLD])
+
+    def test_ambiguous_or_changed_ownership_never_deletes_devices(self):
+        for change in ("name", "deviceTypeIdentifier", "runtime", "duplicate", "createdUDID", "createAttempted"):
+            with self.subTest(change=change):
+                self.host.document = copy.deepcopy(Host().document)
+                env, directory = self.allocation(name=change)
+                route.prepare_ci(env, directory)
+                device = self.host.document["devices"][RUNTIME][-1]
+                if change in ("name", "deviceTypeIdentifier"):
+                    device[change] = "someone else's device"
+                elif change == "runtime":
+                    self.host.document["devices"][RUNTIME].remove(device)
+                    self.host.document["devices"]["another runtime"] = [device]
+                elif change == "duplicate":
+                    self.host.document["devices"][RUNTIME].append(dict(device, udid=str(uuid.uuid4())))
+                else:
+                    receipt = directory / "ownership.json"
+                    plan = json.loads(receipt.read_text())
+                    plan[change] = OLD if change == "createdUDID" else False
+                    route.write_json(receipt, plan)
+                with self.assertRaises(ValueError):
+                    route.cleanup(directory)
+        self.assertFalse(any("shutdown" in call or "delete" in call for call in self.host.calls))
+
+    def test_cli_prefers_generic_evidence_directory_and_supports_legacy_fallback(self):
+        for generic in (True, False):
+            with self.subTest(generic=generic):
+                env, directory = self.allocation(name=str(generic))
+                legacy = directory / "legacy"
+                env["IPAD_EVIDENCE_DIR"] = str(legacy)
+                evidence = directory / "generic" if generic else legacy
+                if generic:
+                    env["SIMULATOR_EVIDENCE_DIR"] = str(evidence)
+                with patch.dict(os.environ, env, clear=True):
+                    with patch.object(sys, "argv", ["ci_simulator.py", "prepare-ci"]):
+                        route.main()
+                    self.assertTrue((evidence / "ownership.json").exists())
+                    if generic:
+                        self.assertFalse(legacy.exists())
+                    with patch.object(sys, "argv", ["ci_simulator.py", "cleanup"]):
+                        route.main()
+                self.assertEqual(json.loads((evidence / "cleanup.json").read_text())["deleteExit"], 0)
+
+    def test_cli_retains_failure_evidence_without_exporting_a_destination(self):
+        env, directory = self.allocation()
+        env["SIMULATOR_EVIDENCE_DIR"] = str(directory)
+        self.host.fail_create = True
+        with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", ["ci_simulator.py", "prepare-ci"]):
+            with self.assertRaises(RuntimeError):
+                route.main()
+        self.assertIn("simctl create failed", json.loads((directory / "prepare-ci-error.json").read_text())["error"])
+        self.assertFalse((directory / "environment").exists())
+        route.cleanup(directory)
+
+    def test_ui_workflow_uses_separate_owned_destinations_and_cleans_failures_or_skips(self):
+        scripts = Path(__file__).resolve().parent
+        workflow = (scripts.parent / ".github/workflows/ci.yml").read_text()
+        job = workflow.split("  ios-ui-tests:\n", 1)[1].split("  visionos-build:\n", 1)[0]
+
+        def step(name):
+            section = job.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
+            command = section.split("        run: ", 1)[1]
+            return textwrap.dedent(command[2:]) if command.startswith("|\n") else command.strip()
+
+        self.assertLess(job.index("name: Create owned iPhone simulator"), job.index("name: Pre-boot simulator"))
+        self.assertLess(job.index("name: Clean up owned iPhone simulator"), job.index("name: Run iPad menu regression tests"))
+        for name in ("Clean up owned iPhone simulator", "Clean up owned iPad simulator"):
+            section = job.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
+            self.assertIn("if: always()", section)
+        for outcome in ("passed", "failed", "skipped", "create-failed"):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                for name in ("scripts", "bin", "runner temp"):
+                    (root / name).mkdir()
+                (root / "scripts/ci_simulator.py").write_text((scripts / "ci_simulator.py").read_text())
+                host_stub = root / "bin/host-stub"
+                host_stub.write_text(f"#!{sys.executable}\n" + textwrap.dedent(f"""\
+                    import json, os, sys
+                    from pathlib import Path
+                    sys.path.insert(0, {str(scripts)!r})
+                    from test_ci_simulator import Host
+                    path = Path(os.environ['HOST_STATE'])
+                    state = json.loads(path.read_text()) if path.exists() else None
+                    host = Host()
+                    if state:
+                        host.document, host.created = state['document'], state['created']
+                    host.fail_create = os.environ.get('FAIL_CREATE') == '1'
+                    result = host([Path(sys.argv[0]).name, *sys.argv[1:]])
+                    path.write_text(json.dumps({{'document': host.document, 'created': host.created}}))
+                    sys.stdout.write(result.stdout)
+                    sys.stderr.write(result.stderr)
+                    sys.exit(result.returncode)
+                    """))
+                host_stub.chmod(0o755)
+                for name in ("xcrun", "xcodebuild", "git"):
+                    (root / "bin" / name).symlink_to(host_stub)
+                wrapper = root / "scripts/xcodebuild.sh"
+                wrapper.write_text('#!/bin/bash\nprintf "%s\\n" "$*" "$SIM_UDID" > "$CALLS"\nexit "$TEST_EXIT"\n')
+                wrapper.chmod(0o755)
+                env = dict(os.environ, PATH=str(root / "bin") + os.pathsep + os.environ["PATH"],
+                           RUNNER_TEMP=str(root / "runner temp"), GITHUB_ENV=str(root / "environment"),
+                           GITHUB_RUN_ID="123", GITHUB_RUN_ATTEMPT="2", GITHUB_JOB="ios-ui-tests",
+                           SIMULATOR_FAMILY="iphone", HOST_STATE=str(root / "host.json"),
+                           CALLS=str(root / "calls"), TEST_EXIT="65" if outcome == "failed" else "0")
+                env.pop("SIMULATOR_EVIDENCE_DIR", None)
+                env.pop("IPAD_EVIDENCE_DIR", None)
+
+                def execute(name, overrides=None):
+                    return subprocess.run(["bash", "-e", "-o", "pipefail", "-c", step(name)],
+                                          cwd=root, env=dict(env, **(overrides or {})), text=True, capture_output=True)
+
+                def import_environment():
+                    env.update(line.split("=", 1) for line in (root / "environment").read_text().splitlines())
+
+                result = execute("Use isolated build directory")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                import_environment()
+                result = execute("Create owned iPhone simulator")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                import_environment()
+                phone = json.loads((Path(env["SIMULATOR_EVIDENCE_DIR"]) / "ownership.json").read_text())
+                self.assertEqual(env["SIM_UDID"], phone["createdUDID"])
+                result = execute("Clean up owned iPhone simulator")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                overrides = {"SIMULATOR_FAMILY": "ipad", "SIMULATOR_EVIDENCE_DIR": str(root / "runner temp" / "intent-simulator-123-2-ui-ipad"),
+                             "FAIL_CREATE": "1" if outcome == "create-failed" else "0"}
+                if outcome != "skipped":
+                    result = execute("Run iPad menu regression tests", overrides)
+                    self.assertEqual(result.returncode, 1 if outcome == "create-failed" else int(env["TEST_EXIT"]), result.stderr)
+                    ipad = json.loads((Path(overrides["SIMULATOR_EVIDENCE_DIR"]) / "ownership.json").read_text())
+                    if outcome != "create-failed":
+                        self.assertNotEqual(phone["createdUDID"], ipad["createdUDID"])
+                        self.assertEqual((root / "calls").read_text().splitlines(),
+                                         ["test-without-building-ui", ipad["createdUDID"]])
+                    else:
+                        self.assertFalse((root / "calls").exists())
+                result = execute("Clean up owned iPad simulator", overrides)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                state = json.loads((root / "host.json").read_text())
+                self.assertEqual([device["udid"] for _, device in route.device_rows(state["document"])], [OLD])
 
 
 class SimulatorTests(unittest.TestCase):
@@ -159,10 +520,10 @@ class SimulatorTests(unittest.TestCase):
 
     def test_interrupted_receipt_update_keeps_creation_intent_for_cleanup(self):
         original = route.write_json
-        def reject_recorded_udid(path, value):
+        def reject_recorded_udid(path, value, **kwargs):
             if path.name == "ownership.json" and value.get("createdUDID"):
                 raise OSError("injected receipt write failure")
-            original(path, value)
+            original(path, value, **kwargs)
         with patch.object(route, "write_json", reject_recorded_udid), self.assertRaises(OSError):
             route.prepare(self.env, self.directory)
         self.assertIsNone(json.loads((self.directory / "ownership.json").read_text())["createdUDID"])
@@ -450,13 +811,17 @@ class SimulatorTests(unittest.TestCase):
                     (root / "Info-visionOS.plist").write_text("fixture")
                     (root / "Intent/owned-source").write_text("retained")
                     stub = root / "scripts/xcodebuild.sh"
-                    stub.write_text('#!/usr/bin/env bash\nprintf "primary stdout\\n"\nprintf "crash/retry stderr\\n" >&2\nprintf "retry stdout\\n"\nexit "$STUB_TEST_EXIT"\n')
+                    stub.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" > "$CALLS"\n'
+                                    'printf "primary stdout\\n"\nprintf "crash/retry stderr\\n" >&2\nprintf "retry stdout\\n"\nexit "$STUB_TEST_EXIT"\n')
                     stub.chmod(0o755)
                     env = {"PATH": os.environ["PATH"], "SIMULATOR_FAMILY": family, "RUNNER_TEMP": str(root / "runner"),
-                           "IPAD_EVIDENCE_DIR": str(root / "evidence"), "STUB_TEST_EXIT": str(exit_code)}
+                           "IPAD_EVIDENCE_DIR": str(root / "evidence"), "STUB_TEST_EXIT": str(exit_code),
+                           "CALLS": str(root / "calls")}
                     result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", command], cwd=root, env=env,
                                             text=True, capture_output=True)
                     self.assertEqual(result.returncode, exit_code, result.stderr)
+                    self.assertEqual((root / "calls").read_text().strip(),
+                                     "test-without-building-unit" if phase == "keychain" else "test-without-building")
                     self.assertEqual((root / "Intent/owned-source").read_text(), "retained")
                     transcript = root / "evidence" / (phase + ".log")
                     if family == "ipad":
@@ -467,6 +832,37 @@ class SimulatorTests(unittest.TestCase):
 
     def test_keychain_phase_retains_failure_and_retry_transcripts(self):
         self.check_phase_transcript("Run Keychain conformance and existing registry/publisher tests", "keychain")
+
+    def test_keychain_pass_only_runs_for_filtered_dispatches_and_reuses_the_build(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        section = workflow.split("      - name: Run Keychain conformance and existing registry/publisher tests\n", 1)[1].split("\n      - name:", 1)[0]
+        condition = section.split("        if: ${{ ", 1)[1].split(" }}", 1)[0]
+        condition = condition.replace("github.event_name", '"$EVENT"').replace("inputs.only_testing", '"$SELECTION"')
+        command = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        selectors = section.split("          ONLY_TESTING: ", 1)[1].splitlines()[0]
+        for family in ("iphone", "ipad"):
+            for event in ("pull_request", "merge_group", "schedule", "workflow_dispatch"):
+                for selection in ("", "IntentUITests", SELECTORS):
+                    with self.subTest(family=family, event=event, selection=selection), tempfile.TemporaryDirectory() as temporary:
+                        root = Path(temporary)
+                        (root / "scripts").mkdir()
+                        stub = root / "scripts/xcodebuild.sh"
+                        stub.write_text('#!/bin/bash\nprintf "%s\\n" "$*" "$ONLY_TESTING" > "$CALLS"\n')
+                        stub.chmod(0o755)
+                        env = {"PATH": os.environ["PATH"], "EVENT": event, "SELECTION": selection,
+                               "SIMULATOR_FAMILY": family, "ONLY_TESTING": selectors,
+                               "CALLS": str(root / "calls"), "IPAD_EVIDENCE_DIR": str(root)}
+                        result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c",
+                                                 f"if [[ {condition} ]]; then\n{command}\nfi"],
+                                                cwd=root, env=env, text=True, capture_output=True)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        if event == "workflow_dispatch" and selection == SELECTORS:
+                            self.assertEqual((root / "calls").read_text().splitlines(), ["test-without-building-unit", selectors])
+                            self.assertEqual(set(selectors.split()), {
+                                "IntentTests/BackendKeychainConformanceTests", "IntentTests/BackendKeychainFixtureTests",
+                                "IntentTests/SyncedBackendRegistryTests", "IntentTests/SyncedBackendPublisherTests"})
+                        else:
+                            self.assertFalse((root / "calls").exists())
 
     def test_source_moved_phase_retains_failure_and_retry_transcripts(self):
         self.check_phase_transcript("Source-independence check (ios#320)", "source-moved")
@@ -521,12 +917,13 @@ class SimulatorTests(unittest.TestCase):
                 runner = root / "runner temp with spaces"
                 runner.mkdir()
                 environment = root / "github-environment"
+                directory = runner / "intent-simulator-123-2-unit"
                 env = {"PATH": os.environ["PATH"], "RUNNER_TEMP": str(runner), "GITHUB_ENV": str(environment),
+                       "SIMULATOR_EVIDENCE_DIR": str(directory),
                        "SIMULATOR_FAMILY": family, "GITHUB_EVENT_NAME": "workflow_dispatch", "ONLY_TESTING": SELECTORS}
                 result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", command], cwd=root, env=env,
                                         text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                directory = runner / "ipad-evidence"
                 self.assertEqual(json.loads((directory / "request.json").read_text())["family"], family)
                 self.assertEqual(environment.read_text(), f"IPAD_EVIDENCE_DIR={directory}\n")
         job_inputs = workflow.split("  build-and-test:\n", 1)[1].split("    steps:\n", 1)[0]
@@ -536,21 +933,18 @@ class SimulatorTests(unittest.TestCase):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
         build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
         self.assertIn("(inputs.only_testing != '' || inputs.simulator_family == 'ipad') && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test'", build)
-        self.assertIn("udid=$(scripts/xcodebuild.sh pick-simulator)", build)
-        self.assertIn('echo "SIM_UDID=$udid" >> "$GITHUB_ENV"', build)
         self.assertIn("scripts/xcodebuild.sh test-without-building-unit", build)
-        self.assertIn("scripts/xcodebuild.sh test-ios-unit", build)
         self.assertIn("name: Source-independence check", build)
         self.assertIn("set -o pipefail\n            scripts/xcodebuild.sh test-without-building 2>&1 | tee", build)
-        self.assertIn("name: Clean up owned iPad simulator\n        if: always() && env.SIMULATOR_FAMILY == 'ipad'", build)
+        self.assertIn("name: Clean up owned simulator\n        if: always() && env.SIMULATOR_EVIDENCE_DIR != ''", build)
         self.assertIn("name: Upload iPad execution evidence\n        if: always() && env.SIMULATOR_FAMILY == 'ipad'", build)
         self.assertLess(build.index("ci_simulator.py cleanup"), build.index("name: Upload iPad execution evidence"))
         self.assertNotIn("${{ inputs", "\n".join(line for line in build.splitlines() if line.startswith("          ") and not line.lstrip().startswith("ONLY_TESTING:")))
 
-    def test_simulator_selection_preserves_ipad_ownership_and_runner_defaults(self):
+    def test_simulator_selection_preserves_filtered_ipad_and_owns_ordinary_devices(self):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
         build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
-        step = build.split("      - name: Pick simulator device\n", 1)[1].split("\n      - name:", 1)[0]
+        step = build.split("      - name: Create owned simulator\n", 1)[1].split("\n      - name:", 1)[0]
         command = textwrap.dedent(step.split("        run: |\n", 1)[1])
         for family in ("iphone", "ipad"):
             for runner in ("github-hosted", "self-hosted"):
@@ -559,11 +953,10 @@ class SimulatorTests(unittest.TestCase):
                         root = Path(temporary)
                         for directory in ("scripts", ".github/scripts", "bin"):
                             (root / directory).mkdir(parents=True)
-                        selected = "ipad" if family == "ipad" else ("local" if runner == "self-hosted" else "hosted")
-                        for path, name in (("bin/python3", "ipad"), (".github/scripts/select-local-simulator.sh", "local"),
+                        for path, name in (("bin/python3", "owned"), (".github/scripts/select-local-simulator.sh", "local"),
                                            ("scripts/xcodebuild.sh", "hosted")):
                             stub = root / path
-                            output = 'printf "SIM_UDID=ipad-device\\n" >> "$GITHUB_ENV"' if name == "ipad" else f'printf "{name}-device\\n"'
+                            output = 'printf "SIM_UDID=owned-device\\n" >> "$GITHUB_ENV"' if name == "owned" else f'printf "{name}-device\\n"'
                             stub.write_text(f'#!/bin/bash\nprintf "{name}:%s\\n" "$*" >> "$CALLS"\n'
                                             f'[ "$STUB_EXIT" = 0 ] || exit "$STUB_EXIT"\n{output}\n')
                             stub.chmod(0o755)
@@ -575,10 +968,10 @@ class SimulatorTests(unittest.TestCase):
                                                  command.replace("${{ runner.environment }}", runner)],
                                                 cwd=root, env=env, text=True, capture_output=True)
                         calls = (root / "calls").read_text().splitlines()
-                        expected_args = {"ipad": "scripts/ci_simulator.py prepare", "local": "", "hosted": "pick-simulator"}
-                        self.assertEqual(calls, [f"{selected}:{expected_args[selected]}"])
+                        action = "prepare" if family == "ipad" else "prepare-ci"
+                        self.assertEqual(calls, [f"owned:scripts/ci_simulator.py {action}"])
                         self.assertEqual(result.returncode, exit_code, result.stderr)
-                        self.assertEqual(environment.read_text(), "" if exit_code else f"SIM_UDID={selected}-device\n")
+                        self.assertEqual(environment.read_text(), "" if exit_code else "SIM_UDID=owned-device\n")
 
 
 if __name__ == "__main__":
