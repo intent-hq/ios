@@ -18,6 +18,32 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkspaceControlsHaveSeparateTargetsAndSelectEveryMode() {
+        let app = launchWorkspaces()
+        let modes = ["Recent", "Repo", "Status"]
+        let controls = modes.map { app.buttons["workspaces.viewMode.\($0)"] }
+            + [app.buttons["workspaces.search.open"]]
+        for control in controls {
+            XCTAssertTrue(control.isHittable)
+            XCTAssertGreaterThanOrEqual(control.frame.width, 44 - 0.001)
+            XCTAssertGreaterThanOrEqual(control.frame.height, 44 - 0.001)
+        }
+        for (left, right) in zip(controls, controls.dropFirst()) {
+            XCTAssertFalse(left.frame.intersects(right.frame), "Each control must own a separate target")
+        }
+        for mode in ["Repo", "Status", "Recent"] {
+            let selected = app.buttons["workspaces.viewMode.\(mode)"]
+            selected.tap()
+            XCTAssertTrue(selected.wait(for: \.isSelected, toEqual: true, timeout: Fixture.timeout))
+            for other in modes where other != mode {
+                XCTAssertFalse(app.buttons["workspaces.viewMode.\(other)"].isSelected)
+            }
+        }
+        app.buttons["workspaces.search.open"].tap()
+        XCTAssertTrue(app.textFields["workspaces.search.field"].waitForExistence(timeout: Fixture.timeout))
+    }
+
+    @MainActor
     func testSearchFiltersAndClearAndCancelRestoreWorkspaces() {
         let app = launchWorkspaces()
         app.buttons["workspaces.search.open"].tap()
