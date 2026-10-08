@@ -22,8 +22,8 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(harness.mayFollowBack())
         #expect(harness.send(.recoveryPagedUp(recovery1, mayFollowBack: true)) == [.scrollToEnd])
         harness.distanceToBottom = 0
-        #expect(harness.poll(blank, correctionsLeft: 1, correctionsSpent: 1) == .continue(.recover(pageOffsetY: 1600)))
-        #expect(harness.send(.recoveryStep(recovery1, .recover(pageOffsetY: 1600))) == [LogLine.pageUp, .pageUp(offsetY: 1600)])
+        #expect(harness.poll(blank, correctionsLeft: 1, correctionsSpent: 1) == .continue(.recover(pageOffsetY: 0)))
+        #expect(harness.send(.recoveryStep(recovery1, .recover(pageOffsetY: 0))) == [LogLine.pageUp, .pageUp(offsetY: 0)])
         let secondFollowBack = harness.mayFollowBack()
         #expect(secondFollowBack)
         #expect(harness.send(.recoveryPagedUp(recovery1, mayFollowBack: secondFollowBack)) == [.scrollToEnd])
@@ -35,7 +35,7 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(harness.state.currentRecovery == nil)
         #expect(harness.userIsScrolledAway)
         #expect(harness.scrolls == 2)
-        #expect(harness.pageUps == [1600, 1600])
+        #expect(harness.pageUps == [1600, 0])
 
         harness.geometryEdge(distanceToBottom: 0)
         #expect(harness.userIsScrolledAway)

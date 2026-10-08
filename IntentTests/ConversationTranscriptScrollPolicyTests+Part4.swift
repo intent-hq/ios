@@ -79,7 +79,7 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(recovery(geometry(offsetY: 0, contentHeight: 400)) == .finish(.notNeeded))
         #expect(recovery(geometry(offsetY: 0, contentHeight: 650, containerHeight: 780)) == .finish(.notNeeded))
         #expect(recovery(geometry(offsetY: 0, contentHeight: 650, containerHeight: 780, topInset: 150))
-            == .continue(.followToEnd))
+            == .continue(.settling))
     }
 
     @Test func unsuccessfulFollowKeepsSearchingAboveThePreviousPage() {
