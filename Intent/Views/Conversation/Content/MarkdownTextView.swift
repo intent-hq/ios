@@ -9,9 +9,7 @@ struct MarkdownTextView: View {
     /// Intent-file images render even when nil if the link carries its own
     /// workspace ID (long form).
     var workspaceId: String?
-    /// `text` with GFM task-list markers swapped for glyphs, derived once per
-    /// view value in `init` instead of on every `body` evaluation (the body
-    /// also re-runs on lightbox state changes).
+    /// Prepared source is reused across view reconstruction and conversation visits.
     private let markdownSource: String
     private let mermaidSources: [String: String]
     private let pendingDiagram: MermaidMarkdownContent.PendingDiagram?
@@ -39,12 +37,10 @@ struct MarkdownTextView: View {
         self.text = text
         self.onOpenURL = onOpenURL
         self.workspaceId = workspaceId
-        let prepared = MermaidMarkdownContent(text)
-        self.markdownSource = Self.replacingTaskListMarkers(prepared.markdown)
-        self.mermaidSources = prepared.sources
-        self.pendingDiagram = prepared.pending.map { pending in
-            .init(markdown: Self.replacingTaskListMarkers(pending.markdown), language: pending.language)
-        }
+        let prepared = MarkdownContentCache.shared.preparedContent(for: text)
+        self.markdownSource = prepared.markdown
+        self.mermaidSources = prepared.mermaidSources
+        self.pendingDiagram = prepared.pendingDiagram
     }
 
     /// Intent-file image fetcher bound to the session's loader when one is in
@@ -73,7 +69,10 @@ struct MarkdownTextView: View {
 
     var body: some View {
         let pending = isStreaming ? pendingDiagram : nil
-        let markdownView = StructuredText(markdown: pending?.markdown ?? markdownSource)
+        let markdownView = StructuredText(
+            pending?.markdown ?? markdownSource,
+            parser: MarkdownContentCache.shared
+        )
             .textual.structuredTextStyle(CompactMarkdownStyle(
                 mermaidSources: mermaidSources,
                 pendingMermaidLanguage: pending?.language

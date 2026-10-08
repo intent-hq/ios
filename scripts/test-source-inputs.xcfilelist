@@ -339,6 +339,7 @@ $(SRCROOT)/Intent/PersistenceManager+InvitedSessions.swift
 $(SRCROOT)/Intent/PersistenceManager+Screens.swift
 $(SRCROOT)/Intent/PersistenceManager.swift
 $(SRCROOT)/Intent/Presentation
+$(SRCROOT)/Intent/Presentation/BoundedMarkdownCache.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStatusTiming.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStep.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
@@ -353,6 +354,7 @@ $(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
 $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MarkdownCodeFence.swift
+$(SRCROOT)/Intent/Presentation/MarkdownContentCache.swift
 $(SRCROOT)/Intent/Presentation/MermaidMarkdownContent.swift
 $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
@@ -819,6 +821,7 @@ $(SRCROOT)/IntentTests/BackendWindowSessionTests.swift
 $(SRCROOT)/IntentTests/BackendWindowTitleTests.swift
 $(SRCROOT)/IntentTests/BackgroundHookStoreTests.swift
 $(SRCROOT)/IntentTests/BackgroundTaskManagerTests.swift
+$(SRCROOT)/IntentTests/BoundedMarkdownCacheTests.swift
 $(SRCROOT)/IntentTests/BrowserTunnelFrameTests.swift
 $(SRCROOT)/IntentTests/BrowserTunnelRelayTests.swift
 $(SRCROOT)/IntentTests/BrowserTunnelURLTests.swift
@@ -993,6 +996,7 @@ $(SRCROOT)/IntentTests/LayoutPolicyTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
+$(SRCROOT)/IntentTests/MarkdownContentCacheTests.swift
 $(SRCROOT)/IntentTests/MarkdownTableLayoutTests.swift
 $(SRCROOT)/IntentTests/MarkdownTextViewTests.swift
 $(SRCROOT)/IntentTests/MediaAudioSessionTests.swift
