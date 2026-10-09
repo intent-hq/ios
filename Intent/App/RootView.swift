@@ -120,7 +120,9 @@ struct RootView: View {
         // change. Group distributes its modifiers to both outgoing and
         // incoming content, briefly giving each its own overlay window.
         ZStack {
-            if isWorkspaceFlow || showsSettingsSheet {
+            if usesIPadShell, isWorkspaceFlow {
+                IPadShellView(session: session)
+            } else if isWorkspaceFlow || showsSettingsSheet {
                 workspaceFlowContent
             } else {
                 launchContent
@@ -319,6 +321,10 @@ struct RootView: View {
             DeepLinkPairingView(payload: request.payload)
         }
         .onAppear {
+            coordinator.usesIPadShell = usesIPadShell
+            if usesIPadShell, coordinator.selectedSection == .assistant {
+                coordinator.iPadNavigation.showAssistantDetail()
+            }
             updateWorkspaceStatusLease(isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil)
             let supportsMultipleWindows = supportsMultipleWindows
             let openWindow = openWindow
@@ -351,17 +357,6 @@ struct RootView: View {
             notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
         }
     }
-
-    private func updateWorkspaceStatusLease(_ workspaceId: String?) {
-        guard statusWorkspaceId != workspaceId else { return }
-        if let workspaceId {
-            session.retainWorkspaceStatus(workspaceId: workspaceId, consumer: statusConsumer)
-        }
-        if let previous = statusWorkspaceId {
-            session.releaseWorkspaceStatus(workspaceId: previous, consumer: statusConsumer)
-        }
-        statusWorkspaceId = workspaceId
-    }
 }
 
 extension RootView {
@@ -375,8 +370,27 @@ extension RootView {
 }
 
 private extension RootView {
+    func updateWorkspaceStatusLease(_ workspaceId: String?) {
+        guard statusWorkspaceId != workspaceId else { return }
+        if let workspaceId {
+            session.retainWorkspaceStatus(workspaceId: workspaceId, consumer: statusConsumer)
+        }
+        if let previous = statusWorkspaceId {
+            session.releaseWorkspaceStatus(workspaceId: previous, consumer: statusConsumer)
+        }
+        statusWorkspaceId = workspaceId
+    }
+
+    var usesIPadShell: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad
+        #else
+        false
+        #endif
+    }
+
     var showsSettingsSheet: Bool {
-        Self.presentsSettingsSheet(currentScreen: coordinator.currentScreen, sizeClass: sizeClass)
+        !usesIPadShell && Self.presentsSettingsSheet(currentScreen: coordinator.currentScreen, sizeClass: sizeClass)
     }
 
     var settingsPresented: Binding<Bool> {

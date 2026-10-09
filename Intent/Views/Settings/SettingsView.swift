@@ -5,10 +5,20 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     var presentedAsSheet = false
     var contentColorScheme: ColorScheme?
+    var isEmbedded = false
+    var onCollapse: (() -> Void)?
+    var onScanQR: (() -> Void)?
+    var onManualPairing: (() -> Void)?
 
     var body: some View {
         NavigationStack {
-            SettingsContent(presentedAsSheet: presentedAsSheet)
+            SettingsContent(
+                presentedAsSheet: presentedAsSheet,
+                isEmbedded: isEmbedded,
+                onCollapse: onCollapse,
+                onScanQR: onScanQR,
+                onManualPairing: onManualPairing
+            )
                 .environment(\.colorScheme, contentColorScheme ?? colorScheme)
         }
         #if os(iOS)
@@ -56,9 +66,15 @@ private struct SettingsContent: View {
     @State private var showLogOffConfirmation = false
     @ScaledMetric(relativeTo: .callout) private var iconSize = SettingsStyle.iconWidth
     var presentedAsSheet = false
+    var isEmbedded = false
+    var onCollapse: (() -> Void)?
+    var onScanQR: (() -> Void)?
+    var onManualPairing: (() -> Void)?
 
     var body: some View {
-        settingsSurface
+        Group {
+            if isEmbedded { embeddedSurface } else { settingsSurface }
+        }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showLogOffConfirmation) {
                 LogOffConfirmationSheet { coordinator.onLogOff() }
@@ -66,17 +82,47 @@ private struct SettingsContent: View {
             }
     }
 
+    private func collapseSidebar() { onCollapse?() }
+
+    private var embeddedSurface: some View {
+        VStack(spacing: 0) {
+            IPadSidebarHeader(onCollapse: collapseSidebar) {
+                IPadSidebarTitle(title: "Settings")
+            } actions: {}
+            ScrollView {
+                VStack(alignment: .leading, spacing: IPadSidebarStyle.settingsSpacing) {
+                    settingsSections
+                }
+                .padding(.horizontal, IPadSidebarStyle.inset)
+                .padding(.bottom, IPadSidebarStyle.inset)
+            }
+            .accessibilityIdentifier("settings.scroll")
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .foregroundStyle(SettingsStyle.foreground(for: colorScheme))
+        .background(IPadSidebarStyle.background(for: colorScheme))
+        .accessibilityIdentifier("settings.sidebar")
+    }
+
+    @ViewBuilder private var settingsSections: some View {
+        if !session.connection.certMismatches.isEmpty {
+            CertMismatchListView(mismatches: session.connection.certMismatches)
+        }
+        SettingsPairingSection(onScanQR: onScanQR, onManualPairing: onManualPairing)
+        if isEmbedded {
+            SettingsSection(title: "SETTINGS") { SettingsSupportSection() }
+        } else {
+            SettingsSupportSection()
+        }
+        logOffButton
+    }
+
     private var settingsSurface: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SettingsStyle.sectionSpacing) {
                 SettingsHeader(onClose: coordinator.onSettingsBack)
                     .padding(.bottom, SettingsStyle.headingSpacing - SettingsStyle.sectionSpacing)
-                if !session.connection.certMismatches.isEmpty {
-                    CertMismatchListView(mismatches: session.connection.certMismatches)
-                }
-                SettingsPairingSection()
-                SettingsSupportSection()
-                logOffButton
+                settingsSections
             }
             .padding(SettingsStyle.contentMargin)
             .frame(maxWidth: SettingsStyle.maximumContentWidth)
@@ -140,4 +186,28 @@ private struct SettingsContent: View {
         .environment(session)
         .environment(session.makeCoordinator())
         .preferredColorScheme(.dark)
+}
+
+struct IPadSettingsSidebar: View {
+    @Environment(AppCoordinator.self) private var coordinator
+    let onCollapse: () -> Void
+    let onScanQR: () -> Void
+    let onManualPairing: () -> Void
+
+    var body: some View {
+        ZStack {
+            SettingsView(
+                isEmbedded: true,
+                onCollapse: onCollapse,
+                onScanQR: onScanQR,
+                onManualPairing: onManualPairing
+            )
+            .opacity(coordinator.iPadNavigation.pairing == nil ? 1 : 0)
+            .allowsHitTesting(coordinator.iPadNavigation.pairing == nil)
+            .accessibilityHidden(coordinator.iPadNavigation.pairing != nil)
+            if let mode = coordinator.iPadNavigation.pairing {
+                IPadPairingSidebar(title: "Settings", mode: mode, onCollapse: onCollapse)
+            }
+        }
+    }
 }

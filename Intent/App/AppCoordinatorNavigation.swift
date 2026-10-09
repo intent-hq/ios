@@ -221,6 +221,7 @@ extension AppCoordinator {
                 currentScreen = .workspaceList
             }
         }
+        if usesIPadShell { iPadNavigation.showAssistantDetail() }
     }
 
     func onSelectNote(_ noteId: String, workspaceId: String, noteTitle: String) {
@@ -345,5 +346,13 @@ extension AppCoordinator {
 
     func onSettingsBack() {
         currentScreen = .workspaceList
+    }
+
+    func onOpenSettings() {
+        if usesIPadShell, currentScreen.supportsConnectionLossOverlay {
+            onSelectIPadSection(.settings)
+            return
+        }
+        currentScreen = .settings
     }
 }

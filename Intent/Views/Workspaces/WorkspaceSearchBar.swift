@@ -9,15 +9,16 @@ struct WorkspaceSearchBar: View {
     @Binding var isSearching: Bool
     var horizontalPadding: CGFloat = Constants.WorkspaceList.pickerHorizontalPadding
     var isCompact = false
+    var isSidebar = false
     @Namespace private var selectionAnimation
     @ScaledMetric(relativeTo: .body) private var segmentTracking: CGFloat = -0.32
 
     private var controlHeight: CGFloat {
-        isCompact ? Constants.WorkspaceSearch.compactHeight : Constants.WorkspaceSearch.expandedHeight
+        isCompact || isSidebar ? Constants.WorkspaceSearch.compactHeight : Constants.WorkspaceSearch.expandedHeight
     }
 
     private var segmentInset: CGFloat {
-        isCompact ? Constants.WorkspaceSearch.compactSegmentInset : Constants.WorkspaceSearch.segmentInset
+        isSidebar ? 0 : (isCompact ? Constants.WorkspaceSearch.compactSegmentInset : Constants.WorkspaceSearch.segmentInset)
     }
 
     var body: some View {
@@ -25,7 +26,9 @@ struct WorkspaceSearchBar: View {
             HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
                 viewModeSwitcher
 
-                WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight, visionWorkspaceHover: true)
+                if !isSidebar {
+                    WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight, visionWorkspaceHover: true)
+                }
             }
         }
         .padding(.horizontal, horizontalPadding)
@@ -38,11 +41,11 @@ struct WorkspaceSearchBar: View {
                     viewMode = mode
                 } label: {
                     Text(mode.rawValue)
-                        .interFont(Constants.Typography.bodySEmphasized)
+                        .interFont(isSidebar ? Constants.Typography.bodyXSEmphasized : Constants.Typography.bodySEmphasized)
                         .tracking(segmentTracking)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: controlHeight - segmentInset * 2)
-                        .foregroundStyle(viewMode == mode
+                        .foregroundStyle(viewMode == mode && !isSidebar
                             ? Constants.Pairing.foreground(for: colorScheme == .dark ? .light : .dark)
                             : Constants.Pairing.foreground(for: colorScheme))
                         .contentShape(RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius, style: .circular))
@@ -56,11 +59,11 @@ struct WorkspaceSearchBar: View {
         }
         .background {
             RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius, style: .circular)
-                .fill(Constants.Pairing.foreground(for: colorScheme))
+                .fill(isSidebar ? IPadSidebarStyle.selection(for: colorScheme) : Constants.Pairing.foreground(for: colorScheme))
                 .matchedGeometryEffect(id: viewMode, in: selectionAnimation, isSource: false)
         }
         .padding(segmentInset)
-        .background { WorkspaceSearchSurface() }
+        .background { if !isSidebar { WorkspaceSearchSurface() } }
         .animation(reduceMotion ? nil : .snappy(duration: Self.selectionAnimationDuration), value: viewMode)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Workspace view")
@@ -74,6 +77,7 @@ struct WorkspaceSearchButton: View {
     var identifier = "workspaces.search.open"
     var showsBackground = true
     var visionWorkspaceHover = false
+    var onOpen: () -> Void = {}
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -82,6 +86,7 @@ struct WorkspaceSearchButton: View {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration)) {
                 isSearching = true
             }
+            onOpen()
         } label: {
             Image(.search)
                 .resizable()

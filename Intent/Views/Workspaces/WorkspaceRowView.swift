@@ -5,6 +5,7 @@ struct WorkspaceRowView: View {
     let colorScheme: ColorScheme
     var showRepo: Bool = true
     var spacious = false
+    var isSidebar = false
     var timestampOpacity: Double = 1
     var statusIconHidden = false
     var minimumHeight: CGFloat = 0
@@ -52,7 +53,7 @@ struct WorkspaceRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: Self.firstTitleLineCenter, spacing: spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
+        HStack(alignment: Self.firstTitleLineCenter, spacing: spacious || isSidebar ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
             // Status icon with agent activity / unread dot overlays
             WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme)
                 .opacity(statusIconHidden ? 0 : 1)
@@ -75,11 +76,11 @@ struct WorkspaceRowView: View {
 
             monitorRefreshButton
         }
-        .offset(x: -(Constants.WorkspaceRow.statusIconSize + (spacious ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing)) * leadingSwipeProgress)
+        .offset(x: -(Constants.WorkspaceRow.statusIconSize + (spacious || isSidebar ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing)) * leadingSwipeProgress)
         .contentShape(Rectangle())
         .padding(.vertical, spacious ? Constants.WorkspaceRow.spaciousPadding : Constants.WorkspaceRow.verticalPadding)
-        .padding(.horizontal, spacious ? 0 : Constants.WorkspaceRow.horizontalPadding)
-        .frame(minHeight: minimumHeight)
+        .padding(.horizontal, isSidebar ? IPadSidebarStyle.rowInset : (spacious ? 0 : Constants.WorkspaceRow.horizontalPadding))
+        .frame(minHeight: isSidebar ? max(IPadSidebarStyle.rowHeight, minimumHeight) : minimumHeight)
         .coordinateSpace(name: workspace.id)
         .visionAttentionCue(workspaceNeedsInput(workspace))
         .task(id: workspace.id) {
@@ -99,7 +100,7 @@ struct WorkspaceRowView: View {
         let hasRepository = showRepo && workspace.repositoryName != nil
         let hasPullRequests = prIndicator.pill != nil || prIndicator.otherMonitorCount > 0
         let hasActivityLabel = workspace.status?.lowercased() == "archived" || workspace.lastActivity != nil || workspace.updatedAt != nil
-        let showsMetadataActivity = !spacious || Self.usesExpandedMetadataLayout(for: dynamicTypeSize)
+        let showsMetadataActivity = (!spacious && !isSidebar) || Self.usesExpandedMetadataLayout(for: dynamicTypeSize)
         return hasRepository || hasPullRequests || (hasActivityLabel && showsMetadataActivity)
     }
 
@@ -124,7 +125,7 @@ struct WorkspaceRowView: View {
 
     @ViewBuilder
     private var titleRow: some View {
-        if spacious, !Self.usesExpandedMetadataLayout(for: dynamicTypeSize) {
+        if spacious || isSidebar, !Self.usesExpandedMetadataLayout(for: dynamicTypeSize) {
             HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.metadataSpacing) {
                 title
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -139,7 +140,7 @@ struct WorkspaceRowView: View {
     private var title: some View {
         WorkspaceTitle(title: workspace.title, createdAt: workspace.createdAt) { title in
             Text(title)
-                .interFont(Constants.Typography.bodyM.withFace(.semibold))
+                .interFont(isSidebar ? Constants.Typography.bodySEmphasized : Constants.Typography.bodyM.withFace(.semibold))
                 .tracking(titleTracking)
                 .lineLimit(Self.titleLineLimit(for: dynamicTypeSize))
                 .fixedSize(horizontal: false, vertical: true)
@@ -155,7 +156,7 @@ struct WorkspaceRowView: View {
         HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.metadataSpacing) {
             repositoryLabel(lineLimit: 1)
             pullRequestBadges(expanded: false)
-            if !spacious {
+            if !spacious, !isSidebar {
                 Spacer(minLength: Constants.WorkspaceRow.metadataSpacing)
                 activityLabel
             }

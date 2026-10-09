@@ -3,31 +3,50 @@ import SwiftUI
 struct WorkspaceListSidebar: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.isIPadPaneVisible) private var isPaneVisible
     @Environment(\.openAgentHistory) private var openAgentHistory
     @Environment(\.openConnectionSwitcher) private var openConnectionSwitcher
     private let workspaceStore: WorkspaceStore
     private let onCreateWorkspace: () -> Void
+    private let onCollapse: (() -> Void)?
+    private var isEmbedded: Bool { onCollapse != nil }
+    private var surface: Color { isEmbedded ? IPadSidebarStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme) }
     @State private var viewModel: WorkspaceListViewModel
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var workspaceSwipeProgress: [String: CGFloat] = [:]
     @Binding private var isSearching: Bool
     @FocusState private var searchFocused: Bool
 
-    init(workspaceStore: WorkspaceStore, isSearching: Binding<Bool>, onCreateWorkspace: @escaping () -> Void) {
+    init(
+        workspaceStore: WorkspaceStore,
+        isSearching: Binding<Bool>,
+        onCreateWorkspace: @escaping () -> Void,
+        onCollapse: (() -> Void)? = nil
+    ) {
         self.workspaceStore = workspaceStore
         self.onCreateWorkspace = onCreateWorkspace
+        self.onCollapse = onCollapse
         _viewModel = State(initialValue: WorkspaceListViewModel(workspaceStore: workspaceStore))
         _isSearching = isSearching
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            if !isSearching {
-                WorkspaceSearchBar(viewMode: $viewModel.viewMode, isSearching: $isSearching)
+            if let onCollapse {
+                sidebarHeader(onCollapse: onCollapse)
+            }
+            if isEmbedded || !isSearching {
+                WorkspaceSearchBar(
+                    viewMode: $viewModel.viewMode,
+                    isSearching: $isSearching,
+                    horizontalPadding: isEmbedded ? IPadSidebarStyle.inset : Constants.WorkspaceList.pickerHorizontalPadding,
+                    isSidebar: isEmbedded
+                )
+                .padding(.bottom, isEmbedded ? IPadSidebarStyle.sectionSpacing : 0)
             }
 
             ZStack {
-                Theme.sidebar(for: colorScheme).ignoresSafeArea()
+                surface
 
                 if viewModel.isLoading, viewModel.workspaces.isEmpty {
                     ProgressView {
@@ -45,7 +64,7 @@ struct WorkspaceListSidebar: View {
                 }
             }
         }
-        .background(Theme.sidebar(for: colorScheme))
+        .background(surface)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSearching {
                 WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
@@ -56,31 +75,59 @@ struct WorkspaceListSidebar: View {
         }
         .navigationTitle("Workspaces")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                WorkspaceListMenu(
-                    showArchived: $viewModel.showArchived,
-                    canCreateWorkspace: coordinator.canCreateWorkspace,
-                    onCreateWorkspace: onCreateWorkspace
-                ) {
-                    searchFocused = false
-                    isSearching = false
-                    revealedSwipeTarget = nil
-                    openAgentHistory()
-                } onRecentConnections: {
-                    searchFocused = false
-                    isSearching = false
-                    revealedSwipeTarget = nil
-                    openConnectionSwitcher()
-                }
+            if !isEmbedded {
+                ToolbarItem(placement: .topBarTrailing) { workspaceMenu }
+                    .intentToolbarSurface()
             }
-            .intentToolbarSurface()
         }
         .onChange(of: viewModel.showArchived) { _, _ in revealedSwipeTarget = nil }
+        .onChange(of: isPaneVisible) { _, visible in
+            if !visible { searchFocused = false }
+        }
         .onDisappear {
-            isSearching = false
-            viewModel.searchText = ""
+            searchFocused = false
+            if !isEmbedded {
+                isSearching = false
+                viewModel.searchText = ""
+            }
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
+    }
+
+    private var workspaceMenu: some View {
+        WorkspaceListMenu(
+            showArchived: $viewModel.showArchived,
+            canCreateWorkspace: coordinator.canCreateWorkspace,
+            onCreateWorkspace: onCreateWorkspace,
+            onRecentAgents: {
+                searchFocused = false
+                if !isEmbedded { isSearching = false }
+                revealedSwipeTarget = nil
+                openAgentHistory()
+            },
+            onRecentConnections: {
+                searchFocused = false
+                if !isEmbedded { isSearching = false }
+                revealedSwipeTarget = nil
+                openConnectionSwitcher()
+            },
+            showsSidebarTitle: isEmbedded
+        )
+    }
+
+    private func sidebarHeader(onCollapse: @escaping () -> Void) -> some View {
+        IPadSidebarHeader(onCollapse: onCollapse) {
+            workspaceMenu
+        } actions: {
+            IntentIconButton(icon: .addIcon, label: "New workspace", showsBackground: false, action: onCreateWorkspace)
+                .disabled(!coordinator.canCreateWorkspace)
+                .accessibilityIdentifier("workspaces.create")
+            WorkspaceSearchButton(
+                isSearching: $isSearching,
+                height: Constants.WorkspaceSearch.compactHeight,
+                showsBackground: false
+            ) { searchFocused = true }
+        }
     }
 
     private var emptyState: some View {
@@ -132,6 +179,7 @@ struct WorkspaceListSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        .listRowSpacing(isEmbedded ? 0 : nil)
         #if !os(visionOS)
         // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
         .scrollDismissesKeyboard(.immediately)
@@ -141,8 +189,10 @@ struct WorkspaceListSidebar: View {
         // selection, so suppress the default focus effect for the sidebar rows.
         .focusEffectDisabled()
         #endif
-        .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
-        .contentMargins(.bottom, isSearching ? 0 : AssistantLaunchButton.scrollClearance, for: .scrollContent)
+        .scrollContentBackground(isEmbedded ? .hidden : .automatic)
+        .contentMargins(.horizontal, isEmbedded ? IPadSidebarStyle.inset : nil)
+        .contentMargins(.top, isEmbedded ? 0 : Constants.WorkspaceList.sidebarTopContentMargin)
+        .contentMargins(.bottom, isEmbedded ? IPadSidebarStyle.inset : (isSearching ? 0 : AssistantLaunchButton.scrollClearance), for: .scrollContent)
     }
 
     private func sidebarRows(_ workspaces: [Workspace], showRepo: Bool = true) -> some View {
@@ -169,21 +219,20 @@ struct WorkspaceListSidebar: View {
             #endif
             .tag(workspace.id)
             .listRowInsets(EdgeInsets(
-                top: Constants.WorkspaceList.sidebarRowInset,
-                leading: Constants.WorkspaceList.sidebarRowInset,
-                bottom: Constants.WorkspaceList.sidebarRowInset,
-                trailing: Constants.WorkspaceList.sidebarRowInset
+                top: isEmbedded ? 0 : Constants.WorkspaceList.sidebarRowInset,
+                leading: isEmbedded ? 0 : Constants.WorkspaceList.sidebarRowInset,
+                bottom: isEmbedded ? 0 : Constants.WorkspaceList.sidebarRowInset,
+                trailing: isEmbedded ? 0 : Constants.WorkspaceList.sidebarRowInset
             ))
             .listRowSeparator(.hidden)
             .listRowBackground(
                 RoundedRectangle(
-                    cornerRadius: Constants.WorkspaceList.sidebarSelectionCornerRadius,
+                    cornerRadius: isEmbedded ? IPadSidebarStyle.rowRadius : Constants.WorkspaceList.sidebarSelectionCornerRadius,
                     style: .continuous
                 )
-                .fill(Self.rowSelectionBackground(
-                    isSelected: coordinator.selectedWorkspaceId == workspace.id,
-                    colorScheme: colorScheme
-                ))
+                .fill(coordinator.selectedWorkspaceId == workspace.id
+                    ? (isEmbedded ? IPadSidebarStyle.selection(for: colorScheme) : Theme.sidebarSelection(for: colorScheme))
+                    : .clear)
             )
     }
 
@@ -200,7 +249,9 @@ struct WorkspaceListSidebar: View {
             workspaceSwipeProgress: $workspaceSwipeProgress,
             nextWorkspaceId: nil,
             spacious: false,
-            showsTrailingActions: false
+            showsTrailingActions: false,
+            isSidebar: isEmbedded,
+            isSelected: coordinator.selectedWorkspaceId == workspace.id
         ) {
             searchFocused = false
             coordinator.onSelectWorkspace(workspace.id)

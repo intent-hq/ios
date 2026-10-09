@@ -4,6 +4,9 @@ struct AssistantMessageView: View {
     private typealias Layout = Constants.Conversation.AssistantMessage
 
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.conversationPresentation) private var presentation
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var iPadResponseWidth = Constants.Conversation.Design.IPad.assistantMaximumWidth
 
     let message: ConversationMessage
     let workspaceId: String
@@ -101,6 +104,8 @@ struct AssistantMessageView: View {
             .id(hasStrippedPrompts)
         }
         .padding(.vertical, workspaceDesign ? 0 : Layout.verticalPadding)
+        .frame(maxWidth: presentation == .iPad && !dynamicTypeSize.isAccessibilitySize ? iPadResponseWidth : nil, alignment: .leading)
+        .frame(maxWidth: presentation == .iPad ? .infinity : nil, alignment: .leading)
         .environment(\.assistantMessageStreaming, message.isStreaming)
         .environment(\.proposalMessageId, message.id)
         .environment(\.proposalWorkspaceIDs, proposalWorkspaceIDs)

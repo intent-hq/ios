@@ -794,14 +794,17 @@ jobs:
         if: always() && env.SIMULATOR_EVIDENCE_DIR != ''
         run: python3 scripts/ci_simulator.py cleanup
 
-      - name: Run iPad menu regression tests
+      - name: Run iPad sidebar regression tests
         env:
           RESULT_BUNDLE: IPadMenuTestResults
           SIMULATOR_FAMILY: ipad
           SIMULATOR_EVIDENCE_DIR: ${{ runner.temp }}/intent-simulator-${{ github.run_id }}-${{ github.run_attempt }}-ui-ipad
           ONLY_TESTING: >-
-            IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsSendAndMenuAvailable
-            IntentUITests/HomeActionMenuUITests/testIPadQuestionsKeepNextAndSendAvailable
+            IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsDraftAndRailAvailable
+            IntentUITests/HomeActionMenuUITests/testIPadQuestionsKeepNextAndRailAvailable
+            IntentUITests/WorkspaceSearchUITests/testIPadSearchSurvivesCollapseAndSectionChanges
+            IntentUITests/IPadSidebarUITests/testSectionsAndPairingRestoreConversationInBothThemes
+            IntentUITests/IPadSidebarUITests/testRailRemainsReachableWithAccessibilityText
         run: |
           python3 scripts/ci_simulator.py prepare-ci
           SIM_UDID=$(jq -er '.createdUDID' "$SIMULATOR_EVIDENCE_DIR/ownership.json")

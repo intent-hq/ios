@@ -68,7 +68,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     }
 
     @MainActor
-    func testHidingSidebarDuringSearchRestoresUnfilteredWorkspaces() throws {
+    func testIPadSearchSurvivesCollapseAndSectionChanges() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar behavior")
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
@@ -82,14 +82,19 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         XCTAssertTrue(otherWorkspace.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons["intent.menu.open"].exists)
 
-        app.buttons["Hide Sidebar"].tap()
+        app.buttons["ipad.sidebar.collapse"].tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Fixture.timeout))
-        app.buttons["Show Sidebar"].tap()
-        XCTAssertTrue(otherWorkspace.waitForExistence(timeout: Fixture.timeout))
-        app.buttons["workspaces.search.open"].tap()
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
+        app.buttons["ipad.sidebar.expand"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertEqual(field.value as? String, "Search workspaces")
+        XCTAssertEqual(field.value as? String, "payment")
+        app.buttons["ipad.rail.settings"].tap()
+        app.buttons["ipad.rail.workspaces"].tap()
+        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertEqual(field.value as? String, "payment")
+        XCTAssertFalse(otherWorkspace.exists)
+        app.buttons["workspaces.search.cancel"].tap()
+        XCTAssertTrue(otherWorkspace.waitForExistence(timeout: Fixture.timeout))
     }
 
     @MainActor

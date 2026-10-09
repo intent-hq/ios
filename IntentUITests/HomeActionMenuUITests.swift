@@ -5,7 +5,6 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     private static let scrollTolerance: CGFloat = 4
     private static let backdropStartY: CGFloat = 0.2
     private static let backdropEndY: CGFloat = 0.4
-    private static let composerBottomTolerance: CGFloat = 60
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -46,8 +45,8 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
-    func testIPadConversationKeepsSendAndMenuAvailable() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad window-level menu")
+    func testIPadConversationKeepsDraftAndRailAvailable() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent rail")
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = launchHome()
@@ -57,18 +56,11 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         agent.tap()
         let composer = app.textViews["composer.textView"]
         XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
-        let launcher = app.buttons["intent.menu.open"]
+        let rail = app.buttons["ipad.rail.workspaces"]
         let send = app.buttons["Send message"]
-        XCTAssertTrue(launcher.isHittable)
-        XCTAssertFalse(launcher.frame.intersects(send.frame))
-        XCTAssertLessThan(launcher.frame.maxY, composer.frame.minY)
-        XCTAssertLessThan(app.frame.maxY - composer.frame.maxY, Self.composerBottomTolerance)
-        let launcherBottom = launcher.frame.maxY
-        openMenu(app)
-        XCTAssertEqual(app.buttons["intent.menu.close"].frame.maxY, launcherBottom, accuracy: Self.scrollTolerance)
-        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad landscape Intent menu tiles")
-        app.buttons["intent.menu.close"].tap()
-        XCTAssertTrue(waitUntilHittable(composer))
+        XCTAssertTrue(rail.isHittable)
+        XCTAssertFalse(app.buttons["intent.menu.open"].exists)
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad expanded workspace conversation")
 
         composer.tap()
         let emptyHeight = composer.frame.height
@@ -77,31 +69,47 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertGreaterThan(composer.frame.height, emptyHeight)
         XCTAssertTrue(send.isEnabled)
         XCTAssertTrue(send.isHittable)
-        XCTAssertFalse(launcher.frame.intersects(send.frame))
-        XCTAssertLessThan(launcher.frame.maxY, composer.frame.minY)
-        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad Intent menu floating above the composer")
-        send.tap()
+        XCTAssertFalse(rail.frame.intersects(send.frame))
+        app.buttons["ipad.sidebar.collapse"].tap()
+        XCTAssertTrue(app.buttons["ipad.sidebar.expand"].waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, draft)
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad collapsed conversation with draft")
+        for destination in ["settings", "connections", "workspaces"] {
+            app.buttons["ipad.rail.\(destination)"].tap()
+            XCTAssertTrue(waitUntilHittable(composer))
+            XCTAssertEqual(composer.value as? String, draft)
+            XCTAssertTrue(rail.isHittable)
+        }
+        app.buttons["ipad.rail.assistant"].tap()
+        XCTAssertTrue(app.buttons["assistant.sidebar.newConversation"].waitForExistence(timeout: Self.timeout))
+        app.buttons["ipad.rail.workspaces"].tap()
+        XCTAssertTrue(waitUntilHittable(composer))
+        XCTAssertEqual(composer.value as? String, draft)
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(waitUntilHittable(send))
+        XCTAssertEqual(composer.value as? String, draft)
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad portrait conversation with draft")
+        verifySendAndBack(in: app, draft: draft)
+    }
+
+    @MainActor
+    private func verifySendAndBack(in app: XCUIApplication, draft: String) {
+        app.buttons["Send message"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", draft))
             .firstMatch.waitForExistence(timeout: Self.timeout))
+        let composer = app.textViews["composer.textView"]
         XCTAssertEqual(composer.value as? String, "")
-        XCTAssertFalse(app.buttons["intent.menu.close"].exists)
-        openMenu(app)
-        app.buttons["intent.menu.close"].tap()
-        XCTAssertTrue(waitUntilHittable(composer))
-
-        app.navigationBars["Dashboard Implementor"].buttons.element(boundBy: 0).tap()
+        app.buttons["conversation.back"].tap()
+        let agent = app.buttons["workspace.agent.demo-agent-implementor"]
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(composer.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(launcher.isHittable)
-        XCTAssertGreaterThan(launcher.frame.maxY, app.frame.maxY - Self.composerBottomTolerance)
-        openMenu(app)
-        app.buttons["intent.menu.close"].tap()
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
         XCTAssertTrue(waitUntilHittable(agent))
     }
 
     @MainActor
-    func testIPadQuestionsKeepNextAndSendAvailable() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad window-level menu")
+    func testIPadQuestionsKeepNextAndRailAvailable() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent rail")
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = XCUIApplication()
@@ -121,13 +129,19 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(multiAnswer.waitForExistence(timeout: Self.timeout))
         multiAnswer.tap()
 
-        let launcher = app.buttons["intent.menu.open"]
+        let rail = app.buttons["ipad.rail.workspaces"]
         let next = app.buttons["Next"]
         XCTAssertTrue(waitUntilHittable(next))
-        XCTAssertTrue(launcher.isHittable)
+        XCTAssertTrue(rail.isHittable)
         XCTAssertFalse(app.textViews["composer.textView"].exists)
-        XCTAssertFalse(launcher.frame.intersects(next.frame))
-        XCTAssertLessThan(launcher.frame.maxY, next.frame.minY)
+        XCTAssertFalse(rail.frame.intersects(next.frame))
+        app.buttons["ipad.rail.settings"].tap()
+        app.buttons["ipad.rail.workspaces"].tap()
+        if app.buttons["ipad.sidebar.dismiss"].exists {
+            app.buttons["ipad.sidebar.collapse"].tap()
+        }
+        XCTAssertTrue(waitUntilHittable(next))
+        XCTAssertTrue(next.isEnabled)
         next.tap()
         XCUIDevice.shared.orientation = .landscapeLeft
         let lastAnswer = app.buttons["Summary"]
@@ -136,17 +150,15 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let send = app.buttons["Send"]
         XCTAssertTrue(waitUntilHittable(send))
         XCTAssertTrue(send.isEnabled)
-        XCTAssertFalse(launcher.frame.intersects(send.frame))
-        XCTAssertLessThan(launcher.frame.maxY, send.frame.minY)
-        openMenu(app)
-        app.buttons["intent.menu.close"].tap()
+        XCTAssertFalse(rail.frame.intersects(send.frame))
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad question actions beside persistent rail")
         XCTAssertTrue(waitUntilHittable(send))
         send.tap()
 
         let composer = app.textViews["composer.textView"]
         XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
-        XCTAssertLessThan(launcher.frame.maxY, composer.frame.minY)
-        XCTAssertLessThan(app.frame.maxY - composer.frame.maxY, Self.composerBottomTolerance)
+        XCTAssertTrue(rail.isHittable)
+        XCTAssertTrue(waitUntilHittable(composer))
     }
 
     @MainActor
@@ -236,7 +248,8 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-long-workspace-list", "-appThemePreference", themePreference]
         app.launch()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        let navigation = UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
+        XCTAssertTrue(app.buttons[navigation].waitForExistence(timeout: Self.timeout))
         return app
     }
 

@@ -4,6 +4,7 @@ import UIKit
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
     @State private var proposals: ProposalActionStore
+    var onBack: (() -> Void)?
     var onAgentUnavailable: (() -> Void)?
     var assistantStore: AssistantStore?
 
@@ -13,8 +14,10 @@ struct ConversationView: View {
         agentName: String,
         session: BackendSession,
         assistantStore: AssistantStore? = nil,
+        onBack: (() -> Void)? = nil,
         onAgentUnavailable: (() -> Void)? = nil
     ) {
+        self.onBack = onBack
         self.onAgentUnavailable = onAgentUnavailable
         self.assistantStore = assistantStore
         _proposals = State(initialValue: ProposalActionStore(connection: session.connection, agentId: agentId, workspaceId: workspaceId, details: session.agentDetails, workspaceStore: session.workspaceStore))
@@ -35,6 +38,7 @@ struct ConversationView: View {
     var body: some View {
         ConversationViewContent(
             viewModel: viewModel,
+            onBack: onBack,
             onAgentUnavailable: onAgentUnavailable,
             assistantStore: assistantStore
         )
@@ -47,12 +51,17 @@ struct ConversationView: View {
 
 private struct ConversationViewContent: View {
     let viewModel: ConversationViewModel
+    var onBack: (() -> Void)?
     var onAgentUnavailable: (() -> Void)?
     var assistantStore: AssistantStore?
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.conversationPresentation) private var presentation
+    @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
+    @State private var isInNavigation = false
+    @State private var hasVisibleConversation = false
     @State private var showModelPicker = false
     @State private var showDeleteConfirmation = false
     /// True while a deletion initiated from this view's own Delete button is in
@@ -111,28 +120,18 @@ private struct ConversationViewContent: View {
                 }
             }
             .onAppear {
-                if let connectionId = session.backendID?.connectionID {
-                    NotificationManager.shared.conversationOpened(
-                        agentId: viewModel.agentId,
-                        connectionId: connectionId
-                    )
-                }
-                // Entry itself never marks seen (the divider anchor must survive
-                // until the user leaves or the turn finishes).
-                viewModel.conversationAppeared()
+                isInNavigation = true
+                updateConversationVisibility(isPaneVisible)
+            }
+            .onChange(of: isPaneVisible) { _, visible in
+                if isInNavigation { updateConversationVisibility(visible) }
             }
             .onDisappear {
-                if let connectionId = session.backendID?.connectionID {
-                    NotificationManager.shared.conversationClosed(
-                        agentId: viewModel.agentId,
-                        connectionId: connectionId
-                    )
-                }
-                // Stop-looking boundary — fires markSeen immediately.
-                viewModel.conversationDisappeared()
+                isInNavigation = false
+                updateConversationVisibility(false, retainingLiveStores: false)
             }
             .onChange(of: scenePhase) { _, phase in
-                viewModel.scenePhaseChanged(isActive: phase == .active)
+                viewModel.scenePhaseChanged(isActive: phase == .active && hasVisibleConversation)
             }
     }
 
@@ -203,12 +202,45 @@ private struct ConversationViewContent: View {
 }
 
 private extension ConversationViewContent {
+    private var isPaneVisible: Bool {
+        presentation != .iPad || isIPadPaneVisible
+    }
+
+    private func updateConversationVisibility(_ visible: Bool, retainingLiveStores: Bool = true) {
+        guard visible != hasVisibleConversation else {
+            if !retainingLiveStores { viewModel.teardownLiveStores() }
+            return
+        }
+        hasVisibleConversation = visible
+        if visible {
+            if let connectionId = session.backendID?.connectionID {
+                NotificationManager.shared.conversationOpened(agentId: viewModel.agentId, connectionId: connectionId)
+            }
+            // Entry never marks seen: preserve the unread divider until leaving or finishing.
+            viewModel.conversationAppeared()
+        } else {
+            if let connectionId = session.backendID?.connectionID {
+                NotificationManager.shared.conversationClosed(agentId: viewModel.agentId, connectionId: connectionId)
+            }
+            if retainingLiveStores {
+                viewModel.conversationCovered()
+            } else {
+                viewModel.conversationDisappeared()
+            }
+        }
+        viewModel.scenePhaseChanged(isActive: visible && scenePhase == .active)
+    }
+
     private var usesWorkspaceDesign: Bool {
         #if os(iOS)
-        horizontalSizeClass == .compact
+        presentation == .iPad || horizontalSizeClass == .compact
         #else
         false
         #endif
+    }
+
+    private var usesPhoneQuestionPresentation: Bool {
+        usesWorkspaceDesign && presentation != .iPad
     }
 
     /// Keep the column's identity (including its scroll state) across width changes.
@@ -216,7 +248,7 @@ private extension ConversationViewContent {
         legacyConversationChrome
             .navigationBarBackButtonHidden(assistantStore == nil)
             .toolbarBackground(viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
-            .nativeNavigationBackGesture(isEnabled: !usesWorkspaceDesign || !answeringWorkspaceQuestions)
+            .nativeNavigationBackGesture(isEnabled: !usesPhoneQuestionPresentation || !answeringWorkspaceQuestions)
             #if os(iOS)
             .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
@@ -226,18 +258,18 @@ private extension ConversationViewContent {
                         title: viewModel.agentName,
                         showsBackground: !viewModel.showsLoadingState,
                         assistantStore: assistantStore,
-                        onBack: { dismiss() },
-                        actions: { agentMenu }
-                    )
+                        onBack: navigateBack
+                    ) { agentMenu }
                     .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: viewModel.showsLoadingState)
                 }
             }
             .modifier(WorkspaceQuestionPresentation(
                 viewModel: viewModel,
                 isPresented: $answeringWorkspaceQuestions,
-                isEnabled: usesWorkspaceDesign
+                isEnabled: usesPhoneQuestionPresentation
             ))
             #endif
+            .conversationReadableColumn()
             .background {
                 ConversationBackground(isLoading: viewModel.showsLoadingState, usesWorkspaceDesign: usesWorkspaceDesign)
             }
@@ -255,7 +287,7 @@ private extension ConversationViewContent {
                 if !usesWorkspaceDesign {
                     if assistantStore == nil {
                         ToolbarItem(placement: .topBarLeading) {
-                            IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
+                            IntentIconButton(icon: .arrowLeft, label: "Back", action: navigateBack)
                         }
                         .intentToolbarSurface()
                     }
@@ -372,6 +404,14 @@ private extension ConversationViewContent {
         }
     }
 
+    private func navigateBack() {
+        if let onBack {
+            onBack()
+        } else {
+            dismiss()
+        }
+    }
+
     /// Delete-confirmation action: deletes the agent then dismisses this view.
     private func deleteAgent() {
         HapticManager.notification(.warning)
@@ -388,7 +428,7 @@ private extension ConversationViewContent {
                 if let onAgentUnavailable {
                     onAgentUnavailable()
                 } else {
-                    dismiss()
+                    navigateBack()
                 }
             } catch {
                 selfInitiatedDelete = false
@@ -442,56 +482,5 @@ private extension ConversationViewContent {
             workspaceId: workspaceId,
             agentName: name
         )
-    }
-}
-
-/// Note sheet opened from a transcript note reference. Note-to-note links that
-/// target the hidden global Assistant workspace push inside the sheet: that
-/// workspace has no place in the Workspaces tab, so the coordinator route would
-/// replace the user's open workspace screen with it. Other links keep the
-/// coordinator route.
-private struct ConversationNoteSheet: View {
-    let noteInfo: NoteSheetInfo
-    let session: BackendSession
-    let onDone: () -> Void
-    @Environment(AppCoordinator.self) private var coordinator
-    @State private var path = NavigationPath()
-
-    var body: some View {
-        NavigationStack(path: $path) {
-            noteDetail(noteId: noteInfo.noteId, workspaceId: noteInfo.workspaceId, noteTitle: noteInfo.noteTitle)
-                .navigationDestination(for: NoteDestination.self) { destination in
-                    noteDetail(
-                        noteId: destination.noteId,
-                        workspaceId: destination.workspaceId,
-                        noteTitle: destination.noteTitle
-                    )
-                }
-        }
-    }
-
-    private func noteDetail(noteId: String, workspaceId: String, noteTitle: String) -> some View {
-        NoteDetailView(
-            noteId: noteId,
-            workspaceId: workspaceId,
-            noteTitle: noteTitle,
-            session: session,
-            showsBackButton: !path.isEmpty,
-            onNavigateToNote: navigate
-        )
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                IntentIconButton(icon: .close, label: "Done", action: onDone)
-            }
-            .intentToolbarSurface()
-        }
-    }
-
-    private func navigate(noteId: String, workspaceId: String, noteTitle: String) {
-        if workspaceId == Workspace.chiefWorkspaceId {
-            path.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle))
-        } else {
-            coordinator.onSelectNote(noteId, workspaceId: workspaceId, noteTitle: noteTitle)
-        }
     }
 }

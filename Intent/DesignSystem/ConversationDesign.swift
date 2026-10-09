@@ -1,8 +1,8 @@
 import SwiftUI
 
 extension Constants.Conversation {
-    /// Compact iOS workspace-agent and Assistant styling from the approved 402pt Figma frames.
-    /// Existing conversation constants stay unchanged for regular-width and visionOS callers.
+    /// Shared iOS workspace-agent and Assistant styling from the approved Figma frames.
+    /// iPad opts in explicitly; standard regular-width and visionOS callers stay unchanged.
     /// Heights are visual baselines, not text caps; preserve Dynamic Type and platform hit targets.
     enum Design {
         static let horizontalInset: CGFloat = 24
@@ -17,6 +17,18 @@ extension Constants.Conversation {
 }
 
 extension Constants.Conversation.Design {
+    enum IPad {
+        static let readableWidth: CGFloat = 560
+        static let assistantMaximumWidth: CGFloat = 415
+        static let userBubbleMaximumWidth: CGFloat = 270
+        static let minimumHorizontalInset: CGFloat = 16
+        static let horizontalInset: CGFloat = 24
+        static let headerTopInset: CGFloat = 32
+        static let headerBottomInset: CGFloat = 24
+        static let composerBottomInset: CGFloat = 24
+        static let transcriptRowSpacing: CGFloat = 36
+    }
+
     enum Header {
         static let controlSize: CGFloat = 48
         static let verticalPadding: CGFloat = 8

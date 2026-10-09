@@ -105,27 +105,13 @@ struct ConnectionsView: View {
     @State private var connectionPendingDelete: StoredConnection?
     @State private var showDeleteError = false
     @ScaledMetric private var menuIconSize: CGFloat = 17
+    var isEmbedded = false
+    var onCollapse: (() -> Void)?
+    var onScanQR: (() -> Void)?
+    var onManualPairing: (() -> Void)?
 
     var body: some View {
-        ConnectionSheet(
-            initialHeight: Constants.Connections.initialSheetHeight,
-            backgroundColor: Constants.Connections.background(for: colorScheme),
-            closeForeground: Constants.Connections.foreground(for: colorScheme)
-        ) {
-            VStack(spacing: Constants.Connections.headingToCardsSpacing) {
-                ConnectionSheetText(
-                    "Saved Connections", style: Constants.Typography.heading2, tracking: Constants.Connections.headingTracking
-                )
-                .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
-                .multilineTextAlignment(.center)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("saved-connections.title")
-                VStack(spacing: Constants.Connections.cardsToPairingSpacing) {
-                    connectionsList
-                    ConnectionPairingActions(colorScheme: colorScheme, onPaired: handlePaired)
-                }
-            }
-        }
+        presentation
         .sheet(item: $connectionShowingDetails) { connection in
             SavedConnectionDetails(connection: connection)
         }
@@ -156,6 +142,58 @@ struct ConnectionsView: View {
             reload()
         }
         .onReceive(coordinator.dependencies.persistence.connectionsDidChange) { reload() }
+    }
+
+    private func collapseSidebar() { onCollapse?() }
+
+    @ViewBuilder private var presentation: some View {
+        if isEmbedded {
+            VStack(spacing: 0) {
+                IPadSidebarHeader(onCollapse: collapseSidebar) {
+                    IPadSidebarTitle(title: "Connections")
+                } actions: {}
+                ScrollView {
+                    VStack(spacing: Constants.Connections.cardsToPairingSpacing) {
+                        connectionsList
+                        ConnectionPairingActions(
+                            colorScheme: colorScheme,
+                            onPaired: handlePaired,
+                            onScanQR: onScanQR,
+                            onManualPairing: onManualPairing,
+                            isEmbedded: true
+                        )
+                    }
+                    .padding(.horizontal, IPadSidebarStyle.inset)
+                    .padding(.bottom, IPadSidebarStyle.inset)
+                }
+            }
+            .background(IPadSidebarStyle.background(for: colorScheme))
+            .accessibilityIdentifier("connections.sidebar")
+        } else {
+            sheetPresentation
+        }
+    }
+
+    private var sheetPresentation: some View {
+        ConnectionSheet(
+            initialHeight: Constants.Connections.initialSheetHeight,
+            backgroundColor: Constants.Connections.background(for: colorScheme),
+            closeForeground: Constants.Connections.foreground(for: colorScheme)
+        ) {
+            VStack(spacing: Constants.Connections.headingToCardsSpacing) {
+                ConnectionSheetText(
+                    "Saved Connections", style: Constants.Typography.heading2, tracking: Constants.Connections.headingTracking
+                )
+                .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("saved-connections.title")
+                VStack(spacing: Constants.Connections.cardsToPairingSpacing) {
+                    connectionsList
+                    ConnectionPairingActions(colorScheme: colorScheme, onPaired: handlePaired)
+                }
+            }
+        }
     }
 
     private var connectionsList: some View {
@@ -190,7 +228,7 @@ struct ConnectionsView: View {
             if connection.id != windowConnectionId {
                 coordinator.onSwitchConnection(id: connection.id)
             }
-            dismiss()
+            dismissSheet()
         } label: {
             SavedConnectionCard(
                 name: connection.displayName,
@@ -240,7 +278,7 @@ struct ConnectionsView: View {
     private func openInNewWindowButton(_ connection: StoredConnection) -> some View {
         Button {
             openWindow(value: BackendID(connection: connection))
-            dismiss()
+            dismissSheet()
         } label: {
             Label {
                 Text("Open in New Window").interFont(Constants.Typography.bodyS)
@@ -250,8 +288,12 @@ struct ConnectionsView: View {
         }
     }
 
+    private func dismissSheet() {
+        if !isEmbedded { dismiss() }
+    }
+
     private func handlePaired(_ connection: StoredConnection) {
-        dismiss()
+        dismissSheet()
         coordinator.onPaired(connection)
     }
 
@@ -262,7 +304,7 @@ struct ConnectionsView: View {
             return
         }
         reload()
-        if wasBound { dismiss() }
+        if wasBound { dismissSheet() }
     }
 
     private func reload() {
@@ -277,23 +319,54 @@ private struct ConnectionPairingActions: View {
     let onPaired: (StoredConnection) -> Void
     @State private var showQRScanner = false
     @State private var showManualEntry = false
+    var onScanQR: (() -> Void)?
+    var onManualPairing: (() -> Void)?
+    var isEmbedded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Constants.Connections.rowSpacing) {
-            Text("Add Connection")
+            Text(isEmbedded ? "PAIR NEW" : "Add Connection")
                 .interFont(Constants.Typography.eyebrow)
                 .foregroundStyle(Constants.Connections.sectionForeground(for: colorScheme, contrast: contrast))
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
 
             ConnectionPairingButtons(
-                qrTitle: "Scan QR Code",
+                qrTitle: isEmbedded ? "QR Code" : "Scan QR Code",
                 accessibilityPrefix: "saved-connections",
-                onScan: { showQRScanner = true },
-                onManualEntry: { showManualEntry = true }
+                onScan: {
+                    if let onScanQR { onScanQR() } else { showQRScanner = true }
+                },
+                onManualEntry: {
+                    if let onManualPairing { onManualPairing() } else { showManualEntry = true }
+                }
             )
         }
         .fullScreenCover(isPresented: $showQRScanner) { QRScannerView(onPaired: onPaired) }
         .sheet(isPresented: $showManualEntry) { ManualTokenEntryView(onPaired: onPaired) }
+    }
+}
+
+struct IPadConnectionsSidebar: View {
+    @Environment(AppCoordinator.self) private var coordinator
+    let onCollapse: () -> Void
+    let onScanQR: () -> Void
+    let onManualPairing: () -> Void
+
+    var body: some View {
+        ZStack {
+            ConnectionsView(
+                isEmbedded: true,
+                onCollapse: onCollapse,
+                onScanQR: onScanQR,
+                onManualPairing: onManualPairing
+            )
+            .opacity(coordinator.iPadNavigation.pairing == nil ? 1 : 0)
+            .allowsHitTesting(coordinator.iPadNavigation.pairing == nil)
+            .accessibilityHidden(coordinator.iPadNavigation.pairing != nil)
+            if let mode = coordinator.iPadNavigation.pairing {
+                IPadPairingSidebar(title: "Connections", mode: mode, onCollapse: onCollapse)
+            }
+        }
     }
 }
