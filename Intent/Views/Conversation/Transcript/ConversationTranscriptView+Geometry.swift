@@ -14,10 +14,11 @@ extension ConversationTranscriptView {
         proxy: ScrollViewProxy,
         confirming: ScrollViewMomentumProxy.RestingGeometry? = nil
     ) {
+        guard lifecycle.isVisible else { return }
         scrollState.pastEndRePinTask?.cancel()
         scrollState.pastEndRePinTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, lifecycle.isVisible else { return }
             scrollState.pastEndRePinTask = nil
             let outcome = scrollMomentumProxy.rePinIfRestingPastEnd(
                 confirming: confirming,
@@ -75,6 +76,7 @@ extension ConversationTranscriptView {
         to newContainerHeight: CGFloat,
         proxy: ScrollViewProxy
     ) -> Bool {
+        guard lifecycle.isVisible else { return false }
         recordDemoRecoveryResize(from: oldContainerHeight, to: newContainerHeight)
         let recoveryOwnsViewport: Bool
         switch lifecycle.owner {
@@ -119,10 +121,11 @@ extension ConversationTranscriptView {
     /// moment before the phase ending records where the fling left the
     /// viewport, and a fling past the threshold must not be snapped back.
     private func scheduleDeferredContainerRePin(proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible else { return }
         scrollState.containerRePinTask?.cancel()
         scrollState.containerRePinTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, lifecycle.isVisible else { return }
             scrollState.containerRePinTask = nil
             switch ConversationTranscriptScrollPolicy.deferredContainerRePinDecision(
                 distanceToBottom: scrollMomentumProxy.distanceToBottom,
@@ -160,6 +163,7 @@ extension ConversationTranscriptView {
     /// a follow that lands a rounding error short would otherwise re-check
     /// and re-scroll itself without bound.
     func scheduleBottomBandRePinIfNeeded(proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible else { return }
         guard ConversationTranscriptScrollPolicy.shouldRecheckBottomBandAfterEdge(
             isInteracting: isUserInteracting,
             hasInitiallyScrolled: hasInitiallyScrolled,
@@ -176,10 +180,11 @@ extension ConversationTranscriptView {
     /// geometry when it runs (and past the band re-pins it as growth when
     /// it drains).
     private func scheduleBottomBandRePin(proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible else { return }
         scrollState.bottomBandRePinTask?.cancel()
         scrollState.bottomBandRePinTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, lifecycle.isVisible else { return }
             scrollState.bottomBandRePinTask = nil
             switch ConversationTranscriptScrollPolicy.bottomBandRePinDecision(
                 distanceToBottom: scrollMomentumProxy.distanceToBottom,
@@ -231,6 +236,7 @@ extension ConversationTranscriptView {
         isInteracting: Bool,
         proxy: ScrollViewProxy
     ) {
+        guard lifecycle.isVisible else { return }
         // A history prepend's coarse restoration can briefly cross the bottom
         // band. That layout is not a user returning to the tail (#711). Keep
         // the reading position until the page settles; gestures and explicit

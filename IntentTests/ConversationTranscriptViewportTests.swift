@@ -205,6 +205,7 @@ extension ConversationTranscriptScrollPolicyTests {
     @Test @MainActor func automaticFollowCompletionPublishesViewportSettlement() {
         let state = ConversationTranscriptScrollState()
         applyViewportEvent(.endRealized(userIsScrolledAway: false), to: state)
+        applyViewportEvent(.viewAppeared, to: state)
         applyViewportEvent(.followRequested(forced: false), to: state)
         guard case .follow(let token, forced: false) = state.lifecycle.owner else {
             Issue.record("automatic follow did not take ownership")
@@ -219,6 +220,7 @@ extension ConversationTranscriptScrollPolicyTests {
 
     @Test @MainActor func recoveryTerminalKeepsTheActualFollowActiveUntilItsOwnCompletion() throws {
         let state = ConversationTranscriptScrollState()
+        applyViewportEvent(.viewAppeared, to: state)
         applyViewportEvent(.endDerealized, to: state)
         let recovery = try #require(state.lifecycle.currentRecovery)
         applyViewportEvent(.recoveryStep(recovery, .recover(pageOffsetY: 100)), to: state)
@@ -240,6 +242,7 @@ extension ConversationTranscriptScrollPolicyTests {
 
     @Test @MainActor func staleFollowCompletionDoesNotPublishFalseSettlement() {
         let state = ConversationTranscriptScrollState()
+        applyViewportEvent(.viewAppeared, to: state)
         applyViewportEvent(.followRequested(forced: false), to: state)
         guard case .follow(let old, _) = state.lifecycle.owner else {
             Issue.record("missing first owner")
@@ -257,6 +260,7 @@ extension ConversationTranscriptScrollPolicyTests {
 
     @Test @MainActor func recoveryOwnershipAndExplicitTapRemainObservable() throws {
         let state = ConversationTranscriptScrollState()
+        applyViewportEvent(.viewAppeared, to: state)
         applyViewportEvent(.endDerealized, to: state)
         let recovery = try #require(state.lifecycle.currentRecovery)
         #expect(!state.isFollowing, "a polling recovery has not taken the viewport")
@@ -268,12 +272,33 @@ extension ConversationTranscriptScrollPolicyTests {
         applyViewportEvent(.viewDisappeared, to: state)
         #expect(!state.isFollowing)
         #expect(released() == 1)
+        applyViewportEvent(.viewAppeared, to: state)
         state.isScrollingToBottom = true
         #expect(state.isFollowing, "the explicit tap owns the gap before its request")
         let tapReleased = observeFollowing(state)
         state.isScrollingToBottom = false
         #expect(!state.isFollowing)
         #expect(tapReleased() == 1)
+    }
+
+    @Test @MainActor func disappearancePublishesFollowSettlementAndRejectsItsLateCompletion() {
+        let state = ConversationTranscriptScrollState()
+        applyViewportEvent(.endRealized(userIsScrolledAway: false), to: state)
+        applyViewportEvent(.viewAppeared, to: state)
+        applyViewportEvent(.followRequested(forced: false), to: state)
+        guard case .follow(let token, _) = state.lifecycle.owner else {
+            Issue.record("missing follow owner")
+            return
+        }
+        let changes = observeFollowing(state)
+        applyViewportEvent(.viewDisappeared, to: state)
+        #expect(!state.isFollowing)
+        #expect(changes() == 1)
+        applyViewportEvent(.followFinished(token, .executed(nil)), to: state)
+        applyViewportEvent(.endDerealized, to: state)
+        #expect(!state.lifecycle.isVisible)
+        #expect(state.lifecycle.currentRecovery == nil)
+        #expect(!state.isFollowing)
     }
 
     @MainActor private func observeFollowing(_ state: ConversationTranscriptScrollState) -> @Sendable () -> Int {

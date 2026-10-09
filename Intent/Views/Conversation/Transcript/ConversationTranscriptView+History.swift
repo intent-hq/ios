@@ -21,6 +21,7 @@ extension ConversationTranscriptView {
     }
 
     func loadOlderMessagesIfNeeded(proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible else { return }
         guard ConversationTranscriptScrollPolicy.shouldLoadOlderMessages(
             isNearTop: scrollState.isNearHistoryTop,
             hasInitiallyScrolled: hasInitiallyScrolled,

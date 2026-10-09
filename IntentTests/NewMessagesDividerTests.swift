@@ -695,3 +695,42 @@ extension ConversationTranscriptScrollPolicyTests {
         ) == .preserveViewport)
     }
 }
+
+extension ConversationTranscriptScrollPolicyTests {
+    @Test(arguments: [false, true])
+    func disappearingBeforeEntrySettlesAllowsANewEntry(performed: Bool) {
+        let state = ConversationTranscriptScrollState()
+        state.initialScrollScheduled = true
+        state.initialScrollAwaitingScrollView = !performed
+        state.initialScrollPerformed = performed
+        let previousGeneration = state.initialScrollGeneration
+
+        state.suspendEntryScroll()
+
+        #expect(!state.hasInitiallyScrolled)
+        #expect(!state.initialScrollScheduled)
+        #expect(!state.initialScrollAwaitingScrollView)
+        #expect(!state.initialScrollPerformed)
+        #expect(state.initialScrollGeneration == previousGeneration + 1)
+        state.applyDividerProbe(distanceToBottom: 100, generation: previousGeneration)
+        #expect(!state.userIsScrolledAway)
+        state.applyDividerProbe(distanceToBottom: 100, generation: state.initialScrollGeneration)
+        #expect(state.userIsScrolledAway)
+    }
+
+    @Test func disappearingAfterEntryKeepsTheReadersPositionAndGestureClaim() {
+        let state = ConversationTranscriptScrollState()
+        state.preservePresentedViewport(distanceToBottom: 100)
+        state.forcedFollowTakenOverByGesture = true
+        let previousGeneration = state.initialScrollGeneration
+
+        state.suspendEntryScroll()
+
+        #expect(state.hasInitiallyScrolled)
+        #expect(state.initialScrollScheduled)
+        #expect(state.initialScrollPerformed)
+        #expect(state.userIsScrolledAway)
+        #expect(state.forcedFollowTakenOverByGesture)
+        #expect(state.initialScrollGeneration == previousGeneration + 1)
+    }
+}

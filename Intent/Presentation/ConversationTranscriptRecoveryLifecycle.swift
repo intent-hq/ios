@@ -73,7 +73,13 @@ enum ConversationTranscriptRecoveryLifecycle {
         }
     }
 
+    enum Visibility: Equatable {
+        case inactive
+        case visible
+    }
+
     struct State: Equatable {
+        var visibility: Visibility = .inactive
         var owner: ViewportOwner = .idle
         var armedRecovery: ArmedRecovery?
         var fallback: GiveUpFallback = .none
@@ -82,6 +88,7 @@ enum ConversationTranscriptRecoveryLifecycle {
         var isEndRealized = false
         var nextTokenId = 1
 
+        var isVisible: Bool { visibility == .visible }
         var isFollowing: Bool { owner != .idle }
 
         /// The one recovery task alive right now, armed or owning.
@@ -117,6 +124,7 @@ enum ConversationTranscriptRecoveryLifecycle {
         case recoveryPagedUp(RecoveryToken, mayFollowBack: Bool)
         /// One intermediate poll of the recovery loop.
         case recoveryStep(RecoveryToken, RecoveryContinuation)
+        case viewAppeared
         case viewDisappeared
     }
 
@@ -162,11 +170,25 @@ enum ConversationTranscriptRecoveryLifecycle {
         var state = state
         var effects: [Effect] = []
         switch event {
+        case .viewAppeared:
+            viewAppeared(&state, &effects)
+        case .viewDisappeared:
+            viewDisappeared(&state, &effects)
         case .endDerealized:
             endDerealized(&state, &effects)
         case .endRealized(let userIsScrolledAway):
             endRealized(userIsScrolledAway: userIsScrolledAway, &state, &effects)
-        case .explicitClaim, .viewDisappeared:
+        default:
+            if state.isVisible { transitionVisibleWork(&state, event, &effects) }
+        }
+        return (state, effects)
+    }
+}
+
+extension ConversationTranscriptRecoveryLifecycle {
+    private static func transitionVisibleWork(_ state: inout State, _ event: Event, _ effects: inout [Effect]) {
+        switch event {
+        case .explicitClaim:
             cancelRecovery(&state, &effects)
         case .followCancelledByGesture:
             followCancelledByGesture(&state, &effects)
@@ -182,8 +204,9 @@ enum ConversationTranscriptRecoveryLifecycle {
             recoveryPagedUp(token, mayFollowBack: mayFollowBack, &state, &effects)
         case let .recoveryStep(token, continuation):
             recoveryStep(token, continuation, &state, &effects)
+        case .endDerealized, .endRealized, .viewAppeared, .viewDisappeared:
+            break
         }
-        return (state, effects)
     }
 
     // MARK: - Per-event transitions
@@ -191,19 +214,36 @@ enum ConversationTranscriptRecoveryLifecycle {
     // A stale token returns before touching `state` or `effects`, so the
     // dispatcher's unchanged state and empty effects are the result.
 
+    private static func viewAppeared(_ state: inout State, _ effects: inout [Effect]) {
+        guard !state.isVisible else { return }
+        state.visibility = .visible
+        if !state.isEndRealized { armRecovery(&state, &effects) }
+    }
+
+    private static func viewDisappeared(_ state: inout State, _ effects: inout [Effect]) {
+        if case .follow(let token, _) = state.owner {
+            effects.append(.cancelFollowTask(token))
+        }
+        cancelRecovery(&state, &effects)
+        state.visibility = .inactive
+        state.owner = .idle
+        state.fallback = .none
+        state.isEndRealized = false
+    }
+
     private static func endDerealized(_ state: inout State, _ effects: inout [Effect]) {
         state.isEndRealized = false
         // A recovery already polling keeps its budget: it reads the end
         // row's state at every poll, so re-arming would only reset the
         // bound.
-        if state.currentRecovery == nil {
+        if state.isVisible, state.currentRecovery == nil {
             armRecovery(&state, &effects)
         }
     }
 
     private static func endRealized(userIsScrolledAway: Bool, _ state: inout State, _ effects: inout [Effect]) {
         state.isEndRealized = true
-        if userIsScrolledAway {
+        if state.isVisible, userIsScrolledAway {
             effects.append(.replayLiveEdge(.live))
         }
     }
