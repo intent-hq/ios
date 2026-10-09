@@ -68,7 +68,10 @@ struct WorkspaceQuestionPresentation: ViewModifier {
             .environment(\.workspaceQuestionPanelPresented, isActive)
             .environment(\.workspaceQuestionSubmitting, submitting)
             .animation(presentationAnimation, value: isActive)
-            .onChange(of: isActive) { _, active in panelFocused = active }
+            .onChange(of: isActive) { _, active in
+                AppLog.userInterface.debug("[SCROLL][QUESTION] panel active=\(active) submitting=\(submitting)")
+                panelFocused = active
+            }
             .onChange(of: viewModel.pendingQuestions?.messageId) { _, _ in isPresented = false }
             .onChange(of: isEnabled) { _, enabled in
                 if !enabled { isPresented = false }
@@ -77,14 +80,18 @@ struct WorkspaceQuestionPresentation: ViewModifier {
 
     private func submit(_ answers: [QuestionAnswer], messageId: String) {
         guard !submitting else { return }
-        // Keep the banner's layout destination until the panel has collapsed,
-        // but fade its content away rather than flashing it before the send.
+        AppLog.userInterface.debug("[SCROLL][QUESTION] submit collapse-start")
+        // Keep the banner mounted for the matched transition, but fade it and
+        // release its reserved height as the panel closes, before the send.
         withAnimation(presentationAnimation, completionCriteria: .removed) {
             submitting = true
             isPresented = false
         } completion: {
+            AppLog.userInterface.debug("[SCROLL][QUESTION] submit collapse-completed")
             Task {
+                AppLog.userInterface.debug("[SCROLL][QUESTION] submit request-start")
                 await viewModel.submitQuestionAnswers(answers, answeredQuestionsMessageId: messageId)
+                AppLog.userInterface.debug("[SCROLL][QUESTION] submit request-returned pending=\(viewModel.pendingQuestions != nil)")
                 submitting = false
             }
         }

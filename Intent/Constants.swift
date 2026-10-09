@@ -18,7 +18,6 @@ enum ConversationConstants {
         static let maximumImageSelectionCount = 5
         static let draftSaveDebounceMilliseconds = 500
         static let imageCompressionQuality: CGFloat = 0.8
-        static let refocusDelay: Double = 0.05
     }
 
     enum Column {}

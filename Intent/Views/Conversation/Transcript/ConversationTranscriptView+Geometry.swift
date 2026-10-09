@@ -1,6 +1,44 @@
 import SwiftUI
 
 extension ConversationTranscriptView {
+    #if DEBUG
+    /// Keyboard frames are screen coordinates, not the transcript's occluded height.
+    /// Read only the geometry/timing keys; never log the notification's entire payload.
+    func logKeyboardGeometry(_ event: String, notification: Notification) {
+        let info = notification.userInfo
+        let begin = (info?[UIResponder.keyboardFrameBeginUserInfoKey] as? NSValue)?.cgRectValue
+        let end = (info?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+        let duration = info?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double
+        let curve = info?[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int
+        let isLocal = info?[UIResponder.keyboardIsLocalUserInfoKey] as? Bool
+        logScrollGeometry(
+            "[QUESTION] keyboard \(event) beginScreen=\(String(describing: begin)) endScreen=\(String(describing: end))"
+                + " beginHeight=\(String(describing: begin?.height)) endHeight=\(String(describing: end?.height))"
+                + " duration=\(String(describing: duration)) curve=\(String(describing: curve)) local=\(String(describing: isLocal))"
+        )
+    }
+    #endif
+
+    /// Debug device tracing for question/keyboard teardown. Never includes
+    /// conversation content or backend identifiers, and does no work in Release.
+    func logScrollGeometry(_ event: @autoclosure () -> String) {
+        #if DEBUG
+        let owner: String
+        switch lifecycle.owner {
+        case .idle: owner = "idle"
+        case .follow(_, let forced): owner = forced ? "forced-follow" : "follow"
+        case .recovery: owner = "recovery"
+        }
+        let geometry = scrollMomentumProxy.restingGeometry
+        AppLog.userInterface.debug(
+            "[SCROLL] \(event()) geometry=\(String(describing: geometry))"
+                + " distanceToBottom=\(String(describing: geometry?.distanceToBottom))"
+                + " endRealized=\(lifecycle.isEndRealized) owner=\(owner) following=\(isFollowing)"
+                + " gesture=\(isUserInteracting) away=\(userIsScrolledAway) positioned=\(hasInitiallyScrolled)"
+        )
+        #endif
+    }
+
     /// Re-checks the live scroll view once the geometry has had time to
     /// settle (a bounce or a mid-animation frame reads past the end too) and
     /// clamps the offset back to the bottom once two checks agree; a viewport
@@ -76,6 +114,9 @@ extension ConversationTranscriptView {
         proxy: ScrollViewProxy
     ) -> Bool {
         recordDemoRecoveryResize(from: oldContainerHeight, to: newContainerHeight)
+        if oldContainerHeight != newContainerHeight {
+            logScrollGeometry("container-height \(oldContainerHeight)->\(newContainerHeight)")
+        }
         let recoveryOwnsViewport: Bool
         switch lifecycle.owner {
         case .recovery: recoveryOwnsViewport = true
@@ -124,6 +165,7 @@ extension ConversationTranscriptView {
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
             guard !Task.isCancelled else { return }
             scrollState.containerRePinTask = nil
+            logScrollGeometry("container-settle-check")
             switch ConversationTranscriptScrollPolicy.deferredContainerRePinDecision(
                 distanceToBottom: scrollMomentumProxy.distanceToBottom,
                 isInteracting: isUserInteracting,
