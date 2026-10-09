@@ -14,6 +14,40 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
         static let dragFar: CGFloat = 0.75
         static let dragDuration: TimeInterval = 0.05
         static let dragHold: TimeInterval = 0.2
+        static let historyVisits = 3
+    }
+
+    @MainActor
+    func testDiagramHistoryReopensAndGoToEndShowsLastAnswer() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-design-scenario=mermaid-history", "--trace-conversation"]
+        app.launch()
+        defer { app.terminate() }
+        let workspace = app.staticTexts["Workspace agent design"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        workspace.tap()
+
+        for visit in 1...Fixture.historyVisits {
+            let agent = app.staticTexts["Continue Spec Writer"].firstMatch
+            XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+            agent.tap()
+            let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+            XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+            let lastAnswer = transcript.staticTexts.matching(NSPredicate(
+                format: "label CONTAINS %@", "Architecture answer 4 is complete."
+            )).firstMatch
+            let goToEnd = app.buttons["transcript.goToEnd"].firstMatch
+            XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { goToEnd.exists || lastAnswer.isHittable })
+            if goToEnd.exists { goToEnd.tap() }
+            let landed = waitUntil(timeout: Fixture.timeout) {
+                guard lastAnswer.exists, lastAnswer.isHittable else { return false }
+                return transcript.frame.intersects(lastAnswer.frame) && !goToEnd.exists
+            }
+            capture(app, name: "mermaid-history-visit-\(visit)")
+            XCTAssertTrue(landed, "The final answer must be visible without a manual scroll: \(transcript.value ?? "no report")")
+            app.buttons["conversation.back"].tap()
+        }
     }
 
     @MainActor

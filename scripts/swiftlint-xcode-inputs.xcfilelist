@@ -106,6 +106,7 @@ $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MarkdownCodeFence.swift
 $(SRCROOT)/Intent/Presentation/MarkdownContentCache.swift
+$(SRCROOT)/Intent/Presentation/MermaidInlineHeightCache.swift
 $(SRCROOT)/Intent/Presentation/MermaidMarkdownContent.swift
 $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
@@ -727,6 +728,7 @@ $(SRCROOT)/IntentTests/MarkdownContentCacheTests.swift
 $(SRCROOT)/IntentTests/MarkdownTableLayoutTests.swift
 $(SRCROOT)/IntentTests/MarkdownTextViewTests.swift
 $(SRCROOT)/IntentTests/MediaAudioSessionTests.swift
+$(SRCROOT)/IntentTests/MermaidInlineHeightTests.swift
 $(SRCROOT)/IntentTests/MermaidMarkdownContentTests.swift
 $(SRCROOT)/IntentTests/MermaidWebViewTests.swift
 $(SRCROOT)/IntentTests/MessageBlockPartitionTests.swift

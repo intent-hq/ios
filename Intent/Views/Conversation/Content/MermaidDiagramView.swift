@@ -17,6 +17,7 @@ struct MermaidDiagramView: View {
         MermaidCanvas(source: source, expanded: false) {
             isExpanded = true
         }
+        .id(source)
         .fullScreenCover(isPresented: $isExpanded) {
             MermaidExpandedView(source: source)
         }
@@ -72,7 +73,8 @@ private struct MermaidCanvas: View {
     @ScaledMetric(relativeTo: .caption) private var controlIconSide: CGFloat = 12
 
     private var inlineHeight: CGFloat {
-        min(max(state.height ?? MermaidAppearance.minimumHeight, MermaidAppearance.minimumHeight), MermaidAppearance.maximumInlineHeight)
+        let height = state.height ?? MermaidInlineHeightCache.shared.height(for: source) ?? MermaidAppearance.minimumHeight
+        return min(max(height, MermaidAppearance.minimumHeight), MermaidAppearance.maximumInlineHeight)
     }
 
     var body: some View {

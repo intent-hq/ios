@@ -11,6 +11,11 @@ import tempfile
 
 
 CAPTURES = {
+    "ConversationMermaidUITests": {
+        "testDiagramHistoryReopensAndGoToEndShowsLastAnswer": (
+            "mermaid-history-visit-1", "mermaid-history-visit-2", "mermaid-history-visit-3",
+        ),
+    },
     "ConversationTranscriptScrollUITests": {
         "testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath": ("Transcript recovered release",),
         "testBlankEndSeveralScreensDeepIsRecovered": ("Transcript recovered deep-release",),

@@ -18,6 +18,7 @@ enum DemoDesignScenario: String, CaseIterable {
     case empty
     case history
     case mermaid
+    case mermaidHistory = "mermaid-history"
     case questionCards = "question-cards"
     case questionFlow = "question-flow"
     case questions
