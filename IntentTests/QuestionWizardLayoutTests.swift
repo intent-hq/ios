@@ -8,6 +8,43 @@ import UIKit
     await SyntheticBadgeHost.publishesAccessibilityTree()
 })
 struct QuestionWizardLayoutTests {
+    @Test(arguments: [false, true])
+    func pendingBannerReleasesSpaceBeforeQuestionsAreCleared(submitting: Bool) async throws {
+        let viewModel = ConversationViewModel(
+            agentId: "banner-layout",
+            workspaceId: "banner-layout",
+            agentName: "Test",
+            connection: ConnectionManager.shared,
+            uploadService: .shared,
+            optionsStore: CreationOptionsStore()
+        )
+        let pending = PendingQuestionSet(messageId: "pending", questions: [question])
+        // Keep the question set mounted: submission must release its space
+        // during panel closure, not wait for the later answer-send removal.
+        let view = VStack(spacing: 0) {
+            Text("Before banner").accessibilityIdentifier("banner.before")
+            WorkspaceQuestionPendingBanner(viewModel: viewModel, pendingSet: pending) {}
+                .environment(\.workspaceQuestionSubmitting, submitting)
+            Text("After banner").accessibilityIdentifier("banner.after")
+        }
+        try await SyntheticBadgeHost.render(view, width: 390, height: 700, safeAreaRegions: []) { host, _ in
+            let elements = SyntheticBadgeHost.accessibilityElements(in: host)
+            let before = try #require(elements.first { element in
+                SyntheticBadgeHost.accessibilityIdentifier(of: element) == "banner.before"
+            })
+            let after = try #require(elements.first { element in
+                SyntheticBadgeHost.accessibilityIdentifier(of: element) == "banner.after"
+            })
+            let reservedHeight = after.accessibilityFrame.minY - before.accessibilityFrame.maxY
+            if submitting {
+                #expect(abs(reservedHeight) < 1, "Submitting banner still reserves \(reservedHeight)pt")
+            } else {
+                #expect(reservedHeight >= 44, "Unanswered questions must retain their visible controls")
+                #expect(button("Answer", in: host) != nil)
+            }
+        }
+    }
+
     @Test func composerPagingAutoAdvancesAndRestoresSelection() async throws {
         let questions = [
             Question(attachmentId: "first", header: "First", question: "Choose a direction", options: [

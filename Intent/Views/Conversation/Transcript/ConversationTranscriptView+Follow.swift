@@ -16,7 +16,13 @@ extension ConversationTranscriptView {
         if state != lifecycle || !effects.isEmpty {
             traceSnapshot("lifecycleTransition")
         }
+        #if DEBUG
+        let traceTransition = state.owner != lifecycle.owner || state.isEndRealized != lifecycle.isEndRealized
+        #endif
         scrollState.lifecycle = state
+        #if DEBUG
+        if traceTransition { logScrollGeometry("lifecycle-changed") }
+        #endif
         for effect in effects {
             perform(effect, proxy: proxy, animated: animated)
         }
