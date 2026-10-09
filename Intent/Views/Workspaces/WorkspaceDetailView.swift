@@ -254,35 +254,35 @@ struct WorkspaceDetailView: View {
         .toolbarBackground(WorkspaceDetailStyle.background(for: colorScheme), for: .navigationBar)
         #endif
         .toolbar {
-            #if os(visionOS)
-            // The workspace picker lives in the top toolbar on visionOS.
-            ToolbarItem(placement: .topBarTrailing) {
-                toolbarWorkspacePicker
-            }
-            #else
-            if !usesVerticalBar {
+            if usesVerticalBar {
+                if showsToolbarTitle {
+                    ToolbarItem(placement: .principal) { toolbarTitle }
+                }
+                WorkspaceVerticalNavigationToolbar(
+                    isEnabled: true,
+                    backLabel: "Back to workspaces",
+                    backIdentifier: "workspaceDetail.back",
+                    onBack: coordinator.onBackToWorkspaceList
+                ) { workspaceActions }
+            } else {
+                #if os(visionOS)
+                // The workspace picker lives in the top toolbar on visionOS.
+                ToolbarItem(placement: .topBarTrailing) {
+                    toolbarWorkspacePicker
+                }
+                #else
                 ToolbarItem(placement: .topBarLeading) {
                     IntentIconButton(icon: .arrowLeft, label: "Back to workspaces", action: coordinator.onBackToWorkspaceList)
                 }
                 .intentToolbarSurface()
-            }
-            #endif
-            if showsToolbarTitle {
-                ToolbarItem(placement: .principal) { toolbarTitle }
-            }
-            if !usesVerticalBar {
+                #endif
+                ToolbarItem(placement: .principal) {
+                    toolbarTitle
+                }
                 ToolbarItem(placement: .primaryAction) {
                     workspaceActions
                 }
                 .intentToolbarSurface()
-            }
-            WorkspaceVerticalNavigationToolbar(
-                isEnabled: usesVerticalBar,
-                backLabel: "Back to workspaces",
-                backIdentifier: "workspaceDetail.back",
-                onBack: coordinator.onBackToWorkspaceList
-            ) {
-                workspaceActions
             }
         }
         #if !os(visionOS)

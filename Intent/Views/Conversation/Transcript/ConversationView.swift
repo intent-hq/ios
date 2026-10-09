@@ -208,7 +208,6 @@ private extension ConversationViewContent {
         false
         #endif
     }
-
     /// Keep the column's identity (including its scroll state) across width changes.
     private var conversationChrome: some View {
         legacyConversationChrome
@@ -250,7 +249,13 @@ private extension ConversationViewContent {
                 workspaceId: viewModel.workspaceId
             )
             .toolbar {
-                if !usesWorkspaceDesign, !usesVerticalNavigation {
+                if usesVerticalNavigation {
+                    WorkspaceVerticalNavigationToolbar(
+                        isEnabled: true,
+                        backIdentifier: "conversation.back",
+                        onBack: dismiss.callAsFunction
+                    ) { agentMenu }
+                } else if !usesWorkspaceDesign {
                     if assistantStore == nil {
                         ToolbarItem(placement: .topBarLeading) {
                             IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
@@ -262,11 +267,6 @@ private extension ConversationViewContent {
                     }
                     .intentToolbarSurface()
                 }
-                WorkspaceVerticalNavigationToolbar(
-                    isEnabled: usesVerticalNavigation,
-                    backIdentifier: "conversation.back",
-                    onBack: dismiss.callAsFunction
-                ) { agentMenu }
             }
     }
 

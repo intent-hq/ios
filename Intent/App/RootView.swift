@@ -76,7 +76,8 @@ struct RootView: View {
         switch coordinator.currentScreen {
         case .workspaceList, .workspaceDetail, .agentConversation, .noteDetail:
             return true
-        default: return false
+        default:
+            return false
         }
     }
 
@@ -140,7 +141,12 @@ struct RootView: View {
     @ViewBuilder private var workspaceNavigationContent: some View {
         if sizeClass == .compact {
             // iPhone: standard NavigationStack with push/pop
-            compactNavigationView
+            if usesVerticalBar {
+                compactNavigationView
+                    .modifier(WorkspaceCompactActionLauncher(showsWorkspaceDetail: showingWorkspaceDetail))
+            } else {
+                compactNavigationView
+            }
         } else {
             // iPad: NavigationSplitView with sidebar selection
             WorkspaceConnectionSwitcher(
@@ -149,22 +155,7 @@ struct RootView: View {
                     && coordinator.selectedSection == .workspaces,
                 onReveal: prepareConnectionSwitcher
             ) {
-                NavigationSplitView(columnVisibility: $splitViewVisibility) {
-                    WorkspaceListSidebar(
-                        workspaceStore: session.workspaceStore,
-                        isSearching: $isSearchingWorkspaces,
-                        onCreateWorkspace: createWorkspace
-                    )
-                    .navigationSplitViewColumnWidth(
-                        min: Constants.Root.sidebarMinimumWidth,
-                        ideal: Constants.Root.sidebarIdealWidth,
-                        max: Constants.Root.sidebarMaximumWidth
-                    )
-                } detail: {
-                    detailContent
-                        .modifier(WorkspaceActionLauncherToolbar(isEnabled: !isSearchingWorkspaces))
-                }
-                .navigationSplitViewStyle(.automatic)
+                workspaceSplitView
             }
             .modifier(WorkspaceActionLauncher(
                 isSearching: isSearchingWorkspaces,
@@ -427,6 +418,43 @@ private extension RootView {
 }
 
 private extension RootView {
+    @ViewBuilder var workspaceSplitView: some View {
+        if usesVerticalBar {
+            NavigationSplitView(columnVisibility: $splitViewVisibility) {
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: $isSearchingWorkspaces,
+                    onCreateWorkspace: createWorkspace
+                )
+                .navigationSplitViewColumnWidth(
+                    min: Constants.Root.sidebarMinimumWidth,
+                    ideal: Constants.Root.sidebarIdealWidth,
+                    max: Constants.Root.sidebarMaximumWidth
+                )
+            } detail: {
+                detailContent
+                    .modifier(WorkspaceActionLauncherToolbar(isEnabled: !isSearchingWorkspaces))
+            }
+            .navigationSplitViewStyle(.automatic)
+        } else {
+            NavigationSplitView {
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: $isSearchingWorkspaces,
+                    onCreateWorkspace: createWorkspace
+                )
+                .navigationSplitViewColumnWidth(
+                    min: Constants.Root.sidebarMinimumWidth,
+                    ideal: Constants.Root.sidebarIdealWidth,
+                    max: Constants.Root.sidebarMaximumWidth
+                )
+            } detail: {
+                detailContent
+            }
+            .navigationSplitViewStyle(.automatic)
+        }
+    }
+
     func prepareConnectionSwitcher() {
         isSearchingWorkspaces = false
     }

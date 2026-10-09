@@ -22,23 +22,30 @@ private struct IntentNavigationBackButtonModifier: ViewModifier {
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
 
     func body(content: Content) -> some View {
-        content
-            .navigationBarBackButtonHidden()
-            .nativeNavigationBackGesture()
-            .toolbar {
-                if isVisible {
-                    if usesWorkspaceVerticalBar, usesVerticalBar {
+        if usesWorkspaceVerticalBar, usesVerticalBar {
+            content
+                .navigationBarBackButtonHidden()
+                .nativeNavigationBackGesture()
+                .toolbar {
+                    if isVisible {
                         WorkspaceVerticalNavigationToolbar(isEnabled: true, onBack: dismiss.callAsFunction) {
                             EmptyView()
                         }
-                    } else {
+                    }
+                }
+        } else {
+            content
+                .navigationBarBackButtonHidden()
+                .nativeNavigationBackGesture()
+                .toolbar {
+                    if isVisible {
                         ToolbarItem(placement: .topBarLeading) {
                             IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
                         }
                         .intentToolbarSurface()
                     }
                 }
-            }
+        }
     }
 }
 

@@ -32,7 +32,6 @@ extension RootView {
                     }
                 }
         }
-        .modifier(WorkspaceCompactActionLauncher(showsWorkspaceDetail: showingWorkspaceDetail))
         .onAppear {
             syncNavigationState()
         }

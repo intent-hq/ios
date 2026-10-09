@@ -15,6 +15,7 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
     @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @State private var width: CGFloat = 0
     @State private var safeArea = EdgeInsets()
     @State private var translation: CGFloat = 0
@@ -49,11 +50,17 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safeArea = $0 }
         .mask {
-            Rectangle()
-                .padding(.top, -safeArea.top)
-                .padding(.bottom, -safeArea.bottom)
-                .padding(.leading, -safeArea.leading)
-                .padding(.trailing, -safeArea.trailing)
+            if usesVerticalBar {
+                Rectangle()
+                    .padding(.top, -safeArea.top)
+                    .padding(.bottom, -safeArea.bottom)
+                    .padding(.leading, -safeArea.leading)
+                    .padding(.trailing, -safeArea.trailing)
+            } else {
+                Rectangle()
+                    .padding(.top, -safeArea.top)
+                    .padding(.bottom, -safeArea.bottom)
+            }
         }
         .modifier(EdgeDrawerGesture(
             side: side,
@@ -98,11 +105,17 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
             }
             .background(Constants.WorkspaceList.canvas(for: colorScheme).ignoresSafeArea())
             .mask {
-                RoundedRectangle(cornerRadius: ConnectionSwitcherStyle.pageCornerRadius * revealProgress, style: .continuous)
-                    .padding(.top, -safeArea.top)
-                    .padding(.bottom, -safeArea.bottom)
-                    .padding(.leading, -safeArea.leading)
-                    .padding(.trailing, -safeArea.trailing)
+                if usesVerticalBar {
+                    RoundedRectangle(cornerRadius: ConnectionSwitcherStyle.pageCornerRadius * revealProgress, style: .continuous)
+                        .padding(.top, -safeArea.top)
+                        .padding(.bottom, -safeArea.bottom)
+                        .padding(.leading, -safeArea.leading)
+                        .padding(.trailing, -safeArea.trailing)
+                } else {
+                    RoundedRectangle(cornerRadius: ConnectionSwitcherStyle.pageCornerRadius * revealProgress, style: .continuous)
+                        .padding(.top, -safeArea.top)
+                        .padding(.bottom, -safeArea.bottom)
+                }
             }
             .shadow(
                 color: .black.opacity(ConnectionSwitcherStyle.shadowOpacity * Double(revealProgress)),

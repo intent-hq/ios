@@ -32,6 +32,20 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 
     func body(content: Content) -> some View {
+        if usesVerticalBar {
+            floatingMenu(content: content)
+                .onChange(of: isOpen) { _, open in
+                    if open { connectionCount = PersistenceManager.shared.loadConnections().count }
+                }
+                .modifier(WorkspaceActionLauncherToolbar(isEnabled: hostsVerticalBarButton && !isSearching))
+                .environment(\.workspaceActionMenuPresented, $isOpen)
+        } else {
+            floatingMenu(content: content)
+        }
+    }
+
+    // Keep the original modifier chain and ordering on devices without a vertical bar.
+    private func floatingMenu(content: Content) -> some View {
         content
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
@@ -52,13 +66,8 @@ struct WorkspaceActionLauncher: ViewModifier {
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
             }
-            .onChange(of: isOpen) { _, open in
-                if open { connectionCount = PersistenceManager.shared.loadConnections().count }
-            }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
             .onDisappear { isOpen = false }
-            .modifier(WorkspaceActionLauncherToolbar(isEnabled: hostsVerticalBarButton && !isSearching))
-            .environment(\.workspaceActionMenuPresented, $isOpen)
     }
 
     private func actionOverlay(bottomInset: CGFloat) -> some View {
@@ -106,9 +115,16 @@ struct WorkspaceActionLauncher: ViewModifier {
                 )
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
             }
-            // Keep the close control inside the modal overlay's accessibility boundary.
-            if !usesVerticalBar || isOpen {
-                AssistantLaunchButton(isOpen: isOpen, action: toggleMenu)
+            if usesVerticalBar {
+                // Keep the close control inside the modal overlay's accessibility boundary.
+                if isOpen {
+                    AssistantLaunchButton(isOpen: isOpen) { isOpen.toggle() }
+                }
+            } else {
+                AssistantLaunchButton(isOpen: isOpen) {
+                    if !isOpen { connectionCount = PersistenceManager.shared.loadConnections().count }
+                    isOpen.toggle()
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .bottom))
@@ -120,10 +136,6 @@ struct WorkspaceActionLauncher: ViewModifier {
         case "dark": "Dark Mode"
         default: "System"
         }
-    }
-
-    private func toggleMenu() {
-        isOpen.toggle()
     }
 
     private func select(_ action: HomeActionTiles.Action) {
@@ -185,18 +197,21 @@ struct WorkspaceActionLauncherToolbar: ViewModifier {
     func body(content: Content) -> some View {
         // Gate the modifier itself: older SDKs cannot build an empty toolbar closure.
         #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
-        content.toolbar {
-            if #available(iOS 27.1, *), isEnabled, usesVerticalBar,
-               let menuPresented, !menuPresented.wrappedValue {
-                ToolbarItem(placement: .bottomBar) {
-                    AssistantLaunchButton(isOpen: false, isInVerticalBar: true) {
-                        menuPresented.wrappedValue = true
+        if #available(iOS 27.1, *), usesVerticalBar {
+            content.toolbar {
+                if isEnabled, let menuPresented, !menuPresented.wrappedValue {
+                    ToolbarItem(placement: .bottomBar) {
+                        AssistantLaunchButton(isOpen: false, isInVerticalBar: true) {
+                            menuPresented.wrappedValue = true
+                        }
                     }
+                    .axisBehavior(.verticalPreferred)
+                    .sharedBackgroundVisibility(.hidden)
+                    .contentMarginsRemoved()
                 }
-                .axisBehavior(.verticalPreferred)
-                .sharedBackgroundVisibility(.hidden)
-                .contentMarginsRemoved()
             }
+        } else {
+            content
         }
         #else
         content
