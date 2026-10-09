@@ -24,12 +24,13 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
 
     func body(content: Content) -> some View {
         content
-            .toolbar(horizontalSizeClass == .compact ? .hidden : .automatic, for: .navigationBar)
+            .toolbar(horizontalSizeClass == .compact && !usesVerticalBar ? .hidden : .automatic, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if horizontalSizeClass == .compact {
+                if horizontalSizeClass == .compact, !usesVerticalBar {
                     WorkspaceNavigationHeader(
                         title: title,
                         subtitle: "Workspace",

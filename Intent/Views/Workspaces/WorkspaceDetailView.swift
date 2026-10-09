@@ -3,11 +3,13 @@ import SwiftUI
 struct WorkspaceDetailView: View {
     let workspaceId: String
     private let persistence: PersistenceManager
+    private let isSidebarVisible: Bool
     @Environment(AppCoordinator.self) var coordinator
     @State private var storedAgentStore: AgentStore
     @State private var storedViewModel: AgentListViewModel
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @State private var showDeleteConfirmation = false
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
@@ -25,9 +27,10 @@ struct WorkspaceDetailView: View {
     @State private var titleEditor = WorkspaceTitleEditor()
     @Environment(BackendSession.self) private var session
 
-    init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared) {
+    init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared, isSidebarVisible: Bool = false) {
         self.workspaceId = workspaceId
         self.persistence = persistence
+        self.isSidebarVisible = isSidebarVisible
         _selectedTab = State(initialValue: WorkspaceTab.restored(
             persistedValue: persistence.loadWorkspaceTab(workspaceId: workspaceId),
             fallback: .agents
@@ -64,6 +67,8 @@ struct WorkspaceDetailView: View {
     }
 
     private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
+
+    private var showsToolbarTitle: Bool { !usesVerticalBar || !isSidebarVisible }
 
     private var lifecycleContent: some View {
         ZStack {
@@ -241,7 +246,7 @@ struct WorkspaceDetailView: View {
         } message: {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
-        .navigationTitle(workspaceName)
+        .navigationTitle(showsToolbarTitle ? workspaceName : "")
         .toolbarTitleDisplayMode(.inline)
         #if !os(visionOS)
         .navigationBarBackButtonHidden()
@@ -249,24 +254,37 @@ struct WorkspaceDetailView: View {
         .toolbarBackground(WorkspaceDetailStyle.background(for: colorScheme), for: .navigationBar)
         #endif
         .toolbar {
-            #if os(visionOS)
-            // The workspace picker lives in the top toolbar on visionOS.
-            ToolbarItem(placement: .topBarTrailing) {
-                toolbarWorkspacePicker
+            if usesVerticalBar {
+                if showsToolbarTitle {
+                    ToolbarItem(placement: .principal) { toolbarTitle }
+                }
+                WorkspaceVerticalNavigationToolbar(
+                    isEnabled: true,
+                    showsBackButton: !isSidebarVisible,
+                    backLabel: "Back to workspaces",
+                    backIdentifier: "workspaceDetail.back",
+                    onBack: coordinator.onBackToWorkspaceList
+                ) { workspaceActions }
+            } else {
+                #if os(visionOS)
+                // The workspace picker lives in the top toolbar on visionOS.
+                ToolbarItem(placement: .topBarTrailing) {
+                    toolbarWorkspacePicker
+                }
+                #else
+                ToolbarItem(placement: .topBarLeading) {
+                    IntentIconButton(icon: .arrowLeft, label: "Back to workspaces", action: coordinator.onBackToWorkspaceList)
+                }
+                .intentToolbarSurface()
+                #endif
+                ToolbarItem(placement: .principal) {
+                    toolbarTitle
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    workspaceActions
+                }
+                .intentToolbarSurface()
             }
-            #else
-            ToolbarItem(placement: .topBarLeading) {
-                IntentIconButton(icon: .arrowLeft, label: "Back to workspaces", action: coordinator.onBackToWorkspaceList)
-            }
-            .intentToolbarSurface()
-            #endif
-            ToolbarItem(placement: .principal) {
-                toolbarTitle
-            }
-            ToolbarItem(placement: .primaryAction) {
-                workspaceActions
-            }
-            .intentToolbarSurface()
         }
         #if !os(visionOS)
         .workspacePhoneNavigation(

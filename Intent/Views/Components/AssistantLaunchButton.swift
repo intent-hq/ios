@@ -19,6 +19,7 @@ struct AssistantLaunchButton: View {
 
     static let scrollClearance: CGFloat = 104
     let isOpen: Bool
+    var isInVerticalBar = false
     let action: () -> Void
 
     var body: some View {
@@ -32,16 +33,23 @@ struct AssistantLaunchButton: View {
         }
         .buttonStyle(IntentContentButtonStyle())
         .frame(width: size, height: size)
-        .shadow(color: .black.opacity(isOpen ? 0 : Layout.shadowOpacity), radius: Layout.shadowRadius, y: Layout.shadowOffset)
+        .shadow(
+            color: .black.opacity(isOpen || isInVerticalBar ? 0 : Layout.shadowOpacity),
+            radius: Layout.shadowRadius,
+            y: Layout.shadowOffset
+        )
         .accessibilityLabel(isOpen ? "Close Intent menu" : "Intent menu")
         .accessibilityIdentifier(isOpen ? "intent.menu.close" : "intent.menu.open")
-        .padding(.horizontal, Layout.horizontalInset)
+        .padding(.horizontal, isInVerticalBar ? 0 : Layout.horizontalInset)
     }
 
-    private var size: CGFloat { isOpen ? Layout.closeSize : Layout.diameter }
+    private var size: CGFloat { isOpen || isInVerticalBar ? Layout.closeSize : Layout.diameter }
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: isOpen ? Layout.closeCornerRadius : Layout.diameter / 2, style: isOpen ? .circular : .continuous)
+        RoundedRectangle(
+            cornerRadius: isOpen || isInVerticalBar ? Layout.closeCornerRadius : Layout.diameter / 2,
+            style: isOpen || isInVerticalBar ? .circular : .continuous
+        )
     }
 
     private var icon: some View {

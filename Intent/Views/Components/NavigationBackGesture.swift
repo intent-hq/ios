@@ -1,8 +1,8 @@
 import SwiftUI
 
 extension View {
-    func intentNavigationBackButton(_ isVisible: Bool = true) -> some View {
-        modifier(IntentNavigationBackButtonModifier(isVisible: isVisible))
+    func intentNavigationBackButton(_ isVisible: Bool = true, usesWorkspaceVerticalBar: Bool = false) -> some View {
+        modifier(IntentNavigationBackButtonModifier(isVisible: isVisible, usesWorkspaceVerticalBar: usesWorkspaceVerticalBar))
     }
 
     @ViewBuilder
@@ -17,20 +17,68 @@ extension View {
 
 private struct IntentNavigationBackButtonModifier: ViewModifier {
     let isVisible: Bool
+    let usesWorkspaceVerticalBar: Bool
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
 
     func body(content: Content) -> some View {
-        content
-            .navigationBarBackButtonHidden()
-            .nativeNavigationBackGesture()
-            .toolbar {
-                if isVisible {
-                    ToolbarItem(placement: .topBarLeading) {
-                        IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
+        if usesWorkspaceVerticalBar, usesVerticalBar {
+            content
+                .navigationBarBackButtonHidden()
+                .nativeNavigationBackGesture()
+                .toolbar {
+                    if isVisible {
+                        WorkspaceVerticalNavigationToolbar(isEnabled: true, onBack: dismiss.callAsFunction) {
+                            EmptyView()
+                        }
                     }
-                    .intentToolbarSurface()
+                }
+        } else {
+            content
+                .navigationBarBackButtonHidden()
+                .nativeNavigationBackGesture()
+                .toolbar {
+                    if isVisible {
+                        ToolbarItem(placement: .topBarLeading) {
+                            IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
+                        }
+                        .intentToolbarSurface()
+                    }
+                }
+        }
+    }
+}
+
+/// One vertical group keeps Back above the screen's overflow menu, below system status chrome.
+struct WorkspaceVerticalNavigationToolbar<Actions: View>: ToolbarContent {
+    let isEnabled: Bool
+    var showsBackButton = true
+    var backLabel: LocalizedStringKey = "Back"
+    var backIdentifier = "navigation.back"
+    let onBack: () -> Void
+    @ViewBuilder let actions: Actions
+
+    @ToolbarContentBuilder
+    var body: some ToolbarContent {
+        #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
+        if #available(iOS 27.1, *), isEnabled {
+            ToolbarItem(placement: .topBarTrailing) {
+                VStack(spacing: 0) {
+                    if showsBackButton {
+                        IntentIconButton(icon: .arrowLeft, label: backLabel, showsBackground: false, action: onBack)
+                            .accessibilityIdentifier(backIdentifier)
+                    }
+                    actions
                 }
             }
+            .axisBehavior(.verticalPreferred)
+            .sharedBackgroundVisibility(.hidden)
+            .contentMarginsRemoved()
+        }
+        #else
+        // Legacy ToolbarContentBuilder requires an expression even when the group has no items.
+        ToolbarItemGroup(placement: .automatic) { EmptyView() }
+        #endif
     }
 }
 

@@ -5,11 +5,13 @@ struct WorkspaceActionLauncher: ViewModifier {
     let isSearching: Bool
     var alignment: HorizontalAlignment = .trailing
     var avoidsConversationInput = true
+    var hostsVerticalBarButton = true
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @AppStorage("appThemePreference") private var themePreference = "system"
     @State private var isOpen = false
     @State private var connectionCount = 0
@@ -30,6 +32,20 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 
     func body(content: Content) -> some View {
+        if usesVerticalBar {
+            floatingMenu(content: content)
+                .onChange(of: isOpen) { _, open in
+                    if open { connectionCount = PersistenceManager.shared.loadConnections().count }
+                }
+                .modifier(WorkspaceActionLauncherToolbar(isEnabled: hostsVerticalBarButton && !isSearching))
+                .environment(\.workspaceActionMenuPresented, $isOpen)
+        } else {
+            floatingMenu(content: content)
+        }
+    }
+
+    // Keep the original modifier chain and ordering on devices without a vertical bar.
+    private func floatingMenu(content: Content) -> some View {
         content
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
@@ -99,9 +115,16 @@ struct WorkspaceActionLauncher: ViewModifier {
                 )
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
             }
-            AssistantLaunchButton(isOpen: isOpen) {
-                if !isOpen { connectionCount = PersistenceManager.shared.loadConnections().count }
-                isOpen.toggle()
+            if usesVerticalBar {
+                // Keep the close control inside the modal overlay's accessibility boundary.
+                if isOpen {
+                    AssistantLaunchButton(isOpen: isOpen) { isOpen.toggle() }
+                }
+            } else {
+                AssistantLaunchButton(isOpen: isOpen) {
+                    if !isOpen { connectionCount = PersistenceManager.shared.loadConnections().count }
+                    isOpen.toggle()
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .bottom))
@@ -131,6 +154,74 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 }
 
+/// Pushed compact Duo screens need a launcher after the Workspaces list leaves the screen.
+struct WorkspaceCompactActionLauncher: ViewModifier {
+    let showsWorkspaceDetail: Bool
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(BackendSession.self) private var session
+    @State private var showingCreateWorkspace = false
+    @State private var showingConnections = false
+
+    func body(content: Content) -> some View {
+        if usesVerticalBar {
+            content
+                .modifier(WorkspaceActionLauncher(
+                    isSearching: !showsWorkspaceDetail,
+                    hostsVerticalBarButton: false,
+                    onCreateWorkspace: { showingCreateWorkspace = true },
+                    onConnections: { showingConnections = true }
+                ))
+                .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
+                    if shouldDismiss { showingCreateWorkspace = false }
+                }
+                .sheet(isPresented: $showingCreateWorkspace) {
+                    CreateWorkspaceView(session: session, coordinator: coordinator)
+                        .environment(coordinator)
+                }
+                .sheet(isPresented: $showingConnections) {
+                    ConnectionsView()
+                        .environment(coordinator)
+                }
+        } else {
+            content
+        }
+    }
+}
+
+/// Navigation content owns the toolbar; its outer launcher still owns the menu overlay.
+struct WorkspaceActionLauncherToolbar: ViewModifier {
+    var isEnabled = true
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(\.workspaceActionMenuPresented) private var menuPresented
+
+    func body(content: Content) -> some View {
+        // Gate the modifier itself: older SDKs cannot build an empty toolbar closure.
+        #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
+        if #available(iOS 27.1, *), usesVerticalBar {
+            content.toolbar {
+                if isEnabled, let menuPresented, !menuPresented.wrappedValue {
+                    ToolbarSpacer(.flexible, placement: .bottomBar)
+                        .axisBehavior(.verticalPreferred)
+                    ToolbarItem(placement: .bottomBar) {
+                        AssistantLaunchButton(isOpen: false, isInVerticalBar: true) {
+                            menuPresented.wrappedValue = true
+                        }
+                    }
+                    .axisBehavior(.verticalPreferred)
+                    .sharedBackgroundVisibility(.hidden)
+                    .contentMarginsRemoved()
+                }
+            }
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
 /// The active input's top edge in the same global coordinate space as the launcher overlay.
 struct WorkspaceActionMenuInputTop: PreferenceKey {
     nonisolated static var defaultValue: CGFloat? { nil }
@@ -139,3 +230,28 @@ struct WorkspaceActionMenuInputTop: PreferenceKey {
         value = nextValue() ?? value
     }
 }
+
+extension EnvironmentValues {
+    @Entry var workspaceActionMenuPresented: Binding<Bool>?
+
+    var workspaceUsesVerticalBar: Bool {
+        #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
+        if #available(iOS 27.1, *) { return self[WorkspaceVerticalBarKey.self] }
+        #endif
+        return false
+    }
+}
+
+#if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
+@available(iOS 27.1, *)
+private struct WorkspaceVerticalBarKey: UITraitBridgedEnvironmentKey {
+    nonisolated static let defaultValue = false
+
+    static func read(from traitCollection: UITraitCollection) -> Bool {
+        traitCollection.userInterfaceIdiom == .phone && traitCollection.verticalBarEdge == .trailing
+    }
+
+    // This observes a system-owned trait; the app must not override its placement.
+    static func write(to _: inout any UIMutableTraits, value _: Bool) {}
+}
+#endif

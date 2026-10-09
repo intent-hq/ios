@@ -150,6 +150,41 @@ struct WorkspaceDetailViewTests {
         }
     }
 
+    @MainActor
+    @Test func progressDoesNotKeepScrollContentWiderAfterResize() async throws {
+        let progress = try #require(WorkspaceTaskProgressLayout(total: 10, completed: 4, inProgress: 3))
+        var contentFrame = CGRect.zero
+        let content = ScrollView {
+            VStack(spacing: 0) {
+                heading(title: "Add usage analytics dashboard")
+                WorkspaceTaskProgressView(progress: progress)
+            }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { contentFrame = $0 }
+        }
+        let scene = try #require(SyntheticBadgeHostScene.resolve(
+            in: UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        ))
+        let window = UIWindow(windowScene: scene)
+        let container = UIViewController()
+        let controller = UIHostingController(rootView: content)
+        window.rootViewController = container
+        container.addChild(controller)
+        container.view.addSubview(controller.view)
+        controller.didMove(toParent: container)
+        defer { window.isHidden = true; window.rootViewController = nil; window.windowScene = nil }
+        window.isHidden = false
+        window.layoutIfNeeded()
+
+        for width: CGFloat in [700, 386, 320, 700] {
+            controller.view.frame = CGRect(x: 0, y: 0, width: width, height: 600)
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
+            try await waitUntil("scroll content fits resized width \(width); last frame \(contentFrame)") {
+                abs(contentFrame.width - width) < 1 && contentFrame.minX >= -0.5
+            }
+        }
+    }
+
     // MARK: - Session store routing (multi-window state split)
 
     /// A backend-bound session composed over a fake backend connection; the

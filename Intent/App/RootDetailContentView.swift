@@ -5,7 +5,11 @@ extension RootView {
     var detailContent: some View {
         if let workspaceId = coordinator.selectedWorkspaceId {
             NavigationStack(path: $noteStack) {
-                WorkspaceDetailView(workspaceId: workspaceId, session: session)
+                WorkspaceDetailView(
+                    workspaceId: workspaceId,
+                    session: session,
+                    isSidebarVisible: usesVerticalBar
+                )
                     .navigationDestination(isPresented: $showingConversation) {
                         conversationDestination
                     }
