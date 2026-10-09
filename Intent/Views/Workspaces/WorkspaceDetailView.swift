@@ -8,6 +8,7 @@ struct WorkspaceDetailView: View {
     @State private var storedViewModel: AgentListViewModel
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @State private var showDeleteConfirmation = false
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
@@ -255,18 +256,30 @@ struct WorkspaceDetailView: View {
                 toolbarWorkspacePicker
             }
             #else
-            ToolbarItem(placement: .topBarLeading) {
-                IntentIconButton(icon: .arrowLeft, label: "Back to workspaces", action: coordinator.onBackToWorkspaceList)
+            if !usesVerticalBar {
+                ToolbarItem(placement: .topBarLeading) {
+                    IntentIconButton(icon: .arrowLeft, label: "Back to workspaces", action: coordinator.onBackToWorkspaceList)
+                }
+                .intentToolbarSurface()
             }
-            .intentToolbarSurface()
             #endif
             ToolbarItem(placement: .principal) {
                 toolbarTitle
             }
-            ToolbarItem(placement: .primaryAction) {
+            if !usesVerticalBar {
+                ToolbarItem(placement: .primaryAction) {
+                    workspaceActions
+                }
+                .intentToolbarSurface()
+            }
+            WorkspaceVerticalNavigationToolbar(
+                isEnabled: usesVerticalBar,
+                backLabel: "Back to workspaces",
+                backIdentifier: "workspaceDetail.back",
+                onBack: coordinator.onBackToWorkspaceList
+            ) {
                 workspaceActions
             }
-            .intentToolbarSurface()
         }
         #if !os(visionOS)
         .workspacePhoneNavigation(
