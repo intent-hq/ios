@@ -8,6 +8,7 @@ import WebKit
 struct MermaidWebViewTests {
     private static let viewport = CGRect(x: 0, y: 0, width: 390, height: 360)
     private static let pollInterval: Duration = .milliseconds(50)
+    private static let replacementLimitSeconds = 8
 
     @Test func ignoresStaleAndMalformedMessages() {
         #expect(MermaidRenderState.message(["revision": "old", "height": 120.0], revision: "new") == nil)
@@ -125,6 +126,77 @@ struct MermaidWebViewTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func silentPageLoadReplacesWebViewAndIgnoresDiscardedCallbacks(duringRecovery: Bool) async throws {
+        try await withWebView { webView, coordinator, state in
+            if duringRecovery { coordinator.webViewWebContentProcessDidTerminate(webView) }
+            webView.navigationDelegate = nil
+            webView.stopLoading()
+            let replacement = try await waitForReplacement(of: webView, coordinator: coordinator)
+            try await waitForResult(state)
+            try #require(state.wrappedValue.height != nil, "A silent page load must recover without user intervention")
+            #expect(webView.superview == nil)
+            #expect(replacement.frame == Self.viewport)
+            #expect(replacement.configuration.websiteDataStore !== webView.configuration.websiteDataStore)
+            _ = try await replacement.evaluateJavaScript("window.previousPage = true")
+            coordinator.webView(webView, didFinish: nil)
+            for failure in WebKitFailure.allCases { failure.trigger(webView: webView, coordinator: coordinator) }
+            try await waitForResult(state)
+            #expect(state.wrappedValue.height != nil, "Discarded views must not change the current renderer")
+            let previousPage = try await replacement.evaluateJavaScript("window.previousPage === true")
+            #expect(previousPage as? Bool == true, "Discarded callbacks must not reload the replacement")
+        }
+    }
+
+    @Test func silentLoadsExhaustOnlyTwoRetries() async throws {
+        var loadedViews: [WKWebView] = []
+        try await withWebView(onWebViewAdded: { webView, _ in
+            loadedViews.append(webView)
+            webView.navigationDelegate = nil
+            webView.stopLoading()
+        }, check: { _, coordinator, state in
+            try await waitForResult(state)
+            #expect(loadedViews.count == 3, "The initial view and exactly two fresh-view retries must be attempted")
+            #expect(state.wrappedValue.error == "Unable to load this diagram. Try again.")
+            for webView in loadedViews {
+                coordinator.webView(webView, didFinish: nil)
+                coordinator.webViewWebContentProcessDidTerminate(webView)
+            }
+            try await waitForResult(state)
+            #expect(loadedViews.count == 3, "Exhausted recovery must not create another view")
+            #expect(state.wrappedValue.error == "Unable to load this diagram. Try again.")
+        })
+    }
+
+    @Test func freshWebViewKeepsOriginalRenderDeadline() async throws {
+        var firstLoad = true
+        try await withWebView(onWebViewAdded: { webView, coordinator in
+            if firstLoad {
+                firstLoad = false
+                webView.navigationDelegate = nil
+                webView.stopLoading()
+            } else {
+                // Install before the tested navigation, not the factory's already-started load.
+                webView.stopLoading()
+                webView.configuration.userContentController.addUserScript(WKUserScript(
+                    source: "Object.defineProperty(window, 'renderMermaid', { value: () => new Promise(resolve => setTimeout(resolve, 60000)) });",
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                ))
+                coordinator.loadPage()
+            }
+        }, check: { webView, coordinator, state in
+            let started = ContinuousClock.now
+            let deadline = started + MermaidAppearance.renderTimeout + .seconds(1)
+            _ = try await waitForReplacement(of: webView, coordinator: coordinator)
+            while state.wrappedValue.isLoading, ContinuousClock.now < deadline {
+                try await Task.sleep(for: Self.pollInterval)
+            }
+            #expect(state.wrappedValue.error == "Unable to load this diagram. Try again.", "Replacement must not reset the deadline")
+            #expect(started.duration(to: .now) >= MermaidAppearance.renderTimeout - .seconds(1), "The stalled renderer must reach the original deadline")
+        })
+    }
+
     @Test func recoveryKeepsOriginalRenderDeadline() async throws {
         try await withWebView { webView, coordinator, state in
             try await waitForResult(state)
@@ -204,7 +276,9 @@ struct MermaidWebViewTests {
             #expect(injected as? Bool == false)
         }
     }
+}
 
+extension MermaidWebViewTests {
     private func withRenderer(
         source: String,
         dark: Bool,
@@ -221,17 +295,43 @@ struct MermaidWebViewTests {
         source: String = "flowchart LR\n start[Start] --> finish[Finish]",
         dark: Bool = false,
         expanded: Bool = false,
+        onWebViewAdded: ((WKWebView, MermaidWebView.Coordinator) -> Void)? = nil,
         check: (WKWebView, MermaidWebView.Coordinator, Binding<MermaidRenderState>) async throws -> Void
     ) async throws {
         _ = try #require(MermaidWebView.pageURL, "Mermaid folder must be copied into the app bundle")
         let coordinator = MermaidWebView.Coordinator()
         let webView = MermaidWebView.makeWebView(coordinator: coordinator)
+        let container = WebViewContainer(frame: Self.viewport)
+        container.onWebViewAdded = { onWebViewAdded?($0, coordinator) }
         webView.frame = Self.viewport
+        container.addSubview(webView)
         var state = MermaidRenderState.loading
         let binding = Binding(get: { state }, set: { state = $0 })
         coordinator.update(MermaidWebView(source: source, dark: dark, expanded: expanded, state: binding))
-        defer { MermaidWebView.dismantleUIView(webView, coordinator: coordinator) }
+        defer {
+            MermaidWebView.dismantleUIView(coordinator.webView ?? webView, coordinator: coordinator)
+            withExtendedLifetime(container) {}
+        }
         try await check(webView, coordinator, binding)
+    }
+
+    private final class WebViewContainer: UIView {
+        var onWebViewAdded: ((WKWebView) -> Void)?
+
+        override func didAddSubview(_ subview: UIView) {
+            super.didAddSubview(subview)
+            if let webView = subview as? WKWebView { onWebViewAdded?(webView) }
+        }
+    }
+
+    private func waitForReplacement(of oldView: WKWebView, coordinator: MermaidWebView.Coordinator) async throws -> WKWebView {
+        let replacementLimit: Duration = .seconds(Self.replacementLimitSeconds)
+        let deadline = ContinuousClock.now + replacementLimit
+        while coordinator.webView === oldView, ContinuousClock.now < deadline {
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        try #require(coordinator.webView !== oldView, "A no-progress load must replace the stuck web view before the total deadline")
+        return try #require(coordinator.webView)
     }
 
     private func waitForResult(_ state: Binding<MermaidRenderState>) async throws {

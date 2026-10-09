@@ -95,6 +95,15 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
             }
             return rendererError != nil || element.exists
         }
+        // The renderer can publish its deadline error during the wait's final polling interval.
+        // Recheck only diagnostics: a late successful render must not turn a timeout into a pass.
+        if !appeared {
+            if errorText.exists {
+                rendererError = errorText.label
+            } else if retry.exists {
+                rendererError = "Try again"
+            }
+        }
         if let rendererError {
             XCTFail("\(message): renderer failed with \"\(rendererError)\"", file: file, line: line)
             return

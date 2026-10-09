@@ -42,15 +42,19 @@ struct MermaidWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeUIView(context: Context) -> WKWebView {
-        Self.makeWebView(coordinator: context.coordinator)
+    func makeUIView(context: Context) -> UIView {
+        let container = UIView()
+        container.addSubview(Self.makeWebView(coordinator: context.coordinator))
+        return container
     }
 
-    static func makeWebView(coordinator: Coordinator) -> WKWebView {
+    static func makeWebView(coordinator: Coordinator, freshProcess: Bool = false) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = Self.websiteDataStore
+        // A separate ephemeral session prevents a watchdog retry from reusing the stuck process.
+        configuration.websiteDataStore = freshProcess ? .nonPersistent() : Self.websiteDataStore
         configuration.userContentController.add(coordinator, name: "mermaid")
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.navigationDelegate = coordinator
         webView.isOpaque = false
         webView.backgroundColor = .clear
@@ -66,21 +70,25 @@ struct MermaidWebView: UIViewRepresentable {
         return webView
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        webView.overrideUserInterfaceStyle = dark ? .dark : .light
-        webView.accessibilityIdentifier = expanded ? "mermaid.fullscreen.webview" : "mermaid.webview"
+    func updateUIView(_: UIView, context: Context) {
         context.coordinator.update(self)
     }
 
-    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+    static func dismantleUIView(_: UIView, coordinator: Coordinator) {
         coordinator.stop()
-        webView.stopLoading()
+    }
+
+    private static func discard(_ webView: WKWebView) {
         webView.navigationDelegate = nil
+        webView.stopLoading()
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "mermaid")
+        webView.removeFromSuperview()
     }
 
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        private static let pageLoadTimeoutSeconds = 5
+        private static let pageLoadTimeout: Duration = .seconds(pageLoadTimeoutSeconds)
         weak var webView: WKWebView?
         private var parent: MermaidWebView?
         private var revision = UUID().uuidString
@@ -90,20 +98,25 @@ struct MermaidWebView: UIViewRepresentable {
         private var navigation: WKNavigation?
         private var renderTask: Task<Void, Never>?
         private var timeoutTask: Task<Void, Never>?
+        private var watchdogTask: Task<Void, Never>?
 
         func loadPage() {
             guard let webView, let url = MermaidWebView.pageURL else { return }
             ready = false
             navigation = webView.loadFileURL(url, allowingReadAccessTo: Bundle.main.bundleURL)
+            startWatchdog()
         }
 
         func update(_ view: MermaidWebView) {
             let changed = parent?.source != view.source || parent?.dark != view.dark || parent?.expanded != view.expanded
             parent = view
+            webView?.overrideUserInterfaceStyle = view.dark ? .dark : .light
+            webView?.accessibilityIdentifier = view.expanded ? "mermaid.fullscreen.webview" : "mermaid.webview"
             guard changed else { return }
             revision = UUID().uuidString
             renderTask?.cancel()
             timeoutTask?.cancel()
+            watchdogTask?.cancel()
             recoveryAttempts = 0
             hasFailed = false
             publish(.loading)
@@ -116,12 +129,16 @@ struct MermaidWebView: UIViewRepresentable {
                 render()
             } else if navigation == nil {
                 loadPage()
+            } else {
+                startWatchdog()
             }
         }
 
         func stop() {
             renderTask?.cancel()
             timeoutTask?.cancel()
+            watchdogTask?.cancel()
+            if let webView { MermaidWebView.discard(webView) }
             navigation = nil
             parent = nil
             webView = nil
@@ -130,12 +147,13 @@ struct MermaidWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
             guard webView === self.webView, !hasFailed,
                   navigation == nil || navigation === self.navigation else { return }
+            watchdogTask?.cancel()
             ready = true
             render()
         }
 
-        func webView(_: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
-            guard navigationAction.targetFrame?.isMainFrame == true,
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
+            guard webView === self.webView, navigationAction.targetFrame?.isMainFrame == true,
                   let url = navigationAction.request.url, url.isFileURL,
                   url.standardizedFileURL == MermaidWebView.pageURL?.standardizedFileURL else { return .cancel }
             return .allow
@@ -166,6 +184,7 @@ struct MermaidWebView: UIViewRepresentable {
                   let state = MermaidRenderState.message(message.body, revision: revision) else { return }
             timeoutTask?.cancel()
             timeoutTask = nil
+            watchdogTask?.cancel()
             hasFailed = state.error != nil
             publish(state)
         }
@@ -187,7 +206,7 @@ struct MermaidWebView: UIViewRepresentable {
                         contentWorld: .page
                     )
                 } catch {
-                    guard let self, revision == currentRevision, !Task.isCancelled,
+                    guard let self, webView === self.webView, revision == currentRevision, !Task.isCancelled,
                           !(error is CancellationError) else { return }
                     recover(reason: "JavaScript call failed", error: error)
                 }
@@ -202,7 +221,20 @@ struct MermaidWebView: UIViewRepresentable {
             }
         }
 
-        private func recover(reason: String, error: Error) {
+        private func startWatchdog() {
+            watchdogTask?.cancel()
+            guard parent != nil, let webView else { return }
+            let currentRevision = revision
+            watchdogTask = Task { [weak self, weak webView] in
+                do { try await Task.sleep(for: Self.pageLoadTimeout) } catch { return }
+                guard let self, let webView, webView === self.webView,
+                      revision == currentRevision, !ready, !hasFailed, !Task.isCancelled else { return }
+                AppLog.userInterface.error("Mermaid page-load watchdog fired: attempt=\(recoveryAttempts + 1)")
+                recover(reason: "page load made no progress", error: URLError(.timedOut), replaceWebView: true)
+            }
+        }
+
+        private func recover(reason: String, error: Error, replaceWebView: Bool = false) {
             guard parent != nil, webView != nil, !hasFailed else { return }
             let nsError = error as NSError
             AppLog.userInterface.error("Mermaid \(reason): domain=\(nsError.domain) code=\(nsError.code) retries=\(recoveryAttempts)")
@@ -216,7 +248,24 @@ struct MermaidWebView: UIViewRepresentable {
             publish(.loading)
             // Keep the pending render's deadline. A crash after success starts a new bounded recovery window.
             if timeoutTask == nil { startTimeout() }
-            loadPage()
+            if replaceWebView {
+                replaceStuckWebView()
+            } else {
+                loadPage()
+            }
+        }
+
+        private func replaceStuckWebView() {
+            guard let webView, let container = webView.superview else {
+                fail()
+                return
+            }
+            MermaidWebView.discard(webView)
+            let replacement = MermaidWebView.makeWebView(coordinator: self, freshProcess: true)
+            replacement.frame = container.bounds
+            replacement.overrideUserInterfaceStyle = webView.overrideUserInterfaceStyle
+            replacement.accessibilityIdentifier = webView.accessibilityIdentifier
+            container.addSubview(replacement)
         }
 
         private func fail() {
@@ -225,6 +274,7 @@ struct MermaidWebView: UIViewRepresentable {
             revision = UUID().uuidString
             renderTask?.cancel()
             timeoutTask?.cancel()
+            watchdogTask?.cancel()
             timeoutTask = nil
             navigation = nil
             webView?.stopLoading()
