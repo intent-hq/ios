@@ -41,8 +41,12 @@ extension DemoDesignFixtures {
     static var mermaidHistory: [[String: Any]] {
         (0..<4).flatMap { turn in
             let explanation = Array(repeating: "The app loads its transcript, prepares each message, and preserves the current reading position while diagrams render.", count: 8).joined(separator: "\n\n")
-            let sections = (0..<3).map { section in
-                "## Architecture section \(turn + 1).\(section + 1)\n\n\(explanation)\n\n\(mermaidDiagram)"
+            let sectionCount = turn == 0 ? 3 : 2
+            let sections = (0..<sectionCount).map { section in
+                let diagram = mermaidDiagram.replacingOccurrences(
+                    of: "flowchart TB", with: "flowchart TB\n    %% Architecture \(turn).\(section)"
+                )
+                return "## Architecture section \(turn + 1).\(section + 1)\n\n\(explanation)\n\n\(diagram)"
             }
             .joined(separator: "\n\n")
             return [

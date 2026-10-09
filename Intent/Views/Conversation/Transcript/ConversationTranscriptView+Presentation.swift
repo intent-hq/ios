@@ -3,6 +3,8 @@ import SwiftUI
 // These builders remain on the transcript so extraction does not add a new
 // observation boundary or change the lazy stack's row and anchor identities.
 extension ConversationTranscriptView {
+    private static let eagerTailMessageLimit = 12
+
     @ViewBuilder
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         let generation = scrollState.initialScrollGeneration
@@ -23,10 +25,40 @@ extension ConversationTranscriptView {
                 .id("older-messages")
         }
 
-        ForEach(rows, id: \.id) { @Sendable row in
-            row.content
+        if containsDiagramMessages {
+            ForEach(rows.dropLast(Self.eagerTailMessageLimit), id: \.id) { @Sendable row in
+                row.content
+            }
+            // Realize a bounded tail and its footer together. A separately lazy
+            // footer can remain absent at the stack's estimated bottom after
+            // tall diagram rows resize, even when repeated scrollTo calls land.
+            VStack(spacing: usesWorkspaceDesign ? Constants.Conversation.Design.sectionSpacing : Layout.transcriptRowSpacing) {
+                ForEach(rows.suffix(Self.eagerTailMessageLimit), id: \.id) { @Sendable row in
+                    row.content
+                }
+                transcriptEndRows(proxy: proxy)
+            }
+            .id("transcript-tail")
+        } else {
+            ForEach(rows, id: \.id) { @Sendable row in
+                row.content
+            }
+            transcriptEndRows(proxy: proxy)
         }
+    }
 
+    private var containsDiagramMessages: Bool {
+        viewModel.filteredMessages.contains { message in
+            message.contentBlocks.contains { block in
+                guard block.type == .text, let text = block.text else { return false }
+                let prepared = MarkdownContentCache.shared.preparedContent(for: text)
+                return !prepared.mermaidSources.isEmpty || prepared.pendingDiagram != nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func transcriptEndRows(proxy: ScrollViewProxy) -> some View {
         #if !os(visionOS)
         // On visionOS the composer renders these as large chips above the
         // field instead (MessageInputView).

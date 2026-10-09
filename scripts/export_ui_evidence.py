@@ -12,6 +12,7 @@ import tempfile
 
 CAPTURES = {
     "ConversationMermaidUITests": {
+        "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
         "testDiagramHistoryReopensAndGoToEndShowsLastAnswer": (
             "mermaid-history-visit-1", "mermaid-history-visit-2", "mermaid-history-visit-3",
         ),
