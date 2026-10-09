@@ -35,11 +35,11 @@ struct PairingPayloadTests {
 
     @Test func parsesLegacyCertFingerprintParam() {
         let payload = PairingPayload.parse(
-            "intent://pair?token=tok&host=192.168.1.42&port=5180&path=/ws&certFingerprint=01:02:03"
+            "intent://pair?token=tok&host=192.168.1.42&port=5181&path=/ws&certFingerprint=01:02:03"
         )
         #expect(payload != nil)
         #expect(payload?.hosts == ["192.168.1.42"])
-        #expect(payload?.port == 5180)
+        #expect(payload?.port == 5181)
         #expect(payload?.token == "tok")
         #expect(payload?.certFingerprint == "01:02:03")
     }
@@ -58,7 +58,7 @@ struct PairingPayloadTests {
     /// A payload without any fingerprint still parses (the caller must then
     /// probe the server cert instead of downgrading to plain ws://).
     @Test func parsesPayloadWithoutFingerprint() {
-        let payload = PairingPayload.parse("intent://pair?host=h1&port=5180&token=t")
+        let payload = PairingPayload.parse("intent://pair?host=h1&port=5181&token=t")
         #expect(payload != nil)
         #expect(payload?.certFingerprint == nil)
     }

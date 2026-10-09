@@ -3,7 +3,7 @@ import Foundation
 /// Saved-machine fixtures for Settings screenshots and interaction tests.
 /// Only the existing ephemeral demo store is written; normal launch is untouched.
 enum DemoSettings {
-    private static let port = 5180
+    private static let port = 5181
     private static var startupBackendID: BackendID?
 
     static func seedConnectionsIfNeeded() {
