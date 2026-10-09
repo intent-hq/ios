@@ -47,6 +47,8 @@ extension ConversationLiveTranscript {
         if messages.isEmpty {
             isLoading = true
         }
+        let interval = ConversationTrace.begin("ChatSubscribe", "\(traceContext) attempt=\(subscriptionAttempt)")
+        defer { ConversationTrace.end("ChatSubscribe", interval, "\(traceContext) requestRegistration=\(generation)") }
 
         let outcome: Result<String?, Error>
         do {
@@ -58,6 +60,7 @@ extension ConversationLiveTranscript {
         // A reply (or failure) that lands after a rebind, reset, reconnect or
         // newer registration must leave the current channel untouched.
         guard generation == registrationGeneration else {
+            traceEvent("ChatSubscribeRejected", "reason=registration_changed requestRegistration=\(generation)")
             if case .success(let orphanedId?) = outcome {
                 await releaseOrphanedSubscription(orphanedId)
             }
@@ -75,7 +78,7 @@ extension ConversationLiveTranscript {
         ]
         if !useFullDeltaEncoding { params["deltaEncoding"] = "incremental" }
         do {
-            return try await connectionManager.request("chat.subscribe", params: params)
+            return try await sendSubscriptionRequest(params, generation: generation)
         } catch {
             guard generation == registrationGeneration, !useFullDeltaEncoding,
                   Self.rejectsDeltaEncoding(error) else { throw error }
@@ -83,8 +86,31 @@ extension ConversationLiveTranscript {
             // recovery keeps omitting it until reconnect negotiates anew.
             useFullDeltaEncoding = true
             params.removeValue(forKey: "deltaEncoding")
-            return try await connectionManager.request("chat.subscribe", params: params)
+            traceEvent("ChatSubscribeFallback", "reason=unsupported_encoding requestRegistration=\(generation)")
+            return try await sendSubscriptionRequest(params, generation: generation)
         }
+    }
+
+    private func sendSubscriptionRequest(_ params: [String: Any], generation: Int) async throws -> Any {
+        let interval = ConversationTrace.begin(
+            "ChatSubscribeRequest",
+            "\(traceContext) requestRegistration=\(generation) incremental=\(params["deltaEncoding"] != nil)"
+        )
+        var succeeded = false
+        defer {
+            ConversationTrace.end(
+                "ChatSubscribeRequest",
+                interval,
+                "\(traceContext) requestRegistration=\(generation) succeeded=\(succeeded) cancelled=\(Task.isCancelled)"
+            )
+        }
+        let result = try await connectionManager.request("chat.subscribe", params: params)
+        succeeded = true
+        traceEvent(
+            "ChatSubscribeResponse",
+            "requestRegistration=\(generation) hasSubscriptionID=\((result as? [String: Any])?["subscriptionId"] is String)"
+        )
+        return result
     }
 
     private static let initialHistoryMessageLimit = 50
@@ -126,9 +152,14 @@ extension ConversationLiveTranscript {
     private func applySubscribeOutcome(_ outcome: Result<String?, Error>, generation: Int) {
         switch outcome {
         case .success(let subscriptionId?):
+            traceEvent("ChatSubscribeAccepted", "requestRegistration=\(generation)")
             chatSubscriptionId = subscriptionId
             connectionManager.registerSubscriptionHandler(id: subscriptionId) { [weak self] push in
-                guard let self, generation == registrationGeneration else { return }
+                guard let self else { return }
+                guard generation == registrationGeneration else {
+                    traceEvent("ChatPushRejected", "reason=registration_changed requestRegistration=\(generation)")
+                    return
+                }
                 handlePush(push)
             }
             AppLog.conversation.info(
@@ -139,12 +170,17 @@ extension ConversationLiveTranscript {
             subscriptionLoadingStage = .receiving
             armSnapshotTimeout(generation: generation)
         case .success(nil):
+            traceEvent("ChatSubscribeRejected", "reason=missing_subscription_id requestRegistration=\(generation)")
             clearChannel()
             AppLog.conversation.warning(
                 "[ConversationStore] chat.subscribe returned no subscriptionId, retrying with backoff"
             )
             scheduleRetry(generation: generation)
         case .failure(let error):
+            traceEvent(
+                "ChatSubscribeRejected",
+                "reason=request_failed requestRegistration=\(generation) entityMissing=\((error as NSError).isEntityNotFound) cancelled=\(Task.isCancelled)"
+            )
             clearChannel()
             AppLog.conversation.warning(
                 "[ConversationStore] chat.subscribe failed: \(error), retrying with backoff"
@@ -187,6 +223,7 @@ extension ConversationLiveTranscript {
     }
 
     func prepareForReconnect() {
+        traceEvent("ChatReconnecting", "messages=\(messages.count) pending=\(snapshotPending)")
         subscriptionLoadingStage = .requesting
         chatLive = false
         incrementalDeltas = false
@@ -215,11 +252,14 @@ extension ConversationLiveTranscript {
     /// is owed.
     func awaitSnapshot() async {
         guard snapshotPending else { return }
+        let interval = ConversationTrace.begin("ChatSnapshotWait", traceContext)
+        defer { ConversationTrace.end("ChatSnapshotWait", interval, "\(traceContext) seeded=\(chatSeeded) pending=\(snapshotPending)") }
         let id = UUID()
         let timeout = snapshotTimeout
         let deadline = Task { [weak self] in
             try? await Task.sleep(for: timeout)
             guard !Task.isCancelled else { return }
+            self?.traceEvent("ChatSnapshotWaitExpired", "")
             self?.snapshotWaiters.removeValue(forKey: id)?.resume()
         }
         await withCheckedContinuation { continuation in
@@ -246,6 +286,7 @@ extension ConversationLiveTranscript {
             try? await Task.sleep(for: timeout)
             guard !Task.isCancelled, let self, generation == registrationGeneration, !chatSeeded else { return }
             snapshotTimeoutTask = nil
+            traceEvent("ChatSnapshotTimeout", "requestRegistration=\(generation)")
             AppLog.conversation.warning(
                 "[ConversationStore] chat.subscribe snapshot did not arrive within \(timeout), resubscribing..."
             )
@@ -258,6 +299,7 @@ extension ConversationLiveTranscript {
         subscriptionLoadingStage = .retrying(attempt: subscriptionAttempt + 1)
         retryTask?.cancel()
         let delay = nextRetryDelay ?? initialRetryDelay
+        traceEvent("ChatRetryScheduled", "requestRegistration=\(generation) attempt=\(subscriptionAttempt + 1) delaySeconds=\(delay.components.seconds)")
         nextRetryDelay = min(delay * 2, maxRetryDelay)
         retryTask = Task { [weak self] in
             try? await Task.sleep(for: delay)

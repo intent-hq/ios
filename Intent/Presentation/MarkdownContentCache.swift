@@ -58,11 +58,13 @@ final class MarkdownContentCache: MarkupParser {
     init() {
         prepared = BoundedMarkdownCache(
             maximumEntries: Self.preparedEntryLimit,
-            maximumCost: Self.preparedCostLimit
+            maximumCost: Self.preparedCostLimit,
+            traceName: "MarkdownPreparation"
         )
         parsed = BoundedMarkdownCache(
             maximumEntries: Self.parsedEntryLimit,
-            maximumCost: Self.parsedCostLimit
+            maximumCost: Self.parsedCostLimit,
+            traceName: "MarkdownParse"
         )
     }
 

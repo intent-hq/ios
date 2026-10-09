@@ -38,8 +38,7 @@ extension ConversationTranscriptView {
     /// row's current state at every poll, so re-arming it would only reset
     /// the bound.
     func runUnrealizedEndRecovery(_ token: Lifecycle.RecoveryToken, proxy: ScrollViewProxy) async {
-        let deadline = ContinuousClock.now
-            + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
+        let deadline = ContinuousClock.now + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
         var correctionsLeft = Constants.Conversation.Transcript.followLandingRetries
         var previous: ScrollViewMomentumProxy.RestingGeometry?
         var previousPageOffsetY: CGFloat?
@@ -61,6 +60,7 @@ extension ConversationTranscriptView {
                 timedOut: ContinuousClock.now >= deadline
             )
             previous = geometry
+            traceEvent("RecoveryStep", "token=\(token) step=\(step) remaining=\(correctionsLeft) previousPage=\(String(describing: previousPageOffsetY)) geometry=\(String(describing: geometry))")
             switch step {
             case .continue(let continuation):
                 let effects = send(.recoveryStep(token, continuation), proxy: proxy, animated: false)

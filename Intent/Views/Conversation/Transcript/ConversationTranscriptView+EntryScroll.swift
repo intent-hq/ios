@@ -1,14 +1,28 @@
 import SwiftUI
 
 extension ConversationTranscriptView {
+    func handleTranscriptAppearance(proxy: ScrollViewProxy) {
+        beginViewportTrace()
+        restoreRetainedViewport(proxy: proxy)
+        if !viewModel.isLoading {
+            runInitialScrollIfNeeded(proxy: proxy)
+        }
+    }
+
     func restoreRetainedViewport(proxy: ScrollViewProxy) {
         let revision = scrollState.viewportOwnershipRevision
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
             guard revision == scrollState.viewportOwnershipRevision,
                   !isUserInteracting, !isFollowing,
-                  scrollMomentumProxy.scrollView?.window != nil else { return }
+                  scrollMomentumProxy.scrollView?.window != nil else {
+                traceSnapshot("restoreSkipped requestedOwnership=\(revision)")
+                return
+            }
             scrollState.retainViewportMessages(withIDs: viewModel.filteredMessageIDs)
-            guard let target = scrollState.resumeViewportTarget() else { return }
+            guard let target = scrollState.resumeViewportTarget() else {
+                traceEvent("RestoreSkipped", "reason=noRetainedTarget")
+                return
+            }
             guard viewModel.filteredMessageIDs.contains(target) else {
                 scrollState.retireViewportRestoration()
                 return
@@ -17,12 +31,15 @@ extension ConversationTranscriptView {
             // callback restores the measured offset, including partial rows.
             let generation = scrollState.initialScrollGeneration
             let ownershipRevision = scrollState.viewportOwnershipRevision
+            traceEvent("RestoreRequested", "target=\(target)")
             proxy.scrollTo(target, anchor: .top)
             scrollState.retainedViewportScrollIssued(target: target, generation: generation, ownershipRevision: ownershipRevision)
         }
     }
 
     func handleMessageCountChange(from oldIDs: [String], to newIDs: [String], proxy: ScrollViewProxy) {
+        traceEvent("MessageIDsChanged", "old=\(oldIDs.count) new=\(newIDs.count)")
+        scheduleTraceSnapshots()
         let oldCount = oldIDs.count
         let newCount = newIDs.count
         switch ConversationTranscriptScrollPolicy.messageCountChangeDecision(
@@ -75,7 +92,11 @@ extension ConversationTranscriptView {
     /// Runs exactly once per transcript lifetime from whichever loading trigger
     /// fires first, after LazyVStack has had time to finish layout.
     func runInitialScrollIfNeeded(proxy: ScrollViewProxy) {
-        guard !scrollState.initialScrollScheduled else { return }
+        guard !scrollState.initialScrollScheduled else {
+            traceEvent("EntrySkipped", "reason=alreadyScheduled")
+            return
+        }
+        traceSnapshot("entryScheduled")
         // Snapshot appearance can precede an already-running detail read by a
         // layout pass. Decide at initial layout, not at this scheduling edge.
         scrollState.initialScrollScheduled = true
@@ -122,13 +143,18 @@ extension ConversationTranscriptView {
         scrollViewWaitElapsed: Bool,
         generation: Int
     ) {
-        guard generation == scrollState.initialScrollGeneration else { return }
-        switch ConversationTranscriptScrollPolicy.initialScrollStep(
+        guard generation == scrollState.initialScrollGeneration else {
+            traceEvent("EntrySkipped", "reason=staleGeneration requested=\(generation)")
+            return
+        }
+        let step = ConversationTranscriptScrollPolicy.initialScrollStep(
             alreadyPerformed: scrollState.initialScrollPerformed,
             scrollViewResolved: scrollMomentumProxy.hasResolvedScrollView,
             scrollViewWaitElapsed: scrollViewWaitElapsed,
             entryMetadataReady: viewModel.isEntryScrollReady
-        ) {
+        )
+        traceEvent("EntryDecision", "step=\(step) ready=\(viewModel.isEntryScrollReady) resolved=\(scrollMomentumProxy.hasResolvedScrollView) waitElapsed=\(scrollViewWaitElapsed)")
+        switch step {
         case .skip:
             return
         case .preserveViewport:
@@ -163,6 +189,7 @@ extension ConversationTranscriptView {
     /// landing is verified from the live geometry like any other.
     private func performInitialScroll(proxy: ScrollViewProxy, generation: Int) {
         guard let dividerAnchor = viewModel.newMessagesDividerAnchorId else {
+            traceEvent("EntryTarget", "target=end")
             scrollToBottom(proxy: proxy, forced: true, animated: false)
             return
         }
@@ -170,6 +197,7 @@ extension ConversationTranscriptView {
         // bottom first, including when the seen message exceeds the viewport.
         // The divider's measured frame then aligns the boundary at the top.
         scrollState.pendingEntryDivider = dividerAnchor
+        traceEvent("EntryTarget", "target=divider row=\(dividerAnchor)")
         proxy.scrollTo(dividerAnchor, anchor: .bottom)
         // Runs before `hasInitiallyScrolled` flips (probe < settle delay), so
         // no automatic follow can be queued ahead of this decision.

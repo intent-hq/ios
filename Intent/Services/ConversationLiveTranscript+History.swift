@@ -7,7 +7,10 @@ extension ConversationLiveTranscript {
         let generation = olderHistoryGeneration
         isLoadingOlderMessages = true
         olderMessagesError = nil
+        let interval = ConversationTrace.begin("OlderMessagesFetch", "\(traceContext) historyGeneration=\(generation)")
+        var outcome = "failed"
         defer {
+            ConversationTrace.end("OlderMessagesFetch", interval, "\(traceContext) historyGeneration=\(generation) outcome=\(outcome)")
             // A superseded request cannot dismiss a newer request's loader.
             if generation == olderHistoryGeneration { isLoadingOlderMessages = false }
         }
@@ -15,7 +18,12 @@ extension ConversationLiveTranscript {
             let page = try await commands.fetchOlderMessages(
                 agentId: agentId, workspaceId: workspaceId, nextToken: cursor
             )
-            guard !Task.isCancelled, generation == olderHistoryGeneration else { return }
+            traceEvent("OlderMessagesResponse", "historyGeneration=\(generation) messages=\(page.messages.count) hasNext=\(page.nextToken != nil)")
+            guard !Task.isCancelled, generation == olderHistoryGeneration else {
+                outcome = "rejected"
+                traceEvent("OlderMessagesRejected", "reason=cancelled_or_superseded historyGeneration=\(generation)")
+                return
+            }
             var residentIds = Set(messages.map(\.id))
             // The daemon serves each page oldest-first. Existing live rows win
             // over page duplicates, including any newer content or hydration.
@@ -24,8 +32,11 @@ extension ConversationLiveTranscript {
             remergeHydratedBlocks()
             olderMessagesCursor = page.nextToken
             isTruncated = hasOlderMessages
+            outcome = "accepted"
+            traceEvent("OlderMessagesAccepted", "received=\(page.messages.count) inserted=\(older.count) resident=\(messages.count)")
             onTranscriptReplaced?()
         } catch {
+            traceEvent("OlderMessagesFailed", "historyGeneration=\(generation) cancelled=\(Task.isCancelled)")
             guard !Task.isCancelled, generation == olderHistoryGeneration else { return }
             olderMessagesError = "Could not load older messages. Please try again."
         }

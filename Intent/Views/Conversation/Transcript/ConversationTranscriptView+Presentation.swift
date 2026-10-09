@@ -54,10 +54,17 @@ extension ConversationTranscriptView {
             Color.clear.frame(height: Layout.bottomAnchorHeight)
                 .padding(.bottom, Layout.bottomAnchorPadding)
                 .id("scroll-bottom")
+                .onGeometryChange(for: CGRect.self) { geometry in
+                    ConversationTrace.enabled ? geometry.frame(in: .named(Self.viewportCoordinateSpace)) : .zero
+                } action: { frame in
+                    scrollState.trace.recordEnd(frame)
+                    traceEvent("EndGeometry", "frame=\(frame)")
+                }
                 .onAppear {
                     send(.endRealized(userIsScrolledAway: userIsScrolledAway), proxy: proxy)
                 }
                 .onDisappear {
+                    scrollState.trace.recordEnd(nil)
                     send(.endDerealized, proxy: proxy)
                 }
         } else {
@@ -94,9 +101,12 @@ extension ConversationTranscriptView {
         .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
             .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
         } action: { measurement in
+            scrollState.trace.row(message.id, frame: measurement.frame, context: traceContext)
             preserveRowOffsetAfterDividerChange(messageId: message.id, measurement: measurement, proxy: proxy)
         }
         .onDisappear {
+            traceEvent("RowDisappeared", "row=\(message.id)")
+            scrollState.trace.removeRow(message.id)
             scrollState.viewportAnchor.remove(id: message.id, generation: generation, entryGeneration: scrollState.initialScrollGeneration, ownershipRevision: ownershipRevision)
         }
     }
@@ -143,8 +153,10 @@ extension ConversationTranscriptView {
         )
         switch application {
         case .offset(let offset):
+            traceEvent("RowRestoration", "row=\(messageId) offset=\(offset)")
             scrollMomentumProxy.pageTo(offsetY: offset)
         case let .retainedAlignment(target, anchorY, rowY):
+            traceEvent("RowRestoration", "row=\(messageId) target=\(target) anchor=\(anchorY) rowY=\(rowY)")
             proxy.scrollTo(target, anchor: UnitPoint(x: 0.5, y: anchorY))
             scrollState.viewportAnchor.recordRestorationAlignment(
                 anchorY: anchorY,
@@ -187,6 +199,7 @@ extension ConversationTranscriptView {
                 cachedHeight: cachedHeight,
                 isStreaming: message.isStreaming
             ) { height in
+                traceEvent("RowHeight", "row=\(message.id) natural=\(height) cached=\(String(describing: cachedHeight)) streaming=\(message.isStreaming)")
                 scrollState.rowHeightCache.record(
                     height: height,
                     for: message,
@@ -199,6 +212,8 @@ extension ConversationTranscriptView {
 
     func goToEndButton(proxy: ScrollViewProxy) -> some View {
         Button {
+            traceSnapshot("goToEndTap")
+            scheduleTraceSnapshots()
             scrollMomentumProxy.stopMomentum()
             claimViewportForExplicitFollow(proxy: proxy)
             scrollState.isScrollingToBottom = true

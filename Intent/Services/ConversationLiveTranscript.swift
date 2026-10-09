@@ -35,8 +35,18 @@ final class ConversationLiveTranscript {
             onStreamingChanged?(isStreaming)
         }
     }
-    var isLoading = false
-    var subscriptionLoadingStage: LoadingStage = .requesting
+    var isLoading = false {
+        didSet {
+            guard oldValue != isLoading else { return }
+            traceEvent("LoadState", "loading=\(isLoading) seeded=\(chatSeeded) messages=\(messages.count)")
+        }
+    }
+    var subscriptionLoadingStage: LoadingStage = .requesting {
+        didSet {
+            guard oldValue != subscriptionLoadingStage else { return }
+            traceEvent("LoadStage", "stage=\(subscriptionLoadingStage) attempt=\(subscriptionAttempt)")
+        }
+    }
     @ObservationIgnored var subscriptionAttempt = 0
     var streamingUpdateCount = 0
     var isTruncated = false
@@ -103,7 +113,12 @@ final class ConversationLiveTranscript {
     var chatLive = false
     @ObservationIgnored var chatSubscriptionId: String?
     var chatChannelActive = false
-    var chatSeeded = false
+    var chatSeeded = false {
+        didSet {
+            guard oldValue != chatSeeded else { return }
+            traceEvent("ChatSeeded", "seeded=\(chatSeeded) messages=\(messages.count)")
+        }
+    }
     /// Only the latest accepted snapshot can enable fragment appends.
     @ObservationIgnored var incrementalDeltas = false
     /// A known encoding-parameter rejection is remembered for this connection;
@@ -126,10 +141,10 @@ final class ConversationLiveTranscript {
     /// an authoritative deletion instead of resubscribing without a bound.
     @ObservationIgnored var emptySnapshotRecoveryAttempts = 0
     private let timestampFormatter = ISO8601DateFormatter()
-    @ObservationIgnored private var hydratedBlocks: [String: ContentBlock] = [:]
-    @ObservationIgnored private var hydratedBlockOrder: [String] = []
+    @ObservationIgnored var hydratedBlocks: [String: ContentBlock] = [:]
+    @ObservationIgnored var hydratedBlockOrder: [String] = []
 
-    private static let maxHydratedBlocks = 30
+    static let maxHydratedBlocks = 30
     private static let maxEmptySnapshotRecoveryAttempts = 1
     private static let defaultSnapshotTimeoutSeconds = 5
     private static let defaultInitialRetryDelaySeconds = 1
@@ -156,109 +171,6 @@ final class ConversationLiveTranscript {
 }
 
 extension ConversationLiveTranscript {
-    static func hydratedBlockKey(messageId: String, blockId: String) -> String {
-        "\(messageId)|\(blockId)"
-    }
-
-    func isBlockHydrated(messageId: String, blockId: String) -> Bool {
-        hydratedBlocks[Self.hydratedBlockKey(messageId: messageId, blockId: blockId)] != nil
-    }
-
-    func hydratingBlockIds(forMessage messageId: String) -> Set<String> {
-        let prefix = "\(messageId)|"
-        return Set(hydratingBlockKeys.lazy
-            .filter { $0.hasPrefix(prefix) }
-            .map { String($0.dropFirst(prefix.count)) })
-    }
-
-    func hydrateBlock(messageId: String, blockId: String) async {
-        guard let agentId else { return }
-        let key = Self.hydratedBlockKey(messageId: messageId, blockId: blockId)
-        if hydratedBlocks[key] != nil || hydratingBlockKeys.contains(key) { return }
-        hydratingBlockKeys.insert(key)
-        defer { hydratingBlockKeys.remove(key) }
-        let stateVersion = liveStateVersion
-
-        do {
-            let decoded = try await whileBound {
-                let result = try await connectionManager.request(
-                    "agent.getMessageBlock",
-                    params: [
-                        "agentId": agentId,
-                        "messageId": messageId,
-                        "blockId": blockId
-                    ]
-                )
-                return await Self.decodeMessageBlock(InboundJSONValue(value: result), blockId: blockId)
-            }
-            guard let decoded else { return }
-            guard let block = decoded else {
-                AppLog.conversation.error(
-                    "[ConversationStore] getMessageBlock returned no decodable block for \(key)"
-                )
-                return
-            }
-            // A text read begun before a live update cannot erase fragments
-            // or an authoritative replacement that arrived while it waited.
-            if block.type == .text || block.type == .thinking, stateVersion != liveStateVersion { return }
-            storeHydratedBlock(block, forKey: key)
-            remergeHydratedBlocks()
-        } catch {
-            AppLog.conversation.error(
-                "[ConversationStore] Failed to hydrate block \(key): \(error)"
-            )
-        }
-    }
-
-    private func storeHydratedBlock(_ block: ContentBlock, forKey key: String) {
-        if hydratedBlocks[key] == nil {
-            hydratedBlockOrder.append(key)
-        }
-        hydratedBlocks[key] = block
-        while hydratedBlockOrder.count > Self.maxHydratedBlocks {
-            hydratedBlocks.removeValue(forKey: hydratedBlockOrder.removeFirst())
-        }
-    }
-
-    /// Hydration may expand a partial text body, but a later live update or
-    /// snapshot owns that text. Tool/image previews still keep their full body.
-    private func discardHydratedText(_ block: ContentBlock, messageId: String) {
-        guard block.type == .text || block.type == .thinking else { return }
-        let key = Self.hydratedBlockKey(messageId: messageId, blockId: block.id)
-        guard hydratedBlocks.removeValue(forKey: key) != nil else { return }
-        hydratedBlockOrder.removeAll { $0 == key }
-    }
-
-    private func discardHydratedText(in messages: [ConversationMessage]) {
-        for message in messages {
-            for block in message.contentBlocks {
-                discardHydratedText(block, messageId: message.id)
-            }
-        }
-    }
-
-    func remergeHydratedBlocks() {
-        guard !hydratedBlocks.isEmpty else { return }
-        for messageIndex in messages.indices {
-            var blocks = messages[messageIndex].contentBlocks
-            guard !blocks.isEmpty else { continue }
-            var changed = false
-            for blockIndex in blocks.indices {
-                let key = Self.hydratedBlockKey(
-                    messageId: messages[messageIndex].id,
-                    blockId: blocks[blockIndex].id
-                )
-                if let hydrated = hydratedBlocks[key] {
-                    blocks[blockIndex] = hydrated
-                    changed = true
-                }
-            }
-            if changed {
-                messages[messageIndex].contentBlocks = blocks
-            }
-        }
-    }
-
     func setTestChannel(subscriptionId: String) {
         chatChannelActive = true
         chatSeeded = false
@@ -268,11 +180,17 @@ extension ConversationLiveTranscript {
 
     func handlePush(_ push: SubscriptionPush) {
         guard chatChannelActive, let subscriptionId = chatSubscriptionId,
-              push.subscriptionId == subscriptionId else { return }
+              push.subscriptionId == subscriptionId else {
+            traceEvent("ChatPushRejected", "reason=inactive_channel seq=\(push.seq)")
+            return
+        }
 
         switch push.kind {
         case .snapshot:
-            if chatSeeded, push.seq + 1 < chatExpectedSeq { return }
+            if chatSeeded, push.seq + 1 < chatExpectedSeq {
+                traceEvent("ChatSnapshotRejected", "reason=stale_sequence seq=\(push.seq) expected=\(chatExpectedSeq)")
+                return
+            }
             applySnapshot(push)
         case .delta:
             guard let delta = push.delta else { return }
@@ -299,31 +217,20 @@ extension ConversationLiveTranscript {
     }
 
     private func applySnapshot(_ push: SubscriptionPush) {
-        guard let items = push.snapshot else { return }
+        guard let items = push.snapshot else {
+            traceEvent("ChatSnapshotRejected", "reason=missing_payload seq=\(push.seq)")
+            return
+        }
+        let interval = ConversationTrace.begin("ChatSnapshotApply", "\(traceContext) seq=\(push.seq)")
+        var accepted = false
+        defer { ConversationTrace.end("ChatSnapshotApply", interval, "\(traceContext) accepted=\(accepted)") }
         let snapshotMessages = push.snapshotMessages ?? ConversationMessage.parseMessages(items)
         let resumed = push.snapshotMeta?["resumed"] as? Bool == true
-        if !resumed, snapshotMessages.isEmpty, !messages.isEmpty {
-            if emptySnapshotRecoveryAttempts >= Self.maxEmptySnapshotRecoveryAttempts,
-               !resnapshotInProgress {
-                AppLog.conversation.warning(
-                    "[ConversationStore] Accepting repeated empty chat snapshot after recovery"
-                )
-                emptySnapshotRecoveryAttempts = 0
-            } else {
-                AppLog.conversation.warning(
-                    "[ConversationStore] Rejecting empty chat snapshot over populated transcript, resubscribing..."
-                )
-                // The registration answered; only its content is in doubt.
-                resumeSnapshotWaiters()
-                if !resnapshotInProgress {
-                    emptySnapshotRecoveryAttempts += 1
-                    scheduleResnapshot()
-                }
-                return
-            }
-        } else if !snapshotMessages.isEmpty {
-            emptySnapshotRecoveryAttempts = 0
-        }
+        traceEvent(
+            "ChatSnapshotReceived",
+            "seq=\(push.seq) items=\(items.count) messages=\(snapshotMessages.count) blocks=\(snapshotMessages.reduce(0) { $0 + $1.contentBlocks.count }) predecoded=\(push.snapshotMessages != nil) resumed=\(resumed)"
+        )
+        guard shouldAcceptSnapshot(snapshotMessages, resumed: resumed) else { return }
         chatLive = true
         chatSeeded = true
         incrementalDeltas = push.snapshotMeta?["deltaEncoding"] as? String == "incremental"
@@ -347,9 +254,42 @@ extension ConversationLiveTranscript {
                 + "seq=\(push.seq), streaming=\(isStreaming)"
         )
         isLoading = false
+        accepted = true
+        traceEvent(
+            "ChatSnapshotAccepted",
+            "seq=\(push.seq) incoming=\(snapshotMessages.count) resident=\(messages.count) blocks=\(messages.reduce(0) { $0 + $1.contentBlocks.count }) "
+                + "total=\(totalMessageCount) streaming=\(isStreaming) loading=\(isLoading) seeded=\(chatSeeded)"
+        )
         resumeSnapshotWaiters()
         onAuthoritativeMessages?(snapshotMessages, true)
         onTranscriptReplaced?()
+    }
+
+    private func shouldAcceptSnapshot(_ snapshotMessages: [ConversationMessage], resumed: Bool) -> Bool {
+        if !resumed, snapshotMessages.isEmpty, !messages.isEmpty {
+            if emptySnapshotRecoveryAttempts >= Self.maxEmptySnapshotRecoveryAttempts,
+               !resnapshotInProgress {
+                AppLog.conversation.warning(
+                    "[ConversationStore] Accepting repeated empty chat snapshot after recovery"
+                )
+                emptySnapshotRecoveryAttempts = 0
+            } else {
+                traceEvent("ChatSnapshotRejected", "reason=empty_over_existing recoveryAttempts=\(emptySnapshotRecoveryAttempts)")
+                AppLog.conversation.warning(
+                    "[ConversationStore] Rejecting empty chat snapshot over populated transcript, resubscribing..."
+                )
+                // The registration answered; only its content is in doubt.
+                resumeSnapshotWaiters()
+                if !resnapshotInProgress {
+                    emptySnapshotRecoveryAttempts += 1
+                    scheduleResnapshot()
+                }
+                return false
+            }
+        } else if !snapshotMessages.isEmpty {
+            emptySnapshotRecoveryAttempts = 0
+        }
+        return true
     }
 
     private func applyDelta(_ delta: SubscriptionPush.DeltaPayload) {

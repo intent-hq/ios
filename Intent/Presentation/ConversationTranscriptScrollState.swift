@@ -131,6 +131,8 @@ final class ConversationTranscriptRowHeightCache {
 
 @Observable
 final class ConversationTranscriptScrollState {
+    @ObservationIgnored let trace = ConversationViewportTrace()
+
     typealias Lifecycle = ConversationTranscriptRecoveryLifecycle
 
     let momentumProxy = ScrollViewMomentumProxy()
