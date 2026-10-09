@@ -108,11 +108,11 @@ struct SavedConnectionCardTests {
 
     @Test func referenceCardsGrowForLongContentRatherThanClipping() throws {
         for current in [false, true] {
-            let normal = try render(name: "Example Computer", address: "192.0.2.42:5180", current: current)
+            let normal = try render(name: "Example Computer", address: "192.0.2.42:5181", current: current)
             #expect(normal == CGSize(width: 354, height: 96))
             let long = try render(
                 name: "A saved connection with a much longer descriptive name that must wrap onto multiple lines",
-                address: "host-with-a-long-name.example.invalid:5180, 192.0.2.43:5180",
+                address: "host-with-a-long-name.example.invalid:5181, 192.0.2.43:5181",
                 current: current
             )
             #expect(long.width == 354)

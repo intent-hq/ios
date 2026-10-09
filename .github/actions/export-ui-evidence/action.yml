@@ -1,5 +1,5 @@
 name: Export UI evidence
-description: Retain only allowlisted fixture screenshots and transcript recovery records
+description: Retain allowlisted fixture screenshots, recovery records, and missing-capture diagnostics
 inputs:
   bundles:
     description: Result bundle paths, one per line; retry bundles are included automatically
@@ -9,6 +9,7 @@ runs:
   steps:
     - name: Export fixture attachments
       id: evidence
+      continue-on-error: true
       shell: bash
       env:
         EVIDENCE_BUNDLES: ${{ inputs.bundles }}
@@ -18,7 +19,7 @@ runs:
         --bundles "$EVIDENCE_BUNDLES"
 
     - name: Upload review screenshots
-      if: always() && steps.evidence.outputs.review_count != '' && steps.evidence.outputs.review_count != '0'
+      if: always() && steps.evidence.outputs.review_available == 'true'
       uses: actions/upload-artifact@v7
       with:
         name: ios-ui-review-evidence
@@ -27,7 +28,7 @@ runs:
         if-no-files-found: ignore
 
     - name: Upload agent group screenshots
-      if: always() && steps.evidence.outputs.agent-groups_count != '' && steps.evidence.outputs.agent-groups_count != '0'
+      if: always() && steps.evidence.outputs.agent-groups_available == 'true'
       uses: actions/upload-artifact@v7
       with:
         name: ios-agent-group-evidence
@@ -36,7 +37,7 @@ runs:
         if-no-files-found: ignore
 
     - name: Upload transcript recovery evidence
-      if: always() && steps.evidence.outputs.recovery_count != '' && steps.evidence.outputs.recovery_count != '0'
+      if: always() && steps.evidence.outputs.recovery_available == 'true'
       uses: actions/upload-artifact@v7
       with:
         name: ios-transcript-recovery-evidence
