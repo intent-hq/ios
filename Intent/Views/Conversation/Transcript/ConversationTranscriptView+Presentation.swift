@@ -209,6 +209,7 @@ extension ConversationTranscriptView {
                 }
             }
         )
+        .environment(\.transcriptDisclosureState, scrollState.disclosures.state(for: message.id))
         .modifier(
             ConversationTranscriptRowHeightFrame(
                 cachedHeight: cachedHeight,

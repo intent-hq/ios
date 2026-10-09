@@ -119,6 +119,7 @@ $(SRCROOT)/Intent/Presentation/SplashPlaybackState.swift
 $(SRCROOT)/Intent/Presentation/SuggestedPrompts.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier+Classification.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
+$(SRCROOT)/Intent/Presentation/TranscriptDisclosureState.swift
 $(SRCROOT)/Intent/Presentation/WatcherMessagePresentation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceAgentSelection.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceLinks.swift
@@ -831,6 +832,7 @@ $(SRCROOT)/IntentTests/TextInputDescendantWalkTests.swift
 $(SRCROOT)/IntentTests/ToolClassifierClassificationTests.swift
 $(SRCROOT)/IntentTests/ToolbarEnvironmentTests.swift
 $(SRCROOT)/IntentTests/TranscriptDecodingMeasurementTests.swift
+$(SRCROOT)/IntentTests/TranscriptDisclosureTests.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+EdgeSequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Follow.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Harness.swift

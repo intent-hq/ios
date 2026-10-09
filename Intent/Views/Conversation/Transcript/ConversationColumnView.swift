@@ -53,6 +53,7 @@ struct ConversationColumnView: View {
         }
         .onChange(of: viewModel.filteredMessageIDs, initial: true) { _, messageIDs in
             transcriptScrollState.rowHeightCache.retainMessages(withIDs: messageIDs)
+            transcriptScrollState.disclosures.retainMessages(withIDs: messageIDs)
             transcriptScrollState.retainViewportMessages(withIDs: messageIDs)
         }
         #if os(visionOS)

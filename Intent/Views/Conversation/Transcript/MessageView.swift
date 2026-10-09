@@ -44,7 +44,11 @@ struct MessageRowContent: View, Equatable {
     /// Agent-to-agent rows render as a collapsed disclosure card; the body
     /// is hidden until the header is tapped (FE parity: ChatMessage.svelte
     /// `isAgentMessageExpanded`, collapsed by default).
-    @State private var isAgentMessageExpanded = false
+    var disclosure = TranscriptDisclosure()
+    private var isAgentMessageExpanded: Bool {
+        get { disclosure.binding(for: .agentMessage, default: false).wrappedValue }
+        nonmutating set { disclosure.binding(for: .agentMessage, default: false).wrappedValue = newValue }
+    }
 
     /// Manual `==`: closures are excluded on purpose — the transcript builds
     /// new ones per evaluation, and they only capture stable identifiers.
