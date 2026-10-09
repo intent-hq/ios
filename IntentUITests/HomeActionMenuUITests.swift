@@ -332,7 +332,11 @@ extension HomeActionMenuUITests {
         let back = app.buttons["workspaceDetail.back"]
         let rootActions = app.buttons["Workspace actions"]
         XCTAssertTrue(waitUntilHittable(rootActions))
-        XCTAssertFalse(back.exists)
+        XCTAssertTrue(waitUntilHittable(back))
+        back.tap()
+        XCTAssertTrue(waitUntilHittable(app.buttons["workspaces.search.open"]))
+        workspace.tap()
+        XCTAssertTrue(waitUntilHittable(back))
         let launcher = app.buttons["intent.menu.open"]
         XCTAssertTrue(waitUntilHittable(launcher))
         XCTAssertEqual(app.buttons.matching(identifier: "intent.menu.open").count, 1)
@@ -361,7 +365,7 @@ extension HomeActionMenuUITests {
         conversationBack.tap()
         XCTAssertTrue(waitUntilHittable(agent))
         XCTAssertTrue(waitUntilHittable(launcher))
-        XCTAssertFalse(back.exists)
+        XCTAssertTrue(waitUntilHittable(back))
         XCTAssertEqual(launcher.frame.midX, rootActions.frame.midX, accuracy: Self.scrollTolerance)
     }
 
@@ -378,11 +382,11 @@ extension HomeActionMenuUITests {
         workspace.tap()
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
         XCTAssertTrue(waitUntilHittable(agent))
+        XCTAssertFalse(app.buttons["workspaceDetail.back"].exists)
         let sidebar = app.collectionViews.firstMatch
         XCTAssertEqual(sidebar.frame.maxX, window.frame.midX, accuracy: Self.scrollTolerance)
         XCTAssertLessThanOrEqual(sidebar.frame.maxX, agent.frame.minX)
         XCTAssertTrue(workspace.isHittable)
-        XCTAssertFalse(app.buttons["workspaceDetail.back"].exists)
         let rootActions = app.buttons["Workspace actions"]
         XCTAssertTrue(waitUntilHittable(rootActions))
         XCTAssertLessThan(rootActions.frame.maxY, window.frame.midY)

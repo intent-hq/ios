@@ -260,7 +260,7 @@ struct WorkspaceDetailView: View {
                 }
                 WorkspaceVerticalNavigationToolbar(
                     isEnabled: true,
-                    showsBackButton: false,
+                    showsBackButton: !isSidebarVisible,
                     backLabel: "Back to workspaces",
                     backIdentifier: "workspaceDetail.back",
                     onBack: coordinator.onBackToWorkspaceList
