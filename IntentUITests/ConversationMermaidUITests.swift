@@ -113,7 +113,8 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=mermaid"]
         app.launch()
-        defer {
+        // XCTest assertion aborts can bypass Swift defer blocks.
+        addTeardownBlock { @MainActor [self] () async in
             capture(app, name: "mermaid-final-state")
             app.terminate()
         }

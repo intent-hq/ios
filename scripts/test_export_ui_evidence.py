@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -21,6 +22,10 @@ GROUP_TEST = "WorkspaceAgentGroupsUITests/testLoadingFailureCanRetryOnlyTheExpan
 RECOVERY_TEST = "ConversationTranscriptScrollUITests/testControlledRecovery()"
 UUID = "01234567-89AB-CDEF-0123-456789ABCDEF"
 REVISION = "a" * 40
+MERMAID_SUITE = "ConversationMermaidUITests"
+MERMAID_TEST = "testFullscreenButtonEdgeAndInlinePinchAndPan"
+MERMAID_IDENTIFIER = f"{MERMAID_SUITE}/{MERMAID_TEST}()"
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def png(red):
@@ -36,7 +41,7 @@ def attachment(name="nested-file-tree", filename="image.png", extension="png"):
 
 
 def record(test=TREE_TEST, attachments=None):
-    return {"testIdentifier": test, "attachments": attachments or [attachment()]}
+    return {"testIdentifier": test, "attachments": attachments if attachments is not None else [attachment()]}
 
 
 class ExportTests(unittest.TestCase):
@@ -51,7 +56,7 @@ class ExportTests(unittest.TestCase):
         self.calls = []
         self.exports = []
         self.addCleanup(patch.stopall)
-        patch("sys.stdout", new_callable=io.StringIO).start()
+        self.stdout = patch("sys.stdout", new_callable=io.StringIO).start()
 
     def bundle(self, name="UITestResults", records=None, files=None, status=0):
         path = self.root / name
@@ -87,6 +92,156 @@ class ExportTests(unittest.TestCase):
 
     def manifest(self, kind="review"):
         return json.loads((self.output / kind / "manifest.json").read_text())
+
+    def mermaid_producer(self):
+        source = (ROOT / "IntentUITests" / f"{MERMAID_SUITE}.swift").read_text()
+        self.assertEqual(re.findall(r"\bclass (\w+): XCTestCase", source), [MERMAID_SUITE])
+        methods = dict(re.findall(
+            r"^    (?:private )?func (\w+)(\([^\n]*\n.*?^    })", source, re.MULTILINE | re.DOTALL
+        ))
+        self.assertIn(MERMAID_TEST, methods, "Locate the owning test for the Mermaid gesture captures")
+        launch = methods[MERMAID_TEST].split("app.launch()")
+        self.assertEqual(len(launch), 2, "Recheck fixture provenance if its launch flow changes")
+        self.assertIn('"--demo-data"', launch[0])
+        self.assertIn('"--demo-design-scenario=mermaid"', launch[0])
+        reachable = set()
+        pending = [MERMAID_TEST]
+        while pending:
+            method = pending.pop()
+            if method in reachable:
+                continue
+            reachable.add(method)
+            pending.extend(name for name in methods
+                           if re.search(rf"\b{re.escape(name)}\(", methods[method]))
+        self.assertEqual({name for name in reachable if name.startswith("test")}, {MERMAID_TEST})
+        source = "\n".join(methods[name] for name in sorted(reachable))
+        captures = re.findall(r'capture\(app, name: "([^"\\]+)"\)', source)
+        self.assertTrue(captures)
+        self.assertEqual(len(captures), len(re.findall(r"\bcapture\(app,", source)),
+                         "Extend the producer reader for nonliteral capture names")
+        return captures
+
+    def test_mermaid_history_captures_are_scoped_to_their_owning_tests(self):
+        registrations = {
+            "testDiagramHistoryReopensAndGoToEndShowsLastAnswer": (
+                "mermaid-history-visit-1", "mermaid-history-visit-2", "mermaid-history-visit-3",
+            ),
+            "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
+        }
+        for test, captures in registrations.items():
+            for capture in captures:
+                self.assertEqual(evidence.permitted_attachment(MERMAID_SUITE, test, attachment(capture)),
+                                 ("review", capture, "png"))
+                self.assertIsNone(evidence.permitted_attachment(MERMAID_SUITE, MERMAID_TEST, attachment(capture)))
+
+    def test_mermaid_producer_captures_survive_export_and_retry(self):
+        captures = self.mermaid_producer()
+        records = [record(test=MERMAID_IDENTIFIER, attachments=[attachment(name) for name in captures])]
+        source = self.bundle(records=records)
+        retry = self.bundle("UITestResults-retry", records=records, files={"image.png": png(0)})
+        self.export(source)
+        for bundle, is_retry in [(source, False), (retry, True)]:
+            entries = [entry for entry in self.manifest()["files"] if entry["sourceBundle"] == str(bundle)]
+            self.assertEqual({entry["capture"] for entry in entries}, set(captures),
+                             "A fixture producer capture was omitted by the exporter")
+            self.assertTrue(all(entry["testIdentifier"] == MERMAID_IDENTIFIER for entry in entries))
+            self.assertTrue(all(entry["retry"] == is_retry for entry in entries))
+        self.assertEqual(self.manifest()["missingCaptures"], [])
+
+    def test_producer_contract_detects_removed_registration(self):
+        captures = evidence.CAPTURES[MERMAID_SUITE][MERMAID_TEST]
+        with patch.dict(evidence.CAPTURES, {MERMAID_SUITE: {
+            MERMAID_TEST: tuple(name for name in captures if name != "mermaid-fullscreen-from-button-edge"),
+        }}):
+            with self.assertRaisesRegex(AssertionError, "mermaid-fullscreen-from-button-edge"):
+                self.test_mermaid_producer_captures_survive_export_and_retry()
+
+    def test_failed_mermaid_job_replay_retains_only_named_fixture_screenshots(self):
+        fixture = json.loads((ROOT / "scripts/fixtures/ui-evidence/mermaid-fullscreen-failure.json").read_text())
+        records = fixture["records"]
+        self.assertEqual(len(records[0]["attachments"]), 31)
+        files = {item["exportedFileName"]: png(255) if item["exportedFileName"].endswith(".png") else b"diagnostic text"
+                 for item in records[0]["attachments"]}
+        source = self.bundle(records=records, files=files)
+        result = source / "test-result.json"
+        result.write_text(json.dumps(fixture["source"]))
+        before = result.read_bytes()
+        self.assertEqual(self.export(source)["review"], 2)
+        entries = self.manifest()["files"]
+        self.assertEqual({entry["capture"] for entry in entries}, {
+            "mermaid-fullscreen-from-button-edge", "mermaid-inline-before-gestures",
+        })
+        self.assertTrue(all(entry["testIdentifier"] == MERMAID_IDENTIFIER for entry in entries))
+        self.assertTrue(all(not entry["retry"] for entry in entries))
+        for entry in entries:
+            self.assertEqual((self.output / "review" / entry["file"]).read_bytes(), files[entry["exportedFileName"]])
+        self.assertEqual(self.manifest()["missingCaptures"][0]["captures"], sorted({
+            "mermaid-final-state", "mermaid-inline-after-pinch",
+            "mermaid-inline-after-horizontal-pan", "mermaid-inline-after-vertical-pan",
+        }))
+        self.assertIn("Captures may not have been reached before a test failure", self.stdout.getvalue())
+        self.assertEqual(result.read_bytes(), before)
+
+    def test_missing_captures_remain_visible_when_a_retry_has_the_screenshots(self):
+        source = self.bundle(records=[record(test=MERMAID_IDENTIFIER, attachments=[])], files={})
+        self.bundle("UITestResults-retry", records=[record(test=MERMAID_IDENTIFIER,
+                    attachments=[attachment(name) for name in self.mermaid_producer()])])
+        self.export(source)
+        missing = self.manifest()["missingCaptures"]
+        self.assertEqual(len(missing), 1)
+        self.assertEqual(missing[0]["sourceBundle"], str(source))
+        self.assertEqual(missing[0]["testIdentifier"], MERMAID_IDENTIFIER)
+        self.assertFalse(missing[0]["retry"])
+        self.assertTrue(all(entry["retry"] for entry in self.manifest()["files"]))
+
+    def test_missing_only_artifact_is_uploadable_and_cli_does_not_fail(self):
+        source = self.bundle(records=[record(test=MERMAID_IDENTIFIER, attachments=[])], files={})
+        args = ["export_ui_evidence.py", "--output-root", str(self.output), "--bundles", str(source)]
+        export = evidence.export_evidence
+        with patch.object(sys, "argv", args), \
+                patch.object(evidence.subprocess, "check_output", return_value=REVISION), \
+                patch.object(evidence, "export_evidence", side_effect=lambda bundles, output, revision:
+                             export(bundles, output, revision, self.env, self.run_xcrun)):
+            self.assertIsNone(evidence.main())
+        self.assertEqual(self.manifest()["files"], [])
+        self.assertEqual(len(self.manifest()["missingCaptures"]), 1)
+        self.assertIn("review_count=0\nreview_available=true", (self.root / "github-output").read_text())
+        self.assertIn("::warning::Missing fixture captures", self.stdout.getvalue())
+
+    def test_repeated_records_are_combined_only_within_their_bundle(self):
+        records = [record(test=MERMAID_IDENTIFIER, attachments=[attachment(name)]) for name in self.mermaid_producer()]
+        source = self.bundle(records=records)
+        retry = self.bundle("UITestResults-retry", records=[record(test=MERMAID_IDENTIFIER, attachments=[])])
+        self.export(source)
+        missing = self.manifest()["missingCaptures"]
+        self.assertEqual(len(missing), 1)
+        self.assertEqual(missing[0]["sourceBundle"], str(retry))
+        self.assertTrue(missing[0]["retry"])
+
+    def test_mermaid_names_cannot_bypass_fixture_path_or_content_boundaries(self):
+        capture = "mermaid-fullscreen-from-button-edge"
+        secret = self.root / "secret.png"
+        secret.write_bytes(png(0))
+        source = self.bundle(records=[
+            record(test=MERMAID_IDENTIFIER, attachments=[
+                attachment(capture, "../secret.png"), attachment(capture, str(secret)),
+                attachment(capture, "linked.png"), attachment(capture, "absent.png"),
+                attachment(capture, "invalid.png"), attachment(capture + "-hierarchy", "hierarchy.txt", "txt"),
+                attachment("Automatic screenshot"), attachment(capture + "-unregistered"),
+            ]),
+            record(test="RealAccountTests/testOpen()", attachments=[attachment(capture)]),
+            record(test=f"{MERMAID_SUITE}/testUnregistered()", attachments=[attachment(capture)]),
+            record(test="IntentTests/" + MERMAID_IDENTIFIER, attachments=[attachment(capture)]),
+        ], files={"image.png": png(255), "linked.png": secret, "invalid.png": b"not PNG", "hierarchy.txt": b"private text"})
+        self.assertEqual(self.export(source)["review"], 0)
+        self.assertEqual(self.manifest()["files"], [])
+        self.assertIn(capture, self.manifest()["missingCaptures"][0]["captures"])
+        self.assertEqual(list((self.output / "review").rglob("*.png")), [])
+
+    def test_malformed_attachment_lists_do_not_hide_later_evidence(self):
+        source = self.bundle(records=[{"testIdentifier": MERMAID_IDENTIFIER, "attachments": None}, record()])
+        self.assertEqual(self.export(source)["review"], 1)
+        self.assertEqual(self.manifest()["missingCaptures"][0]["testIdentifier"], MERMAID_IDENTIFIER)
 
     def test_only_named_captures_from_their_fixture_tests_are_retained(self):
         captures = [attachment(), attachment("Automatic screenshot"),
@@ -172,7 +327,9 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(self.export(self.root / "missing"), {"review": 0, "agent-groups": 0, "recovery": 0})
         self.assertEqual(self.calls, [])
         self.assertEqual(list(self.output.iterdir()), [])
-        self.assertEqual((self.root / "github-output").read_text(), "review_count=0\nagent-groups_count=0\nrecovery_count=0\n")
+        self.assertEqual((self.root / "github-output").read_text(),
+                         "review_count=0\nreview_available=false\nagent-groups_count=0\nagent-groups_available=false\n"
+                         "recovery_count=0\nrecovery_available=false\n")
 
     def test_export_failure_does_not_block_later_retry_evidence(self):
         source = self.bundle(status=1)
