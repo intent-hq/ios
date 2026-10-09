@@ -5,11 +5,13 @@ struct WorkspaceActionLauncher: ViewModifier {
     let isSearching: Bool
     var alignment: HorizontalAlignment = .trailing
     var avoidsConversationInput = true
+    var hostsVerticalBarButton = true
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @AppStorage("appThemePreference") private var themePreference = "system"
     @State private var isOpen = false
     @State private var connectionCount = 0
@@ -50,8 +52,13 @@ struct WorkspaceActionLauncher: ViewModifier {
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
             }
+            .onChange(of: isOpen) { _, open in
+                if open { connectionCount = PersistenceManager.shared.loadConnections().count }
+            }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
             .onDisappear { isOpen = false }
+            .modifier(WorkspaceActionLauncherToolbar(isEnabled: hostsVerticalBarButton && !isSearching))
+            .environment(\.workspaceActionMenuPresented, $isOpen)
     }
 
     private func actionOverlay(bottomInset: CGFloat) -> some View {
@@ -99,9 +106,9 @@ struct WorkspaceActionLauncher: ViewModifier {
                 )
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
             }
-            AssistantLaunchButton(isOpen: isOpen) {
-                if !isOpen { connectionCount = PersistenceManager.shared.loadConnections().count }
-                isOpen.toggle()
+            // Keep the close control inside the modal overlay's accessibility boundary.
+            if !usesVerticalBar || isOpen {
+                AssistantLaunchButton(isOpen: isOpen, action: toggleMenu)
             }
         }
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .bottom))
@@ -113,6 +120,10 @@ struct WorkspaceActionLauncher: ViewModifier {
         case "dark": "Dark Mode"
         default: "System"
         }
+    }
+
+    private func toggleMenu() {
+        isOpen.toggle()
     }
 
     private func select(_ action: HomeActionTiles.Action) {
@@ -131,6 +142,32 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 }
 
+/// The split view's detail column owns the toolbar; its outer launcher still owns the menu overlay.
+struct WorkspaceActionLauncherToolbar: ViewModifier {
+    var isEnabled = true
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(\.workspaceActionMenuPresented) private var menuPresented
+
+    func body(content: Content) -> some View {
+        content.toolbar {
+            // Swift 6.4 ships with both SDK 27.0 and 27.1; gate on the SDK module too.
+            #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
+            if #available(iOS 27.1, *), isEnabled, usesVerticalBar,
+               let menuPresented, !menuPresented.wrappedValue {
+                ToolbarItem(placement: .bottomBar) {
+                    AssistantLaunchButton(isOpen: false, isInVerticalBar: true) {
+                        menuPresented.wrappedValue = true
+                    }
+                }
+                .axisBehavior(.verticalPreferred)
+                .sharedBackgroundVisibility(.hidden)
+                .contentMarginsRemoved()
+            }
+            #endif
+        }
+    }
+}
+
 /// The active input's top edge in the same global coordinate space as the launcher overlay.
 struct WorkspaceActionMenuInputTop: PreferenceKey {
     nonisolated static var defaultValue: CGFloat? { nil }
@@ -139,3 +176,28 @@ struct WorkspaceActionMenuInputTop: PreferenceKey {
         value = nextValue() ?? value
     }
 }
+
+extension EnvironmentValues {
+    @Entry var workspaceActionMenuPresented: Binding<Bool>?
+
+    var workspaceUsesVerticalBar: Bool {
+        #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
+        if #available(iOS 27.1, *) { return self[WorkspaceVerticalBarKey.self] }
+        #endif
+        return false
+    }
+}
+
+#if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
+@available(iOS 27.1, *)
+private struct WorkspaceVerticalBarKey: UITraitBridgedEnvironmentKey {
+    nonisolated static let defaultValue = false
+
+    static func read(from traitCollection: UITraitCollection) -> Bool {
+        traitCollection.userInterfaceIdiom == .phone && traitCollection.verticalBarEdge == .trailing
+    }
+
+    // This observes a system-owned trait; the app must not override its placement.
+    static func write(to _: inout any UIMutableTraits, value _: Bool) {}
+}
+#endif

@@ -46,6 +46,56 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     }
 
     @MainActor
+    func testMenuPlacementSurvivesDrawerRoundTrips() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "Compact workspace page drawers")
+        // Opt in only when the selected simulator is in a vertical-bar display mode.
+        let expectsVerticalBar = ProcessInfo.processInfo.environment["INTENT_UITEST_VERTICAL_BAR"] == "1"
+        let app = launchHome(themePreference: "light")
+        let launcher = app.buttons["intent.menu.open"]
+        XCTAssertTrue(waitUntilHittable(launcher))
+        XCTAssertEqual(app.buttons.matching(identifier: "intent.menu.open").count, 1)
+        let originalFrame = launcher.frame
+        if expectsVerticalBar {
+            XCTAssertGreaterThan(originalFrame.minX, app.buttons["workspaces.search.open"].frame.maxX)
+            XCTAssertEqual(originalFrame.width, 48, accuracy: 1)
+            XCTAssertEqual(originalFrame.height, 48, accuracy: 1)
+        } else {
+            XCTAssertEqual(originalFrame.width, 80, accuracy: 1)
+            XCTAssertLessThanOrEqual(originalFrame.maxX, app.scrollViews["workspaces.list"].frame.maxX)
+        }
+        attachScreenshot(app.screenshot(), named: "Intent menu placement closed")
+        openMenu(app)
+        XCTAssertTrue(waitUntilHittable(app.buttons["intent.menu.close"]))
+        XCTAssertTrue(app.buttons["intent.menu.assistant"].isHittable)
+        XCTAssertTrue(app.frame.contains(app.buttons["intent.menu.close"].frame))
+        attachScreenshot(app.screenshot(), named: "Intent menu placement open")
+        app.buttons["intent.menu.close"].tap()
+        XCTAssertTrue(app.buttons["intent.menu.close"].waitForNonExistence(timeout: Self.timeout))
+        for (title, closeId) in [
+            ("Recent connections", "connection-switcher.close"),
+            ("Recent agents", "agent-history.close")
+        ] {
+            XCTAssertTrue(waitUntilHittable(app.buttons["workspaces.menu"]))
+            app.buttons["workspaces.menu"].tap()
+            let action = app.buttons[title]
+            XCTAssertTrue(action.waitForExistence(timeout: Self.timeout))
+            action.tap()
+            let close = app.buttons[closeId]
+            XCTAssertTrue(waitUntilHittable(close))
+            XCTAssertFalse(app.buttons["workspace.row.demo-ws-dashboard"].isHittable)
+            attachScreenshot(app.screenshot(), named: "Intent menu placement \(title)")
+            close.tap()
+            XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(waitUntilHittable(launcher))
+            XCTAssertEqual(launcher.frame.minX, originalFrame.minX, accuracy: 1)
+            XCTAssertEqual(launcher.frame.minY, originalFrame.minY, accuracy: 1)
+            openMenu(app)
+            app.buttons["intent.menu.close"].tap()
+            XCTAssertTrue(app.buttons["intent.menu.close"].waitForNonExistence(timeout: Self.timeout))
+        }
+    }
+
+    @MainActor
     func testIPadConversationKeepsSendAndMenuAvailable() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad window-level menu")
         XCUIDevice.shared.orientation = .landscapeLeft

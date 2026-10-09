@@ -160,6 +160,7 @@ struct RootView: View {
                     )
                 } detail: {
                     detailContent
+                        .modifier(WorkspaceActionLauncherToolbar(isEnabled: !isSearchingWorkspaces))
                 }
                 .navigationSplitViewStyle(.automatic)
             }
@@ -167,6 +168,7 @@ struct RootView: View {
                 isSearching: isSearchingWorkspaces,
                 alignment: .trailing,
                 avoidsConversationInput: !conversationIsPopping,
+                hostsVerticalBarButton: false,
                 onCreateWorkspace: createWorkspace
             ) {
                 showingConnections = true

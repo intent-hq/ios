@@ -52,6 +52,8 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
             Rectangle()
                 .padding(.top, -safeArea.top)
                 .padding(.bottom, -safeArea.bottom)
+                .padding(.leading, -safeArea.leading)
+                .padding(.trailing, -safeArea.trailing)
         }
         .modifier(EdgeDrawerGesture(
             side: side,
@@ -99,6 +101,8 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
                 RoundedRectangle(cornerRadius: ConnectionSwitcherStyle.pageCornerRadius * revealProgress, style: .continuous)
                     .padding(.top, -safeArea.top)
                     .padding(.bottom, -safeArea.bottom)
+                    .padding(.leading, -safeArea.leading)
+                    .padding(.trailing, -safeArea.trailing)
             }
             .shadow(
                 color: .black.opacity(ConnectionSwitcherStyle.shadowOpacity * Double(revealProgress)),
