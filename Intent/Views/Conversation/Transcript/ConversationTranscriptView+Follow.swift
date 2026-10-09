@@ -221,13 +221,16 @@ extension ConversationTranscriptView {
     }
 
     private func issueScrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
-        traceSnapshot("scrollToEndRequested animated=\(animated)")
+        // The tail is a direct lazy-stack child, so SwiftUI can realize it
+        // while its nested footer is absent. Both targets end at the footer.
+        let target = lifecycle.isEndRealized ? "scroll-bottom" : "transcript-tail"
+        traceSnapshot("scrollToEndRequested target=\(target) animated=\(animated)")
         if animated {
             withAnimation(.easeOut(duration: Constants.Conversation.Transcript.scrollAnimationDuration)) {
-                proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                proxy.scrollTo(target, anchor: .bottom)
             }
         } else {
-            proxy.scrollTo("scroll-bottom", anchor: .bottom)
+            proxy.scrollTo(target, anchor: .bottom)
         }
     }
 
