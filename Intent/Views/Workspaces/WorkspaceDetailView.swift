@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkspaceDetailView: View {
     let workspaceId: String
     private let persistence: PersistenceManager
+    private let isSidebarVisible: Bool
     @Environment(AppCoordinator.self) var coordinator
     @State private var storedAgentStore: AgentStore
     @State private var storedViewModel: AgentListViewModel
@@ -26,9 +27,10 @@ struct WorkspaceDetailView: View {
     @State private var titleEditor = WorkspaceTitleEditor()
     @Environment(BackendSession.self) private var session
 
-    init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared) {
+    init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared, isSidebarVisible: Bool = false) {
         self.workspaceId = workspaceId
         self.persistence = persistence
+        self.isSidebarVisible = isSidebarVisible
         _selectedTab = State(initialValue: WorkspaceTab.restored(
             persistedValue: persistence.loadWorkspaceTab(workspaceId: workspaceId),
             fallback: .agents
@@ -65,6 +67,8 @@ struct WorkspaceDetailView: View {
     }
 
     private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
+
+    private var showsToolbarTitle: Bool { !usesVerticalBar || !isSidebarVisible }
 
     private var lifecycleContent: some View {
         ZStack {
@@ -242,7 +246,7 @@ struct WorkspaceDetailView: View {
         } message: {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
-        .navigationTitle(workspaceName)
+        .navigationTitle(showsToolbarTitle ? workspaceName : "")
         .toolbarTitleDisplayMode(.inline)
         #if !os(visionOS)
         .navigationBarBackButtonHidden()
@@ -263,8 +267,8 @@ struct WorkspaceDetailView: View {
                 .intentToolbarSurface()
             }
             #endif
-            ToolbarItem(placement: .principal) {
-                toolbarTitle
+            if showsToolbarTitle {
+                ToolbarItem(placement: .principal) { toolbarTitle }
             }
             if !usesVerticalBar {
                 ToolbarItem(placement: .primaryAction) {

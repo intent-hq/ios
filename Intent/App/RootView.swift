@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.horizontalSizeClass) var sizeClass
+    @Environment(\.workspaceUsesVerticalBar) var usesVerticalBar
     @Environment(\.colorScheme) var colorScheme
     // Multi-window tap routing (spec decision 5): false on iPhone, so alert
     // taps there always navigate in place — unchanged semantics.
@@ -52,6 +53,8 @@ struct RootView: View {
     @State var handledConversationRequestId = 0 // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
+    // The split detail reads sidebar visibility to choose its navigation title.
+    @State var splitViewVisibility: NavigationSplitViewVisibility = .automatic // swiftlint:disable:this private_swiftui_state
 
     var conversationDestination: some View {
         ConversationDestinationView(
@@ -73,8 +76,7 @@ struct RootView: View {
         switch coordinator.currentScreen {
         case .workspaceList, .workspaceDetail, .agentConversation, .noteDetail:
             return true
-        default:
-            return false
+        default: return false
         }
     }
 
@@ -147,7 +149,7 @@ struct RootView: View {
                     && coordinator.selectedSection == .workspaces,
                 onReveal: prepareConnectionSwitcher
             ) {
-                NavigationSplitView {
+                NavigationSplitView(columnVisibility: $splitViewVisibility) {
                     WorkspaceListSidebar(
                         workspaceStore: session.workspaceStore,
                         isSearching: $isSearchingWorkspaces,

@@ -9,7 +9,7 @@ extension RootView {
                     if let workspaceId = coordinator.selectedWorkspaceId {
                         WorkspaceDetailView(workspaceId: workspaceId, session: session)
                             #if os(iOS)
-                            .toolbar(sizeClass == .compact ? .hidden : .visible, for: .navigationBar)
+                            .toolbar(sizeClass == .compact && !usesVerticalBar ? .hidden : .visible, for: .navigationBar)
                             #else
                             .toolbar(.visible, for: .navigationBar)
                             #endif
@@ -32,6 +32,7 @@ extension RootView {
                     }
                 }
         }
+        .modifier(WorkspaceCompactActionLauncher(showsWorkspaceDetail: showingWorkspaceDetail))
         .onAppear {
             syncNavigationState()
         }

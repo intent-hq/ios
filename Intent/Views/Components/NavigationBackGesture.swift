@@ -50,6 +50,7 @@ struct WorkspaceVerticalNavigationToolbar<Actions: View>: ToolbarContent {
     let onBack: () -> Void
     @ViewBuilder let actions: Actions
 
+    @ToolbarContentBuilder
     var body: some ToolbarContent {
         #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
         if #available(iOS 27.1, *), isEnabled {
@@ -64,6 +65,9 @@ struct WorkspaceVerticalNavigationToolbar<Actions: View>: ToolbarContent {
             .sharedBackgroundVisibility(.hidden)
             .contentMarginsRemoved()
         }
+        #else
+        // Legacy ToolbarContentBuilder requires an expression even when the group has no items.
+        ToolbarItemGroup(placement: .automatic) { EmptyView() }
         #endif
     }
 }

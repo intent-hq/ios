@@ -142,6 +142,40 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 }
 
+/// Pushed compact Duo screens need a launcher after the Workspaces list leaves the screen.
+struct WorkspaceCompactActionLauncher: ViewModifier {
+    let showsWorkspaceDetail: Bool
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(BackendSession.self) private var session
+    @State private var showingCreateWorkspace = false
+    @State private var showingConnections = false
+
+    func body(content: Content) -> some View {
+        if usesVerticalBar {
+            content
+                .modifier(WorkspaceActionLauncher(
+                    isSearching: !showsWorkspaceDetail,
+                    onCreateWorkspace: { showingCreateWorkspace = true },
+                    onConnections: { showingConnections = true }
+                ))
+                .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
+                    if shouldDismiss { showingCreateWorkspace = false }
+                }
+                .sheet(isPresented: $showingCreateWorkspace) {
+                    CreateWorkspaceView(session: session, coordinator: coordinator)
+                        .environment(coordinator)
+                }
+                .sheet(isPresented: $showingConnections) {
+                    ConnectionsView()
+                        .environment(coordinator)
+                }
+        } else {
+            content
+        }
+    }
+}
+
 /// The split view's detail column owns the toolbar; its outer launcher still owns the menu overlay.
 struct WorkspaceActionLauncherToolbar: ViewModifier {
     var isEnabled = true
@@ -149,9 +183,9 @@ struct WorkspaceActionLauncherToolbar: ViewModifier {
     @Environment(\.workspaceActionMenuPresented) private var menuPresented
 
     func body(content: Content) -> some View {
+        // Gate the modifier itself: older SDKs cannot build an empty toolbar closure.
+        #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
         content.toolbar {
-            // Swift 6.4 ships with both SDK 27.0 and 27.1; gate on the SDK module too.
-            #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
             if #available(iOS 27.1, *), isEnabled, usesVerticalBar,
                let menuPresented, !menuPresented.wrappedValue {
                 ToolbarItem(placement: .bottomBar) {
@@ -163,8 +197,10 @@ struct WorkspaceActionLauncherToolbar: ViewModifier {
                 .sharedBackgroundVisibility(.hidden)
                 .contentMarginsRemoved()
             }
-            #endif
         }
+        #else
+        content
+        #endif
     }
 }
 
