@@ -350,6 +350,7 @@ $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollState.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptViewportAnchor+Application.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptViewportAnchor.swift
+$(SRCROOT)/Intent/Presentation/ConversationViewportTrace.swift
 $(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
 $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
@@ -415,6 +416,7 @@ $(SRCROOT)/Intent/Services/ConversationCommands+QueueEvents.swift
 $(SRCROOT)/Intent/Services/ConversationCommands.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Fetch.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+History.swift
+$(SRCROOT)/Intent/Services/ConversationLiveTranscript+Hydration.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Subscribe.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Commands.swift
@@ -518,6 +520,7 @@ $(SRCROOT)/Intent/Services/WorkspaceVideo.swift
 $(SRCROOT)/Intent/Utils
 $(SRCROOT)/Intent/Utils/AppLog.swift
 $(SRCROOT)/Intent/Utils/BackgroundTaskManager.swift
+$(SRCROOT)/Intent/Utils/ConversationTrace.swift
 $(SRCROOT)/Intent/Utils/Date+Relative.swift
 $(SRCROOT)/Intent/Utils/DiagnosticCoverage.swift
 $(SRCROOT)/Intent/Utils/DiagnosticErrorOwnership.swift
@@ -675,6 +678,7 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Geome
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+History.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Presentation.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Recovery.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView+Trace.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/CopyContextMenuOverlay.swift
