@@ -6,7 +6,35 @@ extension Constants.Accessibility {
     static let visionListRowMinimumHeight: CGFloat = 60
 }
 
+extension Constants.WorkspaceSearch {
+    /// Leave room between the individual gaze highlights without changing iOS.
+    static var visionSegmentSpacing: CGFloat {
+        #if os(visionOS)
+        contentSpacing
+        #else
+        0
+        #endif
+    }
+}
+
 extension View {
+    /// Apply inside each workspace control's label, after its frame, so the
+    /// custom button style keeps a single, shaped gaze target per action.
+    @ViewBuilder
+    func visionWorkspaceControlHover(cornerRadius: CGFloat, isEnabled: Bool = true) -> some View {
+        #if os(visionOS)
+        if isEnabled {
+            self
+                .contentShape([.interaction, .hoverEffect], .rect(cornerRadius: cornerRadius))
+                .hoverEffect(.highlight)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+
     /// visionOS eyes/hands ergonomics for custom-styled row buttons: grow the
     /// hit region to a 60 pt minimum height (>= 44 pt targets with >= 60 pt
     /// center spacing between stacked rows), make the whole area tappable, and

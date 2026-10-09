@@ -25,14 +25,14 @@ struct WorkspaceSearchBar: View {
             HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
                 viewModeSwitcher
 
-                WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight)
+                WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight, visionWorkspaceHover: true)
             }
         }
         .padding(.horizontal, horizontalPadding)
     }
 
     private var viewModeSwitcher: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: Constants.WorkspaceSearch.visionSegmentSpacing) {
             ForEach(ViewMode.allCases, id: \.self) { mode in
                 Button {
                     viewMode = mode
@@ -46,6 +46,7 @@ struct WorkspaceSearchBar: View {
                             ? Constants.Pairing.foreground(for: colorScheme == .dark ? .light : .dark)
                             : Constants.Pairing.foreground(for: colorScheme))
                         .contentShape(RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius, style: .circular))
+                        .visionWorkspaceControlHover(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius)
                 }
                 .buttonStyle(IntentContentButtonStyle())
                 .matchedGeometryEffect(id: mode, in: selectionAnimation)
@@ -72,6 +73,7 @@ struct WorkspaceSearchButton: View {
     var label: LocalizedStringKey = "Search workspaces"
     var identifier = "workspaces.search.open"
     var showsBackground = true
+    var visionWorkspaceHover = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -91,6 +93,7 @@ struct WorkspaceSearchButton: View {
                 .background {
                     if showsBackground { WorkspaceSearchSurface() }
                 }
+                .visionWorkspaceControlHover(cornerRadius: Constants.WorkspaceSearch.cornerRadius, isEnabled: visionWorkspaceHover)
                 .accessibilityHidden(true)
         }
         .buttonStyle(IntentContentButtonStyle())

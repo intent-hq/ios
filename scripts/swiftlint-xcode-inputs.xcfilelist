@@ -853,6 +853,7 @@ $(SRCROOT)/IntentTests/WorkspaceChangesRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRootRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesStoreTests.swift
+$(SRCROOT)/IntentTests/WorkspaceControlGazeTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationDraftTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationImagesTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationProposalTests.swift
