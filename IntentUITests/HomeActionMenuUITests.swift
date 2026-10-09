@@ -317,3 +317,107 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         app.revealHomeAction(action)
     }
 }
+
+extension HomeActionMenuUITests {
+    @MainActor
+    func testFoldedDuoLauncherStaysInRailAcrossDetailNavigation() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["INTENT_UITEST_FOLDED_DUO"] == "1",
+            "Requires a user-configured folded Duo; this test never changes display mode"
+        )
+        let app = launchHome(themePreference: "light")
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(waitUntilHittable(workspace))
+        workspace.tap()
+        let back = app.buttons["workspaceDetail.back"]
+        let rootActions = app.buttons["Workspace actions"]
+        XCTAssertTrue(waitUntilHittable(rootActions))
+        XCTAssertFalse(back.exists)
+        let launcher = app.buttons["intent.menu.open"]
+        XCTAssertTrue(waitUntilHittable(launcher))
+        XCTAssertEqual(app.buttons.matching(identifier: "intent.menu.open").count, 1)
+        XCTAssertEqual(launcher.frame.midX, rootActions.frame.midX, accuracy: Self.scrollTolerance)
+        XCTAssertLessThan(rootActions.frame.maxY, app.frame.midY)
+        XCTAssertGreaterThan(launcher.frame.minY, app.frame.midY)
+        app.buttons["Changes"].firstMatch.tap()
+        let file = app.buttons["changes.file.unstaged.Sources/Analytics.swift"].firstMatch
+        XCTAssertTrue(waitUntilHittable(file))
+        XCTAssertGreaterThan(launcher.frame.minX, file.frame.maxX)
+        attachScreenshot(app.screenshot(), named: "Folded Duo Changes launcher rail")
+        openMenu(app)
+        app.buttons["intent.menu.close"].tap()
+        XCTAssertTrue(app.buttons["intent.menu.close"].waitForNonExistence(timeout: Self.timeout))
+        app.buttons["Agents"].firstMatch.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+        XCTAssertTrue(waitUntilHittable(agent))
+        agent.tap()
+        let composer = app.textViews["composer.textView"]
+        XCTAssertTrue(waitUntilHittable(composer))
+        let conversationBack = app.buttons["conversation.back"]
+        XCTAssertTrue(waitUntilHittable(conversationBack))
+        XCTAssertTrue(waitUntilHittable(launcher))
+        XCTAssertEqual(launcher.frame.midX, conversationBack.frame.midX, accuracy: Self.scrollTolerance)
+        XCTAssertGreaterThan(launcher.frame.minX, composer.frame.maxX)
+        conversationBack.tap()
+        XCTAssertTrue(waitUntilHittable(agent))
+        XCTAssertTrue(waitUntilHittable(launcher))
+        XCTAssertFalse(back.exists)
+        XCTAssertEqual(launcher.frame.midX, rootActions.frame.midX, accuracy: Self.scrollTolerance)
+    }
+
+    @MainActor
+    func testUnfoldedDuoKeepsHalfWidthSidebarAndDetailNavigation() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["INTENT_UITEST_UNFOLDED_DUO"] == "1",
+            "Requires a user-configured unfolded Duo; this test never changes display mode"
+        )
+        let app = launchHome(themePreference: "light")
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(waitUntilHittable(workspace))
+        workspace.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+        XCTAssertTrue(waitUntilHittable(agent))
+        let sidebar = app.collectionViews.firstMatch
+        XCTAssertTrue(sidebar.exists)
+        XCTAssertEqual(sidebar.frame.maxX, app.frame.midX, accuracy: Self.scrollTolerance)
+        XCTAssertLessThanOrEqual(sidebar.frame.maxX, agent.frame.minX)
+        XCTAssertTrue(workspace.isHittable)
+        let rootBack = app.buttons["workspaceDetail.back"]
+        XCTAssertFalse(rootBack.exists)
+        let rootActions = app.buttons["Workspace actions"]
+        XCTAssertTrue(waitUntilHittable(rootActions))
+        XCTAssertLessThan(rootActions.frame.maxY, app.frame.midY)
+        let launcher = app.buttons["intent.menu.open"]
+        XCTAssertTrue(waitUntilHittable(launcher))
+        XCTAssertEqual(app.buttons.matching(identifier: "intent.menu.open").count, 1)
+        XCTAssertEqual(launcher.frame.midX, rootActions.frame.midX, accuracy: Self.scrollTolerance)
+        XCTAssertGreaterThan(launcher.frame.minX, agent.frame.maxX)
+        XCTAssertGreaterThan(launcher.frame.minY, app.frame.midY)
+        attachScreenshot(app.screenshot(), named: "Unfolded Duo workspace split")
+
+        let sidebarFrame = sidebar.frame
+        agent.tap()
+        let composer = app.textViews["composer.textView"]
+        XCTAssertTrue(waitUntilHittable(composer))
+        let back = app.buttons["conversation.back"]
+        let actions = app.buttons["conversation.actions.open"]
+        XCTAssertTrue(waitUntilHittable(back))
+        XCTAssertTrue(actions.isHittable)
+        XCTAssertTrue(workspace.isHittable)
+        XCTAssertEqual(sidebar.frame, sidebarFrame)
+        XCTAssertLessThanOrEqual(sidebar.frame.maxX, composer.frame.minX)
+        XCTAssertLessThanOrEqual(back.frame.maxY, actions.frame.minY)
+        XCTAssertLessThan(actions.frame.maxY, app.frame.midY)
+        XCTAssertGreaterThan(launcher.frame.minX, composer.frame.maxX)
+        XCTAssertGreaterThan(launcher.frame.minY, app.frame.midY)
+        XCTAssertEqual(launcher.frame.midX, back.frame.midX, accuracy: Self.scrollTolerance)
+        attachScreenshot(app.screenshot(), named: "Unfolded Duo conversation split")
+        back.tap()
+        XCTAssertTrue(waitUntilHittable(agent))
+        XCTAssertTrue(composer.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.isHittable)
+        XCTAssertEqual(sidebar.frame, sidebarFrame)
+        XCTAssertFalse(rootBack.exists)
+        attachScreenshot(app.screenshot(), named: "Unfolded Duo after back")
+    }
+}

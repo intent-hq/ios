@@ -168,6 +168,7 @@ struct WorkspaceCompactActionLauncher: ViewModifier {
             content
                 .modifier(WorkspaceActionLauncher(
                     isSearching: !showsWorkspaceDetail,
+                    hostsVerticalBarButton: false,
                     onCreateWorkspace: { showingCreateWorkspace = true },
                     onConnections: { showingConnections = true }
                 ))
@@ -188,7 +189,7 @@ struct WorkspaceCompactActionLauncher: ViewModifier {
     }
 }
 
-/// The split view's detail column owns the toolbar; its outer launcher still owns the menu overlay.
+/// Navigation content owns the toolbar; its outer launcher still owns the menu overlay.
 struct WorkspaceActionLauncherToolbar: ViewModifier {
     var isEnabled = true
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
@@ -200,6 +201,8 @@ struct WorkspaceActionLauncherToolbar: ViewModifier {
         if #available(iOS 27.1, *), usesVerticalBar {
             content.toolbar {
                 if isEnabled, let menuPresented, !menuPresented.wrappedValue {
+                    ToolbarSpacer(.flexible, placement: .bottomBar)
+                        .axisBehavior(.verticalPreferred)
                     ToolbarItem(placement: .bottomBar) {
                         AssistantLaunchButton(isOpen: false, isInVerticalBar: true) {
                             menuPresented.wrappedValue = true

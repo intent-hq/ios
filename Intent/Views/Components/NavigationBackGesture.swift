@@ -52,6 +52,7 @@ private struct IntentNavigationBackButtonModifier: ViewModifier {
 /// One vertical group keeps Back above the screen's overflow menu, below system status chrome.
 struct WorkspaceVerticalNavigationToolbar<Actions: View>: ToolbarContent {
     let isEnabled: Bool
+    var showsBackButton = true
     var backLabel: LocalizedStringKey = "Back"
     var backIdentifier = "navigation.back"
     let onBack: () -> Void
@@ -63,8 +64,10 @@ struct WorkspaceVerticalNavigationToolbar<Actions: View>: ToolbarContent {
         if #available(iOS 27.1, *), isEnabled {
             ToolbarItem(placement: .topBarTrailing) {
                 VStack(spacing: 0) {
-                    IntentIconButton(icon: .arrowLeft, label: backLabel, showsBackground: false, action: onBack)
-                        .accessibilityIdentifier(backIdentifier)
+                    if showsBackButton {
+                        IntentIconButton(icon: .arrowLeft, label: backLabel, showsBackground: false, action: onBack)
+                            .accessibilityIdentifier(backIdentifier)
+                    }
                     actions
                 }
             }

@@ -8,7 +8,7 @@ extension RootView {
                 WorkspaceDetailView(
                     workspaceId: workspaceId,
                     session: session,
-                    isSidebarVisible: usesVerticalBar && splitViewVisibility != .detailOnly
+                    isSidebarVisible: usesVerticalBar
                 )
                     .navigationDestination(isPresented: $showingConversation) {
                         conversationDestination

@@ -8,6 +8,7 @@ extension RootView {
                 .navigationDestination(isPresented: $showingWorkspaceDetail) {
                     if let workspaceId = coordinator.selectedWorkspaceId {
                         WorkspaceDetailView(workspaceId: workspaceId, session: session)
+                            .modifier(WorkspaceActionLauncherToolbar())
                             #if os(iOS)
                             .toolbar(sizeClass == .compact && !usesVerticalBar ? .hidden : .visible, for: .navigationBar)
                             #else
@@ -15,6 +16,7 @@ extension RootView {
                             #endif
                             .navigationDestination(isPresented: $showingConversation) {
                                 conversationDestination
+                                    .modifier(WorkspaceActionLauncherToolbar())
                             }
                             .navigationDestination(isPresented: $showingNoteDetail) {
                                 NoteDetailView(
@@ -28,6 +30,7 @@ extension RootView {
                                     noteDetailNoteTitle = title
                                 }
                                 .id(noteDetailNoteId)
+                                .modifier(WorkspaceActionLauncherToolbar())
                             }
                     }
                 }
