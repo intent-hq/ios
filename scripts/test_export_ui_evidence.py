@@ -113,6 +113,23 @@ class ExportTests(unittest.TestCase):
         self.assertEqual({entry["capture"] for entry in self.manifest()["files"]},
                          {"Sent video poster", "Sent video full-screen playback"})
 
+    def test_mermaid_failure_retains_only_its_named_final_state_screenshot(self):
+        mermaid_test = "ConversationMermaidUITests/testFullscreenButtonEdgeAndInlinePinchAndPan()"
+        source = self.bundle(records=[
+            record(test=mermaid_test, attachments=[
+                attachment("mermaid-final-state"), attachment("Automatic screenshot"),
+                attachment("mermaid-final-state-private-account"),
+                attachment("mermaid-final-state-hierarchy", "hierarchy.txt", "txt"),
+            ]),
+            record(test="RealAccountTests/testOpen()", attachments=[attachment("mermaid-final-state")]),
+            record(test="ConversationMermaidUITests/testUnreviewedCapture()",
+                   attachments=[attachment("mermaid-final-state")]),
+        ], files={"image.png": png(255), "hierarchy.txt": b"Fixture hierarchy stays in xcresult"})
+        self.assertEqual(self.export(source), {"review": 1, "agent-groups": 0, "recovery": 0})
+        entry = self.manifest()["files"][0]
+        self.assertEqual(entry["capture"], "mermaid-final-state")
+        self.assertEqual((self.output / "review" / entry["file"]).read_bytes(), png(255))
+
     def test_existing_group_images_and_recovery_json_remain_separate(self):
         recovery = {"test": "testControlledRecovery", "cycle": 1, "goToEndPresent": False,
                     "endRowPosition": "INSIDE", "endRecovery": {"reason": "recovered", "corrections": 1}}

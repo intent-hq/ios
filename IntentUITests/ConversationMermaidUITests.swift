@@ -22,11 +22,11 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=mermaid"]
-        app.launch()
-        defer {
-            capture(app, name: "mermaid-final-state")
+        addTeardownBlock { @MainActor () async in
+            self.capture(app, name: "mermaid-final-state")
             app.terminate()
         }
+        app.launch()
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
         workspace.tap()
@@ -37,7 +37,7 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
         let webView = transcript.webViews["mermaid.webview"].firstMatch
         let expand = transcript.buttons["mermaid.expand"].firstMatch
-        XCTAssertTrue(webView.waitForExistence(timeout: Fixture.timeout))
+        assertRenderer(webView, in: transcript, message: "The inline renderer must expose its web view")
         XCTAssertTrue(expand.waitForExistence(timeout: Fixture.timeout))
         reveal(webView, expand: expand, in: transcript)
         let diagram = webView.images["Mermaid diagram"].firstMatch
@@ -65,12 +65,41 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
         let done = app.buttons["mermaid.done"].firstMatch
         XCTAssertTrue(done.waitForExistence(timeout: Fixture.timeout), "The button's outer edge must open fullscreen")
         let expandedDiagram = app.webViews["mermaid.fullscreen.webview"].images["Mermaid diagram"].firstMatch
-        let rendered = expandedDiagram.waitForExistence(timeout: Fixture.timeout)
+        assertRenderer(expandedDiagram, in: app, message: "The fullscreen renderer must draw its own diagram")
         capture(app, name: "mermaid-fullscreen-from-button-edge")
-        XCTAssertTrue(rendered, "The fullscreen renderer must draw its own diagram")
         done.tap()
         XCTAssertTrue(done.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(webView.waitForExistence(timeout: Fixture.timeout))
+    }
+
+    @MainActor
+    private func assertRenderer(
+        _ element: XCUIElement,
+        in container: XCUIElement,
+        message: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let errorText = container.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@ OR label BEGINSWITH %@",
+            "Unable to load this diagram",
+            "Unable to draw this diagram"
+        )).firstMatch
+        let retry = container.buttons["Try again"].firstMatch
+        var rendererError: String?
+        let appeared = waitUntil(timeout: Fixture.timeout) {
+            if errorText.exists {
+                rendererError = errorText.label
+            } else if retry.exists {
+                rendererError = "Try again"
+            }
+            return rendererError != nil || element.exists
+        }
+        if let rendererError {
+            XCTFail("\(message): renderer failed with \"\(rendererError)\"", file: file, line: line)
+            return
+        }
+        XCTAssertTrue(appeared, message, file: file, line: line)
     }
 
     @MainActor

@@ -11,6 +11,9 @@ import tempfile
 
 
 CAPTURES = {
+    "ConversationMermaidUITests": {
+        "testFullscreenButtonEdgeAndInlinePinchAndPan": ("mermaid-final-state",),
+    },
     "ConversationTranscriptScrollUITests": {
         "testLoadingStatusShowsIdleDelayAndRestoresComposer": (
             "Conversation loading before idle light", "Conversation loading after idle light",
