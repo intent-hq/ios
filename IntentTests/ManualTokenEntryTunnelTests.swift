@@ -117,7 +117,7 @@ extension ManualTokenEntryViewTests {
         let result = try await CertFingerprintProbe.probeViaTunnel(
             dialer: dialer,
             tcAddress: "tc-key-abc123",
-            remotePort: 5180
+            remotePort: 5181
         ) { _, _ in .noCertificate }
 
         #expect(result == .noCertificate)
@@ -153,7 +153,7 @@ extension ManualTokenEntryViewTests {
             _ = try await CertFingerprintProbe.probeViaTunnel(
                 dialer: dialer,
                 tcAddress: "tc-nonsense",
-                remotePort: 5180
+                remotePort: 5181
             ) { _, _ in .noCertificate }
         }
     }

@@ -13,7 +13,7 @@ WHAT YOU WILL SEE WITHOUT A DAEMON ON YOUR NETWORK
 The following applies if you choose not to install the desktop app.
 1. On first launch the app shows the pairing screen with two options: "Scan QR Code" and "Manual Connection".
 2. "Scan QR Code" asks for camera permission and opens a camera view prompting "Point at the QR code in Intent Settings". The QR code is displayed by the desktop app; without one, nothing scans and the sheet can be dismissed.
-3. "Manual Connection" opens a form with Host, Port (default 5180), and API Token fields. Submitting values without a reachable daemon shows a clear "Connection failed" error and the form stays usable — no crash, no hang.
+3. "Manual Connection" opens a form with Host, Port (default 5181), and API Token fields. Submitting values without a reachable daemon shows a clear "Connection failed" error and the form stays usable — no crash, no hang.
 4. All app content (workspaces, notes, tasks, agent conversations) appears only after pairing with a daemon.
 
 WHAT THE PAIRED EXPERIENCE LOOKS LIKE
