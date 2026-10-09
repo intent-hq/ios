@@ -77,6 +77,12 @@ Debug-only plaintext fixtures and must not be treated as Release coverage.
 
 ### CI selection and evidence
 
+The iOS test jobs, including filtered dispatches, temporarily use hosted `macos-15`
+and explicitly select Xcode 26.3 while self-hosted WebKit startup failures (#735)
+are investigated. Do not silently fall back to another Xcode or weaken test gates.
+Check the actual runtime in simulator ownership evidence; visionOS build routing
+is unchanged. Run `python3 scripts/test_ci_simulator.py` after changing this routing.
+
 `gh workflow run ci.yml --repo intent-hq/ios --ref <branch> -f only_testing='IntentTests/DemoFixturesTests'`
 runs the same filter in CI as a non-gating `iOS Filtered Tests` job, with the
 per-selector table in the job summary. In CI, pull requests and the merge queue

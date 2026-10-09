@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -349,6 +350,92 @@ class OrdinaryCITests(unittest.TestCase):
         self.assertIn("simctl create failed", json.loads((directory / "prepare-ci-error.json").read_text())["error"])
         self.assertFalse((directory / "environment").exists())
         route.cleanup(directory)
+
+    def test_ios_test_jobs_use_hosted_macos15(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        for name in ("build-and-test", "ios-ui-tests"):
+            with self.subTest(job=name):
+                job = workflow.split("  " + name + ":\n", 1)[1].split("    steps:\n", 1)[0]
+                runner = next(line.split(":", 1)[1].strip() for line in job.splitlines()
+                              if line.strip().startswith("runs-on:"))
+                self.assertEqual(runner.strip("\"'"), "macos-15")
+
+    def test_ios_test_jobs_pin_xcode_and_reject_missing_toolchain(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        for name in ("build-and-test", "ios-ui-tests"):
+            job = workflow.split("  " + name + ":\n", 1)[1]
+            step = job.split("      - name: Select Xcode\n", 1)[1].split("\n      - name:", 1)[0]
+            command = textwrap.dedent(step.split("        run: |\n", 1)[1])
+            command = command.replace("${{ runner.environment }}", "github-hosted")
+            for installed in (True, False):
+                with self.subTest(job=name, installed=installed), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    applications = root / "Applications"
+                    (applications / "Xcode_27.app").mkdir(parents=True)
+                    expected = applications / "Xcode_26.3.app/Contents/Developer"
+                    if installed:
+                        expected.mkdir(parents=True)
+                    binary = root / "xcodebuild"
+                    binary.write_text('#!/bin/bash\nprintf "%s\\n" "$DEVELOPER_DIR" > "$CALLS"\n')
+                    binary.chmod(0o755)
+                    environment = root / "environment"
+                    calls = root / "calls"
+                    env = {"PATH": str(root) + os.pathsep + os.environ["PATH"],
+                           "GITHUB_ENV": str(environment), "CALLS": str(calls)}
+                    result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c",
+                                             command.replace("/Applications/", str(applications) + "/")],
+                                            env=env, text=True, capture_output=True)
+                    if installed:
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(environment.read_text(), f"DEVELOPER_DIR={expected}\n")
+                        self.assertEqual(calls.read_text(), f"{expected}\n")
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertFalse(environment.exists())
+                        self.assertFalse(calls.exists())
+
+    def test_ios_jobs_log_selected_xcode_and_runtime_build(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        for name in ("build-and-test", "ios-ui-tests"):
+            with self.subTest(job=name):
+                job = re.split(r"\n  [\w-]+:\n", workflow.split("  " + name + ":\n", 1)[1], maxsplit=1)[0]
+                marker = "      - name: Log selected simulator\n"
+                self.assertIn(marker, job)
+                self.assertLess(job.index("name: Create owned"), job.index(marker))
+                self.assertLess(job.index(marker), job.index("name: Pre-boot simulator"))
+                step = job.split(marker, 1)[1].split("\n      - name:", 1)[0]
+                self.assertNotIn("        if:", step)
+                command = textwrap.dedent(step.split("        run: |\n", 1)[1])
+                for build in ("test-runtime-A", "test-runtime-B", None):
+                    receipt = {"xcode": "Xcode fixture\nBuild version selected-toolchain",
+                               "runtime": {"name": "iOS selected", "buildversion": build}}
+                    (self.directory / "ownership.json").write_text(json.dumps(receipt))
+                    result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", command],
+                                            env={"PATH": os.environ["PATH"],
+                                                 "SIMULATOR_EVIDENCE_DIR": str(self.directory)},
+                                            text=True, capture_output=True)
+                    if build:
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertIn(receipt["xcode"], result.stdout)
+                        self.assertIn("iOS selected", result.stdout)
+                        self.assertIn(build, result.stdout)
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+
+    def test_tailcat_cache_keys_match_and_isolate_runner_environment_and_architecture(self):
+        workflows = Path(__file__).resolve().parent.parent / ".github/workflows"
+        keys = []
+        for filename in ("ci.yml", "warm-cache.yml"):
+            for section in (workflows / filename).read_text().split("      - name: Cache TailcatKit.xcframework\n")[1:]:
+                step = section.split("\n      - name:", 1)[0]
+                self.assertNotIn("restore-keys:", step)
+                keys.append(next(line.split("key:", 1)[1].strip() for line in step.splitlines()
+                                 if line.strip().startswith("key:")))
+        self.assertEqual(len(keys), 3)
+        self.assertEqual(len(set(keys)), 1, "Cache producers and consumers must agree")
+        rendered = {key.replace("${{ runner.environment }}", environment).replace("${{ runner.arch }}", arch)
+                    for key in keys for environment in ("self-hosted", "github-hosted") for arch in ("ARM64", "X64")}
+        self.assertEqual(len(rendered), 4, "Native helper caches must separate host environments and architectures")
 
     def test_ui_workflow_uses_separate_owned_destinations_and_cleans_failures_or_skips(self):
         scripts = Path(__file__).resolve().parent

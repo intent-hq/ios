@@ -192,7 +192,9 @@ jobs:
     # step below waits for those jobs and fails this one if either did not
     # succeed. All three jobs still run in parallel.
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    # Avoid the self-hosted macOS 27 / iOS 26.3.1 WebKit startup failures (ios#735).
+    # Keep all test selectors and gates intact while the runner is investigated.
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -265,17 +267,10 @@ jobs:
 
       - name: Select Xcode
         run: |
-          if [ '${{ runner.environment }}' = self-hosted ]; then
-            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
-            # local results agree with hosted ones; the Mac's default Xcode
-            # stays untouched (ios#588, ios#592).
-            xcode=/Applications/Xcode_26.3.app
-            if [ ! -d "$xcode" ]; then
-              echo "::error::$xcode is not installed on this runner" >&2
-              exit 1
-            fi
-          else
-            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          xcode=/Applications/Xcode_26.3.app
+          if [ ! -d "$xcode" ]; then
+            echo "::error::$xcode is not installed on this runner" >&2
+            exit 1
           fi
           echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
           DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
@@ -296,6 +291,10 @@ jobs:
             python3 scripts/ci_simulator.py prepare-ci
           fi
 
+      - name: Log selected simulator
+        run: |
+          jq -er '.xcode, "Selected simulator: \(.runtime.name) (build \(.runtime.buildversion // error("Missing selected runtime build")))"' "$SIMULATOR_EVIDENCE_DIR/ownership.json"
+
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
       # Run in the background: simctl boot can block for minutes waiting for
@@ -312,7 +311,8 @@ jobs:
       # included because it picks the toolchain (setup-go go-version-file)
       # and module versions. On a hit the job never needs Go at all, which
       # skips the multi-minute toolchain download and the 800 MB Go cache
-      # restore/save. warm-cache.yml seeds this cache on main.
+      # restore/save. warm-cache.yml seeds this cache on main. Separate host
+      # environments and architectures: tcecho is a host-native executable.
       - name: Cache TailcatKit.xcframework
         id: tailcat-cache
         uses: actions/cache@v6
@@ -320,7 +320,7 @@ jobs:
           path: |
             TailcatKit/build/TailcatKit.xcframework
             TailcatKit/build/tcecho
-          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
+          key: ${{ runner.os }}-${{ runner.environment }}-${{ runner.arch }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
 
       - name: Set up Go
         if: steps.tailcat-cache.outputs.cache-hit != 'true'
@@ -671,10 +671,10 @@ jobs:
     # run the complete UI bundle. Filtered dispatches already run their
     # requested selector in build-and-test.
     # A human adds this check to the ruleset after merge; build-and-test does not
-    # wait for it; the macOS jobs queue on the dedicated Mac.
+    # wait for it; both iOS test jobs use hosted Macs while ios#735 is investigated.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad')) }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    runs-on: macos-15
     # Allow setup, the full iPhone suite, iPad regressions, and cleanup (ios#429).
     timeout-minutes: 90
     env:
@@ -694,17 +694,10 @@ jobs:
 
       - name: Select Xcode
         run: |
-          if [ '${{ runner.environment }}' = self-hosted ]; then
-            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
-            # local results agree with hosted ones; the Mac's default Xcode
-            # stays untouched (ios#588, ios#592).
-            xcode=/Applications/Xcode_26.3.app
-            if [ ! -d "$xcode" ]; then
-              echo "::error::$xcode is not installed on this runner" >&2
-              exit 1
-            fi
-          else
-            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          xcode=/Applications/Xcode_26.3.app
+          if [ ! -d "$xcode" ]; then
+            echo "::error::$xcode is not installed on this runner" >&2
+            exit 1
           fi
           echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
           DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
@@ -718,6 +711,10 @@ jobs:
       - name: Create owned iPhone simulator
         run: python3 scripts/ci_simulator.py prepare-ci
 
+      - name: Log selected simulator
+        run: |
+          jq -er '.xcode, "Selected simulator: \(.runtime.name) (build \(.runtime.buildversion // error("Missing selected runtime build")))"' "$SIMULATOR_EVIDENCE_DIR/ownership.json"
+
       - name: Pre-boot simulator
         run: xcrun simctl boot "$SIM_UDID" > "$SIMULATOR_EVIDENCE_DIR/boot.log" 2>&1 || true &
 
@@ -728,7 +725,7 @@ jobs:
           path: |
             TailcatKit/build/TailcatKit.xcframework
             TailcatKit/build/tcecho
-          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
+          key: ${{ runner.os }}-${{ runner.environment }}-${{ runner.arch }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
 
       - name: Set up Go
         if: steps.tailcat-cache.outputs.cache-hit != 'true'

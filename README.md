@@ -150,8 +150,9 @@ then `npm test`. Native coverage lives in `MermaidMarkdownContentTests`,
 ### Clean-checkout prerequisites
 
 - For app builds: macOS with Xcode and its command-line tools. Tests require an available iPhone
-  simulator by default; use `SIM_UDID` to select an iPad. CI's self-hosted Macs
-  select Xcode 26.3 explicitly; hosted runners select their newest installed Xcode.
+  simulator by default; use `SIM_UDID` to select an iPad. CI's iOS test jobs use
+  hosted `macos-15` with Xcode 26.3 pinned. The visionOS build still uses Xcode 26.3
+  on self-hosted Macs or the newest installed Xcode on hosted runners.
 - Network access for the first Swift package resolution and pinned Go tool download.
 - A Go toolchain compatible with the version in `TailcatKit/go.mod`. iOS commands
   automatically run `TailcatKit/build_xcframework.sh` when the gitignored framework
@@ -315,6 +316,14 @@ the visionOS platform is absent and produce a bogus successful build.
 Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes pin `parallelizable = "NO"`, so no extra flags are needed. Parallel simulator clone runners mass-flake the suite locally (see [intent-hq/intent#759](https://github.com/intent-hq/intent/issues/759)).
 
 ### CI and review evidence
+
+The iOS test jobs (including filtered dispatches) temporarily use hosted
+`macos-15` with Xcode 26.3 while self-hosted WebKit startup failures are investigated
+([ios#735](https://github.com/intent-hq/ios/issues/735)). A missing pinned Xcode fails
+setup rather than silently selecting another version. The job log prints the selected
+Xcode and simulator runtime build from the ownership evidence. Native TailcatKit/helper
+caches are separated by runner environment and architecture; visionOS build routing
+and all test gates are unchanged.
 
 `.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
 `scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
