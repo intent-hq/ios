@@ -17,8 +17,15 @@ struct ToolCallView: View {
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isExpanded = false
-    @State private var isInputExpanded = false
+    var disclosure = TranscriptDisclosure()
+    private var isExpanded: Bool {
+        get { disclosure.binding(for: .tool(block.id), default: false).wrappedValue }
+        nonmutating set { disclosure.binding(for: .tool(block.id), default: false).wrappedValue = newValue }
+    }
+    private var isInputExpanded: Bool {
+        get { disclosure.binding(for: .toolInput(block.id), default: false).wrappedValue }
+        nonmutating set { disclosure.binding(for: .toolInput(block.id), default: false).wrappedValue = newValue }
+    }
 
     private typealias Layout = Constants.Conversation.ToolCall
     private typealias Design = Constants.Conversation.Design

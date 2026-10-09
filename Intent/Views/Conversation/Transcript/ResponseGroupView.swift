@@ -81,7 +81,11 @@ struct ResponseGroupBody: View, Equatable {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .caption) private var groupIconSide: CGFloat = 12
     @ScaledMetric(relativeTo: .caption2) private var disclosureIconSide: CGFloat = 11
-    @State private var isExpanded: Bool
+    var disclosure = TranscriptDisclosure()
+    private var isExpanded: Bool {
+        get { disclosure.binding(for: .group(group.id), default: isLast).wrappedValue }
+        nonmutating set { disclosure.binding(for: .group(group.id), default: isLast).wrappedValue = newValue }
+    }
 
     /// Manual `==`: closures are excluded on purpose — the message builds
     /// new ones per evaluation, and they only capture stable identifiers.
@@ -114,7 +118,6 @@ struct ResponseGroupBody: View, Equatable {
         self.hydratingBlockIds = hydratingBlockIds
         self.onLayoutChange = onLayoutChange
         self.onHydrateBlock = onHydrateBlock
-        self._isExpanded = State(initialValue: isLast)
     }
 
     var body: some View {
@@ -123,6 +126,7 @@ struct ResponseGroupBody: View, Equatable {
             groupContent
         }
         .padding(.bottom, Layout.bottomPadding)
+        .onAppear { disclosure.initialize(.group(group.id), default: isLast) }
     }
 
     private var headerButton: some View {

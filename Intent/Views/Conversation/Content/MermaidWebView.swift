@@ -186,8 +186,14 @@ struct MermaidWebView: UIViewRepresentable {
         private func publish(_ state: MermaidRenderState) {
             let currentRevision = revision
             Task { @MainActor [weak self] in
-                guard let self, revision == currentRevision else { return }
-                parent?.state = state
+                guard let self, revision == currentRevision, let parent else { return }
+                MermaidInlineHeightCache.shared.record(state, for: parent.source, expanded: parent.expanded)
+                ConversationTrace.emit(
+                    "MermaidState",
+                    "renderer=\(ObjectIdentifier(self)) revision=\(currentRevision) sourceID=\(parent.source.hashValue) "
+                        + "sourceBytes=\(parent.source.utf8.count) expanded=\(parent.expanded) state=\(state)"
+                )
+                parent.state = state
             }
         }
     }

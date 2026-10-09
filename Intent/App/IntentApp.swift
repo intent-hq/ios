@@ -4,6 +4,7 @@ import UIKit
 @main
 struct IntentApp: App {
     init() {
+        ConversationTrace.emit("AppStarted", "")
         LifecycleDiagnostics.sessionStarted()
         DemoConnectionLoss.seedSavedMachineIfNeeded()
         DemoSettings.seedConnectionsIfNeeded()

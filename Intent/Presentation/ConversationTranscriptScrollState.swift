@@ -131,10 +131,13 @@ final class ConversationTranscriptRowHeightCache {
 
 @Observable
 final class ConversationTranscriptScrollState {
+    @ObservationIgnored let trace = ConversationViewportTrace()
+
     typealias Lifecycle = ConversationTranscriptRecoveryLifecycle
 
     let momentumProxy = ScrollViewMomentumProxy()
     let rowHeightCache = ConversationTranscriptRowHeightCache()
+    let disclosures = TranscriptDisclosureStore()
     /// Who owns the viewport (a follow from its request to its terminal, an
     /// unrealized-end correction from its first scroll to its terminal), the
     /// recovery armed without owning, a give-up transferred to the owning

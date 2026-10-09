@@ -92,7 +92,11 @@ struct ContentBlockBody: View, Equatable {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
-    @State private var thinkingExpanded = false
+    var disclosure = TranscriptDisclosure()
+    private var thinkingExpanded: Bool {
+        get { disclosure.binding(for: .thinking(block.id), default: false).wrappedValue }
+        nonmutating set { disclosure.binding(for: .thinking(block.id), default: false).wrappedValue = newValue }
+    }
     @State private var lightboxPresented = false
     /// Set when a thumbnail tap started hydration: the lightbox then opens
     /// automatically once the full block merges in (dataTruncated clears).

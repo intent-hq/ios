@@ -11,6 +11,11 @@ extension ConversationTranscriptView {
     func send(_ event: Lifecycle.Event, proxy: ScrollViewProxy, animated: Bool = true) -> [Lifecycle.Effect] {
         recordDemoRecoveryResizeFollowBack(event)
         let (state, effects) = Lifecycle.transition(lifecycle, event)
+        traceEvent("RecoveryTransition", "event=\(event) ownerBefore=\(lifecycle.owner) ownerAfter=\(state.owner) armed=\(String(describing: state.armedRecovery)) fallback=\(state.fallback)")
+        traceEvent("RecoveryEffects", "event=\(event) effects=\(effects)")
+        if state != lifecycle || !effects.isEmpty {
+            traceSnapshot("lifecycleTransition")
+        }
         scrollState.lifecycle = state
         for effect in effects {
             perform(effect, proxy: proxy, animated: animated)
@@ -156,6 +161,7 @@ extension ConversationTranscriptView {
             takenOverByGesture: scrollState.forcedFollowTakenOverByGesture
         ) {
             AppLog.userInterface.debug("[SCROLL] Forced follow refused: a gesture took over the last one")
+            traceEvent("FollowSkipped", "reason=gestureTakeover forced=\(forced)")
             return
         }
         scrollState.lastFollowToBottomAt = ProcessInfo.processInfo.systemUptime
@@ -215,12 +221,16 @@ extension ConversationTranscriptView {
     }
 
     private func issueScrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        // The tail is a direct lazy-stack child, so SwiftUI can realize it
+        // while its nested footer is absent. Both targets end at the footer.
+        let target = lifecycle.isEndRealized ? "scroll-bottom" : "transcript-tail"
+        traceSnapshot("scrollToEndRequested target=\(target) animated=\(animated)")
         if animated {
             withAnimation(.easeOut(duration: Constants.Conversation.Transcript.scrollAnimationDuration)) {
-                proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                proxy.scrollTo(target, anchor: .bottom)
             }
         } else {
-            proxy.scrollTo("scroll-bottom", anchor: .bottom)
+            proxy.scrollTo(target, anchor: .bottom)
         }
     }
 
@@ -256,6 +266,7 @@ extension ConversationTranscriptView {
                 userIsScrolledAway: userIsScrolledAway
             )
             previous = geometry
+            traceEvent("FollowLanding", "step=\(step) remaining=\(correctionsLeft) geometry=\(String(describing: geometry))")
             switch step {
             case .continue(.settling):
                 continue

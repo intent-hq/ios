@@ -38,6 +38,24 @@ extension DemoDesignFixtures {
     changes will be attempted.
     """
 
+    static var mermaidHistory: [[String: Any]] {
+        (0..<4).flatMap { turn in
+            let explanation = Array(repeating: "The app loads its transcript, prepares each message, and preserves the current reading position while diagrams render.", count: 8).joined(separator: "\n\n")
+            let sectionCount = turn == 0 ? 3 : 2
+            let sections = (0..<sectionCount).map { section in
+                let diagram = mermaidDiagram.replacingOccurrences(
+                    of: "flowchart TB", with: "flowchart TB\n    %% Architecture \(turn).\(section)"
+                )
+                return "## Architecture section \(turn + 1).\(section + 1)\n\n\(explanation)\n\n\(diagram)"
+            }
+            .joined(separator: "\n\n")
+            return [
+                message(id: "diagram-question-\(turn)", role: "user", blocks: [DemoFixtures.textBlock("Explain architecture section \(turn + 1).")]),
+                message(id: "diagram-answer-\(turn)", role: "assistant", blocks: [DemoFixtures.textBlock("\(sections)\n\nArchitecture answer \(turn + 1) is complete.")])
+            ]
+        }
+    }
+
     var workspace: [String: Any] {
         var result: [String: Any] = [
             "id": Self.workspaceId, "title": "Workspace agent design", "branch": "design/agent-conversation",
@@ -109,6 +127,7 @@ extension DemoDesignFixtures {
 
     var initialMessages: [[String: Any]] {
         if scenario == .empty { return [] }
+        if scenario == .mermaidHistory { return Self.mermaidHistory }
         var rows = [
             Self.message(id: "demo-design-assistant", role: "assistant", blocks: [DemoFixtures.textBlock(Self.assistantText)]),
             Self.message(id: "demo-design-user", role: "user", blocks: [DemoFixtures.textBlock(Self.userText)]),

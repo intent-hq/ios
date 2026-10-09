@@ -44,7 +44,10 @@ class ScrollViewMomentumProxy {
     /// `.unavailable` when the scroll view has not been found, so the caller
     /// can fall back.
     func rePinIfRestingPastEnd(confirming: RestingGeometry?, isFollowing: Bool = false) -> RePinOutcome {
-        guard let scrollView, let geometry = restingGeometry else { return .unavailable }
+        guard let scrollView, let geometry = restingGeometry else {
+            ConversationTrace.emit("RePinSkipped", "reason=noScrollView")
+            return .unavailable
+        }
         let decision = ConversationTranscriptScrollPolicy.rePinDecision(
             contentOffsetY: geometry.contentOffsetY,
             distanceToBottom: geometry.distanceToBottom,
@@ -53,6 +56,7 @@ class ScrollViewMomentumProxy {
             containerHeight: geometry.containerHeight,
             verticalInsets: geometry.verticalInsets
         )
+        ConversationTrace.emit("RePinDecision", "host=\(ObjectIdentifier(scrollView)) decision=\(decision) geometry=\(geometry) confirmed=\(geometry == confirming) following=\(isFollowing)")
         switch decision {
         case .none:
             return .notPastEnd
@@ -104,7 +108,11 @@ class ScrollViewMomentumProxy {
     /// false when the scroll view has not been found.
     @discardableResult
     func pageTo(offsetY: CGFloat) -> Bool {
-        guard let scrollView else { return false }
+        guard let scrollView else {
+            ConversationTrace.emit("PageSkipped", "reason=noScrollView target=\(offsetY)")
+            return false
+        }
+        ConversationTrace.emit("PageRequested", "host=\(ObjectIdentifier(scrollView)) from=\(scrollView.contentOffset.y) target=\(offsetY)")
         AppLog.userInterface.debug("[SCROLL] Paging blank viewport from \(scrollView.contentOffset.y) to \(offsetY)")
         scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: offsetY), animated: false)
         return true

@@ -18,6 +18,7 @@ enum DemoDesignScenario: String, CaseIterable {
     case empty
     case history
     case mermaid
+    case mermaidHistory = "mermaid-history"
     case questionCards = "question-cards"
     case questionFlow = "question-flow"
     case questions
@@ -80,7 +81,7 @@ final class DemoDesignFixtures {
         if ownsAgent, let response = queueResponse(for: method, params: params) { return response }
         switch method {
         case "workspace.list":
-            return ["workspaces": [workspace]]
+            return ["workspaces": [workspace] + (scenario == .mermaidHistory ? DemoFixtures.workspaces : [])]
         case "note.list" where ownsWorkspace && scenario == .context: return ["notes": contextNotes]
         case "note.get" where ownsWorkspace && scenario == .context:
             return contextNotes.first { $0["id"] as? String == params["noteId"] as? String }.map { ["note": $0] }

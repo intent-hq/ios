@@ -89,7 +89,9 @@ private extension ConversationTranscriptView {
                 followStreamingDeltaIfDrifted(proxy: proxy)
             }
             .onChange(of: viewModel.isLoading) { _, isLoading in
+                traceEvent("LoadingChanged", "loading=\(isLoading)")
                 if !isLoading {
+                    scheduleTraceSnapshots()
                     runInitialScrollIfNeeded(proxy: proxy)
                 }
             }
@@ -97,14 +99,10 @@ private extension ConversationTranscriptView {
                 if ready { runInitialScrollIfNeeded(proxy: proxy) }
             }
             .onAppear {
-                restoreRetainedViewport(proxy: proxy)
-                // On first open the transcript mounts only after loading settles,
-                // so onAppear is also an entry-scroll trigger for cached data.
-                if !viewModel.isLoading {
-                    runInitialScrollIfNeeded(proxy: proxy)
-                }
+                handleTranscriptAppearance(proxy: proxy)
             }
             .onChange(of: scrollMomentumProxy.hostingRevision) { _, _ in
+                traceSnapshot("hostingChanged")
                 restoreRetainedViewport(proxy: proxy)
                 if scrollMomentumProxy.hasResolvedScrollView {
                     handleScrollViewResolved(proxy: proxy)
@@ -213,6 +211,8 @@ private extension ConversationTranscriptView {
         // the gesture short (Go to End stopping a fling, the tap that sent a
         // message) owns the flag instead.
         .onScrollPhaseChange { oldPhase, newPhase, context in
+            traceEvent("ScrollPhase", "old=\(oldPhase) new=\(newPhase)")
+            traceSnapshot("scrollPhase")
             scrollState.isUserScrollPhase = newPhase.isUserDriven
             if newPhase.isUserDriven {
                 takeOverPendingFollowIfGesture(isInteracting: true, proxy: proxy)
@@ -257,6 +257,7 @@ private extension ConversationTranscriptView {
             }
         }
         .onDisappear {
+            traceSnapshot("disappear")
             scrollState.olderMessagesTask?.cancel()
             scrollState.olderMessagesTask = nil
             scrollState.hasScrolledForHistory = false
@@ -266,6 +267,7 @@ private extension ConversationTranscriptView {
             cancelDeferredContainerRePin()
             cancelBottomBandRePin()
             send(.viewDisappeared, proxy: proxy)
+            scrollState.trace.stop()
         }
     }
 }

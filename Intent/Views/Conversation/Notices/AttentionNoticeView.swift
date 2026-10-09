@@ -12,7 +12,11 @@ struct AttentionNoticeView: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isExpanded = true
+    var disclosure = TranscriptDisclosure()
+    private var isExpanded: Bool {
+        get { disclosure.binding(for: .attentionNotice, default: true).wrappedValue }
+        nonmutating set { disclosure.binding(for: .attentionNotice, default: true).wrappedValue = newValue }
+    }
 
     private typealias Layout = Constants.Conversation.NoticeCard
     private typealias Design = Constants.Conversation.Design

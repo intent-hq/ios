@@ -30,11 +30,15 @@ extension DemoFixturesTests {
             return
         }
         #expect(viewModel.totalMessageCount == viewModel.messages.count + (scenario == .history ? 100 : 0))
-        #expect(viewModel.messages.first?.joinedTextContent.hasPrefix("Worth adding tests?") == true)
-        #expect(viewModel.messages.contains { $0.role == .user && $0.joinedTextContent.contains("attention circle not fill") })
-        let tools = try #require(viewModel.messages.first { $0.id == "demo-design-tools" })
-        #expect(tools.contentBlocks.filter { $0.type == .toolUse }.count == 3)
-        #expect(tools.contentBlocks.filter { $0.type == .toolResult }.count == 3)
+        if scenario == .mermaidHistory {
+            assertDiagramHistory(viewModel)
+        } else {
+            #expect(viewModel.messages.first?.joinedTextContent.hasPrefix("Worth adding tests?") == true)
+            #expect(viewModel.messages.contains { $0.role == .user && $0.joinedTextContent.contains("attention circle not fill") })
+            let tools = try #require(viewModel.messages.first { $0.id == "demo-design-tools" })
+            #expect(tools.contentBlocks.filter { $0.type == .toolUse }.count == 3)
+            #expect(tools.contentBlocks.filter { $0.type == .toolResult }.count == 3)
+        }
         #expect(viewModel.isStreaming == (scenario == .streaming || scenario == .queue))
         if scenario == .blocker {
             let notice = try #require(viewModel.messages.last?.attentionNotice)
@@ -53,6 +57,22 @@ extension DemoFixturesTests {
             #expect(viewModel.pendingQuestions == nil)
         }
         #expect(viewModel.monitoredPrStore.activeMonitors.count == (scenario == .conversation ? 1 : 0))
+    }
+
+    private func assertDiagramHistory(_ viewModel: ConversationViewModel) {
+        let firstAnswerDiagramCount = 3
+        let laterAnswerDiagramCount = 2
+        let expectedDiagramCounts = [firstAnswerDiagramCount, laterAnswerDiagramCount, laterAnswerDiagramCount, laterAnswerDiagramCount]
+        let turns = expectedDiagramCounts.indices
+        #expect(viewModel.messages.count == turns.count * 2)
+        #expect(viewModel.messages.map(\.id) == turns.flatMap { ["diagram-question-\($0)", "diagram-answer-\($0)"] })
+        let questions = viewModel.messages.filter { $0.role == .user }
+        #expect(questions.map(\.joinedTextContent) == turns.map { "Explain architecture section \($0 + 1)." })
+        let answers = viewModel.messages.filter { $0.role == .assistant }
+        let diagrams = answers.map { Array(MarkdownContentCache.shared.preparedContent(for: $0.joinedTextContent).mermaidSources.values) }
+        #expect(diagrams.map(\.count) == expectedDiagramCounts)
+        #expect(Set(diagrams.flatMap { $0 }).count == expectedDiagramCounts.reduce(0, +))
+        #expect(answers.last?.joinedTextContent.hasSuffix("Architecture answer 4 is complete.") == true)
     }
 
     @Test func designDemoSendStopAndReloadKeepTheActualSentMessage() async throws {

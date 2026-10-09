@@ -3,6 +3,8 @@ import SwiftUI
 // These builders remain on the transcript so extraction does not add a new
 // observation boundary or change the lazy stack's row and anchor identities.
 extension ConversationTranscriptView {
+    private static let eagerTailMessageLimit = 12
+
     @ViewBuilder
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         let generation = scrollState.initialScrollGeneration
@@ -23,10 +25,23 @@ extension ConversationTranscriptView {
                 .id("older-messages")
         }
 
-        ForEach(rows, id: \.id) { @Sendable row in
+        ForEach(rows.dropLast(Self.eagerTailMessageLimit), id: \.id) { @Sendable row in
             row.content
         }
+        // Realize a bounded tail and its footer together. A separately lazy
+        // footer can remain absent at the stack's estimated bottom after
+        // rows resize, even when repeated scrollTo calls land.
+        VStack(spacing: usesWorkspaceDesign ? Constants.Conversation.Design.sectionSpacing : Layout.transcriptRowSpacing) {
+            ForEach(rows.suffix(Self.eagerTailMessageLimit), id: \.id) { @Sendable row in
+                row.content
+            }
+            transcriptEndRows(proxy: proxy)
+        }
+        .id("transcript-tail")
+    }
 
+    @ViewBuilder
+    private func transcriptEndRows(proxy: ScrollViewProxy) -> some View {
         #if !os(visionOS)
         // On visionOS the composer renders these as large chips above the
         // field instead (MessageInputView).
@@ -54,10 +69,17 @@ extension ConversationTranscriptView {
             Color.clear.frame(height: Layout.bottomAnchorHeight)
                 .padding(.bottom, Layout.bottomAnchorPadding)
                 .id("scroll-bottom")
+                .onGeometryChange(for: CGRect.self) { geometry in
+                    ConversationTrace.enabled ? geometry.frame(in: .named(Self.viewportCoordinateSpace)) : .zero
+                } action: { frame in
+                    scrollState.trace.recordEnd(frame)
+                    traceEvent("EndGeometry", "frame=\(frame)")
+                }
                 .onAppear {
                     send(.endRealized(userIsScrolledAway: userIsScrolledAway), proxy: proxy)
                 }
                 .onDisappear {
+                    scrollState.trace.recordEnd(nil)
                     send(.endDerealized, proxy: proxy)
                 }
         } else {
@@ -94,9 +116,12 @@ extension ConversationTranscriptView {
         .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
             .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
         } action: { measurement in
+            scrollState.trace.row(message.id, frame: measurement.frame, context: traceContext)
             preserveRowOffsetAfterDividerChange(messageId: message.id, measurement: measurement, proxy: proxy)
         }
         .onDisappear {
+            traceEvent("RowDisappeared", "row=\(message.id)")
+            scrollState.trace.removeRow(message.id)
             scrollState.viewportAnchor.remove(id: message.id, generation: generation, entryGeneration: scrollState.initialScrollGeneration, ownershipRevision: ownershipRevision)
         }
     }
@@ -143,8 +168,10 @@ extension ConversationTranscriptView {
         )
         switch application {
         case .offset(let offset):
+            traceEvent("RowRestoration", "row=\(messageId) offset=\(offset)")
             scrollMomentumProxy.pageTo(offsetY: offset)
         case let .retainedAlignment(target, anchorY, rowY):
+            traceEvent("RowRestoration", "row=\(messageId) target=\(target) anchor=\(anchorY) rowY=\(rowY)")
             proxy.scrollTo(target, anchor: UnitPoint(x: 0.5, y: anchorY))
             scrollState.viewportAnchor.recordRestorationAlignment(
                 anchorY: anchorY,
@@ -182,11 +209,13 @@ extension ConversationTranscriptView {
                 }
             }
         )
+        .environment(\.transcriptDisclosureState, scrollState.disclosures.state(for: message.id))
         .modifier(
             ConversationTranscriptRowHeightFrame(
                 cachedHeight: cachedHeight,
                 isStreaming: message.isStreaming
             ) { height in
+                traceEvent("RowHeight", "row=\(message.id) natural=\(height) cached=\(String(describing: cachedHeight)) streaming=\(message.isStreaming)")
                 scrollState.rowHeightCache.record(
                     height: height,
                     for: message,
@@ -199,6 +228,8 @@ extension ConversationTranscriptView {
 
     func goToEndButton(proxy: ScrollViewProxy) -> some View {
         Button {
+            traceSnapshot("goToEndTap")
+            scheduleTraceSnapshots()
             scrollMomentumProxy.stopMomentum()
             claimViewportForExplicitFollow(proxy: proxy)
             scrollState.isScrollingToBottom = true

@@ -15,17 +15,17 @@ extension ConversationTranscriptScrollUITests {
         let opened = enterLongConversation(in: app, context: "inline loading status", waitForTranscript: false)
         let block = app.otherElements["conversation.connectionStatusBlock"].firstMatch
         let status = block.otherElements["conversation.connectionStatus"]
+        let skeleton = block.otherElements["conversation.loadingSkeleton"]
         let retry = block.buttons["conversation.retryNow"]
         let composer = app.textViews[Fixture.composerIdentifier].firstMatch
-        XCTAssertTrue(status.waitForExistence(timeout: Fixture.settleTimeout))
-        XCTAssertEqual(status.label, "Requesting messages, Current", "The active step must announce its progress state")
-        XCTAssertFalse(block.buttons["conversation.connectionStatus"].exists, "The status is not a disclosure control")
+        XCTAssertTrue(skeleton.waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertFalse(retry.exists)
         attachLoading(app.screenshot(), named: "Conversation loading before idle \(appearance)")
-        assertConnectionSteps(in: block)
         XCTAssertFalse(opened.transcript.exists, "The snapshot must remain held while checking loading status")
         XCTAssertFalse(composer.exists, "Loading must hide the message bar")
 
+        XCTAssertTrue(status.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertFalse(skeleton.exists)
         XCTAssertTrue(retry.waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertTrue(status.label.hasPrefix("Requesting messages, Current, elapsed: "))
         XCTAssertTrue(status.label.contains("Taking longer than usual"))

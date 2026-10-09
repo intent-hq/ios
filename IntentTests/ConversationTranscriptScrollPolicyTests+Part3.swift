@@ -179,7 +179,7 @@ extension ConversationTranscriptScrollPolicyTests {
         (1, false, .finish(.landed), .continue(.recover(pageOffsetY: -20))),
         (2, true, .continue(.scrollAgain), .continue(.followToEnd)),
         (50, true, .continue(.scrollAgain), .continue(.followToEnd)),
-        (51, false, .continue(.scrollAgain), .continue(.settling))
+        (51, false, .continue(.scrollAgain), .continue(.followToEnd))
     ])
     func geometryDefaultsAgreeAcrossFollowLandingAndRecovery(
         distance: CGFloat,

@@ -13,8 +13,7 @@ extension ConversationTranscriptScrollPolicy {
         /// No scroll view yet, a follow or gesture in flight, the geometry
         /// moved since the last poll, or a geometry another path corrects.
         case settling
-        /// At rest short of the bottom inside the band, which alone explains
-        /// the end row being off screen: follow to the end once.
+        /// At rest short of the bottom: try the end target once before searching.
         case followToEnd
         /// At rest at the bottom by geometry with no end row realized, or a
         /// follow that changed nothing: page the offset up to `pageOffsetY`
@@ -45,27 +44,12 @@ extension ConversationTranscriptScrollPolicy {
     }
 
     // swiftlint:disable function_parameter_count function_default_parameter_at_end
-    /// Every re-pin judges the viewport by geometry alone, and the geometry
-    /// can read at the bottom over a blank viewport (#338): a footer row
-    /// shrinking the container right after the entry follow landed, on a
-    /// transcript whose last rows re-measure once realized, left the
-    /// container re-pin's `scrollTo` with a lazy stack that realized no rows
-    /// at all — the offset agreed with the stack's estimate of its own size,
-    /// so neither the past-end clamp (#271) nor the growth re-pin had an
-    /// edge to fire on, and the entry follow had already reported `landed`.
-    /// The end row's realization is the missing signal: a following
-    /// viewport at rest within the at-bottom band, with no gesture and no
-    /// follow in flight, whose end row is not realized is blank. It is
-    /// recovered the way a user does — paged up a viewport, so rows realize
-    /// above, and followed back to the end — a bounded number of times.
-    /// A first rest short of the bottom inside the band explains the end
-    /// row on its own and is followed to the end as the deferred container
-    /// re-pin does; the page up is for a rest the geometry calls the bottom,
-    /// or one that follow left unchanged. Content shorter than the container
-    /// realizes every row, so nothing is inferred from it; a rest past the
-    /// end or beyond the band is waited out like a follow, since the clamp
-    /// or the growth re-pin that owns it is on its way; and a user who
-    /// scrolled away legitimately has the end row off screen.
+    /// A lazy stack can report the estimated bottom without realizing its end
+    /// row (#338). Search farther upward after each unsuccessful end jump;
+    /// the final bounded attempt realizes the top before following back.
+    /// A failed jump may leave the viewport short of the end. Recovery must
+    /// continue there because it owns the viewport and suppresses other re-pins.
+    /// User gestures, explicit reading position, and past-end clamping still win.
     static func unrealizedEndRecoveryStep(
         geometry: ViewportGeometry?,
         previous: ViewportGeometry?,
@@ -76,6 +60,7 @@ extension ConversationTranscriptScrollPolicy {
         userIsScrolledAway: Bool,
         correctionsLeft: Int,
         correctionsSpent: Int = 0,
+        previousPageOffsetY: CGFloat? = nil,
         timedOut: Bool,
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold,
         landingTolerance: CGFloat = Constants.Conversation.Transcript.followLandingTolerance
@@ -98,20 +83,20 @@ extension ConversationTranscriptScrollPolicy {
             containerHeight: geometry.containerHeight,
             verticalInsets: geometry.verticalInsets,
             atBottomThreshold: atBottomThreshold
-        ) || isScrolledAway(distanceToBottom: distance, atBottomThreshold: atBottomThreshold) {
+        ), correctionsSpent == 0 {
             return .continue(.settling)
         }
         guard correctionsLeft > 0 else { return .finish(.giveUp) }
-        if correctionsSpent == 0, isDriftedWithinBottomBand(
-            distanceToBottom: distance,
-            driftTolerance: landingTolerance,
-            atBottomThreshold: atBottomThreshold
-        ) {
+        if correctionsSpent == 0, distance > landingTolerance {
             return .continue(.followToEnd)
         }
-        return .continue(
-            .recover(pageOffsetY: max(-geometry.topInset, geometry.contentOffsetY - geometry.containerHeight))
-        )
+        let top = -geometry.topInset
+        // A missing end target can leave the follow at the paged-up offset.
+        // Keep searching there; the recovery owns and suppresses other re-pins.
+        let estimatedEnd = geometry.contentOffsetY + distance
+        let searchFrom = min(geometry.contentOffsetY, previousPageOffsetY ?? geometry.contentOffsetY, estimatedEnd)
+        let pageOffsetY = correctionsLeft == 1 ? top : max(top, searchFrom - geometry.containerHeight)
+        return .continue(.recover(pageOffsetY: pageOffsetY))
     }
     // swiftlint:enable function_parameter_count function_default_parameter_at_end
 

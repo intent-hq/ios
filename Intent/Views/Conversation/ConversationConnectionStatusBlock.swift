@@ -35,16 +35,10 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
             let elapsed = timing.elapsed(at: context.date).formatted(.time(pattern: .minuteSecond))
             let isDelayed = timing.isDelayed(phase: phase, at: context.date)
             VStack(alignment: .leading, spacing: Layout.rowSpacing) {
-                VStack(alignment: .leading, spacing: Layout.contentSpacing) {
-                    ForEach(ConversationConnectionStep.allCases, id: \.self) { step in
-                        ConversationConnectionStepRow(
-                            phase: phase,
-                            step: step,
-                            currentStep: currentStep,
-                            title: step == currentStep ? message : step.title,
-                            elapsed: step == currentStep && isDelayed ? elapsed : nil
-                        )
-                    }
+                if timing.showsProgress(at: context.date) {
+                    progressSteps(elapsed: isDelayed ? elapsed : nil)
+                } else {
+                    ConversationLoadingSkeleton()
                 }
 
                 if isDelayed {
@@ -64,6 +58,59 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
         }
         .onChange(of: phase) { _, newPhase in
             timing.update(phase: newPhase, at: Date())
+        }
+    }
+
+    private func progressSteps(elapsed: String?) -> some View {
+        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+            ForEach(ConversationConnectionStep.allCases, id: \.self) { step in
+                ConversationConnectionStepRow(
+                    phase: phase,
+                    step: step,
+                    currentStep: currentStep,
+                    title: step == currentStep ? message : step.title,
+                    elapsed: step == currentStep ? elapsed : nil
+                )
+            }
+        }
+    }
+}
+
+private struct ConversationLoadingSkeleton: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @ScaledMetric(relativeTo: .body) private var lineHeight = Layout.lineHeight
+
+    private enum Layout {
+        static let lineHeight: CGFloat = 12
+        static let lineSpacing: CGFloat = 12
+        static let paragraphSpacing: CGFloat = 32
+        static let cornerRadius: CGFloat = 4
+        static let longLine: CGFloat = 0.9
+        static let shortLine: CGFloat = 0.62
+        static let firstParagraph: [CGFloat] = [longLine, 1, longLine, shortLine]
+        static let secondParagraph: [CGFloat] = [1, longLine, shortLine]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Layout.paragraphSpacing) {
+            paragraph(Layout.firstParagraph)
+            paragraph(Layout.secondParagraph)
+        }
+        .padding(.vertical, Constants.Conversation.Column.Loading.contentSpacing)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading messages")
+        .accessibilityIdentifier("conversation.loadingSkeleton")
+    }
+
+    private func paragraph(_ widths: [CGFloat]) -> some View {
+        VStack(alignment: .leading, spacing: Layout.lineSpacing) {
+            ForEach(widths.indices, id: \.self) { index in
+                RoundedRectangle(cornerRadius: Layout.cornerRadius)
+                    .fill(Constants.Conversation.Design.Palette.border(for: colorScheme, contrast: contrast))
+                    .frame(height: lineHeight)
+                    .scaleEffect(x: widths[index], y: 1, anchor: .leading)
+            }
         }
     }
 }

@@ -12,6 +12,10 @@ import tempfile
 
 CAPTURES = {
     "ConversationMermaidUITests": {
+        "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
+        "testDiagramHistoryReopensAndGoToEndShowsLastAnswer": (
+            "mermaid-history-visit-1", "mermaid-history-visit-2", "mermaid-history-visit-3",
+        ),
         "testFullscreenButtonEdgeAndInlinePinchAndPan": (
             "mermaid-final-state", "mermaid-inline-before-gestures",
             "mermaid-fullscreen-from-button-edge", "mermaid-inline-after-pinch",
@@ -19,6 +23,8 @@ CAPTURES = {
         ),
     },
     "ConversationTranscriptScrollUITests": {
+        "testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath": ("Transcript recovered release",),
+        "testBlankEndSeveralScreensDeepIsRecovered": ("Transcript recovered deep-release",),
         "testLoadingStatusShowsIdleDelayAndRestoresComposer": (
             "Conversation loading before idle light", "Conversation loading after idle light",
             "Conversation loading before idle dark", "Conversation loading after idle dark",

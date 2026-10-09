@@ -96,17 +96,43 @@ class ExportTests(unittest.TestCase):
     def mermaid_producer(self):
         source = (ROOT / "IntentUITests" / f"{MERMAID_SUITE}.swift").read_text()
         self.assertEqual(re.findall(r"\bclass (\w+): XCTestCase", source), [MERMAID_SUITE])
-        self.assertEqual(re.findall(r"\bfunc (test\w+)\(", source), [MERMAID_TEST],
-                         "Map captures to their owning test if this fixture gains another test")
-        launch = source.split("app.launch()")
+        methods = dict(re.findall(
+            r"^    (?:private )?func (\w+)(\([^\n]*\n.*?^    })", source, re.MULTILINE | re.DOTALL
+        ))
+        self.assertIn(MERMAID_TEST, methods, "Locate the owning test for the Mermaid gesture captures")
+        launch = methods[MERMAID_TEST].split("app.launch()")
         self.assertEqual(len(launch), 2, "Recheck fixture provenance if its launch flow changes")
         self.assertIn('"--demo-data"', launch[0])
         self.assertIn('"--demo-design-scenario=mermaid"', launch[0])
+        reachable = set()
+        pending = [MERMAID_TEST]
+        while pending:
+            method = pending.pop()
+            if method in reachable:
+                continue
+            reachable.add(method)
+            pending.extend(name for name in methods
+                           if re.search(rf"\b{re.escape(name)}\(", methods[method]))
+        self.assertEqual({name for name in reachable if name.startswith("test")}, {MERMAID_TEST})
+        source = "\n".join(methods[name] for name in sorted(reachable))
         captures = re.findall(r'capture\(app, name: "([^"\\]+)"\)', source)
         self.assertTrue(captures)
         self.assertEqual(len(captures), len(re.findall(r"\bcapture\(app,", source)),
                          "Extend the producer reader for nonliteral capture names")
         return captures
+
+    def test_mermaid_history_captures_are_scoped_to_their_owning_tests(self):
+        registrations = {
+            "testDiagramHistoryReopensAndGoToEndShowsLastAnswer": (
+                "mermaid-history-visit-1", "mermaid-history-visit-2", "mermaid-history-visit-3",
+            ),
+            "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
+        }
+        for test, captures in registrations.items():
+            for capture in captures:
+                self.assertEqual(evidence.permitted_attachment(MERMAID_SUITE, test, attachment(capture)),
+                                 ("review", capture, "png"))
+                self.assertIsNone(evidence.permitted_attachment(MERMAID_SUITE, MERMAID_TEST, attachment(capture)))
 
     def test_mermaid_producer_captures_survive_export_and_retry(self):
         captures = self.mermaid_producer()
