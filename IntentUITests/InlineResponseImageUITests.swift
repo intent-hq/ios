@@ -199,15 +199,16 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
     private func assertPresentedLightbox(in app: XCUIApplication) {
         let preview = app.images["Image preview"].firstMatch
         XCTAssertTrue(preview.waitForExistence(timeout: Fixture.timeout), "The saved image did not open the lightbox")
-        XCTAssertTrue(
-            app.keyboards.firstMatch.waitForNonExistence(timeout: Fixture.timeout),
-            "The keyboard must not cover the image viewer"
-        )
+        let keyboard = app.keyboards.firstMatch
+        let keyboardHidden = waitUntil(timeout: Fixture.timeout) {
+            !keyboard.exists || !keyboard.isHittable
+        }
         XCTAssertGreaterThan(preview.frame.width, Fixture.thumbnailSide)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Saved response image in lightbox"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        XCTAssertTrue(keyboardHidden, "The keyboard must not cover the image viewer")
         app.buttons["Close image"].firstMatch.tap()
         XCTAssertTrue(preview.waitForNonExistence(timeout: Fixture.timeout))
     }
