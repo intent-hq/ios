@@ -339,6 +339,35 @@ skips. Quarantined transcript cases in `ConversationTranscriptFullGateUITests`
 require `TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run;
 `ui_suite=full` alone does not opt into them.
 
+#### Mermaid UI quarantine
+
+`IntentUITests/ConversationMermaidUITests/testFullscreenButtonEdgeAndInlinePinchAndPan`
+is quarantined for intermittent inline and fullscreen render failures tracked in
+[ios#735](https://github.com/intent-hq/ios/issues/735). The root cause is unconfirmed.
+It is absent from PR/merge-queue smoke selection and skips before app launch in
+scheduled full runs, manual full runs, and focused runs unless explicitly enabled.
+Neither `ui_suite=full` nor `only_testing` alone enables it.
+
+This intentionally leaves fullscreen button-edge activation, inline pinch zoom,
+and two-axis pan without default UI coverage. The assertions, diagram feature,
+`MermaidMarkdownContentTests`, and `MermaidWebViewTests` remain intact. For local
+diagnosis on a Mac, run from the repository root:
+
+```bash
+scripts/xcodebuild.sh build-for-testing-ui
+TEST_RUNNER_INTENT_UITEST_MERMAID_REPRO=1 \
+  ONLY_TESTING='IntentUITests/ConversationMermaidUITests/testFullscreenButtonEdgeAndInlinePinchAndPan' \
+  scripts/xcodebuild.sh test-without-building-ui
+```
+
+Only the exact value `1` opts in; the transcript quarantine flag is independent.
+Check the wrapper's executed/skipped counts: a skip is not runtime coverage.
+Remove the guard and restore the smoke selector together after ios#735 has a
+validated fix and repeated unchanged runs pass on the affected CI simulator/Xcode
+configurations with the original assertions and timeouts.
+
+### UI evidence artifacts
+
 CI uploads `ios-ui-review-evidence` for 14 days when allowlisted captures exist,
 on success or failure and for filtered UI runs. Open its PNGs directly;
 `manifest.json` records the tested revision, suite/test, source bundle, and retry
