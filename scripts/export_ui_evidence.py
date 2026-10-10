@@ -11,6 +11,11 @@ import tempfile
 
 
 CAPTURES = {
+    "InlineResponseImageUITests": {
+        "testSavedImageOpensWithKeyboardAndPreservesDraft": (
+            "Response image with keyboard open", "Saved response image in lightbox",
+        ),
+    },
     "ConversationMermaidUITests": {
         "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
         "testDiagramHistoryReopensAndGoToEndShowsLastAnswer": (

@@ -69,6 +69,43 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
     }
 
     @MainActor
+    func testSavedImageOpensWithKeyboardAndPreservesDraft() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-inline-images"]
+        app.launch()
+        openWorkspace(in: app)
+        let agent = app.staticTexts[Fixture.agentName].firstMatch
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        agent.tap()
+        let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+        XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        let composer = app.textViews["composer.textView"].firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: Fixture.timeout))
+        let draft = "Keep this draft while viewing the image"
+        composer.tap()
+        composer.typeText(draft)
+        let saved = message(in: app, containing: Fixture.savedCaption)
+        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
+        reveal(saved, in: transcript)
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) {
+            app.keyboards.firstMatch.exists && app.keyboards.firstMatch.isHittable
+                && saved.frame.height >= Fixture.thumbnailSide
+        }, "The image must be loaded and the software keyboard visible before the tap")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Response image with keyboard open"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        assertLightbox(in: app, transcript: transcript)
+
+        XCTAssertEqual(composer.value as? String, draft)
+        XCTAssertTrue(saved.exists, "Closing the image must return to the same conversation")
+        composer.tap()
+        composer.typeText(" intact")
+        XCTAssertEqual(composer.value as? String, draft + " intact")
+    }
+
+    @MainActor
     func testBothImageResponsePromptsSendTheirDisplayedText() {
         for (index, expected) in Fixture.prompts.enumerated() {
             let app = XCUIApplication()
