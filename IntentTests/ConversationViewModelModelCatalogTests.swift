@@ -46,6 +46,7 @@ extension ConversationViewModelTests {
         #expect(vm.currentModelId == "sonnet4.5")
 
         fake.errorMap["agent.setModel"] = nil
+        fake.responseMap["agent.setModel"] = ["success": true]
         try await vm.setModel("opus")
         #expect(vm.currentModelId == "opus")
     }

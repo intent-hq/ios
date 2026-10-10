@@ -53,7 +53,8 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         XCTAssertTrue(transcript.exists)
         XCTAssertEqual(composer.value as? String, "Continue with this draft")
         openActions(app)
-        XCTAssertTrue(app.staticTexts["Model: Named Model"].waitForExistence(timeout: Self.timeout))
+        assertNamedModelInMenu(app)
+        capture(app, named: "Agent-Actions-Updated-Light")
     }
 
     @MainActor
@@ -94,10 +95,11 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         namedModel.tap()
         XCTAssertTrue(picker.waitForNonExistence(timeout: Self.timeout))
         openActions(app)
-        XCTAssertTrue(app.staticTexts["Model: Named Model"].waitForExistence(timeout: Self.timeout))
+        assertNamedModelInMenu(app)
         model.tap()
         XCTAssertTrue(namedModel.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(namedModel.isSelected)
+        capture(app, named: "Agent-Model-Picker-Selected-Dark-LargeText")
     }
 
     @MainActor
@@ -120,6 +122,13 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         agent.tap()
         XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
         return app
+    }
+
+    @MainActor
+    private func assertNamedModelInMenu(_ app: XCUIApplication) {
+        let modelInformation = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Model: Named Model")).firstMatch
+        XCTAssertTrue(modelInformation.waitForExistence(timeout: Self.timeout), app.debugDescription)
     }
 
     @MainActor

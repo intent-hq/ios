@@ -144,10 +144,10 @@ CAPTURES = {
     },
     "ConversationActionsUITests": {
         "testHistoryNoticeAndActionCancellationPreserveConversation": (
-            "Conversation-History-Light", "Agent-Actions-Light", "Agent-Model-Picker-Light",
+            "Conversation-History-Light", "Agent-Actions-Light", "Agent-Model-Picker-Light", "Agent-Actions-Updated-Light",
         ),
         "testLargeTextModelPickerWorksAfterSending": (
-            "Agent-Actions-Dark-LargeText", "Agent-Model-Picker-Dark-LargeText",
+            "Agent-Actions-Dark-LargeText", "Agent-Model-Picker-Dark-LargeText", "Agent-Model-Picker-Selected-Dark-LargeText",
         ),
     },
     "ConversationMermaidUITests": {
