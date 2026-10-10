@@ -93,6 +93,7 @@ struct MessageInputView: View {
             viewModel.loadSelectedPhotos()
         }
         .onDisappear {
+            isFocused = false
             viewModel.cancelPhotoImport()
         }
         .fileImporter(
