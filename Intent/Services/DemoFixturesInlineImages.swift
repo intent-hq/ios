@@ -37,15 +37,17 @@ extension DemoFixtures {
     }
 
     private static func imageBlockConversation(role: String) -> [[String: Any]] {
-        [[
-            "id": "demo-image-block-\(role)",
-            "role": role,
-            "timestamp": transcriptIso(minutesAgo: 1),
-            "contentBlocks": [
-                ["type": "text", "text": "An attached screenshot."],
-                ["type": "image", "data": statusImagePNG.base64EncodedString(), "mimeType": "image/png"]
+        [
+            [
+                "id": "demo-image-block-\(role)",
+                "role": role,
+                "timestamp": transcriptIso(minutesAgo: 1),
+                "contentBlocks": [
+                    ["type": "text", "text": "An attached screenshot."],
+                    ["type": "image", "data": statusImagePNG.base64EncodedString(), "mimeType": "image/png"]
+                ]
             ]
-        ]]
+        ]
     }
 
     static var inlineImageResponseText: String {
