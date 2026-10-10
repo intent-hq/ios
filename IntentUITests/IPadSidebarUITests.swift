@@ -22,15 +22,11 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         for appearance in ["light", "dark"] {
             let app = launch(appearance: appearance)
             openConversation(in: app)
-            capture(app, name: "iPad workspace \(appearance)")
-            app.buttons["ipad.sidebar.collapse"].tap()
-            XCTAssertTrue(app.buttons["ipad.sidebar.expand"].waitForExistence(timeout: Self.timeout))
-            capture(app, name: "iPad collapsed \(appearance)")
-            app.buttons["ipad.sidebar.expand"].tap()
+            captureMainScreens(in: app, appearance: appearance)
             let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
             composer.tap()
             composer.typeText(Self.draft)
-            try verifySections(in: app, appearance: appearance)
+            try verifySections(in: app)
             try verifyPairingCancellation(in: app, appearance: appearance)
             XCTAssertEqual(composer.value as? String, Self.draft)
             app.terminate()
@@ -64,11 +60,33 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
-    private func verifySections(in app: XCUIApplication, appearance: String) throws {
+    private func captureMainScreens(in app: XCUIApplication, appearance: String) {
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        capture(app, name: "iPad workspace \(appearance)")
+        app.buttons["ipad.sidebar.collapse"].tap()
+        XCTAssertTrue(app.buttons["ipad.sidebar.expand"].waitForExistence(timeout: Self.timeout))
+        capture(app, name: "iPad collapsed \(appearance)")
+        app.buttons["ipad.sidebar.expand"].tap()
+        let sections = [
+            ("assistant", "Assistant", "assistant.sidebar.newConversation"),
+            ("connections", "connections", "saved-connections.scan"),
+            ("settings", "settings", "settings.pairing.scan")
+        ]
+        for (section, label, control) in sections {
+            app.buttons["ipad.rail.\(section)"].tap()
+            XCTAssertTrue(app.buttons["ipad.rail.\(section)"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+            XCTAssertTrue(app.buttons[control].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+            capture(app, name: "iPad \(label) \(appearance)")
+            app.buttons["ipad.rail.workspaces"].tap()
+        }
+    }
+
+    @MainActor
+    private func verifySections(in app: XCUIApplication) throws {
         app.buttons["ipad.rail.assistant"].tap()
         XCTAssertTrue(app.buttons["assistant.sidebar.newConversation"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, "")
-        capture(app, name: "iPad Assistant \(appearance)")
         app.buttons["ipad.rail.workspaces"].tap()
         let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
         XCTAssertEqual(composer.value as? String, Self.draft)
@@ -76,7 +94,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             app.buttons["ipad.rail.\(section)"].tap()
             XCTAssertTrue(app.buttons["ipad.rail.\(section)"].isSelected)
             XCTAssertEqual(composer.value as? String, Self.draft)
-            capture(app, name: "iPad \(section) \(appearance)")
         }
     }
 
