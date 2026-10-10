@@ -367,21 +367,18 @@ private extension ConversationViewContent {
         }
     }
 
-    /// Ellipsis toolbar menu (model info, rename, delete).
+    /// Ellipsis toolbar menu (model selection, rename, delete).
     private var nativeAgentMenu: some View {
         Menu {
             if let assistantStore {
                 AssistantHistoryMenu(store: assistantStore, coordinator: coordinator, onOpenHistory: onShowAssistantHistory)
                 Divider()
             }
-            if let displayName = viewModel.currentModelDisplayName {
-                Text("Model: \(displayName)")
-                    .accessibilityIdentifier("conversation.actions.modelInformation")
-            }
             Button { handleAgentAction(.changeModel) } label: {
-                Label { Text("Change Model") } icon: { Image(.settings2) }
+                Label { Text(viewModel.currentModelDisplayName ?? "Select Model") } icon: { Image(.settings2) }
             }
             .accessibilityIdentifier("conversation.actions.model")
+            .accessibilityHint("Change model")
             Button { handleAgentAction(.rename) } label: {
                 Label { Text("Rename") } icon: { Image(.edit) }
             }

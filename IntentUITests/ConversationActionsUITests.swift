@@ -126,9 +126,9 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
 
     @MainActor
     private func assertNamedModelInMenu(_ app: XCUIApplication) {
-        let modelInformation = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == %@", "Model: Named Model")).firstMatch
-        XCTAssertTrue(modelInformation.waitForExistence(timeout: Self.timeout), app.debugDescription)
+        let modelButton = app.buttons.matching(identifier: "conversation.actions.model")
+            .matching(NSPredicate(format: "label == %@", "Named Model")).firstMatch
+        XCTAssertTrue(modelButton.waitForExistence(timeout: Self.timeout), app.debugDescription)
     }
 
     @MainActor
