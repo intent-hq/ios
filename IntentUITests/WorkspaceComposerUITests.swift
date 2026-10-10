@@ -41,9 +41,12 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
             .matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "Make the logo bigger", "keep its proportions"))
             .firstMatch
         XCTAssertTrue(sentMessage.waitForExistence(timeout: Fixture.timeout))
+        assertSendDismissesKeyboard(in: app, sentMessage: sentMessage)
 
         let draft = "Keep this draft while stopping"
         composer.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Fixture.timeout), "Tapping the composer must reopen the keyboard")
+        XCTAssertEqual(composer.value(forKey: "hasKeyboardFocus") as? Bool, true)
         composer.typeText(draft)
         XCTAssertTrue(send.waitForExistence(timeout: Fixture.timeout))
         assertReachable(send, in: app)
@@ -53,6 +56,22 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertTrue(stop.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertEqual(composer.value as? String, draft, "Stop must not consume the next message")
         XCTAssertTrue(send.isEnabled)
+    }
+
+    @MainActor
+    private func assertSendDismissesKeyboard(in app: XCUIApplication, sentMessage: XCUIElement) {
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Fixture.timeout), "Sending must dismiss the keyboard")
+        let composer = app.textViews["composer.textView"]
+        XCTAssertEqual(composer.value(forKey: "hasKeyboardFocus") as? Bool, false, "Sending must leave the composer unfocused")
+        let transcript = app.scrollViews["transcript.scrollView"]
+        let opened = OpenConversation(lastMessage: sentMessage, goToEnd: app.buttons["transcript.goToEnd"], transcript: transcript)
+        assertAtEnd(.thinkingIndicator(in: app), in: opened, context: "after sending and closing the keyboard")
+        XCTAssertTrue(isVisible(sentMessage, in: transcript), "The sent message must remain visible without scrolling")
+        let reopened = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: keyboard)
+        reopened.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [reopened], timeout: 2), .completed, "The keyboard must stay closed until the composer is tapped")
+        XCTAssertEqual(composer.value(forKey: "hasKeyboardFocus") as? Bool, false)
     }
 
     @MainActor

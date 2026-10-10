@@ -60,6 +60,7 @@ private struct ConversationViewContent: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @State private var isInNavigation = false
     @State private var hasVisibleConversation = false
     @State private var showModelPicker = false
@@ -77,12 +78,8 @@ private struct ConversationViewContent: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    // `body` is decomposed into layered `some View` properties
-    // (intent-hq/monorepo#2352): the Xcode Cloud Release build could not
-    // type-check the former single-expression modifier chain in reasonable
-    // time (Debug builds passed). Each layer is an opaque sub-expression the
-    // type checker solves independently; modifier ORDER is unchanged — the
-    // layers chain bottom-up: column → chrome → presentation → lifecycle.
+    // Layered opaque expressions keep Release type-checking tractable (intent-hq/monorepo#2352).
+    // Preserve modifier order: column → chrome → presentation → lifecycle.
     var body: some View {
         conversationLifecycle
     }
@@ -231,6 +228,10 @@ private extension ConversationViewContent {
         viewModel.scenePhaseChanged(isActive: visible && scenePhase == .active)
     }
 
+    private var usesVerticalNavigation: Bool {
+        presentation != .iPad && usesVerticalBar && assistantStore == nil
+    }
+
     private var usesWorkspaceDesign: Bool {
         #if os(iOS)
         presentation == .iPad || horizontalSizeClass == .compact
@@ -250,10 +251,10 @@ private extension ConversationViewContent {
             .toolbarBackground(viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
             .nativeNavigationBackGesture(isEnabled: !usesPhoneQuestionPresentation || !answeringWorkspaceQuestions)
             #if os(iOS)
-            .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar)
+            .toolbar(usesWorkspaceDesign && !usesVerticalNavigation ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if usesWorkspaceDesign {
+                if usesWorkspaceDesign, !usesVerticalNavigation {
                     WorkspaceConversationHeader(
                         title: viewModel.agentName,
                         showsBackground: !viewModel.showsLoadingState,
@@ -284,7 +285,13 @@ private extension ConversationViewContent {
                 workspaceId: viewModel.workspaceId
             )
             .toolbar {
-                if !usesWorkspaceDesign {
+                if usesVerticalNavigation {
+                    WorkspaceVerticalNavigationToolbar(
+                        isEnabled: true,
+                        backIdentifier: "conversation.back",
+                        onBack: dismiss.callAsFunction
+                    ) { agentMenu }
+                } else if !usesWorkspaceDesign {
                     if assistantStore == nil {
                         ToolbarItem(placement: .topBarLeading) {
                             IntentIconButton(icon: .arrowLeft, label: "Back", action: navigateBack)

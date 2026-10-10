@@ -55,7 +55,7 @@ struct NoteDetailView: View {
         .navigationTitle(noteTitle)
         .toolbar(.visible, for: .navigationBar)
         .toolbarTitleDisplayMode(.inline)
-        .intentNavigationBackButton(showsBackButton)
+        .intentNavigationBackButton(showsBackButton, usesWorkspaceVerticalBar: true)
         .workspaceNavigationSubtitle(title: noteTitle, workspaceId: workspaceId)
         .task {
             await loadNote()

@@ -45,6 +45,7 @@ struct ConversationColumnView: View {
             keyboardVisible = false
         }
         .onChange(of: viewModel.pendingQuestions?.messageId) { _, newId in
+            AppLog.userInterface.debug("[SCROLL][QUESTION] pending changed present=\(newId != nil) keyboardVisible=\(keyboardVisible) columnHeight=\(conversationHeight)")
             questionWizardCollapsed = false
             #if os(visionOS)
             // Auto-present on a new question set; close when the set clears
@@ -157,7 +158,6 @@ struct ConversationColumnView: View {
                         usesWorkspaceDesign: usesWorkspaceDesign,
                         allowsSending: composerVisible
                     ) { composerFocused = $0 }
-                    .disabled(usesPhoneQuestionPresentation && answeringWorkspaceQuestions)
                     .padding(.horizontal, usesWorkspaceDesign ? stickyHorizontalInset : 0)
                     .padding(.top, usesWorkspaceDesign && !workspaceQueueVisible ? Design.Composer.keyboardBottomSpacing : 0)
                     .padding(.bottom, usesWorkspaceDesign ? composerBottomInset : 0)

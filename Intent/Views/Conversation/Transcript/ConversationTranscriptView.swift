@@ -64,6 +64,26 @@ struct ConversationTranscriptView: View {
                 }
             }
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            logKeyboardGeometry("will-show", notification: notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { notification in
+            logKeyboardGeometry("did-show", notification: notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
+            logKeyboardGeometry("will-hide", notification: notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { notification in
+            logKeyboardGeometry("did-hide", notification: notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+            logKeyboardGeometry("will-change-frame", notification: notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)) { notification in
+            logKeyboardGeometry("did-change-frame", notification: notification)
+        }
+        #endif
     }
 }
 
@@ -225,6 +245,7 @@ private extension ConversationTranscriptView {
             traceEvent("ScrollPhase", "old=\(oldPhase) new=\(newPhase)")
             traceSnapshot("scrollPhase")
             scrollState.isUserScrollPhase = newPhase.isUserDriven
+            logScrollGeometry("phase \(oldPhase)->\(newPhase)")
             if newPhase.isUserDriven {
                 takeOverPendingFollowIfGesture(isInteracting: true, proxy: proxy)
                 if hasInitiallyScrolled {

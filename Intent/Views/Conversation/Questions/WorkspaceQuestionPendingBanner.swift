@@ -23,18 +23,27 @@ struct WorkspaceQuestionPendingBanner: View {
         .opacity(panelPresented ? 0 : 1)
         .modifier(WorkspaceQuestionSurface(isPanel: false))
         .opacity(submitting ? 0 : 1)
+        // Return the reserved space during panel closure, not in a second
+        // layout animation after the answers are sent.
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(height: submitting ? 0 : nil, alignment: .top)
         .allowsHitTesting(!panelPresented && !submitting)
         .accessibilityElement(children: .contain)
         .accessibilityHidden(panelPresented || submitting)
         .accessibilityFocused($bannerFocused)
+        .onDisappear {
+            AppLog.userInterface.debug("[SCROLL][QUESTION] banner disappeared pending=\(viewModel.pendingQuestions != nil)")
+        }
         .onChange(of: panelPresented) { wasPresented, presented in
             if wasPresented, !presented, !submitting { bannerFocused = true }
         }
         .confirmationDialog("Dismiss questions?", isPresented: $confirmingDismiss, titleVisibility: .visible) {
             Button("Dismiss questions", role: .destructive) {
+                AppLog.userInterface.debug("[SCROLL][QUESTION] dismiss confirmed")
                 dismissing = true
                 Task {
                     await viewModel.dismissQuestions(messageId: pendingSet.messageId)
+                    AppLog.userInterface.debug("[SCROLL][QUESTION] dismiss request-returned pending=\(viewModel.pendingQuestions != nil)")
                     dismissing = false
                 }
             }

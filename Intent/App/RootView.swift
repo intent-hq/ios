@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.horizontalSizeClass) var sizeClass
+    @Environment(\.workspaceUsesVerticalBar) var usesVerticalBar
     @Environment(\.colorScheme) var colorScheme
     // Multi-window tap routing (spec decision 5): false on iPhone, so alert
     // taps there always navigate in place — unchanged semantics.
@@ -52,6 +53,8 @@ struct RootView: View {
     @State var handledConversationRequestId = 0 // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
+    // The unfolded Duo divides the window at its midpoint, including the trailing rail.
+    @State private var duoSidebarWidth = Constants.Root.sidebarIdealWidth
 
     var conversationDestination: some View {
         ConversationDestinationView(
@@ -140,7 +143,12 @@ struct RootView: View {
     @ViewBuilder private var workspaceNavigationContent: some View {
         if sizeClass == .compact {
             // iPhone: standard NavigationStack with push/pop
-            compactNavigationView
+            if usesVerticalBar {
+                compactNavigationView
+                    .modifier(WorkspaceCompactActionLauncher(showsWorkspaceDetail: showingWorkspaceDetail))
+            } else {
+                compactNavigationView
+            }
         } else {
             // iPad: NavigationSplitView with sidebar selection
             WorkspaceConnectionSwitcher(
@@ -149,26 +157,13 @@ struct RootView: View {
                     && coordinator.selectedSection == .workspaces,
                 onReveal: prepareConnectionSwitcher
             ) {
-                NavigationSplitView {
-                    WorkspaceListSidebar(
-                        workspaceStore: session.workspaceStore,
-                        isSearching: $isSearchingWorkspaces,
-                        onCreateWorkspace: createWorkspace
-                    )
-                    .navigationSplitViewColumnWidth(
-                        min: Constants.Root.sidebarMinimumWidth,
-                        ideal: Constants.Root.sidebarIdealWidth,
-                        max: Constants.Root.sidebarMaximumWidth
-                    )
-                } detail: {
-                    detailContent
-                }
-                .navigationSplitViewStyle(.automatic)
+                workspaceSplitView
             }
             .modifier(WorkspaceActionLauncher(
                 isSearching: isSearchingWorkspaces,
                 alignment: .trailing,
                 avoidsConversationInput: !conversationIsPopping,
+                hostsVerticalBarButton: false,
                 onCreateWorkspace: createWorkspace
             ) {
                 showingConnections = true
@@ -437,6 +432,46 @@ private extension RootView {
 }
 
 private extension RootView {
+    @ViewBuilder var workspaceSplitView: some View {
+        if usesVerticalBar {
+            NavigationSplitView(columnVisibility: .constant(.all)) {
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: $isSearchingWorkspaces,
+                    onCreateWorkspace: createWorkspace
+                )
+                .navigationSplitViewColumnWidth(duoSidebarWidth)
+                .toolbar(removing: .sidebarToggle)
+            } detail: {
+                detailContent
+                    .modifier(WorkspaceActionLauncherToolbar(isEnabled: !isSearchingWorkspaces))
+                    .toolbar(removing: .sidebarToggle)
+            }
+            .navigationSplitViewStyle(.balanced)
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                // The content proposal excludes the system rail, but the fold does not.
+                (geometry.size.width + geometry.safeAreaInsets.leading + geometry.safeAreaInsets.trailing) / 2
+                    - geometry.safeAreaInsets.leading
+            } action: { duoSidebarWidth = $0 }
+        } else {
+            NavigationSplitView {
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: $isSearchingWorkspaces,
+                    onCreateWorkspace: createWorkspace
+                )
+                .navigationSplitViewColumnWidth(
+                    min: Constants.Root.sidebarMinimumWidth,
+                    ideal: Constants.Root.sidebarIdealWidth,
+                    max: Constants.Root.sidebarMaximumWidth
+                )
+            } detail: {
+                detailContent
+            }
+            .navigationSplitViewStyle(.automatic)
+        }
+    }
+
     func prepareConnectionSwitcher() {
         isSearchingWorkspaces = false
     }

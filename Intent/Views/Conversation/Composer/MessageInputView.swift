@@ -14,6 +14,7 @@ struct MessageInputView: View {
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
+    @Environment(\.workspaceQuestionPanelPresented) private var questionPanelPresented
 
     @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
     @ScaledMetric(relativeTo: .caption) var attachmentIconSide: CGFloat = 12
@@ -113,6 +114,11 @@ struct MessageInputView: View {
         }
         .onChange(of: isIPadPaneVisible) { _, visible in
             if presentation == .iPad, !visible { isFocused = false }
+        }
+        .onChange(of: questionPanelPresented) { _, presented in
+            // Resign explicitly rather than disabling the native editor: UIKit
+            // restores a disabled first responder when the panel closes.
+            if presented { isFocused = false }
         }
         #if os(visionOS)
         .onDisappear {
@@ -455,8 +461,7 @@ private extension MessageInputView {
         dictation.stop(reason: .send)
         #endif
 
-        // Check if dictation is active — only resign focus if so.
-        // This prevents keyboard users from seeing a focus flicker.
+        // Commit active dictation before reading the final text below.
         let isDictating = UITextInputMode.activeInputModes.contains { $0.primaryLanguage == "dictation" }
 
         if isDictating {
@@ -482,10 +487,8 @@ private extension MessageInputView {
             let imagesToSend = viewModel.pendingImages
             viewModel.messageText = ""
             viewModel.pendingImages.removeAll()
-            // Re-focus after clearing
-            DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Composer.refocusDelay) {
-                isFocused = true
-            }
+            // Sending ends editing on every device; only an explicit tap reopens it.
+            isFocused = false
             Task { await viewModel.sendMessage(text, images: imagesToSend) }
         }
     }

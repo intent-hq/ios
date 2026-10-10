@@ -112,6 +112,9 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     @MainActor
     func testSelectionFreeTextAndMultiSelectSurviveBackThenSend() throws {
         let app = try openQuestions()
+        let composer = app.textViews["composer.textView"]
+        tap(composer)
+        composer.typeText("Keep this draft")
         tap(app.buttons["question.answer"])
         XCTAssertFalse(app.buttons["question.next"].isEnabled)
         XCTAssertFalse(app.buttons["question.back"].exists, "The first question has no Back control")
@@ -135,6 +138,8 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(app.buttons["question.answer"].waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["question.next"].exists, "The collapsed panel must be hidden from accessibility")
         XCTAssertTrue(app.textViews["composer.textView"].isHittable)
+        assertKeyboardClosed(in: app)
+        XCTAssertEqual(composer.value as? String, "Keep this draft")
         attachScreenshot("questions-collapsed-with-draft", in: app)
         tap(app.buttons["question.answer"])
         XCTAssertTrue(app.buttons["question.next"].waitForExistence(timeout: Self.timeout))
@@ -162,7 +167,11 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
 
     @MainActor
     func testCustomAnswersSubmitBesideTheKeyboardWithoutScrolling() throws {
-        let app = try openQuestions(collapsed: false)
+        let app = try openQuestions()
+        let composer = app.textViews["composer.textView"]
+        tap(composer)
+        composer.typeText("Keep this draft")
+        tap(app.buttons["question.answer"])
         let editor = answerField(in: app)
         let submit = app.buttons["question.freeText.submit"]
         tap(editor)
@@ -201,6 +210,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         ])
         XCTAssertTrue(submit.waitForNonExistence(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["question.answer"].exists)
+        assertKeyboardClosed(in: app)
     }
 
     @MainActor
@@ -223,6 +233,9 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     @MainActor
     func testDismissRequiresConfirmationAndCancelPreservesQuestions() throws {
         let app = try openQuestions()
+        let transcript = app.scrollViews["transcript.scrollView"]
+        let lastTool = app.buttons["Edit design-system.astro"]
+        XCTAssertTrue(waitUntilVisible(lastTool, in: transcript, timeout: Self.timeout))
         tap(app.buttons["question.dismiss"])
         let confirmation = app.sheets["Dismiss questions?"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
@@ -240,6 +253,8 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         tap(confirmation.buttons["Dismiss questions"])
         XCTAssertTrue(app.buttons["question.answer"].waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(app.textViews["composer.textView"].firstMatch.waitForExistence(timeout: Self.timeout))
+        attachScreenshot("questions-dismissed-transcript", in: app)
+        XCTAssertTrue(isVisible(lastTool, in: transcript), "The transcript tail must remain visible after dismissal")
     }
 
     /// Unlike hosted component tests, this exercises native keyboard avoidance
@@ -288,6 +303,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         tap(app.buttons["question.skip"])
         assertSentMessage(in: app, contains: ["A: (Other) A separate\nanswer", "A: (skipped)"])
         XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        assertKeyboardClosed(in: app)
         tap(composer)
         XCTAssertLessThanOrEqual(composer.frame.maxY, keyboard.frame.minY)
         XCTAssertGreaterThan(app.scrollViews["transcript.scrollView"].frame.height, 0)
@@ -297,6 +313,40 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
 }
 
 extension QuestionWizardUITests {
+    @MainActor
+    func testQuestionSubmissionKeepsTailVisibleWhenKeyboardCloses() throws {
+        let app = try openQuestions(collapsed: false)
+        tap(app.buttons["question.option.0"])
+        tap(app.buttons["question.next"])
+        let editor = answerField(in: app)
+        tap(editor)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        editor.typeText("Run the focused checks")
+        tap(app.buttons["question.freeText.submit"])
+
+        XCTAssertTrue(app.buttons["question.answer"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        let transcript = app.scrollViews["transcript.scrollView"]
+        let endRow = EndRow.thinkingIndicator(in: app)
+        let opened = OpenConversation(
+            lastMessage: endRow.element, goToEnd: app.buttons["transcript.goToEnd"], transcript: transcript
+        )
+        assertAtEnd(endRow, in: opened, context: "immediately after panel and keyboard close")
+        XCTAssertLessThanOrEqual(transcript.frame.maxY, app.textViews["composer.textView"].frame.minY)
+        assertSentMessage(in: app, contains: ["A: Yes, confirmed", "A: (Other) Run the focused checks"])
+    }
+
+    @MainActor
+    private func assertKeyboardClosed(in app: XCUIApplication) {
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout), "Finishing questions must dismiss the keyboard")
+        let composer = app.textViews["composer.textView"]
+        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(composer.value(forKey: "hasKeyboardFocus") as? Bool, false, "The main composer must wait for an explicit tap to focus")
+        let reopened = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: app.keyboards.firstMatch)
+        reopened.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [reopened], timeout: 2), .completed, "The keyboard must not reopen after the panel collapses")
+    }
+
     @MainActor
     private func attachScreenshot(_ name: String, in app: XCUIApplication) {
         let screenshot = XCTAttachment(screenshot: app.screenshot())
@@ -399,5 +449,16 @@ extension QuestionWizardUITests {
         })
         let sent = app.descendants(matching: .any).matching(predicate).firstMatch
         XCTAssertTrue(sent.waitForExistence(timeout: Self.timeout), "Submitted answers were not echoed by the demo RPC")
+        attachScreenshot("questions-submitted-transcript", in: app)
+        let transcript = app.scrollViews["transcript.scrollView"]
+        XCTAssertTrue(transcript.frame.intersects(sent.frame), "Submitted answers must be visible without scrolling")
+        let opened = OpenConversation(lastMessage: sent, goToEnd: app.buttons["transcript.goToEnd"], transcript: transcript)
+        assertRestsAtBottom(
+            lastRow: sent,
+            named: "submitted answers",
+            endRow: .thinkingIndicator(in: app),
+            in: opened,
+            context: "after answering questions"
+        )
     }
 }

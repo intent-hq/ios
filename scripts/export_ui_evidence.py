@@ -46,8 +46,10 @@ CAPTURES = {
         ),
     },
     "QuestionWizardUITests": {
+        "testSkipClearsAnEarlierSelection": ("questions-submitted-transcript",),
+        "testDismissRequiresConfirmationAndCancelPreservesQuestions": ("questions-dismissed-transcript",),
         "testCustomAnswersSubmitBesideTheKeyboardWithoutScrolling": (
-            "questions-custom-answer-next", "questions-custom-answer-send",
+            "questions-custom-answer-next", "questions-custom-answer-send", "questions-submitted-transcript",
         ),
     },
     "TranscriptVideoUITests": {

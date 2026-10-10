@@ -162,7 +162,8 @@ struct WorkspaceTaskProgressView: View {
             progressSegment(count: progress.inProgress, color: WorkspaceDetailStyle.accent)
             remainingProgressSegment
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Accept a narrower proposal even while segments still use the previous measurement.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .frame(height: WorkspaceDetailStyle.progressHeight)
         .clipShape(Capsule())
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { progressWidth = $0 }
