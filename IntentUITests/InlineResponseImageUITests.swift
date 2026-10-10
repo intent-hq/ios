@@ -18,6 +18,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         static let thumbnailSide: CGFloat = 160
         static let entryCount = 2
         static let maximumScrolls = 3
+        static let scrollPressDuration: TimeInterval = 0.05
         static let failureTapVerticalFraction: CGFloat = 0.75
     }
 
@@ -81,7 +82,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
         let composer = app.textViews["composer.textView"].firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: Fixture.timeout))
-        let draft = "Keep this draft while viewing the image"
+        let draft = "Keep this draft"
         composer.tap()
         composer.typeText(draft)
         let saved = message(in: app, containing: Fixture.savedCaption)
@@ -228,11 +229,13 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             let paragraphFrame = paragraph.frame
             if transcriptFrame.minY <= paragraphFrame.minY,
                paragraphFrame.maxY <= transcriptFrame.maxY { return }
-            if paragraphFrame.minY < transcriptFrame.minY {
-                transcript.swipeDown()
-            } else {
-                transcript.swipeUp()
-            }
+            let distance = paragraphFrame.minY < transcriptFrame.minY
+                ? transcriptFrame.minY - paragraphFrame.minY
+                : transcriptFrame.maxY - paragraphFrame.maxY
+            let limit = transcriptFrame.height / 2
+            let start = transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let end = start.withOffset(CGVector(dx: 0, dy: min(limit, max(-limit, distance))))
+            start.press(forDuration: Fixture.scrollPressDuration, thenDragTo: end)
         }
         XCTAssertTrue(waitUntilVisible(paragraph, in: transcript, timeout: Fixture.timeout))
     }
