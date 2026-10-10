@@ -1,5 +1,14 @@
 import XCTest
 
+extension XCUIElementQuery {
+    @MainActor
+    func singleHittableElement(file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
+        let visible = allElementsBoundByIndex.filter(\.isHittable)
+        XCTAssertEqual(visible.count, 1, "Exactly one retained control must accept input", file: file, line: line)
+        return try XCTUnwrap(visible.first, file: file, line: line)
+    }
+}
+
 private enum HomeActionMenuTestSupport {
     static let timeout: TimeInterval = 30
     static let maximumSwipes = 12

@@ -370,6 +370,7 @@ $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
 $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
 $(SRCROOT)/Intent/Presentation/NoteSheetInfo.swift
+$(SRCROOT)/Intent/Presentation/RetainedIPadPane.swift
 $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
 $(SRCROOT)/Intent/Presentation/SpecialistPickerSelection.swift
 $(SRCROOT)/Intent/Presentation/SplashAnimation.swift

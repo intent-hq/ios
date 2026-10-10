@@ -60,7 +60,7 @@ struct IPadShellView: View {
                 detail
                     .padding(.leading, layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
                     .environment(\.isIPadPaneVisible, !isDrawerVisible)
-                    .accessibilityHidden(isDrawerVisible)
+                    .allowsHitTesting(!isDrawerVisible)
                     .accessibilityFocused($detailFocused)
                 drawerBackdrop
                 sidebars
@@ -68,8 +68,9 @@ struct IPadShellView: View {
                     .frame(maxHeight: .infinity)
                     .background(Constants.Pairing.background(for: colorScheme))
                     .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
-                    .modifier(IPadPaneVisibility(isVisible: navigation.isSidebarVisible))
-                    .accessibilityAction(.escape) { coordinator.iPadNavigation.collapseSidebar() }
+                    .opacity(navigation.isSidebarVisible ? 1 : 0)
+                    .allowsHitTesting(navigation.isSidebarVisible)
+                    .environment(\.isIPadPaneVisible, navigation.isSidebarVisible)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -82,19 +83,27 @@ struct IPadShellView: View {
         .onChange(of: navigation.isSidebarVisible) { oldValue, newValue in
             if oldValue, !newValue { detailFocused = true }
         }
-        .accessibilityIdentifier("ipad.shell")
     }
 
     private var detail: some View {
         ZStack {
-            IPadWorkspaceDetailView(session: session)
-                .modifier(IPadPaneVisibility(isVisible: navigation.detail == .workspace && navigation.pairing == nil))
+            RetainedIPadPane(
+                isVisible: navigation.detail == .workspace && navigation.pairing == nil,
+                keepsCoveredContentVisible: true
+            ) {
+                IPadWorkspaceDetailView(session: session)
+            }
             if navigation.hasOpenedAssistant {
-                AssistantView(session: session)
-                    .modifier(IPadPaneVisibility(isVisible: navigation.detail == .assistant && navigation.pairing == nil))
+                RetainedIPadPane(
+                    isVisible: navigation.detail == .assistant && navigation.pairing == nil,
+                    keepsCoveredContentVisible: true
+                ) {
+                    AssistantView(session: session)
+                }
             }
             if let pairing = navigation.pairing {
                 IPadPairingDetail(mode: pairing) { coordinator.iPadNavigation.cancelPairing() }
+                    .accessibilityHidden(true, isEnabled: isDrawerVisible)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -106,37 +115,40 @@ struct IPadShellView: View {
             y: IPadShellLayout.shadowOffset
         )
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("ipad.detail")
     }
 
     private var sidebars: some View {
         ZStack {
-            WorkspaceListSidebar(
-                workspaceStore: session.workspaceStore,
-                isSearching: $isSearchingWorkspaces,
-                onCreateWorkspace: createWorkspace,
-                onCollapse: collapseSidebar
-            )
-            .modifier(IPadPaneVisibility(isVisible: navigation.section == .workspaces))
-            if navigation.hasOpenedAssistant {
-                IPadAssistantSidebar(
-                    session: session,
+            RetainedIPadPane(isVisible: navigation.section == .workspaces) {
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: $isSearchingWorkspaces,
+                    onCreateWorkspace: createWorkspace,
                     onCollapse: collapseSidebar
-                ) { coordinator.onSelectAssistant(agentId: $0) }
-                .modifier(IPadPaneVisibility(isVisible: navigation.section == .assistant))
+                )
             }
-            IPadConnectionsSidebar(
-                onCollapse: collapseSidebar,
-                onScanQR: { coordinator.iPadNavigation.presentPairing(.qrCode) },
-                onManualPairing: { coordinator.iPadNavigation.presentPairing(.manual) }
-            )
-            .modifier(IPadPaneVisibility(isVisible: navigation.section == .connections))
-            IPadSettingsSidebar(
-                onCollapse: collapseSidebar,
-                onScanQR: { coordinator.iPadNavigation.presentPairing(.qrCode) },
-                onManualPairing: { coordinator.iPadNavigation.presentPairing(.manual) }
-            )
-            .modifier(IPadPaneVisibility(isVisible: navigation.section == .settings))
+            if navigation.hasOpenedAssistant {
+                RetainedIPadPane(isVisible: navigation.section == .assistant) {
+                    IPadAssistantSidebar(
+                        session: session,
+                        onCollapse: collapseSidebar
+                    ) { coordinator.onSelectAssistant(agentId: $0) }
+                }
+            }
+            RetainedIPadPane(isVisible: navigation.section == .connections) {
+                IPadConnectionsSidebar(
+                    onCollapse: collapseSidebar,
+                    onScanQR: { coordinator.iPadNavigation.presentPairing(.qrCode) },
+                    onManualPairing: { coordinator.iPadNavigation.presentPairing(.manual) }
+                )
+            }
+            RetainedIPadPane(isVisible: navigation.section == .settings) {
+                IPadSettingsSidebar(
+                    onCollapse: collapseSidebar,
+                    onScanQR: { coordinator.iPadNavigation.presentPairing(.qrCode) },
+                    onManualPairing: { coordinator.iPadNavigation.presentPairing(.manual) }
+                )
+            }
         }
     }
 
@@ -160,19 +172,5 @@ struct IPadShellView: View {
         guard coordinator.canCreateWorkspace else { return }
         showingConnectionSwitcher = false
         showingCreateWorkspace = true
-    }
-}
-
-/// Retaining inactive subtrees preserves drafts, list filters and transcript state.
-private struct IPadPaneVisibility: ViewModifier {
-    let isVisible: Bool
-    @Environment(\.isIPadPaneVisible) private var parentVisible
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(isVisible ? 1 : 0)
-            .allowsHitTesting(isVisible)
-            .accessibilityHidden(!isVisible)
-            .environment(\.isIPadPaneVisible, parentVisible && isVisible)
     }
 }

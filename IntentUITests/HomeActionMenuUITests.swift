@@ -54,7 +54,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
         agent.tap()
-        let composer = app.textViews["composer.textView"]
+        var composer = app.textViews["composer.textView"]
         XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
         let rail = app.buttons["ipad.rail.workspaces"]
         let send = app.buttons["Send message"]
@@ -83,26 +83,26 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         app.buttons["ipad.rail.assistant"].tap()
         XCTAssertTrue(app.buttons["assistant.sidebar.newConversation"].waitForExistence(timeout: Self.timeout))
         app.buttons["ipad.rail.workspaces"].tap()
-        XCTAssertTrue(waitUntilHittable(composer))
+        composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
         XCTAssertEqual(composer.value as? String, draft)
         XCUIDevice.shared.orientation = .portrait
-        XCTAssertTrue(waitUntilHittable(send))
+        XCTAssertTrue(try app.buttons.matching(identifier: "Send message").singleHittableElement().isEnabled)
         XCTAssertEqual(composer.value as? String, draft)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad portrait conversation with draft")
-        verifySendAndBack(in: app, draft: draft)
+        try verifySendAndBack(in: app, draft: draft)
     }
 
     @MainActor
-    private func verifySendAndBack(in app: XCUIApplication, draft: String) {
-        app.buttons["Send message"].tap()
+    private func verifySendAndBack(in app: XCUIApplication, draft: String) throws {
+        try app.buttons.matching(identifier: "Send message").singleHittableElement().tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", draft))
             .firstMatch.waitForExistence(timeout: Self.timeout))
-        let composer = app.textViews["composer.textView"]
+        let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
         XCTAssertEqual(composer.value as? String, "")
-        app.buttons["conversation.back"].tap()
+        try app.buttons.matching(identifier: "conversation.back").singleHittableElement().tap()
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(composer.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.contains { $0.isHittable })
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
         XCTAssertTrue(waitUntilHittable(agent))
     }

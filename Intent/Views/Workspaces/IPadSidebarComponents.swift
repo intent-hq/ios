@@ -40,6 +40,7 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.isIPadPaneVisible) private var isPaneVisible
 
     var body: some View {
         Group {
@@ -63,9 +64,14 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
 
     private var controls: some View {
         HStack(spacing: 0) {
-            actions()
-            IntentIconButton(icon: .panelVertical, label: "Hide sidebar", showsBackground: false, action: onCollapse)
-                .accessibilityIdentifier("ipad.sidebar.collapse")
+            if isPaneVisible {
+                actions()
+                IntentIconButton(icon: .panelVertical, label: "Hide sidebar", showsBackground: false, action: onCollapse)
+                    .accessibilityIdentifier("ipad.sidebar.collapse")
+                    .accessibilityAction(.escape, onCollapse)
+            } else {
+                Color.clear.frame(width: Constants.WorkspaceSearch.compactHeight, height: Constants.WorkspaceSearch.compactHeight)
+            }
         }
     }
 }

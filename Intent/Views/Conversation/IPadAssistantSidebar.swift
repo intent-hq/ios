@@ -38,7 +38,6 @@ struct IPadAssistantSidebar: View {
             .refreshable { await store.refresh() }
         }
         .background(IPadSidebarStyle.background(for: colorScheme))
-        .accessibilityIdentifier("assistant.sidebar")
         .task { if !store.hasLoaded { await store.refresh() } }
     }
 

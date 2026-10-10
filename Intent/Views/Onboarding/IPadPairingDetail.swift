@@ -25,7 +25,6 @@ struct IPadPairingDetail: View {
             }
         }
         .onDisappear { teardown() }
-        .accessibilityIdentifier("ipad.pairing.detail")
     }
 
     @ViewBuilder private var pairingContent: some View {

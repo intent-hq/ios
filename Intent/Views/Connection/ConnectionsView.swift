@@ -168,7 +168,6 @@ struct ConnectionsView: View {
                 }
             }
             .background(IPadSidebarStyle.background(for: colorScheme))
-            .accessibilityIdentifier("connections.sidebar")
         } else {
             sheetPresentation
         }
@@ -349,22 +348,22 @@ private struct ConnectionPairingActions: View {
 
 struct IPadConnectionsSidebar: View {
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(\.isIPadPaneVisible) private var isPaneVisible
     let onCollapse: () -> Void
     let onScanQR: () -> Void
     let onManualPairing: () -> Void
 
     var body: some View {
         ZStack {
-            ConnectionsView(
-                isEmbedded: true,
-                onCollapse: onCollapse,
-                onScanQR: onScanQR,
-                onManualPairing: onManualPairing
-            )
-            .opacity(coordinator.iPadNavigation.pairing == nil ? 1 : 0)
-            .allowsHitTesting(coordinator.iPadNavigation.pairing == nil)
-            .accessibilityHidden(coordinator.iPadNavigation.pairing != nil)
-            if let mode = coordinator.iPadNavigation.pairing {
+            RetainedIPadPane(isVisible: coordinator.iPadNavigation.pairing == nil) {
+                ConnectionsView(
+                    isEmbedded: true,
+                    onCollapse: onCollapse,
+                    onScanQR: onScanQR,
+                    onManualPairing: onManualPairing
+                )
+            }
+            if isPaneVisible, let mode = coordinator.iPadNavigation.pairing {
                 IPadPairingSidebar(title: "Connections", mode: mode, onCollapse: onCollapse)
             }
         }

@@ -101,7 +101,6 @@ private struct SettingsContent: View {
         .buttonStyle(IntentContentButtonStyle())
         .foregroundStyle(SettingsStyle.foreground(for: colorScheme))
         .background(IPadSidebarStyle.background(for: colorScheme))
-        .accessibilityIdentifier("settings.sidebar")
     }
 
     @ViewBuilder private var settingsSections: some View {
@@ -190,22 +189,22 @@ private struct SettingsContent: View {
 
 struct IPadSettingsSidebar: View {
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(\.isIPadPaneVisible) private var isPaneVisible
     let onCollapse: () -> Void
     let onScanQR: () -> Void
     let onManualPairing: () -> Void
 
     var body: some View {
         ZStack {
-            SettingsView(
-                isEmbedded: true,
-                onCollapse: onCollapse,
-                onScanQR: onScanQR,
-                onManualPairing: onManualPairing
-            )
-            .opacity(coordinator.iPadNavigation.pairing == nil ? 1 : 0)
-            .allowsHitTesting(coordinator.iPadNavigation.pairing == nil)
-            .accessibilityHidden(coordinator.iPadNavigation.pairing != nil)
-            if let mode = coordinator.iPadNavigation.pairing {
+            RetainedIPadPane(isVisible: coordinator.iPadNavigation.pairing == nil) {
+                SettingsView(
+                    isEmbedded: true,
+                    onCollapse: onCollapse,
+                    onScanQR: onScanQR,
+                    onManualPairing: onManualPairing
+                )
+            }
+            if isPaneVisible, let mode = coordinator.iPadNavigation.pairing {
                 IPadPairingSidebar(title: "Settings", mode: mode, onCollapse: onCollapse)
             }
         }

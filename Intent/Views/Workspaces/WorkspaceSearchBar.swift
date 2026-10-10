@@ -135,6 +135,8 @@ struct WorkspaceSearchInput: View {
                     .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                     .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
                     .background { WorkspaceSearchSurface() }
+                    .contentShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
+                    .accessibilityHidden(true)
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Close search")
