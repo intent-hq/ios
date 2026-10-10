@@ -12,7 +12,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         capture(app, named: "Conversation-History-Light")
 
         openActions(app)
-        XCTAssertFalse(app.buttons["conversation.actions.model"].exists)
+        XCTAssertTrue(app.buttons["conversation.actions.model"].isHittable)
         capture(app, named: "Agent-Actions-Light")
         app.buttons["conversation.actions.rename"].tap()
         let rename = app.alerts["Rename Agent"]
@@ -37,11 +37,27 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         openActions(app)
         transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.8)).tap()
         XCTAssertTrue(app.buttons["conversation.actions.rename"].waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.textViews["composer.textView"].exists)
+        let composer = app.textViews["composer.textView"]
+        composer.tap()
+        composer.typeText("Continue with this draft")
+        openActions(app)
+        app.buttons["conversation.actions.model"].tap()
+        let picker = app.navigationBars["Select Model"]
+        XCTAssertTrue(picker.waitForExistence(timeout: Self.timeout))
+        let selectedModel = app.buttons["conversation.model.default-model"]
+        XCTAssertTrue(selectedModel.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(selectedModel.isSelected)
+        capture(app, named: "Agent-Model-Picker-Light")
+        app.buttons["conversation.model.named-model"].tap()
+        XCTAssertTrue(picker.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(transcript.exists)
+        XCTAssertEqual(composer.value as? String, "Continue with this draft")
+        openActions(app)
+        XCTAssertTrue(app.staticTexts["Model: Named Model"].waitForExistence(timeout: Self.timeout))
     }
 
     @MainActor
-    func testLargeTextModelPickerReturnsAndSendingRemovesModelAction() {
+    func testLargeTextModelPickerWorksAfterSending() {
         let app = launch(scenario: "empty", appearance: "dark", largeText: true)
         openActions(app)
         let model = app.buttons["conversation.actions.model"]
@@ -68,8 +84,20 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
             XCTAssertTrue(app.buttons["composer.stop"].exists, "Closing focus must retain the streaming conversation")
         }
         openActions(app)
-        XCTAssertFalse(model.exists, "Model changes are only available before the first message")
+        XCTAssertTrue(model.isHittable)
         XCTAssertTrue(app.buttons["conversation.actions.rename"].exists)
+        model.tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: Self.timeout))
+        let namedModel = app.buttons["conversation.model.named-model"]
+        XCTAssertTrue(namedModel.waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Agent-Model-Picker-Dark-LargeText")
+        namedModel.tap()
+        XCTAssertTrue(picker.waitForNonExistence(timeout: Self.timeout))
+        openActions(app)
+        XCTAssertTrue(app.staticTexts["Model: Named Model"].waitForExistence(timeout: Self.timeout))
+        model.tap()
+        XCTAssertTrue(namedModel.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(namedModel.isSelected)
     }
 
     @MainActor

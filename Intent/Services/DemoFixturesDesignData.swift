@@ -79,6 +79,7 @@ extension DemoDesignFixtures {
             "status": isStreaming ? "running" : "idle", "isResponding": isStreaming,
             "createdAt": Self.timestamp, "updatedAt": Self.timestamp, "lastActivity": Self.timestamp,
             "lastMessageRole": "assistant",
+            "model": modelId, "provider": "auggie",
             "metadata": [
                 "pendingQuestionsMessageId": pendingQuestionId,
                 "dismissedQuestionsMessageId": questionsDismissed ? Self.questionMessageId : "",

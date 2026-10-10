@@ -208,13 +208,9 @@ extension ConversationViewModel {
         }
     }
 
-    func setModel(_ modelId: String) async {
-        do {
-            try await store.setModel(agentId: agentId, modelId: modelId, workspaceId: workspaceId)
-            currentModelId = modelId
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Set model failed: \(error)")
-        }
+    func setModel(_ modelId: String) async throws {
+        try await store.setModel(agentId: agentId, modelId: modelId, workspaceId: workspaceId)
+        currentModelId = modelId
     }
 
     typealias ImagePlacementError = ConversationAttachmentPipeline.ImagePlacementError

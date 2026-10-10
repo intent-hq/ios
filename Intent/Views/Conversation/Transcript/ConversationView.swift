@@ -358,7 +358,7 @@ private extension ConversationViewContent {
     private func handleAgentAction(_ action: AgentAction) {
         switch action {
         case .changeModel:
-            if viewModel.filteredMessages.isEmpty { showModelPicker = true }
+            showModelPicker = true
         case .delete:
             showDeleteConfirmation = true
         case .rename:
@@ -378,12 +378,10 @@ private extension ConversationViewContent {
                 Text("Model: \(displayName)")
                     .accessibilityIdentifier("conversation.actions.modelInformation")
             }
-            if viewModel.filteredMessages.isEmpty {
-                Button { handleAgentAction(.changeModel) } label: {
-                    Label { Text("Change Model") } icon: { Image(.settings2) }
-                }
-                .accessibilityIdentifier("conversation.actions.model")
+            Button { handleAgentAction(.changeModel) } label: {
+                Label { Text("Change Model") } icon: { Image(.settings2) }
             }
+            .accessibilityIdentifier("conversation.actions.model")
             Button { handleAgentAction(.rename) } label: {
                 Label { Text("Rename") } icon: { Image(.edit) }
             }

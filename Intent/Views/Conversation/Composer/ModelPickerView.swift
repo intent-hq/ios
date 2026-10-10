@@ -5,6 +5,8 @@ struct ModelPickerView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dismiss) var dismiss
+    @State private var savingModelId: String?
+    @State private var modelChangeError: String?
 
     @ScaledMetric(relativeTo: .body) private var selectionIconSide: CGFloat = 17
 
@@ -29,14 +31,28 @@ struct ModelPickerView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     IntentIconButton(icon: .close, label: "Cancel") { dismiss() }
+                        .disabled(savingModelId != nil)
                 }
                 .intentToolbarSurface()
             }
             .task {
                 await viewModel.refreshSelectableModels()
             }
+            .alert(
+                "Couldn't Change Model",
+                isPresented: Binding(
+                    get: { modelChangeError != nil },
+                    set: { if !$0 { modelChangeError = nil } }
+                ),
+                presenting: modelChangeError
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { detail in
+                Text(detail)
+            }
         }
         .presentationBackground(Constants.Pairing.background(for: colorScheme))
+        .interactiveDismissDisabled(savingModelId != nil)
     }
 
     /// The provider's `models.list` failed and nothing is cached: an
@@ -90,23 +106,43 @@ struct ModelPickerView: View {
 
     private func modelButton(_ model: ModelInfo, isSelected: Bool) -> some View {
         Button {
-            Task {
-                await viewModel.setModel(model.id)
-                dismiss()
-            }
+            selectModel(model.id)
         } label: {
             HStack {
                 Text(model.name)
                     .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                 Spacer()
-                if isSelected {
+                if savingModelId == model.id {
+                    ProgressView()
+                } else if isSelected {
                     selectionIndicator
                 }
             }
             .contentShape(.rect)
         }
         .buttonStyle(IntentContentButtonStyle())
+        .disabled(savingModelId != nil)
+        .accessibilityIdentifier("conversation.model.\(model.id)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func selectModel(_ modelId: String) {
+        guard savingModelId == nil else { return }
+        guard modelId != viewModel.currentModelId else {
+            dismiss()
+            return
+        }
+        savingModelId = modelId
+        Task {
+            defer { savingModelId = nil }
+            do {
+                try await viewModel.setModel(modelId)
+                dismiss()
+            } catch {
+                modelChangeError = error.localizedDescription
+            }
+        }
     }
 
     private var selectionIndicator: some View {

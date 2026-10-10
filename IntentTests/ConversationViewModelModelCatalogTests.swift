@@ -8,6 +8,48 @@ import Testing
 // swiftlint:disable no_magic_numbers
 
 extension ConversationViewModelTests {
+    @Test func changingModelWithHistoryWaitsForConfirmationAndPreservesDraft() async throws {
+        let (vm, _, fake) = makeCatalogVM()
+        vm.currentModelId = "sonnet4.5"
+        vm.store.messages = [textMessage(role: .user, text: "Existing conversation")]
+        vm.messageText = "Continue with this draft"
+        let messageIds = vm.filteredMessageIDs
+        fake.pendingMethods = ["agent.setModel"]
+
+        let change = Task { try await vm.setModel("opus") }
+        try await waitUntil("model change request") { fake.didCallMethod("agent.setModel") }
+        #expect(vm.currentModelId == "sonnet4.5")
+        let params = try #require(fake.paramsForMethod("agent.setModel").first)
+        #expect(params["agentId"] as? String == "test-agent")
+        #expect(params["workspaceId"] as? String == "test-ws")
+        #expect(params["modelId"] as? String == "opus")
+
+        fake.resolvePending("agent.setModel", with: ["success": true])
+        try await change.value
+        #expect(vm.currentModelId == "opus")
+        #expect(vm.messageText == "Continue with this draft")
+        #expect(vm.filteredMessageIDs == messageIds)
+    }
+
+    @Test func failedModelChangeKeepsSelectionAndCanBeRetried() async throws {
+        let (vm, _, fake) = makeCatalogVM()
+        vm.currentModelId = "sonnet4.5"
+        let expectedError = NSError(domain: "ModelChange", code: -1)
+        fake.errorMap["agent.setModel"] = expectedError
+
+        do {
+            try await vm.setModel("opus")
+            Issue.record("A failed model change must reach the picker")
+        } catch {
+            #expect(error as NSError == expectedError)
+        }
+        #expect(vm.currentModelId == "sonnet4.5")
+
+        fake.errorMap["agent.setModel"] = nil
+        try await vm.setModel("opus")
+        #expect(vm.currentModelId == "opus")
+    }
+
     // MARK: - Model display name (conversation menu)
 
     @Test func modelDisplayNameResolvesNameFromCatalog() {
