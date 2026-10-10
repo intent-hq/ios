@@ -172,14 +172,6 @@ struct ConversationColumnView: View {
         }
     }
 
-    private var workspaceQueueVisible: Bool {
-        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
-    }
-
-    private var stickyHorizontalInset: CGFloat {
-        keyboardVisible || composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
-    }
-
     @ViewBuilder
     private var accessoryRows: some View {
         if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
@@ -346,6 +338,16 @@ struct ConversationColumnView: View {
         }
     }
     #endif
+}
+
+private extension ConversationColumnView {
+    var workspaceQueueVisible: Bool {
+        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
+    }
+
+    var stickyHorizontalInset: CGFloat {
+        keyboardVisible || composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
+    }
 }
 
 private struct ConversationConnectionLoadingView: View {
