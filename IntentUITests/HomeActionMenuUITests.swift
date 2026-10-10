@@ -273,7 +273,9 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         openMenu(app)
         XCTAssertEqual(reveal("appearance", in: app).value as? String, "Light Mode")
     }
+}
 
+extension HomeActionMenuUITests {
     @MainActor
     private func verifyMenuDragBehavior(in app: XCUIApplication) {
         let carousel = app.scrollViews["intent.menu.tiles"]

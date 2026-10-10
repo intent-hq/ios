@@ -8,6 +8,7 @@ $(SRCROOT)/Intent/App/BackendSession.swift
 $(SRCROOT)/Intent/App/BackendSessionRegistry.swift
 $(SRCROOT)/Intent/App/BackendWindowSession.swift
 $(SRCROOT)/Intent/App/ConnectionLossPresentation.swift
+$(SRCROOT)/Intent/App/ConversationDestinationView.swift
 $(SRCROOT)/Intent/App/IPadNavigationRail.swift
 $(SRCROOT)/Intent/App/IPadNavigationState.swift
 $(SRCROOT)/Intent/App/IPadShellView.swift
