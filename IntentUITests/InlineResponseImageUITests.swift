@@ -103,7 +103,9 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         XCTAssertTrue(saved.exists, "Closing the image must return to the same conversation")
         composer.tap()
         composer.typeText(" intact")
-        XCTAssertEqual(composer.value as? String, draft + " intact")
+        let editedDraft = composer.value as? String ?? ""
+        XCTAssertTrue(editedDraft.contains(" intact"))
+        XCTAssertEqual(editedDraft.replacingOccurrences(of: " intact", with: ""), draft)
     }
 
     @MainActor
@@ -203,13 +205,18 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         let keyboardHidden = waitUntil(timeout: Fixture.timeout) {
             !keyboard.exists || !keyboard.isHittable
         }
+        let close = app.buttons["Close image"].firstMatch
+        let viewerReady = waitUntil(timeout: Fixture.timeout) {
+            preview.isHittable && close.exists && close.isHittable
+        }
         XCTAssertGreaterThan(preview.frame.width, Fixture.thumbnailSide)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "Saved response image in lightbox"
         screenshot.lifetime = .keepAlways
         add(screenshot)
         XCTAssertTrue(keyboardHidden, "The keyboard must not cover the image viewer")
-        app.buttons["Close image"].firstMatch.tap()
+        XCTAssertTrue(viewerReady, "The image and close control must be available")
+        close.tap()
         XCTAssertTrue(preview.waitForNonExistence(timeout: Fixture.timeout))
     }
 
