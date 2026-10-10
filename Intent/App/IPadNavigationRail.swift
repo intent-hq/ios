@@ -15,11 +15,11 @@ struct IPadNavigationRail: View {
                 if !isSidebarVisible {
                     railButton(asset: .collapseLeft, label: "Show sidebar", identifier: "ipad.sidebar.expand", action: onExpand)
                 }
-                destination(.assistant, asset: .intentDandelion, label: "Assistant")
+                destination(.assistant, asset: .dandelion, label: "Assistant")
                     .disabled(!canUseAssistant)
-                destination(.workspaces, asset: .agents, label: "Workspaces")
+                destination(.workspaces, asset: .agentGeneral1, label: "Workspaces")
                 destination(.connections, asset: .connectionLaptop, label: "Connections")
-                railButton(asset: appearanceIcon, label: "Appearance", identifier: "ipad.rail.appearance") {
+                railButton(asset: .night, label: "Appearance", identifier: "ipad.rail.appearance") {
                     themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"
                 }
                 .accessibilityValue(appearanceTitle)
@@ -82,14 +82,6 @@ struct IPadNavigationRail: View {
         case "light": "Light Mode"
         case "dark": "Dark Mode"
         default: "System"
-        }
-    }
-
-    private var appearanceIcon: ImageResource {
-        switch themePreference {
-        case "light": .brightnessFull
-        case "dark": .night
-        default: .brightnessRise
         }
     }
 }

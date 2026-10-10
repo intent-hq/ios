@@ -66,7 +66,7 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
         HStack(spacing: 0) {
             if isPaneVisible {
                 actions()
-                IntentIconButton(icon: .panelVertical, label: "Hide sidebar", showsBackground: false, action: onCollapse)
+                IntentIconButton(icon: .collapseLeft, label: "Hide sidebar", showsBackground: false, action: onCollapse)
                     .accessibilityIdentifier("ipad.sidebar.collapse")
                     .accessibilityAction(.escape, onCollapse)
             } else {
