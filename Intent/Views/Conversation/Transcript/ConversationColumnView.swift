@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension EnvironmentValues {
+    @Entry var conversationComposerFocus: Binding<Bool>?
+}
+
 struct ConversationColumnView: View {
     let viewModel: ConversationViewModel
     let onNavigateToNote: (String, String, String) -> Void
@@ -30,6 +34,7 @@ struct ConversationColumnView: View {
         VStack(spacing: 0) {
             columnContent
         }
+        .environment(\.conversationComposerFocus, $composerFocused)
         // Measured inside keyboard avoidance on purpose: with the keyboard
         // up the cap derives from the remaining visible height.
         .onGeometryChange(for: CGFloat.self) { proxy in
@@ -156,7 +161,7 @@ struct ConversationColumnView: View {
                         store: viewModel.store,
                         usesWorkspaceDesign: usesWorkspaceDesign,
                         allowsSending: composerVisible
-                    ) { composerFocused = $0 }
+                    )
                     .padding(.horizontal, usesWorkspaceDesign ? stickyHorizontalInset : 0)
                     .padding(.top, usesWorkspaceDesign && !workspaceQueueVisible ? Design.Composer.keyboardBottomSpacing : 0)
                     .padding(.bottom, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)

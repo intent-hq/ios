@@ -16,6 +16,7 @@ struct MarkdownTextView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.assistantMessageStreaming) private var isStreaming
+    @Environment(\.conversationComposerFocus) private var composerFocus
     /// The window's session, when present: workspace images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
@@ -95,6 +96,7 @@ struct MarkdownTextView: View {
             .textual.textSelection(.enabled)
             .textual.onAttachmentTap { attachment in
                 if let image = Self.lightboxImage(for: attachment) {
+                    composerFocus?.wrappedValue = false
                     lightboxItem = LightboxItem(image: image)
                 } else if let video = Self.playbackVideo(for: attachment) {
                     videoItem = VideoItem(video: video)

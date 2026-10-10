@@ -45,7 +45,6 @@ struct ImageLightboxView: View {
             }
             .padding(Constants.Conversation.ImageLightbox.actionContainerPadding)
         }
-        .background(ImageLightboxKeyboardDismissal())
     }
 
     private var backdrop: some View {
@@ -234,23 +233,5 @@ struct ImageLightboxView: View {
             width: min(max(proposed.width, -maxX), maxX),
             height: min(max(proposed.height, -maxY), maxY)
         )
-    }
-}
-
-private struct ImageLightboxKeyboardDismissal: UIViewRepresentable {
-    func makeUIView(context _: Context) -> DismissalView {
-        let view = DismissalView()
-        view.isUserInteractionEnabled = false
-        return view
-    }
-
-    func updateUIView(_: DismissalView, context _: Context) {}
-
-    final class DismissalView: UIView {
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            // The presenting editor can sit outside the modal's responder chain.
-            window?.endEditing(true)
-        }
     }
 }
