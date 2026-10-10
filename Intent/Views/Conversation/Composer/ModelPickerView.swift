@@ -12,16 +12,7 @@ struct ModelPickerView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let models = viewModel.selectableModels {
-                    modelList(models)
-                } else if viewModel.modelCatalogLoadFailed {
-                    loadFailedState
-                } else {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
+            pickerContent
             .background(Constants.Pairing.background(for: colorScheme).ignoresSafeArea())
             .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
             .navigationTitle("Select Model")
@@ -53,6 +44,18 @@ struct ModelPickerView: View {
         }
         .presentationBackground(Constants.Pairing.background(for: colorScheme))
         .interactiveDismissDisabled(savingModelId != nil)
+    }
+
+    @ViewBuilder
+    private var pickerContent: some View {
+        if let models = viewModel.selectableModels {
+            modelList(models)
+        } else if viewModel.modelCatalogLoadFailed {
+            loadFailedState
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     /// The provider's `models.list` failed and nothing is cached: an
