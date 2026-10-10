@@ -15,6 +15,12 @@ CAPTURES = {
         "testSavedImageOpensWithKeyboardAndPreservesDraft": (
             "Response image with keyboard open", "Saved response image in lightbox",
         ),
+        "testUserImageBlockOpensWithKeyboardAndPreservesDraft": (
+            "user image block with keyboard open", "Saved response image in lightbox",
+        ),
+        "testAssistantImageBlockOpensWithKeyboardAndPreservesDraft": (
+            "assistant image block with keyboard open", "Saved response image in lightbox",
+        ),
     },
     "ConversationMermaidUITests": {
         "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),

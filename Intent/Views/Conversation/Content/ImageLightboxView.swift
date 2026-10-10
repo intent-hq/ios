@@ -45,6 +45,14 @@ struct ImageLightboxView: View {
             }
             .padding(Constants.Conversation.ImageLightbox.actionContainerPadding)
         }
+        .onAppear {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder),
+                to: nil,
+                from: nil,
+                for: nil
+            )
+        }
     }
 
     private var backdrop: some View {

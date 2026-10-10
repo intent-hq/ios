@@ -14,7 +14,13 @@ extension DemoFixtures {
     /// PNG; the unknown asset returns an empty payload. Neither needs a network.
     /// The linked workspace intentionally differs from the conversation's.
     static var inlineImageConversationMessages: [[String: Any]] {
-        [
+        if ProcessInfo.processInfo.arguments.contains("--demo-user-image-block") {
+            return imageBlockConversation(role: "user")
+        }
+        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-image-block") {
+            return imageBlockConversation(role: "assistant")
+        }
+        return [
             [
                 "id": "demo-inline-images-user",
                 "role": "user",
@@ -28,6 +34,18 @@ extension DemoFixtures {
                 "contentBlocks": [["type": "text", "text": inlineImageResponseText]]
             ]
         ]
+    }
+
+    private static func imageBlockConversation(role: String) -> [[String: Any]] {
+        [[
+            "id": "demo-image-block-\(role)",
+            "role": role,
+            "timestamp": transcriptIso(minutesAgo: 1),
+            "contentBlocks": [
+                ["type": "text", "text": "An attached screenshot."],
+                ["type": "image", "data": statusImagePNG.base64EncodedString(), "mimeType": "image/png"]
+            ]
+        ]]
     }
 
     static var inlineImageResponseText: String {

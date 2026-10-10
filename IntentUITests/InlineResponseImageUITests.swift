@@ -192,8 +192,15 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
                 dy: saved.frame.height - Fixture.thumbnailSide / 2
             ))
             .tap()
+        assertPresentedLightbox(in: app)
+    }
+
+    @MainActor
+    private func assertPresentedLightbox(in app: XCUIApplication) {
         let preview = app.images["Image preview"].firstMatch
         XCTAssertTrue(preview.waitForExistence(timeout: Fixture.timeout), "The saved image did not open the lightbox")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Fixture.timeout),
+                      "The keyboard must not cover the image viewer")
         XCTAssertGreaterThan(preview.frame.width, Fixture.thumbnailSide)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Saved response image in lightbox"
@@ -238,5 +245,48 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             start.press(forDuration: Fixture.scrollPressDuration, thenDragTo: end)
         }
         XCTAssertTrue(waitUntilVisible(paragraph, in: transcript, timeout: Fixture.timeout))
+    }
+}
+
+extension InlineResponseImageUITests {
+    @MainActor
+    func testUserImageBlockOpensWithKeyboardAndPreservesDraft() {
+        assertImageBlockOpensWithKeyboard(role: "user")
+    }
+
+    @MainActor
+    func testAssistantImageBlockOpensWithKeyboardAndPreservesDraft() {
+        assertImageBlockOpensWithKeyboard(role: "assistant")
+    }
+
+    @MainActor
+    private func assertImageBlockOpensWithKeyboard(role: String) {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-inline-images", "--demo-\(role)-image-block"]
+        app.launch()
+        openWorkspace(in: app)
+        let agent = app.staticTexts[Fixture.agentName].firstMatch
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        agent.tap()
+        let thumbnail = app.buttons["Attached image"].firstMatch
+        XCTAssertTrue(thumbnail.waitForExistence(timeout: Fixture.timeout))
+        thumbnail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        assertPresentedLightbox(in: app)
+
+        let composer = app.textViews["composer.textView"].firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: Fixture.timeout))
+        let draft = "Keep this draft"
+        composer.tap()
+        composer.typeText(draft)
+        let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+        reveal(thumbnail, in: transcript)
+        XCTAssertTrue(app.keyboards.firstMatch.exists && app.keyboards.firstMatch.isHittable)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "\(role) image block with keyboard open"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        thumbnail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        assertPresentedLightbox(in: app)
+        XCTAssertEqual(composer.value as? String, draft)
     }
 }
