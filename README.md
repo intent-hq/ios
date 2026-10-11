@@ -385,7 +385,8 @@ Final diagnostic attachments use XCTest teardown, since an assertion with
 `python3 scripts/check_ui_attachment_lifecycle.py` and its mutation tests to
 reject attachment-producing defer blocks (including named helper calls);
 ordinary cleanup remains allowed. The source check is conservative by function
-name, not a Swift type checker, and does not resolve dynamic dispatch or aliases.
+name, not a Swift type checker: it includes parameter defaults but does not
+resolve dynamic dispatch, aliases, computed properties, or constructors.
 
 After `scripts/xcodebuild.sh build-for-testing-ui`, run
 `python3 scripts/verify_fixture_capture_lifecycle.py --output-root build/capture-contract`

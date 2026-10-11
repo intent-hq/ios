@@ -4,7 +4,8 @@
 This is a conservative source contract, not Swift type checking: function names
 are combined across IntentUITests (including extensions/overloads), and XCTest's
 add and XCTAttachment are attachment sinks. Named helper functions are followed
-transitively; this does not resolve dynamic dispatch or function-value aliases.
+transitively, including parameter defaults. This does not resolve dynamic
+dispatch, function-value aliases, computed properties, or constructors.
 Comments/string text are ignored, but interpolation expressions remain code.
 Ordinary cleanup defer blocks remain valid.
 """
@@ -99,6 +100,22 @@ def source_blocks(source):
     if stack:
         raise ValueError("unclosed Swift delimiters")
 
+    def default_references(start, end):
+        references = set()
+        cursor = start + 1
+        while cursor < end:
+            if tokens[cursor] == "=":
+                cursor += 1
+                while cursor < end and tokens[cursor] != ",":
+                    stop = pairs[cursor] + 1 if tokens[cursor] in ("(", "[", "{") else cursor + 1
+                    references.update(tokens[cursor:stop])
+                    cursor = stop
+            elif tokens[cursor] in ("(", "[", "{"):
+                cursor = pairs[cursor] + 1
+            else:
+                cursor += 1
+        return references
+
     dependencies = defaultdict(set)
     deferred = []
     for index, token in enumerate(tokens):
@@ -115,6 +132,7 @@ def source_blocks(source):
             if current in (";", "}", "func", "let", "var"):
                 break
             if current in ("(", "["):
+                dependencies[name].update(default_references(cursor, pairs[cursor]))
                 cursor = pairs[cursor] + 1
                 continue
             if current == "{":

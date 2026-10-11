@@ -52,6 +52,26 @@ class AttachmentLifecycleTests(unittest.TestCase):
         """}
         self.assertEqual(lifecycle.violations(sources), [("Helpers.swift", 5, "first")])
 
+    def test_attachment_calls_in_helper_defaults_are_rejected(self):
+        for parameters in ("_ emitted: Void = emitAttachment()",
+                           "_ title: String = format(1, 2), emitted: Void = emitAttachment()",
+                           "_ prepare: () -> Void = { emitAttachment() }"):
+            with self.subTest(parameters=parameters):
+                source = f"""
+                    func emitAttachment() {{ add(XCTAttachment(string: "final")) }}
+                    func finalDiagnostic({parameters}) {{}}
+                    func testFixture() {{ defer {{ finalDiagnostic() }} }}
+                """
+                self.assertEqual(lifecycle.violations({"Defaults.swift": source}),
+                                 [("Defaults.swift", 4, "finalDiagnostic")])
+
+    def test_cleanup_defaults_and_attachment_parameter_types_are_allowed(self):
+        source = """
+            func cleanup(_ ignored: XCTAttachment? = nil, action: () -> Void = { app.terminate() }) { action() }
+            func testFixture() { defer { cleanup() } }
+        """
+        self.assertEqual(lifecycle.violations({"Defaults.swift": source}), [])
+
     def test_multiline_signatures_default_closures_and_escaped_names(self):
         sources = {"Fixture.swift": """
             func `record`(
