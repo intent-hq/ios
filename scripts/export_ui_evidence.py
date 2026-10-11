@@ -11,6 +11,10 @@ import tempfile
 
 
 CAPTURES = {
+    "FixtureCaptureLifecycleUITests": {
+        "testAssertionAbortRetainsFinalCapture": ("fixture-assertion-abort-final-state",),
+        "testPassingFixtureRetainsRepeatedFinalCapture": ("fixture-passing-final-state",),
+    },
     "ConversationMermaidUITests": {
         "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
         "testDiagramHistoryReopensAndGoToEndShowsLastAnswer": (

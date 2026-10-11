@@ -118,7 +118,14 @@ jobs:
         run: python3 scripts/test_ci_simulator.py
 
       - name: UI evidence export tests
-        run: python3 scripts/test_export_ui_evidence.py
+        run: |
+          python3 scripts/test_export_ui_evidence.py
+          python3 scripts/test_fixture_capture_lifecycle.py
+
+      - name: UI attachment lifecycle source check and mutations
+        run: |
+          python3 scripts/check_ui_attachment_lifecycle.py
+          python3 scripts/test_check_ui_attachment_lifecycle.py
 
       - name: macOS runner pool selection tests
         run: python3 scripts/test_select_macos_runner.py
@@ -768,6 +775,18 @@ jobs:
 
       - name: Build for testing
         run: scripts/xcodebuild.sh build-for-testing-ui
+
+      - name: Verify assertion-abort fixture evidence
+        run: python3 scripts/verify_fixture_capture_lifecycle.py --output-root FixtureCaptureContract
+
+      - name: Upload assertion-abort fixture evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-fixture-capture-lifecycle
+          path: FixtureCaptureContract
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Simulator state
         run: |

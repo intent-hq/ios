@@ -940,6 +940,7 @@ $(SRCROOT)/IntentUITests/CreateWorkspaceDraftUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspacePreferencesUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
 $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
+$(SRCROOT)/IntentUITests/FixtureCaptureLifecycleUITests.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuTestSupport.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
