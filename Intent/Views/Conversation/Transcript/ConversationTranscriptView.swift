@@ -185,6 +185,7 @@ private extension ConversationTranscriptView {
                 viewportHeight: geometry.visibleRect.height
             )
         } action: { _, isNearTop in
+            guard lifecycle.isVisible else { return }
             scrollState.isNearHistoryTop = isNearTop
             loadOlderMessagesIfNeeded(proxy: proxy)
         }
@@ -231,6 +232,7 @@ private extension ConversationTranscriptView {
         // the gesture short (Go to End stopping a fling, the tap that sent a
         // message) owns the flag instead.
         .onScrollPhaseChange { oldPhase, newPhase, context in
+            guard lifecycle.isVisible else { return }
             traceEvent("ScrollPhase", "old=\(oldPhase) new=\(newPhase)")
             traceSnapshot("scrollPhase")
             scrollState.isUserScrollPhase = newPhase.isUserDriven
@@ -279,15 +281,19 @@ private extension ConversationTranscriptView {
         }
         .onDisappear {
             traceSnapshot("disappear")
+            send(.viewDisappeared, proxy: proxy)
             scrollState.olderMessagesTask?.cancel()
             scrollState.olderMessagesTask = nil
             scrollState.hasScrolledForHistory = false
             scrollState.isNearHistoryTop = false
             scrollState.suspendViewport()
+            scrollState.suspendEntryScroll()
+            scrollState.isScrollingToBottom = false
+            scrollState.isUserScrollPhase = false
+            scrollState.goToEndRequested = false
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
             cancelBottomBandRePin()
-            send(.viewDisappeared, proxy: proxy)
             scrollState.trace.stop()
         }
     }

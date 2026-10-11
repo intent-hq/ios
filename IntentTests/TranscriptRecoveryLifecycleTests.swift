@@ -68,12 +68,12 @@ struct TranscriptRecoveryLifecycleTests {
         realized: Bool = false,
         next: Int = 3
     ) -> State {
-        State(owner: owner, armedRecovery: armed, fallback: fallback, isEndRealized: realized, nextTokenId: next)
+        State(visibility: .visible, owner: owner, armedRecovery: armed, fallback: fallback, isEndRealized: realized, nextTokenId: next)
     }
 
     /// A pinned transcript at rest at the bottom, its end row realized.
     func makeHarness(realized: Bool = true, scrolledAway: Bool = false) -> LifecycleHarness {
-        LifecycleHarness(state: State(isEndRealized: realized), userIsScrolledAway: scrolledAway, check: checkInvariants)
+        LifecycleHarness(state: State(visibility: .visible, isEndRealized: realized), userIsScrolledAway: scrolledAway, check: checkInvariants)
     }
 
     /// Content 1 000 in a 700 container: offset 300 is the bottom, 260 is
@@ -107,18 +107,21 @@ struct TranscriptRecoveryLifecycleTests {
 
     // MARK: - End row
 
-    @Test func freshStateIsIdleAndUnrealized() {
+    @Test func freshStateIsInactiveIdleAndUnrealized() {
         let fresh = State()
+        #expect(fresh.visibility == .inactive)
+        #expect(!fresh.isVisible)
         #expect(fresh.owner == .idle)
         #expect(fresh.armedRecovery == nil)
         #expect(fresh.fallback == .none)
         #expect(!fresh.isEndRealized)
         #expect(!fresh.isFollowing)
         #expect(fresh.currentRecovery == nil)
+        #expect(fresh.nextTokenId == 1)
     }
 
     @Test func endDerealizedArmsExactlyOneRecovery() {
-        var state = State()
+        var state = State(visibility: .visible)
         #expect(step(&state, .endDerealized) == [.startRecoveryTask(recovery1)])
         #expect(state.armedRecovery == .polling(recovery1))
         #expect(state.owner == .idle)

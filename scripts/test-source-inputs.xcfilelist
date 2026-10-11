@@ -1117,6 +1117,8 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Invariants.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Recovery.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Sequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Visibility.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+VisibilitySequences.swift
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/TransferDestinationPolicyTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift

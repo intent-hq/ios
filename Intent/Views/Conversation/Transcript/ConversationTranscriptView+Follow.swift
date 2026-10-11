@@ -11,7 +11,8 @@ extension ConversationTranscriptView {
     func send(_ event: Lifecycle.Event, proxy: ScrollViewProxy, animated: Bool = true) -> [Lifecycle.Effect] {
         recordDemoRecoveryResizeFollowBack(event)
         let (state, effects) = Lifecycle.transition(lifecycle, event)
-        traceEvent("RecoveryTransition", "event=\(event) ownerBefore=\(lifecycle.owner) ownerAfter=\(state.owner) armed=\(String(describing: state.armedRecovery)) fallback=\(state.fallback)")
+        traceEvent("RecoveryTransition", "event=\(event) visibility=\(state.visibility) ownerBefore=\(lifecycle.owner) ownerAfter=\(state.owner)"
+            + " armed=\(String(describing: state.armedRecovery)) fallback=\(state.fallback)")
         traceEvent("RecoveryEffects", "event=\(event) effects=\(effects)")
         if state != lifecycle || !effects.isEmpty {
             traceSnapshot("lifecycleTransition")
@@ -108,6 +109,7 @@ extension ConversationTranscriptView {
     }
 
     func takeOverPendingFollowIfGesture(isInteracting: Bool, proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible else { return }
         scrollState.observeViewportGesture(isInteracting: isInteracting)
         if isInteracting {
             scrollState.preservePresentedViewport(distanceToBottom: scrollMomentumProxy.distanceToBottom)
@@ -131,6 +133,7 @@ extension ConversationTranscriptView {
     /// follow; the execution and landing checks cover the frame before this
     /// runs. Go to End tapped afterwards is a fresh request.
     func cancelPendingFollowOnTakeover(proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible else { return }
         if case .follow(_, forced: true) = lifecycle.owner {
             scrollState.forcedFollowTakenOverByGesture = true
         }
@@ -146,6 +149,7 @@ extension ConversationTranscriptView {
     /// does not take the request's follow over. An unrealized-end recovery
     /// in flight is cancelled too: the request's follow owns the viewport.
     func claimViewportForExplicitFollow(proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible else { return }
         scrollState.retireViewportRestoration()
         scrollState.forcedFollowTakenOverByGesture = false
         scrollState.isUserScrollPhase = false
@@ -163,6 +167,7 @@ extension ConversationTranscriptView {
     /// old task and starts the new one (see `runFollow`), which inherits a
     /// give-up the recovery had transferred to the old.
     func scrollToBottom(proxy: ScrollViewProxy, forced: Bool, animated: Bool = true) {
+        guard lifecycle.isVisible else { return }
         if forced, !ConversationTranscriptScrollPolicy.shouldHonorForcedFollow(
             takenOverByGesture: scrollState.forcedFollowTakenOverByGesture
         ) {
