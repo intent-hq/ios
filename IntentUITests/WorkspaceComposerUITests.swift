@@ -13,6 +13,31 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
     }
 
     @MainActor
+    func testTranscriptTapDismissesKeyboardAndPreservesDraft() throws {
+        let app = launch(scenario: "composer")
+        let composer = app.textViews["composer.textView"]
+        let keyboard = app.keyboards.firstMatch
+        composer.tap()
+        composer.typeText("Keep this unsent draft")
+        XCTAssertTrue(keyboard.waitForExistence(timeout: Fixture.timeout))
+        let transcript = app.scrollViews["transcript.scrollView"]
+        transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
+
+        let dismissed = keyboard.waitForNonExistence(timeout: Fixture.timeout)
+        let composerFocused = try XCTUnwrap(composer.value(forKey: "hasKeyboardFocus") as? Bool)
+        XCTAssertTrue(dismissed, "A transcript tap must dismiss the keyboard; composer focus: \(composerFocused)")
+        XCTAssertFalse(composerFocused)
+        XCTAssertEqual(composer.value as? String, "Keep this unsent draft")
+        let reopened = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: keyboard)
+        reopened.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [reopened], timeout: 2), .completed)
+
+        composer.tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: Fixture.timeout), "An explicit tap must still focus the editor")
+        XCTAssertEqual(composer.value as? String, "Keep this unsent draft")
+    }
+
+    @MainActor
     func testMultilineSendAndStopPreserveAnInProgressDraft() {
         let app = launch(scenario: "composer")
         let composer = app.textViews["composer.textView"]
