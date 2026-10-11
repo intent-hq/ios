@@ -55,6 +55,8 @@ class AttachmentLifecycleTests(unittest.TestCase):
     def test_attachment_calls_in_helper_defaults_are_rejected(self):
         for parameters in ("_ emitted: Void = emitAttachment()",
                            "_ title: String = format(1, 2), emitted: Void = emitAttachment()",
+                           "_ emitted: Void = Diagnostics<Int, String>.emitAttachment()",
+                           "_ emitted: Void = Diagnostics<Box<Int, String>, Double>.emitAttachment(), ignored: XCTAttachment? = nil",
                            "_ prepare: () -> Void = { emitAttachment() }"):
             with self.subTest(parameters=parameters):
                 source = f"""
@@ -68,9 +70,27 @@ class AttachmentLifecycleTests(unittest.TestCase):
     def test_cleanup_defaults_and_attachment_parameter_types_are_allowed(self):
         source = """
             func cleanup(_ ignored: XCTAttachment? = nil, action: () -> Void = { app.terminate() }) { action() }
+            func cleanupGeneric(_ value: Void = Diagnostics<Int, String>.cleanup(), ignored: XCTAttachment? = nil) {}
+            func cleanupComparison(_ flag: Bool = threshold < 3, ignored: XCTAttachment? = nil) {}
             func testFixture() { defer { cleanup() } }
+            func testGeneric() { defer { cleanupGeneric() } }
+            func testComparison() { defer { cleanupComparison() } }
         """
         self.assertEqual(lifecycle.violations({"Defaults.swift": source}), [])
+
+    def test_generic_static_default_capture_reproduction(self):
+        source = """
+            enum Diagnostics<A, B> {
+                static func emitAttachment() {
+                    XCTContext.runActivity(named: "final") { activity in
+                        activity.add(XCTAttachment(string: "state"))
+                    }
+                }
+            }
+            func finalDiagnostic(_ emitted: Void = Diagnostics<Int, String>.emitAttachment()) {}
+            func testFixture() { defer { finalDiagnostic() } }
+        """
+        self.assertEqual(lifecycle.violations({"Defaults.swift": source}), [("Defaults.swift", 10, "finalDiagnostic")])
 
     def test_multiline_signatures_default_closures_and_escaped_names(self):
         sources = {"Fixture.swift": """

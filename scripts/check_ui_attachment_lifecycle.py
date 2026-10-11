@@ -103,10 +103,21 @@ def source_blocks(source):
     def default_references(start, end):
         references = set()
         cursor = start + 1
+
+        def parameter_separator(index):
+            if tokens[index] != ",":
+                return False
+            # A parameter starts with name: or label name:. Generic type
+            # argument commas (Diagnostics<Int, String>.capture()) do not.
+            tail = tokens[index + 1:end]
+            identifier = r"[A-Za-z_][A-Za-z_0-9]*"
+            return bool(len(tail) >= 2 and re.fullmatch(identifier, tail[0]) and (
+                tail[1] == ":" or len(tail) >= 3 and re.fullmatch(identifier, tail[1]) and tail[2] == ":"))
+
         while cursor < end:
             if tokens[cursor] == "=":
                 cursor += 1
-                while cursor < end and tokens[cursor] != ",":
+                while cursor < end and not parameter_separator(cursor):
                     stop = pairs[cursor] + 1 if tokens[cursor] in ("(", "[", "{") else cursor + 1
                     references.update(tokens[cursor:stop])
                     cursor = stop
