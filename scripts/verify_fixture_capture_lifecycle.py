@@ -50,7 +50,11 @@ def verify_result(status, tests, details):
     require(details.get("testResult") == "Failed", "The intentional assertion must remain Failed")
     failures = [node.get("name", "") for node in nodes(details.get("testRuns", []))
                 if node.get("nodeType") == "Failure Message"]
-    require(len(failures) == 1 and MARKER in failures[0],
+    if not failures:
+        # Xcode 26.3 puts a single assertion message directly on Test Case Run.
+        failures = [node.get("name", "") for node in nodes(details.get("testRuns", []))
+                    if node.get("nodeType") == "Test Case Run" and node.get("result") == "Failed"]
+    require(failures == ["XCTAssertTrue failed - " + MARKER],
             f"Expected only the original intentional assertion, got {failures}")
 
 

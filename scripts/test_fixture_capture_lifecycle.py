@@ -19,6 +19,21 @@ def native_results():
 
 
 class ResultTests(unittest.TestCase):
+    def test_xcode_26_3_assertion_message_on_test_case_run(self):
+        tests, details = native_results()
+        # Shape observed in a real Xcode 26.3 assertion-abort xcresult.
+        details["testRuns"] = [{"nodeType": "Device", "children": [
+            {"nodeType": "Test Plan Configuration", "children": [
+                {"nodeType": "Test Case Run", "result": "Failed",
+                 "name": "XCTAssertTrue failed - " + contract.MARKER,
+                 "children": [{"nodeType": "Source Code Reference", "name": ""}]},
+            ]},
+        ]}]
+        contract.verify_result(65, tests, details)
+        details["testRuns"][0]["children"][0]["children"][0]["name"] += " and another failure"
+        with self.assertRaisesRegex(ValueError, "original intentional assertion"):
+            contract.verify_result(65, tests, details)
+
     def test_requires_original_failure_and_passing_companion(self):
         tests, details = native_results()
         contract.verify_result(65, tests, details)
