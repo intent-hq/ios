@@ -318,7 +318,7 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 
 `.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
 `scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
-queue. The UI job also runs focused iPad menu regressions. Go tests, wrapper
+queue. The UI job also runs focused iPad sidebar regressions. Go tests, wrapper
 self-tests, and the strict SwiftLint gate run on Linux. The full UI bundle runs
 on the default branch at **09:00 and 21:00 UTC** or on manual dispatch:
 
@@ -371,7 +371,7 @@ configurations with the original assertions and timeouts.
 CI uploads `ios-ui-review-evidence` for 14 days when allowlisted captures exist,
 on success or failure and for filtered UI runs. Open its PNGs directly;
 `manifest.json` records the tested revision, suite/test, source bundle, and retry
-origin. Captures include workspace creation, menus, changes, and connection-loss
+origin. Captures include workspace creation, iPad sidebars and pairing, menus, changes, and connection-loss
 flows; `scripts/export_ui_evidence.py` is the complete allowlist. Missing images
 are not proof that a view was captured. `ios-agent-group-evidence` and
 `ios-transcript-recovery-evidence` remain separate artifacts. Run

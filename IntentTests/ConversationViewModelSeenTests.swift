@@ -108,6 +108,29 @@ extension ConversationViewModelTests {
         try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
+    @Test func coveredIPadConversationMarksBoundaryAndLeavesHiddenUpdatesUnread() async throws {
+        let (viewModel, fake) = makeSeenVM()
+        viewModel.store.messages = [textMessage(role: .assistant, text: "Visible", id: "m1")]
+        viewModel.conversationAppeared()
+        viewModel.conversationCovered()
+        await waitForMarkSeen(fake)
+        #expect(fake.paramsForMethod("agent.markSeen").first?["messageId"] as? String == "m1")
+
+        viewModel.store.messages.append(textMessage(role: .assistant, text: "Hidden", id: "m2"))
+        viewModel.store.isStreaming = true
+        viewModel.store.isStreaming = false
+        viewModel.conversationCovered()
+        try await expectNever("marking a hidden iPad update seen") {
+            fake.paramsForMethod("agent.markSeen").count > 1
+        }
+
+        viewModel.conversationAppeared()
+        viewModel.store.isStreaming = true
+        viewModel.store.isStreaming = false
+        await waitForMarkSeen(fake, count: 2)
+        #expect(fake.paramsForMethod("agent.markSeen").last?["messageId"] as? String == "m2")
+    }
+
     @Test func turnFinishWhileAppInactiveDoesNotMarkSeen() async throws {
         let (viewModel, fake) = makeSeenVM()
         viewModel.conversationAppeared()

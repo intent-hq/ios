@@ -11,6 +11,24 @@ import tempfile
 
 
 CAPTURES = {
+    "IPadSidebarUITests": {
+        "testSectionsAndPairingRestoreConversationInBothThemes": tuple(
+            f"iPad {section} {appearance}"
+            for appearance in ("light", "dark")
+            for section in (
+                "workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual",
+                "Recent sidebar", "Repo sidebar",
+            )
+        ),
+        "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
+    },
+    "HomeActionMenuUITests": {
+        "testIPadConversationKeepsDraftAndRailAvailable": (
+            "iPad expanded workspace conversation", "iPad collapsed conversation with draft",
+            "iPad portrait conversation with draft",
+        ),
+        "testIPadQuestionsKeepNextAndRailAvailable": ("iPad question actions beside persistent rail",),
+    },
     "ConversationMermaidUITests": {
         "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
         "testDiagramHistoryReopensAndGoToEndShowsLastAnswer": (

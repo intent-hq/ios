@@ -459,10 +459,6 @@ extension AppCoordinator {
         return true
     }
 
-    func onOpenSettings() {
-        currentScreen = .settings
-    }
-
     /// Log Off forgets this window's backend only. Every window on the
     /// forgotten backend leaves it via the registry's removal mark (the
     /// window root closes it, or rebinds a last remaining window to the

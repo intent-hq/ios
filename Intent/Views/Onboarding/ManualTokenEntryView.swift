@@ -74,6 +74,8 @@ struct ManualTokenEntryView: View {
     /// When set, pairing success is reported to the presenting context instead
     /// of the first-run coordinator flow.
     var onPaired: ((StoredConnection) -> Void)?
+    var isEmbedded = false
+    var onCancel: (() -> Void)?
     @State private var host = ""
     @State private var port = "5181"
     @State private var token = ""
@@ -93,6 +95,24 @@ struct ManualTokenEntryView: View {
     private enum Field { case host, port, token }
 
     var body: some View {
+        Group {
+            if isEmbedded {
+                IPadManualPairingSurface(onCancel: cancel) { entryForm }
+            } else {
+                sheetPresentation
+            }
+        }
+            .onDisappear { connectTask?.cancel() }
+            .accessibilityAction(.escape, cancel)
+            .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
+                Button("Cancel", role: .cancel) { isValidating = false }
+                Button("Trust & Connect") { connectWithFingerprint() }
+            } message: {
+                Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
+            }
+    }
+
+    private var sheetPresentation: some View {
         ConnectionSheet(
             initialHeight: Constants.ManualTokenEntry.initialSheetHeight,
             backgroundColor: Constants.Pairing.background(for: colorScheme),
@@ -100,12 +120,13 @@ struct ManualTokenEntryView: View {
         ) {
             entryForm
         }
-            .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
-                Button("Cancel", role: .cancel) { isValidating = false }
-                Button("Trust & Connect") { connectWithFingerprint() }
-            } message: {
-                Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
-            }
+    }
+
+    private func cancel() {
+        connectTask?.cancel()
+        connectTask = nil
+        focusedField = nil
+        if isEmbedded { onCancel?() } else { dismiss() }
     }
 
     private var entryForm: some View {
@@ -262,35 +283,11 @@ struct ManualTokenEntryView: View {
     }
 
     private var connectButton: some View {
-        Button(action: toggleConnectionValidation) {
-            Group {
-                if isValidating {
-                    HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
-                        ProgressView().tint(Constants.Pairing.onAccent)
-                        Text("Cancel")
-                            .interFont(Constants.Typography.bodySEmphasized)
-                    }
-                } else {
-                    Text("Connect")
-                        .interFont(Constants.Typography.bodySEmphasized)
-                }
-            }
-            .tracking(Constants.Pairing.optionTitleTracking)
-            .foregroundStyle(
-                !isValidating && (host.isEmpty || token.isEmpty)
-                    ? Constants.ConnectionSheet.disabledForeground(for: colorScheme) : Constants.Pairing.onAccent
-            )
-            .padding(.vertical, Constants.ConnectionSheet.fieldVerticalPadding)
-            .frame(maxWidth: .infinity, minHeight: Constants.ConnectionSheet.fieldHeight)
-            .background(
-                !isValidating && (host.isEmpty || token.isEmpty)
-                    ? Constants.ConnectionSheet.disabledBackground(for: colorScheme) : Constants.Pairing.accent,
-                in: .rect(cornerRadius: Constants.ConnectionSheet.fieldCornerRadius)
-            )
-        }
-        .buttonStyle(IntentContentButtonStyle())
-        .disabled(!isValidating && (host.isEmpty || token.isEmpty))
-        .accessibilityIdentifier("manual.connect")
+        ManualConnectionSubmitButton(
+            isValidating: isValidating,
+            canConnect: !host.isEmpty && !token.isEmpty,
+            onSubmit: toggleConnectionValidation
+        )
     }
 
     private func pasteToken() {
@@ -380,7 +377,7 @@ struct ManualTokenEntryView: View {
         guard let portNum = Int(port), let fingerprint = probedFingerprint,
               let input = probedInput else { return }
 
-        Task { await connect(input: input, port: portNum, fingerprint: fingerprint) }
+        connectTask = Task { await connect(input: input, port: portNum, fingerprint: fingerprint) }
     }
 
     private func connect(input: ManualConnectionInput, port: Int, fingerprint: String) async {
@@ -392,13 +389,15 @@ struct ManualTokenEntryView: View {
                 token: token,
                 connection: session.connection
             )
-            dismiss()
+            guard !Task.isCancelled else { return }
+            if !isEmbedded { dismiss() }
             if let onPaired {
                 onPaired(stored)
             } else {
                 coordinator.onPaired(stored)
             }
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "Connection failed: \(error.localizedDescription)"
             isValidating = false
         }

@@ -1,3 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
-  <path stroke="#080808" stroke-linejoin="bevel" stroke-width="2" d="M5.636 5.636a8.98 8.98 0 0 1 6.874-2.622 6 6 0 0 0 8.475 8.476 9 9 0 1 1-15.35-5.854Z"/>
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Variant=Night">
+<path id="Subtract" d="M5.63604 5.63597C7.52311 3.74891 10.0397 2.87508 12.5098 3.01436C10.3659 5.36915 10.4317 9.01742 12.7071 11.2928C14.9825 13.5682 18.6307 13.6339 20.9855 11.4901C21.1248 13.9602 20.2511 16.4768 18.364 18.3639C14.8492 21.8786 9.15076 21.8786 5.63604 18.3639C2.12132 14.8492 2.12132 9.15069 5.63604 5.63597Z" stroke-width="2" stroke-linejoin="bevel" stroke="#080808"/>
+</g>
 </svg>

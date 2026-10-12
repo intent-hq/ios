@@ -75,8 +75,13 @@ class AppCoordinator {
     var selectedSection: AppSection = .workspaces {
         didSet {
             if selectedSection != oldValue { navigationState.recentWorkspaceAgentRequestId = nil }
+            if usesIPadShell, selectedSection == .workspaces, oldValue == .assistant {
+                iPadNavigation.showWorkspaceDetail()
+            }
         }
     }
+    var usesIPadShell = false
+    var iPadNavigation = IPadNavigationState()
     var assistantAgentId: String?
     var workspaceCreationDraft: WorkspaceCreationDraft?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection

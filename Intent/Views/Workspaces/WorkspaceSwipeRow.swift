@@ -9,6 +9,8 @@ struct WorkspaceSwipeRow: View {
     let nextWorkspaceId: String?
     var spacious = true
     var showsTrailingActions = true
+    var isSidebar = false
+    var isSelected = false
     let onSelect: () -> Void
     let onOpenRecentAgent: () -> Void
     let onAction: (WorkspaceAction) -> Void
@@ -23,7 +25,7 @@ struct WorkspaceSwipeRow: View {
 
     private var actionSize: CGFloat { max(Constants.Accessibility.minimumTapTarget, scaledActionSize) }
     private var horizontalInset: CGFloat { spacious ? Constants.WorkspaceList.pageInset : 0 }
-    private var statusInset: CGFloat { horizontalInset + (spacious ? 0 : Constants.WorkspaceRow.horizontalPadding) }
+    private var statusInset: CGFloat { horizontalInset + (isSidebar ? IPadSidebarStyle.rowInset : (spacious ? 0 : Constants.WorkspaceRow.horizontalPadding)) }
     private var leadingLayout: WorkspaceSwipePolicy.LeadingLayout {
         WorkspaceSwipePolicy.leadingLayout(
             rowWidth: rowSize.width,
@@ -75,9 +77,9 @@ struct WorkspaceSwipeRow: View {
         }
         .clipped()
         .overlay(alignment: .bottom) {
-            if spacious {
+            if spacious || (isSidebar && !isSelected) {
                 Divider()
-                    .padding(.horizontal, Constants.WorkspaceList.pageInset)
+                    .padding(.horizontal, isSidebar ? 0 : Constants.WorkspaceList.pageInset)
                     .opacity(dividerOpacity)
                     .animation(reduceMotion ? nil : .easeOut(duration: DividerStyle.fadeDuration), value: dividerOpacity)
             }
@@ -116,6 +118,7 @@ struct WorkspaceSwipeRow: View {
                 colorScheme: colorScheme,
                 showRepo: showRepo,
                 spacious: spacious,
+                isSidebar: isSidebar,
                 timestampOpacity: 1 - Double(swipeProgress),
                 statusIconHidden: true,
                 minimumHeight: badgeSize.height,

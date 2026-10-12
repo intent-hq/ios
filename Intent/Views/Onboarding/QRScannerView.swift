@@ -14,6 +14,8 @@ struct QRScannerView: View {
     /// Unused on visionOS: kept so call sites pass the same arguments as the
     /// iOS QRScannerView below.
     var onPaired: ((StoredConnection) -> Void)?
+    var isEmbedded = false
+    var onCancel: (() -> Void)?
 
     var body: some View {
         NavigationStack {
@@ -28,7 +30,9 @@ struct QRScannerView: View {
                 .ignoresSafeArea()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        IntentIconButton(icon: .close, label: "Cancel") { dismiss() }
+                        IntentIconButton(icon: .close, label: "Cancel") {
+                            if isEmbedded { onCancel?() } else { dismiss() }
+                        }
                     }
                     .intentToolbarSurface()
                 }
@@ -43,6 +47,8 @@ struct QRScannerView: View {
     /// When set, pairing success is reported to the presenting context instead
     /// of the first-run coordinator flow.
     var onPaired: ((StoredConnection) -> Void)?
+    var isEmbedded = false
+    var onCancel: (() -> Void)?
     @State private var isValidating = false
     @State private var errorMessage: String?
     @State private var pendingPayload: PairingPayload?
@@ -50,6 +56,7 @@ struct QRScannerView: View {
     @State private var showFingerprintConfirmation = false
     @State private var scannerAvailability: ScannerAvailability = .checking
     @State private var errorAutoClearID: UUID?
+    @State private var connectTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -57,12 +64,13 @@ struct QRScannerView: View {
             QRScannerOverlay(
                 showsGuide: scannerAvailability == .available,
                 isValidating: isValidating,
-                errorMessage: errorMessage
-            ) {
-                dismiss()
-            }
+                errorMessage: errorMessage,
+                isEmbedded: isEmbedded,
+                onCancel: cancel
+            )
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(isEmbedded ? nil : .dark)
+        .environment(\.colorScheme, .dark)
         .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
             Button("Cancel", role: .cancel) {
                 pendingPayload = nil
@@ -72,8 +80,17 @@ struct QRScannerView: View {
         } message: {
             Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
         }
+        .onDisappear { connectTask?.cancel() }
+        .accessibilityAction(.escape, cancel)
         .task { await prepareScanner() }
         .task(id: errorAutoClearID) { await clearErrorAfterDelay() }
+    }
+
+    private func cancel() {
+        connectTask?.cancel()
+        connectTask = nil
+        pendingPayload = nil
+        if isEmbedded { onCancel?() } else { dismiss() }
     }
 
     private var scannerLayer: some View {
@@ -168,8 +185,10 @@ struct QRScannerView: View {
         // A payload fingerprint is pinned directly; without one, PairingFlow
         // probes the server cert like manual entry does and the user must
         // trust it before connecting pinned over wss — never plain ws://.
-        Task {
-            switch await PairingFlow.resolveFingerprint(for: payload) {
+        connectTask = Task {
+            let resolution = await PairingFlow.resolveFingerprint(for: payload)
+            guard !Task.isCancelled else { return }
+            switch resolution {
             case .pinned(let fingerprint):
                 connect(payload: payload, certFingerprint: fingerprint)
             case .needsUserConfirmation(let fingerprint):
@@ -188,20 +207,22 @@ struct QRScannerView: View {
     /// goes through here with a non-nil fingerprint (from the payload or the
     /// trust-confirmed probe), so scanning can never fall back to plain ws://.
     private func connect(payload: PairingPayload, certFingerprint: String) {
-        Task {
+        connectTask = Task {
             do {
                 let stored = try await PairingFlow.connect(
                     payload: payload,
                     certFingerprint: certFingerprint,
                     connectionManager: session.connection
                 )
-                dismiss()
+                guard !Task.isCancelled else { return }
+                if !isEmbedded { dismiss() }
                 if let onPaired {
                     onPaired(stored)
                 } else {
                     coordinator.onPaired(stored)
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 errorAutoClearID = nil
                 errorMessage = "Connection failed: \(error.localizedDescription)"
                 isValidating = false
@@ -214,151 +235,6 @@ private enum ScannerAvailability {
     case available
     case checking
     case unavailable
-}
-
-private struct QRScannerOverlay: View {
-    let showsGuide: Bool
-    let isValidating: Bool
-    let errorMessage: String?
-    let onCancel: () -> Void
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            if showsGuide { scanGuide }
-            IntentIconButton(icon: .close, label: "Cancel", action: onCancel)
-                .padding(.leading, Constants.QRScanner.horizontalInset)
-                .padding(.top, Constants.QRScanner.cancelTopPadding)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var scanGuide: some View {
-        let geometry = QRScannerGeometry(
-            horizontalInset: Constants.QRScanner.horizontalInset,
-            verticalOffset: Constants.QRScanner.windowVerticalOffset
-        )
-        return ZStack {
-            QRScannerMask(geometry: geometry, cornerRadius: Constants.QRScanner.windowCornerRadius)
-                .fill(.black.opacity(Constants.QRScanner.dimmingOpacity), style: FillStyle(eoFill: true))
-            QRScannerCorners(
-                geometry: geometry,
-                armLength: Constants.QRScanner.bracketArmLength,
-                cornerRadius: Constants.QRScanner.windowCornerRadius
-            )
-            .stroke(.white, style: StrokeStyle(lineWidth: Constants.QRScanner.bracketWidth, lineCap: .round))
-            QRScannerStatusLayout(geometry: geometry, topPadding: Constants.QRScanner.instructionTopPadding) {
-                scannerStatus
-                    .frame(maxWidth: .infinity)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, Constants.QRScanner.horizontalInset)
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-    }
-
-    private var scannerStatus: some View {
-        VStack(spacing: Constants.QRScanner.statusSpacing) {
-            HStack(spacing: Constants.QRScanner.statusSpacing) {
-                if isValidating {
-                    ProgressView().tint(.white)
-                    Text("Connecting…")
-                        .interFont(Constants.Typography.bodyXS)
-                } else if let error = errorMessage {
-                    Image(systemName: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
-                        .accessibilityHidden(true)
-                    Text(error)
-                        .interFont(Constants.Typography.bodyXS)
-                } else {
-                    Image(.scanHint)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: Constants.QRScanner.hintIconSize, height: Constants.QRScanner.hintIconSize)
-                        .accessibilityHidden(true)
-                    Text("Find QR code in Settings -> Mobile\nin the Intent desktop app")
-                        .interFont(Constants.Typography.bodyXS)
-                }
-            }
-        }
-        .font(.subheadline)
-        .foregroundStyle(.white)
-        .multilineTextAlignment(.center)
-    }
-}
-
-/// All guide elements derive their coordinates during layout, including the first frame.
-nonisolated private struct QRScannerGeometry {
-    let horizontalInset: CGFloat
-    let verticalOffset: CGFloat
-
-    func window(in rect: CGRect) -> CGRect {
-        let side = max(0, min(rect.width - 2 * horizontalInset, rect.height / 2))
-        return CGRect(
-            x: rect.midX - side / 2,
-            y: rect.midY - side / 2 + verticalOffset,
-            width: side,
-            height: side
-        )
-    }
-}
-
-nonisolated private struct QRScannerMask: Shape {
-    let geometry: QRScannerGeometry
-    let cornerRadius: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.addRect(rect)
-        path.addPath(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .circular)
-                .path(in: geometry.window(in: rect))
-        )
-        return path
-    }
-}
-
-private struct QRScannerStatusLayout: Layout {
-    let geometry: QRScannerGeometry
-    let topPadding: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews _: Subviews, cache _: inout ()) -> CGSize {
-        proposal.replacingUnspecifiedDimensions()
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
-        let window = geometry.window(in: bounds)
-        for subview in subviews {
-            subview.place(
-                at: CGPoint(x: bounds.midX, y: window.maxY + topPadding),
-                anchor: .top,
-                proposal: ProposedViewSize(width: bounds.width, height: nil)
-            )
-        }
-    }
-}
-
-nonisolated private struct QRScannerCorners: Shape {
-    let geometry: QRScannerGeometry
-    let armLength: CGFloat
-    let cornerRadius: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        let window = geometry.window(in: rect)
-        let arm = min(armLength, window.width / 2)
-        let radius = min(cornerRadius, arm)
-        var corner = Path()
-        corner.move(to: CGPoint(x: arm, y: 0))
-        corner.addArc(tangent1End: .zero, tangent2End: CGPoint(x: 0, y: arm), radius: radius)
-        corner.addLine(to: CGPoint(x: 0, y: arm))
-        var path = Path()
-        for (scaleX, originX) in [(1.0, window.minX), (-1.0, window.maxX)] {
-            for (scaleY, originY) in [(1.0, window.minY), (-1.0, window.maxY)] {
-                path.addPath(corner, transform: CGAffineTransform(a: scaleX, b: 0, c: 0, d: scaleY, tx: originX, ty: originY))
-            }
-        }
-        return path
-    }
 }
 
 // MARK: - Camera Preview

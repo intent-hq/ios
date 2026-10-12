@@ -1,5 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
-  <path stroke="#080808" stroke-width="1.995" d="M11.25 7.5h9m-16.5 9h9"/>
-  <circle cx="7.5" cy="7.5" r="3.502" stroke="#080808" stroke-width="1.995"/>
-  <circle cx="16.5" cy="16.5" r="3.502" stroke="#080808" stroke-width="1.995"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+<g transform="translate(3 3) scale(1.5)">
+<g id="Group 2147229407">
+<path id="Vector 5" d="M5.5 3L11.5 3" stroke-width="1.33" stroke="#080808"/>
+<path id="Vector 5_2" d="M0.5 9H6.5" stroke-width="1.33" stroke="#080808"/>
+<path id="Ellipse 25" d="M5.335 3C5.335 4.28958 4.28958 5.335 3 5.335C1.71042 5.335 0.665 4.28958 0.665 3C0.665 1.71042 1.71042 0.665 3 0.665C4.28958 0.665 5.335 1.71042 5.335 3Z" stroke-width="1.33" stroke="#080808"/>
+<path id="Ellipse 25_2" d="M11.335 9C11.335 10.2896 10.2896 11.335 9 11.335C7.71042 11.335 6.665 10.2896 6.665 9C6.665 7.71042 7.71042 6.665 9 6.665C10.2896 6.665 11.335 7.71042 11.335 9Z" stroke-width="1.33" stroke="#080808"/>
+</g>
+</g>
 </svg>
