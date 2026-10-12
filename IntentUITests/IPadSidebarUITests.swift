@@ -79,6 +79,8 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         composer.tap()
         composer.typeText(Self.draft)
         let child = app.buttons["watched-agent-demo-agent-deflake-capture"]
+        app.buttons["Hide keyboard"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(child.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         child.tap()
         let childTitle = app.staticTexts["Capture Race Fixer, Agent"]

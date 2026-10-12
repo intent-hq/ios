@@ -50,7 +50,6 @@ struct AgentHistoryList: View {
         .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
         .padding(.leading, ConnectionSwitcherStyle.trailingInset)
         .padding(.trailing, ConnectionSwitcherStyle.inset)
-        .accessibilityIdentifier("agent-history.list")
     }
 
     private var rowSnapshot: [HistoryRow] {
