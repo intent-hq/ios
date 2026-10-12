@@ -18,6 +18,10 @@ struct IPadWorkspaceDetailView: View {
         .onChange(of: coordinator.currentScreenDescription) {
             if !notePath.isEmpty { notePath = NavigationPath() }
         }
+        .onChange(of: coordinator.conversationRequestId) {
+            if !notePath.isEmpty { notePath = NavigationPath() }
+        }
+        .task { await DemoFixtures.reselectConversationIfRequested(coordinator: coordinator) }
     }
 
     @ViewBuilder private var content: some View {
@@ -28,6 +32,7 @@ struct IPadWorkspaceDetailView: View {
                 workspaceId: workspaceId,
                 agentName: agentName,
                 session: session,
+                navigationRequestId: coordinator.conversationRequestId,
                 onBack: coordinator.onBackToWorkspaceDetail
             )
             .id(agentId)

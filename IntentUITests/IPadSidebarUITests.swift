@@ -60,6 +60,41 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
+    func testRepeatedAgentSelectionReturnsFromChildAndPreservesDraft() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad retained conversation navigation")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let trigger = FileManager.default.temporaryDirectory.appendingPathComponent("ipad-reselect-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: trigger) }
+        let app = launch(appearance: "light", extraArguments: ["--demo-conversation-reselection-trigger-file=\(trigger.path)"])
+        defer { app.terminate() }
+        let workspace = app.buttons["workspace.row.demo-ws-flaky-tests"]
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        workspace.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-deflake"]
+        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        agent.tap()
+        let composer = app.textViews["composer.textView"]
+        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        composer.tap()
+        composer.typeText(Self.draft)
+        let child = app.buttons["watched-agent-demo-agent-deflake-capture"]
+        XCTAssertTrue(child.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        child.tap()
+        let childTitle = app.staticTexts["Capture Race Fixer, Agent"]
+        XCTAssertTrue(childTitle.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        app.buttons["ipad.rail.settings"].tap()
+        app.buttons["ipad.rail.workspaces"].tap()
+        XCTAssertTrue(childTitle.isHittable, "Section changes must retain the pushed conversation")
+        try Data().write(to: trigger)
+        let parentTitle = app.staticTexts["Test Stabilizer, Agent"]
+        XCTAssertTrue(parentTitle.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertTrue(childTitle.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
+    }
+
+    @MainActor
     private func captureMainScreens(in app: XCUIApplication, appearance: String) {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
         capture(app, name: "iPad workspace \(appearance)")
@@ -121,9 +156,9 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
-    private func launch(appearance: String, accessibility: Bool = false) -> XCUIApplication {
+    private func launch(appearance: String, accessibility: Bool = false, extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--demo-data", "-appThemePreference", appearance]
+        app.launchArguments = ["--demo-data", "-appThemePreference", appearance] + extraArguments
         if accessibility {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }

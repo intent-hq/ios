@@ -4,6 +4,7 @@ import UIKit
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
     @State private var proposals: ProposalActionStore
+    let navigationRequestId: Int
     var onBack: (() -> Void)?
     var onAgentUnavailable: (() -> Void)?
     var assistantStore: AssistantStore?
@@ -14,9 +15,11 @@ struct ConversationView: View {
         agentName: String,
         session: BackendSession,
         assistantStore: AssistantStore? = nil,
+        navigationRequestId: Int = 0,
         onBack: (() -> Void)? = nil,
         onAgentUnavailable: (() -> Void)? = nil
     ) {
+        self.navigationRequestId = navigationRequestId
         self.onBack = onBack
         self.onAgentUnavailable = onAgentUnavailable
         self.assistantStore = assistantStore
@@ -38,6 +41,7 @@ struct ConversationView: View {
     var body: some View {
         ConversationViewContent(
             viewModel: viewModel,
+            navigationRequestId: navigationRequestId,
             onBack: onBack,
             onAgentUnavailable: onAgentUnavailable,
             assistantStore: assistantStore
@@ -51,6 +55,7 @@ struct ConversationView: View {
 
 private struct ConversationViewContent: View {
     let viewModel: ConversationViewModel
+    let navigationRequestId: Int
     var onBack: (() -> Void)?
     var onAgentUnavailable: (() -> Void)?
     var assistantStore: AssistantStore?
@@ -103,6 +108,7 @@ private struct ConversationViewContent: View {
                 )
                 .id(dest.agentId)
             }
+            .onChange(of: navigationRequestId) { childAgent = nil }
             .task {
                 await viewModel.load()
                 handleAgentNotFoundIfNeeded()
