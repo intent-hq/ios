@@ -125,7 +125,8 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         app.buttons["workspaces.menu.recentAgents"].tap()
         let entry = app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@ AND identifier ENDSWITH %@",
-            "agent-history.entry.", "/demo-agent-implementor"
+            "agent-history.entry.",
+            "/demo-agent-implementor"
         )).firstMatch
         XCTAssertTrue(entry.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         let close = app.buttons["agent-history.close"]
