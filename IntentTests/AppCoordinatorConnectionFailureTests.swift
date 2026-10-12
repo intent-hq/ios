@@ -8,6 +8,7 @@ extension AppCoordinatorTests {
     @MainActor func explicitConnectionAfterLaunchShowsBack(action: String) {
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let coordinator = makeLaunchCoordinator(for: stored, registry: BackendSessionRegistry())
+        #expect(coordinator.connectingStartedByLaunch)
         coordinator.onLoadComplete()
         #expect(coordinator.connectingStartedByLaunch)
 
@@ -53,15 +54,18 @@ extension AppCoordinatorTests {
 
         // Restoring another backend must not consume this selection's token.
         let otherWindow = makeLaunchCoordinator(for: other, registry: registry)
+        #expect(otherWindow.connectingStartedByLaunch)
         otherWindow.onLoadComplete()
         #expect(otherWindow.connectingStartedByLaunch)
         let selected = makeLaunchCoordinator(for: stored, registry: registry)
+        #expect(!selected.connectingStartedByLaunch, "Project switching must use its artwork from the first loading frame")
         selected.onLoadComplete()
         #expect(selected.currentScreenDescription == "connecting")
         #expect(!selected.connectingStartedByLaunch)
 
         // The token is spent: a later automatic restoration is not a selection.
         let restored = makeLaunchCoordinator(for: stored, registry: registry)
+        #expect(restored.connectingStartedByLaunch)
         restored.onLoadComplete()
         #expect(restored.connectingStartedByLaunch)
         // A new process also starts with no selection, even for the same saved record.

@@ -188,7 +188,7 @@ struct RootView: View {
             // it in this stable position preserves animation playback across
             // the phase transition; the phase views render on top.
             if isLaunchSplash {
-                SplashArtView()
+                SplashArtView(style: coordinator.connectingStartedByLaunch ? .launch : .projectSwitch)
             }
             switch coordinator.currentScreen {
             case .loading:
