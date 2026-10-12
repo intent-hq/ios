@@ -19,7 +19,7 @@ struct IPadNavigationRail: View {
                     .disabled(!canUseAssistant)
                 destination(.workspaces, asset: .agentGeneral1, label: "Workspaces")
                 destination(.connections, asset: .connectionLaptop, label: "Connections")
-                railButton(asset: .night, label: "Appearance", identifier: "ipad.rail.appearance") {
+                railButton(asset: appearanceAsset, label: "Appearance", identifier: "ipad.rail.appearance") {
                     themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"
                 }
                 .accessibilityValue(appearanceTitle)
@@ -75,6 +75,14 @@ struct IPadNavigationRail: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier(identifier)
         .help(label)
+    }
+
+    private var appearanceAsset: ImageResource {
+        switch themePreference {
+        case "light": .brightnessFull
+        case "dark": .night
+        default: .brightnessRise
+        }
     }
 
     private var appearanceTitle: String {
