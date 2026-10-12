@@ -19,7 +19,7 @@ struct IPadShellView: View {
     private var layout: IPadShellLayout {
         IPadShellLayout(width: width ?? 0, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
     }
-    private var measuredOverlay: Bool? { width.map { _ in layout.usesSidebarOverlay } }
+    private var measuredLayout: IPadShellLayout? { width.map { _ in layout } }
     private var sidebarPresentation: SidebarPresentation {
         SidebarPresentation(isVisible: navigation.isSidebarVisible, usesOverlay: navigation.usesSidebarOverlay)
     }
@@ -83,8 +83,8 @@ struct IPadShellView: View {
         .opacity(width == nil ? 0 : 1)
         .background(Constants.Pairing.background(for: colorScheme).ignoresSafeArea())
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if $0 > 0 { width = $0 } }
-        .onChange(of: measuredOverlay, initial: true) { _, usesOverlay in
-            if let usesOverlay { coordinator.iPadNavigation.updateLayout(usesOverlay: usesOverlay) }
+        .onChange(of: measuredLayout, initial: true) { _, measuredLayout in
+            if let measuredLayout { coordinator.iPadNavigation.updateLayout(usesOverlay: measuredLayout.usesSidebarOverlay) }
         }
         .onChange(of: sidebarPresentation) { old, new in
             // Layout changes (first measurement, rotation) must not move VoiceOver focus.
