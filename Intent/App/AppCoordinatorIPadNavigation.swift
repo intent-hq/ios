@@ -32,14 +32,11 @@ extension AppCoordinator {
         iPadNavigation.selectSection(section)
     }
 
-    func synchronizeIPadWorkspaceRoute() {
+    /// Only explicit workspace selections move the shell. Background redirects
+    /// (a missing workspace, reconnect restore) update the retained pane in place.
+    func revealIPadWorkspaceRoute() {
         guard usesIPadShell else { return }
-        switch currentScreen {
-        case .workspaceList, .workspaceDetail, .agentConversation, .noteDetail:
-            iPadNavigation.showWorkspaceDetail()
-        default:
-            break
-        }
+        iPadNavigation.showWorkspaceDetail()
     }
 
     func onIPadAssistantAccessChanged() {

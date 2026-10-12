@@ -7,7 +7,8 @@ struct IPadShellView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var width: CGFloat = 0
+    /// Nil until measured, so a zero first width never drives the navigation layout.
+    @State private var width: CGFloat?
     @State private var isSearchingWorkspaces = false
     @State private var showingCreateWorkspace = false
     @State private var showingConnectionSwitcher = false
@@ -16,9 +17,13 @@ struct IPadShellView: View {
 
     private var navigation: IPadNavigationState { coordinator.iPadNavigation }
     private var layout: IPadShellLayout {
-        IPadShellLayout(width: width, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
+        IPadShellLayout(width: width ?? 0, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
     }
-    private var isDrawerVisible: Bool { layout.usesSidebarOverlay && navigation.isSidebarVisible }
+    private var measuredOverlay: Bool? { width.map { _ in layout.usesSidebarOverlay } }
+    private var sidebarPresentation: SidebarPresentation {
+        SidebarPresentation(isVisible: navigation.isSidebarVisible, usesOverlay: navigation.usesSidebarOverlay)
+    }
+    private var isDrawerVisible: Bool { navigation.usesSidebarOverlay && navigation.isSidebarVisible }
     private var workspaceActionsEnabled: Bool {
         navigation.section == .workspaces && navigation.pairing == nil && !showingCreateWorkspace
     }
@@ -75,13 +80,15 @@ struct IPadShellView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(layout.inset)
+        .opacity(width == nil ? 0 : 1)
         .background(Constants.Pairing.background(for: colorScheme).ignoresSafeArea())
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .onChange(of: layout.usesSidebarOverlay, initial: true) { _, usesOverlay in
-            coordinator.iPadNavigation.updateLayout(usesOverlay: usesOverlay)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if $0 > 0 { width = $0 } }
+        .onChange(of: measuredOverlay, initial: true) { _, usesOverlay in
+            if let usesOverlay { coordinator.iPadNavigation.updateLayout(usesOverlay: usesOverlay) }
         }
-        .onChange(of: navigation.isSidebarVisible) { oldValue, newValue in
-            if oldValue, !newValue { detailFocused = true }
+        .onChange(of: sidebarPresentation) { old, new in
+            // Layout changes (first measurement, rotation) must not move VoiceOver focus.
+            if old.usesOverlay == new.usesOverlay, old.isVisible, !new.isVisible { detailFocused = true }
         }
     }
 
@@ -173,4 +180,9 @@ struct IPadShellView: View {
         showingConnectionSwitcher = false
         showingCreateWorkspace = true
     }
+}
+
+private struct SidebarPresentation: Equatable {
+    let isVisible: Bool
+    let usesOverlay: Bool
 }

@@ -111,6 +111,7 @@ extension AppCoordinator {
         selectedWorkspaceId = workspaceId
         currentScreen = .workspaceDetail(workspaceId: workspaceId)
         saveCurrentScreen()
+        revealIPadWorkspaceRoute()
     }
 
     /// A completed row swipe opens the overview first, then the most recently
@@ -205,6 +206,7 @@ extension AppCoordinator {
         conversationRequestId += 1
         currentScreen = .agentConversation(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
         saveCurrentScreen()
+        revealIPadWorkspaceRoute()
     }
 
     func onSelectAssistant(agentId: String? = nil) {
@@ -228,6 +230,7 @@ extension AppCoordinator {
         selectedSection = .workspaces
         currentScreen = .noteDetail(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
         saveCurrentScreen()
+        revealIPadWorkspaceRoute()
     }
 
     func onBackFromNote() {

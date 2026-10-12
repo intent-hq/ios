@@ -66,7 +66,6 @@ class AppCoordinator {
     var currentScreen: AppScreen = .loading {
         didSet {
             navigationState.recentWorkspaceAgentRequestId = nil
-            synchronizeIPadWorkspaceRoute()
             recordAgentVisit()
             if !currentScreen.supportsConnectionLossOverlay {
                 resetConnectionLossEligibility()

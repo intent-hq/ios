@@ -169,6 +169,31 @@ extension AppCoordinatorTests {
         #expect(coordinator.selectedWorkspaceId == "workspace")
     }
 
+    @Test @MainActor func iPadBackgroundRedirectKeepsSectionAndPairingUntilExplicitSelection() {
+        let coordinator = iPadCoordinator(connection: FakeConnectionManager())
+        coordinator.onSelectWorkspace("workspace")
+        coordinator.onSelectAssistant(agentId: "assistant-thread")
+        coordinator.onSelectIPadSection(.settings)
+        coordinator.iPadNavigation.presentPairing(.manual)
+
+        coordinator.handleMissingWorkspace()
+
+        guard case .workspaceList = coordinator.currentScreen else {
+            Issue.record("Expected .workspaceList, got \(coordinator.currentScreen)")
+            return
+        }
+        #expect(coordinator.iPadNavigation.section == .settings)
+        #expect(coordinator.iPadNavigation.detail == .assistant)
+        #expect(coordinator.iPadNavigation.pairing == .manual)
+        #expect(coordinator.selectedSection == .assistant)
+
+        coordinator.onSelectWorkspace("workspace")
+        #expect(coordinator.iPadNavigation.section == .workspaces)
+        #expect(coordinator.iPadNavigation.detail == .workspace)
+        #expect(coordinator.iPadNavigation.pairing == nil)
+        #expect(coordinator.selectedSection == .workspaces)
+    }
+
     @Test @MainActor func iPadLayoutUsesReadablePanesAndAdaptsForTextSize() {
         let large = IPadShellLayout(width: IPadReference.largeWidth, isAccessibilitySize: false)
         let small = IPadShellLayout(width: IPadReference.smallWidth, isAccessibilitySize: false)
