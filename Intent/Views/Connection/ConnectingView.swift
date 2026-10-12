@@ -12,6 +12,10 @@ struct ConnectingView: View {
 
     private typealias Layout = Constants.Connecting
 
+    private var statusColorScheme: ColorScheme {
+        coordinator.connectingStartedByLaunch ? .light : colorScheme
+    }
+
     var body: some View {
         VStack {
             Spacer()
@@ -28,11 +32,13 @@ struct ConnectingView: View {
             if !session.connection.certMismatches.isEmpty {
                 CertMismatchListView(
                     mismatches: session.connection.certMismatches,
-                    warningForeground: Theme.foreground(for: colorScheme)
+                    warningForeground: Theme.foreground(for: statusColorScheme)
                 )
                 .padding(.horizontal, Layout.mismatchHorizontalPadding)
             }
         }
+        .foregroundStyle(Theme.foreground(for: statusColorScheme))
+        .environment(\.colorScheme, statusColorScheme)
         .padding(.bottom, Layout.contentBottomPadding)
         .frame(maxWidth: .infinity)
         .safeAreaInset(edge: .top, alignment: .leading, spacing: 0) {
