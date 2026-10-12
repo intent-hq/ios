@@ -15,7 +15,10 @@ CAPTURES = {
         "testSectionsAndPairingRestoreConversationInBothThemes": tuple(
             f"iPad {section} {appearance}"
             for appearance in ("light", "dark")
-            for section in ("workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual")
+            for section in (
+                "workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual",
+                "Recent sidebar", "Repo sidebar",
+            )
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
     },

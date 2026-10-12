@@ -152,7 +152,17 @@ struct WorkspaceListSidebar: View {
         )) {
             switch viewModel.viewMode {
             case .recent:
-                sidebarRows(viewModel.filteredWorkspaces)
+                if isEmbedded {
+                    Section {
+                        sidebarRows(viewModel.filteredWorkspaces)
+                    } header: {
+                        Color.clear.frame(height: 0)
+                            .listRowInsets(EdgeInsets())
+                            .accessibilityHidden(true)
+                    }
+                } else {
+                    sidebarRows(viewModel.filteredWorkspaces)
+                }
             case .repo:
                 let groups = viewModel.groupedByRepo.map { repoName, workspaces in
                     let content = Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
@@ -179,6 +189,7 @@ struct WorkspaceListSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        .environment(\.defaultMinListHeaderHeight, isEmbedded && viewModel.viewMode == .recent ? 0 : nil)
         .listRowSpacing(isEmbedded ? 0 : nil)
         #if !os(visionOS)
         // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).

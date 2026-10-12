@@ -97,6 +97,12 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     @MainActor
     private func captureMainScreens(in app: XCUIApplication, appearance: String) {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        for mode in ["Repo", "Recent"] {
+            let control = app.buttons["workspaces.viewMode.\(mode)"]
+            control.tap()
+            XCTAssertTrue(control.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+            capture(app, name: "iPad \(mode) sidebar \(appearance)")
+        }
         capture(app, name: "iPad workspace \(appearance)")
         app.buttons["ipad.sidebar.collapse"].tap()
         XCTAssertTrue(app.buttons["ipad.sidebar.expand"].waitForExistence(timeout: Self.timeout))
