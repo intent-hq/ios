@@ -17,7 +17,7 @@ CAPTURES = {
             for appearance in ("light", "dark")
             for section in (
                 "workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual",
-                "Recent sidebar", "Repo sidebar",
+                "Recent sidebar", "Repo sidebar", "Status sidebar", "first workspace selected",
             )
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
