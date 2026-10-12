@@ -99,7 +99,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar toggling")
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
-        let app = launch(appearance: "dark")
+        let app = launch(appearance: "dark", extraArguments: ["--demo-settings"])
         defer { app.terminate() }
         openConversation(in: app)
         let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
