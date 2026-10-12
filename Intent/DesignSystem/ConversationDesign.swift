@@ -19,10 +19,11 @@ extension Constants.Conversation {
 
 extension Constants.Conversation.Design {
     enum IPad {
+        private static let readableCharacterCount: CGFloat = 72
         static let readableWidth: CGFloat = {
             let font = Constants.Typography.bodyS.uiFont(compatibleWith: UITraitCollection(preferredContentSizeCategory: .large))
             // Match 72ch using the body font's zero-glyph advance at the baseline text size.
-            return ("0" as NSString).size(withAttributes: [.font: font]).width * 72
+            return "0".size(withAttributes: [.font: font]).width * Self.readableCharacterCount
         }()
         static let userBubbleMaximumWidth: CGFloat = 270
         static let minimumHorizontalInset: CGFloat = 16
