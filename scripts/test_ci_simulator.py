@@ -23,7 +23,7 @@ TYPE = "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4"
 PHONE_TYPE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16"
 OLD = "11111111-1111-4111-8111-111111111111"
 NEW = "22222222-2222-4222-8222-222222222222"
-SELECTORS = "IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsSendAndMenuAvailable IntentTests/PersonalPairingPermissionsTests"
+SELECTORS = "IntentUITests/HomeActionMenuUITests/testIPadConversationKeepsDraftAndRailAvailable IntentTests/PersonalPairingPermissionsTests"
 
 
 def result_document(cases):
@@ -361,7 +361,7 @@ class OrdinaryCITests(unittest.TestCase):
             return textwrap.dedent(command[2:]) if command.startswith("|\n") else command.strip()
 
         self.assertLess(job.index("name: Create owned iPhone simulator"), job.index("name: Pre-boot simulator"))
-        self.assertLess(job.index("name: Clean up owned iPhone simulator"), job.index("name: Run iPad menu regression tests"))
+        self.assertLess(job.index("name: Clean up owned iPhone simulator"), job.index("name: Run iPad sidebar regression tests"))
         for name in ("Clean up owned iPhone simulator", "Clean up owned iPad simulator"):
             section = job.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
             self.assertIn("if: always()", section)
@@ -423,7 +423,7 @@ class OrdinaryCITests(unittest.TestCase):
                 overrides = {"SIMULATOR_FAMILY": "ipad", "SIMULATOR_EVIDENCE_DIR": str(root / "runner temp" / "intent-simulator-123-2-ui-ipad"),
                              "FAIL_CREATE": "1" if outcome == "create-failed" else "0"}
                 if outcome != "skipped":
-                    result = execute("Run iPad menu regression tests", overrides)
+                    result = execute("Run iPad sidebar regression tests", overrides)
                     self.assertEqual(result.returncode, 1 if outcome == "create-failed" else int(env["TEST_EXIT"]), result.stderr)
                     ipad = json.loads((Path(overrides["SIMULATOR_EVIDENCE_DIR"]) / "ownership.json").read_text())
                     if outcome != "create-failed":

@@ -16,6 +16,8 @@ struct QuestionWizardView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.conversationPresentation) private var presentation
+    @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
 
     private typealias Layout = Constants.Conversation.QuestionWizard.Surface
     private typealias Design = Constants.Conversation.Design
@@ -59,6 +61,7 @@ struct QuestionWizardView: View {
     private var isLast: Bool { idx == questions.count - 1 }
     private var isMulti: Bool { current.multiSelect }
     private var multiStep: Bool { questions.count > 1 }
+    private var isPaneVisible: Bool { presentation != .iPad || isIPadPaneVisible }
     private var hasFreeText: Bool {
         !drafts[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -104,6 +107,9 @@ struct QuestionWizardView: View {
         }
         .onChange(of: collapsed) { _, collapsed in
             if collapsed { answerFocused = false }
+        }
+        .onChange(of: isPaneVisible) { _, visible in
+            if !visible { answerFocused = false }
         }
         .animation(
             reduceMotion
@@ -204,7 +210,7 @@ struct QuestionWizardView: View {
                 onSelect: selectOption,
                 onSubmit: handleNext,
                 onTextChange: { drafts[step].skipped = false },
-                isActive: step == idx && !collapsed
+                isActive: step == idx && !collapsed && isPaneVisible
             )
             footer(for: step)
         }

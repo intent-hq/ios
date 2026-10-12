@@ -16,11 +16,22 @@ struct ConversationTranscriptView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.workspaceTranscriptDesign) var usesWorkspaceDesign
+    @Environment(\.conversationPresentation) var presentation
     @ScaledMetric(relativeTo: .caption) var actionIconSide: CGFloat = 12
 
     typealias Lifecycle = ConversationTranscriptRecoveryLifecycle
 
     var transcriptColorScheme: ColorScheme { colorScheme }
+
+    var transcriptRowSpacing: CGFloat {
+        if presentation == .iPad { return Constants.Conversation.Design.IPad.transcriptRowSpacing }
+        return usesWorkspaceDesign ? Constants.Conversation.Design.sectionSpacing : Layout.transcriptRowSpacing
+    }
+
+    private var transcriptHorizontalInset: CGFloat {
+        if presentation == .iPad { return 0 }
+        return usesWorkspaceDesign ? Constants.Conversation.Design.horizontalInset : Layout.transcriptHorizontalPadding
+    }
 
     var scrollMomentumProxy: ScrollViewMomentumProxy {
         scrollState.momentumProxy
@@ -157,10 +168,10 @@ private extension ConversationTranscriptView {
     // swiftlint:disable:next function_body_length
     private func transcriptScrollBase(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         ScrollView {
-            LazyVStack(spacing: usesWorkspaceDesign ? Constants.Conversation.Design.sectionSpacing : Layout.transcriptRowSpacing) {
+            LazyVStack(spacing: transcriptRowSpacing) {
                 transcriptRows(proxy: proxy, dividerAnchorId: dividerAnchorId)
             }
-            .padding(.horizontal, usesWorkspaceDesign ? Constants.Conversation.Design.horizontalInset : Layout.transcriptHorizontalPadding)
+            .padding(.horizontal, transcriptHorizontalInset)
             .padding(.top, Layout.transcriptTopPadding)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.width

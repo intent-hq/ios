@@ -4,6 +4,7 @@ struct AssistantView: View {
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.conversationPresentation) private var presentation
 
     private var store: AssistantStore { session.assistantStore }
 
@@ -13,7 +14,7 @@ struct AssistantView: View {
 
     private var usesWorkspaceDesign: Bool {
         #if os(iOS)
-        horizontalSizeClass == .compact
+        presentation == .iPad || horizontalSizeClass == .compact
         #else
         false
         #endif
@@ -30,11 +31,11 @@ struct AssistantView: View {
             .safeAreaInset(edge: .top) {
                 if usesWorkspaceDesign, selectedThread == nil {
                     VStack(spacing: 0) {
-                        emptyHeader
-                        errorBanner
+                        emptyHeader.conversationReadableColumn()
+                        errorBanner.conversationReadableColumn()
                     }
                 } else {
-                    errorBanner
+                    errorBanner.conversationReadableColumn()
                 }
             }
         }
@@ -150,7 +151,11 @@ struct AssistantView: View {
     private func createThread() {
         Task {
             if let id = await store.createThread() {
-                coordinator.assistantAgentId = id
+                if presentation == .iPad {
+                    coordinator.onSelectAssistant(agentId: id)
+                } else {
+                    coordinator.assistantAgentId = id
+                }
             }
         }
     }

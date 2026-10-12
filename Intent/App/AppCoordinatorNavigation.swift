@@ -111,6 +111,7 @@ extension AppCoordinator {
         selectedWorkspaceId = workspaceId
         currentScreen = .workspaceDetail(workspaceId: workspaceId)
         saveCurrentScreen()
+        revealIPadWorkspaceRoute()
     }
 
     /// A completed row swipe opens the overview first, then the most recently
@@ -205,6 +206,7 @@ extension AppCoordinator {
         conversationRequestId += 1
         currentScreen = .agentConversation(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
         saveCurrentScreen()
+        revealIPadWorkspaceRoute()
     }
 
     func onSelectAssistant(agentId: String? = nil) {
@@ -221,12 +223,14 @@ extension AppCoordinator {
                 currentScreen = .workspaceList
             }
         }
+        if usesIPadShell { iPadNavigation.showAssistantDetail() }
     }
 
     func onSelectNote(_ noteId: String, workspaceId: String, noteTitle: String) {
         selectedSection = .workspaces
         currentScreen = .noteDetail(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
         saveCurrentScreen()
+        revealIPadWorkspaceRoute()
     }
 
     func onBackFromNote() {
@@ -345,5 +349,13 @@ extension AppCoordinator {
 
     func onSettingsBack() {
         currentScreen = .workspaceList
+    }
+
+    func onOpenSettings() {
+        if usesIPadShell, currentScreen.supportsConnectionLossOverlay {
+            onSelectIPadSection(.settings)
+            return
+        }
+        currentScreen = .settings
     }
 }

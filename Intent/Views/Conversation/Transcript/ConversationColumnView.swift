@@ -13,6 +13,7 @@ struct ConversationColumnView: View {
     var onDemoCover: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.conversationPresentation) private var presentation
     @State private var questionWizardCollapsed = false
     @State private var conversationHeight: CGFloat = 0
     @State private var questionInputTop: CGFloat?
@@ -136,10 +137,10 @@ struct ConversationColumnView: View {
 
         questionRegion
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { questionInputTop = $0 }
-            .preference(key: WorkspaceActionMenuInputTop.self, value: composerVisible || usesWorkspaceDesign ? nil : questionInputTop)
-            .layoutPriority(usesWorkspaceDesign ? 1 : 0)
+            .preference(key: WorkspaceActionMenuInputTop.self, value: composerVisible || usesPhoneQuestionPresentation ? nil : questionInputTop)
+            .layoutPriority(usesPhoneQuestionPresentation ? 1 : 0)
 
-        if !viewModel.showsLoadingState, composerVisible || usesWorkspaceDesign {
+        if !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
             VStack(spacing: 0) {
                 if usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
                     MonitoredPrsRow(
@@ -164,7 +165,7 @@ struct ConversationColumnView: View {
                     )
                     .padding(.horizontal, usesWorkspaceDesign ? stickyHorizontalInset : 0)
                     .padding(.top, usesWorkspaceDesign && !workspaceQueueVisible ? Design.Composer.keyboardBottomSpacing : 0)
-                    .padding(.bottom, usesWorkspaceDesign ? Design.Composer.keyboardBottomSpacing : 0)
+                    .padding(.bottom, usesWorkspaceDesign ? composerBottomInset : 0)
                 }
             }
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerInputTop = $0 }
@@ -172,49 +173,21 @@ struct ConversationColumnView: View {
         }
     }
 
-    @ViewBuilder
-    private var accessoryRows: some View {
-        if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
+    private var workspaceQueueVisible: Bool {
+        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
+    }
 
-        if viewModel.store.isWaitingForAgents {
-            VStack(spacing: 0) {
-                AgentWaitingView(
-                    viewModel: viewModel,
-                    store: viewModel.store,
-                    onNavigateToAgent: onNavigateToAgent
-                )
-                Divider()
-            }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
+    private var stickyHorizontalInset: CGFloat {
+        guard presentation != .iPad else { return 0 }
+        return keyboardVisible || composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
+    }
 
-        if !usesWorkspaceDesign, !viewModel.showsLoadingState,
-           !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
-            VStack(spacing: 0) {
-                MonitoredPrsRow(
-                    viewModel: viewModel,
-                    monitoredPrStore: viewModel.monitoredPrStore
-                )
-                Divider()
-            }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
+    private var composerBottomInset: CGFloat {
+        presentation == .iPad && !keyboardVisible ? Design.IPad.composerBottomInset : Design.Composer.keyboardBottomSpacing
+    }
 
-        if !viewModel.activeAgentHooks.isEmpty || viewModel.hookStore.error != nil {
-            VStack(spacing: 0) {
-                BackgroundHooksRow(
-                    viewModel: viewModel,
-                    hookStore: viewModel.hookStore
-                )
-                Divider()
-            }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-
-        if !usesWorkspaceDesign, !viewModel.queuedMessages.isEmpty {
-            QueuedMessagesView(viewModel: viewModel)
-            Divider()
-        }
+    private var usesPhoneQuestionPresentation: Bool {
+        usesWorkspaceDesign && presentation != .iPad
     }
 
     @ViewBuilder
@@ -235,7 +208,7 @@ struct ConversationColumnView: View {
             .padding(.horizontal, Layout.questionBannerHorizontalPadding)
             .padding(.vertical, Layout.questionBannerVerticalPadding)
             #else
-            if usesWorkspaceDesign {
+            if usesPhoneQuestionPresentation {
                 WorkspaceQuestionPendingBanner(
                     viewModel: viewModel,
                     pendingSet: pendingSet
@@ -266,7 +239,7 @@ struct ConversationColumnView: View {
                     }
                 )
                 .id(pendingSet.messageId)
-                .padding(.horizontal, Layout.questionWizardHorizontalPadding)
+                .padding(.horizontal, presentation == .iPad ? 0 : Layout.questionWizardHorizontalPadding)
                 .padding(.top, Layout.questionWizardTopPadding)
                 .padding(
                     .bottom,
@@ -340,19 +313,70 @@ struct ConversationColumnView: View {
     #endif
 }
 
-private extension ConversationColumnView {
-    var workspaceQueueVisible: Bool {
-        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
-    }
+extension ConversationColumnView {
+    @ViewBuilder
+    private var accessoryRows: some View {
+        if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
 
-    var stickyHorizontalInset: CGFloat {
-        keyboardVisible || composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
+        if viewModel.store.isWaitingForAgents {
+            VStack(spacing: 0) {
+                AgentWaitingView(
+                    viewModel: viewModel,
+                    store: viewModel.store,
+                    onNavigateToAgent: onNavigateToAgent
+                )
+                Divider()
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+
+        if !usesWorkspaceDesign, !viewModel.showsLoadingState,
+           !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
+            VStack(spacing: 0) {
+                MonitoredPrsRow(
+                    viewModel: viewModel,
+                    monitoredPrStore: viewModel.monitoredPrStore
+                )
+                Divider()
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+
+        if !viewModel.activeAgentHooks.isEmpty || viewModel.hookStore.error != nil {
+            VStack(spacing: 0) {
+                BackgroundHooksRow(
+                    viewModel: viewModel,
+                    hookStore: viewModel.hookStore
+                )
+                Divider()
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+
+        if !usesWorkspaceDesign, !viewModel.queuedMessages.isEmpty {
+            QueuedMessagesView(viewModel: viewModel)
+            Divider()
+        }
+
+        // The inline iPad wizard occupies the composer slot. Keep monitoring and
+        // queued-message actions reachable while that slot is answering questions.
+        if presentation == .iPad, !composerVisible, !viewModel.showsLoadingState {
+            if !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
+                MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: viewModel.monitoredPrStore, usesWorkspaceDesign: true)
+                    .padding(.vertical, Design.Status.composerSpacing)
+            }
+            if workspaceQueueVisible {
+                WorkspaceQueuedMessagesView(viewModel: viewModel)
+                    .padding(.vertical, Design.Queue.composerSpacing)
+            }
+        }
     }
 }
 
 private struct ConversationConnectionLoadingView: View {
     let viewModel: ConversationViewModel
     let usesWorkspaceDesign: Bool
+    @Environment(\.conversationPresentation) private var presentation
 
     private var message: LocalizedStringResource {
         switch viewModel.loadingStage {
@@ -374,11 +398,15 @@ private struct ConversationConnectionLoadingView: View {
                 onRetry: viewModel.retryNow
             )
             .id(viewModel.conversationConsumer)
-            .padding(.horizontal, usesWorkspaceDesign
-                ? Constants.Conversation.Design.horizontalInset : Constants.Conversation.Transcript.transcriptHorizontalPadding)
+            .padding(.horizontal, horizontalInset)
             .padding(.vertical, Constants.Conversation.Transcript.transcriptTopPadding)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var horizontalInset: CGFloat {
+        if presentation == .iPad { return 0 }
+        return usesWorkspaceDesign ? Constants.Conversation.Design.horizontalInset : Constants.Conversation.Transcript.transcriptHorizontalPadding
     }
 }
 

@@ -103,6 +103,13 @@ extension ConversationViewModel {
         isOnScreen = true
     }
 
+    /// A retained iPad pane has left sight, but its draft and live leases stay mounted.
+    func conversationCovered() {
+        guard isOnScreen else { return }
+        isOnScreen = false
+        fireMarkSeenNow()
+    }
+
     func conversationDisappeared() {
         isOnScreen = false
         teardownLiveStores()

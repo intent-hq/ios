@@ -9,10 +9,14 @@ extension EnvironmentValues {
 struct WorkspaceUserBubbleLayout: Layout {
     var usesFullWidth: Bool
     var layoutDirection: LayoutDirection
+    var maximumWidth: CGFloat?
 
     private func bubbleProposal(_ proposal: ProposedViewSize) -> ProposedViewSize {
         let fraction = usesFullWidth ? 1 : Constants.Conversation.Design.Transcript.bubbleMaximumWidthFraction
-        return ProposedViewSize(width: proposal.width.map { $0 * fraction }, height: nil)
+        return ProposedViewSize(
+            width: proposal.width.map { usesFullWidth ? $0 : min($0 * fraction, maximumWidth ?? .infinity) },
+            height: nil
+        )
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {

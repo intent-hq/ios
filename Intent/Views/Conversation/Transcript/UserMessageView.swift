@@ -13,10 +13,12 @@ struct UserMessageView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(BackendSession.self) private var session
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.conversationPresentation) private var presentation
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .body) private var workspaceFontSize = Constants.Typography.bodyS.size
+    @ScaledMetric(relativeTo: .body) private var iPadBubbleWidth = Design.IPad.userBubbleMaximumWidth
 
     /// Derived once per message value in `init` rather than on every `body`
     /// evaluation (the body also re-runs on the expansion toggle): the wake /
@@ -59,7 +61,8 @@ struct UserMessageView: View {
         if workspaceDesign {
             WorkspaceUserBubbleLayout(
                 usesFullWidth: dynamicTypeSize.isAccessibilitySize || hookWake != nil || prWake != nil,
-                layoutDirection: layoutDirection
+                layoutDirection: layoutDirection,
+                maximumWidth: presentation == .iPad && usesTrimmedMessageText ? iPadBubbleWidth : nil
             ) {
                 bubble
             }

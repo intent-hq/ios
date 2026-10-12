@@ -42,8 +42,10 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
             ConnectionSwitcherStyle.background(for: colorScheme).ignoresSafeArea()
             panel
                 .frame(width: revealWidth)
+                .accessibilityAction(.escape, close)
+                .accessibilityElement(children: isPresented ? .contain : .ignore)
                 .allowsHitTesting(isPresented)
-                .accessibilityHidden(!isPresented)
+                .accessibilityHidden(true, isEnabled: !isPresented)
 
             slidingPage
         }
@@ -70,7 +72,6 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
             onEnded: finish,
             onCancelled: cancelDrag
         ))
-        .accessibilityAction(.escape, close)
         .onChange(of: isRevealed) { _, revealed in
             if revealed { onReveal() }
         }
@@ -89,9 +90,11 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
 
     private var slidingPage: some View {
         content
+            .accessibilityElement(children: isRevealed ? .ignore : .contain)
             .scrollDisabled(isRevealed)
             .allowsHitTesting(!isRevealed)
-            .accessibilityHidden(isRevealed)
+            // A closed drawer must preserve hidden states inside the page.
+            .accessibilityHidden(true, isEnabled: isRevealed)
             .overlay {
                 if isRevealed {
                     Button { close() } label: {
@@ -100,6 +103,7 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
                     .buttonStyle(IntentContentButtonStyle())
                     .accessibilityLabel(closeLabel)
                     .accessibilityIdentifier(closeIdentifier)
+                    .accessibilityAction(.escape, close)
                     .transition(.identity)
                 }
             }

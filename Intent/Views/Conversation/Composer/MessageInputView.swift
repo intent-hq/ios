@@ -11,6 +11,8 @@ struct MessageInputView: View {
     private let allowsSending: Bool
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.conversationPresentation) private var presentation
+    @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
     @Environment(\.workspaceQuestionPanelPresented) private var questionPanelPresented
     @Environment(\.conversationComposerFocus) private var conversationFocus
 
@@ -111,6 +113,9 @@ struct MessageInputView: View {
         }
         .onChange(of: isEnabled) { _, enabled in
             if !enabled { isFocused = false }
+        }
+        .onChange(of: isIPadPaneVisible) { _, visible in
+            if presentation == .iPad, !visible { isFocused = false }
         }
         .onChange(of: questionPanelPresented) { _, presented in
             // Resign explicitly rather than disabling the native editor: UIKit

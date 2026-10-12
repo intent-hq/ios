@@ -50,7 +50,6 @@ struct AgentHistoryList: View {
         .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
         .padding(.leading, ConnectionSwitcherStyle.trailingInset)
         .padding(.trailing, ConnectionSwitcherStyle.inset)
-        .accessibilityIdentifier("agent-history.list")
     }
 
     private var rowSnapshot: [HistoryRow] {
@@ -67,10 +66,10 @@ struct AgentHistoryList: View {
     }
 
     private func rowList(_ rows: [HistoryRow]) -> some View {
-        VStack(spacing: ConnectionSwitcherStyle.rowSpacing) {
-            ForEach(rows) { row in
-                rowView(row)
-            }
+        // Resolve environment values and actions before SwiftUI's async row callback.
+        let content = rows.map { (id: $0.id, content: rowView($0)) }
+        return VStack(spacing: ConnectionSwitcherStyle.rowSpacing) {
+            ForEach(content, id: \.id) { @Sendable row in row.content }
         }
     }
 
