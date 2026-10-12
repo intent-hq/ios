@@ -179,7 +179,9 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         )
         capturePDF(app, named: "PDF share sheet")
     }
+}
 
+extension InlineResponseImageUITests {
     @MainActor
     private func assertPDFViewer(in app: XCUIApplication) {
         let viewer = app.descendants(matching: .any).matching(
