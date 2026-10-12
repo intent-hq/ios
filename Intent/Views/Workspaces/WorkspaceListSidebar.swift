@@ -152,17 +152,7 @@ struct WorkspaceListSidebar: View {
         )) {
             switch viewModel.viewMode {
             case .recent:
-                if isEmbedded {
-                    Section {
-                        sidebarRows(viewModel.filteredWorkspaces)
-                    } header: {
-                        Color.clear.frame(height: 0)
-                            .listRowInsets(EdgeInsets())
-                            .accessibilityHidden(true)
-                    }
-                } else {
-                    sidebarRows(viewModel.filteredWorkspaces)
-                }
+                recentWorkspaces
             case .repo:
                 let groups = viewModel.groupedByRepo.map { repoName, workspaces in
                     let content = Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
@@ -204,6 +194,21 @@ struct WorkspaceListSidebar: View {
         .contentMargins(.horizontal, isEmbedded ? IPadSidebarStyle.inset : nil)
         .contentMargins(.top, isEmbedded ? 0 : Constants.WorkspaceList.sidebarTopContentMargin)
         .contentMargins(.bottom, isEmbedded ? IPadSidebarStyle.inset : (isSearching ? 0 : AssistantLaunchButton.scrollClearance), for: .scrollContent)
+    }
+
+    @ViewBuilder
+    private var recentWorkspaces: some View {
+        if isEmbedded {
+            Section {
+                sidebarRows(viewModel.filteredWorkspaces)
+            } header: {
+                Color.clear.frame(height: 0)
+                    .listRowInsets(EdgeInsets())
+                    .accessibilityHidden(true)
+            }
+        } else {
+            sidebarRows(viewModel.filteredWorkspaces)
+        }
     }
 
     private func sidebarRows(_ workspaces: [Workspace], showRepo: Bool = true) -> some View {
