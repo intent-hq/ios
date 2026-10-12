@@ -11,6 +11,7 @@ struct WorkspaceSwipeRow: View {
     var showsTrailingActions = true
     var isSidebar = false
     var isSelected = false
+    var isNextSelected = false
     let onSelect: () -> Void
     let onOpenRecentAgent: () -> Void
     let onAction: (WorkspaceAction) -> Void
@@ -77,7 +78,7 @@ struct WorkspaceSwipeRow: View {
         }
         .clipped()
         .overlay(alignment: .bottom) {
-            if spacious || (isSidebar && !isSelected) {
+            if spacious || (isSidebar && !isSelected && !isNextSelected) {
                 Divider()
                     .padding(.horizontal, isSidebar ? 0 : Constants.WorkspaceList.pageInset)
                     .opacity(dividerOpacity)

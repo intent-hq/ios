@@ -137,8 +137,32 @@ struct WorkspaceListSidebar: View {
             .accessibilityIdentifier("workspaces.empty.create")
     }
 
-    @ViewBuilder
     private var workspaceList: some View {
+        Group {
+            if isEmbedded {
+                // Sidebar list styling clips section edges to the system radius.
+                // The persistent sidebar uses the same custom radius for every row.
+                workspaceListContent.listStyle(.plain)
+            } else {
+                workspaceListContent.listStyle(.sidebar)
+            }
+        }
+        .environment(\.defaultMinListHeaderHeight, isEmbedded && viewModel.viewMode == .recent ? 0 : nil)
+        .listRowSpacing(isEmbedded ? 0 : nil)
+        #if !os(visionOS)
+        // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
+        .scrollDismissesKeyboard(.immediately)
+        // Custom row backgrounds already mark selection; suppress the system
+        // keyboard-focus halo (ios#339).
+        .focusEffectDisabled()
+        #endif
+        .scrollContentBackground(isEmbedded ? .hidden : .automatic)
+        .contentMargins(.horizontal, isEmbedded ? IPadSidebarStyle.inset : nil)
+        .contentMargins(.top, isEmbedded ? 0 : Constants.WorkspaceList.sidebarTopContentMargin)
+        .contentMargins(.bottom, isEmbedded ? IPadSidebarStyle.inset : (isSearching ? 0 : AssistantLaunchButton.scrollClearance), for: .scrollContent)
+    }
+
+    private var workspaceListContent: some View {
         List(selection: Binding(
             get: { coordinator.selectedWorkspaceId },
             set: { newId in
@@ -165,6 +189,7 @@ struct WorkspaceListSidebar: View {
                     }) {
                         sidebarRows(workspaces, showRepo: false)
                     }
+                    .listSectionSeparator(isEmbedded ? .hidden : .automatic)
                     return (id: repoName, content: content)
                 }
                 ForEach(groups, id: \.id) { @Sendable group in group.content }
@@ -173,27 +198,12 @@ struct WorkspaceListSidebar: View {
                     let content = Section(header: Text(statusLabel).interFont(Constants.Typography.eyebrow)) {
                         sidebarRows(workspaces)
                     }
+                    .listSectionSeparator(isEmbedded ? .hidden : .automatic)
                     return (id: statusLabel, content: content)
                 }
                 ForEach(groups, id: \.id) { @Sendable group in group.content }
             }
         }
-        .listStyle(.sidebar)
-        .environment(\.defaultMinListHeaderHeight, isEmbedded && viewModel.viewMode == .recent ? 0 : nil)
-        .listRowSpacing(isEmbedded ? 0 : nil)
-        #if !os(visionOS)
-        // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
-        .scrollDismissesKeyboard(.immediately)
-        // With a hardware keyboard attached, iPadOS draws the focused row's
-        // selection as an accent-coloured halo once the row background is
-        // customised (ios#339). The grey listRowBackground already marks the
-        // selection, so suppress the default focus effect for the sidebar rows.
-        .focusEffectDisabled()
-        #endif
-        .scrollContentBackground(isEmbedded ? .hidden : .automatic)
-        .contentMargins(.horizontal, isEmbedded ? IPadSidebarStyle.inset : nil)
-        .contentMargins(.top, isEmbedded ? 0 : Constants.WorkspaceList.sidebarTopContentMargin)
-        .contentMargins(.bottom, isEmbedded ? IPadSidebarStyle.inset : (isSearching ? 0 : AssistantLaunchButton.scrollClearance), for: .scrollContent)
     }
 
     @ViewBuilder
@@ -206,6 +216,7 @@ struct WorkspaceListSidebar: View {
                     .listRowInsets(EdgeInsets())
                     .accessibilityHidden(true)
             }
+            .listSectionSeparator(.hidden)
         } else {
             sidebarRows(viewModel.filteredWorkspaces)
         }
@@ -213,8 +224,10 @@ struct WorkspaceListSidebar: View {
 
     private func sidebarRows(_ workspaces: [Workspace], showRepo: Bool = true) -> some View {
         // Snapshot selection, updating state and bindings outside every row provider.
-        let rows = workspaces.map { workspace in
-            (id: workspace.id, content: sidebarRow(workspace, showRepo: showRepo))
+        let rows = workspaces.indices.map { index in
+            let workspace = workspaces[index]
+            let nextID = index + 1 < workspaces.count ? workspaces[index + 1].id : nil
+            return (id: workspace.id, content: sidebarRow(workspace, nextWorkspaceId: nextID, showRepo: showRepo))
         }
         return ForEach(rows, id: \.id) { @Sendable row in row.content }
     }
@@ -224,8 +237,8 @@ struct WorkspaceListSidebar: View {
     /// On visionOS that custom background also replaces the system row
     /// background that drew the gaze highlight (ios#339), so the hover effect
     /// is reapplied to the row content in the selection's rounded shape.
-    private func sidebarRow(_ workspace: Workspace, showRepo: Bool = true) -> some View {
-        sidebarRowContent(workspace, showRepo: showRepo)
+    private func sidebarRow(_ workspace: Workspace, nextWorkspaceId: String?, showRepo: Bool = true) -> some View {
+        sidebarRowContent(workspace, nextWorkspaceId: nextWorkspaceId, showRepo: showRepo)
             #if os(visionOS)
             .contentShape(
                 .hoverEffect,
@@ -253,7 +266,7 @@ struct WorkspaceListSidebar: View {
     }
 
     @ViewBuilder
-    private func sidebarRowContent(_ workspace: Workspace, showRepo: Bool) -> some View {
+    private func sidebarRowContent(_ workspace: Workspace, nextWorkspaceId: String?, showRepo: Bool) -> some View {
         #if os(visionOS)
         WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
         #else
@@ -263,11 +276,12 @@ struct WorkspaceListSidebar: View {
             isUpdating: workspaceStore.updatingWorkspaceIDs.contains(workspace.id),
             revealedTarget: $revealedSwipeTarget,
             workspaceSwipeProgress: $workspaceSwipeProgress,
-            nextWorkspaceId: nil,
+            nextWorkspaceId: nextWorkspaceId,
             spacious: false,
             showsTrailingActions: false,
             isSidebar: isEmbedded,
-            isSelected: coordinator.selectedWorkspaceId == workspace.id
+            isSelected: coordinator.selectedWorkspaceId == workspace.id,
+            isNextSelected: nextWorkspaceId != nil && coordinator.selectedWorkspaceId == nextWorkspaceId
         ) {
             searchFocused = false
             coordinator.onSelectWorkspace(workspace.id)

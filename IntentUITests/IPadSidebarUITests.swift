@@ -21,6 +21,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         defer { XCUIDevice.shared.orientation = .portrait }
         for appearance in ["light", "dark"] {
             let app = launch(appearance: appearance)
+            captureFirstWorkspaceSelection(in: app, appearance: appearance)
             openConversation(in: app)
             captureMainScreens(in: app, appearance: appearance)
             let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
@@ -137,9 +138,22 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
+    private func captureFirstWorkspaceSelection(in app: XCUIApplication, appearance: String) {
+        let recent = app.buttons["workspaces.viewMode.Recent"]
+        recent.tap()
+        XCTAssertTrue(recent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+        let workspace = app.buttons["workspace.row.demo-ws-reconnect"]
+        XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        workspace.tap()
+        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-backoff"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        capture(app, name: "iPad first workspace selected \(appearance)")
+    }
+
+    @MainActor
     private func captureMainScreens(in app: XCUIApplication, appearance: String) {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
-        for mode in ["Repo", "Recent"] {
+        for mode in ["Repo", "Status", "Recent"] {
             let control = app.buttons["workspaces.viewMode.\(mode)"]
             control.tap()
             XCTAssertTrue(control.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
