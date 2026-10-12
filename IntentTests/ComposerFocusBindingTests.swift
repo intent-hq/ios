@@ -6,8 +6,8 @@ import UIKit
 /// Owns deferred UIKit/SwiftUI focus ordering; real keyboard entry is covered by QuestionWizardUITests.
 @MainActor
 struct ComposerFocusBindingTests {
-    @Test(arguments: [false, true])
-    func editingCallbackWinsOverTheEarlierRenderFocus(editing: Bool) async {
+    @Test(arguments: [false, true], [false, true])
+    func editingCallbackWinsOverTheEarlierRenderFocus(editing: Bool, renderQueuedFirst: Bool) async {
         var focused = !editing
         let adapter = SubmittableTextView(
             text: .constant(""),
@@ -19,13 +19,14 @@ struct ComposerFocusBindingTests {
         editor.delegate = coordinator
         editor.responder = editing
 
+        if renderQueuedFirst { coordinator.synchronizeFocus(in: editor) }
         // UIKit has already changed focus, but its binding callback is deferred.
         if editing {
             coordinator.textViewDidBeginEditing(editor)
         } else {
             coordinator.textViewDidEndEditing(editor)
         }
-        coordinator.synchronizeFocus(in: editor)
+        if !renderQueuedFirst { coordinator.synchronizeFocus(in: editor) }
         await drainFocusCallbacks()
 
         #expect(focused == editing)
