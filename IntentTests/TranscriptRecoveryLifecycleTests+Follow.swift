@@ -8,7 +8,7 @@ extension TranscriptRecoveryLifecycleTests {
     // MARK: - followRequested
 
     @Test(arguments: [false, true]) func followRequestedFromIdleStartsAFollow(forced: Bool) {
-        var state = State()
+        var state = State(visibility: .visible)
         #expect(step(&state, .followRequested(forced: forced)) == [.startFollowTask(follow1, forced: forced)])
         #expect(state.owner == .follow(follow1, forced: forced))
         #expect(state.isFollowing)
@@ -142,7 +142,7 @@ extension TranscriptRecoveryLifecycleTests {
     /// `isRecoveringUnrealizedEnd` raised, so the drain's replayed edge sees
     /// `isFollowing` and the page-up check then follows back.
     @Test func aDrainedFollowRestoresTheRecoveryItDemoted() {
-        var state = State()
+        var state = State(visibility: .visible)
         step(&state, .endDerealized)
         #expect(nonLog(step(&state, .recoveryStep(recovery1, .recover(pageOffsetY: 120)))) == [.pageUp(offsetY: 120)])
         #expect(state.owner == .recovery(recovery1))
@@ -172,7 +172,7 @@ extension TranscriptRecoveryLifecycleTests {
     /// paths read `isFollowing` from the restored owner until the recovery's
     /// own terminal, where a never-claimed polling recovery leaves it false.
     @Test func aRestoredRecoveryKeepsIsFollowingForTheGeometryEdgeUntilItsTerminal() {
-        var corrected = State()
+        var corrected = State(visibility: .visible)
         step(&corrected, .endDerealized)
         step(&corrected, .recoveryStep(recovery1, .followToEnd))
         step(&corrected, .followRequested(forced: true))
@@ -187,7 +187,7 @@ extension TranscriptRecoveryLifecycleTests {
         ])
         #expect(!corrected.isFollowing)
 
-        var polling = State()
+        var polling = State(visibility: .visible)
         step(&polling, .endDerealized)
         step(&polling, .followRequested(forced: true))
         step(&polling, .followDue(follow2, execute: false))

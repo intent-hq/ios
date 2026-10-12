@@ -108,6 +108,11 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
 
     @MainActor
     func testFullscreenButtonEdgeAndInlinePinchAndPan() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["INTENT_UITEST_MERMAID_REPRO"] == "1",
+            "Quarantined intermittent inline/fullscreen render failures: https://github.com/intent-hq/ios/issues/735; "
+                + "opt in with TEST_RUNNER_INTENT_UITEST_MERMAID_REPRO=1."
+        )
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()

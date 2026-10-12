@@ -283,6 +283,15 @@ final class ConversationTranscriptScrollState {
         retainedViewport = position
     }
 
+    /// Retire queued callbacks while keeping a completed entry on return.
+    func suspendEntryScroll() {
+        initialScrollGeneration += 1
+        guard !hasInitiallyScrolled else { return }
+        initialScrollScheduled = false
+        initialScrollAwaitingScrollView = false
+        initialScrollPerformed = false
+    }
+
     var hasPendingViewportRestoration: Bool {
         retainedViewport != nil || viewportAnchor.hasPendingRetainedRestoration
     }

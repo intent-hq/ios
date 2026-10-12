@@ -142,7 +142,7 @@ extension ConversationTranscriptView {
             .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
                 .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
             } action: { measurement in
-                guard !isUserInteracting, !isFollowing,
+                guard lifecycle.isVisible, !isUserInteracting, !isFollowing,
                       let geometry = scrollMomentumProxy.restingGeometry,
                       let adjustment = scrollState.entryDividerAdjustment(measurement, viewportHeight: geometry.containerHeight) else { return }
                 scrollMomentumProxy.pageTo(offsetY: geometry.contentOffsetY + adjustment)
@@ -152,6 +152,7 @@ extension ConversationTranscriptView {
     private func preserveRowOffsetAfterDividerChange(
         messageId: String, measurement: ConversationTranscriptViewportAnchor.Measurement, proxy: ScrollViewProxy
     ) {
+        guard lifecycle.isVisible else { return }
         // This live check also covers a queued callback that beats the
         // column's message-ID observer after an authoritative deletion.
         scrollState.retainViewportMessages(withIDs: viewModel.filteredMessageIDs)

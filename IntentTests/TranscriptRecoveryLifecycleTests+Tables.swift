@@ -9,7 +9,7 @@ extension TranscriptRecoveryLifecycleTests {
 
     @Test func staleTokensChangeNothing() {
         let states = [
-            State(),
+            State(visibility: .visible),
             makeState(owner: .follow(follow1, forced: true), armed: .polling(recovery2), fallback: .transferred(follow: follow1)),
             makeState(owner: .follow(follow1, forced: false), armed: .demoted(recovery2)),
             makeState(owner: .recovery(recovery1))
@@ -31,7 +31,7 @@ extension TranscriptRecoveryLifecycleTests {
     }
 
     @Test func aGestureTakeoverMakesEveryEarlierTokenStale() {
-        var state = State()
+        var state = State(visibility: .visible)
         step(&state, .endDerealized)
         step(&state, .recoveryStep(recovery1, .recover(pageOffsetY: 80)))
         #expect(state.owner == .recovery(recovery1))
@@ -50,7 +50,7 @@ extension TranscriptRecoveryLifecycleTests {
     }
 
     @Test func tokensAreMintedFromOneMonotonicCounter() {
-        var state = State()
+        var state = State(visibility: .visible)
         #expect(step(&state, .endDerealized) == [.startRecoveryTask(RecoveryToken(id: 1))])
         #expect(step(&state, .followRequested(forced: false)) == [.startFollowTask(FollowToken(id: 2), forced: false)])
         #expect(nonLog(step(&state, .followRequested(forced: true))) == [
@@ -87,6 +87,14 @@ extension TranscriptRecoveryLifecycleTests {
             states.append(makeState(owner: .recovery(recovery2), realized: realized))
         }
         return states
+    }
+
+    @Test func duplicateAppearancePreservesEveryVisibleOwnerAndBudget() {
+        for original in terminalStates {
+            var state = original
+            #expect(step(&state, .viewAppeared).isEmpty)
+            #expect(state == original)
+        }
     }
 
     @Test func recoveryFinishedTable() {

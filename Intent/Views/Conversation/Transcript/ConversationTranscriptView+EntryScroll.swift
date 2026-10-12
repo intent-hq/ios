@@ -3,6 +3,7 @@ import SwiftUI
 extension ConversationTranscriptView {
     func handleTranscriptAppearance(proxy: ScrollViewProxy) {
         beginViewportTrace()
+        send(.viewAppeared, proxy: proxy)
         restoreRetainedViewport(proxy: proxy)
         if !viewModel.isLoading {
             runInitialScrollIfNeeded(proxy: proxy)
@@ -10,9 +11,10 @@ extension ConversationTranscriptView {
     }
 
     func restoreRetainedViewport(proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible else { return }
         let revision = scrollState.viewportOwnershipRevision
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
-            guard revision == scrollState.viewportOwnershipRevision,
+            guard lifecycle.isVisible, revision == scrollState.viewportOwnershipRevision,
                   !isUserInteracting, !isFollowing,
                   scrollMomentumProxy.scrollView?.window != nil else {
                 traceSnapshot("restoreSkipped requestedOwnership=\(revision)")
@@ -38,6 +40,7 @@ extension ConversationTranscriptView {
     }
 
     func handleMessageCountChange(from oldIDs: [String], to newIDs: [String], proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible || newIDs.isEmpty else { return }
         traceEvent("MessageIDsChanged", "old=\(oldIDs.count) new=\(newIDs.count)")
         scheduleTraceSnapshots()
         let oldCount = oldIDs.count
@@ -92,6 +95,7 @@ extension ConversationTranscriptView {
     /// Runs exactly once per transcript lifetime from whichever loading trigger
     /// fires first, after LazyVStack has had time to finish layout.
     func runInitialScrollIfNeeded(proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible else { return }
         guard !scrollState.initialScrollScheduled else {
             traceEvent("EntrySkipped", "reason=alreadyScheduled")
             return
@@ -115,6 +119,7 @@ extension ConversationTranscriptView {
     /// LazyVStack's first layout pass, so the resolved path gets the same
     /// `initialScrollDelay` the loading triggers get before it scrolls.
     func handleScrollViewResolved(proxy: ScrollViewProxy) {
+        guard lifecycle.isVisible else { return }
         let generation = scrollState.initialScrollGeneration
         guard scrollState.initialScrollAwaitingScrollView else {
             // Defensive: onAppear / isLoading already schedule the entry
@@ -143,6 +148,7 @@ extension ConversationTranscriptView {
         scrollViewWaitElapsed: Bool,
         generation: Int
     ) {
+        guard lifecycle.isVisible else { return }
         guard generation == scrollState.initialScrollGeneration else {
             traceEvent("EntrySkipped", "reason=staleGeneration requested=\(generation)")
             return

@@ -60,12 +60,11 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(state.fallback == .none)
     }
 
-    // MARK: - explicitClaim / viewDisappeared
+    // MARK: - explicitClaim
 
-    @Test(arguments: [ConversationTranscriptRecoveryLifecycle.Event.explicitClaim, .viewDisappeared])
-    func claimCancelsTheRecoveryOnly(event: ConversationTranscriptRecoveryLifecycle.Event) {
+    @Test func explicitClaimCancelsTheRecoveryOnly() {
         var armedUnderFollow = makeState(owner: .follow(follow1, forced: true), armed: .polling(recovery2), fallback: .transferred(follow: follow1))
-        #expect(step(&armedUnderFollow, event) == [.cancelRecoveryTask(recovery2)])
+        #expect(step(&armedUnderFollow, .explicitClaim) == [.cancelRecoveryTask(recovery2)])
         #expect(armedUnderFollow.owner == .follow(follow1, forced: true))
         #expect(armedUnderFollow.fallback == .transferred(follow: follow1))
         #expect(armedUnderFollow.armedRecovery == nil)
@@ -73,19 +72,19 @@ extension TranscriptRecoveryLifecycleTests {
         // A demoted recovery is cancelled too: the follow's drain restores
         // nothing.
         var demotedUnderFollow = makeState(owner: .follow(follow1, forced: false), armed: .demoted(recovery2))
-        #expect(step(&demotedUnderFollow, event) == [.cancelRecoveryTask(recovery2)])
+        #expect(step(&demotedUnderFollow, .explicitClaim) == [.cancelRecoveryTask(recovery2)])
         #expect(demotedUnderFollow.owner == .follow(follow1, forced: false))
         #expect(demotedUnderFollow.armedRecovery == nil)
         #expect(step(&demotedUnderFollow, .followFinished(follow1, .dropped)) == [.replayLiveEdge(.live)])
         #expect(demotedUnderFollow.owner == .idle)
 
         var owning = makeState(owner: .recovery(recovery1))
-        #expect(step(&owning, event) == [.cancelRecoveryTask(recovery1)])
+        #expect(step(&owning, .explicitClaim) == [.cancelRecoveryTask(recovery1)])
         #expect(owning.owner == .idle)
 
         var idle = makeState(owner: .follow(follow1, forced: false))
         let before = idle
-        #expect(step(&idle, event).isEmpty)
+        #expect(step(&idle, .explicitClaim).isEmpty)
         #expect(idle == before)
     }
 
