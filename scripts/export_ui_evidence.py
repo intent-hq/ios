@@ -60,6 +60,12 @@ CAPTURES = {
             "Sent video poster", "Sent video full-screen playback",
         ),
     },
+    "InlineResponseImageUITests": {
+        "testPDFCardAndLinkOpenViewerAndShare": (
+            "Inline PDF card and link", "PDF viewer from inline card",
+            "PDF viewer from text link", "PDF share sheet", "PDF unavailable with close and retry",
+        ),
+    },
     "AssistantStateUITests": {
         "testLoadingFailureRetriesToEmptyAndStartsConversation": (
             "Assistant loading light", "Assistant error light", "Assistant empty light",
