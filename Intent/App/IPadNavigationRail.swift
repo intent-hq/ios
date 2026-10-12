@@ -7,6 +7,7 @@ struct IPadNavigationRail: View {
     let onSelect: (IPadSidebarSection) -> Void
     let onExpand: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appThemePreference") private var themePreference = "system"
 
     var body: some View {
@@ -14,6 +15,7 @@ struct IPadNavigationRail: View {
             VStack(spacing: IPadShellLayout.railSpacing) {
                 if !isSidebarVisible {
                     railButton(asset: .collapseLeft, label: "Show sidebar", identifier: "ipad.sidebar.expand", action: onExpand)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 destination(.assistant, asset: .dandelion, label: "Assistant")
                     .disabled(!canUseAssistant)
@@ -26,6 +28,7 @@ struct IPadNavigationRail: View {
                 .accessibilityHint("Changes appearance")
                 destination(.settings, asset: .settings2, label: "Settings")
             }
+            .animation(reduceMotion ? nil : IPadShellLayout.sidebarAnimation, value: isSidebarVisible)
             .padding(.top, IPadShellLayout.railTopInset)
         }
         .scrollIndicators(.hidden)

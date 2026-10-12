@@ -7,6 +7,7 @@ struct IPadShellView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Nil until measured, so a zero first width never drives the navigation layout.
     @State private var width: CGFloat?
     @State private var isSearchingWorkspaces = false
@@ -63,7 +64,9 @@ struct IPadShellView: View {
             }
             ZStack(alignment: .leading) {
                 detail
-                    .padding(.leading, layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
+                    .animation(reduceMotion ? nil : IPadShellLayout.sidebarAnimation) { content in
+                        content.padding(.leading, layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
+                    }
                     .environment(\.isIPadPaneVisible, !isDrawerVisible)
                     .allowsHitTesting(!isDrawerVisible)
                     .accessibilityFocused($detailFocused)
@@ -73,7 +76,10 @@ struct IPadShellView: View {
                     .frame(maxHeight: .infinity)
                     .background(Constants.Pairing.background(for: colorScheme))
                     .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
+                    .offset(x: navigation.isSidebarVisible ? 0 : -layout.sidebarWidth)
                     .opacity(navigation.isSidebarVisible ? 1 : 0)
+                    .animation(reduceMotion ? nil : IPadShellLayout.sidebarAnimation, value: navigation.isSidebarVisible)
+                    .clipped()
                     .allowsHitTesting(navigation.isSidebarVisible)
                     .environment(\.isIPadPaneVisible, navigation.isSidebarVisible)
             }
@@ -84,7 +90,12 @@ struct IPadShellView: View {
         .background(Constants.Pairing.background(for: colorScheme).ignoresSafeArea())
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if $0 > 0 { width = $0 } }
         .onChange(of: measuredLayout, initial: true) { _, measuredLayout in
-            if let measuredLayout { coordinator.iPadNavigation.updateLayout(usesOverlay: measuredLayout.usesSidebarOverlay) }
+            guard let measuredLayout else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                coordinator.iPadNavigation.updateLayout(usesOverlay: measuredLayout.usesSidebarOverlay)
+            }
         }
         .onChange(of: sidebarPresentation) { old, new in
             // Layout changes (first measurement, rotation) must not move VoiceOver focus.
@@ -159,16 +170,22 @@ struct IPadShellView: View {
         }
     }
 
-    @ViewBuilder private var drawerBackdrop: some View {
-        if isDrawerVisible {
-            Button(action: collapseSidebar) {
-                Color.black.opacity(IPadShellLayout.drawerShadeOpacity)
-                    .contentShape(Rectangle())
+    private var drawerBackdrop: some View {
+        ZStack {
+            if isDrawerVisible {
+                Button(action: collapseSidebar) {
+                    Color.black.opacity(IPadShellLayout.drawerShadeOpacity)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(IntentContentButtonStyle())
+                .accessibilityLabel("Close sidebar")
+                .accessibilityIdentifier("ipad.sidebar.dismiss")
+                .transition(.opacity)
             }
-            .buttonStyle(IntentContentButtonStyle())
-            .accessibilityLabel("Close sidebar")
-            .accessibilityIdentifier("ipad.sidebar.dismiss")
         }
+        .animation(reduceMotion ? nil : IPadShellLayout.sidebarAnimation, value: isDrawerVisible)
+        .allowsHitTesting(isDrawerVisible)
+        .accessibilityHidden(!isDrawerVisible)
     }
 
     private func collapseSidebar() {

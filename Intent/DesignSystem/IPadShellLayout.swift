@@ -18,6 +18,8 @@ struct IPadShellLayout: Equatable {
     static let shadowRadius: CGFloat = 24
     static let shadowOffset: CGFloat = 16
     static let drawerShadeOpacity = 0.2
+    static let sidebarAnimationDuration = 0.3
+    static let sidebarAnimation = Animation.smooth(duration: Self.sidebarAnimationDuration)
 
     let width: CGFloat
     let isAccessibilitySize: Bool
