@@ -11,17 +11,18 @@ extension View {
 private struct ConversationReadableColumn: ViewModifier {
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var readableWidth = Constants.Conversation.Design.IPad.readableWidth
     @State private var availableWidth: CGFloat = 0
 
     private typealias Layout = Constants.Conversation.Design.IPad
 
     private var maximumWidth: CGFloat {
-        presentation == .iPad && !dynamicTypeSize.isAccessibilitySize ? Layout.readableWidth : .infinity
+        presentation == .iPad && !dynamicTypeSize.isAccessibilitySize ? readableWidth : .infinity
     }
 
     private var horizontalInset: CGFloat {
         guard presentation == .iPad else { return 0 }
-        return availableWidth >= Layout.readableWidth + Layout.horizontalInset * 2
+        return availableWidth >= readableWidth + Layout.horizontalInset * 2
             ? Layout.horizontalInset : Layout.minimumHorizontalInset
     }
 

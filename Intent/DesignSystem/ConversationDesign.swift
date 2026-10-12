@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 extension Constants.Conversation {
     /// Shared iOS workspace-agent and Assistant styling from the approved Figma frames.
@@ -18,8 +19,11 @@ extension Constants.Conversation {
 
 extension Constants.Conversation.Design {
     enum IPad {
-        static let readableWidth: CGFloat = 560
-        static let assistantMaximumWidth: CGFloat = 415
+        static let readableWidth: CGFloat = {
+            let font = Constants.Typography.bodyS.uiFont(compatibleWith: UITraitCollection(preferredContentSizeCategory: .large))
+            // Match 72ch using the body font's zero-glyph advance at the baseline text size.
+            return ("0" as NSString).size(withAttributes: [.font: font]).width * 72
+        }()
         static let userBubbleMaximumWidth: CGFloat = 270
         static let minimumHorizontalInset: CGFloat = 16
         static let horizontalInset: CGFloat = 24
