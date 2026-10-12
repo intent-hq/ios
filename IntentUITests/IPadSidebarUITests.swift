@@ -96,7 +96,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
 
     @MainActor
     func testRepeatedSidebarTogglesWithAgentHistoryPreserveDraft() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar animation")
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar toggling")
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = launch(appearance: "dark")
