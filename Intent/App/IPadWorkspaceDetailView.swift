@@ -48,21 +48,7 @@ struct IPadWorkspaceDetailView: View {
         case let .workspaceDetail(workspaceId):
             WorkspaceDetailView(workspaceId: workspaceId, session: session)
         default:
-            ContentUnavailableView {
-                Label {
-                    Text("Select a Workspace").interFont(Constants.Typography.bodyM.withFace(.semibold))
-                } icon: {
-                    Image(systemName: "sidebar.left")
-                }
-            } description: {
-                Text("Choose a workspace from the sidebar to see its agents and notes.")
-                    .interFont(Constants.Typography.bodyS)
-            } actions: {
-                Button("Show workspaces") { coordinator.onSelectIPadSection(.workspaces) }
-                    .buttonStyle(IntentButtonStyle(variant: .secondary))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Constants.Conversation.Design.Palette.background(for: colorScheme))
+            Constants.Conversation.Design.Palette.background(for: colorScheme)
         }
     }
 
