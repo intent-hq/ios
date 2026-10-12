@@ -69,6 +69,7 @@ nonisolated enum DiagnosticOperation: String, Codable, CaseIterable, Sendable {
     case otherLocalOperation = "other.local_operation"
     case otherRequest = "other.request"
     case pairingPhase = "pairing.phase"
+    case pdfLoad = "pdf.load"
     case persistenceConnectionDelete = "persistence.connection_delete"
     case persistenceKeychainDelete = "persistence.keychain_delete"
     case persistenceKeychainRead = "persistence.keychain_read"
@@ -130,7 +131,7 @@ nonisolated enum DiagnosticOperation: String, Codable, CaseIterable, Sendable {
 
 nonisolated enum DiagnosticFamily: String, Codable, CaseIterable, Sendable {
     case agent, app, attachment, background, connection, conversation, dictation, github, hook, image, link
-    case network, note, notification, other, pairing, persistence
+    case network, note, notification, other, pairing, pdf, persistence
     case prMonitor = "pr_monitor"
     case protocolHandling = "protocol"
     case provider, scanner, subscription, task, trust

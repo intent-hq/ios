@@ -21,6 +21,7 @@ struct MarkdownTextView: View {
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
     @State private var videoItem: VideoItem?
+    @State private var pdfItem: PDFItem?
     @State private var browserItem: WorkspaceBrowser?
     @State private var attachmentAttempt = 0
 
@@ -67,6 +68,13 @@ struct MarkdownTextView: View {
         }
     }
 
+    private var filePDFFetcher: @Sendable (String, String) async throws -> WorkspacePDF {
+        let fileLoader = session?.workspaceFileImageLoader ?? .shared
+        return { workspaceId, path in
+            try await fileLoader.pdf(workspaceId: workspaceId, path: path)
+        }
+    }
+
     var body: some View {
         let pending = isStreaming ? pendingDiagram : nil
         let markdownView = StructuredText(
@@ -83,7 +91,8 @@ struct MarkdownTextView: View {
                     fallback: .image(),
                     fileImage: fileImageFetcher,
                     assetMedia: Self.assetMediaFetcher(session: session),
-                    fileVideo: fileVideoFetcher
+                    fileVideo: fileVideoFetcher,
+                    filePDF: filePDFFetcher
                 )
             )
             .textual.listItemSpacing(
@@ -98,6 +107,11 @@ struct MarkdownTextView: View {
                     lightboxItem = LightboxItem(image: image)
                 } else if let video = Self.playbackVideo(for: attachment) {
                     videoItem = VideoItem(video: video)
+                } else if let pdf = Self.previewPDF(for: attachment) {
+                    pdfItem = PDFItem(pdf: pdf)
+                } else if let failure = attachment.base as? IntentFilePDFFailureAttachment,
+                          failure.prepareRetry(using: session?.workspaceFileImageLoader ?? .shared) {
+                    attachmentAttempt += 1
                 } else if let failure = attachment.base as? IntentFileVideoFailureAttachment,
                           failure.prepareRetry(using: session?.workspaceFileImageLoader ?? .shared) {
                     attachmentAttempt += 1
@@ -117,6 +131,9 @@ struct MarkdownTextView: View {
             }
             .fullScreenCover(item: $videoItem) { item in
                 VideoLightboxView(video: item.video)
+            }
+            .fullScreenCover(item: $pdfItem) { item in
+                PDFLightboxView(pdf: item.pdf)
             }
 
         markdownView
@@ -161,6 +178,10 @@ struct MarkdownTextView: View {
 
     static func playbackVideo(for attachment: AnyAttachment) -> WorkspaceVideo? {
         (attachment.base as? IntentFileVideoAttachment)?.video
+    }
+
+    static func previewPDF(for attachment: AnyAttachment) -> WorkspacePDF? {
+        (attachment.base as? IntentFilePDFAttachment)?.pdf
     }
 
     /// GFM task-list line: optional blockquote prefix, indent, list marker
@@ -244,4 +265,9 @@ private struct LightboxItem: Identifiable {
 private struct VideoItem: Identifiable {
     let id = UUID()
     let video: WorkspaceVideo
+}
+
+private struct PDFItem: Identifiable {
+    let id = UUID()
+    let pdf: WorkspacePDF
 }
