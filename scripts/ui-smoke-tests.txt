@@ -41,6 +41,7 @@ IntentUITests/WorkspaceStatusImageUITests/testStatusImageIsAbsentFromListAndOpen
 
 # Conversation
 # Mermaid fullscreen/pinch/pan is quarantined (ios#735); see README.md#mermaid-ui-quarantine.
+IntentUITests/InlineResponseImageUITests/testPDFCardAndLinkOpenViewerAndShare
 IntentUITests/WatcherMessageUITests/testWatcherDetailsExpandAndCollapseWithoutLosingTheReport
 IntentUITests/WorkspaceComposerUITests/testNativePasteKeepsTextAndImageDraft
 IntentUITests/WorkspaceComposerUITests/testMultilineSendAndStopPreserveAnInProgressDraft

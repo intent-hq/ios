@@ -133,6 +133,95 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
     }
 
     @MainActor
+    func testPDFCardAndLinkOpenViewerAndShare() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-inline-pdfs"]
+        app.launch()
+        openWorkspace(in: app)
+        let agent = app.staticTexts[Fixture.agentName].firstMatch
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        agent.tap()
+        let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+        XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        let card = message(in: app, containing: "PDF preview:")
+        XCTAssertTrue(card.waitForExistence(timeout: Fixture.timeout))
+        reveal(card, in: transcript)
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) {
+            card.frame.height >= Fixture.thumbnailSide
+        }, "The inline PDF card must occupy its preview area; opening it below proves it loaded")
+        XCTAssertGreaterThanOrEqual(card.frame.minX, transcript.frame.minX)
+        XCTAssertLessThanOrEqual(card.frame.maxX, transcript.frame.maxX)
+        capturePDF(app, named: "Inline PDF card and link")
+
+        // Textual draws the attachment into the final square of this paragraph.
+        card.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: Fixture.thumbnailSide / 2, dy: card.frame.height - Fixture.thumbnailSide / 2))
+            .tap()
+        assertPDFViewer(in: app)
+        capturePDF(app, named: "PDF viewer from inline card")
+        let close = app.buttons["pdf.close"].firstMatch
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: Fixture.timeout))
+
+        assertUnavailablePDFCanClose(in: app, transcript: transcript)
+
+        let link = app.links["Open the PDF brief"].firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
+        reveal(link, in: transcript)
+        // Selectable Markdown overlays the semantic link in accessibility hit-testing.
+        link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        assertPDFViewer(in: app)
+        capturePDF(app, named: "PDF viewer from text link")
+        app.buttons["Share PDF"].firstMatch.tap()
+        XCTAssertTrue(
+            app.otherElements["ActivityListView"].firstMatch.waitForExistence(timeout: Fixture.timeout),
+            "Share must present the native activity sheet"
+        )
+        capturePDF(app, named: "PDF share sheet")
+    }
+
+    @MainActor
+    private func assertPDFViewer(in app: XCUIApplication) {
+        let viewer = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", "PDF viewer: Demo brief.pdf, 2 pages")
+        ).firstMatch
+        XCTAssertTrue(viewer.waitForExistence(timeout: Fixture.timeout), "Both PDF entry points must open the document viewer")
+        XCTAssertTrue(app.staticTexts["Intent project brief"].firstMatch.waitForExistence(timeout: Fixture.timeout))
+        let close = app.buttons["pdf.close"].firstMatch
+        let share = app.buttons["Share PDF"].firstMatch
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable && share.isHittable })
+        XCTAssertEqual(close.label, "Close PDF")
+    }
+
+    @MainActor
+    private func assertUnavailablePDFCanClose(in app: XCUIApplication, transcript: XCUIElement) {
+        let link = app.links["Open the missing PDF"].firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
+        reveal(link, in: transcript)
+        link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let unavailable = app.staticTexts["PDF unavailable"].firstMatch
+        XCTAssertTrue(unavailable.waitForExistence(timeout: Fixture.timeout))
+        let close = app.buttons["pdf.close"].firstMatch
+        let retry = app.buttons["Retry loading PDF"].firstMatch
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable && retry.isHittable })
+        XCTAssertEqual(close.label, "Close PDF")
+        capturePDF(app, named: "PDF unavailable with close and retry")
+        retry.tap()
+        XCTAssertTrue(unavailable.waitForExistence(timeout: Fixture.timeout))
+        close.tap()
+        XCTAssertTrue(unavailable.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(close.waitForNonExistence(timeout: Fixture.timeout))
+    }
+
+    @MainActor
+    private func capturePDF(_ app: XCUIApplication, named name: String) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
     private func assertPrompts(in app: XCUIApplication, transcript: XCUIElement) {
         for (index, expected) in Fixture.prompts.enumerated() {
             let prompt = app.buttons["transcript.suggestedPrompt.\(index)"].firstMatch

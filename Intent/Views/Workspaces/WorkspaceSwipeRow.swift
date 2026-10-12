@@ -11,10 +11,12 @@ struct WorkspaceSwipeRow: View {
     var showsTrailingActions = true
     var isSidebar = false
     var isSelected = false
+    var isNextSelected = false
     let onSelect: () -> Void
     let onOpenRecentAgent: () -> Void
     let onAction: (WorkspaceAction) -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var scaledActionSize = Constants.WorkspaceList.swipeButtonSize
     @ScaledMetric(relativeTo: .body) private var actionIconSize = Constants.WorkspaceList.swipeButtonIconSize
@@ -77,12 +79,22 @@ struct WorkspaceSwipeRow: View {
         }
         .clipped()
         .overlay(alignment: .bottom) {
-            if spacious || (isSidebar && !isSelected) {
-                Divider()
-                    .padding(.horizontal, isSidebar ? 0 : Constants.WorkspaceList.pageInset)
+            if spacious || (isSidebar && !isSelected && !isNextSelected) {
+                rowDivider
+                    .padding(.horizontal, isSidebar ? IPadSidebarStyle.rowInset : Constants.WorkspaceList.pageInset)
                     .opacity(dividerOpacity)
                     .animation(reduceMotion ? nil : .easeOut(duration: DividerStyle.fadeDuration), value: dividerOpacity)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var rowDivider: some View {
+        if isSidebar, colorScheme == .light {
+            Color.black.opacity(DividerStyle.lightOpacity)
+                .frame(height: 1 / displayScale)
+        } else {
+            Divider()
         }
     }
 
@@ -97,6 +109,7 @@ struct WorkspaceSwipeRow: View {
     private func updateOffset(_ offset: CGFloat) { swipeOffset = offset }
 
     private enum DividerStyle {
+        static let lightOpacity = 0.1
         static let fadeProgress: CGFloat = 0.15
         static let fadeDuration = 0.12
     }

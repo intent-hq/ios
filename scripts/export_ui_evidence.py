@@ -28,7 +28,7 @@ CAPTURES = {
             for appearance in ("light", "dark")
             for section in (
                 "workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual",
-                "Recent sidebar", "Repo sidebar",
+                "Recent sidebar", "Repo sidebar", "Status sidebar", "first workspace selected",
             )
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
@@ -69,6 +69,12 @@ CAPTURES = {
     "TranscriptVideoUITests": {
         "testSentVideoPosterOpensFullScreenPlayback": (
             "Sent video poster", "Sent video full-screen playback",
+        ),
+    },
+    "InlineResponseImageUITests": {
+        "testPDFCardAndLinkOpenViewerAndShare": (
+            "Inline PDF card and link", "PDF viewer from inline card",
+            "PDF viewer from text link", "PDF share sheet", "PDF unavailable with close and retry",
         ),
     },
     "AssistantStateUITests": {

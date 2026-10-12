@@ -30,6 +30,7 @@ nonisolated struct DiagnosticFailure: Codable, Equatable, Sendable {
         case none
         case notConnected = "not_connected"
         case notImage = "not_image"
+        case passwordRequired = "password_required"
         case permissionDenied = "permission_denied"
         case pinMismatch = "pin_mismatch"
         case readFailed = "read_failed"

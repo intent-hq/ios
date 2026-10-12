@@ -99,6 +99,7 @@ struct ContentBlockBody: View, Equatable {
         nonmutating set { disclosure.binding(for: .thinking(block.id), default: false).wrappedValue = newValue }
     }
     @State private var lightboxPresented = false
+    @State private var pdfLink: PDFLinkPreviewView.Link?
     /// Set when a thumbnail tap started hydration: the lightbox then opens
     /// automatically once the full block merges in (dataTruncated clears).
     @State private var lightboxPendingHydration = false
@@ -185,20 +186,30 @@ struct ContentBlockBody: View, Equatable {
 
     @ViewBuilder
     private func textView(_ text: String) -> some View {
-        if workspaceId == Workspace.chiefWorkspaceId {
-            WorkspaceLinkedTextView(text: text, workspaceId: workspaceId, onOpenURL: openTextURL)
-        } else {
-            MarkdownTextView(text: text, onOpenURL: openTextURL, workspaceId: workspaceId)
+        Group {
+            if workspaceId == Workspace.chiefWorkspaceId {
+                WorkspaceLinkedTextView(text: text, workspaceId: workspaceId, onOpenURL: openTextURL)
+            } else {
+                MarkdownTextView(text: text, onOpenURL: openTextURL, workspaceId: workspaceId)
+            }
+        }
+        .fullScreenCover(item: $pdfLink) { link in
+            PDFLinkPreviewView(link: link)
         }
     }
 
     private func openTextURL(_ url: URL) -> OpenURLAction.Result {
-        guard let link = NoteDetailView.parseIntentNoteLink(url) else { return .systemAction }
-        let targetWorkspaceId = link.workspaceId ?? workspaceId
-        if let onNavigateToNote {
-            onNavigateToNote(link.id, targetWorkspaceId, "Note")
-        } else {
-            coordinator.onSelectNote(link.id, workspaceId: targetWorkspaceId, noteTitle: "Note")
+        switch Self.textURLRoute(for: url, workspaceId: workspaceId) {
+        case .pdf(let link):
+            pdfLink = link
+        case let .note(noteId, targetWorkspaceId):
+            if let onNavigateToNote {
+                onNavigateToNote(noteId, targetWorkspaceId, "Note")
+            } else {
+                coordinator.onSelectNote(noteId, workspaceId: targetWorkspaceId, noteTitle: "Note")
+            }
+        case .system:
+            return .systemAction
         }
         return .handled
     }
@@ -354,5 +365,24 @@ struct ContentBlockBody: View, Equatable {
         .padding(.vertical, Constants.Conversation.ContentBlock.fileVerticalPadding)
         .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.ContentBlock.fileBackgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ContentBlock.fileCornerRadius))
+    }
+}
+
+extension ContentBlockBody {
+    enum TextURLRoute: Equatable {
+        case pdf(PDFLinkPreviewView.Link)
+        case note(id: String, workspaceId: String)
+        case system
+    }
+
+    /// Shared by ordinary transcript markdown and the chief workspace's linked text.
+    static func textURLRoute(for url: URL, workspaceId: String) -> TextURLRoute {
+        if let link = IntentFileLink.parse(url), WorkspacePDF.isPDF(path: link.path) {
+            return .pdf(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
+        }
+        if let link = NoteDetailView.parseIntentNoteLink(url) {
+            return .note(id: link.id, workspaceId: link.workspaceId ?? workspaceId)
+        }
+        return .system
     }
 }
