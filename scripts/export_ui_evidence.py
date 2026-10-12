@@ -104,6 +104,7 @@ CAPTURES = {
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
         ),
         "testLaunchHidesBackButSelectedMachineCanReturnHome": (
+            "connection-loss-launch-connecting-without-back",
             "connection-loss-connection-failure-back", "connection-loss-connecting-back",
         ),
     },
