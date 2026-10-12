@@ -63,25 +63,9 @@ struct IPadShellView: View {
                 coordinator.iPadNavigation.revealSidebar()
             }
             ZStack(alignment: .leading) {
-                detail
-                    .animation(reduceMotion ? nil : IPadShellLayout.sidebarAnimation) { content in
-                        content.padding(.leading, layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
-                    }
-                    .environment(\.isIPadPaneVisible, !isDrawerVisible)
-                    .allowsHitTesting(!isDrawerVisible)
-                    .accessibilityFocused($detailFocused)
+                detailPane
                 drawerBackdrop
-                sidebars
-                    .frame(width: layout.sidebarWidth)
-                    .frame(maxHeight: .infinity)
-                    .background(Constants.Pairing.background(for: colorScheme))
-                    .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
-                    .offset(x: navigation.isSidebarVisible ? 0 : -layout.sidebarWidth)
-                    .opacity(navigation.isSidebarVisible ? 1 : 0)
-                    .animation(reduceMotion ? nil : IPadShellLayout.sidebarAnimation, value: navigation.isSidebarVisible)
-                    .clipped()
-                    .allowsHitTesting(navigation.isSidebarVisible)
-                    .environment(\.isIPadPaneVisible, navigation.isSidebarVisible)
+                sidebarPane
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -101,6 +85,29 @@ struct IPadShellView: View {
             // Layout changes (first measurement, rotation) must not move VoiceOver focus.
             if old.usesOverlay == new.usesOverlay, old.isVisible, !new.isVisible { detailFocused = true }
         }
+    }
+
+    private var detailPane: some View {
+        detail
+            .padding(.leading, layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
+            .animation(reduceMotion ? nil : IPadShellLayout.sidebarAnimation, value: navigation.isSidebarVisible)
+            .environment(\.isIPadPaneVisible, !isDrawerVisible)
+            .allowsHitTesting(!isDrawerVisible)
+            .accessibilityFocused($detailFocused)
+    }
+
+    private var sidebarPane: some View {
+        sidebars
+            .frame(width: layout.sidebarWidth)
+            .frame(maxHeight: .infinity)
+            .background(Constants.Pairing.background(for: colorScheme))
+            .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
+            .offset(x: navigation.isSidebarVisible ? 0 : -layout.sidebarWidth)
+            .opacity(navigation.isSidebarVisible ? 1 : 0)
+            .animation(reduceMotion ? nil : IPadShellLayout.sidebarAnimation, value: navigation.isSidebarVisible)
+            .clipped()
+            .allowsHitTesting(navigation.isSidebarVisible)
+            .environment(\.isIPadPaneVisible, navigation.isSidebarVisible)
     }
 
     private var detail: some View {
