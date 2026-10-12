@@ -210,6 +210,7 @@ class AppCoordinator {
             claimScreenRestoration: claimScreenRestoration
         )
         self.backendID = backendID
+        connectingStartedByLaunch = !sessionRegistry.consumeConnectionSelection(for: backendID)
         self.connectionLossPresentation = connectionLossPresentation
         lifecycleState.workspaceDataAtInitialFlowStart = workspaceStore.lastUpdated
         savedConnectionsObserver = persistence.connectionsDidChange.sink { [weak self] _ in

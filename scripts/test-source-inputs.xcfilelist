@@ -198,6 +198,7 @@ $(SRCROOT)/Intent/Assets.xcassets/PlayFill.imageset
 $(SRCROOT)/Intent/Assets.xcassets/PlayFillSmall.imageset
 $(SRCROOT)/Intent/Assets.xcassets/PlaySmall.imageset
 $(SRCROOT)/Intent/Assets.xcassets/PressToHold.imageset
+$(SRCROOT)/Intent/Assets.xcassets/ProjectLoadingBackground.imageset
 $(SRCROOT)/Intent/Assets.xcassets/PullRequestClosed.imageset
 $(SRCROOT)/Intent/Assets.xcassets/PullRequestDraft.imageset
 $(SRCROOT)/Intent/Assets.xcassets/PullRequestMerged.imageset
