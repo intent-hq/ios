@@ -806,6 +806,7 @@ jobs:
             IntentUITests/IPadSidebarUITests/testSectionsAndPairingRestoreConversationInBothThemes
             IntentUITests/IPadSidebarUITests/testRailRemainsReachableWithAccessibilityText
             IntentUITests/IPadSidebarUITests/testRepeatedAgentSelectionReturnsFromChildAndPreservesDraft
+            IntentUITests/IPadSidebarUITests/testRepeatedSidebarTogglesWithAgentHistoryPreserveDraft
         run: |
           python3 scripts/ci_simulator.py prepare-ci
           SIM_UDID=$(jq -er '.createdUDID' "$SIMULATOR_EVIDENCE_DIR/ownership.json")

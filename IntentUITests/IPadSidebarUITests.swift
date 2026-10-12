@@ -95,6 +95,45 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
+    func testRepeatedSidebarTogglesWithAgentHistoryPreserveDraft() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar animation")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = launch(appearance: "dark")
+        defer { app.terminate() }
+        openConversation(in: app)
+        let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
+        composer.tap()
+        composer.typeText(Self.draft)
+        verifyPopulatedHistory(in: app)
+        let collapse = app.buttons["ipad.sidebar.collapse"]
+        let expand = app.buttons["ipad.sidebar.expand"]
+        for _ in 0..<12 {
+            XCTAssertTrue(collapse.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            collapse.tap()
+            XCTAssertTrue(expand.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            expand.tap()
+        }
+        XCTAssertTrue(collapse.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, Self.draft)
+        verifyPopulatedHistory(in: app)
+    }
+
+    @MainActor
+    private func verifyPopulatedHistory(in app: XCUIApplication) {
+        app.buttons["workspaces.menu"].tap()
+        app.buttons["workspaces.menu.recentAgents"].tap()
+        let entry = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND identifier ENDSWITH %@",
+            "agent-history.entry.", "/demo-agent-implementor"
+        )).firstMatch
+        XCTAssertTrue(entry.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        let close = app.buttons["agent-history.close"]
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
     private func captureMainScreens(in app: XCUIApplication, appearance: String) {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
         for mode in ["Repo", "Recent"] {
