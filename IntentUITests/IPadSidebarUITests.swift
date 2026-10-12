@@ -145,7 +145,8 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         let workspace = app.buttons["workspace.row.demo-ws-reconnect"]
         XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         workspace.tap()
-        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-backoff"].waitForExistence(timeout: Self.timeout))
+        let heading = app.staticTexts["workspace.title.heading"]
+        XCTAssertTrue(heading.wait(for: \.label, toEqual: "Fix websocket reconnect storm", timeout: Self.timeout))
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
         capture(app, name: "iPad first workspace selected \(appearance)")
     }
