@@ -53,13 +53,13 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
         XCTAssertEqual(field.value as? String, draft)
         let scroll = app.scrollViews["workspace.detail.scroll"]
         XCTAssertTrue(scroll.exists)
-        scroll.swipeUp()
-        scroll.swipeUp()
+        scrollTitleEditor(scroll, app: app, towardTop: false)
+        scrollTitleEditor(scroll, app: app, towardTop: false)
         XCTAssertFalse(field.isHittable)
-        for _ in 0..<6 where !field.isHittable { scroll.swipeDown() }
+        for _ in 0..<6 where !field.isHittable { scrollTitleEditor(scroll, app: app, towardTop: true) }
         XCTAssertTrue(field.isHittable)
         XCTAssertEqual(field.value as? String, draft)
-        field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
         field.typeText(" again")
         XCTAssertEqual(field.value as? String, draft + " again")
         app.buttons["workspace.title.cancel"].tap()
@@ -85,6 +85,23 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
 
         XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
         XCTAssertEqual(heading.label, Self.workspaceTitle)
+    }
+
+    @MainActor
+    private func scrollTitleEditor(_ scroll: XCUIElement, app: XCUIApplication, towardTop: Bool) {
+        let frame = scroll.frame.intersection(app.frame)
+        let keyboard = app.keyboards.firstMatch
+        let navigation = app.navigationBars.firstMatch
+        let top = navigation.exists ? max(frame.minY, navigation.frame.maxY) : frame.minY + 100
+        let bottom = keyboard.exists ? min(frame.maxY, keyboard.frame.minY - 80) : frame.maxY
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let upper = origin.withOffset(CGVector(dx: frame.minX + 20, dy: top + 30))
+        let lower = origin.withOffset(CGVector(dx: frame.minX + 20, dy: bottom - 30))
+        if towardTop {
+            upper.press(forDuration: 0.05, thenDragTo: lower)
+        } else {
+            lower.press(forDuration: 0.05, thenDragTo: upper)
+        }
     }
 
     @MainActor
