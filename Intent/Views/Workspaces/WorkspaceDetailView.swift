@@ -390,10 +390,20 @@ private extension WorkspaceDetailView {
     }
 
     var hasWorkspaceResources: Bool {
+        hasWorkspaceTerminals || hasWorkspaceBrowsers || hasWorkspaceScripts
+    }
+
+    private var hasWorkspaceTerminals: Bool {
         !terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty
-            || !browserStore.browsers(workspaceId: workspaceId).isEmpty
+    }
+
+    private var hasWorkspaceBrowsers: Bool {
+        !browserStore.browsers(workspaceId: workspaceId).isEmpty
             || browserStore.errorMessage(workspaceId: workspaceId) != nil
-            || !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty
+    }
+
+    private var hasWorkspaceScripts: Bool {
+        !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty
             || scriptStore.errorMessage(workspaceId: workspaceId) != nil
     }
 
@@ -436,13 +446,19 @@ private extension WorkspaceDetailView {
     var agentListContent: some View {
         LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
             ForEach(agentListRows) { @Sendable row in row }
-            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore, revealedTarget: $revealedSwipeTarget) { terminal in
-                selectedTerminal = terminal
+            if hasWorkspaceTerminals {
+                WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore, revealedTarget: $revealedSwipeTarget) { terminal in
+                    selectedTerminal = terminal
+                }
             }
-            WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore, revealedTarget: $revealedSwipeTarget) { browser in
-                selectedBrowser = browser
+            if hasWorkspaceBrowsers {
+                WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore, revealedTarget: $revealedSwipeTarget) { browser in
+                    selectedBrowser = browser
+                }
             }
-            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore, revealedTarget: $revealedSwipeTarget)
+            if hasWorkspaceScripts {
+                WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore, revealedTarget: $revealedSwipeTarget)
+            }
         }
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.bottom, WorkspaceDetailStyle.pageInset)
