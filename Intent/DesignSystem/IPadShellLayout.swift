@@ -31,7 +31,7 @@ struct IPadShellLayout: Equatable {
         width >= Self.largeWindowWidth ? Self.largeSidebarWidth : Self.smallSidebarWidth
     }
     var contentWidth: CGFloat { max(0, width - 2 * inset - (usesCompactNavigation ? 0 : Self.railWidth + railGutter)) }
-    var sidebarWidth: CGFloat { min(preferredSidebarWidth, contentWidth) }
+    var sidebarWidth: CGFloat { usesCompactNavigation ? contentWidth : min(preferredSidebarWidth, contentWidth) }
     var usesSidebarOverlay: Bool {
         let minimumDetail = isAccessibilitySize ? Self.accessibleDetailWidth : Self.minimumDetailWidth
         return contentWidth < preferredSidebarWidth + gutter + minimumDetail

@@ -53,14 +53,16 @@ struct WorkspaceActionLauncher: ViewModifier {
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
-            .accessibilityHidden(isOpen)
+            .accessibilityHidden(true, isEnabled: isOpen)
             .overlayPreferenceValue(WorkspaceActionMenuInputTop.self) { inputTop in
                 let bottomInset = avoidsConversationInput ? inputTop.map { max(0, overlayBottom - $0) } ?? 0 : 0
                 // Keep the overlay's measured extent independent of its padded controls.
-                Color.clear
-                    .allowsHitTesting(false)
-                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { overlayBottom = $0 }
-                    .overlay { actionOverlay(bottomInset: bottomInset) }
+                if isEnabled {
+                    Color.clear
+                        .allowsHitTesting(false)
+                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { overlayBottom = $0 }
+                        .overlay { actionOverlay(bottomInset: bottomInset) }
+                }
             }
             .animation(
                 reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),

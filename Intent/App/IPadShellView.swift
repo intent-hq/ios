@@ -98,6 +98,7 @@ struct IPadShellView: View {
                     usesCompactNavigation: measuredLayout.usesCompactNavigation,
                     showsWorkspaceList: showsWorkspaceList
                 )
+                coordinator.ensureIPadWorkspaceSelection()
             }
         }
         .onChange(of: sidebarPresentation) { old, new in
@@ -206,6 +207,7 @@ struct IPadShellView: View {
     }
 
     private func collapseSidebar() {
+        guard !layout.usesCompactNavigation || !showsWorkspaceList || navigation.section != .workspaces else { return }
         coordinator.iPadNavigation.collapseSidebar()
     }
 

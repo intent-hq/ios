@@ -7,6 +7,45 @@ import UIKit
 extension AppCoordinatorTests {
     @Test(.enabled("The host must publish accessible controls") {
         await SyntheticBadgeHost.publishesAccessibilityTree()
+    })
+    @MainActor func iPadWorkspaceBackFollowsWindowWidthAndKeepsSelection() async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let coordinator = compactShellCoordinator(fixture)
+        fixture.session.workspaceStore.workspaces = [Self.makeWorkspace(id: ConversationStartupFixture.workspaceId)]
+        let size = CompactShellSize(width: CompactShellSize.wide)
+        let shell = ResizableIPadTestShell(session: fixture.session, coordinator: coordinator, size: size)
+        try await SyntheticBadgeHost.render(shell, width: CompactShellSize.wide, height: CompactShellSize.height) { host, _ in
+            try waitForCompactShell {
+                coordinator.selectedWorkspaceId == ConversationStartupFixture.workspaceId
+                    && compactControl("ipad.rail.workspaces", in: host) != nil
+            }
+            #expect(compactControl("workspaceDetail.back", in: host) == nil)
+            try recordCompactShell(in: host, width: size.width, name: "ipad-wide-workspace-no-back.png")
+            size.width = CompactShellSize.narrow
+            try waitForCompactShell { compactControl("workspaceDetail.back", in: host) != nil }
+            let detail = coordinator.currentScreenDescription
+            try recordCompactShell(in: host, width: size.width, name: "ipad-narrow-workspace-back.png")
+            let back = try #require(compactControl("workspaceDetail.back", in: host))
+            #expect(back.accessibilityActivate())
+            try waitForCompactShell {
+                coordinator.iPadNavigation.isSidebarVisible
+                    && compactControl("workspaces.search.open", in: host) != nil
+            }
+            #expect(coordinator.currentScreenDescription == detail)
+            #expect(coordinator.selectedWorkspaceId == ConversationStartupFixture.workspaceId)
+            try recordCompactShell(in: host, width: size.width, name: "ipad-narrow-back-to-workspaces.png")
+            size.width = CompactShellSize.wide
+            try waitForCompactShell { compactControl("ipad.rail.workspaces", in: host) != nil }
+            #expect(compactControl("workspaceDetail.back", in: host) == nil)
+            #expect(coordinator.selectedWorkspaceId == ConversationStartupFixture.workspaceId)
+            coordinator.iPadNavigation.collapseSidebar()
+            #expect(compactControl("workspaceDetail.back", in: host) == nil)
+        }
+    }
+
+    @Test(.enabled("The host must publish accessible controls") {
+        await SyntheticBadgeHost.publishesAccessibilityTree()
     }, arguments: [ColorScheme.light, .dark])
     @MainActor func iPadCompactLaunchShowsListAndMenuDestinations(appearance: ColorScheme) async throws {
         let fixture = ConversationStartupFixture()

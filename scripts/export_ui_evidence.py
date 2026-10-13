@@ -15,6 +15,9 @@ CAPTURES = {
         "testDisclosureAndNoteNavigationKeepSeparateTouchTargets": ("note-viewer-flat-back-button",),
     },
     "AppCoordinatorTests": {
+        "iPadWorkspaceBackFollowsWindowWidthAndKeepsSelection": (
+            "ipad-wide-workspace-no-back", "ipad-narrow-workspace-back", "ipad-narrow-back-to-workspaces",
+        ),
         "iPadCompactLaunchShowsListAndMenuDestinations": tuple(
             f"ipad-narrow-{screen}-{appearance}"
             for appearance in ("light", "dark")

@@ -17,6 +17,7 @@ struct IPadCompactNavigationTests {
             #expect(rail.contentWidth == rail.width - 2 * rail.inset - IPadShellLayout.railWidth - rail.gutter)
             #expect(compact.detailLeadingInset(sidebarVisible: true) == 0)
             #expect(compact.sidebarWidth <= compact.contentWidth)
+            #expect(compact.sidebarWidth == compact.contentWidth)
         }
     }
 
@@ -63,5 +64,60 @@ struct IPadCompactNavigationTests {
         #expect(state.detail == .assistant)
         #expect(state.hasOpenedAssistant)
         #expect(!state.usesCompactNavigation)
+    }
+}
+
+extension AppCoordinatorTests {
+    @Test @MainActor func iPadWideLayoutSelectsWorkspaceAfterMeasurementAndLoading() {
+        let store = WorkspaceStore(forTesting: true)
+        let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
+        coordinator.usesIPadShell = true
+        coordinator.currentScreen = .workspaceList
+        coordinator.ensureIPadWorkspaceSelection()
+        #expect(coordinator.selectedWorkspaceId == nil)
+        coordinator.iPadNavigation.updateLayout(usesOverlay: false)
+        coordinator.ensureIPadWorkspaceSelection()
+        #expect(coordinator.selectedWorkspaceId == nil)
+        store.workspaces = [
+            Self.makeWorkspace(id: "archived", status: "archived"), Self.makeWorkspace(id: "deleted", status: "deleted"),
+            Self.makeWorkspace(id: Workspace.chiefWorkspaceId), Self.makeWorkspace(id: "available")
+        ]
+        coordinator.ensureIPadWorkspaceSelection()
+        #expect(coordinator.selectedWorkspaceId == "available")
+        #expect(coordinator.currentScreenDescription == String(describing: AppScreen.workspaceDetail(workspaceId: "available")))
+        coordinator.onSelectAgent("agent", workspaceId: "available", agentName: "Agent")
+        let conversation = coordinator.currentScreenDescription
+        coordinator.ensureIPadWorkspaceSelection()
+        #expect(coordinator.currentScreenDescription == conversation)
+        store.workspaces = [Self.makeWorkspace(id: "replacement")]
+        coordinator.handleMissingWorkspace()
+        #expect(coordinator.selectedWorkspaceId == "replacement")
+        store.workspaces = []
+        coordinator.handleMissingWorkspace()
+        #expect(coordinator.selectedWorkspaceId == nil)
+        #expect(coordinator.iPadNavigation.isSidebarVisible)
+    }
+
+    @Test @MainActor func iPadCompactBackRevealsListWithoutClearingSelection() {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [Self.makeWorkspace(id: "available")]
+        let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
+        coordinator.usesIPadShell = true
+        coordinator.currentScreen = .workspaceList
+        coordinator.ensureIPadWorkspaceSelection()
+        #expect(coordinator.selectedWorkspaceId == nil, "A window's initial width must be known before selecting")
+        coordinator.iPadNavigation.updateLayout(usesOverlay: true, usesCompactNavigation: true, showsWorkspaceList: true)
+        coordinator.ensureIPadWorkspaceSelection()
+        #expect(coordinator.selectedWorkspaceId == nil)
+        coordinator.onSelectWorkspace("available")
+        let detail = coordinator.currentScreenDescription
+        #expect(!coordinator.iPadNavigation.isSidebarVisible)
+        coordinator.onBackToWorkspaceList()
+        #expect(coordinator.iPadNavigation.isSidebarVisible)
+        #expect(coordinator.selectedWorkspaceId == "available")
+        #expect(coordinator.currentScreenDescription == detail)
+        coordinator.iPadNavigation.updateLayout(usesOverlay: false)
+        coordinator.ensureIPadWorkspaceSelection()
+        #expect(coordinator.currentScreenDescription == detail)
     }
 }

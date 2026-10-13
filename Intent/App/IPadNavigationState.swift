@@ -27,6 +27,7 @@ struct IPadNavigationState: Equatable {
     private(set) var isDrawerPresented = false
     private(set) var usesSidebarOverlay = false
     private(set) var usesCompactNavigation = false
+    private(set) var hasMeasuredLayout = false
 
     var isSidebarVisible: Bool {
         usesSidebarOverlay ? isDrawerPresented : isSidebarExpanded
@@ -90,6 +91,7 @@ struct IPadNavigationState: Equatable {
     }
 
     mutating func updateLayout(usesOverlay: Bool, usesCompactNavigation: Bool = false, showsWorkspaceList: Bool = false) {
+        hasMeasuredLayout = true
         guard usesSidebarOverlay != usesOverlay || self.usesCompactNavigation != usesCompactNavigation else { return }
         usesSidebarOverlay = usesOverlay
         self.usesCompactNavigation = usesCompactNavigation

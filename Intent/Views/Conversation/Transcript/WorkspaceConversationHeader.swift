@@ -6,11 +6,12 @@ extension View {
     func workspacePhoneNavigation<Actions: View>(
         title: String,
         createdAt: String?,
+        showsBackButton: Bool = true,
         onBack: @escaping () -> Void,
         @ViewBuilder actions: @escaping () -> Actions
     ) -> some View {
         #if os(iOS)
-        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, onBack: onBack, actions: actions))
+        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, showsBackButton: showsBackButton, onBack: onBack, actions: actions))
         #else
         self
         #endif
@@ -21,6 +22,7 @@ extension View {
 private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
     let title: String
     let createdAt: String?
+    let showsBackButton: Bool
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -38,7 +40,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
                         backIdentifier: "workspaceDetail.back",
                         showsWorkspacePlaceholder: true,
                         workspaceCreatedAt: createdAt,
-                        onBack: onBack,
+                        onBack: showsBackButton ? onBack : nil,
                         actions: actions
                     )
                 }

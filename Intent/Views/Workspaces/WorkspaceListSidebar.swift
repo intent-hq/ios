@@ -169,7 +169,7 @@ struct WorkspaceListSidebar: View {
                 searchFocused = false
                 if let id = newId {
                     coordinator.onSelectWorkspace(id)
-                } else {
+                } else if !isEmbedded {
                     coordinator.selectedWorkspaceId = nil
                 }
             }
