@@ -110,8 +110,7 @@ private struct WorkspaceBrowserRow: View {
                 .frame(width: WorkspaceDetailStyle.avatarSize, height: WorkspaceDetailStyle.avatarSize)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
-                Text(browser.title)
-                    .interFont(Constants.Typography.bodyM)
+                Text(browser.title).interFont(Constants.Typography.bodyM)
                     .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
                 if let command = browser.command {
                     Text(command)

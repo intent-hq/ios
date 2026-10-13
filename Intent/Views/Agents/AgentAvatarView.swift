@@ -53,6 +53,7 @@ struct AgentAvatarView: View {
                 .scaledToFit()
                 .foregroundStyle(glyphColor)
                 .frame(width: artSize, height: artSize)
+                .accessibilityHidden(true)
         } else {
             AgentAvatarStrokeShape(glyphPath: design.glyph.strokePath)
                 .stroke(glyphColor, style: StrokeStyle(

@@ -15,8 +15,12 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         }
         XCTAssertTrue(row.isHittable)
         let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5))
-        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: -100, dy: 12)),
-                    withVelocity: .slow, thenHoldForDuration: 0.5)
+        start.press(
+            forDuration: 0.05,
+            thenDragTo: start.withOffset(CGVector(dx: -100, dy: 12)),
+            withVelocity: .slow,
+            thenHoldForDuration: 0.5
+        )
         let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
         XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(archive.waitForNonExistence(timeout: 2), "Actions must remain open after the drag settles")

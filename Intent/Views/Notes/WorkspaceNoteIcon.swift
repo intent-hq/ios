@@ -32,6 +32,7 @@ struct WorkspaceNoteIcon: View {
             .resizable()
             .scaledToFit()
             .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
+            .accessibilityLabel("Note")
     }
 
     @ViewBuilder
