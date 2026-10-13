@@ -69,6 +69,7 @@ nonisolated enum InvitedSyncKey {
         var index = hex.startIndex
         while index < hex.endIndex {
             let end = hex.index(index, offsetBy: hexWidth)
+            // Base 16 is intrinsic to this hexadecimal byte decoder, not a configurable limit.
             if let byte = UInt8(hex[index..<end], radix: 16) { bytes.append(byte) } // swiftlint:disable:this no_magic_numbers
             index = end
         }

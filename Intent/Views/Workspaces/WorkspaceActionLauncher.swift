@@ -20,7 +20,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     private enum Layout {
         static let blurRadius: CGFloat = 15
         static let shadeOpacity = 0.8
-        // The shared light/dark home-menu fade in IOS Working.
+        // Literal 8-bit channels preserve the shared light/dark home-menu fade in IOS Working.
         // swiftlint:disable:next no_magic_numbers
         static let shade = Color(.sRGB, red: 26 / 255, green: 26 / 255, blue: 25 / 255)
         static let springResponse = 0.35

@@ -219,6 +219,7 @@ import Observation
     /// `handleEvent` treats as ignore.
     nonisolated static func classify(
         type: String,
+        // The shared classifier signature accepts absent event data without inventing a payload.
         data: [String: Any]? // swiftlint:disable:this discouraged_optional_collection
     ) -> EventClassification? {
         if refetchEventTypes.contains(type) { return .refetch }

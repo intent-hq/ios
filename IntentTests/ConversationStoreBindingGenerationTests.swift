@@ -3,7 +3,7 @@ import Foundation
 import Testing
 
 // Extracted wire fixtures intentionally mirror the daemon payloads inline.
-// swiftlint:disable multiline_arguments multiline_call_arguments multiline_literal_brackets no_magic_numbers
+// swiftlint:disable no_magic_numbers
 
 extension ConversationStoreLiveStateTests {
     /// Agent B's seq-0 snapshot row.
@@ -88,8 +88,10 @@ extension ConversationStoreLiveStateTests {
 
         // The channel has not seeded yet, so the firehose is the liveness signal.
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:stream:activity",
-                      "data": ["agentId": "agent-b"]] as [String: Any]
+            "event": [
+                "type": "agent:stream:activity",
+                "data": ["agentId": "agent-b"]
+            ] as [String: Any]
         ])
         #expect(store.isStreaming, "activity raises the flag while the channel is not live")
         #expect(store.messages.isEmpty, "activity never mutates the transcript")
@@ -124,8 +126,10 @@ extension ConversationStoreLiveStateTests {
         #expect(store.isLoading)
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:stream:activity",
-                      "data": ["agentId": "agent-b"]] as [String: Any]
+            "event": [
+                "type": "agent:stream:activity",
+                "data": ["agentId": "agent-b"]
+            ] as [String: Any]
         ])
 
         subscribeA.cancel()
@@ -207,9 +211,12 @@ extension ConversationStoreLiveStateTests {
     /// `-32602` with `data.code == "not-found"` (docs/PROTOCOL.md §3.3/§9).
     private func definitiveNotFound(agentId: String) -> NSError {
         NSError(
-            domain: "WebSocket", code: -32_602,
-            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: \(agentId)",
-                       NSError.intentErrorDataCodeKey: "not-found"]
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [
+                NSLocalizedDescriptionKey: "unknown agent id: \(agentId)",
+                NSError.intentErrorDataCodeKey: "not-found"
+            ]
         )
     }
 
@@ -259,8 +266,10 @@ extension ConversationStoreLiveStateTests {
             [
                 "id": "msg-a1", "role": "assistant", "timestamp": "2026-06-27T01:00:00.000Z",
                 "contentBlocks": [
-                    ["type": "tool_result", "id": "b-1", "toolUseId": "tc-1",
-                     "output": "p", "outputTruncated": true]
+                    [
+                        "type": "tool_result", "id": "b-1", "toolUseId": "tc-1",
+                        "output": "p", "outputTruncated": true
+                    ]
                 ]
             ]
         ])
@@ -274,9 +283,11 @@ extension ConversationStoreLiveStateTests {
         }
 
         await rebindToAgentB(store, fake)
-        fake.resolvePending("agent.getMessageBlock", with: ["block": [
-            "type": "tool_result", "id": "b-1", "toolUseId": "tc-1", "output": "full"
-        ] as [String: Any]])
+        fake.resolvePending("agent.getMessageBlock", with: [
+            "block": [
+                "type": "tool_result", "id": "b-1", "toolUseId": "tc-1", "output": "full"
+            ] as [String: Any]
+        ])
         await hydration.value
 
         #expect(!store.isBlockHydrated(messageId: "msg-a1", blockId: "b-1"))
@@ -337,4 +348,4 @@ extension ConversationStoreLiveStateTests {
     }
 }
 
-// swiftlint:enable multiline_arguments multiline_call_arguments multiline_literal_brackets no_magic_numbers
+// swiftlint:enable no_magic_numbers

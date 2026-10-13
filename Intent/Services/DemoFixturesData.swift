@@ -3,8 +3,7 @@ import Foundation
 extension DemoFixtures {
     // MARK: - Workspaces
 
-    // Numeric values below are intentional fixture payload data. Keeping them
-    // literal makes the simulated daemon responses readable and auditable.
+    // Literal numeric payloads keep the simulated daemon responses readable and auditable.
     // swiftlint:disable no_magic_numbers
 
     static var workspaces: [[String: Any]] {

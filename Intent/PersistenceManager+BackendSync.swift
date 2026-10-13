@@ -66,11 +66,12 @@ extension PersistenceManager {
     func publishPendingBackends() {
         publishPendingInvitedSessions()
         guard backendPublisher != nil, var connections = loadConnectionsWithOutcome().connections else { return }
+        let millisecondsPerSecond: Double = 1000
         var queuedBackfill = false
         for index in connections.indices where connections[index].principal?.isOwner == true
             && connections[index].syncUpdatedAt == nil
             && connections[index].pendingSyncUpdatedAt == nil {
-            connections[index].pendingSyncUpdatedAt = connections[index].server.pairedAt.timeIntervalSince1970 * 1000 // swiftlint:disable:this no_magic_numbers
+            connections[index].pendingSyncUpdatedAt = connections[index].server.pairedAt.timeIntervalSince1970 * millisecondsPerSecond
             connections[index].localPairingSyncClock = connections[index].pendingSyncUpdatedAt
             queuedBackfill = true
         }

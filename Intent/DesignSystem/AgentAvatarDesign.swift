@@ -5,31 +5,21 @@ import SwiftUI
 /// are picked deterministically from the agent id.
 enum AgentAvatarDesign: String, CaseIterable {
     // CaseIterable order mirrors the desktop avatar catalog and is behaviorally significant.
-    // swiftlint:disable:next sorted_enum_cases
+    // swiftlint:disable sorted_enum_cases
     case coordinator
-    // swiftlint:disable:next sorted_enum_cases
     case implementor
-    // swiftlint:disable:next sorted_enum_cases
     case verifier
-    // swiftlint:disable:next sorted_enum_cases
     case prReviewer = "pr-reviewer"
-    // swiftlint:disable:next sorted_enum_cases
     case uiDesigner = "ui-designer"
-    // swiftlint:disable:next sorted_enum_cases
     case chiefOfStaff = "chief-of-staff"
-    // swiftlint:disable:next sorted_enum_cases
     case ralph
     case fallbackGlasses = "fallback-glasses"
-    // swiftlint:disable:next sorted_enum_cases
     case fallbackCrown = "fallback-crown"
-    // swiftlint:disable:next sorted_enum_cases
     case fallbackCrownInverted = "fallback-crown-inverted"
-    // swiftlint:disable:next sorted_enum_cases
     case fallbackCrownMouth = "fallback-crown-mouth"
-    // swiftlint:disable:next sorted_enum_cases
     case fallbackCode = "fallback-code"
-    // swiftlint:disable:next sorted_enum_cases
     case fallbackDots = "fallback-dots"
+    // swiftlint:enable sorted_enum_cases
 
     static let fallbackDesigns: [Self] = [
         .fallbackGlasses,
@@ -122,9 +112,6 @@ extension AgentAvatarDesign {
         return glyphs
     }()
 
-    // Path data below is verbatim from AgentAvatarArt.svelte (16×16 viewBox).
-    // Glyph geometry below is also verbatim artwork data; naming each coordinate
-    // would obscure its relationship to the desktop source.
     private static func makeGlyph(_ design: AgentAvatarDesign) -> AgentAvatarGlyph {
         switch design {
         case .coordinator, .implementor, .verifier, .prReviewer, .uiDesigner, .chiefOfStaff, .ralph:
@@ -135,42 +122,47 @@ extension AgentAvatarDesign {
         }
     }
 
+    // Keep verbatim 16×16 artwork coordinates beside their SVG paths to match AgentAvatarArt.svelte.
+    // swiftlint:disable no_magic_numbers
     private static func makeBuiltinGlyph(_ design: AgentAvatarDesign) -> AgentAvatarGlyph {
         var (stroke, fill) = (Path(), Path())
         var transform = CGAffineTransform.identity
         switch design {
         case .coordinator:
             transform = CGAffineTransform(translationX: -2, y: -2)
-            // Verbatim SVG path bytes mirror the desktop artwork.
-            // swiftlint:disable:next line_length
-            stroke.addPath(Path(svgPathData: "M9.958 11.718V16.135M4.658 6.455L7.477 8.082C7.826 8.284 8.264 8.246 8.573 7.986C8.881 7.727 8.995 7.302 8.857 6.924L7.744 3.865M12.172 3.865L11.059 6.924C10.921 7.302 11.035 7.727 11.344 7.986C11.653 8.246 12.091 8.284 12.44 8.082L15.259 6.455M6.014 14.111L8.106 11.618C8.366 11.309 8.404 10.871 8.202 10.522C8.001 10.173 7.602 9.987 7.205 10.057L4 10.622M16 10.622L12.794 10.057C12.397 9.987 11.999 10.173 11.797 10.522C11.596 10.871 11.634 11.309 11.893 11.618L13.985 14.111"))
+            stroke.addPath(Path(svgPathData: """
+            M9.958 11.718V16.135\
+            M4.658 6.455L7.477 8.082C7.826 8.284 8.264 8.246 8.573 7.986C8.881 7.727 8.995 7.302 8.857 6.924L7.744 3.865\
+            M12.172 3.865L11.059 6.924C10.921 7.302 11.035 7.727 11.344 7.986C11.653 8.246 12.091 8.284 12.44 8.082L15.259 6.455\
+            M6.014 14.111L8.106 11.618C8.366 11.309 8.404 10.871 8.202 10.522C8.001 10.173 7.602 9.987 7.205 10.057L4 10.622\
+            M16 10.622L12.794 10.057C12.397 9.987 11.999 10.173 11.797 10.522C11.596 10.871 11.634 11.309 11.893 11.618L13.985 14.111
+            """))
         case .implementor:
-            // swiftlint:disable:next line_length
-            stroke.addPath(Path(svgPathData: "M5.333 4.666H6C7.105 4.666 8 5.561 8 6.666V8.333M5.333 11.999H6C7.105 11.999 8 11.104 8 9.999V8.332M10.667 4.666H10C8.896 4.666 8 5.561 8 6.666V8.333M10.667 11.999H10C8.896 11.999 8 11.104 8 9.999V8.332"))
+            stroke.addPath(Path(svgPathData: """
+            M5.333 4.666H6C7.105 4.666 8 5.561 8 6.666V8.333M5.333 11.999H6C7.105 11.999 8 11.104 8 9.999V8.332\
+            M10.667 4.666H10C8.896 4.666 8 5.561 8 6.666V8.333M10.667 11.999H10C8.896 11.999 8 11.104 8 9.999V8.332
+            """))
             stroke.addPath(Path(svgPathData: "M3.667 6L2.303 6.963C1.485 7.54 1.451 8.741 2.235 9.363L3.667 10.5M12.334 6L13.698 6.963C14.515 7.54 14.549 8.741 13.766 9.363L12.334 10.5"))
         case .verifier:
-            // swiftlint:disable:next line_length
-            stroke.addPath(Path(svgPathData: "M3.667 5.75L2.303 6.713C1.485 7.29 1.451 8.491 2.235 9.113L3.667 10.25M12.334 5.75L13.698 6.713C14.515 7.29 14.549 8.491 13.765 9.113L12.334 10.25M5.5 7.756L6.441 9.688C6.818 10.46 7.928 10.43 8.262 9.638L10.5 4.333"))
+            stroke.addPath(Path(svgPathData: """
+            M3.667 5.75L2.303 6.713C1.485 7.29 1.451 8.491 2.235 9.113L3.667 10.25\
+            M12.334 5.75L13.698 6.713C14.515 7.29 14.549 8.491 13.765 9.113L12.334 10.25\
+            M5.5 7.756L6.441 9.688C6.818 10.46 7.928 10.43 8.262 9.638L10.5 4.333
+            """))
         case .prReviewer:
             stroke.addRoundedRect(
-                // swiftlint:disable:next no_magic_numbers
                 in: CGRect(x: 6.333, y: 6.333, width: 3.334, height: 3.334),
-                // swiftlint:disable:next no_magic_numbers
                 cornerSize: CGSize(width: 0.334, height: 0.334)
             )
             stroke.addPath(Path(svgPathData: "M9 3H11C12.105 3 13 3.895 13 5V7M9 13H11C12.105 13 13 12.105 13 11V9M7 3H5C3.895 3 3 3.895 3 5V7M7 13H5C3.895 13 3 12.105 3 11V9"))
         case .uiDesigner:
-            // swiftlint:disable:next no_magic_numbers
             transform = CGAffineTransform(translationX: 1, y: 4.468)
             stroke.addPath(Path(svgPathData: "M4 .543L1.636 2.212C.818 2.789.784 3.99 1.568 4.612L4 6.543M10 .543L12.364 2.212C13.182 2.789 13.216 3.99 12.432 4.612L10 6.543"))
-            // swiftlint:disable:next no_magic_numbers
             fill.addEllipse(in: circleRect(centerX: 7, centerY: 3.543, radius: 1.25))
         case .chiefOfStaff:
-            // swiftlint:disable:next no_magic_numbers
             transform = CGAffineTransform(translationX: 0.5, y: 4)
             stroke.addPath(Path(svgPathData: "M10 7.665H5M10 4.165H5M10 .665H5M3 2.165L1.636 3.128C.818 3.705.784 4.906 1.568 5.528L3 6.665M12 2.165L13.364 3.128C14.182 3.705 14.216 4.906 13.432 5.528L12 6.665"))
         case .ralph:
-            // swiftlint:disable:next no_magic_numbers
             transform = CGAffineTransform(translationX: 1, y: 3)
             stroke.addPath(Path(svgPathData: "M7 0V10M4 2L1.636 3.669C.818 4.246.784 5.447 1.568 6.069L4 8M10 2L12.364 3.669C13.182 4.246 13.216 5.447 12.432 6.069L10 8"))
         default:
@@ -184,46 +176,37 @@ extension AgentAvatarDesign {
         var transform = CGAffineTransform.identity
         switch design {
         case .fallbackGlasses:
-            // swiftlint:disable:next no_magic_numbers
             transform = CGAffineTransform(translationX: 1, y: 5.335)
             stroke.addPath(Path(svgPathData: "M6 2.665H8M0 2.665H2M12 2.665H14"))
-            // swiftlint:disable:next no_magic_numbers
             stroke.addEllipse(in: circleRect(centerX: 4, centerY: 2.665, radius: 2))
-            // swiftlint:disable:next no_magic_numbers
             stroke.addEllipse(in: circleRect(centerX: 10, centerY: 2.665, radius: 2))
         case .fallbackCrown, .fallbackCrownInverted:
-            // Verbatim artwork transforms are kept inline with their SVG geometry.
-            // swiftlint:disable no_magic_numbers
             transform = design == .fallbackCrown
                 ? CGAffineTransform(translationX: 1, y: 2.918)
                 : CGAffineTransform(translationX: 1, y: 13.082).scaledBy(x: 1, y: -1)
-            // swiftlint:enable no_magic_numbers
             stroke.addPath(Path(svgPathData: crownPathData))
-            // swiftlint:disable:next no_magic_numbers
             fill.addEllipse(in: circleRect(centerX: 4.5, centerY: 8.915, radius: 1.25))
-            // swiftlint:disable:next no_magic_numbers
             fill.addEllipse(in: circleRect(centerX: 9.5, centerY: 8.915, radius: 1.25))
         case .fallbackCrownMouth:
-            // swiftlint:disable:next no_magic_numbers
             transform = CGAffineTransform(translationX: 1, y: 3.085)
             stroke.addPath(Path(svgPathData: crownPathData + "M4 9.165H10"))
         case .fallbackCode:
             stroke.addPath(Path(svgPathData: "M13 4.5L10.636 6.169C9.818 6.746 9.784 7.947 10.568 8.569L13 10.5M3 4.5L5.364 6.169C6.182 6.746 6.216 7.947 5.432 8.569L3 10.5M6 11.5H10"))
         case .fallbackDots:
-            // swiftlint:disable:next no_magic_numbers
             transform = CGAffineTransform(translationX: 4, y: 6.5)
-            // swiftlint:disable:next no_magic_numbers
             fill.addEllipse(in: circleRect(centerX: 1.5, centerY: 1.5, radius: 1.5))
-            // swiftlint:disable:next no_magic_numbers
             fill.addEllipse(in: circleRect(centerX: 6.5, centerY: 1.5, radius: 1.5))
         default:
             assertionFailure("Unexpected builtin avatar design")
         }
         return AgentAvatarGlyph(strokePath: stroke.applying(transform), fillPath: fill.applying(transform))
     }
+    // swiftlint:enable no_magic_numbers
 
-    // swiftlint:disable:next line_length
-    private static let crownPathData = "M2 5.665L3.62 1.461C3.788.982 4.219.665 4.7.665C5.183.665 5.616.98 5.79 1.457L6.043 2.154C6.363 3.038 7.616 3.031 7.926 2.144L8.165 1.461C8.333.982 8.764.665 9.246.665C9.729.665 10.162.98 10.335 1.457L12 5.665M0 5.665H14"
+    private static let crownPathData = """
+    M2 5.665L3.62 1.461C3.788.982 4.219.665 4.7.665C5.183.665 5.616.98 5.79 1.457L6.043 2.154\
+    C6.363 3.038 7.616 3.031 7.926 2.144L8.165 1.461C8.333.982 8.764.665 9.246.665C9.729.665 10.162.98 10.335 1.457L12 5.665M0 5.665H14
+    """
 
     private static func circleRect(centerX: CGFloat, centerY: CGFloat, radius: CGFloat) -> CGRect {
         CGRect(x: centerX - radius, y: centerY - radius, width: radius * 2, height: radius * 2)
