@@ -99,6 +99,7 @@ struct ContentBlockBody: View, Equatable {
     }
     @State private var lightboxPresented = false
     @State private var pdfLink: PDFLinkPreviewView.Link?
+    @State private var textLink: TextLinkPreviewView.Link?
     /// Set when a thumbnail tap started hydration: the lightbox then opens
     /// automatically once the full block merges in (dataTruncated clears).
     @State private var lightboxPendingHydration = false
@@ -195,12 +196,17 @@ struct ContentBlockBody: View, Equatable {
         .fullScreenCover(item: $pdfLink) { link in
             PDFLinkPreviewView(link: link)
         }
+        .fullScreenCover(item: $textLink) { link in
+            TextLinkPreviewView(link: link)
+        }
     }
 
     private func openTextURL(_ url: URL) -> OpenURLAction.Result {
         switch Self.textURLRoute(for: url, workspaceId: workspaceId) {
         case .pdf(let link):
             pdfLink = link
+        case .text(let link):
+            textLink = link
         case let .note(noteId, targetWorkspaceId):
             if let onNavigateToNote {
                 onNavigateToNote(noteId, targetWorkspaceId, "Note")
@@ -368,6 +374,7 @@ struct ContentBlockBody: View, Equatable {
 extension ContentBlockBody {
     enum TextURLRoute: Equatable {
         case pdf(PDFLinkPreviewView.Link)
+        case text(TextLinkPreviewView.Link)
         case note(id: String, workspaceId: String)
         case system
     }
@@ -376,6 +383,9 @@ extension ContentBlockBody {
     static func textURLRoute(for url: URL, workspaceId: String) -> TextURLRoute {
         if let link = IntentFileLink.parse(url), WorkspacePDF.isPDF(path: link.path) {
             return .pdf(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
+        }
+        if let link = IntentFileLink.parse(url), WorkspaceTextFile.isText(path: link.path) {
+            return .text(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
         }
         if let link = NoteDetailView.parseIntentNoteLink(url) {
             return .note(id: link.id, workspaceId: link.workspaceId ?? workspaceId)

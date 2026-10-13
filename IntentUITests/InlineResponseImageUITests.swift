@@ -111,14 +111,14 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         }, "The inline PDF card must occupy its preview area; opening it below proves it loaded")
         XCTAssertGreaterThanOrEqual(card.frame.minX, transcript.frame.minX)
         XCTAssertLessThanOrEqual(card.frame.maxX, transcript.frame.maxX)
-        capturePDF(app, named: "Inline PDF card and link")
+        captureMedia(app, named: "Inline PDF card and link")
 
         // Textual draws the attachment into the final square of this paragraph.
         card.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: Fixture.thumbnailSide / 2, dy: card.frame.height - Fixture.thumbnailSide / 2))
             .tap()
         assertPDFViewer(in: app)
-        capturePDF(app, named: "PDF viewer from inline card")
+        captureMedia(app, named: "PDF viewer from inline card")
         let close = app.buttons["pdf.close"].firstMatch
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Fixture.timeout))
@@ -131,13 +131,13 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         // Selectable Markdown overlays the semantic link in accessibility hit-testing.
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         assertPDFViewer(in: app)
-        capturePDF(app, named: "PDF viewer from text link")
+        captureMedia(app, named: "PDF viewer from text link")
         app.buttons["Share PDF"].firstMatch.tap()
         XCTAssertTrue(
             app.otherElements["ActivityListView"].firstMatch.waitForExistence(timeout: Fixture.timeout),
             "Share must present the native activity sheet"
         )
-        capturePDF(app, named: "PDF share sheet")
+        captureMedia(app, named: "PDF share sheet")
     }
 
     @MainActor
@@ -165,7 +165,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         let retry = app.buttons["Retry loading PDF"].firstMatch
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable && retry.isHittable })
         XCTAssertEqual(close.label, "Close PDF")
-        capturePDF(app, named: "PDF unavailable with close and retry")
+        captureMedia(app, named: "PDF unavailable with close and retry")
         retry.tap()
         XCTAssertTrue(unavailable.waitForExistence(timeout: Fixture.timeout))
         close.tap()
@@ -174,7 +174,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
     }
 
     @MainActor
-    private func capturePDF(_ app: XCUIApplication, named name: String) {
+    private func captureMedia(_ app: XCUIApplication, named name: String) {
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = name
         screenshot.lifetime = .keepAlways
@@ -287,5 +287,87 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             }
         }
         XCTAssertTrue(waitUntilVisible(paragraph, in: transcript, timeout: Fixture.timeout))
+    }
+}
+
+extension InlineResponseImageUITests {
+    @MainActor
+    func testTextLinkOpensViewerSharesAndRetriesMissingFile() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-inline-text"]
+        app.launch()
+        openWorkspace(in: app)
+        let agent = app.staticTexts[Fixture.agentName].firstMatch
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        agent.tap()
+        let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+        XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        let link = app.links["Open the text notes"].firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
+        reveal(link, in: transcript)
+        link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        assertTextViewerAndShare(in: app)
+        let close = app.buttons["text.close"].firstMatch
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.textViews["text.content"].firstMatch.waitForNonExistence(timeout: Fixture.timeout))
+
+        assertUnavailableTextCanClose(in: app, transcript: transcript)
+        XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
+        let after = message(in: app, containing: "The notes are ready to review and share.")
+        XCTAssertTrue(after.waitForExistence(timeout: Fixture.timeout))
+        reveal(after, in: transcript)
+        XCTAssertTrue(after.isHittable, "Closing either viewer must preserve the surrounding conversation")
+    }
+
+    @MainActor
+    private func assertTextViewerAndShare(in app: XCUIApplication) {
+        let content = app.textViews["text.content"].firstMatch
+        XCTAssertTrue(content.waitForExistence(timeout: Fixture.timeout))
+        let text = content.value as? String ?? ""
+        XCTAssertTrue(text.contains("Intent project notes"))
+        XCTAssertTrue(text.contains("Café review — ready to share."))
+        XCTAssertTrue(text.contains("3. Return to the conversation."))
+        XCTAssertTrue(app.navigationBars["Demo notes.txt"].exists)
+        let close = app.buttons["text.close"].firstMatch
+        let share = app.buttons["Share text file"].firstMatch
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable && share.isHittable })
+        XCTAssertEqual(close.label, "Close text file")
+        captureMedia(app, named: "Text viewer from text link")
+        share.tap()
+        let activity = app.otherElements["ActivityListView"].firstMatch
+        XCTAssertTrue(activity.waitForExistence(timeout: Fixture.timeout), "Share must present the native activity sheet")
+        let dismissRegion = app.otherElements["PopoverDismissRegion"].firstMatch
+        if dismissRegion.exists {
+            dismissRegion.tap()
+        } else {
+            activity.swipeDown()
+        }
+        XCTAssertTrue(activity.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable })
+    }
+
+    @MainActor
+    private func assertUnavailableTextCanClose(in app: XCUIApplication, transcript: XCUIElement) {
+        let link = app.links["Open the missing text file"].firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
+        reveal(link, in: transcript)
+        link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let unavailable = app.staticTexts["Text file unavailable"].firstMatch
+        XCTAssertTrue(unavailable.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.navigationBars["Missing notes.txt"].exists)
+        let close = app.buttons["text.close"].firstMatch
+        let retry = app.buttons["Retry loading text file"].firstMatch
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable && retry.isHittable })
+        XCTAssertEqual(close.label, "Close text file")
+        XCTAssertFalse(app.buttons["Share text file"].exists)
+        captureMedia(app, named: "Text unavailable with close and retry")
+        retry.tap()
+        XCTAssertTrue(unavailable.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { retry.isHittable && close.isHittable })
+        close.tap()
+        XCTAssertTrue(unavailable.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(close.waitForNonExistence(timeout: Fixture.timeout))
     }
 }

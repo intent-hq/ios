@@ -163,8 +163,8 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
             case .video(let video):
                 return AnyAttachment(IntentFileVideoAttachment(video: video, name: text.isEmpty ?
                     link.assetId : text) as any Textual.Attachment)
-            case .pdf:
-                // Saved-asset PDFs are not supported by this attachment route.
+            case .pdf, .text:
+                // Saved-asset documents are not supported by this attachment route.
                 return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
             }
         } catch {
