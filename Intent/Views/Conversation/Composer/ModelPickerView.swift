@@ -3,6 +3,7 @@ import SwiftUI
 struct ModelPickerView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dismiss) var dismiss
 
     @ScaledMetric(relativeTo: .body) private var selectionIconSide: CGFloat = 17
@@ -19,8 +20,12 @@ struct ModelPickerView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .background(Constants.Pairing.background(for: colorScheme).ignoresSafeArea())
+            .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
             .navigationTitle("Select Model")
             .toolbarTitleDisplayMode(.inline)
+            .toolbarBackground(Constants.Pairing.background(for: colorScheme), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     IntentIconButton(icon: .close, label: "Cancel") { dismiss() }
@@ -31,6 +36,7 @@ struct ModelPickerView: View {
                 await viewModel.refreshSelectableModels()
             }
         }
+        .presentationBackground(Constants.Pairing.background(for: colorScheme))
     }
 
     /// The provider's `models.list` failed and nothing is cached: an
@@ -61,11 +67,15 @@ struct ModelPickerView: View {
             let rows = (grouped[provider] ?? []).map { model in
                 (id: model.id, content: modelButton(model, isSelected: selectedModelId == model.id))
             }
-            let section = Section(header: Text(provider).interFont(Constants.Typography.eyebrow)) {
+            let header = Text(provider)
+                .interFont(Constants.Typography.eyebrow)
+                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
+            let section = Section(header: header) {
                 ForEach(rows, id: \.id) { @Sendable row in
                     row.content
                 }
             }
+            .listRowBackground(Constants.Pairing.surface(for: colorScheme))
             return (id: provider, content: section)
         }
         // Prepare row values on MainActor before SwiftUI requests them off-main.
@@ -74,6 +84,8 @@ struct ModelPickerView: View {
                 section.content
             }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
     }
 
     private func modelButton(_ model: ModelInfo, isSelected: Bool) -> some View {
@@ -86,7 +98,7 @@ struct ModelPickerView: View {
             HStack {
                 Text(model.name)
                     .interFont(Constants.Typography.bodyS)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                    .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                 Spacer()
                 if isSelected {
                     selectionIndicator

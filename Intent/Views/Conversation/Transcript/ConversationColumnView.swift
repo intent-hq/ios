@@ -439,8 +439,16 @@ private struct PendingQuestionRecoveryPlaceholder: View {
 private struct ConversationEmptyView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     private typealias Layout = Constants.Conversation.Column.Empty
+
+    private var secondaryForeground: Color {
+        if viewModel.workspaceId == Workspace.chiefWorkspaceId {
+            return WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast)
+        }
+        return Theme.mutedForeground(for: colorScheme)
+    }
 
     var body: some View {
         if let name = viewModel.specialistName {
@@ -451,14 +459,14 @@ private struct ConversationEmptyView: View {
                 if let description = viewModel.specialistDescription {
                     Text(description)
                         .interFont(Constants.Typography.bodyXS)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .foregroundStyle(secondaryForeground)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, Layout.descriptionHorizontalPadding)
                 }
                 if let displayName = viewModel.currentModelDisplayName {
                     Text("Using \(displayName)")
                         .interFont(Constants.Typography.subtextXXS)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.modelCaptionOpacity))
+                        .foregroundStyle(secondaryForeground.opacity(Layout.modelCaptionOpacity))
                         .padding(.top, Layout.modelCaptionTopPadding)
                 }
             }
