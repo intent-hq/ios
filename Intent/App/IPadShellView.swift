@@ -75,7 +75,9 @@ struct IPadShellView: View {
                 drawerBackdrop
                 sidebarPane
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Accept the new width before the retained sidebar's measured width
+            // catches up; otherwise its old minimum can keep the shell expanded.
+            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(layout.inset)
         .opacity(width == nil ? 0 : 1)
