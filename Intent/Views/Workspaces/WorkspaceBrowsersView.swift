@@ -14,6 +14,7 @@ struct WorkspaceBrowsersView: View {
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionHeadingSpacing) {
                 Text("Browsers")
                     .interFont(Constants.Typography.eyebrow)
+                    .textCase(.uppercase)
                     .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
                     .accessibilityAddTraits(.isHeader)
                 LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {

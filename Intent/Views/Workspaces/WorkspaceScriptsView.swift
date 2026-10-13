@@ -16,6 +16,7 @@ struct WorkspaceScriptsView: View {
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionHeadingSpacing) {
                 Text("Scripts")
                     .interFont(Constants.Typography.eyebrow)
+                    .textCase(.uppercase)
                     .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
                     .accessibilityAddTraits(.isHeader)
                 LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
