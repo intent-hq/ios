@@ -92,7 +92,7 @@ struct ManualTokenEntryView: View {
     @State private var connectTask: Task<Void, Never>?
     @FocusState private var focusedField: Field?
 
-    private enum Field { case host, port, token }
+    private enum Field { case host, port }
 
     var body: some View {
         Group {
@@ -205,17 +205,7 @@ struct ManualTokenEntryView: View {
     private var tokenEditor: some View {
         ManualTokenTextField(
             text: $token,
-            isSecure: !isTokenVisible,
-            isFocused: Binding(
-                get: { focusedField == .token },
-                set: { focused in
-                    if focused {
-                        focusedField = .token
-                    } else if focusedField == .token {
-                        focusedField = nil
-                    }
-                }
-            )
+            isSecure: !isTokenVisible
         )
     }
 

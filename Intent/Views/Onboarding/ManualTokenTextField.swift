@@ -5,7 +5,6 @@ import UIKit
 struct ManualTokenTextField: UIViewRepresentable {
     @Binding var text: String
     let isSecure: Bool
-    @Binding var isFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isEnabled) private var isEnabled
 
@@ -49,9 +48,9 @@ struct ManualTokenTextField: UIViewRepresentable {
         field.isEnabled = isEnabled
         if field.isSecureTextEntry != isSecure { updateSecureEntry(field) }
         if field.text != text { field.text = text }
-        if isFocused, isEnabled, !field.isFirstResponder {
-            field.becomeFirstResponder()
-        } else if !isFocused, field.isFirstResponder {
+        // UIKit owns tap focus. A SwiftUI FocusState with no registered token
+        // target can reset to nil and immediately undo becomeFirstResponder.
+        if !isEnabled, field.isFirstResponder {
             field.resignFirstResponder()
         }
     }
@@ -87,6 +86,11 @@ struct ManualTokenTextField: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
+    static func dismantleUIView(_ field: UITextField, coordinator _: Coordinator) {
+        field.delegate = nil
+        field.resignFirstResponder()
+    }
+
     final class Coordinator: NSObject, UITextFieldDelegate {
         var parent: ManualTokenTextField
         var isUpdating = false
@@ -96,14 +100,6 @@ struct ManualTokenTextField: UIViewRepresentable {
         @objc func textChanged(_ field: UITextField) {
             guard !isUpdating else { return }
             parent.text = field.text ?? ""
-        }
-
-        func textFieldDidBeginEditing(_: UITextField) {
-            if !isUpdating, !parent.isFocused { parent.isFocused = true }
-        }
-
-        func textFieldDidEndEditing(_: UITextField) {
-            if !isUpdating, parent.isFocused { parent.isFocused = false }
         }
 
         func textFieldShouldReturn(_ field: UITextField) -> Bool {
