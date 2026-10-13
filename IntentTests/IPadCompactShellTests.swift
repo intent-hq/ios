@@ -48,6 +48,8 @@ extension AppCoordinatorTests {
         defer { fixture.stop() }
         let coordinator = compactShellCoordinator(fixture)
         if detail == .assistant {
+            await fixture.session.assistantStore.refresh()
+            try #require(!fixture.session.assistantStore.threads.isEmpty)
             coordinator.onSelectAssistant(agentId: ConversationStartupFixture.parentId)
         } else {
             coordinator.onSelectAgent(ConversationStartupFixture.parentId, workspaceId: ConversationStartupFixture.workspaceId, agentName: "Agent")
