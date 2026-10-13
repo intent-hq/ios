@@ -2,6 +2,7 @@ import XCTest
 
 nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
+    private static let maximumHistorySwipes = 12
 
     @MainActor
     func testEmptyWorkspaceButtonOpensCreationAndReturns() {
@@ -65,6 +66,30 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["workspaces.menu"].isHittable)
+    }
+
+    @MainActor
+    func testRecentAgentsScrollsToLastEntryAndOpensAgent() {
+        for appearance in ["light", "dark"] {
+            let app = launchWorkspaces(arguments: ["--demo-long-agent-history", "-appThemePreference", appearance])
+            app.buttons["workspaces.menu"].tap()
+            app.buttons["Recent agents"].tap()
+            let list = app.scrollViews["agent-history.list"]
+            XCTAssertTrue(list.waitForExistence(timeout: Self.timeout))
+            let last = list.buttons.matching(NSPredicate(format: "identifier ENDSWITH %@", "/demo-agent-deflake")).firstMatch
+            capture(app, named: "recent-agents-top-\(appearance)")
+            for _ in 0..<Self.maximumHistorySwipes {
+                if last.exists, list.frame.contains(last.frame), last.isHittable { break }
+                list.swipeUp()
+            }
+            XCTAssertTrue(last.isHittable, "The final history entry must be reachable by scrolling")
+            XCTAssertTrue(list.frame.contains(last.frame), "The final history entry must be fully visible")
+            capture(app, named: "recent-agents-bottom-\(appearance)")
+            last.tap()
+            XCTAssertTrue(app.buttons["agent-history.close"].waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
+            app.terminate()
+        }
     }
 
     @MainActor

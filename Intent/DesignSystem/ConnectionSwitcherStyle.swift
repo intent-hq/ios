@@ -21,11 +21,11 @@ enum ConnectionSwitcherStyle {
     }
 
     static func selection(for scheme: ColorScheme) -> Color {
-        // Surface/Grey700 from Figma 3575:37803, with its light appearance.
+        // Surface/Grey700 from Figma 3575:37803.
         // swiftlint:disable no_magic_numbers
         scheme == .dark
             ? Color(.sRGB, red: 61 / 255, green: 61 / 255, blue: 60 / 255)
-            : Color(.sRGB, red: 207 / 255, green: 207 / 255, blue: 205 / 255)
+            : .white
         // swiftlint:enable no_magic_numbers
     }
 }

@@ -55,7 +55,7 @@ struct WorkspaceListSidebar: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 } else if viewModel.filteredWorkspaces.isEmpty {
                     if viewModel.hasSearchQuery {
-                        ContentUnavailableView.search
+                        WorkspaceSearchEmptyState()
                     } else {
                         emptyState
                     }
