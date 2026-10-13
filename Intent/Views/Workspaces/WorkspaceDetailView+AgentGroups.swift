@@ -31,6 +31,7 @@ extension WorkspaceDetailView {
                     status: agentGroupLoadStatus(group)
                 ) : nil,
                 colorScheme: colorScheme,
+                onLoadGroup: { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) },
                 onToggle: { Task { await toggleAgentGroup(group) } },
                 onRetry: { Task { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) } }
             )

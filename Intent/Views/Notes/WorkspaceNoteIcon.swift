@@ -9,10 +9,10 @@ struct WorkspaceNoteIcon: View {
         Group {
             switch kind {
             case .star:
-                checkbox(status: .notStarted)
+                documentIcon(.fileList)
                     .accessibilityLabel("Spec note")
             case .starWithProgressRing(let stats):
-                checkbox(status: .notStarted)
+                documentIcon(.fileList)
                     .accessibilityLabel("Spec note")
                     .accessibilityValue("\(stats.completed) of \(stats.total) tasks complete")
             case .taskStatus(let status):
@@ -20,14 +20,18 @@ struct WorkspaceNoteIcon: View {
             case .progressRing(let stats):
                 TaskProgressRingView(stats: stats, size: WorkspaceDetailStyle.iconSize)
             case .document:
-                Image(.folder)
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
+                documentIcon(.file)
                     .accessibilityHidden(true)
             }
         }
         .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
+    }
+
+    private func documentIcon(_ resource: ImageResource) -> some View {
+        Image(resource)
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
     }
 
     @ViewBuilder

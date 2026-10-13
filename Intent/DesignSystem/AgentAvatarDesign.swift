@@ -112,6 +112,24 @@ struct AgentAvatarGlyph {
 }
 
 extension AgentAvatarDesign {
+    /// Brand assets keep the flat stroke ends used by the iOS icon set.
+    var imageResource: ImageResource? {
+        switch self {
+        case .coordinator: .dandelion
+        case .implementor: .agentSpecial7
+        case .verifier: .agentSpecial8
+        case .prReviewer: .agentSpecial5
+        case .uiDesigner: .agentSpecial1
+        case .chiefOfStaff: .agentSpecial4
+        case .ralph: .agentSpecial3
+        case .fallbackGlasses: .agentGeneral3
+        case .fallbackCrown: .agentGeneral1
+        case .fallbackCrownInverted: .agentGeneral2
+        case .fallbackDots: .agentGeneral4
+        case .fallbackCrownMouth, .fallbackCode: nil
+        }
+    }
+
     var glyph: AgentAvatarGlyph { Self.glyphs[self] ?? AgentAvatarGlyph() }
 
     private static let glyphs: [AgentAvatarDesign: AgentAvatarGlyph] = {

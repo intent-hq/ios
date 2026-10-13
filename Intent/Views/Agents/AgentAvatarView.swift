@@ -1,10 +1,7 @@
 import SwiftUI
 
-/// Rounded-tile agent avatar with the desktop app's monochrome stroke glyphs.
-/// Ported from cloudlands-fe `AgentAvatar.svelte` + `AgentAvatarArt.svelte`:
-/// glyphs are stroked in a 16×16 art box (stroke width 1.33, round caps and
-/// joins) centered on a rounded tile whose surface is colored by `state`
-/// (`AgentAvatarWithState.svelte`); the default `.idle` keeps the neutral tile.
+/// Rounded-tile agent avatar with brand artwork and state-aware surfaces.
+/// Workspace rows use the iOS assets; other surfaces retain the desktop geometry.
 struct AgentAvatarView: View {
     let agentId: String
     var size: CGFloat = Constants.AgentAvatar.defaultSize
@@ -13,6 +10,7 @@ struct AgentAvatarView: View {
     var isActive: Bool = false
     var state: AgentAvatarState = .idle
     var workspaceStyle = false
+    @Environment(\.colorScheme) private var colorScheme
 
     private var design: AgentAvatarDesign {
         AgentAvatarDesign.design(agentId: agentId, specialist: specialist, icon: icon)
@@ -32,18 +30,7 @@ struct AgentAvatarView: View {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(surfaceColor)
 
-            AgentAvatarStrokeShape(glyphPath: design.glyph.strokePath)
-                .stroke(glyphColor, style: StrokeStyle(
-                    lineWidth: Constants.AgentAvatar.referenceStrokeWidth * artSize
-                        / Constants.AgentAvatar.referenceArtSize,
-                    lineCap: .round,
-                    lineJoin: .round
-                ))
-                .frame(width: artSize, height: artSize)
-
-            AgentAvatarFillShape(glyphPath: design.glyph.fillPath)
-                .fill(glyphColor)
-                .frame(width: artSize, height: artSize)
+            artwork
 
             // Animate only the layer's stroke color in the render server, not
             // SwiftUI geometry: an implicit repeatForever previously made rings
@@ -58,11 +45,35 @@ struct AgentAvatarView: View {
         .geometryGroup()
     }
 
+    @ViewBuilder
+    private var artwork: some View {
+        if workspaceStyle, let resource = design.imageResource {
+            Image(resource)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(glyphColor)
+                .frame(width: artSize, height: artSize)
+        } else {
+            AgentAvatarStrokeShape(glyphPath: design.glyph.strokePath)
+                .stroke(glyphColor, style: StrokeStyle(
+                    lineWidth: Constants.AgentAvatar.referenceStrokeWidth * artSize
+                        / Constants.AgentAvatar.referenceArtSize,
+                    lineCap: workspaceStyle ? .butt : .round,
+                    lineJoin: workspaceStyle ? .miter : .round
+                ))
+                .frame(width: artSize, height: artSize)
+            AgentAvatarFillShape(glyphPath: design.glyph.fillPath)
+                .fill(glyphColor)
+                .frame(width: artSize, height: artSize)
+        }
+    }
+
     /// Desktop tile surface per state (`--agent-avatar-surface-*` tokens);
     /// idle is the neutral hsl(145 14% 92%) light / hsl(145 12% 78%) dark.
     private var surfaceColor: Color {
         if workspaceStyle, state == .idle || state == .running {
-            return design == .coordinator ? WorkspaceDetailStyle.accent : WorkspaceDetailStyle.neutral
+            return design == .coordinator
+                ? WorkspaceDetailStyle.accent : WorkspaceDetailStyle.avatarSurface(for: colorScheme)
         }
         switch state {
         case .idle: return Constants.Colors.AgentAvatar.surface
@@ -80,7 +91,8 @@ struct AgentAvatarView: View {
     /// dark mode, so it carries its own foreground token.
     private var glyphColor: Color {
         if workspaceStyle, state == .idle || state == .running {
-            return design == .coordinator ? WorkspaceDetailStyle.onAccent : .white
+            return design == .coordinator
+                ? WorkspaceDetailStyle.onAccent : WorkspaceDetailStyle.avatarForeground(for: colorScheme)
         }
         return state == .completed
             ? Constants.Colors.AgentAvatar.glyphCompleted
@@ -103,8 +115,11 @@ struct AgentGroupAvatarStack: View {
         HStack(spacing: Constants.AgentRow.avatarOverlap) {
             ForEach(0..<visibleCount, id: \.self) { index in
                 avatar(at: index)
+                    .clipShape(RoundedRectangle(
+                        cornerRadius: size * WorkspaceDetailStyle.avatarCornerRatio, style: .continuous
+                    ))
                     .overlay {
-                        RoundedRectangle(cornerRadius: size * WorkspaceDetailStyle.avatarCornerRatio)
+                        RoundedRectangle(cornerRadius: size * WorkspaceDetailStyle.avatarCornerRatio, style: .continuous)
                             .strokeBorder(
                                 WorkspaceDetailStyle.background(for: colorScheme),
                                 lineWidth: WorkspaceDetailStyle.stackBorderWidth
@@ -132,10 +147,9 @@ struct AgentGroupAvatarStack: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: size * WorkspaceDetailStyle.avatarArtRatio, height: size * WorkspaceDetailStyle.avatarArtRatio)
-                .foregroundStyle(.white)
+                .foregroundStyle(WorkspaceDetailStyle.avatarForeground(for: colorScheme))
                 .frame(width: size, height: size)
-                .background(WorkspaceDetailStyle.neutral)
-                .clipShape(.rect(cornerRadius: size * WorkspaceDetailStyle.avatarCornerRatio))
+                .background(WorkspaceDetailStyle.avatarSurface(for: colorScheme))
                 .accessibilityHidden(true)
         }
     }

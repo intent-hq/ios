@@ -244,7 +244,7 @@ struct WorkspaceActionsMenu: View {
             if let onTransfer {
                 Button(action: onTransfer) {
                     Label { Text("Transfer workspace").interFont(Constants.Typography.bodyS) } icon: {
-                        Image(systemName: "arrow.right.arrow.left")
+                        Image(.truckOne)
                     }
                 }
                 .accessibilityIdentifier("workspace.transfer")

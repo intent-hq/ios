@@ -5,6 +5,7 @@ struct WorkspaceScriptsView: View {
     let store: WorkspaceScriptStore
     @Binding var revealedTarget: WorkspaceSwipeTarget?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         let scripts = store.scriptsWithRuns(workspaceId: workspaceId)
@@ -14,8 +15,8 @@ struct WorkspaceScriptsView: View {
         if !scripts.isEmpty || store.errorMessage(workspaceId: workspaceId) != nil {
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionHeadingSpacing) {
                 Text("Scripts")
-                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
-                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    .interFont(Constants.Typography.eyebrow)
+                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
                     .accessibilityAddTraits(.isHeader)
                 LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
                     ForEach(rows, id: \.id) { @Sendable row in row.content }

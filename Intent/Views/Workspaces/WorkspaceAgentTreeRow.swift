@@ -21,6 +21,7 @@ struct WorkspaceAgentTreeRow: View {
     let depth: Int
     let group: WorkspaceAgentGroupSnapshot?
     let colorScheme: ColorScheme
+    let onLoadGroup: @MainActor () async -> Void
     let onToggle: @MainActor () -> Void
     let onRetry: @MainActor () -> Void
 
@@ -37,6 +38,7 @@ struct WorkspaceAgentTreeRow: View {
                     onToggle: onToggle
                 )
                 .accessibilityIdentifier(group.identifier)
+                .task(id: group.identifier) { await onLoadGroup() }
                 if group.isExpanded {
                     WorkspaceAgentGroupStatus(status: group.status, identifier: group.identifier, onRetry: onRetry)
                 }
