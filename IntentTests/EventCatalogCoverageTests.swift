@@ -68,6 +68,7 @@ struct EventCatalogCoverageTests {
         /// (and the `absent` shape) must produce. Spelled out here rather
         /// than read from the store's table so a flipped table entry fails.
         let discriminatorExpectations: [String: DiscriminatorExpectation]
+        // Classifiers must accept absent event data as well as an explicitly empty payload.
         // swiftlint:disable:next discouraged_optional_collection
         let classify: (String, [String: Any]?) -> EventClassification?
     }

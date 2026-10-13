@@ -299,12 +299,12 @@ extension CreateWorkspaceView {
         storeIsLoading || (!storeHasLoaded && !settled)
     }
 
-    // swiftlint:disable discouraged_optional_boolean
-    /// A missing provider needs no load; a failed catalog falls back to the daemon default.
+    // A missing provider needs no load; a failed catalog falls back to the daemon default.
+    // Nil means no provider is selected; false means its catalog has not loaded yet.
+    // swiftlint:disable:next discouraged_optional_boolean
     static func showsModelCatalogLoading(catalogCached: Bool?, settled: Bool) -> Bool {
         catalogCached == false && !settled
     }
-    // swiftlint:enable discouraged_optional_boolean
 
     static func usesExpandedFormLayout(for size: DynamicTypeSize) -> Bool {
         size.isAccessibilitySize

@@ -47,9 +47,12 @@ import UniformTypeIdentifiers
 
     // Bound compressed source reads and prepared draft memory independently of
     // the daemon's frame limit. JSONSerialization may also escape base64 slashes.
-    nonisolated static let maximumSourceBytes = 30 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
-    static let maximumJPEGBytes = 12 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
-    static let maximumRequestBytes = 39 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    // Keep MiB conversions visible in these named source, JPEG, and request limits.
+    // swiftlint:disable no_magic_numbers
+    nonisolated static let maximumSourceBytes = 30 * 1024 * 1024
+    static let maximumJPEGBytes = 12 * 1024 * 1024
+    static let maximumRequestBytes = 39 * 1024 * 1024
+    // swiftlint:enable no_magic_numbers
     nonisolated private static let maximumPixelSize = 4096
     private(set) var images: [Image] = []
     private(set) var videos: [PendingFile] = []

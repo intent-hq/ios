@@ -76,12 +76,14 @@ nonisolated struct ConnectionPrincipal: Codable, Equatable, Sendable {
     static let maximumClock: Double = 9_007_199_254_740_991
 
     static func number(_ value: Any?) -> Double? {
-        // JSONSerialization bridges booleans and numbers to the same class.
+        // NSNumber preserves CFBoolean identity so JSON booleans cannot be treated as numbers.
         guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID() else { return nil } // swiftlint:disable:this legacy_objc_type
         return value.doubleValue
     }
 
+    // nil means a missing or invalid JSON boolean, distinct from a valid false value.
     static func boolean(_ value: Any?) -> Bool? { // swiftlint:disable:this discouraged_optional_boolean
+        // NSNumber preserves CFBoolean identity so numeric JSON values cannot be treated as booleans.
         guard let value = value as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else { return nil } // swiftlint:disable:this legacy_objc_type
         return value.boolValue
     }

@@ -67,22 +67,25 @@ final class WorkspaceFileImageLoader {
         }
     }
 
+    // Keep MiB conversions visible in the named transfer and decoded-memory limits.
+    // swiftlint:disable no_magic_numbers
     /// Bytes requested per `file.readChunk` call (well under the daemon's
     /// 16 MiB decoded cap; most images resolve in a single round-trip).
-    nonisolated static let chunkLength = 4 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    nonisolated static let chunkLength = 4 * 1024 * 1024
     /// ~350 KB base64 takes ~2.8 s at 1 Mbit/s, leaving headroom under the
     /// 10-second RPC timeout on remote Tailcat links. Other media is unchanged.
-    nonisolated private static let pdfChunkLength = 256 * 1024 // swiftlint:disable:this no_magic_numbers
+    nonisolated private static let pdfChunkLength = 256 * 1024
     /// Refuse to assemble files past this size — transcript images should be
     /// far smaller, and this bounds memory on a pathological path.
-    nonisolated static let maxFileBytes = 32 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    nonisolated static let maxFileBytes = 32 * 1024 * 1024
     /// Longest decoded edge in pixels. Decoding goes through ImageIO's
     /// downsampling thumbnail path, so a small compressed file declaring
     /// enormous pixel dimensions cannot balloon decode/render memory.
     nonisolated static let maxPixelSize = 2048
     /// Decoded-memory budget for the cache (a 2048×2048 BGRA image is ~16 MB).
     /// Videos/PDFs charge only their preview; their temp files have a separate count bound.
-    static let cacheTotalCostLimit = 64 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    static let cacheTotalCostLimit = 64 * 1024 * 1024
+    // swiftlint:enable no_magic_numbers
     /// Eight downloads bound cache-owned temp files per backend session.
     /// Attachments/viewers may retain evicted files until they release them.
     private static let cacheFileCountLimit = 8

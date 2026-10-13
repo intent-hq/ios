@@ -194,6 +194,7 @@ enum GitHubRepoSearchOutcome {
         await fetchAuthStatus(generation: loadGeneration)
     }
 
+    // Nil means a failed or superseded read; false is an authoritative unconfigured result.
     // swiftlint:disable:next discouraged_optional_boolean
     private func fetchAuthStatus(generation: Int) async -> Bool? {
         do {

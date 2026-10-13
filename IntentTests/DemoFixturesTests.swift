@@ -4,7 +4,7 @@ import Testing
 import UIKit
 
 // Protocol fixtures use exact wire literals and long end-to-end assertions.
-// swiftlint:disable file_length function_body_length multiline_arguments_brackets number_separator trailing_comma
+// swiftlint:disable file_length function_body_length
 // swiftlint:disable type_body_length
 
 @MainActor
@@ -590,7 +590,8 @@ extension DemoFixturesTests {
         #expect(DemoFixtures.responseGate(for: "hook.list", params: ["workspaceId": "demo-ws-dashboard"]) == nil)
         #expect(DemoFixtures.responseGate(for: "agent.getConversation", params: long) == nil)
         #expect(DemoFixtures.responseGate(
-            for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId]) == nil)
+            for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId]
+        ) == nil)
         #expect(DemoFixtures.responseGate(for: "prMonitor.list", params: long) == nil)
 
         let hydration = ["agentId": DemoFixtures.longConversationAgentId, "messageId": "m", "blockId": "b"]
@@ -598,7 +599,8 @@ extension DemoFixturesTests {
             == DemoFixtures.longConversationBlockHydrationGate)
         #expect(DemoFixtures.responseGate(for: "agent.getMessageBlock", params: [:]) == nil)
         #expect(DemoFixtures.responseGate(
-            for: "agent.getMessageBlock", params: ["agentId": "demo-agent-implementor"]) == nil)
+            for: "agent.getMessageBlock", params: ["agentId": "demo-agent-implementor"]
+        ) == nil)
     }
 
     // MARK: - Controlled end derealization (intent-hq/ios#338)
@@ -607,14 +609,16 @@ extension DemoFixturesTests {
         #expect(DemoFixtures.endDerealizationTriggerFile(from: ["--demo-data"]) == nil)
         #expect(DemoFixtures.endDerealizationTriggerFile(from: ["--demo-end-derealization-trigger-file="]) == nil)
         #expect(DemoFixtures.endDerealizationTriggerFile(
-            from: ["--demo-hook-list-trigger-file=/tmp/hooks.trigger"]) == nil)
+            from: ["--demo-hook-list-trigger-file=/tmp/hooks.trigger"]
+        ) == nil)
         #expect(DemoFixtures.endDerealizationTriggerFile(
-            from: ["--demo-data", "--demo-end-derealization-trigger-file=/tmp/a.trigger"])
+            from: ["--demo-data", "--demo-end-derealization-trigger-file=/tmp/a.trigger"]
+        )
             == URL(fileURLWithPath: "/tmp/a.trigger"))
         #expect(DemoFixtures.endDerealizationTriggerFile(from: [
             "--demo-end-derealization-trigger-file=/tmp/a.trigger",
             "--demo-end-derealization-trigger-file=",
-            "--demo-end-derealization-trigger-file=/tmp/b.trigger",
+            "--demo-end-derealization-trigger-file=/tmp/b.trigger"
         ]) == URL(fileURLWithPath: "/tmp/b.trigger"))
         // The test runner never passes the argument, so the live value is nil.
         #expect(DemoFixtures.configuredEndDerealizationTriggerFile == nil)
@@ -629,11 +633,11 @@ extension DemoFixturesTests {
         #expect(DemoFixtures.endDerealizationMode(from: [
             "--demo-end-derealization-mode=hold",
             "--demo-end-derealization-mode=bogus",
-            "--demo-end-derealization-mode=release",
+            "--demo-end-derealization-mode=release"
         ]) == .release)
         #expect(DemoFixtures.endDerealizationMode(from: [
             "--demo-end-derealization-mode=release",
-            "--demo-end-derealization-mode=hold",
+            "--demo-end-derealization-mode=hold"
         ]) == .hold)
         #expect(DemoFixtures.configuredEndDerealizationMode == .release)
     }
@@ -647,31 +651,31 @@ extension DemoFixturesTests {
         func restore(_ mode: DemoFixtures.EndDerealizationMode, offset: CGFloat, interacting: Bool = false) -> Bool {
             DemoFixtures.shouldRestoreDerealizedEnd(
                 mode: mode,
-                withdrawnOffsetY: 1_000,
+                withdrawnOffsetY: 1000,
                 contentOffsetY: offset,
                 containerHeight: 600,
                 isInteracting: interacting
             )
         }
-        #expect(!restore(.release, offset: 1_000))
+        #expect(!restore(.release, offset: 1000))
         #expect(!restore(.release, offset: 990))
         #expect(!restore(.release, offset: 701))
         #expect(restore(.release, offset: 700))
         #expect(restore(.release, offset: 400))
-        #expect(!restore(.release, offset: 1_400))
+        #expect(!restore(.release, offset: 1400))
 
-        #expect(!restore(.hold, offset: 1_000))
+        #expect(!restore(.hold, offset: 1000))
         #expect(!restore(.hold, offset: 400))
-        #expect(!restore(.hold, offset: 1_400))
+        #expect(!restore(.hold, offset: 1400))
 
         #expect(!restore(.deepRelease, offset: 400))
         #expect(!restore(.deepRelease, offset: -200))
         #expect(restore(.deepRelease, offset: -500))
 
-        #expect(!restore(.release, offset: 1_000, interacting: true))
-        #expect(!restore(.hold, offset: 1_000.5, interacting: true))
+        #expect(!restore(.release, offset: 1000, interacting: true))
+        #expect(!restore(.hold, offset: 1000.5, interacting: true))
         #expect(restore(.release, offset: 999, interacting: true))
-        #expect(restore(.hold, offset: 1_001, interacting: true))
+        #expect(restore(.hold, offset: 1001, interacting: true))
         #expect(restore(.hold, offset: 400, interacting: true))
     }
 
@@ -681,7 +685,7 @@ extension DemoFixturesTests {
         #expect(DemoFixtures.blockHydrationGate(from: ["--demo-data"])
             == .delay(DemoFixtures.defaultBlockHydrationDelay))
         #expect(DemoFixtures.blockHydrationGate(from: ["--demo-data", "--demo-block-hydration-delay-ms=9000"])
-            == .delay(.milliseconds(9_000)))
+            == .delay(.milliseconds(9000)))
         #expect(DemoFixtures.blockHydrationGate(from: ["--demo-block-hydration-delay-ms=0"]) == .delay(.zero))
         #expect(DemoFixtures.blockHydrationGate(from: ["--demo-block-hydration-delay-ms=abc"])
             == .delay(DemoFixtures.defaultBlockHydrationDelay))
@@ -690,7 +694,7 @@ extension DemoFixturesTests {
         #expect(DemoFixtures.blockHydrationGate(from: [
             "--demo-block-hydration-delay-ms=9000",
             "--demo-block-hydration-trigger-file=/tmp/a.trigger",
-            "--demo-block-hydration-trigger-file=",
+            "--demo-block-hydration-trigger-file="
         ]) == .triggerFile(URL(fileURLWithPath: "/tmp/a.trigger")))
         // The two gates read their own arguments only.
         #expect(DemoFixtures.blockHydrationGate(from: ["--demo-hook-list-trigger-file=/tmp/a.trigger"])
@@ -708,12 +712,13 @@ extension DemoFixturesTests {
         #expect(DemoFixtures.slimToolRowLayout(from: [
             "--demo-long-slim-tool-rows=standalone",
             "--demo-long-slim-tool-rows=sideways",
-            "--demo-long-slim-tool-rows=",
+            "--demo-long-slim-tool-rows="
         ]) == .standalone)
         #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-long-slim-tool-rows=sideways"]) == .leading)
         // The `chat.subscribe` snapshot serves the process default.
         let push = DemoFixtures.subscriptionPush(
-            for: "chat.subscribe", params: ["agentId": DemoFixtures.longConversationAgentId])
+            for: "chat.subscribe", params: ["agentId": DemoFixtures.longConversationAgentId]
+        )
         let items = push?.snapshot
         let expected = DemoFixtures.longConversationMessages(slimToolRows: DemoFixtures.longConversationSlimToolRowLayout)
         #expect(items?.compactMap { $0["id"] as? String } == expected.compactMap { $0["id"] as? String })
@@ -780,7 +785,7 @@ extension DemoFixturesTests {
             let hydrated = DemoFixtures.response(for: "agent.getMessageBlock", params: [
                 "agentId": DemoFixtures.longConversationAgentId,
                 "messageId": message.id,
-                "blockId": slimResult.id,
+                "blockId": slimResult.id
             ])
             let dict = try #require(hydrated as? [String: Any])
             let blockDict = try #require(dict["block"] as? [String: Any])
@@ -798,7 +803,8 @@ extension DemoFixturesTests {
 
         let unknown = DemoFixtures.response(
             for: "agent.getMessageBlock",
-            params: ["agentId": DemoFixtures.longConversationAgentId, "blockId": "demo-long-tool-1-view-result"])
+            params: ["agentId": DemoFixtures.longConversationAgentId, "blockId": "demo-long-tool-1-view-result"]
+        )
         #expect(try #require(unknown as? [String: Any]).isEmpty)
     }
 
@@ -856,4 +862,4 @@ extension DemoFixturesTests {
     }
 }
 // swiftlint:enable type_body_length
-// swiftlint:enable file_length function_body_length multiline_arguments_brackets number_separator trailing_comma
+// swiftlint:enable file_length function_body_length
