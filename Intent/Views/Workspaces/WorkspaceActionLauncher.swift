@@ -3,9 +3,12 @@ import SwiftUI
 /// Actions float above the navigation content without resetting its scroll position.
 struct WorkspaceActionLauncher: ViewModifier {
     let isSearching: Bool
+    var isEnabled = true
     var alignment: HorizontalAlignment = .trailing
     var avoidsConversationInput = true
     var hostsVerticalBarButton = true
+    var onWorkspaces: (() -> Void)?
+    var onAssistant: (() -> Void)?
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
@@ -37,7 +40,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                 .onChange(of: isOpen) { _, open in
                     if open { connectionCount = PersistenceManager.shared.loadConnections().count }
                 }
-                .modifier(WorkspaceActionLauncherToolbar(isEnabled: hostsVerticalBarButton && !isSearching))
+                .modifier(WorkspaceActionLauncherToolbar(isEnabled: isEnabled && hostsVerticalBarButton && !isSearching))
                 .environment(\.workspaceActionMenuPresented, $isOpen)
         } else {
             floatingMenu(content: content)
@@ -66,6 +69,9 @@ struct WorkspaceActionLauncher: ViewModifier {
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
             }
+            .onChange(of: isEnabled) { _, enabled in
+                if !enabled { isOpen = false }
+            }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
             .onDisappear { isOpen = false }
     }
@@ -81,7 +87,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
-            if !isSearching {
+            if isEnabled && !isSearching {
                 actionControls
                     .padding(.bottom, bottomInset + (isOpen && bottomInset == 0 ? Layout.menuBottomInset : Layout.launcherBottomInset))
                     .ignoresSafeArea(.container, edges: isOpen && bottomInset == 0 ? .bottom : [])
@@ -111,7 +117,8 @@ struct WorkspaceActionLauncher: ViewModifier {
                     themePreference: themePreference,
                     onSelect: select,
                     allowsWorkspaceCreation: coordinator.canCreateWorkspace,
-                    allowsAssistant: coordinator.canUseAssistant
+                    allowsAssistant: coordinator.canUseAssistant,
+                    showsWorkspaceList: onWorkspaces != nil
                 )
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
             }
@@ -145,7 +152,9 @@ struct WorkspaceActionLauncher: ViewModifier {
         }
         isOpen = false
         switch action {
-        case .assistant: coordinator.onSelectAssistant()
+        case .assistant:
+            if let onAssistant { onAssistant() } else { coordinator.onSelectAssistant() }
+        case .workspaces: onWorkspaces?()
         case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
         case .connections: onConnections()
         case .settings: coordinator.onOpenSettings()

@@ -27,6 +27,13 @@ struct IPadShellView: View {
     private var workspaceActionsEnabled: Bool {
         navigation.section == .workspaces && navigation.pairing == nil && !showingCreateWorkspace
     }
+    private var showsWorkspaceList: Bool {
+        if case .workspaceList = coordinator.currentScreen { return true }
+        return false
+    }
+    private var workspaceSearchVisible: Bool {
+        isSearchingWorkspaces && navigation.section == .workspaces && navigation.isSidebarVisible
+    }
 
     var body: some View {
         AgentHistoryDrawer(isEnabled: workspaceActionsEnabled && !connectionSwitcherOpen) {
@@ -52,14 +59,16 @@ struct IPadShellView: View {
     }
 
     private var shell: some View {
-        HStack(alignment: .top, spacing: layout.gutter) {
-            IPadNavigationRail(
-                section: navigation.section,
-                isSidebarVisible: navigation.isSidebarVisible,
-                canUseAssistant: coordinator.canUseAssistant,
-                onSelect: coordinator.onSelectIPadSection
-            ) {
-                coordinator.iPadNavigation.revealSidebar()
+        HStack(alignment: .top, spacing: layout.railGutter) {
+            if !layout.usesCompactNavigation {
+                IPadNavigationRail(
+                    section: navigation.section,
+                    isSidebarVisible: navigation.isSidebarVisible,
+                    canUseAssistant: coordinator.canUseAssistant,
+                    onSelect: coordinator.onSelectIPadSection
+                ) {
+                    coordinator.iPadNavigation.revealSidebar()
+                }
             }
             ZStack(alignment: .leading) {
                 detailPane
@@ -71,9 +80,23 @@ struct IPadShellView: View {
         .padding(layout.inset)
         .opacity(width == nil ? 0 : 1)
         .background(Constants.Pairing.background(for: colorScheme).ignoresSafeArea())
+        .modifier(WorkspaceActionLauncher(
+            isSearching: workspaceSearchVisible,
+            isEnabled: width != nil && layout.usesCompactNavigation,
+            onWorkspaces: { coordinator.onSelectIPadSection(.workspaces) },
+            onAssistant: { coordinator.onSelectIPadSection(.assistant) },
+            onCreateWorkspace: createWorkspace,
+            onConnections: { coordinator.onSelectIPadSection(.connections) }
+        ))
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if $0 > 0 { width = $0 } }
         .onChange(of: measuredLayout, initial: true) { _, measuredLayout in
-            if let measuredLayout { coordinator.iPadNavigation.updateLayout(usesOverlay: measuredLayout.usesSidebarOverlay) }
+            if let measuredLayout {
+                coordinator.iPadNavigation.updateLayout(
+                    usesOverlay: measuredLayout.usesSidebarOverlay,
+                    usesCompactNavigation: measuredLayout.usesCompactNavigation,
+                    showsWorkspaceList: showsWorkspaceList
+                )
+            }
         }
         .onChange(of: sidebarPresentation) { old, new in
             // Layout changes (first measurement, rotation) must not move VoiceOver focus.
@@ -91,6 +114,7 @@ struct IPadShellView: View {
 
     private var sidebarPane: some View {
         sidebars
+            .safeAreaPadding(.bottom, layout.usesCompactNavigation && !workspaceSearchVisible ? AssistantLaunchButton.scrollClearance : 0)
             .frame(width: layout.sidebarWidth)
             .frame(maxHeight: .infinity)
             .background(Constants.Pairing.background(for: colorScheme))

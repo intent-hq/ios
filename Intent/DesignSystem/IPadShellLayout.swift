@@ -8,6 +8,7 @@ struct IPadShellLayout: Equatable {
     static let railTopInset: CGFloat = 32
     static let cornerRadius: CGFloat = 20
     static let largeWindowWidth: CGFloat = 1300
+    static let compactWindowWidth: CGFloat = 600
     static let largeInset: CGFloat = 24
     static let smallInset: CGFloat = 16
     static let largeSidebarWidth: CGFloat = 400
@@ -22,12 +23,14 @@ struct IPadShellLayout: Equatable {
     let width: CGFloat
     let isAccessibilitySize: Bool
 
+    var usesCompactNavigation: Bool { width < Self.compactWindowWidth }
     var inset: CGFloat { width >= Self.largeWindowWidth ? Self.largeInset : Self.smallInset }
     var gutter: CGFloat { inset }
+    var railGutter: CGFloat { usesCompactNavigation ? 0 : gutter }
     var preferredSidebarWidth: CGFloat {
         width >= Self.largeWindowWidth ? Self.largeSidebarWidth : Self.smallSidebarWidth
     }
-    var contentWidth: CGFloat { max(0, width - 2 * inset - Self.railWidth - gutter) }
+    var contentWidth: CGFloat { max(0, width - 2 * inset - (usesCompactNavigation ? 0 : Self.railWidth + railGutter)) }
     var sidebarWidth: CGFloat { min(preferredSidebarWidth, contentWidth) }
     var usesSidebarOverlay: Bool {
         let minimumDetail = isAccessibilitySize ? Self.accessibleDetailWidth : Self.minimumDetailWidth
