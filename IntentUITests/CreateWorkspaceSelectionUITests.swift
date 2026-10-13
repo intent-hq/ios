@@ -278,6 +278,9 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Next"].isHittable)
     }
 
+}
+
+extension CreateWorkspaceSelectionUITests {
     @MainActor
     private func checkSearchCancellation(in app: XCUIApplication, prefix: String, placeholder: String, result: XCUIElement) {
         let search = app.textFields["\(prefix).field"]
