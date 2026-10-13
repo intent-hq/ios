@@ -7,13 +7,13 @@ import UIKit
 extension AppCoordinatorTests {
     @Test(.enabled("The host must publish accessible controls") {
         await SyntheticBadgeHost.publishesAccessibilityTree()
-    })
-    @MainActor func iPadCompactLaunchShowsListAndMenuDestinations() async throws {
+    }, arguments: [ColorScheme.light, .dark])
+    @MainActor func iPadCompactLaunchShowsListAndMenuDestinations(appearance: ColorScheme) async throws {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
         let coordinator = compactShellCoordinator(fixture)
         let size = CompactShellSize(width: CompactShellSize.narrow)
-        let shell = ResizableIPadTestShell(session: fixture.session, coordinator: coordinator, size: size)
+        let shell = ResizableIPadTestShell(session: fixture.session, coordinator: coordinator, size: size, appearance: appearance)
         try await SyntheticBadgeHost.render(shell, width: CompactShellSize.wide, height: CompactShellSize.height) { host, _ in
             try waitForCompactShell { coordinator.iPadNavigation.isSidebarVisible && compactControl("intent.menu.open", in: host) != nil }
             #expect(coordinator.iPadNavigation.section == .workspaces)
@@ -21,6 +21,12 @@ extension AppCoordinatorTests {
             #expect(compactControl("ipad.rail.workspaces", in: host) == nil)
             let originalLauncher = try #require(compactControl("intent.menu.open", in: host))
             let originalBottom = originalLauncher.accessibilityFrame.maxY
+            try recordCompactShell(in: host, width: size.width, name: "ipad-narrow-workspaces-\(appearance).png")
+            #expect(originalLauncher.accessibilityActivate())
+            try waitForCompactShell { compactControl("intent.menu.close", in: host) != nil }
+            try recordCompactShell(in: host, width: size.width, name: "ipad-narrow-menu-\(appearance).png")
+            let close = try #require(compactControl("intent.menu.close", in: host))
+            #expect(close.accessibilityActivate())
             for section in [IPadSidebarSection.settings, .connections, .assistant, .workspaces] {
                 try selectCompactMenu(section.rawValue, in: host)
                 try waitForCompactShell { coordinator.iPadNavigation.section == section && coordinator.iPadNavigation.isSidebarVisible }
@@ -71,6 +77,7 @@ extension AppCoordinatorTests {
         try waitForCompactShell { launcher.accessibilityFrame.maxY <= editor.convert(editor.bounds, to: nil).minY }
         #expect(compactEditor(in: host) === editor)
         #expect(editor.text == draft)
+        try recordCompactShell(in: host, width: size.width, name: "ipad-narrow-\(detail)-draft.png")
         try selectCompactMenu("settings", in: host)
         let destination = detail == .assistant ? "assistant" : "workspaces"
         try selectCompactMenu(destination, in: host)
@@ -104,6 +111,16 @@ extension AppCoordinatorTests {
         coordinator.usesIPadShell = true
         coordinator.currentScreen = .workspaceList
         return coordinator
+    }
+
+    @MainActor private func recordCompactShell(in host: UIView, width: CGFloat, name: String) throws {
+        let bounds = CGRect(x: 0, y: 0, width: width, height: host.bounds.height)
+        var drawn = false
+        let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
+            drawn = host.drawHierarchy(in: host.bounds, afterScreenUpdates: true)
+        }
+        try #require(drawn, "The hosted narrow iPad shell could not be captured")
+        Attachment.record(try #require(image.pngData()), named: name)
     }
 
     @MainActor private func selectCompactMenu(_ destination: String, in host: UIView) throws {
@@ -156,11 +173,14 @@ private struct ResizableIPadTestShell: View {
     let session: BackendSession
     let coordinator: AppCoordinator
     let size: CompactShellSize
+    var appearance: ColorScheme = .light
 
     var body: some View {
         IPadShellView(session: session)
             .environment(session)
             .environment(coordinator)
+            .environment(\.colorScheme, appearance)
+            .environment(\.accessibilityReduceMotion, true)
             .frame(width: size.width)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
