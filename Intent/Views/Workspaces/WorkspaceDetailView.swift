@@ -435,10 +435,7 @@ private extension WorkspaceDetailView {
 
     var agentListContent: some View {
         LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
-            agentTree(viewModel.foregroundAgents)
-            agentSection(.background, title: "background agents")
-            agentSection(.orphaned, title: "delegated agents")
-            agentSection(.retired, title: "retired agents")
+            ForEach(agentListRows) { @Sendable row in row }
             WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore, revealedTarget: $revealedSwipeTarget) { terminal in
                 selectedTerminal = terminal
             }

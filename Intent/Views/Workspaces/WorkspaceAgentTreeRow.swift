@@ -1,5 +1,31 @@
 import SwiftUI
 
+/// One identified layout child per entry keeps section expansion out of nested
+/// dynamic view lists, whose height estimates can cycle near the scroll boundary.
+struct WorkspaceAgentListRow: View, Identifiable {
+    enum Content {
+        case agent(WorkspaceAgentTreeRow)
+        case header(BackgroundAgentsHeader)
+        case retired(WorkspaceAgentButton)
+        case status(WorkspaceAgentGroupStatus)
+    }
+
+    let id: String
+    let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            switch content {
+            case let .agent(row): row
+            case let .header(header): header.accessibilityIdentifier(id)
+            case let .retired(button): button
+            case let .status(status): status
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct WorkspaceAgentGroupSnapshot {
     enum LoadStatus {
         case empty
