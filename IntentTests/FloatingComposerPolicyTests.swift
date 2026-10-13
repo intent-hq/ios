@@ -21,28 +21,30 @@ struct FloatingComposerPolicyTests {
     // MARK: - Presentation
 
     @Test func presentsForTheActiveLoadedChat() {
-        #expect(FloatingComposerPolicy.isPresented(isActiveChat: true, isForemost: true, showsLoadingState: false, composerVisible: true))
+        #expect(FloatingComposerPolicy.presentation(isActiveChat: true, isForemost: true, showsLoadingState: false, composerVisible: true) == .shown)
     }
 
     @Test func withdrawsWhileTheChatIsCovered() {
         // A pushed child agent owns the window's composer; the covered chat
         // must not leave a second ornament behind.
-        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: false, isForemost: true, showsLoadingState: false, composerVisible: true))
+        #expect(FloatingComposerPolicy.presentation(isActiveChat: false, isForemost: true, showsLoadingState: false, composerVisible: true) == .withdrawn)
     }
 
     @Test func withdrawsWhileAModalCoversTheChat() {
         // Regression: the Assistant sheet over an open chat left the covered
         // chat's composer on screen (two composers, covered draft sendable).
-        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: true, isForemost: false, showsLoadingState: false, composerVisible: true))
+        let presentation = FloatingComposerPolicy.presentation(isActiveChat: true, isForemost: false, showsLoadingState: false, composerVisible: true)
+        #expect(presentation == .covered)
+        #expect(!presentation.revealsComposer)
     }
 
     @Test func hidesWhileTheTranscriptIsLoading() {
-        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: true, isForemost: true, showsLoadingState: true, composerVisible: true))
+        #expect(FloatingComposerPolicy.presentation(isActiveChat: true, isForemost: true, showsLoadingState: true, composerVisible: true) == .withdrawn)
     }
 
     @Test func hidesWhenTheQuestionSlotOwnsTheComposer() {
         // Pending-question recovery keeps the composer closed (fail closed).
-        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: true, isForemost: true, showsLoadingState: false, composerVisible: false))
+        #expect(FloatingComposerPolicy.presentation(isActiveChat: true, isForemost: true, showsLoadingState: false, composerVisible: false) == .withdrawn)
     }
 
     // MARK: - Modal coverage (ComposerCoverage)
@@ -188,8 +190,10 @@ struct FloatingComposerPolicyTests {
         #expect(column.contains(".modifier(FloatingComposerOrnament("))
         #expect(ornament.contains(".ornament("))
         #expect(ornament.contains(".glassBackgroundEffect(in: shape)"))
-        #expect(ornament.contains("FloatingComposerPolicy.isPresented("))
+        #expect(ornament.contains("FloatingComposerPolicy.presentation("))
         #expect(ornament.contains("coverage?.isForemost(depth: layerDepth)"))
+        #expect(ornament.contains("FloatingComposerPolicy.cancelsPhotoImport(from: old, to: new)"))
+        #expect(column.contains("onWithdraw: viewModel.cancelPhotoImport"))
         #expect(ornament.contains("FloatingComposerPolicy.width(forColumnWidth: columnWidth)"))
     }
 

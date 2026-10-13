@@ -1005,6 +1005,7 @@ $(SRCROOT)/IntentTests/FakeConnectionManagerTests.swift
 $(SRCROOT)/IntentTests/Fixtures
 $(SRCROOT)/IntentTests/Fixtures/backend-keychain
 $(SRCROOT)/IntentTests/Fixtures/backend-keychain/v1
+$(SRCROOT)/IntentTests/FloatingComposerImportTests.swift
 $(SRCROOT)/IntentTests/FloatingComposerPolicyTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreBranchCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift

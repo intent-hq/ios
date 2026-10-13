@@ -35,7 +35,7 @@ extension ConversationAttachmentPipeline {
                 guard !Task.isCancelled else { return }
                 if item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
                     await loadVideo(item, workspaceId: workspaceId)
-                } else if let data = try? await item.loadTransferable(type: Data.self),
+                } else if let data = await loadPhotoData(item),
                           let image = UIImage(data: data), !Task.isCancelled {
                     pendingImages.append(image)
                 }

@@ -83,8 +83,7 @@ struct MessageInputView: View {
                     .fill(Constants.Conversation.Design.Palette.surface(for: colorScheme))
             } else {
                 #if os(visionOS)
-                // The floating ornament host supplies the glass container.
-                Color.clear
+                Color.clear // the floating ornament host supplies the glass
                 #else
                 Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1)
                 #endif
@@ -99,9 +98,9 @@ struct MessageInputView: View {
         .onChange(of: viewModel.selectedPhotoItems) { _, _ in
             viewModel.loadSelectedPhotos()
         }
-        .onDisappear {
-            viewModel.cancelPhotoImport()
-        }
+        #if !os(visionOS)
+        .onDisappear { viewModel.cancelPhotoImport() } // visionOS: FloatingComposerOrnament's onWithdraw
+        #endif
         .fileImporter(
             isPresented: $isFilePickerPresented,
             allowedContentTypes: [.item],

@@ -9,6 +9,10 @@ import SwiftUI
 struct FloatingComposerOrnament<Composer: View>: ViewModifier {
     let showsLoadingState: Bool
     let composerVisible: Bool
+    /// Cancels the chat's in-flight photo import. Called on genuine
+    /// withdrawal only (`FloatingComposerPolicy.cancelsPhotoImport`), never
+    /// because a modal covers the chat.
+    let onWithdraw: () -> Void
     @ViewBuilder let composer: () -> Composer
 
     @Environment(\.colorScheme) private var colorScheme
@@ -22,8 +26,8 @@ struct FloatingComposerOrnament<Composer: View>: ViewModifier {
     /// not end appearance; `ComposerCoverage` handles those.)
     @State private var isActiveChat = false
 
-    private var isPresented: Bool {
-        FloatingComposerPolicy.isPresented(
+    private var presentation: FloatingComposerPresentation {
+        FloatingComposerPolicy.presentation(
             isActiveChat: isActiveChat,
             isForemost: coverage?.isForemost(depth: layerDepth) ?? true,
             showsLoadingState: showsLoadingState,
@@ -31,17 +35,25 @@ struct FloatingComposerOrnament<Composer: View>: ViewModifier {
         )
     }
 
+    private var isRevealed: Bool { presentation.revealsComposer }
+
     func body(content: Content) -> some View {
         content
             .onAppear { isActiveChat = true }
-            .onDisappear { isActiveChat = false }
+            .onDisappear {
+                isActiveChat = false
+                onWithdraw()
+            }
+            .onChange(of: presentation) { old, new in
+                if FloatingComposerPolicy.cancelsPhotoImport(from: old, to: new) { onWithdraw() }
+            }
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.width
             } action: { width in
                 columnWidth = width
             }
             .ornament(
-                visibility: isPresented ? .visible : .hidden,
+                visibility: isRevealed ? .visible : .hidden,
                 // Centered under the window's bottom edge (HIG ornament
                 // placement); its top aligns there so it hangs just outside.
                 attachmentAnchor: .scene(.bottom),
@@ -51,13 +63,16 @@ struct FloatingComposerOrnament<Composer: View>: ViewModifier {
             }
             .animation(
                 reduceMotion ? nil : .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
-                value: isPresented
+                value: isRevealed
             )
     }
 
     @ViewBuilder
     private var floatingComposer: some View {
-        if isPresented {
+        // Covered or withdrawn composers are unmounted: no visible or
+        // VoiceOver-reachable Send, and onDisappear stops dictation and focus.
+        // On visionOS unmounting does not cancel the photo import (see onWithdraw).
+        if isRevealed {
             let shape = RoundedRectangle(cornerRadius: FloatingComposerPolicy.cornerRadius, style: .continuous)
             composer()
                 .padding(FloatingComposerPolicy.contentInset)

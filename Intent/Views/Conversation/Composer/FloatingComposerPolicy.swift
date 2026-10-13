@@ -12,6 +12,20 @@ enum ComposerHost: Equatable {
     }
 }
 
+/// How a chat's floating composer is presented.
+enum FloatingComposerPresentation: Equatable {
+    /// Hidden while a modal layer covers the chat. Temporary: an in-flight
+    /// photo import keeps running so its attachment is waiting on dismissal.
+    case covered
+    /// Visible, interactive and exposed to accessibility: the chat in front.
+    case shown
+    /// The chat went away (navigation, loading, question slot): an in-flight
+    /// photo import is cancelled, as when the inline composer unmounts.
+    case withdrawn
+
+    var revealsComposer: Bool { self == .shown }
+}
+
 /// Presentation rules for the floating (ornament) composer. Platform-neutral
 /// so the iOS unit-test host can pin them; only the ornament itself is
 /// visionOS-specific (ConversationColumnView).
@@ -32,18 +46,27 @@ enum FloatingComposerPolicy {
 
     /// The floating composer appears under the same conditions as the inline
     /// one (not while the transcript is loading, and only when the question
-    /// slot leaves the composer available). It is also withdrawn while its
-    /// chat is covered — by a pushed child agent (`isActiveChat`) or by a
+    /// slot leaves the composer available), and only for the chat in front:
+    /// a pushed child agent (`isActiveChat`) withdraws it, and a covering
     /// modal layer such as the Assistant sheet (`isForemost`, from
-    /// `ComposerCoverage`) — so each window shows exactly one composer, for
-    /// the chat in front.
-    static func isPresented(
+    /// `ComposerCoverage`) hides it, so each window shows exactly one composer.
+    static func presentation(
         isActiveChat: Bool,
         isForemost: Bool,
         showsLoadingState: Bool,
         composerVisible: Bool
+    ) -> FloatingComposerPresentation {
+        guard isActiveChat, !showsLoadingState, composerVisible else { return .withdrawn }
+        return isForemost ? .shown : .covered
+    }
+
+    /// Whether a presentation change ends the chat's in-flight photo import.
+    /// Only a genuine withdrawal does; being covered by a modal does not.
+    static func cancelsPhotoImport(
+        from old: FloatingComposerPresentation,
+        to new: FloatingComposerPresentation
     ) -> Bool {
-        isActiveChat && isForemost && !showsLoadingState && composerVisible
+        new == .withdrawn && old != .withdrawn
     }
 
     /// Composer width that tracks the chat column, so resizing the window

@@ -65,7 +65,8 @@ struct ConversationColumnView: View {
         // The one composer for this chat floats below the window.
         .modifier(FloatingComposerOrnament(
             showsLoadingState: viewModel.showsLoadingState,
-            composerVisible: composerVisible
+            composerVisible: composerVisible,
+            onWithdraw: viewModel.cancelPhotoImport
         ) {
             MessageInputView(
                 viewModel: viewModel,
