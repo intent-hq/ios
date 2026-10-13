@@ -87,7 +87,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
-            if isEnabled && !isSearching {
+            if isEnabled, !isSearching {
                 actionControls
                     .padding(.bottom, bottomInset + (isOpen && bottomInset == 0 ? Layout.menuBottomInset : Layout.launcherBottomInset))
                     .ignoresSafeArea(.container, edges: isOpen && bottomInset == 0 ? .bottom : [])

@@ -138,8 +138,8 @@ extension AppCoordinatorTests {
     }
 
     @MainActor private func compactControls(_ identifier: String, in host: UIView) -> [NSObject] {
-        SyntheticBadgeHost.accessibilityElements(in: host).filter {
-            SyntheticBadgeHost.accessibilityIdentifier(of: $0) == identifier && $0.isAccessibilityElement
+        SyntheticBadgeHost.accessibilityElements(in: host).filter { element in
+            SyntheticBadgeHost.accessibilityIdentifier(of: element) == identifier && element.isAccessibilityElement
         }
     }
 
