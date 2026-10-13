@@ -731,6 +731,8 @@ $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoSuggestionsTests.swift
 $(SRCROOT)/IntentTests/HookTimeBarTests.swift
+$(SRCROOT)/IntentTests/IPadCompactNavigationTests.swift
+$(SRCROOT)/IntentTests/IPadCompactShellTests.swift
 $(SRCROOT)/IntentTests/IPadShellNavigationTests.swift
 $(SRCROOT)/IntentTests/ImagePasteboardFixture.swift
 $(SRCROOT)/IntentTests/InfoPlistSyncTests.swift
