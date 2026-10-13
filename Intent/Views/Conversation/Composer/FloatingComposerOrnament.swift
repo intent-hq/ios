@@ -37,6 +37,14 @@ struct FloatingComposerOrnament<Composer: View>: ViewModifier {
 
     private var isRevealed: Bool { presentation.revealsComposer }
 
+    // Xcode 27 replaces the public 2D overload with a back-deployed 3D one.
+    // Earlier SDKs require Alignment to support our visionOS 2 minimum.
+    #if compiler(>=6.4)
+    private var ornamentAlignment: Alignment3D { .topBack }
+    #else
+    private var ornamentAlignment: Alignment { .top }
+    #endif
+
     func body(content: Content) -> some View {
         content
             .onAppear { isActiveChat = true }
@@ -57,7 +65,7 @@ struct FloatingComposerOrnament<Composer: View>: ViewModifier {
                 // Centered under the window's bottom edge (HIG ornament
                 // placement); its top aligns there so it hangs just outside.
                 attachmentAnchor: .scene(.bottom),
-                contentAlignment: .topBack
+                contentAlignment: ornamentAlignment
             ) {
                 floatingComposer
             }
