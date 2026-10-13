@@ -6,6 +6,7 @@ import Testing
 /// The visionOS floating composer (`FloatingComposerPolicy`): one ornament
 /// composer per active chat, sized from the chat column, with the inline iOS
 /// composer rules left untouched.
+@MainActor
 struct FloatingComposerPolicyTests {
     // MARK: - Host selection
 
@@ -20,22 +21,72 @@ struct FloatingComposerPolicyTests {
     // MARK: - Presentation
 
     @Test func presentsForTheActiveLoadedChat() {
-        #expect(FloatingComposerPolicy.isPresented(isActiveChat: true, showsLoadingState: false, composerVisible: true))
+        #expect(FloatingComposerPolicy.isPresented(isActiveChat: true, isForemost: true, showsLoadingState: false, composerVisible: true))
     }
 
     @Test func withdrawsWhileTheChatIsCovered() {
         // A pushed child agent owns the window's composer; the covered chat
         // must not leave a second ornament behind.
-        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: false, showsLoadingState: false, composerVisible: true))
+        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: false, isForemost: true, showsLoadingState: false, composerVisible: true))
+    }
+
+    @Test func withdrawsWhileAModalCoversTheChat() {
+        // Regression: the Assistant sheet over an open chat left the covered
+        // chat's composer on screen (two composers, covered draft sendable).
+        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: true, isForemost: false, showsLoadingState: false, composerVisible: true))
     }
 
     @Test func hidesWhileTheTranscriptIsLoading() {
-        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: true, showsLoadingState: true, composerVisible: true))
+        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: true, isForemost: true, showsLoadingState: true, composerVisible: true))
     }
 
     @Test func hidesWhenTheQuestionSlotOwnsTheComposer() {
         // Pending-question recovery keeps the composer closed (fail closed).
-        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: true, showsLoadingState: false, composerVisible: false))
+        #expect(!FloatingComposerPolicy.isPresented(isActiveChat: true, isForemost: true, showsLoadingState: false, composerVisible: false))
+    }
+
+    // MARK: - Modal coverage (ComposerCoverage)
+
+    @Test func windowChatIsForemostWithNoModalOpen() {
+        #expect(ComposerCoverage().isForemost(depth: 0))
+    }
+
+    @Test func sheetCoversTheWindowChatButNotItsOwnChat() {
+        // Assistant sheet (layer 1) over a window chat (depth 0): only the
+        // sheet's chat keeps a composer.
+        let coverage = ComposerCoverage()
+        coverage.cover(UUID(), depth: 1)
+        #expect(!coverage.isForemost(depth: 0))
+        #expect(coverage.isForemost(depth: 1))
+    }
+
+    @Test func dismissingTheSheetRestoresTheWindowChat() {
+        let coverage = ComposerCoverage()
+        let sheet = UUID()
+        coverage.cover(sheet, depth: 1)
+        coverage.uncover(sheet)
+        #expect(coverage.isForemost(depth: 0))
+    }
+
+    @Test func nestedModalCoversEveryChatBeneathIt() {
+        // A lightbox (layer 2) opened from the Assistant chat (depth 1).
+        let coverage = ComposerCoverage()
+        let sheet = UUID()
+        let lightbox = UUID()
+        coverage.cover(sheet, depth: 1)
+        coverage.cover(lightbox, depth: 2)
+        #expect(!coverage.isForemost(depth: 0))
+        #expect(!coverage.isForemost(depth: 1))
+        coverage.uncover(lightbox)
+        #expect(coverage.isForemost(depth: 1))
+        #expect(!coverage.isForemost(depth: 0))
+    }
+
+    @Test func uncoveringAnUnknownLayerIsHarmless() {
+        let coverage = ComposerCoverage()
+        coverage.cover(UUID(), depth: 1)
+        coverage.uncover(UUID())
+        #expect(!coverage.isForemost(depth: 0))
     }
 
     // MARK: - Width follows the window
@@ -138,7 +189,35 @@ struct FloatingComposerPolicyTests {
         #expect(ornament.contains(".ornament("))
         #expect(ornament.contains(".glassBackgroundEffect(in: shape)"))
         #expect(ornament.contains("FloatingComposerPolicy.isPresented("))
+        #expect(ornament.contains("coverage?.isForemost(depth: layerDepth)"))
         #expect(ornament.contains("FloatingComposerPolicy.width(forColumnWidth: columnWidth)"))
+    }
+
+    /// Regression (Assistant sheet over an open chat showed two floating
+    /// composers, and the covered draft could still be sent): every modal
+    /// that can open over a chat on visionOS must register as a covering
+    /// layer, so only the foremost chat keeps its composer.
+    @Test(arguments: [
+        "Intent/App/RootView.swift",
+        "Intent/Views/Conversation/Transcript/ConversationView.swift",
+        "Intent/Views/Conversation/Transcript/ConversationColumnView.swift",
+        "Intent/Views/Conversation/Content/MarkdownTextView.swift",
+        "Intent/Views/Conversation/Content/ContentBlockView.swift",
+        "Intent/Views/Conversation/Content/AttachmentReferenceImageView.swift",
+        "Intent/Views/Conversation/Content/AttachmentReferenceVideoView.swift",
+        "Intent/Views/Conversation/Content/ImageAttachmentThumbnail.swift",
+        "Intent/Views/Conversation/Content/MermaidDiagramView.swift"
+    ])
+    func chatCoveringModalsSuppressComposersBeneath(_ path: String) throws {
+        let source = try Self.source(path)
+        let presentations = source.components(separatedBy: ".sheet(").count - 1
+            + source.components(separatedBy: ".fullScreenCover(").count - 1
+        let coveringLayers = source.components(separatedBy: ".coversConversationComposers()").count - 1
+        #expect(presentations > 0, "\(path) no longer presents a modal; update this list")
+        #expect(
+            coveringLayers == presentations,
+            "\(path): \(presentations) modal presentation(s) but \(coveringLayers) covering layer(s)"
+        )
     }
 
     private static func source(_ relativePath: String) throws -> String {

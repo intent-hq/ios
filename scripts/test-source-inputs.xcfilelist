@@ -623,6 +623,7 @@ $(SRCROOT)/Intent/Views/Conversation/AssistantErrorBanner.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantStateContent.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer
+$(SRCROOT)/Intent/Views/Conversation/Composer/ComposerCoverage.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/FloatingComposerOrnament.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/FloatingComposerPolicy.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputAttachments.swift

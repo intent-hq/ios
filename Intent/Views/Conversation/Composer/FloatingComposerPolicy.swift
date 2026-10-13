@@ -33,14 +33,17 @@ enum FloatingComposerPolicy {
     /// The floating composer appears under the same conditions as the inline
     /// one (not while the transcript is loading, and only when the question
     /// slot leaves the composer available). It is also withdrawn while its
-    /// chat is covered — a pushed child agent owns the window's ornament — so
-    /// each window shows at most one composer, for the chat in front.
+    /// chat is covered — by a pushed child agent (`isActiveChat`) or by a
+    /// modal layer such as the Assistant sheet (`isForemost`, from
+    /// `ComposerCoverage`) — so each window shows exactly one composer, for
+    /// the chat in front.
     static func isPresented(
         isActiveChat: Bool,
+        isForemost: Bool,
         showsLoadingState: Bool,
         composerVisible: Bool
     ) -> Bool {
-        isActiveChat && !showsLoadingState && composerVisible
+        isActiveChat && isForemost && !showsLoadingState && composerVisible
     }
 
     /// Composer width that tracks the chat column, so resizing the window

@@ -75,6 +75,7 @@ struct ConversationColumnView: View {
         })
         .sheet(isPresented: $questionSheetPresented) {
             questionSheet
+                .coversConversationComposers()
         }
         #endif
         .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)

@@ -14,14 +14,18 @@ struct FloatingComposerOrnament<Composer: View>: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(ComposerCoverage.self) private var coverage: ComposerCoverage?
+    @Environment(\.composerLayerDepth) private var layerDepth
     @State private var columnWidth: CGFloat = 0
     /// False while another chat is pushed over this one, so only the chat in
-    /// front owns the window's composer.
+    /// front owns the window's composer. (Sheets and full-screen covers do
+    /// not end appearance; `ComposerCoverage` handles those.)
     @State private var isActiveChat = false
 
     private var isPresented: Bool {
         FloatingComposerPolicy.isPresented(
             isActiveChat: isActiveChat,
+            isForemost: coverage?.isForemost(depth: layerDepth) ?? true,
             showsLoadingState: showsLoadingState,
             composerVisible: composerVisible
         )

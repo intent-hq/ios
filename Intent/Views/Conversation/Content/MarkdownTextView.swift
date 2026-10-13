@@ -128,12 +128,15 @@ struct MarkdownTextView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
                 ImageLightboxView(image: item.image)
+                    .coversConversationComposers()
             }
             .fullScreenCover(item: $videoItem) { item in
                 VideoLightboxView(video: item.video)
+                    .coversConversationComposers()
             }
             .fullScreenCover(item: $pdfItem) { item in
                 PDFLightboxView(pdf: item.pdf)
+                    .coversConversationComposers()
             }
 
         markdownView
@@ -141,6 +144,7 @@ struct MarkdownTextView: View {
             .fullScreenCover(item: $browserItem) { browser in
                 if let session {
                     WorkspaceBrowserView(browser: browser, connection: session.connection)
+                        .coversConversationComposers()
                 }
             }
     }
