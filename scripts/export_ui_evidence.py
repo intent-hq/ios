@@ -112,7 +112,14 @@ CAPTURES = {
         ),
     },
     "WorkspaceSwipeUITests": {
+        "testSlowStatusSwipeStaysOpenAfterFingerLifts": ("workspace-status-swipe-stays-open",),
         "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
+    },
+    "ManualConnectionDesignUITests": {
+        "testTokenVisibilityKeepsDraftFocusAndSheetPosition": (
+            "manual-design-token-visibility-keeps-focus",
+            "manual-design-token-visibility-keeps-keyboard-dismissed",
+        ),
     },
     "WorkspaceListMenuUITests": {
         "testEmptyWorkspaceButtonOpensCreationAndReturns": ("empty-workspaces-light", "empty-workspaces-dark"),

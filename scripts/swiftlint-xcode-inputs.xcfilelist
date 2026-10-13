@@ -456,6 +456,7 @@ $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionField.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionHeader.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionSubmitButton.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualTokenEntryView.swift
+$(SRCROOT)/Intent/Views/Onboarding/ManualTokenTextField.swift
 $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerOverlay.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift

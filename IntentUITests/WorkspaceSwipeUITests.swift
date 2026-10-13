@@ -5,6 +5,34 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
     private static let workspaceId = "demo-ws-dashboard"
 
     @MainActor
+    func testSlowStatusSwipeStaysOpenAfterFingerLifts() {
+        let app = launchWorkspaces()
+        app.buttons["workspaces.viewMode.Status"].tap()
+        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
+        let visibleBottom = app.buttons["intent.menu.open"].frame.minY
+        for _ in 0..<4 where row.frame.maxY > visibleBottom {
+            app.scrollViews["workspaces.list"].swipeUp()
+        }
+        XCTAssertTrue(row.isHittable)
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: -100, dy: 12)),
+                    withVelocity: .slow, thenHoldForDuration: 0.5)
+        let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
+        XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(archive.waitForNonExistence(timeout: 2), "Actions must remain open after the drag settles")
+        XCTAssertTrue(archive.isHittable)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "workspace-status-swipe-stays-open"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        archive.tap()
+        let alert = app.alerts["Archive Workspace"]
+        XCTAssertTrue(alert.waitForExistence(timeout: Self.timeout))
+        alert.buttons["Cancel"].tap()
+        XCTAssertTrue(row.exists)
+    }
+
+    @MainActor
     func testRightSwipeOpensRecentAgentAndBackReturnsToWorkspace() {
         let app = launchWorkspaces()
         let row = app.buttons["workspace.row.\(Self.workspaceId)"]
