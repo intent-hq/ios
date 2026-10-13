@@ -85,8 +85,9 @@ struct IPadShellView: View {
             isEnabled: width != nil && layout.usesCompactNavigation,
             onWorkspaces: { coordinator.onSelectIPadSection(.workspaces) },
             onAssistant: { coordinator.onSelectIPadSection(.assistant) },
-            onCreateWorkspace: createWorkspace
-        ) { coordinator.onSelectIPadSection(.connections) })
+            onCreateWorkspace: createWorkspace,
+            onConnections: showConnections
+        ))
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if $0 > 0 { width = $0 } }
         .onChange(of: measuredLayout, initial: true) { _, measuredLayout in
             if let measuredLayout {
@@ -204,6 +205,10 @@ struct IPadShellView: View {
 
     private func collapseSidebar() {
         coordinator.iPadNavigation.collapseSidebar()
+    }
+
+    private func showConnections() {
+        coordinator.onSelectIPadSection(.connections)
     }
 
     private func createWorkspace() {
