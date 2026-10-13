@@ -11,6 +11,16 @@ nonisolated enum DiagnosticZIP {
     private static let maximumHeaderBytes = 1024
     static let maximumArchiveBytes = DiagnosticLimits.maximumHistoryBytes + maximumMetadataBytes + maximumHeaderBytes
 
+    // Classic ZIP APPNOTE signatures and fixed fields for stored UTF-8 entries.
+    private static let localHeaderSignature: UInt32 = 0x04034b50
+    private static let centralDirectorySignature: UInt32 = 0x02014b50
+    private static let endOfDirectorySignature: UInt32 = 0x06054b50
+    private static let version20: UInt16 = 20
+    private static let utf8Flag: UInt16 = 0x0800
+    private static let dosEpochDate: UInt16 = 0x0021 // 1980-01-01; no filesystem metadata
+    private static let reversedCRC32Polynomial: UInt32 = 0xedb88320
+    private static let checksumCancellationInterval = 16_384
+
     private struct Entry {
         let name: Data
         let bytes: Data
@@ -39,15 +49,13 @@ nonisolated enum DiagnosticZIP {
         return archive
     }
 
-    // ZIP wire constants and field widths are specified by APPNOTE, not tuning parameters.
-    // swiftlint:disable no_magic_numbers
     private static func appendLocal(_ entry: Entry, to data: inout Data) {
-        append(UInt32(0x04034b50), to: &data)
-        append(UInt16(20), to: &data) // Version 2.0
-        append(UInt16(0x0800), to: &data) // UTF-8
+        append(localHeaderSignature, to: &data)
+        append(version20, to: &data)
+        append(utf8Flag, to: &data)
         append(UInt16(0), to: &data) // Stored
         append(UInt16(0), to: &data) // DOS time
-        append(UInt16(0x0021), to: &data) // 1980-01-01; no filesystem metadata
+        append(dosEpochDate, to: &data)
         append(entry.checksum, to: &data)
         append(UInt32(entry.bytes.count), to: &data)
         append(UInt32(entry.bytes.count), to: &data)
@@ -58,13 +66,13 @@ nonisolated enum DiagnosticZIP {
     }
 
     private static func appendCentral(_ entry: Entry, to data: inout Data) {
-        append(UInt32(0x02014b50), to: &data)
-        append(UInt16(20), to: &data) // Made by DOS, version 2.0
-        append(UInt16(20), to: &data)
-        append(UInt16(0x0800), to: &data)
+        append(centralDirectorySignature, to: &data)
+        append(version20, to: &data) // Made by DOS, version 2.0
+        append(version20, to: &data)
+        append(utf8Flag, to: &data)
         append(UInt16(0), to: &data)
         append(UInt16(0), to: &data)
-        append(UInt16(0x0021), to: &data)
+        append(dosEpochDate, to: &data)
         append(entry.checksum, to: &data)
         append(UInt32(entry.bytes.count), to: &data)
         append(UInt32(entry.bytes.count), to: &data)
@@ -79,7 +87,7 @@ nonisolated enum DiagnosticZIP {
     }
 
     private static func appendEnd(count: UInt16, size: UInt32, offset: UInt32, to data: inout Data) {
-        append(UInt32(0x06054b50), to: &data)
+        append(endOfDirectorySignature, to: &data)
         append(UInt16(0), to: &data)
         append(UInt16(0), to: &data)
         append(count, to: &data)
@@ -89,10 +97,10 @@ nonisolated enum DiagnosticZIP {
         append(UInt16(0), to: &data)
     }
 
-    private static let crcTable: [UInt32] = (0..<256).map { value in
+    private static let crcTable: [UInt32] = (0...Int(UInt8.max)).map { value in
         var remainder = UInt32(value)
-        for _ in 0..<8 {
-            remainder = (remainder >> 1) ^ (remainder & 1 == 0 ? 0 : 0xedb88320)
+        for _ in 0..<UInt8.bitWidth {
+            remainder = (remainder >> 1) ^ (remainder & 1 == 0 ? 0 : reversedCRC32Polynomial)
         }
         return remainder
     }
@@ -100,12 +108,11 @@ nonisolated enum DiagnosticZIP {
     private static func crc32(_ data: Data) throws -> UInt32 {
         var checksum = UInt32.max
         for (index, byte) in data.enumerated() {
-            if index.isMultiple(of: 16_384) { try Task.checkCancellation() }
-            checksum = (checksum >> 8) ^ crcTable[Int((checksum ^ UInt32(byte)) & 0xff)]
+            if index.isMultiple(of: checksumCancellationInterval) { try Task.checkCancellation() }
+            checksum = (checksum >> UInt8.bitWidth) ^ crcTable[Int((checksum ^ UInt32(byte)) & UInt32(UInt8.max))]
         }
         return checksum ^ UInt32.max
     }
-    // swiftlint:enable no_magic_numbers
 
     private static func append<Value: FixedWidthInteger>(_ value: Value, to data: inout Data) {
         var littleEndian = value.littleEndian

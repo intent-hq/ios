@@ -21,7 +21,7 @@ enum ConnectionSwitcherStyle {
     }
 
     static func selection(for scheme: ColorScheme) -> Color {
-        // Surface/Grey700 from Figma 3575:37803.
+        // Literal 8-bit channels preserve Surface/Grey700 from Figma 3575:37803 in dark mode.
         // swiftlint:disable no_magic_numbers
         scheme == .dark
             ? Color(.sRGB, red: 61 / 255, green: 61 / 255, blue: 60 / 255)

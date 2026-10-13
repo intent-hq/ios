@@ -260,10 +260,12 @@ struct ConversationDecodingIdentityTests {
             ["type": "text", "text": "a"],
             ["id": "wire-1", "type": "text", "text": "b"],
             ["type": "tool_result", "toolUseId": "tc-1", "output": "full"],
-            ["type": "text", "text": "d"]
+            ["type": "text", "text": "d"],
+            ["type": "text", "text": "a"]
         ]
         let identities: [ContentBlock.FallbackIdentity] = [
-            .fingerprint(messageId: "m-a"), .indexed(messageId: "m-b", index: 4), .fixed("msg-1:3"), .indexed(messageId: "m-d", index: 0)
+            .fingerprint(messageId: "m-a"), .indexed(messageId: "m-b", index: 4),
+            .fixed("msg-1:3"), .indexed(messageId: "m-d", index: 0), .fingerprint(messageId: nil)
         ]
         #expect(JSONSerialization.isValidJSONObject(dicts))
         let perItem = zip(dicts, identities).map { ContentBlock.decode($0, fallbackIdentity: $1) }
@@ -274,6 +276,8 @@ struct ConversationDecodingIdentityTests {
         #expect(batched[1]?.id == "wire-1")
         #expect(batched[2]?.id == "msg-1:3")
         #expect(batched[3]?.id == "m-d:0")
+        #expect(batched[4]?.id.hasPrefix("block:") == true)
+        #expect(batched[4] == ContentBlock.decode(dicts[4]))
         #expect(ContentBlock.decodeBatch([], fallbackIdentities: []).isEmpty)
     }
 

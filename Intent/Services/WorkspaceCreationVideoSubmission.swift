@@ -70,13 +70,22 @@ import Observation
         if workspace == nil { try await createIdleWorkspace() }
         guard let workspace, let agentId else { throw SubmissionError.invalidCreationResponse }
         if messageId == nil {
-            let blocks = try await uploadVideos(workspaceId: workspace.id)
-            try Task.checkCancellation()
-            let id = conversation.beginSendAttempt(agentId: agentId, content: content, workspaceId: workspace.id)
-            conversation.prepareSendAttempt(id, imagePayload: .inline(imageBlocks), filePayload: .attachments(blocks))
-            messageId = id
+            try await prepareSendAttempt(workspaceId: workspace.id, agentId: agentId)
         }
         guard let messageId else { throw SubmissionError.unconfirmed }
+        try await sendOrCheckAttempt(messageId)
+        return workspace
+    }
+
+    private func prepareSendAttempt(workspaceId: String, agentId: String) async throws {
+        let blocks = try await uploadVideos(workspaceId: workspaceId)
+        try Task.checkCancellation()
+        let id = conversation.beginSendAttempt(agentId: agentId, content: content, workspaceId: workspaceId)
+        conversation.prepareSendAttempt(id, imagePayload: .inline(imageBlocks), filePayload: .attachments(blocks))
+        messageId = id
+    }
+
+    private func sendOrCheckAttempt(_ messageId: String) async throws {
         // Ordinary sends are NOT idempotent. Reuse the composer's recovery owner:
         // a lost reply may only be checked, never blindly resent (protocol §5.5).
         if needsStatusCheck { await conversation.inspectSendAttempt(messageId) }
@@ -89,7 +98,6 @@ import Observation
             }
         }
         guard attempt?.status.isConfirmed == true else { throw SubmissionError.unconfirmed }
-        return workspace
     }
 
     private func createIdleWorkspace() async throws {

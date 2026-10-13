@@ -24,6 +24,29 @@ extension ConnectionManagerTests {
         #expect(!WebSocketConnection.fingerprintMatches(colon, pinned: InvitedSessionFixtures.pin))
     }
 
+    @Test @MainActor func realTLSFingerprintMismatchPreservesReceivedFingerprint() async throws {
+        let server = try await LoopbackWebSocketServer.start(tlsIdentity: ManualTokenEntryViewTests.fixtureIdentity())
+        defer { server.stop() }
+
+        do {
+            let socket = try await WebSocketConnection.connect(
+                host: "127.0.0.1",
+                port: server.port,
+                token: "test-token",
+                certFingerprint: InvitedSessionFixtures.pin
+            )
+            await socket.disconnect()
+            Issue.record("The real TLS transport accepted a different certificate pin")
+        } catch let error as WebSocketTransportError {
+            guard case let .certificateMismatch(host, fingerprint) = error else {
+                Issue.record("Expected a certificate mismatch, got \(error)")
+                return
+            }
+            #expect(host == "127.0.0.1")
+            #expect(fingerprint == ManualTokenEntryViewTests.fixtureIdentityFingerprint)
+        }
+    }
+
     @Test(arguments: [false, true]) @MainActor func canonicalInvitedPinImportsAndReconnectsThroughRealTLS(tunnel: Bool) async throws {
         let server = try await LoopbackWebSocketServer.start(tlsIdentity: ManualTokenEntryViewTests.fixtureIdentity())
         defer { server.stop() }

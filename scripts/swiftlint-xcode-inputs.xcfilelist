@@ -724,7 +724,6 @@ $(SRCROOT)/IntentTests/EventCatalogCoverageTests.swift
 $(SRCROOT)/IntentTests/EventWakeAttributionTests.swift
 $(SRCROOT)/IntentTests/ExternalLinkTests.swift
 $(SRCROOT)/IntentTests/FakeConnectionManager.swift
-$(SRCROOT)/IntentTests/FakeConnectionManagerRecords.swift
 $(SRCROOT)/IntentTests/FakeConnectionManagerTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreBranchCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift

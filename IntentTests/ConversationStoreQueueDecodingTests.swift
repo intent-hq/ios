@@ -8,9 +8,6 @@ private enum NestedImageQueueFixture {
     static let position = 4
 }
 
-// Extracted wire fixtures intentionally keep protocol dictionaries compact.
-// swiftlint:disable multiline_literal_brackets
-
 extension ConversationStoreIntegrationTests {
     // MARK: - Queue snapshot decoding (ios#252)
 
@@ -20,11 +17,13 @@ extension ConversationStoreIntegrationTests {
     @Test func fetchQueueKeepsValidSiblingsWhenOneElementIsMalformed() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        fake.responseMap["agent.getQueue"] = ["queue": [
-            ["id": "q-1", "content": "first", "queuedAt": "2025-01-01T00:00:00Z", "position": 0],
-            ["id": "q-broken", "queuedAt": "2025-01-01T00:00:01Z", "position": 1],
-            ["id": "q-3", "content": "third", "queuedAt": "2025-01-01T00:00:02Z", "position": 2]
-        ]]
+        fake.responseMap["agent.getQueue"] = [
+            "queue": [
+                ["id": "q-1", "content": "first", "queuedAt": "2025-01-01T00:00:00Z", "position": 0],
+                ["id": "q-broken", "queuedAt": "2025-01-01T00:00:01Z", "position": 1],
+                ["id": "q-3", "content": "third", "queuedAt": "2025-01-01T00:00:02Z", "position": 2]
+            ]
+        ]
 
         await store.fetchQueue(agentId: "agent-1")
 
@@ -38,12 +37,14 @@ extension ConversationStoreIntegrationTests {
     @Test func fetchQueueDropsNonObjectElementsButKeepsSiblings() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        fake.responseMap["agent.getQueue"] = ["queue": [
-            ["id": "q-1", "content": "first", "queuedAt": "2025-01-01T00:00:00Z", "position": 0],
-            "not-an-object",
-            NSNull(),
-            ["id": "q-4", "content": "fourth", "queuedAt": "2025-01-01T00:00:03Z", "position": 3]
-        ] as [Any]]
+        fake.responseMap["agent.getQueue"] = [
+            "queue": [
+                ["id": "q-1", "content": "first", "queuedAt": "2025-01-01T00:00:00Z", "position": 0],
+                "not-an-object",
+                NSNull(),
+                ["id": "q-4", "content": "fourth", "queuedAt": "2025-01-01T00:00:03Z", "position": 3]
+            ] as [Any]
+        ]
 
         await store.fetchQueue(agentId: "agent-1")
 
@@ -201,5 +202,3 @@ extension ConversationStoreIntegrationTests {
         #expect(messages.first?.messageMetadata["userAppMessageId"]?.stringValue == "uam-1")
     }
 }
-
-// swiftlint:enable multiline_literal_brackets

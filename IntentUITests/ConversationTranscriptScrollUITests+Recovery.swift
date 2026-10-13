@@ -1,7 +1,6 @@
 import XCTest
 
-// These end-to-end regressions retain staged narratives and observed timeout
-// values so failures identify the exact viewport phase.
+// Staged regression narratives keep observed timeout values inline to identify the failing viewport phase.
 // swiftlint:disable function_body_length no_magic_numbers
 
 extension ConversationTranscriptScrollUITests {

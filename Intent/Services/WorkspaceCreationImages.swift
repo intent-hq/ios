@@ -47,9 +47,12 @@ import UniformTypeIdentifiers
 
     // Bound compressed source reads and prepared draft memory independently of
     // the daemon's frame limit. JSONSerialization may also escape base64 slashes.
-    nonisolated static let maximumSourceBytes = 30 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
-    static let maximumJPEGBytes = 12 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
-    static let maximumRequestBytes = 39 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    // Keep MiB conversions visible in these named source, JPEG, and request limits.
+    // swiftlint:disable no_magic_numbers
+    nonisolated static let maximumSourceBytes = 30 * 1024 * 1024
+    static let maximumJPEGBytes = 12 * 1024 * 1024
+    static let maximumRequestBytes = 39 * 1024 * 1024
+    // swiftlint:enable no_magic_numbers
     nonisolated private static let maximumPixelSize = 4096
     private(set) var images: [Image] = []
     private(set) var videos: [PendingFile] = []
@@ -133,22 +136,7 @@ import UniformTypeIdentifiers
         isImporting = true
         let task = Task {
             do {
-                var prepared: [Image] = []
-                var preparedVideos: [PendingFile] = []
-                for load in loaders {
-                    let media = try await load()
-                    try Task.checkCancellation()
-                    switch media {
-                    case let .image(data):
-                        prepared.append(try await Self.prepare(data, quality: Constants.Conversation.Composer.imageCompressionQuality))
-                    case let .video(video):
-                        guard video.size <= ImportedPhotoVideo.maxBytes else { throw ImportedPhotoVideo.ImportError.tooLarge }
-                        preparedVideos.append(PendingFile(
-                            url: video.url, displayName: video.url.lastPathComponent, size: Int64(video.size), video: video
-                        ))
-                    }
-                    try Task.checkCancellation()
-                }
+                let (prepared, preparedVideos) = try await Self.prepareMedia(loaders)
                 guard images.reduce(0, { $0 + $1.jpeg.count }) + prepared.reduce(0, { $0 + $1.jpeg.count })
                     <= Self.maximumJPEGBytes else { throw ImportError.tooLarge }
                 images.append(contentsOf: prepared)
@@ -163,6 +151,26 @@ import UniformTypeIdentifiers
         }
         importTask = task
         return task
+    }
+
+    private static func prepareMedia(_ loaders: [MediaLoader]) async throws -> (images: [Image], videos: [PendingFile]) {
+        var prepared: [Image] = []
+        var preparedVideos: [PendingFile] = []
+        for load in loaders {
+            let media = try await load()
+            try Task.checkCancellation()
+            switch media {
+            case let .image(data):
+                prepared.append(try await Self.prepare(data, quality: Constants.Conversation.Composer.imageCompressionQuality))
+            case let .video(video):
+                guard video.size <= ImportedPhotoVideo.maxBytes else { throw ImportedPhotoVideo.ImportError.tooLarge }
+                preparedVideos.append(PendingFile(
+                    url: video.url, displayName: video.url.lastPathComponent, size: Int64(video.size), video: video
+                ))
+            }
+            try Task.checkCancellation()
+        }
+        return (prepared, preparedVideos)
     }
 
     func cancelImport() {

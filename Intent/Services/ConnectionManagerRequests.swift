@@ -13,7 +13,6 @@ extension ConnectionManager {
     /// known to outlast this bound (e.g. `workspace.create`).
     static let defaultRequestTimeout: TimeInterval = 10
 
-    // swiftlint:disable cyclomatic_complexity function_body_length
     /// Sends a JSON-RPC request and awaits its response.
     ///
     /// - Parameter timeout: Per-call timeout override in seconds (defaults to
@@ -28,28 +27,13 @@ extension ConnectionManager {
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
         if DemoMode.isEnabled || servesDemoFixtures {
-            if let gate = DemoFixtures.responseGate(for: method, params: params) {
-                try await DemoFixtures.wait(for: gate)
-            }
-            let response = DemoFixtures.response(for: method, params: params)
-            // Routed ahead of the ack: the router buffers it until the caller
-            // registers its handler, the same order a live daemon can produce.
-            if let push = DemoFixtures.subscriptionPush(for: method, params: params) {
-                subscriptionRouter.route(push)
-            }
-            if let event = DemoFixtures.designScenario?.event(for: method, params: params) {
-                for handler in Array(eventHandlers.values) { handler("event", event) }
-            }
-            return response
+            return try await demoResponse(for: method, params: params)
         }
         guard let currentSocket = socket else {
-            let error = DiagnosticErrorOwnership.attaching(
-                to: NSError(
-                    domain: Self.webSocketErrorDomain,
-                    code: Self.notConnectedErrorCode,
-                    userInfo: [NSLocalizedDescriptionKey: "Not connected"]
-                ),
-                failure: DiagnosticFailure(origin: .localRequest, classification: .notConnected)
+            let error = Self.localRequestError(
+                code: Self.notConnectedErrorCode,
+                message: "Not connected",
+                classification: .notConnected
             )
             recordRequestFailure(error)
             throw error
@@ -96,7 +80,39 @@ extension ConnectionManager {
         }
     }
 
-    // swiftlint:enable cyclomatic_complexity function_body_length
+    private func demoResponse(for method: String, params: [String: Any]) async throws -> Any {
+        if let gate = DemoFixtures.responseGate(for: method, params: params) {
+            try await DemoFixtures.wait(for: gate)
+        }
+        let response = DemoFixtures.response(for: method, params: params)
+        // Routed ahead of the ack: the router buffers it until the caller
+        // registers its handler, the same order a live daemon can produce.
+        if let push = DemoFixtures.subscriptionPush(for: method, params: params) {
+            subscriptionRouter.route(push)
+        }
+        if let event = DemoFixtures.designScenario?.event(for: method, params: params) {
+            for handler in Array(eventHandlers.values) { handler("event", event) }
+        }
+        return response
+    }
+
+    private static func localRequestError(
+        code: Int,
+        message: String,
+        classification: DiagnosticFailure.Classification,
+        suppressed: Bool = false
+    ) -> NSError {
+        DiagnosticErrorOwnership.attaching(
+            to: NSError(
+                domain: webSocketErrorDomain,
+                code: code,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            ),
+            failure: DiagnosticFailure(origin: .localRequest, classification: classification),
+            suppressed: suppressed
+        )
+    }
+
     /// Registers a pending continuation for `id`, performs `write`, and races
     /// the response against `timeout`. Internal for test visibility (lets tests
     /// exercise the timeout race without a live socket).
@@ -117,13 +133,10 @@ extension ConnectionManager {
             try? await Task.sleep(for: .seconds(max(0, timeout)))
             guard !Task.isCancelled else { return }
             if let continuation = self?.pendingRequests.removeValue(forKey: id) {
-                continuation.resume(throwing: DiagnosticErrorOwnership.attaching(
-                    to: NSError(
-                        domain: Self.webSocketErrorDomain,
-                        code: Self.requestTimedOutErrorCode,
-                        userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
-                    ),
-                    failure: DiagnosticFailure(origin: .localRequest, classification: .requestTimeout)
+                continuation.resume(throwing: Self.localRequestError(
+                    code: Self.requestTimedOutErrorCode,
+                    message: "Request timed out",
+                    classification: .requestTimeout
                 ))
             }
         }
@@ -168,11 +181,16 @@ extension ConnectionManager {
                 stage: .request,
                 outcome: owner.outcome,
                 failure: failure,
-                effect: failure.origin == .remoteRPC ? .remoteRejected :
-                    (failure.classification == .notConnected || failure.classification == .encodingFailed ? .notSent : .unknown)
+                effect: Self.requestFailureEffect(for: failure)
             ),
             store: diagnostics
         )
+    }
+
+    nonisolated private static func requestFailureEffect(for failure: DiagnosticFailure) -> DiagnosticEvent.Effect {
+        if failure.origin == .remoteRPC { return .remoteRejected }
+        if failure.classification == .notConnected || failure.classification == .encodingFailed { return .notSent }
+        return .unknown
     }
 
     nonisolated static func parseInboundFrame(_ text: String) -> InboundFrame? {
@@ -262,6 +280,7 @@ extension ConnectionManager {
         }
     }
 
+    // Keep each frame metric and the reporting threshold explicit in this pure log formatter.
     // swiftlint:disable:next function_parameter_count
     nonisolated static func slowFrameLogLine(
         label: String,
@@ -447,13 +466,10 @@ extension ConnectionManager {
         let pending = pendingRequests
         pendingRequests.removeAll()
         for (_, continuation) in pending {
-            continuation.resume(throwing: DiagnosticErrorOwnership.attaching(
-                to: NSError(
-                    domain: Self.webSocketErrorDomain,
-                    code: Self.connectionClosedErrorCode,
-                    userInfo: [NSLocalizedDescriptionKey: message]
-                ),
-                failure: DiagnosticFailure(origin: .localRequest, classification: .connectionClosed),
+            continuation.resume(throwing: Self.localRequestError(
+                code: Self.connectionClosedErrorCode,
+                message: message,
+                classification: .connectionClosed,
                 suppressed: true
             ))
         }

@@ -309,12 +309,12 @@ extension ConversationCommands {
         onQueueSnapshot?(queuedMessages)
     }
 
-    /// Shared getQueue/queue:updated decoder (PROTOCOL §5.5). Non-arrays return
-    /// nil; invalid elements are dropped, retaining valid rows' order and ids.
-    /// Logs only array positions/error shapes, never content or metadata.
-    static func decodeQueueSnapshot(
-        _ queue: Any?, source: String
-    ) -> [QueuedMessage]? { // swiftlint:disable:this discouraged_optional_collection
+    // Shared getQueue/queue:updated decoder (PROTOCOL §5.5). Non-arrays return
+    // nil; invalid elements are dropped, retaining valid rows' order and ids.
+    // Logs only array positions/error shapes, never content or metadata.
+    // Nil preserves the current queue for malformed input; an empty array clears it.
+    // swiftlint:disable:next discouraged_optional_collection
+    static func decodeQueueSnapshot(_ queue: Any?, source: String) -> [QueuedMessage]? {
         guard let items = queue as? [Any] else { return nil }
         let decoder = JSONDecoder()
         var messages: [QueuedMessage] = []
