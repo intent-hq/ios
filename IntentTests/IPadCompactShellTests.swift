@@ -79,6 +79,7 @@ extension AppCoordinatorTests {
         try waitForCompactShell { launcher.accessibilityFrame.maxY <= editor.convert(editor.bounds, to: nil).minY }
         #expect(compactEditor(in: host) === editor)
         #expect(editor.text == draft)
+        try verifyCompactControlBounds(in: host, width: size.width)
         try recordCompactShell(in: host, width: size.width, name: "ipad-narrow-\(detail)-draft.png")
         try selectCompactMenu("settings", in: host)
         let destination = detail == .assistant ? "assistant" : "workspaces"
@@ -113,6 +114,15 @@ extension AppCoordinatorTests {
         coordinator.usesIPadShell = true
         coordinator.currentScreen = .workspaceList
         return coordinator
+    }
+
+    @MainActor private func verifyCompactControlBounds(in host: UIView, width: CGFloat) throws {
+        let viewport = host.convert(CGRect(x: 0, y: 0, width: width, height: host.bounds.height), to: nil)
+        for identifier in ["composer.send", "composer.attachment", "intent.menu.open"] {
+            let control = try #require(compactControl(identifier, in: host))
+            #expect(control.accessibilityFrame.minX >= viewport.minX)
+            #expect(control.accessibilityFrame.maxX <= viewport.maxX)
+        }
     }
 
     @MainActor private func recordCompactShell(in host: UIView, width: CGFloat, name: String) throws {

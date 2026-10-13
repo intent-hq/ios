@@ -30,6 +30,7 @@ struct HomeActionTiles: View {
         static let inset: CGFloat = 24
         static let spacing: CGFloat = 8
         static let maximumTileWidth: CGFloat = 192
+        static let minimumTileWidth: CGFloat = 160
         static let minimumHeight: CGFloat = 240
         static let cornerRadius: CGFloat = 20
         static let iconSize: CGFloat = 24
@@ -75,7 +76,7 @@ struct HomeActionTiles: View {
             .containerRelativeFrame(.horizontal) { width, _ in
                 let columns: CGFloat = dynamicTypeSize.isAccessibilitySize ? 1 : 2
                 let contentWidth = min(width, Layout.maximumTileWidth * 2 + Layout.spacing)
-                return (contentWidth - Layout.spacing * (columns - 1)) / columns
+                return max(Layout.minimumTileWidth, (contentWidth - Layout.spacing * (columns - 1)) / columns)
             }
             .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
