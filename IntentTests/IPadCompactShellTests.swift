@@ -160,13 +160,13 @@ extension AppCoordinatorTests {
         return host.subviews.lazy.compactMap { self.compactEditor(in: $0) }.first
     }
 
-    @MainActor private func waitForCompactShell(_ ready: () -> Bool) throws {
+    @MainActor private func waitForCompactShell(sourceLocation: SourceLocation = #_sourceLocation, _ ready: () -> Bool) throws {
         let deadline = Date(timeIntervalSinceNow: CompactShellSize.timeout)
         while Date() < deadline {
             if ready() { return }
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: CompactShellSize.pollInterval))
         }
-        try #require(ready(), "The retained iPad shell did not finish updating")
+        try #require(ready(), "The retained iPad shell did not finish updating", sourceLocation: sourceLocation)
     }
 }
 
