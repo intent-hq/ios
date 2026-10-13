@@ -62,6 +62,17 @@ struct ConversationColumnView: View {
         .onAppear {
             questionSheetPresented = viewModel.pendingQuestions != nil
         }
+        // The one composer for this chat floats below the window.
+        .modifier(FloatingComposerOrnament(
+            showsLoadingState: viewModel.showsLoadingState,
+            composerVisible: composerVisible
+        ) {
+            MessageInputView(
+                viewModel: viewModel,
+                store: viewModel.store,
+                allowsSending: composerVisible
+            ) { composerFocused = $0 }
+        })
         .sheet(isPresented: $questionSheetPresented) {
             questionSheet
         }
@@ -132,10 +143,20 @@ struct ConversationColumnView: View {
 
         questionRegion
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { questionInputTop = $0 }
-            .preference(key: WorkspaceActionMenuInputTop.self, value: composerVisible || usesPhoneQuestionPresentation ? nil : questionInputTop)
+            .preference(
+                key: WorkspaceActionMenuInputTop.self,
+                value: FloatingComposerPolicy.questionRegionLauncherTop(
+                    host: composerHost,
+                    questionInputTop: questionInputTop,
+                    hasQuestionContent: viewModel.pendingQuestions != nil || viewModel.isPendingQuestionRecoveryLoading,
+                    composerVisible: composerVisible,
+                    usesPhoneQuestionPresentation: usesPhoneQuestionPresentation
+                )
+            )
             .layoutPriority(usesPhoneQuestionPresentation ? 1 : 0)
 
-        if !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
+        // A floating host presents the composer from an ornament instead.
+        if composerHost == .inline, !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
             VStack(spacing: 0) {
                 if usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
                     MonitoredPrsRow(
@@ -269,6 +290,14 @@ struct ConversationColumnView: View {
         #else
         return (viewModel.pendingQuestions == nil && !viewModel.isPendingQuestionRecoveryLoading)
             || questionWizardCollapsed
+        #endif
+    }
+
+    private var composerHost: ComposerHost {
+        #if os(visionOS)
+        ComposerHost.forPlatform(isVisionOS: true)
+        #else
+        ComposerHost.forPlatform(isVisionOS: false)
         #endif
     }
 

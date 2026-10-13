@@ -82,7 +82,12 @@ struct MessageInputView: View {
                 RoundedRectangle(cornerRadius: workspaceCornerRadius)
                     .fill(Constants.Conversation.Design.Palette.surface(for: colorScheme))
             } else {
+                #if os(visionOS)
+                // The floating ornament host supplies the glass container.
+                Color.clear
+                #else
                 Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1)
+                #endif
             }
         }
         .photosPicker(
