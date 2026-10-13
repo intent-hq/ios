@@ -85,18 +85,33 @@ enum FloatingComposerPolicy {
     /// otherwise). A floating composer lives outside the window, so the
     /// question region is the lowest in-window input whenever it shows
     /// content; an empty region reports nothing rather than a stale top.
+    ///
+    /// `accessoryRowsTop` is the top of the status rows (agent waiting, PR
+    /// monitors, hooks, queue) above the question region, when any show. With
+    /// a floating composer they are the window's bottom controls, so the
+    /// launcher stays above them; inline hosts keep the prior rule.
     static func questionRegionLauncherTop(
         host: ComposerHost,
         questionInputTop: CGFloat?,
         hasQuestionContent: Bool,
         composerVisible: Bool,
-        usesPhoneQuestionPresentation: Bool
+        usesPhoneQuestionPresentation: Bool,
+        accessoryRowsTop: CGFloat? = nil
     ) -> CGFloat? {
         switch host {
         case .floatingOrnament:
-            hasQuestionContent ? questionInputTop : nil
+            accessoryRowsTop ?? (hasQuestionContent ? questionInputTop : nil)
         case .inline:
             composerVisible || usesPhoneQuestionPresentation ? nil : questionInputTop
         }
+    }
+
+    /// Room the transcript keeps below its last row so a floating Intent
+    /// launcher (bottom-right) never covers it. Only a floating host needs
+    /// it — inline hosts lift the launcher above their composer, unchanged —
+    /// and only where a launcher floats over the chat (`launcherClearance`
+    /// is 0 elsewhere, e.g. the Assistant sheet).
+    static func transcriptBottomClearance(host: ComposerHost, launcherClearance: CGFloat) -> CGFloat {
+        host == .floatingOrnament ? launcherClearance : 0
     }
 }

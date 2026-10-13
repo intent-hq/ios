@@ -694,6 +694,7 @@ $(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript
 $(SRCROOT)/Intent/Views/Conversation/Transcript/AssistantMessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationColumnView.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationEmptyView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationNoteSheet.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationScrollViewSupport.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptGestureProbe.swift
@@ -774,6 +775,7 @@ $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalKeyBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceActionLauncher.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceActionMenuDepth.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAgentTreeRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAttentionCue.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserPage.swift
@@ -1162,6 +1164,7 @@ $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WatcherMessagePresentationTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
+$(SRCROOT)/IntentTests/WorkspaceActionMenuDepthTests.swift
 $(SRCROOT)/IntentTests/WorkspaceActionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAgentLoadingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAgentSelectionTests.swift

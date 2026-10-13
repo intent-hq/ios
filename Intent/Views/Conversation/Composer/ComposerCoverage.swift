@@ -46,11 +46,43 @@ private struct ComposerCoveringLayer: ViewModifier {
     }
 }
 
+/// Registers in-window content (the open Intent menu) as a covering layer
+/// while `isActive`; withdrawing it, or unmounting it, uncovers the chats.
+private struct ComposerConditionalCoveringLayer: ViewModifier {
+    let isActive: Bool
+    @Environment(ComposerCoverage.self) private var coverage: ComposerCoverage?
+    @Environment(\.composerLayerDepth) private var parentDepth
+    @State private var id = UUID()
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { update(isActive) }
+            .onChange(of: isActive) { _, active in update(active) }
+            .onDisappear { coverage?.uncover(id) }
+    }
+
+    private func update(_ active: Bool) {
+        if active {
+            coverage?.cover(id, depth: parentDepth + 1)
+        } else {
+            coverage?.uncover(id)
+        }
+    }
+}
+
 extension View {
     /// Marks sheet or full-screen-cover content that covers the chats beneath
     /// it: their floating composers withdraw until it is dismissed (drafts
     /// and pending attachments stay on the conversation model).
     func coversConversationComposers() -> some View {
         modifier(ComposerCoveringLayer())
+    }
+
+    /// Covers the chats beneath this view while `isActive` — for in-window
+    /// overlays such as the open Intent menu. Coverage is temporary: covered
+    /// composers hide (no input, focus or accessibility) but keep drafts,
+    /// pending attachments and in-flight imports, and return on withdrawal.
+    func coversConversationComposers(while isActive: Bool) -> some View {
+        modifier(ComposerConditionalCoveringLayer(isActive: isActive))
     }
 }

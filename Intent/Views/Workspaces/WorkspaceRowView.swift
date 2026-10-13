@@ -18,6 +18,9 @@ struct WorkspaceRowView: View {
     /// own backend; falls back to the shared store when no session is in the
     /// environment (previews/tests).
     @Environment(BackendSession.self) private var session: BackendSession?
+    /// Raised attention rows hide while the Intent menu is open (visionOS).
+    @Environment(\.workspaceActionMenuOpen) private var actionMenuOpen
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var monitorConsumer = UUID()
     @ScaledMetric(relativeTo: .headline) private var titleTracking: CGFloat = -0.36
 
@@ -82,7 +85,7 @@ struct WorkspaceRowView: View {
         .padding(.horizontal, isSidebar ? IPadSidebarStyle.rowInset : (spacious ? 0 : Constants.WorkspaceRow.horizontalPadding))
         .frame(minHeight: isSidebar ? max(IPadSidebarStyle.rowHeight, minimumHeight) : minimumHeight)
         .coordinateSpace(name: workspace.id)
-        .visionAttentionCue(workspaceNeedsInput(workspace))
+        .visionAttentionCue(WorkspaceAttentionCuePresentation.resolve(for: workspace, actionMenuOpen: actionMenuOpen), reduceMotion: reduceMotion)
         .task(id: workspace.id) {
             guard !Task.isCancelled else { return }
             monitorsSource.retain(workspaceId: workspace.id, consumer: monitorConsumer)

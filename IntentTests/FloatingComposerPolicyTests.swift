@@ -178,6 +178,70 @@ struct FloatingComposerPolicyTests {
         #expect(top == nil)
     }
 
+    @Test func floatingHostKeepsTheLauncherAboveStatusRows() {
+        // Regression: with the composer outside the window, waiting/monitor/
+        // hook/queue rows sit at the window bottom under the launcher. The
+        // launcher must rise above the topmost of them (and the question
+        // banner beneath them).
+        let top = FloatingComposerPolicy.questionRegionLauncherTop(
+            host: .floatingOrnament,
+            questionInputTop: 640,
+            hasQuestionContent: true,
+            composerVisible: true,
+            usesPhoneQuestionPresentation: false,
+            accessoryRowsTop: 580
+        )
+        let rowsOnly = FloatingComposerPolicy.questionRegionLauncherTop(
+            host: .floatingOrnament,
+            questionInputTop: 640,
+            hasQuestionContent: false,
+            composerVisible: true,
+            usesPhoneQuestionPresentation: false,
+            accessoryRowsTop: 600
+        )
+        #expect(top == 580)
+        #expect(rowsOnly == 600)
+    }
+
+    @Test func inlineHostIgnoresStatusRowsForTheLauncher() {
+        // iPhone/iPad: the inline composer still reports its own top.
+        let top = FloatingComposerPolicy.questionRegionLauncherTop(
+            host: .inline,
+            questionInputTop: 640,
+            hasQuestionContent: true,
+            composerVisible: true,
+            usesPhoneQuestionPresentation: false,
+            accessoryRowsTop: 580
+        )
+        #expect(top == nil)
+    }
+
+    @Test func floatingHostReservesTranscriptRoomForTheLauncher() {
+        // Regression: the bottom-right launcher covered the last transcript
+        // line once the composer left the window.
+        let clearance = AssistantLaunchButton.scrollClearance
+        #expect(FloatingComposerPolicy.transcriptBottomClearance(host: .floatingOrnament, launcherClearance: clearance) == clearance)
+    }
+
+    @Test func transcriptClearanceOnlyWhereALauncherFloatsOverAFloatingHost() {
+        // No launcher above this chat (Assistant sheet, search open): no gap.
+        #expect(FloatingComposerPolicy.transcriptBottomClearance(host: .floatingOrnament, launcherClearance: 0) == 0)
+        // iPhone/iPad keep the transcript unchanged.
+        #expect(FloatingComposerPolicy.transcriptBottomClearance(host: .inline, launcherClearance: AssistantLaunchButton.scrollClearance) == 0)
+    }
+
+    @Test func launcherClearanceReachesTheTranscript() throws {
+        let launcher = try Self.source("Intent/Views/Workspaces/WorkspaceActionLauncher.swift")
+        let column = try Self.source("Intent/Views/Conversation/Transcript/ConversationColumnView.swift")
+        let transcript = try Self.source("Intent/Views/Conversation/Transcript/ConversationTranscriptView+Presentation.swift")
+        #expect(launcher.contains(".environment(\\.workspaceActionLauncherClearance, isSearching ? 0 : AssistantLaunchButton.scrollClearance)"))
+        #expect(column.contains("@Environment(\\.workspaceActionLauncherClearance) private var launcherClearance"))
+        #expect(column.contains("bottomClearance: FloatingComposerPolicy.transcriptBottomClearance(host: composerHost, launcherClearance: launcherClearance)"))
+        #expect(column.contains("accessoryRowsTop: accessoryRowsLauncherTop"))
+        // On the end marker, so follow landings still reach the true end.
+        #expect(transcript.components(separatedBy: ".padding(.bottom, Layout.bottomAnchorPadding + bottomClearance)").count - 1 == 2)
+    }
+
     // MARK: - Source wiring (visionOS branches cannot run in the iOS test host)
 
     @Test func visionOSColumnHostsOneComposerInAGlassOrnament() throws {
