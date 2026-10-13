@@ -11,6 +11,16 @@ import tempfile
 
 
 CAPTURES = {
+    "AppCoordinatorTests": {
+        "iPadCompactLaunchShowsListAndMenuDestinations": tuple(
+            f"ipad-narrow-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("workspaces", "menu")
+        ),
+        "iPadCompactResizeRetainsComposerAndDismissesOpenMenu": (
+            "ipad-narrow-workspace-draft", "ipad-narrow-assistant-draft",
+        ),
+    },
     "IPadSidebarUITests": {
         "testSectionsAndPairingRestoreConversationInBothThemes": tuple(
             f"iPad {section} {appearance}"
@@ -198,9 +208,16 @@ def test_identity(identifier):
     if not isinstance(identifier, str):
         return None
     match = re.fullmatch(
-        r"(?:IntentUITests/)?([A-Za-z0-9_]+)/([A-Za-z0-9_]+)(?:\(\))?", identifier,
+        r"(?:(Intent(?:UI)?Tests)/)?([A-Za-z0-9_]+)/([A-Za-z0-9_]+)(?:\((?:[A-Za-z_][A-Za-z0-9_]*:)*\))?",
+        identifier,
     )
-    return match.groups() if match else None
+    if not match:
+        return None
+    target, suite, test = match.groups()
+    expected_target = "IntentUITests" if suite.endswith("UITests") else "IntentTests"
+    if target and target != expected_target:
+        return None
+    return suite, test
 
 
 def capture_matches(name, capture, extension):
