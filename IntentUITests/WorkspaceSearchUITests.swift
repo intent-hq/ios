@@ -68,7 +68,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     }
 
     @MainActor
-    func testHidingSidebarDuringSearchRestoresUnfilteredWorkspaces() throws {
+    func testIPadSearchSurvivesCollapseAndSectionChanges() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar behavior")
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
@@ -82,14 +82,38 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         XCTAssertTrue(otherWorkspace.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons["intent.menu.open"].exists)
 
-        app.buttons["Hide Sidebar"].tap()
-        XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Fixture.timeout))
-        app.buttons["Show Sidebar"].tap()
+        app.buttons["ipad.sidebar.collapse"].tap()
+        XCTAssertTrue(field.wait(for: \.isHittable, toEqual: false, timeout: Fixture.timeout), app.debugDescription)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
+        let collapsed = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        collapsed.name = "iPad collapsed sidebar retains search"
+        collapsed.lifetime = .keepAlways
+        add(collapsed)
+        app.buttons["ipad.sidebar.expand"].tap()
+        XCTAssertTrue(field.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+        XCTAssertEqual(field.value as? String, "payment")
+        app.buttons["ipad.rail.settings"].tap()
+        XCTAssertFalse(field.isHittable)
+        app.buttons["ipad.rail.workspaces"].tap()
+        XCTAssertTrue(field.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+        XCTAssertEqual(field.value as? String, "payment")
+        XCTAssertFalse(otherWorkspace.exists)
+        let cancel = app.buttons["workspaces.search.cancel"]
+        XCTAssertTrue(cancel.isHittable)
+        captureSearchState(name: "iPad search before closing")
+        cancel.tap()
+        captureSearchState(name: "iPad search after closing")
+        XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout), app.debugDescription)
         XCTAssertTrue(otherWorkspace.waitForExistence(timeout: Fixture.timeout))
-        app.buttons["workspaces.search.open"].tap()
-        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertEqual(field.value as? String, "Search workspaces")
+    }
+
+    @MainActor
+    private func captureSearchState(name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor

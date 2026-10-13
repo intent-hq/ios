@@ -263,6 +263,7 @@ struct SubmittableTextView: UIViewRepresentable {
 
     class Coordinator: NSObject, UITextViewDelegate {
         var parent: SubmittableTextView
+        private var nativeFocusRevision = 0
 
         init(_ parent: SubmittableTextView) {
             self.parent = parent
@@ -271,8 +272,11 @@ struct SubmittableTextView: UIViewRepresentable {
         func synchronizeFocus(in textView: KeyCommandTextView) {
             // Native editing callbacks defer their binding writes. Read the latest
             // focus after those writes, not the render snapshot that preceded them.
+            // If UIKit changes focus before this block runs, that newer transition
+            // wins even when its binding write is still queued behind us (ios#799).
+            let revision = nativeFocusRevision
             DispatchQueue.main.async { [weak self, weak textView] in
-                guard let self, let textView else { return }
+                guard let self, let textView, nativeFocusRevision == revision else { return }
                 if parent.isFocused, !textView.isFirstResponder {
                     textView.becomeFirstResponder()
                 } else if !parent.isFocused, textView.isFirstResponder {
@@ -319,12 +323,14 @@ struct SubmittableTextView: UIViewRepresentable {
         }
 
         func textViewDidBeginEditing(_: UITextView) {
+            nativeFocusRevision &+= 1
             DispatchQueue.main.async {
                 self.parent.isFocused = true
             }
         }
 
         func textViewDidEndEditing(_: UITextView) {
+            nativeFocusRevision &+= 1
             DispatchQueue.main.async {
                 self.parent.isFocused = false
             }

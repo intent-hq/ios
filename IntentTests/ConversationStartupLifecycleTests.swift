@@ -4,6 +4,31 @@ import Testing
 
 @MainActor
 struct ConversationStartupLifecycleTests {
+    @Test func coveredIPadConversationKeepsLiveQueueAndRegistration() async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let model = fixture.makeViewModel()
+        await model.load()
+        model.conversationAppeared()
+        model.conversationCovered()
+        fixture.connection.deliverEvent(method: "event", params: [
+            "type": "agent:queue:updated", "data": [
+                "agentId": ConversationStartupFixture.parentId,
+                "queue": [["id": "covered-queue", "content": "Still live", "queuedAt": "2026-10-09", "position": 0]]
+            ]
+        ])
+        try await waitUntil("queue updates while the iPad pane is covered") {
+            model.store.queuedMessages.map(\.id) == ["covered-queue"]
+        }
+        model.conversationAppeared()
+        #expect(fixture.connection.paramsForMethod("chat.subscribe").count == 1)
+        #expect(!fixture.connection.didCallMethod("chat.unsubscribe"))
+        model.conversationDisappeared()
+        try await waitUntil("final disappearance releases the retained conversation") {
+            fixture.connection.paramsForMethod("chat.unsubscribe").count == 1
+        }
+    }
+
     @Test func transcriptStartsBeforeAnySideReply() async throws {
         let fixture = ConversationStartupFixture()
         let connection = fixture.connection

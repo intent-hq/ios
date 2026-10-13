@@ -5,14 +5,20 @@ struct SettingsPairingSection: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var showQRScanner = false
     @State private var showManualEntry = false
+    var onScanQR: (() -> Void)?
+    var onManualPairing: (() -> Void)?
 
     var body: some View {
         SettingsSection(title: "PAIR NEW") {
             ConnectionPairingButtons(
                 qrTitle: "QR Code",
                 accessibilityPrefix: "settings.pairing",
-                onScan: { showQRScanner = true },
-                onManualEntry: { showManualEntry = true }
+                onScan: {
+                    if let onScanQR { onScanQR() } else { showQRScanner = true }
+                },
+                onManualEntry: {
+                    if let onManualPairing { onManualPairing() } else { showManualEntry = true }
+                }
             )
         }
         .fullScreenCover(isPresented: $showQRScanner, onDismiss: refreshConnections) { QRScannerView(onPaired: handlePaired) }

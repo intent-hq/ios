@@ -2,6 +2,7 @@ $(SRCROOT)/Intent
 $(SRCROOT)/Intent/App
 $(SRCROOT)/Intent/App/AppCoordinator.swift
 $(SRCROOT)/Intent/App/AppCoordinatorAgentHistory.swift
+$(SRCROOT)/Intent/App/AppCoordinatorIPadNavigation.swift
 $(SRCROOT)/Intent/App/AppCoordinatorNavigation.swift
 $(SRCROOT)/Intent/App/AppCoordinatorRouting.swift
 $(SRCROOT)/Intent/App/BackendID.swift
@@ -9,6 +10,11 @@ $(SRCROOT)/Intent/App/BackendSession.swift
 $(SRCROOT)/Intent/App/BackendSessionRegistry.swift
 $(SRCROOT)/Intent/App/BackendWindowSession.swift
 $(SRCROOT)/Intent/App/ConnectionLossPresentation.swift
+$(SRCROOT)/Intent/App/ConversationDestinationView.swift
+$(SRCROOT)/Intent/App/IPadNavigationRail.swift
+$(SRCROOT)/Intent/App/IPadNavigationState.swift
+$(SRCROOT)/Intent/App/IPadShellView.swift
+$(SRCROOT)/Intent/App/IPadWorkspaceDetailView.swift
 $(SRCROOT)/Intent/App/IntentApp.swift
 $(SRCROOT)/Intent/App/NavigationDestinations.swift
 $(SRCROOT)/Intent/App/RootCompactNavigationView.swift
@@ -272,7 +278,9 @@ $(SRCROOT)/Intent/DesignSystem/ConnectionSwitcherStyle.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationDesign.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationDesignColors.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationMediaLayout.swift
+$(SRCROOT)/Intent/DesignSystem/ConversationReadableColumn.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationTranscriptLayout.swift
+$(SRCROOT)/Intent/DesignSystem/IPadShellLayout.swift
 $(SRCROOT)/Intent/DesignSystem/IntentButtonStyle.swift
 $(SRCROOT)/Intent/DesignSystem/InterFontModifier.swift
 $(SRCROOT)/Intent/DesignSystem/Layout.swift
@@ -342,6 +350,7 @@ $(SRCROOT)/Intent/Presentation
 $(SRCROOT)/Intent/Presentation/BoundedMarkdownCache.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStatusTiming.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStep.swift
+$(SRCROOT)/Intent/Presentation/ConversationPresentation.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Geometry.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Landing.swift
@@ -362,6 +371,7 @@ $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
 $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
 $(SRCROOT)/Intent/Presentation/NoteSheetInfo.swift
+$(SRCROOT)/Intent/Presentation/RetainedIPadPane.swift
 $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
 $(SRCROOT)/Intent/Presentation/SpecialistPickerSelection.swift
 $(SRCROOT)/Intent/Presentation/SplashAnimation.swift
@@ -449,6 +459,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesInlineImages.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
+$(SRCROOT)/Intent/Services/DemoFixturesNavigation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesTranscriptVideo.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceProposal.swift
@@ -636,6 +647,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/VideoLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceCreationProposalView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceLinkedTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/ConversationConnectionStatusBlock.swift
+$(SRCROOT)/Intent/Views/Conversation/IPadAssistantSidebar.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices
 $(SRCROOT)/Intent/Views/Conversation/Notices/AgentMessageAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AttentionNoticeView.swift
@@ -669,6 +681,7 @@ $(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript
 $(SRCROOT)/Intent/Views/Conversation/Transcript/AssistantMessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationColumnView.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationNoteSheet.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationScrollViewSupport.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptGestureProbe.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptRowHeightFrame.swift
@@ -699,10 +712,13 @@ $(SRCROOT)/Intent/Views/Notes/TaskMetadataHeaderView.swift
 $(SRCROOT)/Intent/Views/Notes/WorkspaceNoteIcon.swift
 $(SRCROOT)/Intent/Views/Onboarding
 $(SRCROOT)/Intent/Views/Onboarding/DeepLinkPairingView.swift
+$(SRCROOT)/Intent/Views/Onboarding/IPadPairingDetail.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionField.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionHeader.swift
+$(SRCROOT)/Intent/Views/Onboarding/ManualConnectionSubmitButton.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualTokenEntryView.swift
 $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
+$(SRCROOT)/Intent/Views/Onboarding/QRScannerOverlay.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift
 $(SRCROOT)/Intent/Views/Onboarding/Splash
 $(SRCROOT)/Intent/Views/Onboarding/Splash/SplashArtView.swift
@@ -733,6 +749,7 @@ $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceView.swift
 $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/HomeActionTiles.swift
+$(SRCROOT)/Intent/Views/Workspaces/IPadSidebarComponents.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalControls.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ModelPicker.swift
@@ -979,6 +996,7 @@ $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoSuggestionsTests.swift
 $(SRCROOT)/IntentTests/HookTimeBarTests.swift
+$(SRCROOT)/IntentTests/IPadShellNavigationTests.swift
 $(SRCROOT)/IntentTests/ImagePasteboardFixture.swift
 $(SRCROOT)/IntentTests/InfoPlistSyncTests.swift
 $(SRCROOT)/IntentTests/IntentFileAttachmentLoaderTests.swift

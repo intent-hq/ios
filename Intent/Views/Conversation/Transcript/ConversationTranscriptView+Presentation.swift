@@ -31,7 +31,7 @@ extension ConversationTranscriptView {
         // Realize a bounded tail and its footer together. A separately lazy
         // footer can remain absent at the stack's estimated bottom after
         // rows resize, even when repeated scrollTo calls land.
-        VStack(spacing: usesWorkspaceDesign ? Constants.Conversation.Design.sectionSpacing : Layout.transcriptRowSpacing) {
+        VStack(spacing: transcriptRowSpacing) {
             ForEach(rows.suffix(Self.eagerTailMessageLimit), id: \.id) { @Sendable row in
                 row.content
             }

@@ -77,6 +77,7 @@ struct WorkspaceConversationHeader<Actions: View>: View {
                 backLabel: "Back",
                 backIdentifier: "conversation.back",
                 showsBackground: showsBackground,
+                usesConversationLayout: true,
                 onBack: onBack,
                 actions: actions
             )
@@ -90,22 +91,26 @@ struct AssistantConversationHeader<Actions: View>: View {
     let canCreateConversation: Bool
     let onNewConversation: () -> Void
     @ViewBuilder let actions: () -> Actions
+    @Environment(\.conversationPresentation) private var presentation
 
     var body: some View {
         WorkspaceNavigationHeader(
             title: title,
             subtitle: title == "Assistant" ? nil : "Assistant",
-            showsBackground: showsBackground
+            showsBackground: showsBackground,
+            usesConversationLayout: true
         ) {
             HStack(spacing: 0) {
-                IntentIconButton(
-                    icon: .displayEdit,
-                    label: "New Conversation",
-                    showsBackground: false,
-                    action: onNewConversation
-                )
-                .disabled(!canCreateConversation)
-                .accessibilityIdentifier("assistant.newConversation")
+                if presentation != .iPad {
+                    IntentIconButton(
+                        icon: .displayEdit,
+                        label: "New Conversation",
+                        showsBackground: false,
+                        action: onNewConversation
+                    )
+                    .disabled(!canCreateConversation)
+                    .accessibilityIdentifier("assistant.newConversation")
+                }
                 actions()
             }
         }
@@ -123,12 +128,19 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var showsBackground = true
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
+    var usesConversationLayout = false
     var onBack: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.conversationPresentation) private var presentation
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private typealias Design = Constants.Conversation.Design
+
+    private var usesIPadDesign: Bool {
+        usesConversationLayout && presentation == .iPad
+    }
 
     var body: some View {
         windowAdaptedControls
@@ -138,7 +150,10 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     @ViewBuilder
     private var windowAdaptedControls: some View {
         #if os(iOS)
-        if #available(iOS 26.0, *) {
+        if usesIPadDesign {
+            // The shell already respects the window safe area around this inset pane.
+            controls
+        } else if #available(iOS 26.0, *) {
             // Reserve only the system's actual corner region (including iPad window controls).
             controls.containerCornerOffset(.horizontal, sizeToFit: true)
         } else {
@@ -163,27 +178,41 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel(backLabel)
                 .accessibilityIdentifier(backIdentifier)
+            } else if usesIPadDesign {
+                // Balance the trailing menu so Assistant titles share the agent alignment.
+                Color.clear
+                    .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
+                    .accessibilityHidden(true)
             }
-            VStack(spacing: Design.Header.titleSpacing) {
-                if showsWorkspacePlaceholder {
-                    WorkspaceTitle(title: title, createdAt: workspaceCreatedAt) { title in
-                        WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
-                    }
-                } else {
-                    WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
-                }
-                subtitleText
-            }
-            .tracking(Design.Typography.smallTracking)
-            .frame(maxWidth: .infinity)
-            .accessibilityElement(children: .combine)
+            titleCopy
             actions()
                 .buttonStyle(IntentContentButtonStyle())
                 .frame(minWidth: Design.Header.controlSize, minHeight: Design.Header.controlSize)
         }
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))
-        .padding(.horizontal, Design.horizontalInset)
-        .padding(.vertical, Design.Header.verticalPadding)
+        .padding(.horizontal, usesIPadDesign ? 0 : Design.horizontalInset)
+        .padding(.top, usesIPadDesign ? Design.IPad.headerTopInset : Design.Header.verticalPadding)
+        .padding(.bottom, usesIPadDesign ? Design.IPad.headerBottomInset : Design.Header.verticalPadding)
+    }
+
+    private var titleCopy: some View {
+        VStack(spacing: Design.Header.titleSpacing) {
+            if showsWorkspacePlaceholder {
+                WorkspaceTitle(title: title, createdAt: workspaceCreatedAt) { title in
+                    WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
+                }
+            } else {
+                WorkspaceHeaderText(
+                    Text(title),
+                    style: Constants.Typography.bodyXSEmphasized,
+                    lineLimit: usesIPadDesign && dynamicTypeSize.isAccessibilitySize ? nil : 1
+                )
+            }
+            subtitleText
+        }
+        .tracking(Design.Typography.smallTracking)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder private var subtitleText: some View {

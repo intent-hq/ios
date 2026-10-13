@@ -8,6 +8,8 @@ struct WorkspaceListMenu: View {
     let onRecentAgents: () -> Void
     let onRecentConnections: () -> Void
 
+    var showsSidebarTitle = false
+
     var body: some View {
         Menu {
             newWorkspaceAction
@@ -40,7 +42,11 @@ struct WorkspaceListMenu: View {
             }
             .accessibilityIdentifier("workspaces.menu.archived")
         } label: {
-            ToolbarOverflowLabel()
+            if showsSidebarTitle {
+                IPadSidebarTitle(title: "Workspaces")
+            } else {
+                ToolbarOverflowLabel()
+            }
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Workspace list options")
