@@ -17,6 +17,7 @@ final class WorkspaceFileImageLoader {
         case notAnImage
         case notAVideo
         case notAPDF
+        case notUTF8Text
         case pdfPasswordRequired
         case previouslyFailed
     }
@@ -236,20 +237,13 @@ final class WorkspaceFileImageLoader {
         failedKeys.remove(videoKey)
         failedVideoKeys.remove(videoKey)
         failedKeys.remove("pdf\u{0}" + key)
+        failedKeys.remove("text\u{0}" + key)
     }
 
     /// `forgetFailure` for the asset namespace (status image retry taps).
     func forgetAssetFailure(workspaceId: String, assetId: String) {
         failedKeys.remove(Self.assetKey(workspaceId: workspaceId, assetId: assetId))
         failedVideoKeys.remove(Self.assetKey(workspaceId: workspaceId, assetId: assetId))
-    }
-
-    static func cost(of media: WorkspaceFileMedia) -> Int {
-        switch media {
-        case .image(let image): decodedCost(of: image)
-        case .video(let video): decodedCost(of: video.poster)
-        case .pdf(let pdf): decodedCost(of: pdf.thumbnail)
-        }
     }
 
     /// Approximate decoded byte size, used as the NSCache cost (shared with
@@ -399,6 +393,33 @@ final class WorkspaceFileImageLoader {
 }
 
 extension WorkspaceFileImageLoader {
+    static func cost(of media: WorkspaceFileMedia) -> Int {
+        switch media {
+        case .image(let image): decodedCost(of: image)
+        case .video(let video): decodedCost(of: video.poster)
+        case .pdf(let pdf): decodedCost(of: pdf.thumbnail)
+        case .text(let file): file.byteCount * 2
+        }
+    }
+
+    func text(workspaceId: String, path: String) async throws -> WorkspaceTextFile {
+        let key = "text\u{0}" + Self.fileKey(workspaceId: workspaceId, path: path)
+        let media = try await cachedMedia(key: key) { [chunkRequester] in
+            .text(try await WorkspaceTextFile.load(path: path) { handle in
+                try await Self.writeFileBytes(
+                    chunkRequester: chunkRequester,
+                    workspaceId: workspaceId,
+                    path: path,
+                    to: handle,
+                    limit: WorkspaceTextFile.maxBytes,
+                    length: Self.pdfChunkLength
+                )
+            })
+        }
+        guard case .text(let file) = media else { throw LoadError.notUTF8Text }
+        return file
+    }
+
     func pdf(workspaceId: String, path: String) async throws -> WorkspacePDF {
         let key = "pdf\u{0}" + Self.fileKey(workspaceId: workspaceId, path: path)
         let media = try await cachedMedia(key: key) { [chunkRequester, diagnostics] in
