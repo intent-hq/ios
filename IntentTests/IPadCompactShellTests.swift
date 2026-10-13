@@ -145,7 +145,7 @@ extension AppCoordinatorTests {
 
     @MainActor private func compactEditor(in host: UIView) -> KeyCommandTextView? {
         if let editor = host as? KeyCommandTextView { return editor }
-        return host.subviews.lazy.compactMap { compactEditor(in: $0) }.first
+        return host.subviews.lazy.compactMap { self.compactEditor(in: $0) }.first
     }
 
     @MainActor private func waitForCompactShell(_ ready: () -> Bool) throws {
@@ -180,7 +180,7 @@ private struct ResizableIPadTestShell: View {
             .environment(session)
             .environment(coordinator)
             .environment(\.colorScheme, appearance)
-            .environment(\.accessibilityReduceMotion, true)
+            .transaction { $0.disablesAnimations = true }
             .frame(width: size.width)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
