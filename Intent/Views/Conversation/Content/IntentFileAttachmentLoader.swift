@@ -34,7 +34,7 @@ nonisolated enum MarkdownImageRoute: Equatable {
 }
 
 /// Textual image-attachment loader that renders `![alt](intent://local/[ws-id/]file/<path>)`
-/// images/videos and `workspace-asset://` media by fetching bytes from the daemon,
+/// images/videos/PDFs and `workspace-asset://` media by fetching bytes from the daemon,
 /// and remote http(s) images via `RemoteImageLoader`. Videos open full-screen
 /// playback; images open the lightbox. Other URLs use the wrapped fallback loader
 /// (Textual's default network loader).
@@ -63,6 +63,9 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     }
     var fileVideo: @Sendable (String, String) async throws -> WorkspaceVideo = { workspaceId, path in
         try await WorkspaceFileImageLoader.shared.video(workspaceId: workspaceId, path: path)
+    }
+    var filePDF: @Sendable (String, String) async throws -> WorkspacePDF = { workspaceId, path in
+        try await WorkspaceFileImageLoader.shared.pdf(workspaceId: workspaceId, path: path)
     }
 
     func attachment(
@@ -96,6 +99,9 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         case .workspaceAsset(let link):
             return await assetAttachment(link: link, text: text)
         case .intentFile(let link):
+            if WorkspacePDF.isPDF(path: link.path) {
+                return await pdfAttachment(link: link)
+            }
             if WorkspaceVideo.isVideo(path: link.path) {
                 let resolvedWorkspaceId = link.workspaceId ?? workspaceId
                 if let resolvedWorkspaceId,
@@ -133,6 +139,19 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         }
     }
 
+    private func pdfAttachment(link: IntentFileLink) async -> AnyAttachment {
+        let resolvedWorkspaceId = link.workspaceId ?? workspaceId
+        if let resolvedWorkspaceId,
+           let pdf = try? await filePDF(resolvedWorkspaceId, link.path) {
+            return AnyAttachment(IntentFilePDFAttachment(pdf: pdf) as any Textual.Attachment)
+        }
+        return AnyAttachment(IntentFilePDFFailureAttachment(
+            name: URL(fileURLWithPath: link.path).lastPathComponent,
+            workspaceId: resolvedWorkspaceId,
+            path: link.path
+        ) as any Textual.Attachment)
+    }
+
     private func assetAttachment(link: WorkspaceAssetLink?, text: String) async -> AnyAttachment {
         guard let link else {
             return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
@@ -144,6 +163,9 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
             case .video(let video):
                 return AnyAttachment(IntentFileVideoAttachment(video: video, name: text.isEmpty ?
                     link.assetId : text) as any Textual.Attachment)
+            case .pdf, .text:
+                // Saved-asset documents are not supported by this attachment route.
+                return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
             }
         } catch {
             if WorkspaceVideo.isVideo(path: link.assetId) || error as? WorkspaceFileImageLoader.LoadError == .notAVideo {

@@ -19,7 +19,6 @@ extension AppCoordinator {
         routingState.hasLoadCompleted = true
         refreshSyncedBackends()
         if DemoMode.pretendPaired || backendID != nil {
-            connectingStartedByLaunch = !dependencies.sessionRegistry.consumeConnectionSelection(for: backendID)
             currentScreen = .connecting
         } else {
             // Synced connections merged from the registry (or connections

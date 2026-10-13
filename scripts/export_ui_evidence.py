@@ -21,7 +21,7 @@ CAPTURES = {
             for appearance in ("light", "dark")
             for section in (
                 "workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual",
-                "Recent sidebar", "Repo sidebar",
+                "Recent sidebar", "Repo sidebar", "Status sidebar", "first workspace selected",
             )
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
@@ -64,6 +64,15 @@ CAPTURES = {
             "Sent video poster", "Sent video full-screen playback",
         ),
     },
+    "InlineResponseImageUITests": {
+        "testPDFCardAndLinkOpenViewerAndShare": (
+            "Inline PDF card and link", "PDF viewer from inline card",
+            "PDF viewer from text link", "PDF share sheet", "PDF unavailable with close and retry",
+        ),
+        "testTextLinkOpensViewerSharesAndRetriesMissingFile": (
+            "Text viewer from text link", "Text unavailable with close and retry",
+        ),
+    },
     "AssistantStateUITests": {
         "testLoadingFailureRetriesToEmptyAndStartsConversation": (
             "Assistant loading light", "Assistant error light", "Assistant empty light",
@@ -102,6 +111,7 @@ CAPTURES = {
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
         ),
         "testLaunchHidesBackButSelectedMachineCanReturnHome": (
+            "connection-loss-launch-connecting-without-back",
             "connection-loss-connection-failure-back", "connection-loss-connecting-back",
         ),
     },

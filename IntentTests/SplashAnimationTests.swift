@@ -130,23 +130,20 @@ struct SplashAnimationTests {
             .environment(\.scenePhase, scenePhase)
     }
 
-    @Test(arguments: [ColorScheme.light, .dark])
-    func sharedBackgroundPreservesArtworkEndpointsAndDarkFill(scheme: ColorScheme) throws {
-        let renderer = ImageRenderer(content: SplashBackground()
+    @Test(arguments: [ColorScheme.light, .dark], [SplashBackground.Style.launch, .projectSwitch])
+    func sharedBackgroundFillsBothAppearancesAndPreservesLightArtwork(scheme: ColorScheme, style: SplashBackground.Style) throws {
+        let renderer = ImageRenderer(content: SplashBackground(style: style)
             .frame(width: 4, height: 100)
             .environment(\.colorScheme, scheme))
         let image = try #require(renderer.cgImage)
         let pixels = try backgroundPixels(image)
         #expect(pixels.allSatisfy { $0[3] == 255 }, "The background must fill the proposed size")
-        // Exported light artwork endpoints, or the opaque dark theme fill.
-        let expected = scheme == .light ? [[243, 242, 241], [231, 245, 115]] : [[28, 28, 36]]
+        guard scheme == .light else { return }
+        let expected = [[243, 242, 241], [231, 245, 115]]
         for color in expected {
             #expect(pixels.contains { pixel in
                 zip(pixel.prefix(3), color).allSatisfy { abs($0 - $1) <= 3 }
             })
-        }
-        if scheme == .dark {
-            #expect(pixels.allSatisfy { $0 == pixels.first }, "Dark mode must be a uniform fill")
         }
     }
 

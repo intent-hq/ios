@@ -201,6 +201,8 @@ $(SRCROOT)/Intent/Services/DemoFixturesDesign.swift
 $(SRCROOT)/Intent/Services/DemoFixturesDesignData.swift
 $(SRCROOT)/Intent/Services/DemoFixturesHistory.swift
 $(SRCROOT)/Intent/Services/DemoFixturesInlineImages.swift
+$(SRCROOT)/Intent/Services/DemoFixturesInlinePDF.swift
+$(SRCROOT)/Intent/Services/DemoFixturesInlineText.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
@@ -259,6 +261,7 @@ $(SRCROOT)/Intent/Services/WorkspaceCreationImages.swift
 $(SRCROOT)/Intent/Services/WorkspaceCreationVideoSubmission.swift
 $(SRCROOT)/Intent/Services/WorkspaceDiffLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
+$(SRCROOT)/Intent/Services/WorkspacePDF.swift
 $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceProviderOptions.swift
@@ -270,6 +273,7 @@ $(SRCROOT)/Intent/Services/WorkspaceStatusStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusWaiters.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore+EventClassification.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
+$(SRCROOT)/Intent/Services/WorkspaceTextFile.swift
 $(SRCROOT)/Intent/Services/WorkspaceTransferExport.swift
 $(SRCROOT)/Intent/Services/WorkspaceTransferModels.swift
 $(SRCROOT)/Intent/Services/WorkspaceTransferRelay.swift
@@ -373,15 +377,20 @@ $(SRCROOT)/Intent/Views/Conversation/Content/ImageAttachmentThumbnail.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageDecodeFailureView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileAttachmentLoader.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/IntentFilePDFAttachment.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileVideoAttachment.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MarkdownTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MermaidDiagramView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MermaidWebView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/PDFLightboxView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/PDFLinkPreviewView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalCardView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalSelectionSwitch.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/TextLinkPreviewView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/VideoLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceCreationProposalView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceLinkedTextView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceTextFileView.swift
 $(SRCROOT)/Intent/Views/Conversation/ConversationConnectionStatusBlock.swift
 $(SRCROOT)/Intent/Views/Conversation/IPadAssistantSidebar.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AgentMessageAttributionView.swift
@@ -604,6 +613,7 @@ $(SRCROOT)/IntentTests/ConnectionPairingTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceMigrationTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ConnectionPrincipalTests.swift
+$(SRCROOT)/IntentTests/ContentBlockLinkTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
 $(SRCROOT)/IntentTests/ConversationBudgetEvidence.swift
 $(SRCROOT)/IntentTests/ConversationBudgetFixture.swift
@@ -722,6 +732,7 @@ $(SRCROOT)/IntentTests/HookTimeBarTests.swift
 $(SRCROOT)/IntentTests/IPadShellNavigationTests.swift
 $(SRCROOT)/IntentTests/ImagePasteboardFixture.swift
 $(SRCROOT)/IntentTests/InfoPlistSyncTests.swift
+$(SRCROOT)/IntentTests/IntentFileAttachmentLoaderTests+PDF.swift
 $(SRCROOT)/IntentTests/IntentFileAttachmentLoaderTests.swift
 $(SRCROOT)/IntentTests/IntentFileLinkTests.swift
 $(SRCROOT)/IntentTests/IntentFileVideoTests.swift
@@ -927,6 +938,7 @@ $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSwipePolicyTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTabTests.swift
+$(SRCROOT)/IntentTests/WorkspaceTextFileLoaderTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTitleEditorTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTitleShimmerTests.swift
 $(SRCROOT)/IntentTests/WorkspaceTranscriptDesignTests.swift

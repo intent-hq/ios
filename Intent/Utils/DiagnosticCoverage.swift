@@ -21,7 +21,7 @@ nonisolated enum DiagnosticCoverage {
     private static func status(for family: DiagnosticFamily) -> Status {
         switch family {
         case .app, .connection, .network, .scanner, .trust: .instrumented
-        case .pairing, .protocolHandling, .subscription, .other: .partial
+        case .pairing, .pdf, .protocolHandling, .subscription, .other: .partial
         default: .pending
         }
     }
