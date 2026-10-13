@@ -2,11 +2,9 @@ import Foundation
 import ImageIO
 import UIKit
 
-/// Fetches workspace-file media from the daemon via chunked `file.readChunk`
-/// reads over the paired WebSocket, assembling and base64-decoding the slices
-/// into an image or video poster/local file. Results are cached per (workspaceId, path) so transcript
-/// scrolling never refetches, and concurrent requests for the same file share
-/// one in-flight fetch.
+/// Fetches workspace-file media via chunked `file.readChunk` reads over the paired WebSocket, assembling
+/// and base64-decoding slices into an image or video poster/local file. Results are cached per (workspaceId, path)
+/// so transcript scrolling never refetches, and concurrent requests for the same file share one in-flight fetch.
 @MainActor
 final class WorkspaceFileImageLoader {
     static let shared = WorkspaceFileImageLoader()
@@ -125,10 +123,9 @@ final class WorkspaceFileImageLoader {
         }
     }
 
-    /// Cached-or-fetched image for a workspace asset id (the
-    /// `note.saveAsset` / `workspace-asset://` namespace, e.g. the workspace
-    /// `statusImageAssetId`). Asset ids are content-addressed, so a replaced
-    /// image is a new key and refetches; keys never collide with file paths.
+    /// Cached-or-fetched image for a workspace asset id (the `note.saveAsset` / `workspace-asset://` namespace,
+    /// e.g. the workspace `statusImageAssetId`). Asset ids are content-addressed, so a replaced image is a new key
+    /// and refetches; keys never collide with file paths.
     func assetImage(workspaceId: String, assetId: String) async throws -> UIImage {
         guard case .image(let image) = try await assetMedia(workspaceId: workspaceId, assetId: assetId) else {
             throw LoadError.notAnImage
