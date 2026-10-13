@@ -377,6 +377,7 @@ private extension WorkspaceDetailView {
                 }
             }
         }
+        .accessibilityIdentifier("workspace.detail.scroll")
         .refreshable {
             if selectedTab == .agents {
                 await agentStore.fetchAgents(workspaceId: workspaceId)

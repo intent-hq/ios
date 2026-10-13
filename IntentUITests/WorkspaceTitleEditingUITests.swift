@@ -49,8 +49,10 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
         field.typeText(" edited")
-        let draft = field.value as? String
-        let scroll = app.scrollViews.firstMatch
+        let draft = "Workspace agent design edited"
+        XCTAssertEqual(field.value as? String, draft)
+        let scroll = app.scrollViews["workspace.detail.scroll"]
+        XCTAssertTrue(scroll.exists)
         scroll.swipeUp()
         scroll.swipeUp()
         XCTAssertFalse(field.isHittable)
@@ -59,7 +61,7 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
         XCTAssertEqual(field.value as? String, draft)
         field.tap()
         field.typeText(" again")
-        XCTAssertEqual(field.value as? String, (draft ?? "") + " again")
+        XCTAssertEqual(field.value as? String, draft + " again")
         app.buttons["workspace.title.cancel"].tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
         XCTAssertEqual(heading.label, "Workspace agent design")
