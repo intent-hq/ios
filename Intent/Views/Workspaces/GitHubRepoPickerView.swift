@@ -84,7 +84,7 @@ struct GitHubRepoPickerView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
-                .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
+                .frame(width: CreateWorkspaceFormStyle.controlHeight, height: CreateWorkspaceFormStyle.controlHeight)
                 .contentShape(.rect)
         }
         .buttonStyle(IntentContentButtonStyle())

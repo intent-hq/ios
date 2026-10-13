@@ -124,17 +124,18 @@ struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Co
     }
 
     private var heading: some View {
-        HStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
+        HStack(alignment: .top, spacing: Constants.WorkspaceSearch.contentSpacing) {
             Text(title)
                 .interFont(Constants.Typography.heading2)
                 .tracking(CreateWorkspaceRepoStyle.titleTracking)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: CreateWorkspaceFormStyle.controlHeight, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier(titleIdentifier)
             headingAction
             if let searchPlaceholder {
                 WorkspaceSearchButton(
                     isSearching: $isSearching,
+                    height: CreateWorkspaceFormStyle.controlHeight,
                     label: searchPlaceholder,
                     identifier: "\(searchIdentifier).open",
                     showsBackground: searchButtonShowsBackground
@@ -170,7 +171,8 @@ struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Co
                 isSearching: $isSearching,
                 isFocused: $searchFocused,
                 placeholder: searchPlaceholder,
-                identifierPrefix: searchIdentifier
+                identifierPrefix: searchIdentifier,
+                surfaceColor: colorScheme == .light ? .white : nil
             )
             .background(CreateWorkspaceRepoStyle.background(for: colorScheme))
             .transition(reduceMotion ? .identity : .move(edge: .bottom).combined(with: .opacity))
