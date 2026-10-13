@@ -277,7 +277,6 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["creation.branchBack"].isHittable)
         XCTAssertTrue(app.buttons["Next"].isHittable)
     }
-
 }
 
 extension CreateWorkspaceSelectionUITests {
