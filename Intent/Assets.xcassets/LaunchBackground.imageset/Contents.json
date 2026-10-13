@@ -3,6 +3,16 @@
     {
       "filename" : "LaunchBackground.svg",
       "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "LaunchBackgroundDark.svg",
+      "idiom" : "universal"
     }
   ],
   "info" : {

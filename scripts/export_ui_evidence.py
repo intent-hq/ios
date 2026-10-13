@@ -11,17 +11,6 @@ import tempfile
 
 
 CAPTURES = {
-    "InlineResponseImageUITests": {
-        "testSavedImageOpensWithKeyboardAndPreservesDraft": (
-            "Response image with keyboard open", "Saved response image in lightbox",
-        ),
-        "testUserImageBlockOpensWithKeyboardAndPreservesDraft": (
-            "user image block with keyboard open", "Saved response image in lightbox",
-        ),
-        "testAssistantImageBlockOpensWithKeyboardAndPreservesDraft": (
-            "assistant image block with keyboard open", "Saved response image in lightbox",
-        ),
-    },
     "IPadSidebarUITests": {
         "testSectionsAndPairingRestoreConversationInBothThemes": tuple(
             f"iPad {section} {appearance}"
@@ -72,9 +61,21 @@ CAPTURES = {
         ),
     },
     "InlineResponseImageUITests": {
+        "testSavedImageOpensWithKeyboardAndPreservesDraft": (
+            "Response image with keyboard open", "Saved response image in lightbox",
+        ),
+        "testUserImageBlockOpensWithKeyboardAndPreservesDraft": (
+            "user image block with keyboard open", "Saved response image in lightbox",
+        ),
+        "testAssistantImageBlockOpensWithKeyboardAndPreservesDraft": (
+            "assistant image block with keyboard open", "Saved response image in lightbox",
+        ),
         "testPDFCardAndLinkOpenViewerAndShare": (
             "Inline PDF card and link", "PDF viewer from inline card",
             "PDF viewer from text link", "PDF share sheet", "PDF unavailable with close and retry",
+        ),
+        "testTextLinkOpensViewerSharesAndRetriesMissingFile": (
+            "Text viewer from text link", "Text unavailable with close and retry",
         ),
     },
     "AssistantStateUITests": {
@@ -115,6 +116,7 @@ CAPTURES = {
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
         ),
         "testLaunchHidesBackButSelectedMachineCanReturnHome": (
+            "connection-loss-launch-connecting-without-back",
             "connection-loss-connection-failure-back", "connection-loss-connecting-back",
         ),
     },

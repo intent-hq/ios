@@ -12,12 +12,15 @@ struct SplashArtView: View {
     @State private var lease: SplashAnimationLease?
 
     private let store: SplashAnimationStore
+    private let style: SplashBackground.Style
 
     init(
+        style: SplashBackground.Style = .launch,
         clock: any SplashPlaybackClock = MediaTimeSplashClock(),
         store: SplashAnimationStore = .shared
     ) {
         self.store = store
+        self.style = style
         _playback = State(initialValue: SplashPlaybackState(clock: clock))
         _lease = State(initialValue: store.lease())
     }
@@ -39,7 +42,7 @@ struct SplashArtView: View {
     }
 
     var body: some View {
-        SplashBackground()
+        SplashBackground(style: style)
             .overlay {
                 TimelineView(.animation(
                     minimumInterval: animation?.minimumFrameDuration,
@@ -50,7 +53,8 @@ struct SplashArtView: View {
                         SplashFrameView(
                             animation: sample.animation,
                             frame: sample.frame,
-                            colorScheme: colorScheme
+                            colorScheme: colorScheme,
+                            foreground: colorScheme == .dark ? .white : nil
                         )
                         .frame(
                             width: Constants.Splash.maximumLogoDimension,
@@ -76,19 +80,19 @@ struct SplashArtView: View {
     }
 }
 
-/// Shared launch artwork for the splash and conversation loading state.
 struct SplashBackground: View {
+    enum Style {
+        case launch
+        case projectSwitch
+    }
+
+    var style: Style = .launch
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        if colorScheme == .dark {
-            Theme.background(for: colorScheme)
-        } else {
-            // Preserve the exported light artwork and both gradient endpoints.
-            Image(.launchBackground)
-                .resizable()
-                .accessibilityHidden(true)
-        }
+        Image(colorScheme == .dark && style == .projectSwitch ? .projectLoadingBackground : .launchBackground)
+            .resizable()
+            .accessibilityHidden(true)
     }
 }
 
@@ -99,6 +103,7 @@ struct SplashFrameView: View {
     let animation: LottieAnimation
     let frame: AnimationFrameTime
     let colorScheme: ColorScheme
+    var foreground: Color?
 
     var body: some View {
         LottieView(animation: animation)
@@ -109,7 +114,7 @@ struct SplashFrameView: View {
             .backgroundBehavior(.pause)
             .configure(\.animateLayoutChangesWithCurrentCoreAnimationContext, to: false)
             .valueProvider(
-                ColorValueProvider(UIColor(Theme.foreground(for: colorScheme)).lottieColorValue),
+                ColorValueProvider(UIColor(foreground ?? Theme.foreground(for: colorScheme)).lottieColorValue),
                 for: AnimationKeypath(keypath: "**.Color")
             )
     }
@@ -121,5 +126,10 @@ struct SplashFrameView: View {
 
 #Preview("Splash art - Dark") {
     SplashArtView()
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Project switching - Dark") {
+    SplashArtView(style: .projectSwitch)
         .preferredColorScheme(.dark)
 }

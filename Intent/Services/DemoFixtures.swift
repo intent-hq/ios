@@ -360,6 +360,7 @@ extension DemoFixtures {
         if let designScenario, agentId == DemoDesignFixtures.agentId { return designScenario.messages }
         if usesTranscriptVideo, agentId == "demo-agent-implementor" { return transcriptVideoMessages }
         if usesInlinePDF, agentId == "demo-agent-implementor" { return inlinePDFMessages }
+        if usesInlineText, agentId == "demo-agent-implementor" { return inlineTextMessages }
         if inlineImageConversationRequested(by: ProcessInfo.processInfo.arguments),
            agentId == inlineImageAgentId { return inlineImageConversationMessages }
         if agentId == assistantAgentId { return assistantMessages }
@@ -368,13 +369,10 @@ extension DemoFixtures {
     }
 
     /// JSON-RPC fixture response. Unknown methods return an empty dictionary.
-    static func response(
-        for method: String,
-        params: [String: Any],
-        snapshotAnchor: Date = Date()
-    ) -> Any {
+    static func response(for method: String, params: [String: Any], snapshotAnchor: Date = Date()) -> Any {
         if let response = transcriptVideoResponse(for: method, params: params) { return response }
         if let response = inlinePDFResponse(for: method, params: params) { return response }
+        if let response = inlineTextResponse(for: method, params: params) { return response }
         if let response = DemoWorkspaceActionFixtures.response(for: method, params: params) { return response }
         if let response = designScenario?.response(for: method, params: params)
             ?? DemoTerminalFixtures.response(for: method, params: params)
