@@ -11,6 +11,9 @@ import tempfile
 
 
 CAPTURES = {
+    "WorkspaceEntryUITests": {
+        "testDisclosureAndNoteNavigationKeepSeparateTouchTargets": ("note-viewer-flat-back-button",),
+    },
     "AppCoordinatorTests": {
         "iPadCompactLaunchShowsListAndMenuDestinations": tuple(
             f"ipad-narrow-{screen}-{appearance}"

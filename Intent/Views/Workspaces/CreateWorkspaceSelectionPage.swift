@@ -149,7 +149,7 @@ struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Co
 
     private var bottomControls: some View {
         VStack(spacing: 0) {
-            if let onNext {
+            if let onNext, !isSearching {
                 HStack {
                     leadingAction
                     Spacer()
@@ -157,7 +157,7 @@ struct CreateWorkspaceSelectionPage<HeadingAction: View, LeadingAction: View, Co
                 }
                 .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
                 .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
-                .padding(.bottom, isSearching ? CreateWorkspaceFormStyle.rowSpacing : CreateWorkspaceFormStyle.pagePadding)
+                .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
             }
             searchInput
         }

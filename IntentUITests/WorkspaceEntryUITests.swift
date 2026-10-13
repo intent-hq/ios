@@ -339,6 +339,10 @@ extension WorkspaceEntryUITests {
             .tap()
         let taskNavigation = app.navigationBars["Build the icon gallery interface"]
         XCTAssertTrue(taskNavigation.waitForExistence(timeout: 15))
+        let noteScreenshot = XCTAttachment(screenshot: app.screenshot())
+        noteScreenshot.name = "note-viewer-flat-back-button"
+        noteScreenshot.lifetime = .keepAlways
+        add(noteScreenshot)
         taskNavigation.buttons.element(boundBy: 0).tap()
         let spec = app.buttons["workspace.note.spec"]
         XCTAssertTrue(spec.waitForExistence(timeout: 15))
