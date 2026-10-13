@@ -136,22 +136,7 @@ import UniformTypeIdentifiers
         isImporting = true
         let task = Task {
             do {
-                var prepared: [Image] = []
-                var preparedVideos: [PendingFile] = []
-                for load in loaders {
-                    let media = try await load()
-                    try Task.checkCancellation()
-                    switch media {
-                    case let .image(data):
-                        prepared.append(try await Self.prepare(data, quality: Constants.Conversation.Composer.imageCompressionQuality))
-                    case let .video(video):
-                        guard video.size <= ImportedPhotoVideo.maxBytes else { throw ImportedPhotoVideo.ImportError.tooLarge }
-                        preparedVideos.append(PendingFile(
-                            url: video.url, displayName: video.url.lastPathComponent, size: Int64(video.size), video: video
-                        ))
-                    }
-                    try Task.checkCancellation()
-                }
+                let (prepared, preparedVideos) = try await Self.prepareMedia(loaders)
                 guard images.reduce(0, { $0 + $1.jpeg.count }) + prepared.reduce(0, { $0 + $1.jpeg.count })
                     <= Self.maximumJPEGBytes else { throw ImportError.tooLarge }
                 images.append(contentsOf: prepared)
@@ -166,6 +151,26 @@ import UniformTypeIdentifiers
         }
         importTask = task
         return task
+    }
+
+    private static func prepareMedia(_ loaders: [MediaLoader]) async throws -> (images: [Image], videos: [PendingFile]) {
+        var prepared: [Image] = []
+        var preparedVideos: [PendingFile] = []
+        for load in loaders {
+            let media = try await load()
+            try Task.checkCancellation()
+            switch media {
+            case let .image(data):
+                prepared.append(try await Self.prepare(data, quality: Constants.Conversation.Composer.imageCompressionQuality))
+            case let .video(video):
+                guard video.size <= ImportedPhotoVideo.maxBytes else { throw ImportedPhotoVideo.ImportError.tooLarge }
+                preparedVideos.append(PendingFile(
+                    url: video.url, displayName: video.url.lastPathComponent, size: Int64(video.size), video: video
+                ))
+            }
+            try Task.checkCancellation()
+        }
+        return (prepared, preparedVideos)
     }
 
     func cancelImport() {
