@@ -34,6 +34,38 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
     }
 
     @MainActor
+    func testTitleDraftSurvivesScrollingOffscreenAndBack() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-design-scenario=agent-groups-large"]
+        app.launch()
+        let workspace = app.staticTexts["Workspace agent design"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        workspace.tap()
+        let heading = app.staticTexts["workspace.title.heading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
+        heading.doubleTap()
+        let field = app.textFields["workspace.title.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        field.typeText(" edited")
+        let draft = field.value as? String
+        let scroll = app.scrollViews.firstMatch
+        scroll.swipeUp()
+        scroll.swipeUp()
+        XCTAssertFalse(field.isHittable)
+        for _ in 0..<6 where !field.isHittable { scroll.swipeDown() }
+        XCTAssertTrue(field.isHittable)
+        XCTAssertEqual(field.value as? String, draft)
+        field.tap()
+        field.typeText(" again")
+        XCTAssertEqual(field.value as? String, (draft ?? "") + " again")
+        app.buttons["workspace.title.cancel"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertEqual(heading.label, "Workspace agent design")
+    }
+
+    @MainActor
     func testFailedSaveKeepsTheDraftAndCancelDiscardsIt() {
         let app = openWorkspace(failing: true)
         let heading = app.staticTexts["workspace.title.heading"]
