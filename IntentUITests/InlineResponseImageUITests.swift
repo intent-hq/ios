@@ -338,9 +338,12 @@ extension InlineResponseImageUITests {
         share.tap()
         let activity = app.otherElements["ActivityListView"].firstMatch
         XCTAssertTrue(activity.waitForExistence(timeout: Fixture.timeout), "Share must present the native activity sheet")
-        let dismissShare = app.buttons["Close"].firstMatch
-        XCTAssertTrue(dismissShare.waitForExistence(timeout: Fixture.timeout))
-        dismissShare.tap()
+        let dismissRegion = app.otherElements["PopoverDismissRegion"].firstMatch
+        if dismissRegion.exists {
+            dismissRegion.tap()
+        } else {
+            activity.swipeDown()
+        }
         XCTAssertTrue(activity.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable })
     }
