@@ -47,6 +47,9 @@ extension AppCoordinatorTests {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
         let coordinator = compactShellCoordinator(fixture)
+        let workspaceId = detail == .assistant ? Workspace.chiefWorkspaceId : ConversationStartupFixture.workspaceId
+        let startup = fixture.makeViewModel(workspaceId: workspaceId)
+        await startup.load()
         if detail == .assistant {
             await fixture.session.assistantStore.refresh()
             try #require(!fixture.session.assistantStore.threads.isEmpty)
@@ -118,7 +121,16 @@ extension AppCoordinatorTests {
 
     @MainActor private func verifyCompactControlBounds(in host: UIView, width: CGFloat) throws {
         let viewport = host.convert(CGRect(x: 0, y: 0, width: width, height: host.bounds.height), to: nil)
-        for identifier in ["composer.send", "composer.attachment", "intent.menu.open"] {
+        let identifiers = ["composer.send", "composer.attachment", "intent.menu.open"]
+        try waitForCompactShell {
+            host.layoutIfNeeded()
+            return identifiers.allSatisfy { identifier in
+                guard let control = compactControl(identifier, in: host) else { return false }
+                let frame = control.accessibilityFrame
+                return frame.minX >= viewport.minX && frame.maxX <= viewport.maxX
+            }
+        }
+        for identifier in identifiers {
             let control = try #require(compactControl(identifier, in: host))
             #expect(control.accessibilityFrame.minX >= viewport.minX)
             #expect(control.accessibilityFrame.maxX <= viewport.maxX)
