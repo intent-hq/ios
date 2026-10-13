@@ -25,6 +25,7 @@ struct WorkspaceDetailView: View {
     @State private var scriptStore: WorkspaceScriptStore
     @State private var changesStore: WorkspaceChangesStore
     @State private var titleEditor = WorkspaceTitleEditor()
+    @FocusState private var titleFocused: Bool
     @Environment(BackendSession.self) private var session
 
     init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared, isSidebarVisible: Bool = false) {
@@ -363,16 +364,17 @@ private extension WorkspaceDetailView {
 
     var detailContent: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                WorkspaceDetailHeader(
-                    workspaceId: workspaceId,
-                    workspace: workspace,
-                    title: workspaceTitle,
-                    selection: $selectedTab,
-                    titleEditor: titleEditor,
-                    onSaveTitle: saveTitle
-                )
-                tabContent
+            if selectedTab == .agents {
+                LazyVStack(spacing: 0) {
+                    detailHeader
+                    tabContent
+                }
+                .padding(.bottom, showsAgentList ? WorkspaceDetailStyle.pageInset : 0)
+            } else {
+                VStack(spacing: 0) {
+                    detailHeader
+                    tabContent
+                }
             }
         }
         .refreshable {
@@ -389,21 +391,31 @@ private extension WorkspaceDetailView {
         }
     }
 
+    private var detailHeader: some View {
+        VStack(spacing: 0) {
+            WorkspaceDetailHeader(
+                workspaceId: workspaceId,
+                workspace: workspace,
+                title: workspaceTitle,
+                selection: $selectedTab,
+                titleEditor: titleEditor,
+                titleFocus: $titleFocused,
+                onSaveTitle: saveTitle
+            )
+        }
+    }
+
+    private var showsAgentLoading: Bool {
+        (agentStore.isLoading || !agentStore.hasLoaded) && viewModel.agents.isEmpty && !hasWorkspaceResources
+    }
+
+    private var showsAgentList: Bool { !showsAgentLoading && (viewModel.hasAgentSections || hasWorkspaceResources) }
+
     var hasWorkspaceResources: Bool {
-        hasWorkspaceTerminals || hasWorkspaceBrowsers || hasWorkspaceScripts
-    }
-
-    private var hasWorkspaceTerminals: Bool {
         !terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty
-    }
-
-    private var hasWorkspaceBrowsers: Bool {
-        !browserStore.browsers(workspaceId: workspaceId).isEmpty
+            || !browserStore.browsers(workspaceId: workspaceId).isEmpty
             || browserStore.errorMessage(workspaceId: workspaceId) != nil
-    }
-
-    private var hasWorkspaceScripts: Bool {
-        !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty
+            || !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty
             || scriptStore.errorMessage(workspaceId: workspaceId) != nil
     }
 
@@ -422,7 +434,7 @@ private extension WorkspaceDetailView {
     @ViewBuilder
     var tabContent: some View {
         if selectedTab == .agents {
-            if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty, !hasWorkspaceResources {
+            if showsAgentLoading {
                 ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
@@ -443,25 +455,27 @@ private extension WorkspaceDetailView {
         }
     }
 
+    @ViewBuilder
     var agentListContent: some View {
-        LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
-            ForEach(agentListRows) { @Sendable row in row }
-            if hasWorkspaceTerminals {
-                WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore, revealedTarget: $revealedSwipeTarget) { terminal in
-                    selectedTerminal = terminal
-                }
-            }
-            if hasWorkspaceBrowsers {
-                WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore, revealedTarget: $revealedSwipeTarget) { browser in
-                    selectedBrowser = browser
-                }
-            }
-            if hasWorkspaceScripts {
-                WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore, revealedTarget: $revealedSwipeTarget)
-            }
+        let rows = agentListRows
+        let entries = rows.enumerated().map { index, row in
+            (id: row.id, content: row
+                .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+                .padding(.top, index == 0 ? 0 : WorkspaceDetailStyle.rowSpacing))
         }
-        .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-        .padding(.bottom, WorkspaceDetailStyle.pageInset)
+        ForEach(entries, id: \.id) { @Sendable entry in entry.content }
+        if hasWorkspaceResources {
+            WorkspaceDetailResources(
+                workspaceId: workspaceId,
+                terminalStore: terminalStore,
+                browserStore: browserStore,
+                scriptStore: scriptStore,
+                revealedTarget: $revealedSwipeTarget,
+                followsAgents: !rows.isEmpty,
+                onSelectTerminal: { selectedTerminal = $0 },
+                onSelectBrowser: { selectedBrowser = $0 }
+            )
+        }
     }
 
     private func deleteWorkspace() { changeWorkspace("workspace.delete") }

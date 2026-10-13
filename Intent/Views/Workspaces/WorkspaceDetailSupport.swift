@@ -9,11 +9,14 @@ struct WorkspaceDetailHeading: View {
     let repositoryName: String?
     var statusMessage: String?
     @Bindable var titleEditor: WorkspaceTitleEditor
+    var titleFocus: FocusState<Bool>.Binding?
     let onSaveTitle: () -> Void
     @FocusState private var titleFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var focusBinding: FocusState<Bool>.Binding { titleFocus ?? $titleFocused }
 
     var body: some View {
         VStack(alignment: .leading, spacing: titleEditor.isEditing
@@ -47,11 +50,11 @@ struct WorkspaceDetailHeading: View {
                 .tracking(WorkspaceDetailStyle.titleTracking)
                 .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
                 .submitLabel(.done)
-                .focused($titleFocused)
+                .focused(focusBinding)
                 .disabled(titleEditor.isSaving)
-                .onAppear { titleFocused = true }
+                .onAppear { focusBinding.wrappedValue = true }
                 .onChange(of: titleEditor.isSaving) { _, saving in
-                    if !saving { titleFocused = true }
+                    if !saving { focusBinding.wrappedValue = true }
                 }
                 .onSubmit(onSaveTitle)
                 .accessibilityLabel("Workspace name")
@@ -269,6 +272,7 @@ struct WorkspaceDetailHeader: View {
     let title: String
     @Binding var selection: WorkspaceTab
     let titleEditor: WorkspaceTitleEditor
+    let titleFocus: FocusState<Bool>.Binding
     let onSaveTitle: () -> Void
 
     var body: some View {
@@ -280,6 +284,7 @@ struct WorkspaceDetailHeader: View {
             repositoryName: workspace?.repositoryName,
             statusMessage: workspace?.statusMessage,
             titleEditor: titleEditor,
+            titleFocus: titleFocus,
             onSaveTitle: onSaveTitle
         )
         if let assetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
@@ -303,6 +308,58 @@ struct WorkspaceDetailHeader: View {
             ))
             .padding(.bottom, WorkspaceDetailStyle.sectionSpacing)
         #endif
+    }
+}
+
+struct WorkspaceDetailResources: View {
+    let workspaceId: String
+    let terminalStore: MobileTerminalStore
+    let browserStore: WorkspaceBrowserStore
+    let scriptStore: WorkspaceScriptStore
+    @Binding var revealedTarget: WorkspaceSwipeTarget?
+    let followsAgents: Bool
+    let onSelectTerminal: (MobileTerminal) -> Void
+    let onSelectBrowser: (WorkspaceBrowser) -> Void
+
+    private var showsTerminals: Bool { !terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty }
+
+    private var showsBrowsers: Bool {
+        !browserStore.browsers(workspaceId: workspaceId).isEmpty || browserStore.errorMessage(workspaceId: workspaceId) != nil
+    }
+
+    private var showsScripts: Bool {
+        !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty || scriptStore.errorMessage(workspaceId: workspaceId) != nil
+    }
+
+    var body: some View {
+        if showsTerminals {
+            WorkspaceMobileTerminalsView(
+                workspaceId: workspaceId,
+                store: terminalStore,
+                revealedTarget: $revealedTarget,
+                onSelect: onSelectTerminal
+            )
+            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+            .padding(.top, followsAgents ? WorkspaceDetailStyle.rowSpacing : 0)
+            .id("workspace.resources.terminals")
+        }
+        if showsBrowsers {
+            WorkspaceBrowsersView(
+                workspaceId: workspaceId,
+                store: browserStore,
+                revealedTarget: $revealedTarget,
+                onSelect: onSelectBrowser
+            )
+            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+            .padding(.top, followsAgents || showsTerminals ? WorkspaceDetailStyle.rowSpacing : 0)
+            .id("workspace.resources.browsers")
+        }
+        if showsScripts {
+            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore, revealedTarget: $revealedTarget)
+                .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+                .padding(.top, followsAgents || showsTerminals || showsBrowsers ? WorkspaceDetailStyle.rowSpacing : 0)
+                .id("workspace.resources.scripts")
+        }
     }
 }
 
