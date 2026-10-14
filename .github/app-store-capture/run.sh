@@ -44,7 +44,7 @@ PY
     /usr/libexec/PlistBuddy -c 'Add :SBChamoisWindowingEnabled bool false' "$plist"
   fi
   xcrun simctl boot "$udid"
-  open -a Simulator --args -CurrentDeviceUDID "$udid"
+  open -a "$DEVELOPER_DIR/Applications/Simulator.app" --args -CurrentDeviceUDID "$udid"
   xcrun simctl bootstatus "$udid" -b
   if [ "$platform" = ios ]; then
     xcrun simctl ui "$udid" appearance light
