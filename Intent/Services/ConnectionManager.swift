@@ -49,12 +49,19 @@ import os
     @ObservationIgnored var admission: ConnectionAdmission?
     @ObservationIgnored private(set) var pairingAttemptID: UUID?
     var currentPrincipal: ConnectionPrincipal? {
-        get { DemoMode.isEnabled ? .demoOwner : admittedPrincipal }
+        get { DemoMode.isEnabled && !DemoStartupConnection.isEnabled ? .demoOwner : admittedPrincipal }
         set { admittedPrincipal = newValue }
     }
     @ObservationIgnored var authorityRefreshTask: Task<Void, Never>?
     @ObservationIgnored var pendingAuthorityRevision: Double = -1
     @ObservationIgnored var authorityBeforeRefresh: ConnectionPrincipal?
+
+    var startupState: DaemonStartupState?
+    @ObservationIgnored var startupAdmissionID = UUID()
+    @ObservationIgnored var startupCandidate: RacedConnection?
+    @ObservationIgnored var startupSuspended = false
+    @ObservationIgnored var startupResumeWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
+    @ObservationIgnored var startupLifecycleObservers: [AnyCancellable] = []
 
     var certMismatchDetected = false {
         didSet { certMismatchSubject.send(certMismatchDetected) }
@@ -153,6 +160,7 @@ import os
         self.diagnostics = diagnostics
         self.persistence = persistence
         subscriptionRouter = ConnectionSubscriptionRouter(diagnostics: diagnostics)
+        observeStartupLifecycle()
     }
 
     isolated deinit {
@@ -238,19 +246,19 @@ extension ConnectionManager {
         let context = beginConnectAttempt(target)
         let raceStart = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * Self.millisecondsPerSecond))ms")
-        let raced: WonHostRace
+        let raced: AdmittedHostRace
         do {
-            raced = try await raceHosts(target)
+            raced = try await readyRace(token: target.token, fingerprint: target.certFingerprint) {
+                try await self.raceHosts(target)
+            }
         } catch {
             restoreCertMismatchesAfterFailedConnect(context)
             throw error
         }
         let winner = raced.winner
         var lateMismatchGeneration = context.generation
-        defer {
-            recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration)
-        }
-        let principal = try await admit(winner, token: target.token, fingerprint: target.certFingerprint)
+        defer { recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration) }
+        let principal = raced.principal
         let raceEnd = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms (at +\(Int((raceEnd - connectStart) * Self.millisecondsPerSecond))ms)")
         AppLog.connection.debug("[ConnectionManager] Race won by \(winner.host), generation=\(context.generation)")
@@ -416,6 +424,7 @@ extension ConnectionManager {
     /// `connect()` to the same target must keep the accumulated mismatches,
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
+        cancelStartupAdmission()
         isDemoConnection = false
         servesDemoFixtures = false
         connectionGeneration += 1

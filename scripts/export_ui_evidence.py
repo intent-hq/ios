@@ -11,6 +11,16 @@ import tempfile
 
 
 CAPTURES = {
+    "DaemonStartupUITests": {
+        "testInitialStartupCountsEstimateFinalizationAndFreshHello": (
+            "startup-initial-unknown-estimate", "startup-initial-estimate", "startup-initial-unchanged",
+            "startup-initial-finalizing", "startup-ready-workspaces",
+        ),
+        "testReconnectUnavailableFailureAndRetry": (
+            "startup-reconnect-preparing", "startup-reconnect-indexing-large-text", "startup-reconnect-unavailable",
+            "startup-reconnect-failed", "startup-reconnect-recovered",
+        ),
+    },
     "IPadSidebarUITests": {
         "testSectionsAndPairingRestoreConversationInBothThemes": tuple(
             f"iPad {section} {appearance}"

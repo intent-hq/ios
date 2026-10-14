@@ -27,6 +27,9 @@ extension ConnectionManager {
         params: [String: Any] = [:],
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
+        if DemoStartupConnection.isEnabled, connectionState != .connected {
+            throw NSError(domain: Self.webSocketErrorDomain, code: Self.notConnectedErrorCode)
+        }
         if DemoMode.isEnabled || servesDemoFixtures {
             if let gate = DemoFixtures.responseGate(for: method, params: params) {
                 try await DemoFixtures.wait(for: gate)
