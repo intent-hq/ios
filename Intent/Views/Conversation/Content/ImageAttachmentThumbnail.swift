@@ -31,6 +31,7 @@ struct ImageAttachmentThumbnail: View {
             .accessibilityLabel("Attached image")
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: uiImage, data: imageData)
+                    .coversConversationComposers()
             }
         } else {
             ImageDecodeFailureView()

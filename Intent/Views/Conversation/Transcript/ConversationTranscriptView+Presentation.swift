@@ -60,14 +60,15 @@ extension ConversationTranscriptView {
         // The stack's bottom padding lives on the marker so that
         // `scrollTo("scroll-bottom", anchor: .bottom)` targets the true end
         // of the content, not a point 12 points above it that a landing
-        // judged against `followLandingTolerance` could never reach. Its
-        // realization is the end-row signal the unrealized-end recovery
+        // judged against `followLandingTolerance` could never reach. A
+        // floating launcher's `bottomClearance` lives here for the same
+        // reason. Its realization is the end-row signal the unrealized-end recovery
         // reads (#338): the lazy stack appears and disappears the marker as
         // it realizes and drops it. Realizing while scrolled away replays
         // the live edge; derealizing arms the recovery.
         if demoWithdrawnEnd == nil {
             Color.clear.frame(height: Layout.bottomAnchorHeight)
-                .padding(.bottom, Layout.bottomAnchorPadding)
+                .padding(.bottom, Layout.bottomAnchorPadding + bottomClearance)
                 .id("scroll-bottom")
                 .onGeometryChange(for: CGRect.self) { geometry in
                     ConversationTrace.enabled ? geometry.frame(in: .named(Self.viewportCoordinateSpace)) : .zero
@@ -90,7 +91,7 @@ extension ConversationTranscriptView {
             // finds nothing and `isEndRealized` stays false, exactly as over
             // a dropped end row.
             Color.clear.frame(height: Layout.bottomAnchorHeight)
-                .padding(.bottom, Layout.bottomAnchorPadding)
+                .padding(.bottom, Layout.bottomAnchorPadding + bottomClearance)
         }
     }
 

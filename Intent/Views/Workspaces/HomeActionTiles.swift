@@ -78,8 +78,8 @@ struct HomeActionTiles: View {
                 let contentWidth = min(width, Layout.maximumTileWidth * 2 + Layout.spacing)
                 return max(Layout.minimumTileWidth, (contentWidth - Layout.spacing * (columns - 1)) / columns)
             }
-            .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
+            .homeActionTileSurface(cornerRadius: Layout.cornerRadius, fill: Constants.WorkspaceList.controlSurface(for: colorScheme))
         }
         .buttonStyle(HomeActionTileStyle())
         .accessibilityLabel(action == .appearance ? "Appearance" : title(action))

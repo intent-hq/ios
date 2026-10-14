@@ -143,9 +143,10 @@ private struct ConversationViewContent: View {
         conversationChrome
             .sheet(isPresented: $showModelPicker) {
                 ModelPickerView(viewModel: viewModel)
+                    .coversConversationComposers()
             }
             .sheet(item: $presentedNote) { noteInfo in
-                noteSheet(for: noteInfo)
+                noteSheet(for: noteInfo).coversConversationComposers()
             }
             .confirmationDialog(
                 "Delete Agent?",

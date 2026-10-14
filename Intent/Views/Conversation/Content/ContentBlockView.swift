@@ -195,9 +195,11 @@ struct ContentBlockBody: View, Equatable {
         }
         .fullScreenCover(item: $pdfLink) { link in
             PDFLinkPreviewView(link: link)
+                .coversConversationComposers()
         }
         .fullScreenCover(item: $textLink) { link in
             TextLinkPreviewView(link: link)
+                .coversConversationComposers()
         }
     }
 
@@ -308,6 +310,7 @@ struct ContentBlockBody: View, Equatable {
             }
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: uiImage, data: imageData)
+                    .coversConversationComposers()
             }
             .onChange(of: block.dataTruncation) { _, truncation in
                 // Hydration merged the full block in (the truncation flag

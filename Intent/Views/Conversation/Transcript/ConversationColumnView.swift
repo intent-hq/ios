@@ -10,10 +10,14 @@ struct ConversationColumnView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.conversationPresentation) private var presentation
+    /// Room a floating Intent launcher needs over this chat (0 when none).
+    @Environment(\.workspaceActionLauncherClearance) private var launcherClearance
     @State private var questionWizardCollapsed = false
     @State private var conversationHeight: CGFloat = 0
     @State private var questionInputTop: CGFloat?
     @State private var composerInputTop: CGFloat?
+    /// Top of the status rows below the transcript; measured on visionOS only.
+    @State private var accessoryRowsTop: CGFloat?
     @State private var composerFocused = false
     @State private var keyboardVisible = false
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
@@ -62,8 +66,21 @@ struct ConversationColumnView: View {
         .onAppear {
             questionSheetPresented = viewModel.pendingQuestions != nil
         }
+        // The one composer for this chat floats below the window.
+        .modifier(FloatingComposerOrnament(
+            showsLoadingState: viewModel.showsLoadingState,
+            composerVisible: composerVisible,
+            onWithdraw: viewModel.cancelPhotoImport
+        ) {
+            MessageInputView(
+                viewModel: viewModel,
+                store: viewModel.store,
+                allowsSending: composerVisible
+            ) { composerFocused = $0 }
+        })
         .sheet(isPresented: $questionSheetPresented) {
             questionSheet
+                .coversConversationComposers()
         }
         #endif
         .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)
@@ -106,7 +123,8 @@ struct ConversationColumnView: View {
                     viewModel: viewModel,
                     scrollState: transcriptScrollState,
                     onNavigateToNote: onNavigateToNote,
-                    onNavigateToAgent: onNavigateToAgent
+                    onNavigateToAgent: onNavigateToAgent,
+                    bottomClearance: FloatingComposerPolicy.transcriptBottomClearance(host: composerHost, launcherClearance: launcherClearance)
                 )
                 .environment(\.workspaceTranscriptDesign, usesWorkspaceDesign)
                 .overlay(alignment: .top) {
@@ -126,16 +144,25 @@ struct ConversationColumnView: View {
         // The conditional views use SwiftUI's default opacity transition.
         .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)
 
-        VStack(spacing: 0) {
-            accessoryRows
-        }
+        measuredAccessoryRows
 
         questionRegion
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { questionInputTop = $0 }
-            .preference(key: WorkspaceActionMenuInputTop.self, value: composerVisible || usesPhoneQuestionPresentation ? nil : questionInputTop)
+            .preference(
+                key: WorkspaceActionMenuInputTop.self,
+                value: FloatingComposerPolicy.questionRegionLauncherTop(
+                    host: composerHost,
+                    questionInputTop: questionInputTop,
+                    hasQuestionContent: viewModel.pendingQuestions != nil || viewModel.isPendingQuestionRecoveryLoading,
+                    composerVisible: composerVisible,
+                    usesPhoneQuestionPresentation: usesPhoneQuestionPresentation,
+                    accessoryRowsTop: accessoryRowsLauncherTop
+                )
+            )
             .layoutPriority(usesPhoneQuestionPresentation ? 1 : 0)
 
-        if !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
+        // A floating host presents the composer from an ornament instead.
+        if composerHost == .inline, !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
             VStack(spacing: 0) {
                 if usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
                     MonitoredPrsRow(
@@ -272,6 +299,14 @@ struct ConversationColumnView: View {
         #endif
     }
 
+    private var composerHost: ComposerHost {
+        #if os(visionOS)
+        ComposerHost.forPlatform(isVisionOS: true)
+        #else
+        ComposerHost.forPlatform(isVisionOS: false)
+        #endif
+    }
+
     #if os(visionOS)
     @ViewBuilder
     private var questionSheet: some View {
@@ -309,6 +344,31 @@ struct ConversationColumnView: View {
 }
 
 extension ConversationColumnView {
+    /// Whether any status row (agent waiting, PR monitors, hooks, queue)
+    /// shows below the transcript; mirrors `accessoryRows`.
+    private var hasAccessoryRows: Bool {
+        let showsMonitors = !usesWorkspaceDesign && !viewModel.showsLoadingState
+            && (!viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil)
+        let showsHooks = !viewModel.activeAgentHooks.isEmpty || viewModel.hookStore.error != nil
+        let showsQueue = !usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
+        return viewModel.store.isWaitingForAgents || showsMonitors || showsHooks || showsQueue
+    }
+
+    /// The status rows' top for the launcher to stay above (floating host).
+    private var accessoryRowsLauncherTop: CGFloat? {
+        hasAccessoryRows ? accessoryRowsTop : nil
+    }
+
+    /// The status rows; on visionOS their top keeps the launcher above them.
+    private var measuredAccessoryRows: some View {
+        VStack(spacing: 0) {
+            accessoryRows
+        }
+        #if os(visionOS)
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { accessoryRowsTop = $0 }
+        #endif
+    }
+
     @ViewBuilder
     private var accessoryRows: some View {
         if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
@@ -433,45 +493,5 @@ private struct PendingQuestionRecoveryPlaceholder: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Layout.verticalPadding)
         .accessibilityElement(children: .combine)
-    }
-}
-
-private struct ConversationEmptyView: View {
-    let viewModel: ConversationViewModel
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.colorSchemeContrast) private var contrast
-
-    private typealias Layout = Constants.Conversation.Column.Empty
-
-    private var secondaryForeground: Color {
-        if viewModel.workspaceId == Workspace.chiefWorkspaceId {
-            return WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast)
-        }
-        return Theme.mutedForeground(for: colorScheme)
-    }
-
-    var body: some View {
-        if let name = viewModel.specialistName {
-            VStack(spacing: Layout.contentSpacing) {
-                Text(name)
-                    .interFont(Constants.Typography.bodyM)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                if let description = viewModel.specialistDescription {
-                    Text(description)
-                        .interFont(Constants.Typography.bodyXS)
-                        .foregroundStyle(secondaryForeground)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, Layout.descriptionHorizontalPadding)
-                }
-                if let displayName = viewModel.currentModelDisplayName {
-                    Text("Using \(displayName)")
-                        .interFont(Constants.Typography.subtextXXS)
-                        .foregroundStyle(secondaryForeground.opacity(Layout.modelCaptionOpacity))
-                        .padding(.top, Layout.modelCaptionTopPadding)
-                }
-            }
-        } else {
-            Color.clear
-        }
     }
 }

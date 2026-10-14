@@ -22,6 +22,8 @@ struct RootView: View {
     @State private var showingConnections = false
     @State private var showingConnectionSwitcher = false
     @State private var conversationIsPopping = false
+    /// Modal layers open in this window; keeps only the foremost chat's composer.
+    @State private var composerCoverage = ComposerCoverage()
     @State private var connectionSwitcherOpen = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
@@ -174,10 +176,12 @@ struct RootView: View {
             .sheet(isPresented: $showingCreateWorkspace) {
                 CreateWorkspaceView(session: session, coordinator: coordinator)
                     .environment(coordinator)
+                    .coversConversationComposers()
             }
             .sheet(isPresented: $showingConnections) {
                 ConnectionsView()
                     .environment(coordinator)
+                    .coversConversationComposers()
             }
         }
     }
@@ -314,6 +318,7 @@ struct RootView: View {
         // screen is current (first-run pairing or an existing connection).
         .sheet(item: $coordinator.pendingDeepLinkPairing) { request in
             DeepLinkPairingView(payload: request.payload)
+                .coversConversationComposers()
         }
         .onAppear {
             coordinator.usesIPadShell = usesIPadShell
@@ -351,6 +356,7 @@ struct RootView: View {
                   let token = selectionHandlerToken else { return }
             notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
         }
+        .environment(composerCoverage)
     }
 }
 
@@ -412,6 +418,7 @@ private extension RootView {
             AssistantView(session: session)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
+                .coversConversationComposers()
         }
         .sheet(isPresented: settingsPresented) {
             SettingsView(presentedAsSheet: true, contentColorScheme: colorScheme)
@@ -421,6 +428,7 @@ private extension RootView {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
                 .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
+                .coversConversationComposers()
         }
         .background {
             Color.clear.preference(

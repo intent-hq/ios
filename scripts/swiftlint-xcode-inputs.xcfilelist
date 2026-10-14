@@ -359,6 +359,9 @@ $(SRCROOT)/Intent/Views/Conversation/AssistantEmptyState.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantErrorBanner.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantStateContent.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantView.swift
+$(SRCROOT)/Intent/Views/Conversation/Composer/ComposerCoverage.swift
+$(SRCROOT)/Intent/Views/Conversation/Composer/FloatingComposerOrnament.swift
+$(SRCROOT)/Intent/Views/Conversation/Composer/FloatingComposerPolicy.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputAttachments.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/ModelPickerView.swift
@@ -422,6 +425,7 @@ $(SRCROOT)/Intent/Views/Conversation/StatusStrip/HookTimeBar.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/AssistantMessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationColumnView.swift
+$(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationEmptyView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationNoteSheet.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationScrollViewSupport.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationTranscriptGestureProbe.swift
@@ -498,6 +502,7 @@ $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalKeyBar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceActionLauncher.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceActionMenuDepth.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAgentTreeRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceAttentionCue.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowserPage.swift
@@ -725,6 +730,8 @@ $(SRCROOT)/IntentTests/EventWakeAttributionTests.swift
 $(SRCROOT)/IntentTests/ExternalLinkTests.swift
 $(SRCROOT)/IntentTests/FakeConnectionManager.swift
 $(SRCROOT)/IntentTests/FakeConnectionManagerTests.swift
+$(SRCROOT)/IntentTests/FloatingComposerImportTests.swift
+$(SRCROOT)/IntentTests/FloatingComposerPolicyTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreBranchCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
@@ -882,6 +889,7 @@ $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WatcherMessagePresentationTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
+$(SRCROOT)/IntentTests/WorkspaceActionMenuDepthTests.swift
 $(SRCROOT)/IntentTests/WorkspaceActionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAgentLoadingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAgentSelectionTests.swift

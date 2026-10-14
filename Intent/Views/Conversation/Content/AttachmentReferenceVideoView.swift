@@ -49,6 +49,7 @@ struct AttachmentReferenceVideoView<Fallback: View>: View {
             .accessibilityHint("Play full screen")
             .fullScreenCover(isPresented: $lightboxPresented) {
                 VideoLightboxView(video: video)
+                    .coversConversationComposers()
             }
         } else if failed {
             Button { attempt += 1 } label: {

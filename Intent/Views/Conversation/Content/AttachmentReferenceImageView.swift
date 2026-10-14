@@ -69,6 +69,7 @@ struct AttachmentReferenceImageView: View {
             .accessibilityLabel("Attached image")
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: image)
+                    .coversConversationComposers()
             }
         } else if failed {
             Button { attempt += 1 } label: {
