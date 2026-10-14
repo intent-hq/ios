@@ -53,7 +53,9 @@ struct WorkspaceActionLauncher: ViewModifier {
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
-            .accessibilityHidden(true, isEnabled: isOpen)
+            // Enabled launchers need explicit visibility for drawer hit testing while closed.
+            // Disabled launchers must preserve the hidden states of retained iPad panes.
+            .accessibilityHidden(isOpen, isEnabled: isEnabled)
             .overlayPreferenceValue(WorkspaceActionMenuInputTop.self) { inputTop in
                 let bottomInset = avoidsConversationInput ? inputTop.map { max(0, overlayBottom - $0) } ?? 0 : 0
                 // Keep the overlay's measured extent independent of its padded controls.
