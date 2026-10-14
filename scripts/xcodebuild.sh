@@ -13,6 +13,7 @@
 #
 # Usage: scripts/xcodebuild.sh <subcommand>
 #
+#   capture-screenshots     Run isolated App Store capture harness (CAPTURE_PLATFORM, SIM_UDID, RESULT_BUNDLE)
 #   resolve                 Resolve SPM package dependencies
 #   build-ios               Build for the generic iOS Simulator destination
 #   build-visionos          Build for the generic visionOS Simulator destination
@@ -763,6 +764,26 @@ Exiting $EXIT_TEST_PROCESS_CRASHED (test-process crash), not $status." >&2
   return "$outcome"
 }
 
+# Isolated App Store harness, using only a caller-owned disposable simulator.
+cmd_capture_screenshots() {
+  [ -n "${SIM_UDID:-}" ] || die "capture-screenshots requires SIM_UDID"
+  [ -n "${RESULT_BUNDLE:-}" ] || die "capture-screenshots requires RESULT_BUNDLE"
+  local platform
+  case "${CAPTURE_PLATFORM:-}" in
+    ios) platform='iOS Simulator'; ensure_tailcatkit ;;
+    visionos) platform='visionOS Simulator'; ensure_visionos_sdk ;;
+    *) die "CAPTURE_PLATFORM must be ios or visionos" ;;
+  esac
+  acquire_simulator_lock "$SIM_UDID"
+  run_xcodebuild test -project Intent.xcodeproj -scheme IntentScreenshots \
+    -destination "platform=$platform,id=$SIM_UDID" \
+    -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
+    -only-testing:IntentUITests/CaptureTests/testListingScreens \
+    -resultBundlePath "$RESULT_BUNDLE" \
+    CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= CURRENT_PROJECT_VERSION=283
+  release_simulator_lock
+}
+
 cmd_resolve() {
   run_xcodebuild -resolvePackageDependencies "${PROJECT_ARGS[@]}"
 }
@@ -1304,6 +1325,7 @@ case "$subcommand" in
 esac
 
 case "$subcommand" in
+  capture-screenshots)   cmd_capture_screenshots ;;
   resolve)               cmd_resolve ;;
   build-ios)             cmd_build_ios ;;
   build-visionos)        cmd_build_visionos ;;

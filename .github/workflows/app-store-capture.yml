@@ -1,49 +1,43 @@
-name: App Store capture preflight
+name: App Store screenshots
 on:
   push:
     branches: [chore/capture-116-screenshots]
-    paths: [.github/workflows/app-store-capture.yml]
+    paths:
+      - .github/workflows/app-store-capture.yml
+      - .github/app-store-capture/**
+      - scripts/xcodebuild.sh
 permissions:
   contents: read
+concurrency:
+  group: app-store-capture-116
+  cancel-in-progress: false
 jobs:
-  simulator-preflight:
+  capture:
     runs-on: [self-hosted, macOS, ARM64, intent-ios]
-    timeout-minutes: 25
+    timeout-minutes: 90
     steps:
-      - name: Check architecture and Xcode
-        shell: bash
+      - uses: actions/checkout@v7
+      - name: Select installed Xcode
         run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/capture-$GITHUB_RUN_ID/evidence"
-          cd "$RUNNER_TEMP/capture-$GITHUB_RUN_ID"
-          uname -a | tee evidence/host.txt
           test "$(uname -m)" = arm64
-          xcode=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
-          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-          DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version | tee evidence/xcode.txt
-      - name: Verify visionOS runtime and screenshot capability
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP/capture-$GITHUB_RUN_ID"
-          xcrun simctl list runtimes -j > evidence/runtimes-before.json
-          if ! python3 -c 'import json; assert any(r.get("isAvailable") and "xrOS" in r["identifier"] for r in json.load(open("evidence/runtimes-before.json"))["runtimes"])'; then
-            echo "No installed visionOS runtime; shared Mac left unchanged" >&2
-            exit 1
-          fi
-          xcrun simctl list runtimes -j > evidence/runtimes.json
-          xcrun simctl list devicetypes -j > evidence/device-types.json
-          runtime=$(python3 -c 'import json; print(sorted(r["identifier"] for r in json.load(open("evidence/runtimes.json"))["runtimes"] if r.get("isAvailable") and "xrOS" in r["identifier"])[-1])')
-          udid=$(xcrun simctl create IntentCapturePreflight com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K "$runtime")
-          trap 'xcrun simctl shutdown "$udid" || true; xcrun simctl delete "$udid" || true' EXIT
-          xcrun simctl boot "$udid"
-          open -a Simulator --args -CurrentDeviceUDID "$udid"
-          xcrun simctl bootstatus "$udid" -b
-          xcrun simctl io "$udid" screenshot evidence/visionos-preflight.png
-          sips -g pixelWidth -g pixelHeight evidence/visionos-preflight.png | tee evidence/dimensions.txt
-      - name: Preserve capability evidence
+          test -d /Applications/Xcode_26.3.app
+          echo 'DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer' >> "$GITHUB_ENV"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache-dependency-path: TailcatKit/go.sum
+      - name: Capture exact candidate UI
+        run: .github/app-store-capture/run.sh
+      - name: Preserve screenshots and diagnostics
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: capture-preflight
-          path: ${{ runner.temp }}/capture-${{ github.run_id }}/evidence/
+          name: app-store-116-captures
+          path: |
+            ${{ runner.temp }}/listing-capture-${{ github.run_id }}/**/*.png
+            ${{ runner.temp }}/listing-capture-${{ github.run_id }}/**/*.json
+            ${{ runner.temp }}/listing-capture-${{ github.run_id }}/**/*.txt
+            ${{ runner.temp }}/listing-capture-${{ github.run_id }}/**/*.log
+            ${{ runner.temp }}/listing-capture-${{ github.run_id }}/**/*.xcresult/**
+            !${{ runner.temp }}/listing-capture-${{ github.run_id }}/derived-*/**
+          retention-days: 14
