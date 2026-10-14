@@ -3,9 +3,12 @@ import SwiftUI
 /// Actions float above the navigation content without resetting its scroll position.
 struct WorkspaceActionLauncher: ViewModifier {
     let isSearching: Bool
+    var isEnabled = true
     var alignment: HorizontalAlignment = .trailing
     var avoidsConversationInput = true
     var hostsVerticalBarButton = true
+    var onWorkspaces: (() -> Void)?
+    var onAssistant: (() -> Void)?
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
@@ -20,7 +23,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     private enum Layout {
         static let blurRadius: CGFloat = 15
         static let shadeOpacity = 0.8
-        // The shared light/dark home-menu fade in IOS Working.
+        // Literal 8-bit channels preserve the shared light/dark home-menu fade in IOS Working.
         // swiftlint:disable:next no_magic_numbers
         static let shade = Color(.sRGB, red: 26 / 255, green: 26 / 255, blue: 25 / 255)
         static let springResponse = 0.35
@@ -37,7 +40,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                 .onChange(of: isOpen) { _, open in
                     if open { connectionCount = PersistenceManager.shared.loadConnections().count }
                 }
-                .modifier(WorkspaceActionLauncherToolbar(isEnabled: hostsVerticalBarButton && !isSearching))
+                .modifier(WorkspaceActionLauncherToolbar(isEnabled: isEnabled && hostsVerticalBarButton && !isSearching))
                 .environment(\.workspaceActionMenuPresented, $isOpen)
         } else {
             floatingMenu(content: content)
@@ -54,14 +57,18 @@ struct WorkspaceActionLauncher: ViewModifier {
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
-            .accessibilityHidden(isOpen)
+            // Enabled launchers need explicit visibility for drawer hit testing while closed.
+            // Disabled launchers must preserve the hidden states of retained iPad panes.
+            .accessibilityHidden(isOpen, isEnabled: isEnabled)
             .overlayPreferenceValue(WorkspaceActionMenuInputTop.self) { inputTop in
                 let bottomInset = avoidsConversationInput ? inputTop.map { max(0, overlayBottom - $0) } ?? 0 : 0
                 // Keep the overlay's measured extent independent of its padded controls.
-                Color.clear
-                    .allowsHitTesting(false)
-                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { overlayBottom = $0 }
-                    .overlay { actionOverlay(bottomInset: bottomInset) }
+                if isEnabled {
+                    Color.clear
+                        .allowsHitTesting(false)
+                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { overlayBottom = $0 }
+                        .overlay { actionOverlay(bottomInset: bottomInset) }
+                }
             }
             .animation(
                 reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
@@ -69,6 +76,9 @@ struct WorkspaceActionLauncher: ViewModifier {
             )
             .onChange(of: isSearching) { _, searching in
                 if searching { isOpen = false }
+            }
+            .onChange(of: isEnabled) { _, enabled in
+                if !enabled { isOpen = false }
             }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
             .onDisappear { isOpen = false }
@@ -88,7 +98,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
-            if !isSearching {
+            if isEnabled, !isSearching {
                 actionControls
                     .padding(.bottom, bottomInset + (isOpen && bottomInset == 0 ? Layout.menuBottomInset : Layout.launcherBottomInset))
                     .ignoresSafeArea(.container, edges: isOpen && bottomInset == 0 ? .bottom : [])
@@ -118,7 +128,8 @@ struct WorkspaceActionLauncher: ViewModifier {
                     themePreference: themePreference,
                     onSelect: select,
                     allowsWorkspaceCreation: coordinator.canCreateWorkspace,
-                    allowsAssistant: coordinator.canUseAssistant
+                    allowsAssistant: coordinator.canUseAssistant,
+                    showsWorkspaceList: onWorkspaces != nil
                 )
                     .visionActionMenuDepth()
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
@@ -153,7 +164,9 @@ struct WorkspaceActionLauncher: ViewModifier {
         }
         isOpen = false
         switch action {
-        case .assistant: coordinator.onSelectAssistant()
+        case .assistant:
+            if let onAssistant { onAssistant() } else { coordinator.onSelectAssistant() }
+        case .workspaces: onWorkspaces?()
         case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
         case .connections: onConnections()
         case .settings: coordinator.onOpenSettings()

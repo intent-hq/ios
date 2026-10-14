@@ -9,7 +9,7 @@ import UIKit
 /// Chat subscriptions deliver a snapshot; event feeds acknowledge registrations.
 enum DemoFixtures {
     // Numeric values below are intentional status-image fixture geometry and color data.
-    // swiftlint:disable no_magic_numbers number_separator
+    // swiftlint:disable no_magic_numbers
     nonisolated private static let statusImageSize = CGSize(width: 640, height: 360)
     nonisolated private static let statusImageRowCount = 5
     nonisolated private static let statusImageRowStartY: CGFloat = 48
@@ -23,15 +23,14 @@ enum DemoFixtures {
     nonisolated private static let statusImageToggleWidth: CGFloat = 44
     nonisolated private static let statusImageToggleHeight: CGFloat = 24
     nonisolated private static let statusImageToggleCornerRadius: CGFloat = 12
-    private static let bytesPerKilobyte = 1_024.0
+    private static let bytesPerKilobyte = 1024.0
     private static let secondsPerMinute: TimeInterval = 60
     @TaskLocal static var transcriptTimestampAnchor = Date()
     @TaskLocal private static var snapshotTimestampAnchor: Date?
     private static let defaultHookListDelaySeconds = 4
     private static let defaultBlockHydrationDelaySeconds = 4
     private static let triggerFilePollMilliseconds = 100
-    // swiftlint:enable no_magic_numbers number_separator
-
+    // swiftlint:enable no_magic_numbers
     /// Workspace whose `agent.list` returns `longConversationAgents` instead
     /// of the default `agents` (the "Deflake payment integration tests"
     /// workspace, not part of App Store screenshots 02–04).
@@ -87,6 +86,7 @@ enum DemoFixtures {
     }()
 
     nonisolated private static func drawStatusImage(in context: UIGraphicsImageRendererContext) {
+        // Literal RGB components preserve the status-image fixture's reference colors.
         // swiftlint:disable no_magic_numbers
         let background = UIColor(
             cgColor: CGColor(srgbRed: 0.11, green: 0.11, blue: 0.13, alpha: 1)
@@ -285,27 +285,27 @@ enum DemoFixtures {
         return .milliseconds(milliseconds)
     }
 
-    /// Gate to wait on before serving `response(for:params:)`, or nil for an
-    /// immediate answer.
+    private static let responseTriggerFilePrefixes = [
+        "workspace.create": "--demo-workspace-create-trigger-file=",
+        "github.authStatus": "--demo-workspace-selection-trigger-file=",
+        "github.branches.list": "--demo-workspace-selection-trigger-file=",
+        "github.branches.listCached": "--demo-workspace-selection-trigger-file="
+    ]
+
+    /// Gate to wait on before serving `response(for:params:)`, or nil for an immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
         if let gate = historyResponseGate(for: method, params: params) { return gate }
         if let gate = agentGroupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
         if let gate = startupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
+        if let prefix = responseTriggerFilePrefixes[method] {
+            return triggerFile(from: ProcessInfo.processInfo.arguments, prefix: prefix).map(ResponseGate.triggerFile)
+        }
         switch method {
-        case "workspace.create":
-            return triggerFile(from: ProcessInfo.processInfo.arguments, prefix: "--demo-workspace-create-trigger-file=").map(ResponseGate.triggerFile)
-        case "github.authStatus", "github.branches.list", "github.branches.listCached":
-            return triggerFile(from: ProcessInfo.processInfo.arguments, prefix: "--demo-workspace-selection-trigger-file=").map(ResponseGate.triggerFile)
-        case "settings.get" where params["path"] as? String == "providers.enabled":
-            return workspaceProviderGate(from: ProcessInfo.processInfo.arguments)
-        case "workspace.list":
-            return DemoConnectionLoss.initialDataGate
-        case "hook.list" where params["workspaceId"] as? String == longConversationWorkspaceId:
-            return longConversationHookListGate
-        case "agent.getMessageBlock" where params["agentId"] as? String == longConversationAgentId:
-            return longConversationBlockHydrationGate
-        default:
-            return assistantListGate(for: method, params: params)
+        case "settings.get" where params["path"] as? String == "providers.enabled": return workspaceProviderGate(from: ProcessInfo.processInfo.arguments)
+        case "workspace.list": return DemoConnectionLoss.initialDataGate
+        case "hook.list" where params["workspaceId"] as? String == longConversationWorkspaceId: return longConversationHookListGate
+        case "agent.getMessageBlock" where params["agentId"] as? String == longConversationAgentId: return longConversationBlockHydrationGate
+        default: return assistantListGate(for: method, params: params)
         }
     }
 
@@ -424,56 +424,56 @@ extension DemoFixtures {
         ]
     }
 
-    // The fixture switch deliberately mirrors the demo protocol surface.
-    // swiftlint:disable:next cyclomatic_complexity
-    private static func agentAndTaskResponse(for method: String, params: [String: Any]) -> Any {
-        switch method {
-        case "agent.create" where params["workspaceId"] as? String == Workspace.chiefWorkspaceId:
-            return createAssistantAgent()
-        case "agent.list":
-            let workspaceId = params["workspaceId"] as? String
-            if workspaceId == Workspace.chiefWorkspaceId { return assistantListResponse() }
-            return DemoAgentListFixtures.response(rows: workspaceId == longConversationWorkspaceId ? longConversationAgents : agents, params: params)
-        case "agent.get":
-            let agentId = params["agentId"] as? String
-            if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) {
-                return ["agent": assistant]
-            }
-            var agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
-            if usesStartupTranscript, agentId == longConversationAgentId {
-                agent["metadata"] = ["lastSeenMessageId": startupSeenMessageId]
-            }
-            return ["agent": agent]
-        case "agent.getConversation":
-            return conversationResponse(params: params)
-        case "chat.subscribe":
-            return ["subscriptionId": chatSubscriptionId(agentId: params["agentId"] as? String)]
-        case "agent.getMessageBlock":
-            let blockId = params["blockId"] as? String
-            guard let block = longConversationFullBlock(id: blockId) else { return [String: Any]() }
+    private static let agentAndTaskResponses: [String: @MainActor ([String: Any]) -> Any] = [
+        "agent.create": { $0["workspaceId"] as? String == Workspace.chiefWorkspaceId ? createAssistantAgent() : workspaceCreationResponse(for: "agent.create", params: $0) },
+        "agent.list": agentListResponse,
+        "agent.get": agentGetResponse,
+        "agent.getConversation": conversationResponse,
+        "chat.subscribe": { ["subscriptionId": chatSubscriptionId(agentId: $0["agentId"] as? String)] },
+        "agent.getMessageBlock": { params in
+            guard let block = longConversationFullBlock(id: params["blockId"] as? String) else { return [String: Any]() }
             return ["block": block]
-        case "agent.sendMessage":
-            // Static transcripts have no replying agent; acknowledge the send
-            // without replacing its optimistic row or ending the Thinking state.
-            var response: [String: Any] = ["success": true, "queued": false]
-            response["messageId"] = params["messageId"] as? String
-            return response
-        case "agent.getQueue":
-            return ["queue": [[String: Any]]()]
-        case "agent.getSubscriptions":
-            let agentId = params["agentId"] as? String
-            if usesStartupTranscript, agentId == longConversationAgentId { return ["subscriptions": []] }
-            return agentId == longConversationAgentId ? longConversationSubscriptions : [String: Any]()
-        case "hook.list":
-            let workspaceId = params["workspaceId"] as? String
-            return ["hooks": workspaceId == longConversationWorkspaceId ? longConversationHooks : []]
-        case "task.list":
-            return ["tasks": tasks]
-        case "specialist.list":
-            return ["specialists": specialists]
-        default:
-            return workspaceCreationResponse(for: method, params: params)
+        },
+        "agent.sendMessage": sendMessageResponse,
+        "agent.getQueue": { _ in ["queue": [[String: Any]]()] },
+        "agent.getSubscriptions": subscriptionsResponse,
+        "hook.list": { ["hooks": $0["workspaceId"] as? String == longConversationWorkspaceId ? longConversationHooks : []] },
+        "task.list": { _ in ["tasks": tasks] },
+        "specialist.list": { _ in ["specialists": specialists] }
+    ]
+
+    private static func agentAndTaskResponse(for method: String, params: [String: Any]) -> Any {
+        agentAndTaskResponses[method]?(params) ?? workspaceCreationResponse(for: method, params: params)
+    }
+
+    private static func agentListResponse(params: [String: Any]) -> Any {
+        let workspaceId = params["workspaceId"] as? String
+        if workspaceId == Workspace.chiefWorkspaceId { return assistantListResponse() }
+        return DemoAgentListFixtures.response(rows: workspaceId == longConversationWorkspaceId ? longConversationAgents : agents, params: params)
+    }
+
+    private static func agentGetResponse(params: [String: Any]) -> Any {
+        let agentId = params["agentId"] as? String
+        if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) { return ["agent": assistant] }
+        var agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
+        if usesStartupTranscript, agentId == longConversationAgentId {
+            agent["metadata"] = ["lastSeenMessageId": startupSeenMessageId]
         }
+        return ["agent": agent]
+    }
+
+    private static func sendMessageResponse(params: [String: Any]) -> Any {
+        // Static transcripts have no replying agent; acknowledge the send
+        // without replacing its optimistic row or ending the Thinking state.
+        var response: [String: Any] = ["success": true, "queued": false]
+        response["messageId"] = params["messageId"] as? String
+        return response
+    }
+
+    private static func subscriptionsResponse(params: [String: Any]) -> Any {
+        let agentId = params["agentId"] as? String
+        if usesStartupTranscript, agentId == longConversationAgentId { return ["subscriptions": []] }
+        return agentId == longConversationAgentId ? longConversationSubscriptions : [String: Any]()
     }
 }
 

@@ -20,7 +20,7 @@ struct AssistantEmptyState: View {
                 .accessibilityAddTraits(.isHeader)
             Text("Plan your work and get help across all your workspaces.")
                 .interFont(Constants.Typography.bodyS)
-                .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
             Button(action: onCreateConversation) {
                 Text("Start a Conversation").interFont(Constants.Typography.bodySEmphasized)
             }

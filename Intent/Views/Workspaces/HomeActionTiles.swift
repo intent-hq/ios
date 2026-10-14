@@ -4,6 +4,7 @@ import SwiftUI
 struct HomeActionTiles: View {
     enum Action: String, CaseIterable {
         case assistant
+        case workspaces
         case workspace
         case connections
         case appearance
@@ -16,6 +17,7 @@ struct HomeActionTiles: View {
     let onSelect: (Action) -> Void
     var allowsWorkspaceCreation = true
     var allowsAssistant = true
+    var showsWorkspaceList = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -28,6 +30,7 @@ struct HomeActionTiles: View {
         static let inset: CGFloat = 24
         static let spacing: CGFloat = 8
         static let maximumTileWidth: CGFloat = 192
+        static let minimumTileWidth: CGFloat = 160
         static let minimumHeight: CGFloat = 240
         static let cornerRadius: CGFloat = 20
         static let iconSize: CGFloat = 24
@@ -42,6 +45,7 @@ struct HomeActionTiles: View {
             HStack(spacing: Layout.spacing) {
                 ForEach(Action.allCases.filter { action in
                     (action != .workspace || allowsWorkspaceCreation) && (action != .assistant || allowsAssistant)
+                        && (action != .workspaces || showsWorkspaceList)
                 }, id: \.self) { action in
                     tile(action)
                 }
@@ -72,7 +76,7 @@ struct HomeActionTiles: View {
             .containerRelativeFrame(.horizontal) { width, _ in
                 let columns: CGFloat = dynamicTypeSize.isAccessibilitySize ? 1 : 2
                 let contentWidth = min(width, Layout.maximumTileWidth * 2 + Layout.spacing)
-                return (contentWidth - Layout.spacing * (columns - 1)) / columns
+                return max(Layout.minimumTileWidth, (contentWidth - Layout.spacing * (columns - 1)) / columns)
             }
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
             .homeActionTileSurface(cornerRadius: Layout.cornerRadius, fill: Constants.WorkspaceList.controlSurface(for: colorScheme))
@@ -143,6 +147,7 @@ struct HomeActionTiles: View {
     private func title(_ action: Action) -> String {
         switch action {
         case .assistant: "Chat With\nAssistant"
+        case .workspaces: "Workspaces"
         case .workspace: "New\nWorkspace"
         case .connections: "Connections:\n\(connectionCount) \(connectionCount == 1 ? "Device" : "Devices")"
         case .appearance: "Appearance:\n\(appearance)"
@@ -153,6 +158,7 @@ struct HomeActionTiles: View {
     private func asset(_ action: Action) -> ImageResource {
         switch action {
         case .assistant: .intentDandelion
+        case .workspaces: .agentGeneral1
         case .workspace: .addIcon
         case .connections: .connectionLaptop
         case .appearance:

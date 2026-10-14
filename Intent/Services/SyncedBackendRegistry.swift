@@ -75,10 +75,11 @@ extension SyncedBackendRecord {
         return accountKey > other.accountKey
     }
 
-    /// Tombstone TTL, mirroring the desktop reconcile's `TOMBSTONE_TTL_MS`
-    /// (~30 days): the desktop purges expired tombstones from the keychain,
-    /// so a straggler item the purge has not reached yet must not still act
-    /// as a delete here.
+    // Tombstone TTL, mirroring the desktop reconcile's `TOMBSTONE_TTL_MS`
+    // (~30 days): the desktop purges expired tombstones from the keychain,
+    // so a straggler item the purge has not reached yet must not still act
+    // as a delete here.
+    // Keep the 30-day duration and its conversion to wire-format milliseconds explicit.
     static let tombstoneTTLMs: Double = 30 * 24 * 60 * 60 * 1000 // swiftlint:disable:this no_magic_numbers
     // Date.timeIntervalSince1970 is expressed in seconds.
     private static let millisecondsPerSecond: Double = 1000
@@ -152,12 +153,13 @@ enum SyncedBackendPayload {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// JSON number (never a JSON bool — JSONSerialization bridges both to
-    /// NSNumber; the wire contract's `typeof x === "number"` must reject
-    /// booleans). Compared as Double: the fe compares `v` numerically, so
-    /// e.g. `v: 1.5` must count as newer than 1, never truncate to 1.
-    /// NSNumber remains required to distinguish CFBoolean from numeric JSON values.
+    // JSON number (never a JSON bool — JSONSerialization bridges both to
+    // NSNumber; the wire contract's `typeof x === "number"` must reject
+    // booleans). Compared as Double: the fe compares `v` numerically, so
+    // e.g. `v: 1.5` must count as newer than 1, never truncate to 1.
+    // NSNumber preserves JSON number identity until the CFBoolean check rejects booleans.
     private static func number(_ value: Any?) -> NSNumber? { // swiftlint:disable:this legacy_objc_type
+        // NSNumber is required for the CFBoolean identity check; a Swift numeric cast also accepts booleans.
         guard let value = value as? NSNumber, // swiftlint:disable:this legacy_objc_type
               CFGetTypeID(value) != CFBooleanGetTypeID()
         else { return nil }
@@ -174,6 +176,7 @@ enum SyncedBackendPayload {
 
     /// JSON bool (never a JSON number).
     private static func bool(_ value: Any?) -> AnyCodableBooleanMatch {
+        // NSNumber preserves CFBoolean identity so numeric JSON values cannot be treated as booleans.
         guard let value = value as? NSNumber, // swiftlint:disable:this legacy_objc_type
               CFGetTypeID(value) == CFBooleanGetTypeID()
         else { return .typeMismatch }

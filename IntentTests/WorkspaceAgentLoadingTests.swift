@@ -28,40 +28,47 @@ struct WorkspaceAgentLoadingTests {
         #expect(model.visibleTree(model.foregroundAgents).count == rootCount)
     }
 
-    @Test func actualViewLoadsOnlyTopLevelThenOnlyExpandedGroupsAndResetsOnWorkspaceSwitch() async throws {
+    @Test func actualViewLoadsVisibleBadgesAndKeepsDeeperGroupsLazyAcrossWorkspaceSwitches() async throws {
         let fake = AgentGroupFixtureConnection()
         let host = Host(connection: fake)
         defer { host.tearDown() }
-        try await waitUntil("actual workspace view loads") { host.view.agentStore.hasLoaded }
-        #expect(fake.paramsForMethod("agent.list").count == 1)
+        try await waitUntil("collapsed visible badges load") {
+            host.view.agentStore.isAgentGroupLoaded(.delegated(parentId: "groups-parent"))
+        }
+        #expect(fake.paramsForMethod("agent.list").count == 2)
         #expect(fake.paramsForMethod("agent.list").first?["scope"] as? String == "topLevel")
-        #expect(host.view.agentStore.agents.map(\.id) == ["groups-parent"])
+        #expect(Set(host.view.agentStore.agents.map(\.id)) == ["groups-parent", "groups-child"])
         #expect(host.view.viewModel.expandedGroups.isEmpty)
+        #expect(!host.view.agentStore.isAgentGroupLoaded(.delegated(parentId: "groups-child")))
 
         await host.view.toggleAgentGroup(.delegated(parentId: "groups-parent"))
-        #expect(fake.paramsForMethod("agent.list").last?["parentAgentId"] as? String == "groups-parent")
-        #expect(Set(host.view.agentStore.agents.map(\.id)) == ["groups-parent", "groups-child"])
-        #expect(fake.paramsForMethod("agent.list").count == 2)
+        try await waitUntil("newly visible child badges load") {
+            host.view.agentStore.isAgentGroupLoaded(.delegated(parentId: "groups-child"))
+        }
+        #expect(fake.paramsForMethod("agent.list").last?["parentAgentId"] as? String == "groups-child")
+        #expect(Set(host.view.agentStore.agents.map(\.id)) == ["groups-parent", "groups-child", "groups-grandchild"])
+        #expect(fake.paramsForMethod("agent.list").count == 3)
         await host.view.toggleAgentGroup(.delegated(parentId: "groups-parent"))
         await host.view.toggleAgentGroup(.delegated(parentId: "groups-parent"))
-        #expect(fake.paramsForMethod("agent.list").count == 2, "Re-expansion must use loaded rows")
+        #expect(fake.paramsForMethod("agent.list").count == 3, "Re-expansion must use loaded rows")
 
         fake.clearRequestLog()
         fake.simulateConnect()
-        try await fake.waitForRequests("agent.list", count: 2)
+        try await fake.waitForRequests("agent.list", count: 3)
         #expect(fake.paramsForMethod("agent.list").first?["scope"] as? String == "topLevel")
-        #expect(fake.paramsForMethod("agent.list").last?["parentAgentId"] as? String == "groups-parent")
-        try await expectNever("unopened background, orphan or retired read") { fake.paramsForMethod("agent.list").count > 2 }
+        #expect(Set(fake.paramsForMethod("agent.list").compactMap { $0["parentAgentId"] as? String }) == ["groups-parent", "groups-child"])
+        try await expectNever("unopened background, orphan or retired read") { fake.paramsForMethod("agent.list").count > 3 }
 
         fake.clearRequestLog()
         host.switchWorkspace(to: "ws-2")
         try await waitUntil("workspace switch resets the real view") {
             fake.paramsForMethod("agent.list").contains { $0["workspaceId"] as? String == "ws-2" }
                 && host.view.viewModel.expandedGroups.isEmpty
+                && host.view.agentStore.isAgentGroupLoaded(.delegated(parentId: "groups-parent"))
         }
-        #expect(fake.paramsForMethod("agent.list").count == 1)
+        #expect(fake.paramsForMethod("agent.list").count == 2)
         #expect(fake.paramsForMethod("agent.list").first?["scope"] as? String == "topLevel")
-        #expect(host.view.agentStore.list.loadedGroups.isEmpty)
+        #expect(host.view.agentStore.list.loadedGroups == [.delegated(parentId: "groups-parent")])
         #expect(host.view.agentStore.list.retiredAgents.isEmpty)
     }
 
@@ -69,7 +76,9 @@ struct WorkspaceAgentLoadingTests {
         let fake = AgentGroupFixtureConnection()
         let host = Host(connection: fake)
         defer { host.tearDown() }
-        try await waitUntil("view loads") { host.view.agentStore.hasLoaded }
+        try await waitUntil("visible badges load") {
+            host.view.agentStore.isAgentGroupLoaded(.delegated(parentId: "groups-parent"))
+        }
         fake.pendingMethods.insert("agent.list")
         let expansion = Task { await host.view.toggleAgentGroup(.background) }
         defer { expansion.cancel() }
@@ -84,7 +93,7 @@ struct WorkspaceAgentLoadingTests {
         await host.view.agentStore.loadAgentGroup(.background, workspaceId: "ws-1")
         #expect(host.view.agentStore.list.errors.isEmpty)
         #expect(host.view.agentStore.agents.contains { $0.id == "groups-background" })
-        #expect(fake.paramsForMethod("agent.list").dropFirst().allSatisfy { $0["scope"] as? String == "background" })
+        #expect(fake.paramsForMethod("agent.list").dropFirst(2).allSatisfy { $0["scope"] as? String == "background" })
     }
 
     @Test func actualViewUsesOrphanAndRetiredRequestsAndLegacyFallback() async throws {
@@ -111,6 +120,7 @@ struct WorkspaceAgentLoadingTests {
         defer { host.tearDown() }
         try await waitUntil("view loads") { host.view.agentStore.hasLoaded }
         fake.rows = DemoAgentListFixtures.groupRows.filter { $0["id"] as? String == "groups-parent" }
+        await host.view.agentStore.fetchAgents(workspaceId: "ws-1")
         await host.view.toggleAgentGroup(.delegated(parentId: "groups-parent"))
         #expect(host.view.viewModel.isExpanded(.delegated(parentId: "groups-parent")))
         #expect(host.view.viewModel.count(for: .delegated(parentId: "groups-parent")) == 0)

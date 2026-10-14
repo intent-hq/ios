@@ -13,9 +13,17 @@ extension WorkspaceDetailView {
         }
     }
 
-    func agentTree(_ roots: [AgentSession]) -> some View {
+    var agentListRows: [WorkspaceAgentListRow] {
+        var rows = agentTreeRows(viewModel.foregroundAgents)
+        rows.append(contentsOf: agentSectionRows(.background, title: "background agents"))
+        rows.append(contentsOf: agentSectionRows(.orphaned, title: "delegated agents"))
+        rows.append(contentsOf: agentSectionRows(.retired, title: "retired agents"))
+        return rows
+    }
+
+    private func agentTreeRows(_ roots: [AgentSession]) -> [WorkspaceAgentListRow] {
         // Snapshot values on-main; defer row bodies until the lazy stack requests them.
-        let rows = viewModel.visibleTree(roots).map { row in
+        viewModel.visibleTree(roots).map { row in
             let group = AgentListGroup.delegated(parentId: row.id)
             let count = viewModel.count(for: group)
             let expanded = viewModel.isExpanded(group)
@@ -31,45 +39,46 @@ extension WorkspaceDetailView {
                     status: agentGroupLoadStatus(group)
                 ) : nil,
                 colorScheme: colorScheme,
+                onLoadGroup: { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) },
                 onToggle: { Task { await toggleAgentGroup(group) } },
                 onRetry: { Task { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) } }
             )
-            return (id: row.id, content: content)
+            return WorkspaceAgentListRow(id: "workspace.agent.\(row.id)", content: .agent(content))
         }
-        return ForEach(rows, id: \.id) { @Sendable row in row.content }
     }
 
-    @ViewBuilder
-    func agentSection(_ group: AgentListGroup, title: String) -> some View {
-        if viewModel.count(for: group) > 0 || viewModel.isExpanded(group) {
-            BackgroundAgentsHeader(
-                agents: viewModel.rows(for: group),
-                totalCount: viewModel.count(for: group),
-                title: title,
-                runningCount: viewModel.runningCount(for: group),
-                isExpanded: viewModel.isExpanded(group),
-                colorScheme: colorScheme
-            ) { Task { await toggleAgentGroup(group) } }
-            .accessibilityIdentifier(group.accessibilityIdentifier)
-            if viewModel.isExpanded(group) {
-                agentGroupStatus(group)
-                if group == .retired {
-                    let rows = viewModel.rows(for: group).map { agent in
-                        (id: agent.id, content: agentButton(agent))
-                    }
-                    ForEach(rows, id: \.id) { @Sendable row in row.content }
-                } else {
-                    agentTree(viewModel.rows(for: group))
-                }
+    private func agentSectionRows(_ group: AgentListGroup, title: String) -> [WorkspaceAgentListRow] {
+        let count = viewModel.count(for: group)
+        let expanded = viewModel.isExpanded(group)
+        guard count > 0 || expanded else { return [] }
+        let header = BackgroundAgentsHeader(
+            agents: viewModel.rows(for: group),
+            totalCount: count,
+            title: title,
+            runningCount: viewModel.runningCount(for: group),
+            isExpanded: expanded,
+            colorScheme: colorScheme
+        ) { Task { await toggleAgentGroup(group) } }
+        var rows = [WorkspaceAgentListRow(id: group.accessibilityIdentifier, content: .header(header))]
+        guard expanded else { return rows }
+
+        let status = agentGroupLoadStatus(group)
+        switch status {
+        case .ready: break
+        default:
+            let content = WorkspaceAgentGroupStatus(status: status, identifier: group.accessibilityIdentifier) {
+                Task { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) }
             }
+            rows.append(WorkspaceAgentListRow(id: group.accessibilityIdentifier + ".status", content: .status(content)))
         }
-    }
-
-    @ViewBuilder
-    private func agentGroupStatus(_ group: AgentListGroup) -> some View {
-        WorkspaceAgentGroupStatus(status: agentGroupLoadStatus(group), identifier: group.accessibilityIdentifier) {
-            Task { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) }
+        if group == .retired {
+            rows.append(contentsOf: viewModel.rows(for: group).map { agent in
+                WorkspaceAgentListRow(id: "workspace.agent.\(agent.id)", content: .retired(agentButton(agent)))
+            })
+        } else {
+            rows.append(contentsOf: agentTreeRows(viewModel.rows(for: group)))
         }
+        return rows
     }
 
     private func agentGroupLoadStatus(_ group: AgentListGroup) -> WorkspaceAgentGroupSnapshot.LoadStatus {

@@ -20,15 +20,18 @@ enum ComposerImageRecovery {
 /// removal, clear after a successful send/queue, or deinitialization.
 @MainActor
 @Observable final class ConversationAttachmentPipeline {
+    // Keep MiB conversions and the ordered JPEG quality ladder together as named encoding policy.
+    // swiftlint:disable no_magic_numbers
     // This named aggregate limit mirrors the daemon-facing image contract.
-    static let maxImageReferenceBytes = 30 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    static let maxImageReferenceBytes = 30 * 1024 * 1024
     // Conservative client budgets leave room for base64 and provider context;
     // they are not a guarantee against any provider's total request limit.
-    private static let maxOutgoingImageBytes = 1024 * 1024 // swiftlint:disable:this no_magic_numbers
-    private static let maxOutgoingImagesBytes = 5 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    private static let maxOutgoingImageBytes = 1024 * 1024
+    private static let maxOutgoingImagesBytes = 5 * 1024 * 1024
     private static let maxOutgoingPixelSize: CGFloat = 2048
     private static let maximumResizePasses = 3
-    private static let compressionQualities: [CGFloat] = [Constants.Conversation.Composer.imageCompressionQuality, 0.6, 0.4] // swiftlint:disable:this no_magic_numbers
+    private static let compressionQualities: [CGFloat] = [Constants.Conversation.Composer.imageCompressionQuality, 0.6, 0.4]
+    // swiftlint:enable no_magic_numbers
     // Date.timeIntervalSince1970 is expressed in seconds.
     private static let millisecondsPerSecond: TimeInterval = 1000
 

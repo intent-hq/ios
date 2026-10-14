@@ -263,9 +263,13 @@ extension ManualTokenEntryViewTests {
         let dicts = try #require(items as? [[String: Any]])
         let first = try #require(dicts.first)
         let identity = try #require(first[kSecImportItemIdentity as String])
-        // CoreFoundation identities cannot be conditionally cast under Swift 6.4.
-        // swiftlint:disable:next force_cast
-        return identity as! SecIdentity
+        // Swift 6.4 cannot conditionally cast CoreFoundation identities, so check
+        // the CF type first to report an invalid fixture as a test failure.
+        try #require(
+            CFGetTypeID(identity as CFTypeRef) == SecIdentityGetTypeID(),
+            "Expected a SecIdentity from the PKCS#12 fixture"
+        )
+        return unsafeDowncast(identity as AnyObject, to: SecIdentity.self)
     }
 
     /// Starts a loopback TLS listener serving the fixture identity and waits

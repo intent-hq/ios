@@ -731,6 +731,7 @@ $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionField.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionHeader.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionSubmitButton.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualTokenEntryView.swift
+$(SRCROOT)/Intent/Views/Onboarding/ManualTokenTextField.swift
 $(SRCROOT)/Intent/Views/Onboarding/PairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerOverlay.swift
 $(SRCROOT)/Intent/Views/Onboarding/QRScannerView.swift
@@ -801,6 +802,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceSearchBar.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceSearchEmptyState.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusIconView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusImageView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceStatusSwipeBadge.swift
@@ -1002,7 +1004,6 @@ $(SRCROOT)/IntentTests/EventCatalogCoverageTests.swift
 $(SRCROOT)/IntentTests/EventWakeAttributionTests.swift
 $(SRCROOT)/IntentTests/ExternalLinkTests.swift
 $(SRCROOT)/IntentTests/FakeConnectionManager.swift
-$(SRCROOT)/IntentTests/FakeConnectionManagerRecords.swift
 $(SRCROOT)/IntentTests/FakeConnectionManagerTests.swift
 $(SRCROOT)/IntentTests/Fixtures
 $(SRCROOT)/IntentTests/Fixtures/backend-keychain
@@ -1014,6 +1015,8 @@ $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoSuggestionsTests.swift
 $(SRCROOT)/IntentTests/HookTimeBarTests.swift
+$(SRCROOT)/IntentTests/IPadCompactNavigationTests.swift
+$(SRCROOT)/IntentTests/IPadCompactShellTests.swift
 $(SRCROOT)/IntentTests/IPadShellNavigationTests.swift
 $(SRCROOT)/IntentTests/ImagePasteboardFixture.swift
 $(SRCROOT)/IntentTests/InfoPlistSyncTests.swift

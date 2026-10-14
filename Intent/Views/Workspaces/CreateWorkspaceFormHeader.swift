@@ -23,7 +23,11 @@ struct CreateWorkspaceNavigationButton: View {
                 .foregroundStyle(isEnabled
                     ? CreateWorkspaceFormStyle.foreground(for: colorScheme)
                     : CreateWorkspaceFormStyle.disabledForeground(for: colorScheme))
-                .background { WorkspaceControlSurface() }
+                .background {
+                    RoundedRectangle(cornerRadius: CreateWorkspaceFormStyle.cornerRadius)
+                        .fill(Constants.Pairing.surface(for: colorScheme))
+                        .modifier(CreateWorkspaceControlShadow())
+                }
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(control == .back ? "Back" : "Close")
@@ -84,7 +88,7 @@ struct CreateWorkspaceSubmitButton: View {
                 .fill(isDisabled && !isCreating
                     ? CreateWorkspaceFormStyle.disabledBackground(for: colorScheme)
                     : CreateWorkspaceFormStyle.primary)
-                .modifier(WorkspaceControlShadow())
+                .modifier(CreateWorkspaceControlShadow())
         }
         .accessibilityHidden(true)
         .animation(reduceMotion ? nil : .spring(duration: Motion.duration, bounce: Motion.bounce), value: isCreating)

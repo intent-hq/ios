@@ -6,14 +6,16 @@ struct WorkspaceBrowsersView: View {
     @Binding var revealedTarget: WorkspaceSwipeTarget?
     let onSelect: (WorkspaceBrowser) -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         let browsers = store.browsers(workspaceId: workspaceId)
         if !browsers.isEmpty || store.errorMessage(workspaceId: workspaceId) != nil {
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionHeadingSpacing) {
                 Text("Browsers")
-                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
-                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    .interFont(Constants.Typography.eyebrow)
+                    .textCase(.uppercase)
+                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
                     .accessibilityAddTraits(.isHeader)
                 LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
                     ForEach(browsers) { browser in
@@ -46,14 +48,13 @@ private struct WorkspaceBrowserRow: View {
     @Binding var revealedTarget: WorkspaceSwipeTarget?
     let onSelect: (WorkspaceBrowser) -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         WorkspaceSwipeContainer(
             target: .browser(browser.id),
             revealedTarget: $revealedTarget,
             actionCount: 1,
-            rowBackground: Theme.card(for: colorScheme),
-            restingCornerRadius: BrowserAppearance.cornerRadius,
             horizontalInset: WorkspaceDetailStyle.pageInset
         ) { progress in
             browserButton(swipeProgress: progress)
@@ -100,25 +101,25 @@ private struct WorkspaceBrowserRow: View {
     }
 
     private func row(swipeProgress: CGFloat) -> some View {
-        HStack(spacing: BrowserAppearance.rowSpacing) {
+        HStack(alignment: .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
             Image(.globe)
                 .resizable()
                 .scaledToFit()
                 .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(.tint)
-                .frame(width: BrowserAppearance.controlSize, height: BrowserAppearance.controlSize)
+                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
+                .frame(width: WorkspaceDetailStyle.avatarSize, height: WorkspaceDetailStyle.avatarSize)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: BrowserAppearance.labelSpacing) {
-                Text(browser.title).interFont(Constants.Typography.bodyXS.withFace(.semibold))
+            VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
+                Text(browser.title).interFont(Constants.Typography.bodyM)
+                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
                 if let command = browser.command {
                     Text(command)
                         .font(.caption.monospaced())
                         .lineLimit(2)
                 }
                 Text(browser.url)
-                    .interFont(Constants.Typography.subtextXXS)
+                    .interFont(Constants.Typography.bodyXS)
                     .lineLimit(1)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 if !store.isConnected {
                     Text("Disconnected").interFont(Constants.Typography.subtextXXS)
                 }
@@ -128,11 +129,12 @@ private struct WorkspaceBrowserRow: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: chevronSize, height: chevronSize)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .frame(height: WorkspaceDetailStyle.avatarSize)
                 .opacity(1 - Double(swipeProgress))
                 .accessibilityHidden(true)
         }
-        .padding(BrowserAppearance.rowPadding)
+        .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
+        .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: .top)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }

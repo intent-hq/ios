@@ -12,6 +12,7 @@ extension Constants.Conversation.Design {
 
         // Exact sRGB values from full-frame modes 3020:36994 / 3016:35726,
         // answer cards 3223:18416 / 3223:19376 and blockers 3198:12684 / 3198:11702.
+        // Literal 8-bit channels and alpha retain direct comparison with those design exports.
         // swiftlint:disable no_magic_numbers
         private static let lightSecondary = Color(.sRGB, red: 82 / 255, green: 82 / 255, blue: 80 / 255)
         private static let darkRaisedSurface = Color(.sRGB, red: 61 / 255, green: 61 / 255, blue: 60 / 255)

@@ -40,12 +40,16 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
     var body: some View {
         ZStack(alignment: panelAlignment) {
             ConnectionSwitcherStyle.background(for: colorScheme).ignoresSafeArea()
-            panel
-                .frame(width: revealWidth)
-                .accessibilityAction(.escape, close)
-                .accessibilityElement(children: isPresented ? .contain : .ignore)
-                .allowsHitTesting(isPresented)
-                .accessibilityHidden(true, isEnabled: !isPresented)
+            // Ancestor visibility modifiers can expose hidden descendants. A closed
+            // panel must not leave connection or agent rows in the accessibility tree.
+            if isRevealed {
+                panel
+                    .frame(width: revealWidth)
+                    .accessibilityAction(.escape, close)
+                    .accessibilityElement(children: isPresented ? .contain : .ignore)
+                    .allowsHitTesting(isPresented)
+                    .accessibilityHidden(true, isEnabled: !isPresented)
+            }
 
             slidingPage
         }

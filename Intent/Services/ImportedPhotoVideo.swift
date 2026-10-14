@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// Owns a disk-backed Photos export. Composer selections and send attempts share
 /// this owner so removing a preview cannot delete a file still being uploaded.
 nonisolated final class ImportedPhotoVideo: Transferable, Sendable, Equatable {
-    // Shared composer/transcript policy; all other files retain the 1 GiB cap.
+    // Keep the shared 200 MiB composer/transcript cap explicit; all other files retain the 1 GiB cap.
     static let maxBytes = 200 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
 
     enum ImportError: LocalizedError, Equatable {

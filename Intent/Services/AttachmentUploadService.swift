@@ -36,23 +36,26 @@ final class AttachmentUploadService {
         case unreadableFile
     }
 
+    // Keep MiB/GiB and minute conversions visible in these named protocol limits.
+    // swiftlint:disable no_magic_numbers
     /// Single-shot `data`-arm cap: base64 inflates ~4/3 and the serialized
     /// JSON-RPC frame is capped at 40 MiB (PROTOCOL §1.3) — matches
     /// cloudlands-fe's `MAX_REMOTE_ATTACHMENT_BYTES`.
-    nonisolated static let maxSingleShotBytes = 25 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    nonisolated static let maxSingleShotBytes = 25 * 1024 * 1024
     /// The daemon's per-attachment byte cap (`file.attachmentUpload.begin`
     /// rejects declared sizes above 1 GiB, PROTOCOL §5.9).
-    nonisolated static let maxAttachmentBytes = 1024 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    nonisolated static let maxAttachmentBytes = 1024 * 1024 * 1024
     /// Raw bytes per upload chunk — the daemon's 16 MiB decoded-slice cap;
     /// the effective size is min(this, `begin`'s `maxChunkBytes`).
-    nonisolated static let uploadChunkBytes = 16 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    nonisolated static let uploadChunkBytes = 16 * 1024 * 1024
     /// Bytes read per block during the streaming SHA-256 pass.
-    nonisolated static let hashBlockBytes = 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    nonisolated static let hashBlockBytes = 1024 * 1024
     /// Per-call timeout for placement, chunk sends, and commit: a 16 MiB
     /// chunk is ~21 MiB of base64 on the wire, and commit reassembles and
     /// SHA-256-verifies up to 1 GiB before replying — mirrors cloudlands-fe's
     /// `UPLOAD_TRANSFER_TIMEOUT_MS`.
-    nonisolated static let transferTimeout: TimeInterval = 5 * 60 // swiftlint:disable:this no_magic_numbers
+    nonisolated static let transferTimeout: TimeInterval = 5 * 60
+    // swiftlint:enable no_magic_numbers
 
     /// Fraction (0–1) of chunks acknowledged by the daemon. Only the chunked
     /// path reports progress.

@@ -45,14 +45,14 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
     var body: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: Constants.WorkspaceSearch.contentSpacing) {
-                    title()
-                    controls.frame(maxWidth: .infinity, alignment: .trailing)
-                }
+                stackedHeader
             } else {
-                HStack(spacing: 0) {
-                    title().frame(maxWidth: .infinity, alignment: .leading)
-                    controls
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 0) {
+                        title().fixedSize().frame(maxWidth: .infinity, alignment: .leading)
+                        controls
+                    }
+                    stackedHeader
                 }
             }
         }
@@ -60,6 +60,13 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
         .padding(.horizontal, IPadSidebarStyle.inset)
         .padding(.top, IPadSidebarStyle.topInset)
         .padding(.bottom, IPadSidebarStyle.sectionSpacing)
+    }
+
+    private var stackedHeader: some View {
+        VStack(alignment: .leading, spacing: Constants.WorkspaceSearch.contentSpacing) {
+            title()
+            controls.frame(maxWidth: .infinity, alignment: .trailing)
+        }
     }
 
     private var controls: some View {

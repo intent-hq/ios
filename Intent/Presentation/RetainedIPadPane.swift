@@ -15,5 +15,8 @@ struct RetainedIPadPane<Content: View>: View {
             .allowsHitTesting(isInteractive)
             .accessibilityHidden(true, isEnabled: !isInteractive)
             .environment(\.isIPadPaneVisible, isInteractive)
+            .transformPreference(WorkspaceActionMenuInputTop.self) { inputTop in
+                if !isInteractive { inputTop = nil }
+            }
     }
 }

@@ -417,7 +417,7 @@ private extension RootView {
         .sheet(isPresented: assistantPresented) {
             AssistantView(session: session)
                 .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(.hidden)
                 .coversConversationComposers()
         }
         .sheet(isPresented: settingsPresented) {

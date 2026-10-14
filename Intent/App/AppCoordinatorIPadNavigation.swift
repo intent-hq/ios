@@ -30,6 +30,17 @@ extension AppCoordinator {
             selectedSection = .workspaces
         }
         iPadNavigation.selectSection(section)
+        ensureIPadWorkspaceSelection()
+    }
+
+    /// Wide windows keep a detail selected; compact windows start with the list.
+    func ensureIPadWorkspaceSelection() {
+        guard usesIPadShell, iPadNavigation.hasMeasuredLayout, !iPadNavigation.usesCompactNavigation,
+              iPadNavigation.section == .workspaces, iPadNavigation.pairing == nil,
+              case .workspaceList = currentScreen else { return }
+        let candidates = WorkspaceListViewModel(workspaceStore: dependencies.workspaceStore).filteredWorkspaces
+        guard let workspace = candidates.first(where: { $0.id != Workspace.chiefWorkspaceId }) else { return }
+        onSelectWorkspace(workspace.id)
     }
 
     /// Only explicit workspace selections move the shell. Background redirects

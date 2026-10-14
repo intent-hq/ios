@@ -1,8 +1,12 @@
 import SwiftUI
 
 extension View {
-    func intentNavigationBackButton(_ isVisible: Bool = true, usesWorkspaceVerticalBar: Bool = false) -> some View {
-        modifier(IntentNavigationBackButtonModifier(isVisible: isVisible, usesWorkspaceVerticalBar: usesWorkspaceVerticalBar))
+    func intentNavigationBackButton(
+        _ isVisible: Bool = true, usesWorkspaceVerticalBar: Bool = false, showsBackground: Bool = true
+    ) -> some View {
+        modifier(IntentNavigationBackButtonModifier(
+            isVisible: isVisible, usesWorkspaceVerticalBar: usesWorkspaceVerticalBar, showsBackground: showsBackground
+        ))
     }
 
     @ViewBuilder
@@ -18,6 +22,7 @@ extension View {
 private struct IntentNavigationBackButtonModifier: ViewModifier {
     let isVisible: Bool
     let usesWorkspaceVerticalBar: Bool
+    let showsBackground: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
 
@@ -40,7 +45,7 @@ private struct IntentNavigationBackButtonModifier: ViewModifier {
                 .toolbar {
                     if isVisible {
                         ToolbarItem(placement: .topBarLeading) {
-                            IntentIconButton(icon: .arrowLeft, label: "Back") { dismiss() }
+                            IntentIconButton(icon: .arrowLeft, label: "Back", showsBackground: showsBackground) { dismiss() }
                         }
                         .intentToolbarSurface()
                     }

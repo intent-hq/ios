@@ -104,7 +104,7 @@ struct WorkspaceScriptRow: View {
     }
 
     private func row(swipeProgress: CGFloat) -> some View {
-        HStack(spacing: WorkspaceDetailStyle.avatarSpacing) {
+        HStack(alignment: .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
             Image(.terminal)
                 .resizable()
                 .scaledToFit()

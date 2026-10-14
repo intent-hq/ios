@@ -47,6 +47,7 @@ actor WebSocketConnection {
     }
 
     // MARK: - Connection setup
+    // TLS verification needs the endpoint, credentials, result locks, and callback queue independently.
     // swiftlint:disable:next function_parameter_count
     nonisolated private static func makeParameters(
         host: String,
@@ -118,7 +119,6 @@ actor WebSocketConnection {
             pathObservation.viabilityChanged(isViable)
         }
         // Preserve lifecycle ordering while retaining typed failure provenance.
-        // swiftlint:disable:next closure_body_length
         connection.stateUpdateHandler = { @Sendable [weak connection] state in
             switch state {
             case .setup, .preparing:
@@ -129,22 +129,8 @@ actor WebSocketConnection {
                 didOpen.withLock { $0 = true }
                 continuation.yield()
                 continuation.finish()
-            case .waiting(let error):
-                pathObservation.viabilityChanged(false)
-                AppLog.connection.error("[WebSocket] \(host): waiting (\(String(describing: error)))")
-                continuation.finish(throwing: WebSocketTransportError.failed(
-                    host: host,
-                    message: String(describing: error),
-                    diagnosticFailure: TransportDiagnosticFailure.classify(error)
-                ))
-            case .failed(let error):
-                pathObservation.viabilityChanged(false)
-                AppLog.connection.error("[WebSocket] \(host): failed (\(String(describing: error)))")
-                continuation.finish(throwing: WebSocketTransportError.failed(
-                    host: host,
-                    message: String(describing: error),
-                    diagnosticFailure: TransportDiagnosticFailure.classify(error)
-                ))
+            case .waiting, .failed:
+                finishWithFailure(state, host: host, pathObservation: pathObservation, continuation: continuation)
             case .cancelled:
                 pathObservation.stop()
                 AppLog.connection.debug("[WebSocket] \(host): cancelled")
@@ -155,6 +141,30 @@ actor WebSocketConnection {
                 break
             }
         }
+    }
+
+    nonisolated private static func finishWithFailure(
+        _ state: NWConnection.State,
+        host: String,
+        pathObservation: SocketPathObservation,
+        continuation: AsyncThrowingStream<Void, Error>.Continuation
+    ) {
+        let error: NWError
+        switch state {
+        case .waiting(let failure):
+            error = failure
+            pathObservation.viabilityChanged(false)
+            AppLog.connection.error("[WebSocket] \(host): waiting (\(String(describing: error)))")
+        case .failed(let failure):
+            error = failure
+            pathObservation.viabilityChanged(false)
+            AppLog.connection.error("[WebSocket] \(host): failed (\(String(describing: error)))")
+        default:
+            return
+        }
+        continuation.finish(throwing: WebSocketTransportError.failed(
+            host: host, message: String(describing: error), diagnosticFailure: TransportDiagnosticFailure.classify(error)
+        ))
     }
 
     nonisolated private static func awaitOpening(
@@ -196,8 +206,6 @@ actor WebSocketConnection {
         }
     }
 
-    // Keep trust classification next to the existing handshake cleanup.
-    // swiftlint:disable:next function_body_length
     nonisolated static func connect(
         host: String,
         port: Int,
@@ -230,38 +238,31 @@ actor WebSocketConnection {
             continuation: lifecycleContinuation
         )
         do {
-            try await awaitOpening(
-                nwConnection,
-                didOpen: didOpen,
-                queue: queue,
-                lifecycleEvents: lifecycleEvents,
-                host: host
-            )
+            try await awaitOpening(nwConnection, didOpen: didOpen, queue: queue, lifecycleEvents: lifecycleEvents, host: host)
             try Task.checkCancellation()
-            return WebSocketConnection(
-                host: host,
-                connection: nwConnection,
-                queue: queue,
-                didOpen: didOpen,
-                pathObservation: pathObservation
-            )
+            return WebSocketConnection(host: host, connection: nwConnection, queue: queue, didOpen: didOpen, pathObservation: pathObservation)
         } catch {
             pathObservation.stop()
             Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
-            if !Task.isCancelled, missingCertificate.withLock({ $0 }),
-               case let .failed(host, message, _) = error as? WebSocketTransportError {
-                throw WebSocketTransportError.failed(
-                    host: host,
-                    message: message,
-                    diagnosticFailure: DiagnosticFailure(origin: .transport, classification: .noCertificate)
-                )
-            }
-            throw WebSocketPingSupport.mappedConnectionError(
-                error,
-                mismatchFingerprint: mismatchFingerprint,
-                host: host
+            throw mapConnectFailure(
+                error, host: host, missingCertificate: missingCertificate, mismatchFingerprint: mismatchFingerprint
             )
         }
+    }
+
+    nonisolated private static func mapConnectFailure(
+        _ error: Error,
+        host: String,
+        missingCertificate: OSAllocatedUnfairLock<Bool>,
+        mismatchFingerprint: OSAllocatedUnfairLock<String?>
+    ) -> Error {
+        if !Task.isCancelled, missingCertificate.withLock({ $0 }),
+           case let .failed(host, message, _) = error as? WebSocketTransportError {
+            return WebSocketTransportError.failed(
+                host: host, message: message, diagnosticFailure: DiagnosticFailure(origin: .transport, classification: .noCertificate)
+            )
+        }
+        return WebSocketPingSupport.mappedConnectionError(error, mismatchFingerprint: mismatchFingerprint, host: host)
     }
 }
 
