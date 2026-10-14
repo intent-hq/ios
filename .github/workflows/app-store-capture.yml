@@ -7,14 +7,18 @@ permissions:
   contents: read
 jobs:
   simulator-preflight:
-    runs-on: macos-15
+    runs-on: [self-hosted, macOS, ARM64, intent-ios]
     timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: ${{ runner.temp }}
     steps:
       - name: Check architecture and Xcode
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p evidence
+          mkdir -p "$RUNNER_TEMP/capture-$GITHUB_RUN_ID/evidence"
+          cd "$RUNNER_TEMP/capture-$GITHUB_RUN_ID"
           uname -a | tee evidence/host.txt
           test "$(uname -m)" = arm64
           xcode=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
@@ -24,9 +28,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cd "$RUNNER_TEMP/capture-$GITHUB_RUN_ID"
           xcrun simctl list runtimes -j > evidence/runtimes-before.json
           if ! python3 -c 'import json; assert any(r.get("isAvailable") and "xrOS" in r["identifier"] for r in json.load(open("evidence/runtimes-before.json"))["runtimes"])'; then
-            xcodebuild -downloadPlatform visionOS
+            echo "No installed visionOS runtime; shared Mac left unchanged" >&2
+            exit 1
           fi
           xcrun simctl list runtimes -j > evidence/runtimes.json
           xcrun simctl list devicetypes -j > evidence/device-types.json
@@ -43,4 +49,4 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: capture-preflight
-          path: evidence/
+          path: ${{ runner.temp }}/capture-${{ github.run_id }}/evidence/
