@@ -459,11 +459,9 @@ private extension WorkspaceDetailView {
     var agentListContent: some View {
         let rows = agentListRows
         let entries = rows.enumerated().map { index, row in
-            (id: row.id, content: row
-                .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-                .padding(.top, index == 0 ? 0 : WorkspaceDetailStyle.rowSpacing))
+            (id: row.id, content: WorkspaceAgentListEntry(row: row, isFirst: index == 0))
         }
-        ForEach(entries, id: \.id) { @Sendable entry in entry.content }
+        ForEach(snapshots: entries, id: \.id) { entry in entry.content }
         if hasWorkspaceResources {
             WorkspaceDetailResources(
                 workspaceId: workspaceId,
