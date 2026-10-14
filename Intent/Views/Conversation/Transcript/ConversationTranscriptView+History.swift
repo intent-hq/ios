@@ -35,11 +35,12 @@ extension ConversationTranscriptView {
     private func requestOlderMessages(proxy: ScrollViewProxy) {
         guard scrollState.olderMessagesTask == nil, viewModel.hasOlderMessages else { return }
         scrollState.olderMessagesTask = Task { @MainActor in
-            let firstID = viewModel.filteredMessages.first?.id
-            await viewModel.loadOlderMessages()
+            await viewModel.loadOlderMessages {
+                preserveHistoryPosition()
+            }
             guard !Task.isCancelled else { return }
-            if firstID != viewModel.filteredMessages.first?.id {
-                preserveHistoryPosition(proxy: proxy)
+            if scrollState.hasPendingViewportRestoration {
+                restoreRetainedViewport(proxy: proxy)
             }
             // A prepend can leave the reader inside the prefetch band without
             // crossing its Boolean geometry edge again. Wait for layout and
@@ -60,17 +61,12 @@ extension ConversationTranscriptView {
         }
     }
 
-    private func preserveHistoryPosition(proxy: ScrollViewProxy) {
-        // The load returns on the main actor before the inserted rows lay out.
-        // Use the latest measured position, not the position at request time:
-        // the reader may have kept scrolling while the network was pending.
-        // SwiftUI owns the offset under an active drag/deceleration. Starting
-        // a manual restoration then would either fight it or leave a retained
-        // target whose scheduled scroll is refused while the gesture is active.
-        guard hasInitiallyScrolled, userIsScrolledAway, !isFollowing, !isUserInteracting else { return }
+    private func preserveHistoryPosition() {
+        // Called synchronously at page acceptance, before observable rows change.
+        // Request-time frames may be stale if the reader continued scrolling;
+        // post-await frames may already describe the newly inserted history.
+        guard lifecycle.isVisible, hasInitiallyScrolled, userIsScrolledAway,
+              !isFollowing, !isUserInteracting else { return }
         scrollState.suspendViewport()
-        // Wait for the new lazy-stack layout before resolving the row ID;
-        // scrolling now would resolve it against the pre-insertion frames.
-        restoreRetainedViewport(proxy: proxy)
     }
 }

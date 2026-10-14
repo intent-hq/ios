@@ -35,8 +35,8 @@ import SwiftUI
     var isLoadingOlderMessages: Bool { store.isLoadingOlderMessages }
     var olderMessagesError: String? { store.olderMessagesError }
 
-    func loadOlderMessages() async {
-        await store.loadOlderMessages()
+    func loadOlderMessages(beforePrepend: (() -> Void)? = nil) async {
+        await store.loadOlderMessages(beforePrepend: beforePrepend)
     }
 
     var agentNotFound: Bool { store.agentNotFound || workspaceMismatch }
