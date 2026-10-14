@@ -156,35 +156,51 @@ extension DemoFixtures {
                 "id": "demo-note-spec",
                 "title": "Spec",
                 "isDefault": true,
+                "tags": ["spec"],
                 "createdAt": iso(minutesAgo: 320),
                 "updatedAt": iso(minutesAgo: 18),
                 "content": """
-                # Usage analytics dashboard
+                ## Goal
 
-                Add a usage analytics dashboard to the console so admins can see \
-                seat activity, API call volume, and export the data for finance.
+                Add a usage analytics dashboard to the console so admins can see seat activity, API call volume, and export the data for finance.
 
-                ## Goals
+                ## Tasks
 
-                - Per-team daily/weekly active seat counts
-                - API request volume chart with 30-day history
-                - CSV export matching the finance team's import format
-
-                ## Plan
-
-                - [x] Add `/api/usage/summary` endpoint with date-range params
-                - [x] Chart component with daily/weekly toggle
-                - [x] Wire dashboard route + navigation entry
-                - [/] CSV export with streamed download
-                - [ ] Feature flag rollout to beta orgs
+                - [x] [Add usage summary endpoint](intent://local/task/demo-note-summary-task)
+                - [x] [Build daily and weekly usage charts](intent://local/task/demo-note-chart-task)
+                - [x] [Connect the dashboard route](intent://local/task/demo-note-route-task)
+                - [/] [CSV export with streamed download](intent://local/task/demo-note-csv-task)
+                - [ ] [Feature flag rollout to beta orgs](intent://local/task/demo-note-rollout-task)
 
                 ## Decisions
 
-                - Reuse the existing `MetricsRollupJob` output table instead of \
-                querying raw events — keeps the dashboard queries under 50ms.
-                - Export is capped at 90 days per request; longer ranges get a \
-                background job + email link in a follow-up.
+                - Reuse the existing `MetricsRollupJob` output table instead of querying raw events — keeps the dashboard queries under 50ms.
+                - Export is capped at 90 days per request; longer ranges get a background job + email link in a follow-up.
                 """
+            ],
+            [
+                "id": "demo-note-summary-task",
+                "title": "Add usage summary endpoint",
+                "createdAt": iso(minutesAgo: 280),
+                "updatedAt": iso(minutesAgo: 90),
+                "metadata": ["task": ["status": "complete"]],
+                "content": "Add `/api/usage/summary` with date-range parameters over the rollup table."
+            ],
+            [
+                "id": "demo-note-chart-task",
+                "title": "Build daily and weekly usage charts",
+                "createdAt": iso(minutesAgo: 270),
+                "updatedAt": iso(minutesAgo: 70),
+                "metadata": ["task": ["status": "complete"]],
+                "content": "Show active seats and API volume with a daily or weekly toggle and 30-day history."
+            ],
+            [
+                "id": "demo-note-route-task",
+                "title": "Connect the dashboard route",
+                "createdAt": iso(minutesAgo: 260),
+                "updatedAt": iso(minutesAgo: 50),
+                "metadata": ["task": ["status": "complete"]],
+                "content": "Add the dashboard route and navigation entry to the admin console."
             ],
             [
                 "id": "demo-note-csv-task",
@@ -207,6 +223,14 @@ extension DemoFixtures {
                 - [x] Content-Disposition + progress header plumbing
                 - [ ] Integration test for the 90-day cap error
                 """
+            ],
+            [
+                "id": "demo-note-rollout-task",
+                "title": "Feature flag rollout to beta orgs",
+                "createdAt": iso(minutesAgo: 230),
+                "updatedAt": iso(minutesAgo: 30),
+                "metadata": ["task": ["status": "not_started"]],
+                "content": "Enable the usage dashboard for beta organizations and check query latency before broad rollout."
             ],
             [
                 "id": "demo-note-research",
