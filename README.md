@@ -150,7 +150,7 @@ then `npm test`. Native coverage lives in `MermaidMarkdownContentTests`,
 ### Clean-checkout prerequisites
 
 - For app builds: macOS with Xcode and its command-line tools. Tests require an available iPhone
-  simulator by default; use `SIM_UDID` to select an iPad. CI's self-hosted Macs
+  simulator by default; use `SIM_UDID` to select an iPad. CI's Depot Macs
   select Xcode 26.3 explicitly; hosted runners select their newest installed Xcode.
 - Network access for the first Swift package resolution and pinned Go tool download.
 - A Go toolchain compatible with the version in `TailcatKit/go.mod`. iOS commands
@@ -404,3 +404,11 @@ monorepo issue tracker.
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
+
+### Depot GitHub Actions runners
+
+Script and Go jobs use Depot Ubuntu 24.04. Build and simulator selectors prefer
+available self-hosted Macs, using `RUNNER_STATUS_TOKEN` to inspect the pools,
+and fall back to Depot’s latest macOS Apple Silicon. The selected image needs Xcode 26;
+runtime and Metal provisioning run as needed. Go and Swift package caches and
+Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.

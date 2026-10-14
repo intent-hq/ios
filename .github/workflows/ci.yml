@@ -70,10 +70,10 @@ concurrency:
 jobs:
   select-macos-runner:
     name: Select macOS runner
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     outputs:
-      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"macos-15"' }}
-      runs-on: ${{ steps.select.outputs.runs-on || '"macos-15"' }}
+      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"depot-macos-latest"' }}
+      runs-on: ${{ steps.select.outputs.runs-on || '"depot-macos-latest"' }}
     steps:
       - uses: actions/checkout@v7
       - name: Check local Mac status
@@ -93,7 +93,7 @@ jobs:
     # TailcatKit is pure Go and cross-compiles for Linux, so its tests run
     # here on a cheap, fast Linux runner instead of serialising 2-12 minutes
     # of Tailscale compilation onto the 3-core macOS VM.
-    runs-on: ubuntu-24.04
+    runs-on: depot-ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -153,7 +153,7 @@ jobs:
     # SwiftLint" step in build-and-test never sees a skipped job. The official
     # Linux release requires a compatible SourceKit runtime. Use the same
     # supported native setup as developers; no Xcode or simulator work needed.
-    runs-on: ubuntu-24.04
+    runs-on: depot-ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -192,7 +192,7 @@ jobs:
     # step below waits for those jobs and fails this one if either did not
     # succeed. All three jobs still run in parallel.
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -265,26 +265,20 @@ jobs:
 
       - name: Select Xcode
         run: |
-          if [ '${{ runner.environment }}' = self-hosted ]; then
-            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
-            # local results agree with hosted ones; the Mac's default Xcode
-            # stays untouched (ios#588, ios#592).
-            xcode=/Applications/Xcode_26.3.app
-            if [ ! -d "$xcode" ]; then
-              echo "::error::$xcode is not installed on this runner" >&2
-              exit 1
-            fi
-          else
-            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          xcode=$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort -V | tail -n 1)
+          if [ -z "$xcode" ]; then
+            echo '::error::Xcode 26 is required on the Depot macOS image' >&2
+            exit 1
           fi
           echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
           DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
 
-      - name: Check Metal Toolchain on local Mac
-        if: runner.environment == 'self-hosted'
+      - name: Ensure Metal toolchain
         run: |
-          xcodebuild -downloadComponent MetalToolchain
-          xcrun metal -v
+          if ! xcrun metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun metal -v
+          fi
 
       - name: Create owned simulator
         env:
@@ -674,7 +668,7 @@ jobs:
     # wait for it; the macOS jobs queue on the dedicated Mac.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad')) }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
     # Allow setup, the full iPhone suite, iPad regressions, and cleanup (ios#429).
     timeout-minutes: 90
     env:
@@ -694,26 +688,20 @@ jobs:
 
       - name: Select Xcode
         run: |
-          if [ '${{ runner.environment }}' = self-hosted ]; then
-            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
-            # local results agree with hosted ones; the Mac's default Xcode
-            # stays untouched (ios#588, ios#592).
-            xcode=/Applications/Xcode_26.3.app
-            if [ ! -d "$xcode" ]; then
-              echo "::error::$xcode is not installed on this runner" >&2
-              exit 1
-            fi
-          else
-            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          xcode=$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort -V | tail -n 1)
+          if [ -z "$xcode" ]; then
+            echo '::error::Xcode 26 is required on the Depot macOS image' >&2
+            exit 1
           fi
           echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
           DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
 
-      - name: Check Metal Toolchain on local Mac
-        if: runner.environment == 'self-hosted'
+      - name: Ensure Metal toolchain
         run: |
-          xcodebuild -downloadComponent MetalToolchain
-          xcrun metal -v
+          if ! xcrun metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun metal -v
+          fi
 
       - name: Create owned iPhone simulator
         run: python3 scripts/ci_simulator.py prepare-ci
@@ -857,7 +845,7 @@ jobs:
     # dispatch to save runner time.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"depot-macos-latest"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -872,29 +860,22 @@ jobs:
 
       - name: Select Xcode
         run: |
-          if [ '${{ runner.environment }}' = self-hosted ]; then
-            # Match the hosted macos-15 toolchain (Xcode 26.3, iOS 26.2) so
-            # local results agree with hosted ones; the Mac's default Xcode
-            # stays untouched (ios#588, ios#592).
-            xcode=/Applications/Xcode_26.3.app
-            if [ ! -d "$xcode" ]; then
-              echo "::error::$xcode is not installed on this runner" >&2
-              exit 1
-            fi
-          else
-            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          xcode=$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort -V | tail -n 1)
+          if [ -z "$xcode" ]; then
+            echo '::error::Xcode 26 is required on the Depot macOS image' >&2
+            exit 1
           fi
           echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
           DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
 
-      - name: Check Metal Toolchain on local Mac
-        if: runner.environment == 'self-hosted'
+      - name: Ensure Metal toolchain
         run: |
-          xcodebuild -downloadComponent MetalToolchain
-          xcrun metal -v
+          if ! xcrun metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun metal -v
+          fi
 
       - name: Ensure hosted visionOS simulator runtime
-        if: runner.environment == 'github-hosted'
         run: |
           if ! xcrun simctl list runtimes | grep -q '^visionOS '; then
             sudo xcodebuild -downloadPlatform visionOS
@@ -925,7 +906,7 @@ jobs:
         run: scripts/xcodebuild.sh build-visionos
 
   pr-title:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     if: github.event_name == 'pull_request'
     steps:
       - uses: amannn/action-semantic-pull-request@v6
