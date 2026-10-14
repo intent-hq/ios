@@ -267,6 +267,7 @@ The Xcode wrapper supports these subcommands:
 | `test-ios` | Build and run the complete unit and UI test gate. |
 | `test-ios-unit` | Build and run tests without `IntentUITests`. |
 | `pick-simulator` | Print the automatically selected iPhone simulator UDID. |
+| `capture-screenshots` | Run the isolated App Store capture test using `CAPTURE_PLATFORM` (`ios` or `visionos`), caller-owned `SIM_UDID`, and `RESULT_BUNDLE`; invoked by `.github/app-store-capture/run.sh`. |
 
 For a focused run, set `ONLY_TESTING` to one or more whitespace-separated
 `Target[/Suite[/test]]` selectors. Selectors are test identifiers, not Swift file

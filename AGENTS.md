@@ -75,6 +75,12 @@ For split runs, set the configuration on both commands and rebuild: a Debug buil
 is not Release evidence. This suite is absent in Debug; some other suites require
 Debug-only plaintext fixtures and must not be treated as Release coverage.
 
+For the build-283 listing capture branch, `.github/app-store-capture/run.sh`
+stages only the UI test target and calls `scripts/xcodebuild.sh capture-screenshots`.
+It verifies `Intent/` against the pinned candidate, creates disposable simulators,
+and saves original frames plus provenance. This is screenshot evidence, not a
+replacement for the normal test gate; visually review every frame before upload.
+
 ### CI selection and evidence
 
 `gh workflow run ci.yml --repo intent-hq/ios --ref <branch> -f only_testing='IntentTests/DemoFixturesTests'`
