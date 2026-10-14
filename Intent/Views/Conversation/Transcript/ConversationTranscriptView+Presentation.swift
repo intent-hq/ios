@@ -3,7 +3,7 @@ import SwiftUI
 // These builders remain on the transcript so extraction does not add a new
 // observation boundary or change the lazy stack's row and anchor identities.
 extension ConversationTranscriptView {
-    private static let eagerTailMessageLimit = 12
+    static let eagerTailMessageLimit = 12
 
     @ViewBuilder
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {

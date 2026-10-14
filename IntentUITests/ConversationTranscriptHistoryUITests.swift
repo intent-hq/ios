@@ -66,6 +66,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
 
     @MainActor
     func testPendingHistoryHasNoLoadingRowAndChainsPagesFromTop() throws {
+        continueAfterFailure = true
         let app = launchHistory()
         let opened = openLongConversation(in: app)
         waitUntilSettled(on: opened.lastMessage, named: "last message", in: opened, context: "silent loading entry", allowPreservedEntry: true)
@@ -96,7 +97,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         afterImage.name = "history-after-chained-prepend"
         afterImage.lifetime = .keepAlways
         add(afterImage)
-        XCTAssertEqual(after, before, accuracy: Fixture.rePinTolerance, "Chained prepends moved the reading offset")
+        XCTAssertEqual(after, before, accuracy: Fixture.rePinTolerance, "Chained prepends moved the reading offset; \(String(describing: probe.value))")
     }
 
     @MainActor
