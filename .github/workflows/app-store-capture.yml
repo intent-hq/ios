@@ -27,6 +27,8 @@ jobs:
           go-version-file: TailcatKit/go.mod
           cache-dependency-path: TailcatKit/go.sum
       - name: Capture exact candidate UI
+        env:
+          CAPTURE_SLOTS: APP_APPLE_VISION_PRO
         run: .github/app-store-capture/run.sh
       - name: Preserve screenshots and diagnostics
         if: always()

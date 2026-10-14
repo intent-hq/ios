@@ -35,7 +35,13 @@ nonisolated final class CaptureTests: XCTestCase {
         XCTAssertTrue(back.waitForExistence(timeout: 10))
         back.tap()
         XCTAssertTrue(agent.waitForExistence(timeout: 15))
+        #if os(visionOS)
+        let notesTab = app.segmentedControls.firstMatch.buttons.element(boundBy: 1)
+        XCTAssertTrue(notesTab.waitForExistence(timeout: 10), app.debugDescription)
+        notesTab.tap()
+        #else
         app.buttons["Context"].firstMatch.tap()
+        #endif
         let spec = app.staticTexts["Spec"].firstMatch
         XCTAssertTrue(spec.waitForExistence(timeout: 15))
         spec.tap()

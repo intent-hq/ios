@@ -25,6 +25,7 @@ for spec in \
  'APP_IPHONE_65|ios|com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro-Max' \
  'APP_IPAD_PRO_3GEN_129|ios|com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB'; do
   IFS='|' read -r slot platform device_type <<< "$spec"
+  if [ -n "${CAPTURE_SLOTS:-}" ] && [ "$CAPTURE_SLOTS" != "$slot" ]; then continue; fi
   output="$CAPTURE_ROOT/$slot"
   mkdir -p "$output"
   xcrun simctl list runtimes -j > "$output/runtimes.json"
