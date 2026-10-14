@@ -41,6 +41,9 @@ CAPTURES = {
         ),
     },
     "ConversationTranscriptHistoryUITests": {
+        "testFailedHistoryLoadCanBeRetriedWithoutLeavingConversation": (
+            "history-retry-older-message-visible",
+        ),
         "testPendingHistoryHasNoLoadingRowAndChainsPagesFromTop": (
             "history-before-chained-prepend", "history-after-chained-prepend",
         ),

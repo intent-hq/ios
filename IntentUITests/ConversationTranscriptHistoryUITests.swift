@@ -115,8 +115,13 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         retry.tap()
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { followReport(in: opened).contains("historyCount=30 historyLoading=false") })
         let older = message(in: app, containing: "History message 11.")
-        scrollUp(in: opened) { isVisible(older, in: opened.transcript) }
+        try scrollToHistoryMessage(older, number: 11, in: opened, app: app)
+        XCTAssertTrue(isVisible(older, in: opened.transcript))
         XCTAssertFalse(retry.exists)
+        let image = XCTAttachment(screenshot: app.screenshot())
+        image.name = "history-retry-older-message-visible"
+        image.lifetime = .keepAlways
+        add(image)
     }
 
     @MainActor
@@ -169,6 +174,36 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
             start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
         XCTFail("History did not prefetch: \(followReport(in: opened))")
+    }
+
+    @MainActor
+    private func scrollToHistoryMessage(_ target: XCUIElement, number: Int, in opened: OpenConversation, app: XCUIApplication) throws {
+        let probe = app.descendants(matching: .any).matching(identifier: "transcript.gestureState").firstMatch
+        for _ in 0..<Self.maximumSwipes {
+            if isVisible(target, in: opened.transcript) { return }
+            let towardOlder: Bool
+            if let targetFrame = frame(of: target) {
+                towardOlder = targetFrame.midY < opened.transcript.frame.midY
+            } else {
+                let visibleNumbers = rows(intersecting: opened.transcript).compactMap { row -> Int? in
+                    guard row.label.hasPrefix("History message ") else { return nil }
+                    return Int(row.label.dropFirst("History message ".count).prefix { $0.isNumber })
+                }
+                let firstVisible = try XCTUnwrap(visibleNumbers.min(), "No history row available to choose scroll direction")
+                towardOlder = number < firstVisible
+            }
+            // Full swipes can pass the target between checks. Short, slow drags
+            // stop without a fling and reverse when the target is below us.
+            let startY = towardOlder ? 0.4 : 0.6
+            let endY = towardOlder ? 0.6 : 0.4
+            let start = opened.transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))
+            let end = opened.transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY))
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+            _ = try XCTUnwrap(waitUntilSteady(timeout: Fixture.settleTimeout, tolerance: Fixture.rePinTolerance) {
+                return geometryValue("offset", in: probe.value as? String ?? "").map { CGFloat($0) } ?? .nan
+            }, "History navigation did not settle")
+        }
+        XCTAssertTrue(isVisible(target, in: opened.transcript), "Older history never appeared: \(followReport(in: opened))")
     }
 
     @MainActor
