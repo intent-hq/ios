@@ -27,6 +27,11 @@ enum RenderBlock: Identifiable {
         case .group(let group): return group.id
         }
     }
+
+    var isToolActivity: Bool {
+        if case .contentBlock(let block) = self { return block.isToolActivity }
+        return false
+    }
 }
 
 /// One `<group:Name>` disclosure of an assistant message. A thin shell over
@@ -244,8 +249,8 @@ struct ResponseGroupBody: View, Equatable {
 
     @ViewBuilder
     private var groupChildrenView: some View {
-        VStack(alignment: .leading, spacing: Layout.childSpacing) {
-            ForEach(group.children) { block in
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(group.children.enumerated()), id: \.element.id) { index, block in
                 let toolResult = toolResults[block.id]
                 ContentBlockView(
                     block: block,
@@ -257,7 +262,16 @@ struct ResponseGroupBody: View, Equatable {
                     onLayoutChange: onLayoutChange,
                     onHydrateBlock: onHydrateBlock
                 )
+                .padding(.top, childSpacing(at: index))
             }
         }
+    }
+
+    private func childSpacing(at index: Int) -> CGFloat {
+        guard index > 0 else { return 0 }
+        if workspaceDesign, group.children[index - 1].isToolActivity, group.children[index].isToolActivity {
+            return 0
+        }
+        return Layout.childSpacing
     }
 }
