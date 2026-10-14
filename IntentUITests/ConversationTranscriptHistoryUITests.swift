@@ -200,7 +200,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
             let end = opened.transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY))
             start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
             _ = try XCTUnwrap(waitUntilSteady(timeout: Fixture.settleTimeout, tolerance: Fixture.rePinTolerance) {
-                return geometryValue("offset", in: probe.value as? String ?? "").map { CGFloat($0) } ?? .nan
+                geometryValue("offset", in: probe.value as? String ?? "").map { CGFloat($0) } ?? .nan
             }, "History navigation did not settle")
         }
         XCTAssertTrue(isVisible(target, in: opened.transcript), "Older history never appeared: \(followReport(in: opened))")
