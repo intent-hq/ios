@@ -34,7 +34,7 @@ jobs:
           xcrun simctl list runtimes -j > evidence/runtimes.json
           xcrun simctl list devicetypes -j > evidence/device-types.json
           runtime=$(python3 -c 'import json; print(sorted(r["identifier"] for r in json.load(open("evidence/runtimes.json"))["runtimes"] if r.get("isAvailable") and "xrOS" in r["identifier"])[-1])')
-          udid=$(xcrun simctl create IntentCapturePreflight com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro "$runtime")
+          udid=$(xcrun simctl create IntentCapturePreflight com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K "$runtime")
           trap 'xcrun simctl shutdown "$udid" || true; xcrun simctl delete "$udid" || true' EXIT
           xcrun simctl boot "$udid"
           open -a Simulator --args -CurrentDeviceUDID "$udid"
