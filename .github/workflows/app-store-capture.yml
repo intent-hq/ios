@@ -9,9 +9,6 @@ jobs:
   simulator-preflight:
     runs-on: [self-hosted, macOS, ARM64, intent-ios]
     timeout-minutes: 25
-    defaults:
-      run:
-        working-directory: ${{ runner.temp }}
     steps:
       - name: Check architecture and Xcode
         shell: bash
