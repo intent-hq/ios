@@ -77,6 +77,8 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         XCTAssertFalse(app.buttons["transcript.historyRetry"].exists)
         XCTAssertFalse(app.staticTexts["transcript.historyBeginning"].exists)
 
+        let probe = app.descendants(matching: .any).matching(identifier: "transcript.gestureState").firstMatch
+        let beforeReport = String(describing: probe.value)
         let before = try XCTUnwrap(frame(of: oldestLoaded)?.minY)
         let beforeImage = XCTAttachment(screenshot: app.screenshot())
         beforeImage.name = "history-before-chained-prepend"
@@ -86,7 +88,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
             followReport(in: opened).contains("historyCount=30 historyLoading=false olderAvailable=false")
         }, "A short older page must prefetch the next page without another gesture")
-        XCTAssertTrue(isVisible(oldestLoaded, in: opened.transcript), "Chained prepends must retain the visible message")
+        XCTAssertTrue(isVisible(oldestLoaded, in: opened.transcript), "Chained prepends must retain the visible message; before=\(beforeReport) after=\(String(describing: probe.value)) \(followReport(in: opened))")
         let after = try XCTUnwrap(waitUntilSteady(timeout: Fixture.settleTimeout, tolerance: Fixture.rePinTolerance) {
             frame(of: oldestLoaded)?.minY ?? .nan
         })
