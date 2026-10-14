@@ -1,0 +1,46 @@
+name: App Store capture preflight
+on:
+  push:
+    branches: [chore/capture-116-screenshots]
+    paths: [.github/workflows/app-store-capture.yml]
+permissions:
+  contents: read
+jobs:
+  simulator-preflight:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - name: Check architecture and Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          uname -a | tee evidence/host.txt
+          test "$(uname -m)" = arm64
+          xcode=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version | tee evidence/xcode.txt
+      - name: Verify visionOS runtime and screenshot capability
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list runtimes -j > evidence/runtimes-before.json
+          if ! python3 -c 'import json; assert any(r.get("isAvailable") and "xrOS" in r["identifier"] for r in json.load(open("evidence/runtimes-before.json"))["runtimes"])'; then
+            xcodebuild -downloadPlatform visionOS
+          fi
+          xcrun simctl list runtimes -j > evidence/runtimes.json
+          xcrun simctl list devicetypes -j > evidence/device-types.json
+          runtime=$(python3 -c 'import json; print(sorted(r["identifier"] for r in json.load(open("evidence/runtimes.json"))["runtimes"] if r.get("isAvailable") and "xrOS" in r["identifier"])[-1])')
+          udid=$(xcrun simctl create IntentCapturePreflight com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro "$runtime")
+          trap 'xcrun simctl shutdown "$udid" || true; xcrun simctl delete "$udid" || true' EXIT
+          xcrun simctl boot "$udid"
+          open -a Simulator --args -CurrentDeviceUDID "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl io "$udid" screenshot evidence/visionos-preflight.png
+          sips -g pixelWidth -g pixelHeight evidence/visionos-preflight.png | tee evidence/dimensions.txt
+      - name: Preserve capability evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: capture-preflight
+          path: evidence/
