@@ -10,6 +10,7 @@ printf '%s\n' 3f70e5e51f3e4b84157e571875661b9d171cf272 > "$CAPTURE_ROOT/candidat
 python3 .github/app-store-capture/prepare.py
 udid=''
 capture_pid=''
+failed=0
 cleanup() {
   if [ -n "$capture_pid" ]; then kill "$capture_pid" 2>/dev/null || true; fi
   if [ -n "$udid" ]; then
@@ -54,7 +55,15 @@ PY
   capture_pid=$!
   export SIM_UDID="$udid" CAPTURE_PLATFORM="$platform" TEST_RUNNER_CAPTURE_OUTPUT="$output"
   export DERIVED_DATA_DIR="$CAPTURE_ROOT/derived-$platform" RESULT_BUNDLE="$output/capture.xcresult"
-  scripts/xcodebuild.sh capture-screenshots > "$output/build-test.log" 2>&1 || { tail -80 "$output/build-test.log"; exit 1; }
+  if ! scripts/xcodebuild.sh capture-screenshots > "$output/build-test.log" 2>&1; then
+    xcrun simctl io "$udid" screenshot "$output/failure.png" || true
+    tail -80 "$output/build-test.log"
+    failed=1
+    cleanup
+    udid=''
+    capture_pid=''
+    continue
+  fi
   touch "$output/stop"
   wait "$capture_pid"
   capture_pid=''
@@ -64,4 +73,5 @@ PY
   udid=''
 done
 git diff --exit-code 3f70e5e51f3e4b84157e571875661b9d171cf272 -- Intent/
+[ "$failed" = 0 ] || exit 1
 python3 .github/app-store-capture/verify.py "$CAPTURE_ROOT"

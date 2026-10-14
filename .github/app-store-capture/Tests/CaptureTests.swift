@@ -15,8 +15,7 @@ nonisolated final class CaptureTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
-        let permission = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
-        if permission.waitForExistence(timeout: 3) { permission.tap() }
+        dismissNotificationPrompt()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: 30))
         try capture("01-workspace-list")
@@ -59,12 +58,27 @@ nonisolated final class CaptureTests: XCTestCase {
     }
 
     @MainActor
+    private func dismissNotificationPrompt() {
+        #if os(visionOS)
+        let system = XCUIApplication(bundleIdentifier: "com.apple.SurfBoard")
+        #else
+        let system = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        #endif
+        let allow = system.buttons["Allow"].firstMatch
+        if allow.waitForExistence(timeout: 3) {
+            allow.tap()
+            XCTAssertTrue(allow.waitForNonExistence(timeout: 5))
+        }
+    }
+
+    @MainActor
     private func capture(_ name: String) throws {
         let directory = try XCTUnwrap(ProcessInfo.processInfo.environment["CAPTURE_OUTPUT"])
         let root = URL(fileURLWithPath: directory)
         // The host takes simctl screenshots to include the actual visionOS scene.
         // Acknowledgement holds navigation until the frame has been saved.
         Thread.sleep(forTimeInterval: 2)
+        dismissNotificationPrompt()
         try Data(name.utf8).write(to: root.appendingPathComponent("request"), options: .atomic)
         let acknowledgement = root.appendingPathComponent(name + ".done").path
         let deadline = Date().addingTimeInterval(30)
