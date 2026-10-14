@@ -140,30 +140,7 @@ extension ConnectionManager {
             // a cert mismatch never collides with a real "127.0.0.1" host
             // entry).
             if let transportError = error as? WebSocketTransportError {
-                switch transportError {
-                case .certificateMismatch(_, let fingerprint):
-                    throw WebSocketTransportError.certificateMismatch(host: tunnelCandidateLabel, fingerprint: fingerprint)
-                case .invalidURL:
-                    throw WebSocketTransportError.invalidURL(host: tunnelCandidateLabel)
-                case .missingCertificatePin:
-                    throw WebSocketTransportError.missingCertificatePin(host: tunnelCandidateLabel)
-                case .timedOut:
-                    throw WebSocketTransportError.timedOut(host: tunnelCandidateLabel)
-                case let .failed(_, message, failure):
-                    throw WebSocketTransportError.failed(
-                        host: tunnelCandidateLabel,
-                        message: message,
-                        diagnosticFailure: failure
-                    )
-                case let .disconnected(_, code, reason):
-                    throw WebSocketTransportError.disconnected(
-                        host: tunnelCandidateLabel,
-                        code: code,
-                        reason: reason
-                    )
-                case .certificateMismatches:
-                    throw transportError
-                }
+                throw transportError.relabeled(host: tunnelCandidateLabel)
             }
             throw error
         }
@@ -189,8 +166,6 @@ extension ConnectionManager {
         let currentSocket = socket
         messagePumpTask?.cancel()
         guard let currentSocket else { return }
-        // Keep the existing socket pump intact; diagnostics do not alter dispatch.
-        // swiftlint:disable:next closure_body_length
         messagePumpTask = Task.detached { [weak self] in
             do {
                 while !Task.isCancelled {
@@ -198,19 +173,15 @@ extension ConnectionManager {
                     guard let self else { return }
                     switch message {
                     case .string(let text):
-                        AppLog.connection.debug("[ConnectionManager] Received text bytes: \(text.utf8.count)")
-                        let parseStart = CFAbsoluteTimeGetCurrent()
-                        let frame = Self.parseInboundFrame(text)
-                        let parseEnd = CFAbsoluteTimeGetCurrent()
-                        guard let frame else {
+                        guard let parsed = Self.parseSocketText(text) else {
                             await recordMalformedFrame(from: currentSocket)
                             continue
                         }
                         let accepted = await acceptInboundFrame(
-                            frame,
+                            parsed.frame,
                             byteCount: text.utf8.count,
-                            parseElapsed: parseEnd - parseStart,
-                            parseEnd: parseEnd,
+                            parseElapsed: parsed.parseElapsed,
+                            parseEnd: parsed.parseEnd,
                             from: currentSocket
                         )
                         if !accepted { return }
@@ -225,6 +196,21 @@ extension ConnectionManager {
                 await handleSocketFailure(error, from: currentSocket)
             }
         }
+    }
+
+    nonisolated private struct ParsedSocketText: Sendable {
+        let frame: InboundFrame
+        let parseElapsed: TimeInterval
+        let parseEnd: CFAbsoluteTime
+    }
+
+    nonisolated private static func parseSocketText(_ text: String) -> ParsedSocketText? {
+        AppLog.connection.debug("[ConnectionManager] Received text bytes: \(text.utf8.count)")
+        let parseStart = CFAbsoluteTimeGetCurrent()
+        let frame = parseInboundFrame(text)
+        let parseEnd = CFAbsoluteTimeGetCurrent()
+        guard let frame else { return nil }
+        return ParsedSocketText(frame: frame, parseElapsed: parseEnd - parseStart, parseEnd: parseEnd)
     }
 
     func acceptInboundFrame(

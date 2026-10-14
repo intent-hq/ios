@@ -12,9 +12,9 @@ struct AssistantLaunchButton: View {
         static let iconRotation = 90.0
         static let hiddenIconScale = 0.6
         static let horizontalInset: CGFloat = 24
-        static let shadowRadius: CGFloat = 16
-        static let shadowOffset: CGFloat = 4
-        static let shadowOpacity = 0.15
+        static let shadowRadius: CGFloat = 20
+        static let shadowOffset: CGFloat = 10
+        static let shadowOpacity = 0.08
     }
 
     static let scrollClearance: CGFloat = 104

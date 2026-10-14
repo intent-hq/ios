@@ -12,16 +12,19 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
     let subscriptionId: String
     let kind: Kind
     let seq: Int
+    // Nil means no snapshot payload; an empty snapshot authoritatively clears the collection.
     let snapshot: [[String: Any]]? // swiftlint:disable:this discouraged_optional_collection
     let delta: DeltaPayload?
-    /// Snapshot-level metadata for object-shaped snapshots (chat channel):
-    /// agentId, truncated, totalMessages, nextToken, plus activity flags like
-    /// isResponding, isWaitingOnTool, turnInFlight, lastStreamActivityAt.
-    /// Nil for array-shaped snapshots (collection channels).
+    // Snapshot-level metadata for object-shaped snapshots (chat channel):
+    // agentId, truncated, totalMessages, nextToken, plus activity flags like
+    // isResponding, isWaitingOnTool, turnInFlight, lastStreamActivityAt.
+    // Nil for array-shaped snapshots (collection channels).
+    // Nil identifies a collection snapshot; even empty metadata identifies a conversation snapshot.
     let snapshotMeta: [String: Any]? // swiftlint:disable:this discouraged_optional_collection
-    /// Chat-channel snapshot `messages` pre-decoded by `parse` (undecodable
-    /// rows dropped, matching `ConversationMessage.parseMessage`). Nil for
-    /// collection channels and for pushes built without `parse`.
+    // Chat-channel snapshot `messages` pre-decoded by `parse` (undecodable
+    // rows dropped, matching `ConversationMessage.parseMessage`). Nil for
+    // collection channels and for pushes built without `parse`.
+    // Nil requests fallback decoding; an empty array is an already-decoded empty result.
     let snapshotMessages: [ConversationMessage]? // swiftlint:disable:this discouraged_optional_collection
 
     enum Kind {
@@ -132,16 +135,18 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         let added: [[String: Any]]
         let updated: [[String: Any]]
         let removedIds: [String]
-        /// `added` then `updated` pre-decoded as chat block entities by
-        /// `parse` (entities that are not block-shaped or do not decode are
-        /// dropped). Nil when no entity is block-shaped (collection channels)
-        /// and for payloads built without `parse`.
+        // `added` then `updated` pre-decoded as chat block entities by
+        // `parse` (entities that are not block-shaped or do not decode are
+        // dropped). Nil when no entity is block-shaped (collection channels)
+        // and for payloads built without `parse`.
+        // Nil requests fallback decoding; an empty array means decoding produced no valid blocks.
         let chatBlocks: [ChatBlockEntity]? // swiftlint:disable:this discouraged_optional_collection
 
         init(
             added: [[String: Any]],
             updated: [[String: Any]],
             removedIds: [String],
+            // Nil preserves fallback decoding for callers that have not pre-decoded the delta.
             chatBlocks: [ChatBlockEntity]? = nil // swiftlint:disable:this discouraged_optional_collection
         ) {
             self.added = added
@@ -150,14 +155,13 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
             self.chatBlocks = chatBlocks
         }
 
-        /// Decodes `added` + `updated` into chat block entities; nil when none
-        /// of them is block-shaped.
-        /// Nil preserves the distinction between a collection delta and a chat
-        /// delta whose block-shaped rows all failed decoding.
-        static func decodeChatBlocks(
-            added: [[String: Any]],
-            updated: [[String: Any]]
-        ) -> [ChatBlockEntity]? { // swiftlint:disable:this discouraged_optional_collection
+        // Decodes `added` + `updated` into chat block entities; nil when none
+        // of them is block-shaped.
+        // Nil preserves the distinction between a collection delta and a chat
+        // delta whose block-shaped rows all failed decoding.
+        // Nil means no block-shaped entities; an empty array means their decoding failed.
+        // swiftlint:disable:next discouraged_optional_collection
+        static func decodeChatBlocks(added: [[String: Any]], updated: [[String: Any]]) -> [ChatBlockEntity]? {
             let entities = added + updated
             guard entities.contains(where: { $0["block"] is [String: Any] }) else { return nil }
             return ChatBlockEntity.decodeAll(entities)
@@ -168,9 +172,12 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         subscriptionId: String,
         kind: Kind,
         seq: Int,
+        // Nil represents a delta push without a snapshot, not an empty snapshot.
         snapshot: [[String: Any]]?, // swiftlint:disable:this discouraged_optional_collection
         delta: DeltaPayload?,
+        // Nil preserves collection-shaped payloads; empty metadata still marks a conversation snapshot.
         snapshotMeta: [String: Any]? = nil, // swiftlint:disable:this discouraged_optional_collection
+        // Nil leaves decoding to the consumer; an empty array records a completed decode.
         snapshotMessages: [ConversationMessage]? = nil // swiftlint:disable:this discouraged_optional_collection
     ) {
         self.subscriptionId = subscriptionId

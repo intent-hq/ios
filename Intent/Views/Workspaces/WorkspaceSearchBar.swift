@@ -116,6 +116,7 @@ struct WorkspaceSearchInput: View {
     var isFocused: FocusState<Bool>.Binding
     var placeholder: LocalizedStringKey = "Search workspaces"
     var identifierPrefix = "workspaces.search"
+    var surfaceColor: Color?
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
     var body: some View {
@@ -134,7 +135,7 @@ struct WorkspaceSearchInput: View {
                     .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                     .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                     .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
-                    .background { WorkspaceSearchSurface() }
+                    .background { WorkspaceSearchSurface(color: surfaceColor) }
                     .contentShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
                     .accessibilityHidden(true)
             }
@@ -182,16 +183,17 @@ struct WorkspaceSearchInput: View {
         .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
         .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
         .frame(minHeight: Constants.WorkspaceSearch.expandedHeight)
-        .background { WorkspaceSearchSurface() }
+        .background { WorkspaceSearchSurface(color: surfaceColor) }
     }
 }
 
 private struct WorkspaceSearchSurface: View {
     @Environment(\.colorScheme) private var colorScheme
+    var color: Color?
 
     var body: some View {
         RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-            .fill(Constants.WorkspaceList.controlSurface(for: colorScheme))
+            .fill(color ?? Constants.WorkspaceList.controlSurface(for: colorScheme))
     }
 }
 

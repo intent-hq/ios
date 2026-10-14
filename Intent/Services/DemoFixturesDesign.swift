@@ -73,12 +73,12 @@ final class DemoDesignFixtures {
     private var historyIsTruncated: Bool { scenario == .history }
     private var totalMessageCount: Int { messages.count + (historyIsTruncated ? Self.archivedMessageCount : 0) }
 
-    // This switch is the deliberately small design-demo protocol surface.
-    // swiftlint:disable:next cyclomatic_complexity
     func response(for method: String, params: [String: Any]) -> Any? {
         let ownsAgent = params["agentId"] as? String == Self.agentId
         let ownsWorkspace = params["workspaceId"] as? String == Self.workspaceId
         if ownsAgent, let response = queueResponse(for: method, params: params) { return response }
+        if ownsAgent, let response = agentResponse(for: method, params: params) { return response }
+        if ownsWorkspace, let response = monitorResponse(for: method, params: params) { return response }
         switch method {
         case "workspace.list":
             return ["workspaces": [workspace] + (scenario == .mermaidHistory ? DemoFixtures.workspaces : [])]
@@ -87,41 +87,59 @@ final class DemoDesignFixtures {
             return contextNotes.first { $0["id"] as? String == params["noteId"] as? String }.map { ["note": $0] }
         case "agent.list" where ownsWorkspace:
             return agentListResponse(params: params)
-        case "agent.get" where ownsAgent: return ["agent": agent]
-        case "agent.getConversation" where ownsAgent:
+        default:
+            return nil
+        }
+    }
+
+    private func agentResponse(for method: String, params: [String: Any]) -> Any? {
+        switch method {
+        case "agent.get": return ["agent": agent]
+        case "agent.getConversation":
             return ["messages": messages, "truncated": historyIsTruncated, "totalMessages": totalMessageCount]
-        case "chat.subscribe" where ownsAgent:
+        case "chat.subscribe":
             sequence = 0
             return ["subscriptionId": DemoFixtures.chatSubscriptionId(agentId: Self.agentId)]
-        case "agent.sendMessage" where ownsAgent:
-            guard let messageId = params["messageId"] as? String,
-                  let content = params["content"] as? String else { return nil }
-            var row = Self.message(id: messageId, role: "user", blocks: [DemoFixtures.textBlock(content)])
-            if let metadata = params["messageMetadata"] as? [String: Any] {
-                row["metadata"] = metadata
-                if metadata["type"] as? String == "question_answers",
-                   metadata["answeredQuestionsMessageId"] as? String == pendingQuestionId {
-                    questionsResolved = true
-                }
-            }
-            if !sentMessages.contains(where: { $0["id"] as? String == messageId }) { sentMessages.append(row) }
-            isStreaming = true
-            return ["success": true, "queued": false, "messageId": messageId]
-        case "agent.stop" where ownsAgent:
+        case "agent.sendMessage":
+            return sendMessageResponse(params: params)
+        case "agent.stop":
             isStreaming = false
             return ["success": true]
-        case "agent.dismissQuestions" where ownsAgent:
+        case "agent.dismissQuestions":
             guard params["messageId"] as? String == Self.questionMessageId, hasQuestions else { return nil }
             questionsResolved = true
             questionsDismissed = true
             return ["success": true, "dismissedQuestionsMessageId": Self.questionMessageId]
-        case "prMonitor.list" where ownsWorkspace:
-            let matchesAgent = params["agentId"] == nil || ownsAgent
+        default:
+            return nil
+        }
+    }
+
+    private func sendMessageResponse(params: [String: Any]) -> Any? {
+        guard let messageId = params["messageId"] as? String,
+              let content = params["content"] as? String else { return nil }
+        var row = Self.message(id: messageId, role: "user", blocks: [DemoFixtures.textBlock(content)])
+        if let metadata = params["messageMetadata"] as? [String: Any] {
+            row["metadata"] = metadata
+            if metadata["type"] as? String == "question_answers",
+               metadata["answeredQuestionsMessageId"] as? String == pendingQuestionId {
+                questionsResolved = true
+            }
+        }
+        if !sentMessages.contains(where: { $0["id"] as? String == messageId }) { sentMessages.append(row) }
+        isStreaming = true
+        return ["success": true, "queued": false, "messageId": messageId]
+    }
+
+    private func monitorResponse(for method: String, params: [String: Any]) -> Any? {
+        switch method {
+        case "prMonitor.list":
+            let matchesAgent = params["agentId"] == nil || params["agentId"] as? String == Self.agentId
             return ["monitors": matchesAgent && scenario == .conversation && !monitorCancelled ? [monitor] : []]
-        case "prMonitor.cancel" where ownsWorkspace && params["monitorId"] as? String == Self.monitorId:
+        case "prMonitor.cancel" where params["monitorId"] as? String == Self.monitorId:
             monitorCancelled = true
             return ["success": true]
-        case "prMonitor.flush" where ownsWorkspace && params["monitorId"] as? String == Self.monitorId:
+        case "prMonitor.flush" where params["monitorId"] as? String == Self.monitorId:
             return ["success": true]
         default:
             return nil

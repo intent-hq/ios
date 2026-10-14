@@ -122,6 +122,8 @@ nonisolated final class ConnectionSwitcherUITests: XCTestCase {
     @MainActor
     private func assertClosed(_ app: XCUIApplication) {
         XCTAssertTrue(app.buttons["connection-switcher.close"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertFalse(connection("Studio Mac", in: app).exists)
+        XCTAssertFalse(connection("Travel Mac", in: app).exists)
         XCTAssertTrue(app.buttons["workspaces.search.open"].waitForExistence(timeout: Self.timeout))
     }
 

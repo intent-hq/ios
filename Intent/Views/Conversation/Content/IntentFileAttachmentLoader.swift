@@ -103,32 +103,9 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
                 return await pdfAttachment(link: link)
             }
             if WorkspaceVideo.isVideo(path: link.path) {
-                let resolvedWorkspaceId = link.workspaceId ?? workspaceId
-                if let resolvedWorkspaceId,
-                   let video = try? await fileVideo(resolvedWorkspaceId, link.path) {
-                    return AnyAttachment(IntentFileVideoAttachment(video: video, name: text.isEmpty ?
-                        URL(fileURLWithPath: link.path).lastPathComponent : text) as any Textual.Attachment)
-                }
-                return videoFailure(path: link.path, retrySource: resolvedWorkspaceId.map { workspaceId in
-                    .file(workspaceId: workspaceId, path: link.path)
-                })
+                return await videoAttachment(link: link, text: text)
             }
-            guard link.isImage, let resolvedWorkspaceId = link.workspaceId ?? workspaceId else {
-                return AnyAttachment(
-                    IntentFileFailureAttachment(altText: text) as any Textual.Attachment
-                )
-            }
-            do {
-                let image = try await fileImage(resolvedWorkspaceId, link.path)
-                return AnyAttachment(
-                    IntentFileImageAttachment(image: image, altText: text)
-                        as any Textual.Attachment
-                )
-            } catch {
-                return AnyAttachment(
-                    IntentFileFailureAttachment(altText: text) as any Textual.Attachment
-                )
-            }
+            return await imageAttachment(link: link, text: text)
         case .remote:
             if let attachment = await remoteImageAttachment(for: url, text: text) {
                 return attachment
@@ -137,6 +114,37 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         case .fallback:
             return try await fallback()
         }
+    }
+
+    private func imageAttachment(link: IntentFileLink, text: String) async -> AnyAttachment {
+        guard link.isImage, let resolvedWorkspaceId = link.workspaceId ?? workspaceId else {
+            return AnyAttachment(
+                IntentFileFailureAttachment(altText: text) as any Textual.Attachment
+            )
+        }
+        do {
+            let image = try await fileImage(resolvedWorkspaceId, link.path)
+            return AnyAttachment(
+                IntentFileImageAttachment(image: image, altText: text)
+                    as any Textual.Attachment
+            )
+        } catch {
+            return AnyAttachment(
+                IntentFileFailureAttachment(altText: text) as any Textual.Attachment
+            )
+        }
+    }
+
+    private func videoAttachment(link: IntentFileLink, text: String) async -> AnyAttachment {
+        let resolvedWorkspaceId = link.workspaceId ?? workspaceId
+        if let resolvedWorkspaceId,
+           let video = try? await fileVideo(resolvedWorkspaceId, link.path) {
+            return AnyAttachment(IntentFileVideoAttachment(video: video, name: text.isEmpty ?
+                URL(fileURLWithPath: link.path).lastPathComponent : text) as any Textual.Attachment)
+        }
+        return videoFailure(path: link.path, retrySource: resolvedWorkspaceId.map { workspaceId in
+            .file(workspaceId: workspaceId, path: link.path)
+        })
     }
 
     private func pdfAttachment(link: IntentFileLink) async -> AnyAttachment {

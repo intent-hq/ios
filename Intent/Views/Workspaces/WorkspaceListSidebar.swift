@@ -55,7 +55,7 @@ struct WorkspaceListSidebar: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 } else if viewModel.filteredWorkspaces.isEmpty {
                     if viewModel.hasSearchQuery {
-                        ContentUnavailableView.search
+                        WorkspaceSearchEmptyState()
                     } else {
                         emptyState
                     }
@@ -169,7 +169,7 @@ struct WorkspaceListSidebar: View {
                 searchFocused = false
                 if let id = newId {
                     coordinator.onSelectWorkspace(id)
-                } else {
+                } else if !isEmbedded {
                     coordinator.selectedWorkspaceId = nil
                 }
             }

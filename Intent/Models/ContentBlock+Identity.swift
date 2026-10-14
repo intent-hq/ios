@@ -3,7 +3,7 @@ import Foundation
 // How a block gets its `id`: the wire `id`, a `FallbackIdentity` when the
 // wire omits one (per-item and batched decodes), or a fresh UUID for
 // programmatic creation.
-nonisolated extension ContentBlock {
+nonisolated extension ContentBlock: DecodableWithConfiguration {
     /// Identity for a block served without a wire `id` (ios#257). A block
     /// decoded as part of a message takes the daemon's own synthetic
     /// `{messageId}:{index}` (PROTOCOL §7.1), so an id-less row keys exactly
@@ -17,11 +17,9 @@ nonisolated extension ContentBlock {
         case fixed(String)
     }
 
-    /// `JSONDecoder.userInfo` key carrying a `FallbackIdentity` for standalone
-    /// block decodes; absent means `.fingerprint(messageId: nil)`.
-    static let fallbackIdentityUserInfoKey = CodingUserInfoKey(
-        rawValue: "ContentBlock.fallbackIdentity"
-    )! // swiftlint:disable:this force_unwrapping
+    init(from decoder: Decoder, configuration: FallbackIdentity) throws {
+        try self.init(from: decoder, fallbackIdentity: configuration)
+    }
 
     /// The id an id-less block takes under `identity`; `fingerprintParts` are
     /// the block's identifying fields, used only for `.fingerprint`.
@@ -42,9 +40,7 @@ nonisolated extension ContentBlock {
     ) -> Self? {
         guard JSONSerialization.isValidJSONObject(dictionary),
               let data = try? JSONSerialization.data(withJSONObject: dictionary) else { return nil }
-        let decoder = JSONDecoder()
-        decoder.userInfo[fallbackIdentityUserInfoKey] = fallbackIdentity
-        return try? decoder.decode(Self.self, from: data)
+        return try? JSONDecoder().decode(Self.self, from: data, configuration: fallbackIdentity)
     }
 
     /// `decode` for a whole batch (ios#258): one serialization and one
@@ -64,26 +60,19 @@ nonisolated extension ContentBlock {
               let data = try? JSONSerialization.data(withJSONObject: dictionaries) else {
             return zip(dictionaries, fallbackIdentities).map { decode($0, fallbackIdentity: $1) }
         }
-        let decoder = JSONDecoder()
-        decoder.userInfo[batchFallbackIdentitiesUserInfoKey] = fallbackIdentities
-        guard let batch = try? decoder.decode(Batch.self, from: data),
+        guard let batch = try? JSONDecoder().decode(Batch.self, from: data, configuration: fallbackIdentities),
               batch.blocks.count == dictionaries.count else {
             return zip(dictionaries, fallbackIdentities).map { decode($0, fallbackIdentity: $1) }
         }
         return batch.blocks
     }
 
-    private static let batchFallbackIdentitiesUserInfoKey = CodingUserInfoKey(
-        rawValue: "ContentBlock.batchFallbackIdentities"
-    )! // swiftlint:disable:this force_unwrapping
-
     /// Lenient array decoder for `decodeBatch`: each element decodes with its
     /// own positional `FallbackIdentity`; a failing element yields nil.
-    private struct Batch: Decodable {
+    private struct Batch: DecodableWithConfiguration {
         let blocks: [ContentBlock?]
 
-        init(from decoder: Decoder) throws {
-            let identities = decoder.userInfo[ContentBlock.batchFallbackIdentitiesUserInfoKey] as? [FallbackIdentity] ?? []
+        init(from decoder: Decoder, configuration identities: [FallbackIdentity]) throws {
             var container = try decoder.unkeyedContainer()
             var blocks: [ContentBlock?] = []
             blocks.reserveCapacity(container.count ?? identities.count)

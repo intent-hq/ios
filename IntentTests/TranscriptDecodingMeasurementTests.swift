@@ -195,7 +195,7 @@ struct TranscriptRowHeightIntegrationTests {
         )
         defer { host.tearDown() }
 
-        try await waitUntil("initial cache and row convergence") {
+        try await waitUntil("initial cache and row convergence", timeout: .seconds(3)) {
             Self.cacheAndOuterConverged(cache: cache, message: message, recorder: recorder)
         }
         let initialHeight = try #require(recorder.naturalHeights.last)
@@ -203,7 +203,7 @@ struct TranscriptRowHeightIntegrationTests {
 
         source.text = Self.longText
         host.layout()
-        try await waitUntil("late multiline growth convergence") {
+        try await waitUntil("late multiline growth convergence", timeout: .seconds(3)) {
             guard let natural = recorder.naturalHeights.last, natural > initialHeight else { return false }
             return Self.cacheAndOuterConverged(cache: cache, message: message, recorder: recorder)
         }
@@ -211,7 +211,7 @@ struct TranscriptRowHeightIntegrationTests {
 
         source.text = Self.shortText
         host.layout()
-        try await waitUntil("late multiline shrink convergence") {
+        try await waitUntil("late multiline shrink convergence", timeout: .seconds(3)) {
             guard let natural = recorder.naturalHeights.last, natural < grownHeight else { return false }
             return Self.cacheAndOuterConverged(cache: cache, message: message, recorder: recorder)
         }
@@ -225,7 +225,7 @@ struct TranscriptRowHeightIntegrationTests {
         let recorder = TranscriptHeightRecorder()
         cache.updateLayoutWidth(Self.rowWidth)
         cache.record(height: Self.retainedHeight, for: message, hydratingBlockIds: [])
-        try await waitUntil("retained height cache seed") {
+        try await waitUntil("retained height cache seed", timeout: .seconds(3)) {
             Self.equal(cache.height(for: message, hydratingBlockIds: []), Self.retainedHeight)
         }
         let coordinator = try Self.makeCoordinator()
@@ -241,12 +241,12 @@ struct TranscriptRowHeightIntegrationTests {
         )
         defer { host.tearDown() }
 
-        try await waitUntil("natural MessageView height while retained") {
+        try await waitUntil("natural MessageView height while retained", timeout: .seconds(3)) {
             guard let natural = recorder.naturalHeights.last else { return false }
             return natural > Self.retainedHeight
                 && recorder.outerHeights.contains { Self.equal($0, Self.retainedHeight) }
         }
-        try await waitUntil("MessageView cache and outer convergence") {
+        try await waitUntil("MessageView cache and outer convergence", timeout: .seconds(3)) {
             Self.cacheAndOuterConverged(cache: cache, message: message, recorder: recorder)
         }
         #expect(Self.equal(recorder.widths.last, Self.rowWidth))
@@ -274,7 +274,7 @@ struct TranscriptRowHeightIntegrationTests {
         )
         defer { host.tearDown() }
 
-        try await waitUntil("streaming row convergence") {
+        try await waitUntil("streaming row convergence", timeout: .seconds(3)) {
             Self.cacheAndOuterConverged(cache: cache, message: message, recorder: recorder)
         }
         let naturalHeight = try #require(recorder.naturalHeights.last)
@@ -283,7 +283,7 @@ struct TranscriptRowHeightIntegrationTests {
 
         source.isStreaming = false
         host.layout()
-        try await waitUntil("natural height replay on streaming completion") {
+        try await waitUntil("natural height replay on streaming completion", timeout: .seconds(3)) {
             recorder.naturalHeights.count > samplesBeforeCompletion
         }
         #expect(Self.equal(recorder.naturalHeights.last, naturalHeight))
@@ -325,21 +325,6 @@ struct TranscriptRowHeightIntegrationTests {
             connection: FakeConnectionManager(),
             persistence: PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
         )
-    }
-
-    private func waitUntil(
-        _ what: String,
-        timeout: TimeInterval = 3,
-        _ condition: @MainActor () -> Bool
-    ) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition() {
-            if Date() >= deadline {
-                Issue.record("timed out waiting for \(what)")
-                return
-            }
-            try await Task.sleep(for: .milliseconds(20))
-        }
     }
 }
 

@@ -25,7 +25,7 @@ struct ConnectionSceneBackdrop: ViewModifier {
     @State private var opacity: Double = 0
     private let blurRadius: CGFloat = 10
     private let transitionDuration: Double = 0.2
-    // Figma Fade uses sRGB #080808.
+    // Keep Figma Fade's exact #080808 channel as an 8-bit fraction for comparison with the design.
     // swiftlint:disable:next no_magic_numbers
     private let shade = Color(.sRGB, white: 8 / 255, opacity: 1)
 
@@ -70,7 +70,7 @@ extension Constants {
         static let minimumTouchTarget: CGFloat = 44
         static let placeholderOpacity: Double = 0.3
         static let pressedOpacity: Double = 0.7
-        // Figma Surface/Grey600 in dark 2989:19990 and light 3051:54152.
+        // Literal 8-bit channels preserve direct comparison with Figma Grey600 in dark/light modes.
         // swiftlint:disable no_magic_numbers
         private static let darkDisabledBackground = Color(.sRGB, red: 82 / 255, green: 82 / 255, blue: 80 / 255)
         private static let lightDisabledBackground = Color(.sRGB, red: 186 / 255, green: 186 / 255, blue: 183 / 255)
@@ -110,7 +110,7 @@ extension Constants.ManualTokenEntry {
     static let pasteVerticalPadding: CGFloat = 10
     static let pasteHitExpansion: CGFloat = 10
 
-    // Field labels use Grey400 in light mode, distinct from the Grey500 subtitle.
+    // Keep exact Grey400 channels visible for light labels, distinct from the Grey500 subtitle.
     // swiftlint:disable:next no_magic_numbers
     private static let lightLabelForeground = Color(.sRGB, red: 82 / 255, green: 82 / 255, blue: 80 / 255)
 

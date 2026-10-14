@@ -413,7 +413,7 @@ private extension RootView {
         .sheet(isPresented: assistantPresented) {
             AssistantView(session: session)
                 .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(.hidden)
         }
         .sheet(isPresented: settingsPresented) {
             SettingsView(presentedAsSheet: true, contentColorScheme: colorScheme)

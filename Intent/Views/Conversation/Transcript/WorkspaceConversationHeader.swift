@@ -6,11 +6,12 @@ extension View {
     func workspacePhoneNavigation<Actions: View>(
         title: String,
         createdAt: String?,
+        showsBackButton: Bool = true,
         onBack: @escaping () -> Void,
         @ViewBuilder actions: @escaping () -> Actions
     ) -> some View {
         #if os(iOS)
-        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, onBack: onBack, actions: actions))
+        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, showsBackButton: showsBackButton, onBack: onBack, actions: actions))
         #else
         self
         #endif
@@ -21,6 +22,7 @@ extension View {
 private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
     let title: String
     let createdAt: String?
+    let showsBackButton: Bool
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -38,7 +40,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
                         backIdentifier: "workspaceDetail.back",
                         showsWorkspacePlaceholder: true,
                         workspaceCreatedAt: createdAt,
-                        onBack: onBack,
+                        onBack: showsBackButton ? onBack : nil,
                         actions: actions
                     )
                 }
@@ -97,23 +99,15 @@ struct AssistantConversationHeader<Actions: View>: View {
         WorkspaceNavigationHeader(
             title: title,
             subtitle: title == "Assistant" ? nil : "Assistant",
+            backLabel: "New Conversation",
+            backIdentifier: "assistant.newConversation",
+            leadingIcon: .displayEdit,
+            isLeadingActionEnabled: canCreateConversation,
             showsBackground: showsBackground,
-            usesConversationLayout: true
-        ) {
-            HStack(spacing: 0) {
-                if presentation != .iPad {
-                    IntentIconButton(
-                        icon: .displayEdit,
-                        label: "New Conversation",
-                        showsBackground: false,
-                        action: onNewConversation
-                    )
-                    .disabled(!canCreateConversation)
-                    .accessibilityIdentifier("assistant.newConversation")
-                }
-                actions()
-            }
-        }
+            usesConversationLayout: true,
+            onBack: presentation == .iPad ? nil : onNewConversation,
+            actions: actions
+        )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("assistant.header")
     }
@@ -125,6 +119,8 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     let subtitle: LocalizedStringKey?
     var backLabel: LocalizedStringKey = "Back"
     var backIdentifier = "conversation.back"
+    var leadingIcon: ImageResource = .arrowLeft
+    var isLeadingActionEnabled = true
     var showsBackground = true
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
@@ -168,14 +164,18 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         HStack(spacing: 0) {
             if let onBack {
                 Button(action: onBack) {
-                    Image(.arrowLeft)
+                    Image(leadingIcon)
                         .resizable()
                         .scaledToFit()
                         .frame(width: Design.iconSize, height: Design.iconSize)
+                        .foregroundStyle(isLeadingActionEnabled
+                            ? Design.Palette.foreground(for: colorScheme)
+                            : CreateWorkspaceFormStyle.disabledForeground(for: colorScheme))
                         .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(IntentContentButtonStyle())
+                .disabled(!isLeadingActionEnabled)
                 .accessibilityLabel(backLabel)
                 .accessibilityIdentifier(backIdentifier)
             } else if usesIPadDesign {

@@ -51,6 +51,47 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
     }
 
     @MainActor
+    func testTokenVisibilityKeepsDraftFocusAndSheetPosition() throws {
+        let app = try launchManual()
+        let title = app.staticTexts["manual.title"]
+        let restingTitleY = title.frame.minY
+        app.buttons["Show API token"].tap()
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        XCTAssertEqual(title.frame.minY, restingTitleY, accuracy: 2)
+        app.buttons["Hide API token"].tap()
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+
+        let token = app.secureTextFields["manual.token"]
+        token.tap()
+        token.typeText("SYNTHETIC-TOKEN")
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        let editingTitleY = title.frame.minY
+        let keyboardY = keyboard.frame.minY
+        app.buttons["Show API token"].tap()
+        let visible = app.textFields["manual.token"]
+        XCTAssertEqual(visible.value as? String, "SYNTHETIC-TOKEN")
+        XCTAssertTrue(keyboard.exists)
+        XCTAssertEqual(title.frame.minY, editingTitleY, accuracy: 2)
+        XCTAssertEqual(keyboard.frame.minY, keyboardY, accuracy: 2)
+        visible.typeText("-KEPT")
+        app.buttons["Hide API token"].tap()
+        XCTAssertTrue(token.exists)
+        XCTAssertTrue(keyboard.exists)
+        XCTAssertEqual(title.frame.minY, editingTitleY, accuracy: 2)
+        app.buttons["Show API token"].tap()
+        XCTAssertEqual(visible.value as? String, "SYNTHETIC-TOKEN-KEPT")
+        capture(app, named: "token-visibility-keeps-focus")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout))
+        let dismissedTitleY = title.frame.minY
+        app.buttons["Hide API token"].tap()
+        XCTAssertFalse(keyboard.exists)
+        XCTAssertEqual(title.frame.minY, dismissedTitleY, accuracy: 2)
+        capture(app, named: "token-visibility-keeps-keyboard-dismissed")
+    }
+
+    @MainActor
     func testEmptyAndFilledReferencePlacement() throws {
         let app = try launchManual()
         guard app.frame.size == CGSize(width: 402, height: 874) else {

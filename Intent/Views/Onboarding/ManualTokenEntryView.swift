@@ -92,7 +92,7 @@ struct ManualTokenEntryView: View {
     @State private var connectTask: Task<Void, Never>?
     @FocusState private var focusedField: Field?
 
-    private enum Field { case host, port, token }
+    private enum Field { case host, port }
 
     var body: some View {
         Group {
@@ -203,21 +203,10 @@ struct ManualTokenEntryView: View {
     }
 
     private var tokenEditor: some View {
-        Group {
-            if isTokenVisible {
-                TextField("Paste token", text: $token, prompt: placeholder("Paste token"))
-            } else {
-                SecureField("Paste token", text: $token, prompt: placeholder("Paste token"))
-            }
-        }
-            .interFont(Constants.Typography.bodySEmphasized)
-            .accessibilityLabel("API Token")
-            .accessibilityIdentifier("manual.token")
-            .focused($focusedField, equals: .token)
-            .submitLabel(.done)
-            .onSubmit { focusedField = nil }
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
+        ManualTokenTextField(
+            text: $token,
+            isSecure: !isTokenVisible
+        )
     }
 
     private var pasteTokenButton: some View {
@@ -245,7 +234,6 @@ struct ManualTokenEntryView: View {
     private var tokenVisibilityButton: some View {
         Button {
             isTokenVisible.toggle()
-            focusedField = .token
         } label: {
             Image(isTokenVisible ? .eyeClosed : .eye)
                 .resizable()
