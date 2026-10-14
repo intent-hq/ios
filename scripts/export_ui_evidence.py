@@ -40,6 +40,11 @@ CAPTURES = {
             "mermaid-inline-after-horizontal-pan", "mermaid-inline-after-vertical-pan",
         ),
     },
+    "ConversationTranscriptHistoryUITests": {
+        "testPendingHistoryHasNoLoadingRowAndChainsPagesFromTop": (
+            "history-before-chained-prepend", "history-after-chained-prepend",
+        ),
+    },
     "ConversationTranscriptScrollUITests": {
         "testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath": ("Transcript recovered release",),
         "testBlankEndSeveralScreensDeepIsRecovered": ("Transcript recovered deep-release",),
