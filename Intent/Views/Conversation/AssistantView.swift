@@ -190,7 +190,11 @@ struct AssistantHistoryMenu: View {
                 row.content
             }
         } label: {
-            Label("Assistant conversations", systemImage: "bubble.left.and.bubble.right")
+            Label {
+                Text("Assistant conversations").interFont(Constants.Typography.bodyS)
+            } icon: {
+                Image(.messageList)
+            }
         }
         .accessibilityIdentifier("assistant.conversations")
     }

@@ -175,9 +175,18 @@ extension AppCoordinator {
         }
         selectedWorkspaceId = nil
         currentScreen = .workspaceList
+        ensureIPadWorkspaceSelection()
+        if usesIPadShell, iPadNavigation.section == .workspaces,
+           case .workspaceList = currentScreen {
+            iPadNavigation.revealSidebar()
+        }
     }
 
     func onBackToWorkspaceList() {
+        if usesIPadShell {
+            onSelectIPadSection(.workspaces)
+            return
+        }
         selectedWorkspaceId = nil
         currentScreen = .workspaceList
         guard restoresLastScreen, let connectionID = windowConnectionID else { return }

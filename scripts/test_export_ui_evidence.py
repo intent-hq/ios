@@ -255,6 +255,20 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(self.export(source), {"review": 1, "agent-groups": 0, "recovery": 0})
         self.assertEqual(self.manifest()["files"][0]["capture"], "nested-file-tree")
 
+    def test_parameterized_shell_fixtures_keep_only_their_named_captures(self):
+        launch = "AppCoordinatorTests/iPadCompactLaunchShowsListAndMenuDestinations(appearance:)"
+        resize = "IntentTests/AppCoordinatorTests/iPadCompactResizeRetainsComposerAndDismissesOpenMenu(detail:)"
+        source = self.bundle(records=[
+            record(test=launch, attachments=[attachment("ipad-narrow-menu-light.png"), attachment("Automatic screenshot")]),
+            record(test=resize, attachments=[attachment("ipad-narrow-workspace-draft.png")]),
+            record(test=launch.replace("iPadCompactLaunchShowsListAndMenuDestinations", "unrelated"),
+                   attachments=[attachment("ipad-narrow-menu-light.png")]),
+            record(test="OtherTarget/" + launch, attachments=[attachment("ipad-narrow-menu-light.png")]),
+        ])
+        self.assertEqual(self.export(source), {"review": 2, "agent-groups": 0, "recovery": 0})
+        self.assertEqual({entry["capture"] for entry in self.manifest()["files"]},
+                         {"ipad-narrow-menu-light", "ipad-narrow-workspace-draft"})
+
     def test_video_smoke_retains_only_its_named_poster_and_player_captures(self):
         video_test = "TranscriptVideoUITests/testSentVideoPosterOpensFullScreenPlayback()"
         source = self.bundle(records=[

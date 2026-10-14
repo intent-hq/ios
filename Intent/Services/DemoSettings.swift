@@ -13,6 +13,17 @@ enum DemoSettings {
         persistence.upsertConnection(connection(name: "Travel Mac", host: "travel.invalid"))
         persistence.setActiveConnection(id: primary.id)
         startupBackendID = BackendID(primary.id)
+        if ProcessInfo.processInfo.arguments.contains("--demo-long-agent-history") {
+            persistence.saveAgentHistory((0..<AgentHistory.maximumEntries).map { index in
+                AgentHistoryEntry(
+                    connectionId: primary.id,
+                    workspaceId: DemoFixtures.longConversationWorkspaceId,
+                    agentId: index == AgentHistory.maximumEntries - 1 ? DemoFixtures.longConversationAgentId : "demo-history-\(index)",
+                    agentName: "Recent agent \(index + 1)",
+                    visitedAt: .now.addingTimeInterval(-Double(index))
+                )
+            })
+        }
     }
 
     /// Native scene restoration outlives the ephemeral demo records. Consume

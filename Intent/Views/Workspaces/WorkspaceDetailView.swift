@@ -25,6 +25,7 @@ struct WorkspaceDetailView: View {
     @State private var scriptStore: WorkspaceScriptStore
     @State private var changesStore: WorkspaceChangesStore
     @State private var titleEditor = WorkspaceTitleEditor()
+    @FocusState private var titleFocused: Bool
     @Environment(BackendSession.self) private var session
 
     init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared, isSidebarVisible: Bool = false) {
@@ -69,6 +70,7 @@ struct WorkspaceDetailView: View {
     private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
 
     private var showsToolbarTitle: Bool { !usesVerticalBar || !isSidebarVisible }
+    private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
 
     private var lifecycleContent: some View {
         ZStack {
@@ -260,7 +262,7 @@ struct WorkspaceDetailView: View {
                 }
                 WorkspaceVerticalNavigationToolbar(
                     isEnabled: true,
-                    showsBackButton: !isSidebarVisible,
+                    showsBackButton: showsBackButton && !isSidebarVisible,
                     backLabel: "Back to workspaces",
                     backIdentifier: "workspaceDetail.back",
                     onBack: coordinator.onBackToWorkspaceList
@@ -268,21 +270,18 @@ struct WorkspaceDetailView: View {
             } else {
                 #if os(visionOS)
                 // The workspace picker lives in the top toolbar on visionOS.
-                ToolbarItem(placement: .topBarTrailing) {
-                    toolbarWorkspacePicker
-                }
+                ToolbarItem(placement: .topBarTrailing) { toolbarWorkspacePicker }
                 #else
-                ToolbarItem(placement: .topBarLeading) {
-                    IntentIconButton(icon: .arrowLeft, label: "Back to workspaces", action: coordinator.onBackToWorkspaceList)
+                if showsBackButton {
+                    ToolbarItem(placement: .topBarLeading) {
+                        IntentIconButton(icon: .arrowLeft, label: "Back to workspaces", showsBackground: false, action: coordinator.onBackToWorkspaceList)
+                            .accessibilityIdentifier("workspaceDetail.back")
+                    }
+                    .intentToolbarSurface()
                 }
-                .intentToolbarSurface()
                 #endif
-                ToolbarItem(placement: .principal) {
-                    toolbarTitle
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    workspaceActions
-                }
+                ToolbarItem(placement: .principal) { toolbarTitle }
+                ToolbarItem(placement: .primaryAction) { workspaceActions }
                 .intentToolbarSurface()
             }
         }
@@ -290,6 +289,7 @@ struct WorkspaceDetailView: View {
         .workspacePhoneNavigation(
             title: workspaceTitle,
             createdAt: workspace?.createdAt,
+            showsBackButton: showsBackButton,
             onBack: coordinator.onBackToWorkspaceList
         ) { workspaceActions }
         #endif
@@ -363,18 +363,20 @@ private extension WorkspaceDetailView {
 
     var detailContent: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                WorkspaceDetailHeader(
-                    workspaceId: workspaceId,
-                    workspace: workspace,
-                    title: workspaceTitle,
-                    selection: $selectedTab,
-                    titleEditor: titleEditor,
-                    onSaveTitle: saveTitle
-                )
-                tabContent
+            if selectedTab == .agents {
+                LazyVStack(spacing: 0) {
+                    detailHeader
+                    tabContent
+                }
+                .padding(.bottom, showsAgentList ? WorkspaceDetailStyle.pageInset : 0)
+            } else {
+                VStack(spacing: 0) {
+                    detailHeader
+                    tabContent
+                }
             }
         }
+        .accessibilityIdentifier("workspace.detail.scroll")
         .refreshable {
             if selectedTab == .agents {
                 await agentStore.fetchAgents(workspaceId: workspaceId)
@@ -388,6 +390,26 @@ private extension WorkspaceDetailView {
             }
         }
     }
+
+    private var detailHeader: some View {
+        VStack(spacing: 0) {
+            WorkspaceDetailHeader(
+                workspaceId: workspaceId,
+                workspace: workspace,
+                title: workspaceTitle,
+                selection: $selectedTab,
+                titleEditor: titleEditor,
+                titleFocus: $titleFocused,
+                onSaveTitle: saveTitle
+            )
+        }
+    }
+
+    private var showsAgentLoading: Bool {
+        (agentStore.isLoading || !agentStore.hasLoaded) && viewModel.agents.isEmpty && !hasWorkspaceResources
+    }
+
+    private var showsAgentList: Bool { !showsAgentLoading && (viewModel.hasAgentSections || hasWorkspaceResources) }
 
     var hasWorkspaceResources: Bool {
         !terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty
@@ -412,7 +434,7 @@ private extension WorkspaceDetailView {
     @ViewBuilder
     var tabContent: some View {
         if selectedTab == .agents {
-            if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty, !hasWorkspaceResources {
+            if showsAgentLoading {
                 ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
@@ -433,22 +455,27 @@ private extension WorkspaceDetailView {
         }
     }
 
+    @ViewBuilder
     var agentListContent: some View {
-        LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
-            agentTree(viewModel.foregroundAgents)
-            agentSection(.background, title: "background agents")
-            agentSection(.orphaned, title: "delegated agents")
-            agentSection(.retired, title: "retired agents")
-            WorkspaceMobileTerminalsView(workspaceId: workspaceId, store: terminalStore, revealedTarget: $revealedSwipeTarget) { terminal in
-                selectedTerminal = terminal
-            }
-            WorkspaceBrowsersView(workspaceId: workspaceId, store: browserStore, revealedTarget: $revealedSwipeTarget) { browser in
-                selectedBrowser = browser
-            }
-            WorkspaceScriptsView(workspaceId: workspaceId, store: scriptStore, revealedTarget: $revealedSwipeTarget)
+        let rows = agentListRows
+        let entries = rows.enumerated().map { index, row in
+            (id: row.id, content: row
+                .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+                .padding(.top, index == 0 ? 0 : WorkspaceDetailStyle.rowSpacing))
         }
-        .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-        .padding(.bottom, WorkspaceDetailStyle.pageInset)
+        ForEach(entries, id: \.id) { @Sendable entry in entry.content }
+        if hasWorkspaceResources {
+            WorkspaceDetailResources(
+                workspaceId: workspaceId,
+                terminalStore: terminalStore,
+                browserStore: browserStore,
+                scriptStore: scriptStore,
+                revealedTarget: $revealedSwipeTarget,
+                followsAgents: !rows.isEmpty,
+                onSelectTerminal: { selectedTerminal = $0 },
+                onSelectBrowser: { selectedBrowser = $0 }
+            )
+        }
     }
 
     private func deleteWorkspace() { changeWorkspace("workspace.delete") }
