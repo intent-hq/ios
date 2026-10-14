@@ -571,6 +571,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorSettingsTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorStartupTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorWorkspaceValidationTests.swift
+$(SRCROOT)/IntentTests/AssistantLauncherLayoutTests.swift
 $(SRCROOT)/IntentTests/AssistantStoreTests.swift
 $(SRCROOT)/IntentTests/AttachmentImageLoaderTests.swift
 $(SRCROOT)/IntentTests/AttachmentUploadServiceTests.swift
