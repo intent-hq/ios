@@ -277,19 +277,10 @@ private extension WorkspaceScriptStore {
                 guard isCurrent(currentGeneration) else { return }
                 let response = try await connection.request("script.list", params: ["workspaceId": workspaceId])
                 guard isCurrent(currentGeneration), revisions[workspaceId, default: 0] == revision else { continue }
-                guard let result = response as? [String: Any], let rows = result["scripts"] as? [[String: Any]] else {
-                    throw WorkspaceScriptError.invalidResponse
-                }
-                var seen: Set<String> = []
-                let scripts = rows.compactMap { WorkspaceScript(definition: $0, workspaceId: workspaceId) }
-                    .filter { seen.insert($0.id).inserted }
+                let scripts = try decodeScripts(response, workspaceId: workspaceId)
                 definitions[workspaceId] = scripts
                 loadErrors[workspaceId] = nil
-                cancelMissingLaunch(workspaceId: workspaceId, scripts: scripts)
-                if let browser = presentations[workspaceId], !scripts.contains(where: { $0.browser == browser }) {
-                    presentations[workspaceId] = nil
-                }
-                for script in scripts { considerPresentation(script) }
+                reconcilePresentation(workspaceId: workspaceId, scripts: scripts)
                 return
             } catch {
                 guard isCurrent(currentGeneration), revisions[workspaceId, default: 0] == revision else { continue }
@@ -297,6 +288,23 @@ private extension WorkspaceScriptStore {
                 return
             }
         }
+    }
+
+    func decodeScripts(_ response: Any, workspaceId: String) throws -> [WorkspaceScript] {
+        guard let result = response as? [String: Any], let rows = result["scripts"] as? [[String: Any]] else {
+            throw WorkspaceScriptError.invalidResponse
+        }
+        var seen: Set<String> = []
+        return rows.compactMap { WorkspaceScript(definition: $0, workspaceId: workspaceId) }
+            .filter { seen.insert($0.id).inserted }
+    }
+
+    func reconcilePresentation(workspaceId: String, scripts: [WorkspaceScript]) {
+        cancelMissingLaunch(workspaceId: workspaceId, scripts: scripts)
+        if let browser = presentations[workspaceId], !scripts.contains(where: { $0.browser == browser }) {
+            presentations[workspaceId] = nil
+        }
+        for script in scripts { considerPresentation(script) }
     }
 
     func cancelMissingLaunch(workspaceId: String, scripts: [WorkspaceScript]) {

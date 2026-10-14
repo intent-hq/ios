@@ -150,6 +150,7 @@ import Observation
         }
     }
 
+    // Nil keeps a missing provider catalog distinct from a successfully loaded empty catalog.
     // swiftlint:disable:next discouraged_optional_collection
     func models(for providerId: String) -> [ModelInfo]? { modelCatalogs[providerId]?.value }
 

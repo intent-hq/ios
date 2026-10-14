@@ -61,26 +61,47 @@ struct ConversationTranscriptViewportAnchor {
               measurement.ownershipRevision == ownershipRevision,
               !hasEstablishedCurrentMessages || currentMessageIDs.contains(id) else { return nil }
         if pending?.generation != entryGeneration { pending = nil }
-        if !initialized || measurement.divider != divider {
-            if pending?.isReappearance != true {
-                pending = nil
-            }
-            if pending == nil, initialized, preserve {
-                let visible = frames.filter { $0.value.minY < viewportHeight && $0.value.maxY > 0 && $0.value.height > 0 }
-                let full = visible.filter { $0.value.minY >= 0 && $0.value.maxY <= viewportHeight }
-                pending = (full.isEmpty ? visible : full)
-                    .min { $0.value.minY < $1.value.minY }
-                    .map { Pending(id: $0.key, minY: $0.value.minY, generation: entryGeneration) }
-            }
-            initialized = true
-            divider = measurement.divider
-        }
+        prepareForDividerChange(measurement.divider, viewportHeight: viewportHeight, preserve: preserve, entryGeneration: entryGeneration)
         frames[id] = measurement.frame
+        if let first = firstVisiblePosition(viewportHeight: viewportHeight) {
+            visiblePosition = first
+        }
+        return consumePendingRestoration(id: id, measurement: measurement, viewportHeight: viewportHeight, preserve: preserve, scrollGeometry: scrollGeometry)
+    }
+
+    private func firstVisiblePosition(viewportHeight: CGFloat) -> Position? {
         let visible = frames.filter { $0.value.minY < viewportHeight && $0.value.maxY > 0 && $0.value.height > 0 }
         let full = visible.filter { $0.value.minY >= 0 && $0.value.maxY <= viewportHeight }
-        if let first = (full.isEmpty ? visible : full).min(by: { $0.value.minY < $1.value.minY }) {
-            visiblePosition = Position(id: first.key, minY: first.value.minY)
+        return (full.isEmpty ? visible : full)
+            .min { $0.value.minY < $1.value.minY }
+            .map { Position(id: $0.key, minY: $0.value.minY) }
+    }
+
+    private mutating func prepareForDividerChange(
+        _ newDivider: String?,
+        viewportHeight: CGFloat,
+        preserve: Bool,
+        entryGeneration: Int
+    ) {
+        guard !initialized || newDivider != divider else { return }
+        if pending?.isReappearance != true {
+            pending = nil
         }
+        if pending == nil, initialized, preserve {
+            pending = firstVisiblePosition(viewportHeight: viewportHeight)
+                .map { Pending(id: $0.id, minY: $0.minY, generation: entryGeneration) }
+        }
+        initialized = true
+        divider = newDivider
+    }
+
+    private mutating func consumePendingRestoration(
+        id: String,
+        measurement: Measurement,
+        viewportHeight: CGFloat,
+        preserve: Bool,
+        scrollGeometry: ConversationTranscriptScrollPolicy.ViewportGeometry?
+    ) -> CGFloat? {
         guard let pending, pending.id == id else {
             if restorationTarget == id { recordRestorationEvent("after=\(measurement.frame) offset=\(String(describing: scrollGeometry?.contentOffsetY))") }
             return nil

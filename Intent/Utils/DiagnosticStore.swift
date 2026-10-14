@@ -7,9 +7,10 @@ nonisolated final class DiagnosticStore: Sendable {
     static let shared = DiagnosticStore()
 
     struct Scope: Sendable {
-        // File-private allocation prevents callers fabricating a source ID.
+        // DiagnosticIntake needs same-file access; broader access would allow fabricated source sessions.
         // swiftlint:disable:next strict_fileprivate
         fileprivate let session: UUID
+        // DiagnosticIntake allocates ordinals in this file; callers must not fabricate source IDs.
         // swiftlint:disable:next strict_fileprivate
         fileprivate let ordinal: UInt64
     }

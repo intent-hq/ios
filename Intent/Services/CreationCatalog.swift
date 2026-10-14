@@ -7,6 +7,7 @@ import Synchronization
 @MainActor
 @Observable
 final class CreationCatalog<Element> {
+    // Nil means no successful catalog read; an empty array is a successfully loaded catalog.
     // swiftlint:disable:next discouraged_optional_collection
     private(set) var value: [Element]?
     private(set) var loadFailed = false

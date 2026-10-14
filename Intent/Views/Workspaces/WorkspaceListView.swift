@@ -138,9 +138,13 @@ struct WorkspaceListView: View {
             await workspaceStore.fetchAll()
         }
         .overlay {
-            if viewModel.filteredWorkspaces.isEmpty, !viewModel.hasSearchQuery,
+            if viewModel.filteredWorkspaces.isEmpty,
                !(viewModel.isLoading && viewModel.workspaces.isEmpty) {
-                emptyState
+                if viewModel.hasSearchQuery {
+                    WorkspaceSearchEmptyState()
+                } else {
+                    emptyState
+                }
             }
         }
     }
@@ -201,11 +205,7 @@ struct WorkspaceListView: View {
                 Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
             }
             .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
-        } else if viewModel.filteredWorkspaces.isEmpty {
-            if viewModel.hasSearchQuery {
-                ContentUnavailableView.search
-            }
-        } else {
+        } else if !viewModel.filteredWorkspaces.isEmpty {
             workspaceSections
         }
     }

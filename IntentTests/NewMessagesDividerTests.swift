@@ -605,21 +605,6 @@ struct TranscriptRowHeightCacheTests {
         #expect(cache.height(for: message, hydratingBlockIds: []) == nil)
     }
 
-    private func waitUntil(
-        _ what: String,
-        timeout: TimeInterval = 2,
-        _ condition: @MainActor () -> Bool
-    ) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition() {
-            if Date() >= deadline {
-                Issue.record("timed out waiting for \(what)")
-                return
-            }
-            try await Task.sleep(for: .milliseconds(1))
-        }
-    }
-
     private func assistantMessage(
         text: String,
         streamingState: MessageStreamingState = .complete,

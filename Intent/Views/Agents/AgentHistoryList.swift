@@ -9,10 +9,7 @@ struct AgentHistoryList: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
 
-    /// Row content snapshotted in `body`. SwiftUI builds the ForEach rows on its
-    /// async render thread while measuring the ViewThatFits candidates, where a
-    /// MainActor-isolated store read trips a dispatch_assert_queue trap — so the
-    /// rows carry only value data captured on the main thread.
+    /// Snapshot store values before SwiftUI builds rows on its async render thread.
     private struct HistoryRow: Identifiable, Equatable {
         let entry: AgentHistoryEntry
         let title: String
@@ -28,28 +25,27 @@ struct AgentHistoryList: View {
 
     var body: some View {
         let rows = rowSnapshot
-        VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.headingSpacing) {
-            header(hasEntries: !rows.isEmpty)
+        ScrollView {
+            VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.headingSpacing) {
+                header(hasEntries: !rows.isEmpty)
 
-            if rows.isEmpty {
-                Text("Agents you open on any device appear here.")
-                    .interFont(Constants.Typography.bodyS)
-            } else {
-                // Short lists stay centered; longer ones fill the panel and scroll beneath the header.
-                ViewThatFits(in: .vertical) {
+                if rows.isEmpty {
+                    Text("Agents you open on any device appear here.")
+                        .interFont(Constants.Typography.bodyS)
+                } else {
                     rowList(rows)
-                    ScrollView { rowList(rows) }
-                        .scrollBounceBehavior(.basedOnSize)
+                        .padding(.horizontal, -ConnectionSwitcherStyle.rowInset)
                 }
-                // Row text aligns with the header; the selection fill bleeds into the margin.
-                .padding(.horizontal, -ConnectionSwitcherStyle.rowInset)
             }
+            .padding(.vertical, ConnectionSwitcherStyle.inset)
+            .padding(.horizontal, ConnectionSwitcherStyle.rowInset)
         }
-        .padding(.vertical, ConnectionSwitcherStyle.inset)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .scrollBounceBehavior(.basedOnSize)
+        .defaultScrollAnchor(.center, for: .alignment)
         .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
-        .padding(.leading, ConnectionSwitcherStyle.trailingInset)
-        .padding(.trailing, ConnectionSwitcherStyle.inset)
+        .padding(.leading, ConnectionSwitcherStyle.trailingInset - ConnectionSwitcherStyle.rowInset)
+        .padding(.trailing, ConnectionSwitcherStyle.inset - ConnectionSwitcherStyle.rowInset)
+        .accessibilityIdentifier("agent-history.list")
     }
 
     private var rowSnapshot: [HistoryRow] {

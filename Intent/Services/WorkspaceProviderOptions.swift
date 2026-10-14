@@ -148,6 +148,7 @@ private extension WorkspaceProviderOptions {
 
     struct AuthenticationEntry: Decodable {
         let id: String
+        // Missing or null authentication decodes as unknown, not an explicit signed-out result.
         // swiftlint:disable:next discouraged_optional_boolean
         let authenticated: Bool?
     }

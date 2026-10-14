@@ -34,6 +34,7 @@ extension DemoFixtures {
             .last ?? .leading
     }
 
+    // Nil means the requested fixture block does not exist, not an empty result block.
     // swiftlint:disable discouraged_optional_collection
     /// Full result block for a slim-truncated fixture tool result.
     static func longConversationFullBlock(id blockId: String?) -> [String: Any]? {
@@ -103,6 +104,4 @@ extension DemoFixtures {
     }
     // swiftlint:enable large_tuple
     // swiftlint:enable no_magic_numbers
-    // swiftlint:disable trailing_newline
 }
-// swiftlint:enable trailing_newline

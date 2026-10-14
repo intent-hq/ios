@@ -54,7 +54,7 @@ struct QRScannerOverlay: View {
 
     private var scannerStatus: some View {
         VStack(spacing: Constants.QRScanner.statusSpacing) {
-            HStack(spacing: Constants.QRScanner.statusSpacing) {
+            HStack(alignment: .top, spacing: Constants.QRScanner.statusSpacing) {
                 if isValidating {
                     ProgressView().tint(.white)
                     Text("Connecting…")

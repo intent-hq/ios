@@ -54,4 +54,25 @@ nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
         if case .missingCertificatePin = self { return true }
         return false
     }
+
+    /// Changes a single-route error's label without changing its failure details.
+    /// Aggregate mismatches retain each candidate's original host.
+    func relabeled(host: String) -> Self {
+        switch self {
+        case .certificateMismatch(_, let fingerprint):
+            .certificateMismatch(host: host, fingerprint: fingerprint)
+        case .invalidURL:
+            .invalidURL(host: host)
+        case .missingCertificatePin:
+            .missingCertificatePin(host: host)
+        case .timedOut:
+            .timedOut(host: host)
+        case let .failed(_, message, failure):
+            .failed(host: host, message: message, diagnosticFailure: failure)
+        case let .disconnected(_, code, reason):
+            .disconnected(host: host, code: code, reason: reason)
+        case .certificateMismatches:
+            self
+        }
+    }
 }

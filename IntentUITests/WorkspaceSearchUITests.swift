@@ -48,12 +48,15 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     @MainActor
     func testSearchFiltersAndClearAndCancelRestoreWorkspaces() {
         let app = launchWorkspaces()
+        captureSearchState(name: "Workspace Intent menu button")
         app.buttons["workspaces.search.open"].tap()
         let field = app.textFields["workspaces.search.field"]
         XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
         field.typeText("no-matching-workspace")
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.descendants(matching: .any)["workspaces.search.empty"].waitForExistence(timeout: Fixture.timeout))
+        captureSearchState(name: "Empty workspace search results")
         app.buttons["workspaces.search.clear"].tap()
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
 

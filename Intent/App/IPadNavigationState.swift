@@ -26,6 +26,8 @@ struct IPadNavigationState: Equatable {
     private(set) var isSidebarExpanded = true
     private(set) var isDrawerPresented = false
     private(set) var usesSidebarOverlay = false
+    private(set) var usesCompactNavigation = false
+    private(set) var hasMeasuredLayout = false
 
     var isSidebarVisible: Bool {
         usesSidebarOverlay ? isDrawerPresented : isSidebarExpanded
@@ -69,6 +71,7 @@ struct IPadNavigationState: Equatable {
 
     mutating func cancelPairing() {
         pairing = nil
+        if usesCompactNavigation { revealSidebar() }
     }
 
     mutating func revealSidebar() {
@@ -87,12 +90,18 @@ struct IPadNavigationState: Equatable {
         }
     }
 
-    mutating func updateLayout(usesOverlay: Bool) {
-        guard usesSidebarOverlay != usesOverlay else { return }
+    mutating func updateLayout(usesOverlay: Bool, usesCompactNavigation: Bool = false, showsWorkspaceList: Bool = false) {
+        hasMeasuredLayout = true
+        guard usesSidebarOverlay != usesOverlay || self.usesCompactNavigation != usesCompactNavigation else { return }
         usesSidebarOverlay = usesOverlay
+        self.usesCompactNavigation = usesCompactNavigation
         // Rotation preserves the wide-window preference, without unexpectedly
         // opening a drawer over the conversation in a narrow window.
         isDrawerPresented = false
+        if usesCompactNavigation, pairing == nil,
+           section == .settings || section == .connections || (detail == .workspace && showsWorkspaceList) {
+            revealSidebar()
+        }
     }
 
     mutating func revokeAssistantAccess() {

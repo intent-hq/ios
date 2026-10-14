@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import UIKit
 
-// Geometry regression values intentionally mirror the observed scroll offsets.
+// Observed scroll offsets stay literal, with thousands grouped to compare nearby viewport positions.
 // swiftlint:disable no_magic_numbers number_separator
 
 extension ConversationTranscriptScrollPolicyTests {

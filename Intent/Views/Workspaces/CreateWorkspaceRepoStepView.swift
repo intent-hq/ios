@@ -41,7 +41,7 @@ struct CreateWorkspaceNextButton: View {
                 .background {
                     RoundedRectangle(cornerRadius: CreateWorkspaceFormStyle.cornerRadius)
                         .fill(isDisabled ? CreateWorkspaceFormStyle.disabledBackground(for: colorScheme) : CreateWorkspaceFormStyle.primary)
-                        .modifier(WorkspaceControlShadow())
+                        .modifier(CreateWorkspaceControlShadow())
                 }
         }
         .buttonStyle(IntentContentButtonStyle())

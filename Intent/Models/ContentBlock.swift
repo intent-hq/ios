@@ -153,8 +153,7 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
     }
 
     init(from decoder: Decoder) throws {
-        let identity = decoder.userInfo[Self.fallbackIdentityUserInfoKey] as? FallbackIdentity
-        try self.init(from: decoder, fallbackIdentity: identity ?? .fingerprint(messageId: nil))
+        try self.init(from: decoder, fallbackIdentity: .fingerprint(messageId: nil))
     }
 
     /// The one block decoder: every decode path (message rows, delta

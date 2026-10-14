@@ -11,6 +11,9 @@ enum CreateWorkspaceFormStyle {
     static let controlPadding: CGFloat = 20
     static let controlVerticalPadding: CGFloat = 12
     static let controlHeight: CGFloat = 48
+    static let controlShadowOpacity = 0.08
+    static let controlShadowRadius: CGFloat = 20
+    static let controlShadowOffset: CGFloat = 10
     static let cornerRadius: CGFloat = 20
     static let promptHeight: CGFloat = 180
     static let attachmentTarget: CGFloat = 44
@@ -68,6 +71,18 @@ enum CreateWorkspaceFormStyle {
             return Color(red: darkSecondaryRedGreen, green: darkSecondaryRedGreen, blue: darkSecondaryBlue)
         }
         return Theme.mutedForeground(for: scheme, contrast: contrast)
+    }
+}
+
+struct CreateWorkspaceControlShadow: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content.shadow(
+            color: .black.opacity(colorScheme == .light ? CreateWorkspaceFormStyle.controlShadowOpacity : 0),
+            radius: CreateWorkspaceFormStyle.controlShadowRadius,
+            y: CreateWorkspaceFormStyle.controlShadowOffset
+        )
     }
 }
 

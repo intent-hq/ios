@@ -3,8 +3,9 @@ import Foundation
 import Testing
 
 // These extracted tests retain the parent suite's compact fixture vocabulary.
-// swiftlint:disable identifier_name large_tuple multiline_arguments multiline_call_arguments
-// swiftlint:disable multiline_literal_brackets no_magic_numbers
+// swiftlint:disable identifier_name large_tuple
+// Keep the existing polling attempt count and interval explicit without changing the test budget.
+// swiftlint:disable no_magic_numbers
 
 extension ConversationViewModelTests {
     // MARK: - Model display name (conversation menu)
@@ -52,14 +53,19 @@ extension ConversationViewModelTests {
 
     private func makeCatalogVM() -> (vm: ConversationViewModel, store: CreationOptionsStore, fake: FakeConnectionManager) {
         let fake = FakeConnectionManager()
-        fake.responseMap["models.list"] = ["models": [
-            ["id": "sonnet4.5", "name": "Sonnet 4.5 (balanced)", "provider": "auggie"]
-        ]]
+        fake.responseMap["models.list"] = [
+            "models": [
+                ["id": "sonnet4.5", "name": "Sonnet 4.5 (balanced)", "provider": "auggie"]
+            ]
+        ]
         fake.responseMap["agent.get"] = ["agent": ["model": "sonnet4.5", "provider": "auggie"]]
         let store = CreationOptionsStore(connectionManager: fake)
         let vm = ConversationViewModel(
-            agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
-            connection: fake, uploadService: AttachmentUploadService(connection: fake),
+            agentId: "test-agent",
+            workspaceId: "test-ws",
+            agentName: "Test",
+            connection: fake,
+            uploadService: AttachmentUploadService(connection: fake),
             optionsStore: store
         )
         return (vm, store, fake)
@@ -114,9 +120,11 @@ extension ConversationViewModelTests {
         store.invalidate()
         #expect(vm.modelCatalogKey != keyBefore)
         #expect(vm.modelCatalogKey.isCached == false)
-        fake.resolvePending("models.list", with: ["models": [
-            ["id": "sonnet4.5", "name": "Stale", "provider": "auggie"]
-        ]])
+        fake.resolvePending("models.list", with: [
+            "models": [
+                ["id": "sonnet4.5", "name": "Stale", "provider": "auggie"]
+            ]
+        ])
         await load.value
         #expect(vm.selectableModels == nil)
         #expect(vm.currentModelDisplayName == "sonnet4.5")
@@ -163,9 +171,11 @@ extension ConversationViewModelTests {
         #expect(fake.paramsForMethod("agent.get").count == 1)
 
         fake.responseMap["agent.get"] = ["agent": ["model": "opus", "provider": "auggie"]]
-        fake.responseMap["models.list"] = ["models": [
-            ["id": "opus", "name": "Opus", "provider": "auggie"]
-        ]]
+        fake.responseMap["models.list"] = [
+            "models": [
+                ["id": "opus", "name": "Opus", "provider": "auggie"]
+            ]
+        ]
         store.invalidate()
         #expect(vm.selectableModels == nil)
 
@@ -202,9 +212,11 @@ extension ConversationViewModelTests {
 
         fake.errorMap["agent.get"] = nil
         fake.responseMap["agent.get"] = ["agent": ["model": "opus", "provider": "auggie"]]
-        fake.responseMap["models.list"] = ["models": [
-            ["id": "opus", "name": "Opus", "provider": "auggie"]
-        ]]
+        fake.responseMap["models.list"] = [
+            "models": [
+                ["id": "opus", "name": "Opus", "provider": "auggie"]
+            ]
+        ]
         await vm.loadModelCatalogIfNeeded()
         #expect(fake.paramsForMethod("agent.get").count == 3)
         #expect(fake.paramsForMethod("models.list").count == 2)
@@ -246,5 +258,5 @@ extension ConversationViewModelTests {
     }
 }
 
-// swiftlint:enable identifier_name large_tuple multiline_arguments multiline_call_arguments
-// swiftlint:enable multiline_literal_brackets no_magic_numbers
+// swiftlint:enable identifier_name large_tuple
+// swiftlint:enable no_magic_numbers

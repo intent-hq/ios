@@ -4,9 +4,6 @@ import Observation
 import Synchronization
 import Testing
 
-// Extracted wire fixtures intentionally mirror the daemon payloads inline.
-// swiftlint:disable multiline_arguments multiline_call_arguments multiline_literal_brackets
-
 extension NoteStoreIntegrationTests {
     @Test func cancelledFetchNoteIgnoresLateNotFound() async throws {
         let fake = FakeConnectionManager()
@@ -21,9 +18,12 @@ extension NoteStoreIntegrationTests {
         // before the transport's cancellation cleanup task runs (ios#250).
         fetch.cancel()
         fake.failPending("note.get", with: NSError(
-            domain: "WebSocket", code: -32_602,
-            userInfo: [NSLocalizedDescriptionKey: "not found (-32602)",
-                       NSError.intentErrorDataCodeKey: "not-found"]
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [
+                NSLocalizedDescriptionKey: "not found (-32602)",
+                NSError.intentErrorDataCodeKey: "not-found"
+            ]
         ))
 
         let result = await fetch.value
@@ -39,17 +39,23 @@ extension NoteStoreIntegrationTests {
     @Test func cancelledFetchDoesNotPublishHydratedSpecBody() async throws {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
-        fake.responseMap["note.list"] = ["notes": [
-            ["id": "spec", "title": "Spec", "isDefault": true,
-             "contentPreview": "- [x] done", "contentLength": 40,
-             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
-        ]]
+        fake.responseMap["note.list"] = [
+            "notes": [
+                [
+                    "id": "spec", "title": "Spec", "isDefault": true,
+                    "contentPreview": "- [x] done", "contentLength": 40,
+                    "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+                ]
+            ]
+        ]
         func fullSpec() -> [String: Any] {
-            ["note": [
-                "id": "spec", "title": "Spec", "isDefault": true,
-                "content": "- [x] done\n- [ ] todo item that overflows",
-                "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
-            ]]
+            [
+                "note": [
+                    "id": "spec", "title": "Spec", "isDefault": true,
+                    "content": "- [x] done\n- [ ] todo item that overflows",
+                    "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+                ]
+            ]
         }
 
         // The list lands and publishes the slim spec row; the hydrating
@@ -244,10 +250,14 @@ extension NoteStoreIntegrationTests {
     @Test func identicalRefetchDoesNotReassignNotes() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
-        fake.responseMap["note.list"] = ["notes": [
-            ["id": "note-1", "title": "Note 1", "content": "",
-             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
-        ]]
+        fake.responseMap["note.list"] = [
+            "notes": [
+                [
+                    "id": "note-1", "title": "Note 1", "content": "",
+                    "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+                ]
+            ]
+        ]
         await store.fetchNotes(workspaceId: "ws-1")
         #expect(store.hasLoaded == true)
         #expect(store.notes.count == 1)
@@ -268,16 +278,20 @@ extension NoteStoreIntegrationTests {
         #expect(store.notes.count == 1)
 
         // A genuinely different list must still publish.
-        fake.responseMap["note.list"] = ["notes": [
-            ["id": "note-1", "title": "Note 1", "content": "",
-             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"],
-            ["id": "note-2", "title": "Note 2", "content": "",
-             "createdAt": "2024-01-02T00:00:00Z", "updatedAt": "2024-01-02T00:00:00Z"]
-        ]]
+        fake.responseMap["note.list"] = [
+            "notes": [
+                [
+                    "id": "note-1", "title": "Note 1", "content": "",
+                    "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+                ],
+                [
+                    "id": "note-2", "title": "Note 2", "content": "",
+                    "createdAt": "2024-01-02T00:00:00Z", "updatedAt": "2024-01-02T00:00:00Z"
+                ]
+            ]
+        ]
         await store.fetchNotes(workspaceId: "ws-1")
         #expect(changeCount.withLock { $0 } == 1)
         #expect(store.notes.map(\.id) == ["note-1", "note-2"])
     }
 }
-
-// swiftlint:enable multiline_arguments multiline_call_arguments multiline_literal_brackets
