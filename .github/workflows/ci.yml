@@ -76,11 +76,16 @@ jobs:
       runs-on: ${{ steps.select.outputs.runs-on || '"depot-macos-15"' }}
     steps:
       - uses: actions/checkout@v7
-      - name: Select Depot simulator runner
+      - name: Check local Mac status
         id: select
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
         run: bash .github/scripts/select-macos-runner.sh
-      - name: Select Depot build runner
+      - name: Check build-only Mac status
         id: select-build
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+          RUNNER_POOL_LABEL: intent-ios-build
         run: bash .github/scripts/select-macos-runner.sh
 
   go-test:

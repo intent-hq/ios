@@ -407,9 +407,8 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 ### Depot GitHub Actions runners
 
-All GitHub Actions jobs use Depot: Ubuntu 24.04 for scripts/Go and macOS 15
-Apple Silicon for Xcode builds and simulators. Build and simulator selection is
-deterministic; local Mac availability and RUNNER_STATUS_TOKEN are no longer used.
-The selected image must contain Xcode 26; runtime and Metal provisioning happen
-on the ephemeral job. Existing Go and Swift package caches use Depot's Actions
-cache integration. Xcode Cloud distribution is unchanged.
+Script and Go jobs use Depot Ubuntu 24.04. Build and simulator selectors prefer
+available self-hosted Macs, using `RUNNER_STATUS_TOKEN` to inspect the pools,
+and fall back to Depot macOS 15 Apple Silicon. The selected image needs Xcode 26;
+runtime and Metal provisioning run as needed. Go and Swift package caches and
+Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.
