@@ -591,7 +591,7 @@ jobs:
           bundles: TestResults
 
       - name: Upload test results
-        if: failure() || (github.event_name == 'workflow_dispatch' && (contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests')))
+        if: failure() || (github.event_name == 'workflow_dispatch' && (contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests') || contains(inputs.only_testing, 'ConversationTranscriptHistoryUITests')))
         uses: actions/upload-artifact@v7
         with:
           name: ios-unit-test-results

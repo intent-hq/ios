@@ -117,6 +117,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         let older = message(in: app, containing: "History message 11.")
         try scrollToHistoryMessage(older, number: 11, in: opened, app: app)
         XCTAssertTrue(isVisible(older, in: opened.transcript))
+        XCTAssertTrue(isInside(older, opened.transcript), "The reached history message must be fully visible")
         XCTAssertFalse(retry.exists)
         let image = XCTAttachment(screenshot: app.screenshot())
         image.name = "history-retry-older-message-visible"
@@ -180,7 +181,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
     private func scrollToHistoryMessage(_ target: XCUIElement, number: Int, in opened: OpenConversation, app: XCUIApplication) throws {
         let probe = app.descendants(matching: .any).matching(identifier: "transcript.gestureState").firstMatch
         for _ in 0..<Self.maximumSwipes {
-            if isVisible(target, in: opened.transcript) { return }
+            if isInside(target, opened.transcript) { return }
             let towardOlder: Bool
             if let targetFrame = frame(of: target) {
                 towardOlder = targetFrame.midY < opened.transcript.frame.midY
