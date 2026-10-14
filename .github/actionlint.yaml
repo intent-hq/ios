@@ -5,4 +5,4 @@ self-hosted-runner:
     - m1mac
 
     - depot-ubuntu-24.04
-    - depot-macos-15
+    - depot-macos-latest

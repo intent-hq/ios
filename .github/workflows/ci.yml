@@ -72,8 +72,8 @@ jobs:
     name: Select macOS runner
     runs-on: depot-ubuntu-24.04
     outputs:
-      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"depot-macos-15"' }}
-      runs-on: ${{ steps.select.outputs.runs-on || '"depot-macos-15"' }}
+      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"depot-macos-latest"' }}
+      runs-on: ${{ steps.select.outputs.runs-on || '"depot-macos-latest"' }}
     steps:
       - uses: actions/checkout@v7
       - name: Check local Mac status
@@ -192,7 +192,7 @@ jobs:
     # step below waits for those jobs and fails this one if either did not
     # succeed. All three jobs still run in parallel.
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -668,7 +668,7 @@ jobs:
     # wait for it; the macOS jobs queue on the dedicated Mac.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad')) }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
     # Allow setup, the full iPhone suite, iPad regressions, and cleanup (ios#429).
     timeout-minutes: 90
     env:
@@ -845,7 +845,7 @@ jobs:
     # dispatch to save runner time.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"depot-macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"depot-macos-latest"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'

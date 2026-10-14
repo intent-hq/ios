@@ -4,14 +4,14 @@ set -euo pipefail
 # GITHUB_TOKEN cannot read repository runner status. RUNNER_STATUS_TOKEN needs
 # only Administration: read for this repository. When it is unavailable (for
 # example on a fork PR), use a Depot Mac.
-hosted='"depot-macos-15"'
+hosted='"depot-macos-latest"'
 local_runner='["self-hosted","macOS","ARM64","intent-ios"]'
 pool_label=${RUNNER_POOL_LABEL:-intent-ios}
 preferred_runner=$(jq -cn --arg label "$pool_label" '["self-hosted","macOS","ARM64",$label]')
 selected="$hosted"
 
 if [ -z "${RUNNER_STATUS_TOKEN:-}" ]; then
-  echo '::notice::RUNNER_STATUS_TOKEN is unavailable; using depot-macos-15'
+  echo '::notice::RUNNER_STATUS_TOKEN is unavailable; using depot-macos-latest'
 else
   response=$(mktemp)
   trap 'rm -f "$response"' EXIT
@@ -35,10 +35,10 @@ else
       selected="$local_runner"
       echo '::notice::Build pool unavailable; using the intent-ios runner pool'
     else
-      echo '::notice::No matching Mac is online; using depot-macos-15'
+      echo '::notice::No matching Mac is online; using depot-macos-latest'
     fi
   else
-    echo '::warning::Could not check local Mac status; using depot-macos-15'
+    echo '::warning::Could not check local Mac status; using depot-macos-latest'
   fi
 fi
 

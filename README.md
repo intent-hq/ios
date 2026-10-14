@@ -409,6 +409,6 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 Script and Go jobs use Depot Ubuntu 24.04. Build and simulator selectors prefer
 available self-hosted Macs, using `RUNNER_STATUS_TOKEN` to inspect the pools,
-and fall back to Depot macOS 15 Apple Silicon. The selected image needs Xcode 26;
+and fall back to Depot’s latest macOS Apple Silicon. The selected image needs Xcode 26;
 runtime and Metal provisioning run as needed. Go and Swift package caches and
 Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.

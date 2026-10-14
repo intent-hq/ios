@@ -11,7 +11,7 @@ import unittest
 
 SELECTOR = Path(__file__).resolve().parents[1] / ".github/scripts/select-macos-runner.sh"
 REQUIRED = ["self-hosted", "macOS", "ARM64", "intent-ios"]
-HOSTED = '"depot-macos-15"'
+HOSTED = '"depot-macos-latest"'
 POOL = '["self-hosted","macOS","ARM64","intent-ios"]'
 
 

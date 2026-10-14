@@ -30,7 +30,7 @@ jobs:
     name: Select macOS runner
     runs-on: depot-ubuntu-24.04
     outputs:
-      runs-on: ${{ steps.select.outputs.runs-on || '"depot-macos-15"' }}
+      runs-on: ${{ steps.select.outputs.runs-on || '"depot-macos-latest"' }}
     steps:
       - uses: actions/checkout@v7
       - name: Check local Mac status
@@ -65,7 +65,7 @@ jobs:
     name: Warm TailcatKit and SPM caches (macOS)
     if: ${{ !cancelled() }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-15"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
