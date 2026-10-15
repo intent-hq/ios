@@ -49,7 +49,7 @@ struct WorkspaceTextFileLoaderTests {
         #expect(connection.paramsForMethod("file.readChunk").map { $0["offset"] as? Int } == Array(stride(from: 0, to: limit, by: chunkSize)))
     }
 
-    @Test(arguments: ["missing", "oversized", "non-utf8", "partial"])
+    @Test(arguments: ["missing", "oversized", "non-utf8", "nul-byte", "partial"])
     func unavailableFilesAreCachedUntilRetry(_ failure: String) async throws {
         let connection = FakeConnectionManager()
         let expectedError: WorkspaceFileImageLoader.LoadError?
@@ -62,6 +62,10 @@ struct WorkspaceTextFileLoaderTests {
             expectedError = .fileTooLarge
         case "non-utf8":
             connection.responseMap["file.readChunk"] = Self.chunk(Data([0xC3, 0x28]), size: 2)
+            expectedError = .notUTF8Text
+        case "nul-byte":
+            let bytes = Data("SQLite format 3\0".utf8)
+            connection.responseMap["file.readChunk"] = Self.chunk(bytes, size: bytes.count)
             expectedError = .notUTF8Text
         default:
             connection.responseMap["file.readChunk"] = Self.chunk(Data(), size: 1)

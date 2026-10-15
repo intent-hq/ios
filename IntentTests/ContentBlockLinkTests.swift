@@ -24,7 +24,23 @@ struct ContentBlockLinkTests {
         ("intent://local/file/reports/Review%20notes.TxT?backend=other#section", "current", "reports/Review notes.TxT"),
         ("intent://local/linked/file/Review%20%231%3F%25%2Etxt", "linked", "Review #1?%.txt"),
         ("intent://local/file/report.pdf.txt", "current", "report.pdf.txt"),
-        ("intent://local/file/note/notes.txt", "current", "note/notes.txt")
+        ("intent://local/file/note/notes.txt", "current", "note/notes.txt"),
+        ("intent://local/file/README.md", "current", "README.md"),
+        ("intent://local/file/config.json", "current", "config.json"),
+        ("intent://local/file/output.log", "current", "output.log"),
+        ("intent://local/file/data.csv", "current", "data.csv"),
+        ("intent://local/file/config.yaml", "current", "config.yaml"),
+        ("intent://local/file/Sources/App.swift", "current", "Sources/App.swift"),
+        ("intent://local/file/README.MD", "current", "README.MD"),
+        ("intent://local/file/Makefile", "current", "Makefile"),
+        ("intent://local/file/LICENSE", "current", "LICENSE"),
+        ("intent://local/file/.env.example", "current", ".env.example"),
+        ("intent://local/linked/file/README.md", "linked", "README.md"),
+        ("intent://local/file/notes.txt/child", "current", "notes.txt/child"),
+        ("intent://local/file/report.pdf/child", "current", "report.pdf/child"),
+        ("intent://local/file/report", "current", "report"),
+        ("intent://local/file/archive.zip", "current", "archive.zip"),
+        ("intent://local/file/database.sqlite", "current", "database.sqlite")
     ])
     func textLinksOpenInViewer(address: String, expectedWorkspace: String, expectedPath: String) throws {
         let url = try #require(URL(string: address))
@@ -57,20 +73,16 @@ struct ContentBlockLinkTests {
 
     @Test(arguments: [
         "intent://local/file/image.png",
+        "intent://local/linked/file/image.PNG",
         "intent://local/file/movie.mp4",
-        "intent://local/file/readme.md",
-        "intent://local/file/output.log",
-        "intent://local/file/data.csv",
-        "intent://local/file/config.json",
-        "intent://local/file/notes.txt/child",
+        "intent://local/linked/file/movie.MP4",
+        "intent://local/file/movie.webm",
         "intent://local/file/../notes.txt",
         "intent://local/linked/file/%2E%2E/notes.txt",
         "intent://local/file/reports%2Fnotes.txt",
         "intent://remote/file/notes.txt",
         "workspace-asset://current/notes.txt",
         "https://example.com/notes.txt",
-        "intent://local/file/report.pdf/child",
-        "intent://local/file/report",
         "intent://local/file/../report.pdf",
         "intent://local/linked/file/%2E%2E/report.pdf",
         "intent://local/file/reports%2Freport.pdf",
