@@ -40,11 +40,24 @@ struct ContentBlockLinkTests {
         ("intent://local/file/report.pdf/child", "current", "report.pdf/child"),
         ("intent://local/file/report", "current", "report"),
         ("intent://local/file/archive.zip", "current", "archive.zip"),
-        ("intent://local/file/database.sqlite", "current", "database.sqlite")
+        ("intent://local/file/database.sqlite", "current", "database.sqlite"),
+        ("intent://local/file/page.html.txt", "current", "page.html.txt")
     ])
     func textLinksOpenInViewer(address: String, expectedWorkspace: String, expectedPath: String) throws {
         let url = try #require(URL(string: address))
         #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .text(
+            .init(workspaceId: expectedWorkspace, path: expectedPath)
+        ))
+    }
+
+    @Test(arguments: [
+        ("intent://local/file/page.html", "current", "page.html"),
+        ("intent://local/linked/file/page.HTM", "linked", "page.HTM"),
+        ("intent://local/file/Review%20%231%2EHTML?backend=other#section", "current", "Review #1.HTML")
+    ])
+    func htmlLinksOpenRenderedPage(address: String, expectedWorkspace: String, expectedPath: String) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .html(
             .init(workspaceId: expectedWorkspace, path: expectedPath)
         ))
     }
@@ -62,7 +75,8 @@ struct ContentBlockLinkTests {
         ("intent://local/linked/note/spec", "linked", "spec"),
         ("intent://local/linked/task/task-1", "linked", "task-1"),
         ("intent://local/note/report.pdf", "current", "report.pdf"),
-        ("intent://local/note/notes.txt", "current", "notes.txt")
+        ("intent://local/note/notes.txt", "current", "notes.txt"),
+        ("intent://local/note/page.html", "current", "page.html")
     ])
     func noteLinksKeepNavigation(address: String, expectedWorkspace: String, expectedNote: String) throws {
         let url = try #require(URL(string: address))
@@ -93,7 +107,10 @@ struct ContentBlockLinkTests {
         "https://example.com/report.pdf",
         "http://localhost:5173/report.pdf",
         "file:///tmp/report.pdf",
-        "mailto:hello@example.com"
+        "mailto:hello@example.com",
+        "https://example.com/page.html",
+        "intent://local/file/../page.html",
+        "workspace-asset://current/page.html"
     ])
     func otherLinksKeepSystemRouting(_ address: String) throws {
         let url = try #require(URL(string: address))

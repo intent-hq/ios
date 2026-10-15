@@ -101,6 +101,7 @@ struct ContentBlockBody: View, Equatable {
     @State private var lightboxPresented = false
     @State private var pdfLink: PDFLinkPreviewView.Link?
     @State private var textLink: TextLinkPreviewView.Link?
+    @State private var htmlLink: HTMLLinkPreviewView.Link?
     /// Set when a thumbnail tap started hydration: the lightbox then opens
     /// automatically once the full block merges in (dataTruncated clears).
     @State private var lightboxPendingHydration = false
@@ -202,6 +203,10 @@ struct ContentBlockBody: View, Equatable {
             TextLinkPreviewView(link: link)
                 .coversConversationComposers()
         }
+        .fullScreenCover(item: $htmlLink) { link in
+            HTMLLinkPreviewView(link: link)
+                .coversConversationComposers()
+        }
     }
 
     private func openTextURL(_ url: URL) -> OpenURLAction.Result {
@@ -210,6 +215,8 @@ struct ContentBlockBody: View, Equatable {
             pdfLink = link
         case .text(let link):
             textLink = link
+        case .html(let link):
+            htmlLink = link
         case let .note(noteId, targetWorkspaceId):
             if let onNavigateToNote {
                 onNavigateToNote(noteId, targetWorkspaceId, "Note")
@@ -381,6 +388,7 @@ extension ContentBlockBody {
     enum TextURLRoute: Equatable {
         case pdf(PDFLinkPreviewView.Link)
         case text(TextLinkPreviewView.Link)
+        case html(HTMLLinkPreviewView.Link)
         case note(id: String, workspaceId: String)
         case system
     }
@@ -389,6 +397,9 @@ extension ContentBlockBody {
     static func textURLRoute(for url: URL, workspaceId: String) -> TextURLRoute {
         if let link = IntentFileLink.parse(url), WorkspacePDF.isPDF(path: link.path) {
             return .pdf(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
+        }
+        if let link = IntentFileLink.parse(url), ["html", "htm"].contains(URL(fileURLWithPath: link.path).pathExtension.lowercased()) {
+            return .html(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
         }
         if let link = IntentFileLink.parse(url), !link.isImage, !WorkspaceVideo.isVideo(path: link.path) {
             return .text(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
