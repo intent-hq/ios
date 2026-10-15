@@ -53,24 +53,7 @@ struct WorkspaceListSidebar: View {
                 )
             }
 
-            ZStack {
-                surface
-
-                if viewModel.isLoading, viewModel.workspaces.isEmpty {
-                    ProgressView {
-                        Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
-                    }
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                } else if viewModel.filteredWorkspaces.isEmpty {
-                    if viewModel.hasSearchQuery {
-                        WorkspaceSearchEmptyState()
-                    } else {
-                        emptyState
-                    }
-                } else {
-                    workspaceList
-                }
-            }
+            workspaceResults
         }
         .background(surface)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -128,6 +111,28 @@ struct WorkspaceListSidebar: View {
             }
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
+    }
+}
+
+extension WorkspaceListSidebar {
+    private var workspaceResults: some View {
+        ZStack {
+            surface
+            if viewModel.isLoading, viewModel.workspaces.isEmpty {
+                ProgressView {
+                    Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+                }
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            } else if viewModel.filteredWorkspaces.isEmpty {
+                if viewModel.hasSearchQuery {
+                    WorkspaceSearchEmptyState()
+                } else {
+                    emptyState
+                }
+            } else {
+                workspaceList
+            }
+        }
     }
 
     private var workspaceMenu: some View {
@@ -221,8 +226,8 @@ struct WorkspaceListSidebar: View {
                 let groups = viewModel.groupedByRepo.map { repoName, workspaces in
                     let content = sidebarGroup(
                         workspaces,
-                        showRepo: false,
-                        isFirst: repoName == viewModel.groupedByRepo.first?.0
+                        isFirst: repoName == viewModel.groupedByRepo.first?.0,
+                        showRepo: false
                     ) {
                         HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
                             RepoOwnerAvatarView(
@@ -250,8 +255,8 @@ struct WorkspaceListSidebar: View {
     @ViewBuilder
     private func sidebarGroup<Header: View>(
         _ workspaces: [Workspace],
-        showRepo: Bool = true,
         isFirst: Bool,
+        showRepo: Bool = true,
         @ViewBuilder header: () -> Header
     ) -> some View {
         if isEmbedded {

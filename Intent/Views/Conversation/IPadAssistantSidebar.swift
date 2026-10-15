@@ -88,7 +88,7 @@ struct IPadAssistantSidebar: View {
                 in: .rect(cornerRadius: IPadSidebarStyle.rowRadius)
             )
             .overlay(alignment: .bottom) {
-                if !selected && !isNextSelected {
+                if !selected, !isNextSelected {
                     Divider().padding(.horizontal, IPadSidebarStyle.rowInset)
                 }
             }

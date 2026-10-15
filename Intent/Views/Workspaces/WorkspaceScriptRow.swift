@@ -83,6 +83,7 @@ struct WorkspaceScriptRow: View {
             .resizable()
             .scaledToFit()
             .frame(width: actionIconSize, height: actionIconSize)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder private var menuActions: some View {

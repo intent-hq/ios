@@ -91,17 +91,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
             XCTAssertTrue(app.buttons["workspace.agent.demo-agent-deflake"].waitForExistence(timeout: Self.timeout))
         }
         XCTAssertTrue(row.label.contains("Updated "))
-        for action in ["Archive", "Delete"] {
-            revealActions(on: row)
-            let button = app.buttons["workspace.\(action.lowercased()).\(Self.workspaceId)"]
-            XCTAssertTrue(button.waitForExistence(timeout: Self.timeout))
-            button.tap()
-            let alert = app.alerts["\(action) Workspace"]
-            XCTAssertTrue(alert.waitForExistence(timeout: Self.timeout))
-            XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Add usage analytics dashboard")).firstMatch.exists)
-            alert.buttons["Cancel"].tap()
-            XCTAssertTrue(row.exists)
-        }
+        verifyActionCancellation(in: app, row: row)
         revealActions(on: row)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "workspace-archive-delete-swipe"
@@ -127,13 +117,17 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         workspaceList(in: app).swipeDown()
         XCTAssertFalse(row.exists)
         XCTAssertFalse(other.exists)
+        verifyArchivedWorkspace(in: app, row: row, deleted: other)
+    }
 
+    @MainActor
+    private func verifyArchivedWorkspace(in app: XCUIApplication, row: XCUIElement, deleted: XCUIElement) {
         app.buttons["workspaces.menu"].tap()
         app.buttons["Show archived"].tap()
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(row.label.contains("Archived"))
         XCTAssertFalse(row.label.contains("Updated "))
-        XCTAssertFalse(other.exists)
+        XCTAssertFalse(deleted.exists)
         workspaceList(in: app).swipeDown()
         XCTAssertTrue(row.exists)
         XCTAssertTrue(row.label.contains("Archived"))
@@ -145,6 +139,21 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         app.buttons["workspaces.menu"].tap()
         app.buttons["Hide archived"].tap()
         XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    private func verifyActionCancellation(in app: XCUIApplication, row: XCUIElement) {
+        for action in ["Archive", "Delete"] {
+            revealActions(on: row)
+            let button = app.buttons["workspace.\(action.lowercased()).\(Self.workspaceId)"]
+            XCTAssertTrue(button.waitForExistence(timeout: Self.timeout))
+            button.tap()
+            let alert = app.alerts["\(action) Workspace"]
+            XCTAssertTrue(alert.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Add usage analytics dashboard")).firstMatch.exists)
+            alert.buttons["Cancel"].tap()
+            XCTAssertTrue(row.exists)
+        }
     }
 
     @MainActor

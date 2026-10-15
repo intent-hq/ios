@@ -149,7 +149,7 @@ struct WorkspaceStatusImageView: View {
 private struct StatusImagePreviewLayout: Layout {
     let imageSize: CGSize
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+    func sizeThatFits(proposal: ProposedViewSize, subviews _: Subviews, cache _: inout ()) -> CGSize {
         guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
         let availableWidth = max(0, proposal.width ?? imageSize.width)
         let scale = min(1, availableWidth / imageSize.width, WorkspaceStatusImageLayout.detailMaxHeight / imageSize.height)
