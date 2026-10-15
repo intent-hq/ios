@@ -14,19 +14,12 @@ struct HTMLFileWebViewTests {
         let address = "http://127.0.0.1:\(port.rawValue)/pixel.png"
 
         // Positive control: the same WebKit runtime can reach and display this image.
-        let control = WKWebView()
-        control.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
-        control.loadHTMLString("<img id='remote' src='\(address)'>", baseURL: nil)
-        do {
-            try await waitUntil { try await evaluate("document.getElementById('remote')?.naturalWidth === 1", in: control) as? Bool == true }
-        } catch {
-            let state = try await evaluate("JSON.stringify([document.readyState, document.getElementById('remote')?.complete, document.getElementById('remote')?.naturalWidth])", in: control)
-            Issue.record("HTTP image control failed; requests: \(server.requests), document: \(String(describing: state))")
-            throw error
-        }
+        let control = try await loadUnprotectedImage(at: address, server: server)
         control.stopLoading()
         let baseline = server.requests
+        let baselineConnections = server.acceptedConnections
         #expect(baseline > 0)
+        print("HTML control requests", baseline, "connections", baselineConnections)
 
         let source = """
         <!doctype html><html><head><title>Static report</title>
@@ -54,17 +47,10 @@ struct HTMLFileWebViewTests {
             #expect(webView.title == "Static report")
             #expect(server.requests == baseline)
 
-            for target in [address, "https://example.com", "file:///tmp/page.html", "about:blank", "data:text/html,Replaced", "intent://local/note/spec"] {
-                _ = try await webView.callAsyncJavaScript(
-                    "document.getElementById('link').href = target; document.getElementById('link').click();",
-                    arguments: ["target": target],
-                    in: nil,
-                    contentWorld: .defaultClient
-                )
-                try await Task.sleep(for: .milliseconds(100))
-                #expect(webView.url?.absoluteString == "about:blank")
-                #expect(webView.title == "Static report")
-            }
+            try await checkInertLinks(in: webView, address: address, server: server, baseline: baseline)
+            // WebKit may speculatively open a socket before cancelling navigation.
+            // Count received HTTP bytes, not idle sockets, and allow late requests to surface.
+            try await Task.sleep(for: .seconds(1))
             #expect(server.requests == baseline)
         }
     }
@@ -74,6 +60,36 @@ struct HTMLFileWebViewTests {
             try await Task.sleep(for: .milliseconds(200))
             #expect(webView.title == "Keep this page")
             #expect(try await evaluate("document.querySelector('h1').textContent", in: webView) as? String == "Report")
+        }
+    }
+
+    private func loadUnprotectedImage(at address: String, server: ImageServer) async throws -> WKWebView {
+        let control = WKWebView()
+        control.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
+        control.loadHTMLString("<img id='remote' src='\(address)'>", baseURL: nil)
+        do {
+            try await waitUntil { try await evaluate("document.getElementById('remote')?.naturalWidth === 1", in: control) as? Bool == true }
+        } catch {
+            let state = try await evaluate("JSON.stringify([document.readyState, document.getElementById('remote')?.complete, document.getElementById('remote')?.naturalWidth])", in: control)
+            Issue.record("HTTP image control failed; requests: \(server.requests), document: \(String(describing: state))")
+            throw error
+        }
+        return control
+    }
+
+    private func checkInertLinks(in webView: WKWebView, address: String, server: ImageServer, baseline: Int) async throws {
+        for target in [address, "https://example.com", "file:///tmp/page.html", "about:blank", "data:text/html,Replaced", "intent://local/note/spec"] {
+            _ = try await webView.callAsyncJavaScript(
+                "document.getElementById('link').href = target; document.getElementById('link').click();",
+                arguments: ["target": target],
+                in: nil,
+                contentWorld: .defaultClient
+            )
+            try await Task.sleep(for: .milliseconds(100))
+            print("HTML target", target, "requests", server.requests, "connections", server.acceptedConnections)
+            #expect(webView.url?.absoluteString == "about:blank")
+            #expect(webView.title == "Static report")
+            #expect(server.requests == baseline)
         }
     }
 
@@ -118,6 +134,7 @@ struct HTMLFileWebViewTests {
         static let pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
         let listener: NWListener
         private var connections: [NWConnection] = []
+        var acceptedConnections: Int { connections.count }
         private(set) var requests = 0
 
         init() throws {
@@ -132,15 +149,17 @@ struct HTMLFileWebViewTests {
 
         private func accept(_ connection: NWConnection) {
             connections.append(connection)
-            requests += 1
             let image = Data(base64Encoded: Self.pixel) ?? Data()
             var reply = Data("HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: \(image.count)\r\nConnection: close\r\n\r\n".utf8)
             reply.append(image)
             let response = reply
             connection.start(queue: .main)
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { @Sendable data, _, _, error in
-                guard data != nil, error == nil else { return }
-                connection.send(content: response, contentContext: .finalMessage, isComplete: true, completion: .idempotent)
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { @Sendable [weak self] data, _, _, error in
+                guard let data, !data.isEmpty, error == nil else { return }
+                Task { @MainActor in
+                    self?.requests += 1
+                    connection.send(content: response, contentContext: .finalMessage, isComplete: true, completion: .idempotent)
+                }
             }
         }
 
