@@ -116,9 +116,9 @@ extension AppCoordinatorTests {
         let workspaceId = detail == .assistant ? Workspace.chiefWorkspaceId : ConversationStartupFixture.workspaceId
         let startup = fixture.makeViewModel(workspaceId: workspaceId)
         await startup.load()
+        await fixture.session.assistantStore.refresh()
+        try #require(!fixture.session.assistantStore.threads.isEmpty)
         if detail == .assistant {
-            await fixture.session.assistantStore.refresh()
-            try #require(!fixture.session.assistantStore.threads.isEmpty)
             coordinator.onSelectAssistant(agentId: ConversationStartupFixture.parentId)
         } else {
             coordinator.onSelectAgent(ConversationStartupFixture.parentId, workspaceId: ConversationStartupFixture.workspaceId, agentName: "Agent")
@@ -126,7 +126,10 @@ extension AppCoordinatorTests {
         coordinator.iPadNavigation.collapseSidebar()
         let size = CompactShellSize(width: CompactShellSize.wide)
         let shell = ResizableIPadTestShell(session: fixture.session, coordinator: coordinator, size: size)
-        try await SyntheticBadgeHost.render(shell, width: CompactShellSize.wide, height: CompactShellSize.height) { host, window in
+        let trace = SyntheticBadgeHostTrace(context: "iPad retained pane visibility: \(detail)")
+        try await SyntheticBadgeHost.render(
+            shell, width: CompactShellSize.wide, height: CompactShellSize.height, diagnostics: trace
+        ) { host, window in
             // The render host is deliberately non-key. This test exercises real
             // input focus, so temporarily make its visible window the responder root.
             let previousKey = window.windowScene?.keyWindow
@@ -136,11 +139,20 @@ extension AppCoordinatorTests {
                 previousKey?.makeKey()
             }
             try #require(window.isKeyWindow)
-            try await verifyFocusedEditor(in: host, size: size, coordinator: coordinator)
+            do {
+                try await verifyFocusedEditor(in: host, size: size, coordinator: coordinator, detail: detail, trace: trace)
+            } catch {
+                await IPadVisibilityDiagnostics.record("failure", in: host, coordinator: coordinator, trace: trace)
+                throw error
+            }
         }
     }
+}
 
-    @MainActor private func verifyFocusedEditor(in host: UIView, size: CompactShellSize, coordinator: AppCoordinator) async throws {
+extension AppCoordinatorTests {
+    @MainActor private func verifyFocusedEditor(
+        in host: UIView, size: CompactShellSize, coordinator: AppCoordinator, detail: IPadDetailSelection, trace: SyntheticBadgeHostTrace
+    ) async throws {
         let timeout = Duration.seconds(CompactShellSize.timeout)
         try await waitUntil("the retained composer appears", timeout: timeout) { compactEditor(in: host) != nil }
         let editor = try #require(compactEditor(in: host))
@@ -150,15 +162,13 @@ extension AppCoordinatorTests {
         let selection = CompactShellSize.draftSelection
         editor.selectedRange = selection
         let request = coordinator.conversationRequestId
-        #expect(editor.becomeFirstResponder())
-        try await waitUntil("the editor becomes first responder", timeout: timeout) { editor.isFirstResponder }
-        // Editing callbacks publish their Binding on the main queue. Yield the
-        // executor so this verifies that real callback rather than starving it.
-        try await waitUntil("the native editor publishes focus", timeout: timeout) {
-            (editor.delegate as? SubmittableTextView.Coordinator)?.parent.isFocused == true
-        }
-        try await waitUntil("the shell enters typing focus", timeout: timeout) { coordinator.iPadNavigation.focusPresentation == .conversationEditing }
-        try await waitUntil("the typing focus close control appears", timeout: timeout) { compactControl("ipad.focus.close", in: host) != nil }
+        await IPadVisibilityDiagnostics.record("before-visits", in: host, coordinator: coordinator, trace: trace)
+        try await visitRetainedPanes(in: host, coordinator: coordinator, detail: detail, trace: trace)
+        #expect(compactEditor(in: host) === editor)
+        #expect(editor.text == draft)
+        #expect(editor.selectedRange == selection)
+        try await focusRetainedEditor(editor, in: host, coordinator: coordinator)
+        await IPadVisibilityDiagnostics.record("typing", in: host, coordinator: coordinator, trace: trace)
         for width in [CompactShellSize.narrow, CompactShellSize.wide] {
             size.width = width
             try await waitUntil("the close control fits the resized pane", timeout: timeout) {
@@ -172,17 +182,22 @@ extension AppCoordinatorTests {
             #expect(editor.selectedRange == selection)
             #expect(compactControl("ipad.rail.workspaces", in: host) == nil)
             #expect(compactControl("intent.menu.open", in: host) == nil)
+            await IPadVisibilityDiagnostics.record("typing-width-\(width)", in: host, coordinator: coordinator, trace: trace)
         }
-        let close = try #require(compactControl("ipad.focus.close", in: host))
-        #expect(close.accessibilityActivate())
-        try await waitUntil("closing typing focus resigns the editor", timeout: timeout) {
-            coordinator.iPadNavigation.focusPresentation == .normal && !editor.isFirstResponder
-        }
+        try await closeRetainedFocus(editor, in: host, coordinator: coordinator)
         #expect(compactEditor(in: host) === editor)
         #expect(editor.text == draft)
         #expect(editor.selectedRange == selection)
         #expect(!coordinator.iPadNavigation.isSidebarExpanded)
         #expect(coordinator.conversationRequestId == request)
+        await IPadVisibilityDiagnostics.record("typing-closed", in: host, coordinator: coordinator, trace: trace)
+        if detail == .workspace {
+            try await recordFocusedSearch(in: host, coordinator: coordinator, trace: trace)
+            #expect(compactEditor(in: host) === editor)
+            #expect(editor.text == draft)
+            #expect(editor.selectedRange == selection)
+            #expect(coordinator.conversationRequestId == request)
+        }
     }
 
     @MainActor private func verifyCompactResize(
@@ -300,6 +315,68 @@ extension AppCoordinatorTests {
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: CompactShellSize.pollInterval))
         }
         try #require(ready(), "The retained iPad shell did not finish updating", sourceLocation: sourceLocation)
+    }
+}
+
+private extension AppCoordinatorTests {
+    @MainActor func closeRetainedFocus(_ editor: KeyCommandTextView, in host: UIView, coordinator: AppCoordinator) async throws {
+        let close = try #require(compactControl("ipad.focus.close", in: host))
+        #expect(close.accessibilityActivate())
+        try await waitUntil("closing typing focus resigns the editor", timeout: .seconds(CompactShellSize.timeout)) {
+            coordinator.iPadNavigation.focusPresentation == .normal && !editor.isFirstResponder
+        }
+    }
+
+    @MainActor func focusRetainedEditor(_ editor: KeyCommandTextView, in host: UIView, coordinator: AppCoordinator) async throws {
+        let timeout = Duration.seconds(CompactShellSize.timeout)
+        #expect(editor.becomeFirstResponder())
+        try await waitUntil("the editor becomes first responder", timeout: timeout) { editor.isFirstResponder }
+        // Editing callbacks publish their Binding on the main queue. Yield the
+        // executor so this verifies that real callback rather than starving it.
+        try await waitUntil("the native editor publishes focus", timeout: timeout) {
+            (editor.delegate as? SubmittableTextView.Coordinator)?.parent.isFocused == true
+        }
+        try await waitUntil("the shell enters typing focus", timeout: timeout) { coordinator.iPadNavigation.focusPresentation == .conversationEditing }
+        try await waitUntil("the typing focus close control appears", timeout: timeout) { compactControl("ipad.focus.close", in: host) != nil }
+    }
+
+    @MainActor func visitRetainedPanes(
+        in host: UIView, coordinator: AppCoordinator, detail: IPadDetailSelection, trace: SyntheticBadgeHostTrace
+    ) async throws {
+        let timeout = Duration.seconds(CompactShellSize.timeout)
+        if detail == .workspace {
+            coordinator.onSelectAssistant(agentId: ConversationStartupFixture.parentId)
+            try await waitUntil("both retained composers appear", timeout: timeout) {
+                IPadVisibilityDiagnostics.editors(in: host).count == 2
+            }
+            await IPadVisibilityDiagnostics.record("assistant-visited", in: host, coordinator: coordinator, trace: trace)
+        }
+        coordinator.onSelectIPadSection(.settings)
+        try await waitUntil("the Settings pane appears", timeout: timeout) {
+            compactControl("settings.pairing.scan", in: host) != nil
+        }
+        await IPadVisibilityDiagnostics.record("settings-visited", in: host, coordinator: coordinator, trace: trace)
+        coordinator.onSelectIPadSection(detail == .workspace ? .workspaces : .assistant)
+        coordinator.iPadNavigation.collapseSidebar()
+        await IPadVisibilityDiagnostics.record("before-typing", in: host, coordinator: coordinator, trace: trace)
+    }
+
+    @MainActor func recordFocusedSearch(in host: UIView, coordinator: AppCoordinator, trace: SyntheticBadgeHostTrace) async throws {
+        let timeout = Duration.seconds(CompactShellSize.timeout)
+        coordinator.iPadNavigation.revealSidebar()
+        try await waitUntil("the retained Search control appears", timeout: timeout) {
+            compactControl("workspaces.search.open", in: host) != nil
+        }
+        let search = try #require(compactControl("workspaces.search.open", in: host))
+        #expect(search.accessibilityActivate())
+        try await waitUntil("the retained search field appears", timeout: timeout) {
+            coordinator.iPadNavigation.focusPresentation == .workspaceSearch && compactControl("workspaces.search.field", in: host) != nil
+        }
+        await IPadVisibilityDiagnostics.record("search-focused", in: host, coordinator: coordinator, trace: trace)
+        let close = try #require(compactControl("workspaces.search.cancel", in: host))
+        #expect(close.accessibilityActivate())
+        try await waitUntil("closing search restores normal focus", timeout: timeout) { coordinator.iPadNavigation.focusPresentation == .normal }
+        await IPadVisibilityDiagnostics.record("search-closed", in: host, coordinator: coordinator, trace: trace)
     }
 }
 
