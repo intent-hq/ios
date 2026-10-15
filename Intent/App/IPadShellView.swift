@@ -72,21 +72,7 @@ struct IPadShellView: View {
     private var shell: some View {
         ZStack(alignment: .topLeading) {
             if !layout.usesCompactNavigation {
-                IPadNavigationRail(
-                    section: navigation.section,
-                    isSidebarVisible: navigation.isSidebarVisible,
-                    canUseAssistant: coordinator.canUseAssistant,
-                    onSelect: coordinator.onSelectIPadSection
-                ) {
-                    coordinator.iPadNavigation.revealSidebar()
-                }
-                .blur(radius: isFocused ? IPadShellLayout.focusBlurRadius : 0)
-                .allowsHitTesting(!isFocused)
-                .accessibilityHidden(true, isEnabled: isFocused)
-                .padding(layout.inset)
-                // Native navigation containers can extend their hit region beyond
-                // a clipped pane. Keep normal navigation above those containers.
-                .zIndex(isFocused ? 0 : 2)
+                navigationRail
             }
             detailPane
                 .padding(layout.inset)
@@ -135,6 +121,23 @@ struct IPadShellView: View {
             // Layout changes (first measurement, rotation) must not move VoiceOver focus.
             if old.usesOverlay == new.usesOverlay, old.isVisible, !new.isVisible { detailFocused = true }
         }
+    }
+
+    private var navigationRail: some View {
+        IPadNavigationRail(
+            section: navigation.section,
+            isSidebarVisible: navigation.isSidebarVisible,
+            canUseAssistant: coordinator.canUseAssistant,
+            onSelect: coordinator.onSelectIPadSection
+        ) {
+            coordinator.iPadNavigation.revealSidebar()
+        }
+        .blur(radius: isFocused ? IPadShellLayout.focusBlurRadius : 0)
+        .allowsHitTesting(!isFocused)
+        .accessibilityHidden(true, isEnabled: isFocused)
+        .padding(layout.inset)
+        // Keep normal navigation above native pane containers' hit regions.
+        .zIndex(isFocused ? 0 : 2)
     }
 
     private var detailPane: some View {
