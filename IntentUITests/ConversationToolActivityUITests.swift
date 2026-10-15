@@ -62,7 +62,8 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
             XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
         }
         let output = transcript.staticTexts.matching(NSPredicate(
-            format: "label CONTAINS %@", "Use an outline for the error state."
+            format: "label CONTAINS %@",
+            "Use an outline for the error state."
         )).firstMatch
         XCTAssertFalse(output.exists, "Paired results must remain inside collapsed tool disclosures")
         assertCollapsedRows(rows, in: transcript)
@@ -97,7 +98,9 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
         }
         for (previous, next) in zip(rows, rows.dropFirst()) {
             XCTAssertEqual(
-                next.frame.minY, previous.frame.maxY, accuracy: Self.frameTolerance,
+                next.frame.minY,
+                previous.frame.maxY,
+                accuracy: Self.frameTolerance,
                 "Consecutive tools must not gain extra spacing from padding or hidden result rows"
             )
         }
@@ -110,9 +113,11 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
             let textFrame = text.exists ? String(describing: text.frame) : "not separately exposed"
             return "\(row.label): button=\(row.frame), text=\(textFrame), value=\(String(describing: row.value))"
         }
-        let attachment = XCTAttachment(string: "Native accessibility frames in points; text frames are not glyph bounds.\n"
-            + "Figma reference: 20pt visible rows at y=0,36,72; 16pt visible gaps.\n"
-            + measurements.joined(separator: "\n"))
+        let attachment = XCTAttachment(
+            string: "Native accessibility frames in points; text frames are not glyph bounds.\n"
+                + "Figma reference: 20pt visible rows at y=0,36,72; 16pt visible gaps.\n"
+                + measurements.joined(separator: "\n")
+        )
         attachment.name = "iPad tools geometry \(appearance)"
         attachment.lifetime = .keepAlways
         add(attachment)
