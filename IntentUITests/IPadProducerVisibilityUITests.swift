@@ -56,11 +56,24 @@ nonisolated final class IPadProducerVisibilityUITests: XCTestCase {
 
     @MainActor private func verifyVisible(_ app: XCUIApplication, draft: String) {
         for identifier in Self.identifiers {
-            let element = app.descendants(matching: .any)[identifier].firstMatch
+            let matches = elements(in: app, identifier: identifier)
+            let element = matches.firstMatch
             XCTAssertTrue(element.waitForExistence(timeout: Self.timeout), "Missing visible sentinel: \(identifier)")
+            XCTAssertEqual(matches.count, 1, "Ambiguous visible sentinel: \(identifier)")
             XCTAssertTrue(element.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), "Unreachable visible sentinel: \(identifier)")
         }
+        let list = elements(in: app, identifier: "visibility.list").firstMatch
+        XCTAssertTrue(list.staticTexts["visibility.row"].exists)
+        XCTAssertTrue(list.staticTexts["visibility.list.header"].exists)
         XCTAssertEqual(app.textViews["composer.textView"].value as? String, draft)
+    }
+
+    @MainActor private func elements(in app: XCUIApplication, identifier: String) -> XCUIElementQuery {
+        if identifier == "visibility.list" {
+            // SwiftUI can apply the pane identifier to its native collection view.
+            return app.collectionViews.matching(NSPredicate(format: "identifier IN %@", ["visibility.list", "visibility.sidebar"]))
+        }
+        return app.descendants(matching: .any).matching(identifier: identifier)
     }
 
     @MainActor private func nativeReport(_ probe: XCUIElement) throws -> [String: String] {
@@ -71,11 +84,12 @@ nonisolated final class IPadProducerVisibilityUITests: XCTestCase {
 
     @MainActor private func capture(_ app: XCUIApplication, phase: String, native: [String: String]) throws {
         let observations: [[String: Any]] = Self.identifiers.map { identifier in
-            let matches = app.descendants(matching: .any).matching(identifier: identifier)
+            let matches = elements(in: app, identifier: identifier)
             let element = matches.firstMatch
             let exists = element.exists
             return [
                 "identifier": identifier, "count": matches.count, "exists": exists,
+                "nativeIdentifier": exists ? element.identifier : "absent",
                 "hittable": exists && element.isHittable,
                 "frame": exists ? String(describing: element.frame) : "absent"
             ]
