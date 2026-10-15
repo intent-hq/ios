@@ -155,7 +155,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     private var windowAdaptedControls: some View {
         #if os(iOS)
         if usesIPadDesign {
-            // The shell already respects the window safe area around this inset pane.
+            // The shell gutter and header inset keep these controls below system chrome.
             controls
         } else if #available(iOS 26.0, *) {
             // Reserve only the system's actual corner region (including iPad window controls).

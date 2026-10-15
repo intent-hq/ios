@@ -97,6 +97,7 @@ struct IPadShellView: View {
             }
         }
         .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .ignoresSafeArea(.container, edges: .vertical)
         .opacity(width == nil ? 0 : 1)
         .background(IPadShellStyle.background(for: colorScheme).ignoresSafeArea())
         .modifier(WorkspaceActionLauncher(
