@@ -136,8 +136,7 @@ struct IPadShellView: View {
         }
         .blur(radius: isFocused ? IPadShellLayout.focusBlurRadius : 0)
         .allowsHitTesting(!isFocused)
-        .accessibilityElement(children: isFocused ? .ignore : .contain)
-        .accessibilityHidden(true, isEnabled: isFocused)
+        .accessibilityHidden(isFocused)
         .padding(layout.inset)
         // Keep normal navigation above native pane containers' hit regions.
         .zIndex(isFocused ? 0 : 2)

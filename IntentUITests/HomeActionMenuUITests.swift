@@ -119,11 +119,11 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertGreaterThan(composer.frame.height, emptyHeight)
         XCTAssertTrue(send.isEnabled)
         XCTAssertTrue(send.isHittable)
-        XCTAssertFalse(rail.exists, "Focused typing hides background navigation")
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad focused multiline draft")
+        XCTAssertFalse(rail.exists, "Focused typing hides background navigation\n\(app.debugDescription)")
         let closeFocus = app.buttons["ipad.focus.close"]
         XCTAssertTrue(closeFocus.isHittable)
         XCTAssertFalse(closeFocus.frame.intersects(send.frame))
-        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad focused multiline draft")
         closeFocus.tap()
         XCTAssertTrue(rail.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, draft)

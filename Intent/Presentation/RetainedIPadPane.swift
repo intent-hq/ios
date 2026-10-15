@@ -13,10 +13,7 @@ struct RetainedIPadPane<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .opacity(isVisible && (parentVisible || keepsCoveredContentVisible) ? 1 : 0)
             .allowsHitTesting(isInteractive)
-            // Native containers can otherwise expose hidden descendants through
-            // the shell's ancestor accessibility groups. Retain the view, not its AX children.
-            .accessibilityElement(children: isInteractive ? .contain : .ignore)
-            .accessibilityHidden(true, isEnabled: !isInteractive)
+            .accessibilityHidden(!isInteractive)
             .environment(\.isIPadPaneVisible, isInteractive)
             .transformPreference(WorkspaceActionMenuInputTop.self) { inputTop in
                 if !isInteractive { inputTop = nil }
@@ -32,9 +29,9 @@ struct IPadPaneBounds: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .accessibilityElement(children: isAccessible ? .contain : .ignore)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier(identifier)
             .contentShape([.interaction, .accessibility], Rectangle())
-            .accessibilityHidden(true, isEnabled: !isAccessible)
+            .accessibilityHidden(!isAccessible)
     }
 }

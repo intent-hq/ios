@@ -86,16 +86,16 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             let field = app.textFields["workspaces.search.field"]
             XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
             field.typeText("payment")
+            captureSearchState(name: "iPad focused search \(appearance)")
             XCTAssertFalse(app.staticTexts["Add usage analytics dashboard"].firstMatch.exists)
             XCTAssertFalse(app.buttons["intent.menu.open"].exists)
-            XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)
+            XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists, app.debugDescription)
             XCTAssertFalse(app.buttons["ipad.sidebar.collapse"].exists)
             XCTAssertFalse(heading.exists, app.debugDescription)
             XCTAssertFalse(app.otherElements["ipad.detail.panel"].exists, app.debugDescription)
             XCTAssertFalse(app.buttons["settings.pairing.manual"].exists, app.debugDescription)
             let cancel = app.buttons["workspaces.search.cancel"]
             XCTAssertTrue(cancel.isHittable)
-            captureSearchState(name: "iPad focused search \(appearance)")
             let panel = app.otherElements["ipad.sidebar.panel"]
             XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
             XCTAssertEqual(panel.frame.width, Fixture.focusPanelWidth, accuracy: 2, app.debugDescription)

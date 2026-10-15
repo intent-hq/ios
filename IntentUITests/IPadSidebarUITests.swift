@@ -223,9 +223,9 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         for (section, label, control) in sections {
             app.buttons["ipad.rail.\(section)"].tap()
             XCTAssertTrue(app.buttons["ipad.rail.\(section)"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
-            XCTAssertTrue(app.buttons[control].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
             capture(app, name: "iPad \(label) \(appearance)")
+            XCTAssertTrue(app.buttons[control].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
             app.buttons["ipad.rail.workspaces"].tap()
         }
     }
