@@ -297,6 +297,8 @@ struct RootView: View {
         .background {
             ConnectionLossPresenter(
                 isPresented: coordinator.showsConnectionLossOverlay,
+                startupState: session.connection.startupState,
+                onRetry: session.connection.retryConnection,
                 mismatches: session.connection.certMismatches,
                 networkStatus: networkAvailability.status,
                 onHome: coordinator.onReturnToSavedMachines

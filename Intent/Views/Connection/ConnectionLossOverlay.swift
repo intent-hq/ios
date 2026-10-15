@@ -21,6 +21,8 @@ struct ConnectionLossOverlay: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var viewportHeight: CGFloat = 0
     @State private var bottomBalancePadding: CGFloat = 0
+    var startupState: DaemonStartupState?
+    var onRetry: (() -> Void)?
     let mismatches: [HostCertMismatch]
     var networkStatus: NetworkAvailability.Status = .unknown
     // The source page can be light even though this overlay always renders dark.
@@ -36,7 +38,11 @@ struct ConnectionLossOverlay: View {
                     .frame(width: Layout.markSize, height: Layout.markSize)
                     .accessibilityHidden(true)
                 VStack(spacing: Layout.actionSpacing) {
-                    messages
+                    if let startupState {
+                        DaemonStartupProgressView(state: startupState, onRetry: onRetry)
+                    } else {
+                        messages
+                    }
                     homeButton
                 }
             }

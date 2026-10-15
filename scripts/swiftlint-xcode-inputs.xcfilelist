@@ -164,6 +164,7 @@ $(SRCROOT)/Intent/Services/ConnectionManagerHostRefresh.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerIdentity.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerRecovery.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerRequests.swift
+$(SRCROOT)/Intent/Services/ConnectionManagerStartup.swift
 $(SRCROOT)/Intent/Services/ConnectionPrincipal.swift
 $(SRCROOT)/Intent/Services/ConnectionSubscriptionRouter.swift
 $(SRCROOT)/Intent/Services/ConnectionTypes.swift
@@ -187,6 +188,7 @@ $(SRCROOT)/Intent/Services/ConversationWatchedAgents.swift
 $(SRCROOT)/Intent/Services/CreationCatalog.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore+Events.swift
 $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
+$(SRCROOT)/Intent/Services/DaemonStartupStatus.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
 $(SRCROOT)/Intent/Services/DemoAgentListFixtures.swift
 $(SRCROOT)/Intent/Services/DemoBrowserFixtures.swift
@@ -214,6 +216,7 @@ $(SRCROOT)/Intent/Services/DemoMode.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/DemoRepositoryScriptFixtures.swift
 $(SRCROOT)/Intent/Services/DemoSettings.swift
+$(SRCROOT)/Intent/Services/DemoStartupConnection.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/DemoWorkspaceActionFixtures.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
@@ -351,6 +354,7 @@ $(SRCROOT)/Intent/Views/Connection/ConnectionSheetButtonStyle.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSheetText.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionSwitcherList.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionsView.swift
+$(SRCROOT)/Intent/Views/Connection/DaemonStartupProgressView.swift
 $(SRCROOT)/Intent/Views/Connection/DisconnectedView.swift
 $(SRCROOT)/Intent/Views/Connection/LoadingView.swift
 $(SRCROOT)/Intent/Views/Connection/SavedConnectionCard.swift
@@ -614,6 +618,8 @@ $(SRCROOT)/IntentTests/ConnectionManagerPathTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerPhysicalPathTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerRecoveryFixtures.swift
 $(SRCROOT)/IntentTests/ConnectionManagerRequestTests.swift
+$(SRCROOT)/IntentTests/ConnectionManagerStartupLifecycleTests.swift
+$(SRCROOT)/IntentTests/ConnectionManagerStartupTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerSubscriptionTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerTests.swift
 $(SRCROOT)/IntentTests/ConnectionNetworkMessageTests.swift
@@ -709,6 +715,7 @@ $(SRCROOT)/IntentTests/CreationOptionsStoreModelTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
 $(SRCROOT)/IntentTests/CreationPickerRenderedGeometry.swift
+$(SRCROOT)/IntentTests/DaemonStartupStatusTests.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
 $(SRCROOT)/IntentTests/DemoConversationStartupTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesDesignTests.swift
@@ -981,6 +988,7 @@ $(SRCROOT)/IntentUITests/CreateNewRepositoryUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceDraftUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspacePreferencesUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
+$(SRCROOT)/IntentUITests/DaemonStartupUITests.swift
 $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuTestSupport.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuUITests.swift
@@ -992,6 +1000,7 @@ $(SRCROOT)/IntentUITests/PairingDesignUITests.swift
 $(SRCROOT)/IntentUITests/QuestionWizardUITests.swift
 $(SRCROOT)/IntentUITests/SettingsUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
+$(SRCROOT)/IntentUITests/StartupWebSocketFixture.swift
 $(SRCROOT)/IntentUITests/TranscriptVideoUITests.swift
 $(SRCROOT)/IntentUITests/WatcherMessageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceAgentGroupsUITests.swift

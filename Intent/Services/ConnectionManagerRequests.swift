@@ -6,6 +6,12 @@ extension ConnectionManager {
     private static let connectionClosedErrorCode = -3
     private static let notConnectedErrorCode = -4
 
+    private func requireStartupDemoAdmission() throws {
+        if DemoStartupConnection.isEnabled, connectionState != .connected {
+            throw NSError(domain: Self.webSocketErrorDomain, code: Self.notConnectedErrorCode)
+        }
+    }
+
     // MARK: - Public API
 
     /// Default per-request RPC timeout. Individual calls may pass a longer
@@ -26,6 +32,7 @@ extension ConnectionManager {
         params: [String: Any] = [:],
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
+        try requireStartupDemoAdmission()
         if DemoMode.isEnabled || servesDemoFixtures {
             return try await demoResponse(for: method, params: params)
         }

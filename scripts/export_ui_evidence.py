@@ -11,6 +11,20 @@ import tempfile
 
 
 CAPTURES = {
+    "DaemonStartupUITests": {
+        "testStartupWithoutCountsInitiallyAndOnReconnect": (
+            "startup-no-count-initial-preparing", "startup-no-count-initial-services",
+            "startup-no-count-reconnect-preparing", "startup-no-count-reconnect-services",
+        ),
+        "testInitialStartupCountsEstimateFinalizationAndFreshHello": (
+            "startup-initial-unknown-estimate", "startup-initial-estimate", "startup-initial-unchanged",
+            "startup-initial-finalizing", "startup-ready-workspaces",
+        ),
+        "testReconnectUnavailableFailureAndRetry": (
+            "startup-reconnect-preparing", "startup-reconnect-indexing-large-text", "startup-reconnect-unavailable",
+            "startup-reconnect-failed", "startup-reconnect-recovered",
+        ),
+    },
     "WorkspaceEntryUITests": {
         "testDisclosureAndNoteNavigationKeepSeparateTouchTargets": ("note-viewer-flat-back-button",),
     },
