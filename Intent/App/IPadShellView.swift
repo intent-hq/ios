@@ -9,6 +9,7 @@ struct IPadShellView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Nil until measured, so a zero first width never drives the navigation layout.
     @State private var width: CGFloat?
+    @State private var topSafeArea: CGFloat = 0
     @State private var showingCreateWorkspace = false
     @State private var showingConnectionSwitcher = false
     @State private var connectionSwitcherOpen = false
@@ -19,6 +20,9 @@ struct IPadShellView: View {
         IPadShellLayout(width: width ?? 0, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
     }
     private var measuredLayout: IPadShellLayout? { width.map { _ in layout } }
+    private var paneInsets: EdgeInsets {
+        EdgeInsets(top: max(layout.inset, topSafeArea), leading: layout.inset, bottom: layout.inset, trailing: layout.inset)
+    }
     private var sidebarPresentation: SidebarPresentation {
         SidebarPresentation(isVisible: navigation.isSidebarVisible, usesOverlay: navigation.usesSidebarOverlay)
     }
@@ -59,6 +63,7 @@ struct IPadShellView: View {
         }
         .environment(\.conversationPresentation, .iPad)
         .environment(\.iPadFocusPresentation, focusPresentation)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topSafeArea = $0 }
         .onPreferenceChange(ConnectionSwitcherOpenPreference.self) { connectionSwitcherOpen = $0 }
         .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, dismiss in
             if dismiss { showingCreateWorkspace = false }
@@ -77,15 +82,15 @@ struct IPadShellView: View {
                 navigationRail
             }
             detailPane
-                .padding(layout.inset)
+                .padding(paneInsets)
                 .zIndex(isEditing ? IPadShellLayout.focusLayer : 0)
             drawerBackdrop
                 .frame(width: layout.contentWidth)
                 .offset(x: layout.railLeadingInset)
-                .padding(layout.inset)
+                .padding(paneInsets)
                 .zIndex(1)
             sidebarPane
-                .padding(layout.inset)
+                .padding(paneInsets)
                 .zIndex(workspaceSearchVisible ? IPadShellLayout.focusLayer : 1)
             if isFocused {
                 // Keep the shade outside pane padding so it reaches the full
@@ -138,7 +143,7 @@ struct IPadShellView: View {
         .blur(radius: isFocused ? IPadShellLayout.focusBlurRadius : 0)
         .allowsHitTesting(!isFocused)
         .accessibilityHidden(isFocused)
-        .padding(layout.inset)
+        .padding(paneInsets)
         // Keep normal navigation above native pane containers' hit regions.
         .zIndex(isFocused ? 0 : 2)
     }
