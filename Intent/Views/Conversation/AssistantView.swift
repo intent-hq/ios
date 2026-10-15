@@ -38,6 +38,7 @@ struct AssistantView: View {
                     errorBanner.conversationReadableColumn()
                 }
             }
+            .modifier(IPadNavigationVisibility(isEnabled: presentation == .iPad))
         }
         .accessibilityAction(.escape) {
             coordinator.selectedSection = .workspaces

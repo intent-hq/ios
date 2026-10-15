@@ -14,6 +14,7 @@ struct IPadWorkspaceDetailView: View {
                 .navigationDestination(for: NoteDestination.self) { destination in
                     note(destination, showsBackButton: true)
                 }
+                .modifier(IPadNavigationVisibility())
         }
         .onChange(of: coordinator.currentScreenDescription) {
             if !notePath.isEmpty { notePath = NavigationPath() }
