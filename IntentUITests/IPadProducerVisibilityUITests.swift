@@ -5,7 +5,7 @@ nonisolated final class IPadProducerVisibilityUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let identifiers = [
         "visibility.sidebar", "visibility.detail", "visibility.list", "visibility.row",
-        "visibility.list.header", "visibility.content.header", "composer.textView"
+        "visibility.list.header", "visibility.content.header", "composer.textView", "visibility.standalone"
     ]
 
     override func setUpWithError() throws {

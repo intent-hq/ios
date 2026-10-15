@@ -41,6 +41,9 @@ private struct DemoIPadProducerVisibility: View {
                 Text(phase.rawValue).accessibilityIdentifier("visibility.phase")
             }
             .buttonStyle(IntentContentButtonStyle())
+            Text("Standalone text")
+                .accessibilityIdentifier("visibility.standalone")
+                .accessibilityHidden(true, isEnabled: phase.directlyHidden)
             DemoProducerInspection(inspector: inspector, phase: phase)
                 .frame(height: Self.inspectorHeight)
             HStack {
