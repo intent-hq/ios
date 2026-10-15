@@ -4,22 +4,20 @@ struct AssistantLaunchButton: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Layout {
-        static let diameter: CGFloat = 80
-        static let closeSize: CGFloat = 48
         static let closeCornerRadius: CGFloat = 20
         static let iconSize: CGFloat = 22
         static let closeIconSize: CGFloat = 24
         static let iconRotation = 90.0
         static let hiddenIconScale = 0.6
-        static let horizontalInset: CGFloat = 24
         static let shadowRadius: CGFloat = 20
         static let shadowOffset: CGFloat = 10
         static let shadowOpacity = 0.08
     }
 
-    static let scrollClearance: CGFloat = 104
+    static let scrollClearance = AssistantLauncherLayout.current.scrollClearance
     let isOpen: Bool
     var isInVerticalBar = false
+    var layout = AssistantLauncherLayout.current
     let action: () -> Void
 
     var body: some View {
@@ -40,14 +38,14 @@ struct AssistantLaunchButton: View {
         )
         .accessibilityLabel(isOpen ? "Close Intent menu" : "Intent menu")
         .accessibilityIdentifier(isOpen ? "intent.menu.close" : "intent.menu.open")
-        .padding(.horizontal, isInVerticalBar ? 0 : Layout.horizontalInset)
+        .padding(.horizontal, isInVerticalBar ? 0 : layout.horizontalInset)
     }
 
-    private var size: CGFloat { isOpen || isInVerticalBar ? Layout.closeSize : Layout.diameter }
+    private var size: CGFloat { isOpen || isInVerticalBar ? layout.closeSize : layout.diameter }
 
     private var shape: RoundedRectangle {
         RoundedRectangle(
-            cornerRadius: isOpen || isInVerticalBar ? Layout.closeCornerRadius : Layout.diameter / 2,
+            cornerRadius: isOpen || isInVerticalBar ? Layout.closeCornerRadius : layout.diameter / 2,
             style: isOpen || isInVerticalBar ? .circular : .continuous
         )
     }
@@ -70,5 +68,49 @@ struct AssistantLaunchButton: View {
                 .accessibilityHidden(true)
         }
         .frame(width: isOpen ? Layout.closeIconSize : Layout.iconSize, height: isOpen ? Layout.closeIconSize : Layout.iconSize)
+    }
+}
+
+/// Keep the visible control, hit shape, menu anchor and scroll clearance together.
+struct AssistantLauncherLayout {
+    let diameter: CGFloat
+    let closeSize: CGFloat
+    let horizontalInset: CGFloat
+    let launcherBottomInset: CGFloat
+    let menuBottomInset: CGFloat
+    let tileExtraInset: CGFloat
+
+    // Named layout presets keep platform geometry in one place.
+    // swiftlint:disable no_magic_numbers
+    static let handheld = Self(
+        diameter: 80,
+        closeSize: 48,
+        horizontalInset: 24,
+        launcherBottomInset: 12,
+        menuBottomInset: 24,
+        tileExtraInset: 0
+    )
+    static let spatial = Self(
+        diameter: 88,
+        closeSize: 60,
+        horizontalInset: 48,
+        launcherBottomInset: 36,
+        menuBottomInset: 48,
+        tileExtraInset: 24
+    )
+    // swiftlint:enable no_magic_numbers
+
+    static var current: Self {
+        #if os(visionOS)
+        spatial
+        #else
+        handheld
+        #endif
+    }
+
+    var scrollClearance: CGFloat {
+        // Leave breathing room above the tallest control in either state.
+        let contentGap: CGFloat = 12
+        return max(diameter + launcherBottomInset, closeSize + menuBottomInset) + contentGap
     }
 }
