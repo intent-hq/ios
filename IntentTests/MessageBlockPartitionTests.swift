@@ -351,18 +351,40 @@ struct ToolResultPairingTests {
         ]
         let rows = MessageBlockPartitioning.groupContentBlocks(blocks)
         guard case .group(let group)? = rows.first,
-              case .contentBlock(let trailing)? = rows.last,
               let child = group.children.first else {
-            Issue.record("expected a group followed by the standalone tool result")
+            Issue.record("expected a group containing the tool call")
             return
         }
-        #expect(rows.count == 2)
+        #expect(rows.count == 1)
         #expect(child.id == "u1")
         #expect(child.type == .toolUse)
-        #expect(trailing.id == "r1")
 
         let paired = MessageBlockPartitioning.pairToolResults(blocks)
         #expect(paired[child.id]?.id == "r1")
         #expect(paired.count == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func toolResultsDoNotCreateTranscriptRows(grouped: Bool) {
+        let content = [
+            ContentBlock(id: "thinking", type: .thinking, text: "Inspect the file"),
+            ContentBlock(id: "read", type: .toolUse, name: "read_file", toolUseId: "call-read"),
+            ContentBlock(id: "result", type: .toolResult, toolUseId: "call-read", output: AnyCodable("file contents")),
+            ContentBlock(id: "edit", type: .toolUse, name: "edit_file", toolUseId: "call-edit"),
+            ContentBlock(id: "orphan", type: .toolResult, toolUseId: "missing", output: AnyCodable("orphan result"))
+        ]
+        let blocks = grouped
+            ? [ContentBlock(type: .text, text: "<group:Working>")] + content + [ContentBlock(type: .text, text: "</group>")]
+            : content
+        let rows = MessageBlockPartitioning.groupContentBlocks(blocks)
+        let visible = rows.flatMap { row -> [ContentBlock] in
+            switch row {
+            case .contentBlock(let block): return [block]
+            case .group(let group): return group.children
+            }
+        }
+
+        #expect(visible.map(\.id) == ["thinking", "read", "edit"])
+        #expect(MessageBlockPartitioning.pairToolResults(blocks)["read"]?.output?.value as? String == "file contents")
     }
 }

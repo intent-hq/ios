@@ -70,33 +70,35 @@ struct AssistantMessageView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: workspaceDesign
-            ? Constants.Conversation.Design.Transcript.toolRowSpacing : Layout.contentSpacing) {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(renderBlocks.enumerated()), id: \.element.id) { index, renderBlock in
-                switch renderBlock {
-                case .contentBlock(let block):
-                    ContentBlockView(
-                        block: block,
-                        toolResult: toolResults[block.id],
-                        workspaceId: workspaceId,
-                        onNavigateToNote: onNavigateToNote,
-                        isHydrating: isHydrating(block),
-                        onLayoutChange: onLayoutChange,
-                        onHydrateBlock: onHydrateBlock
-                    )
-                case .group(let group):
-                    let inputs = groupInputs(group)
-                    ResponseGroupView(
-                        group: group,
-                        isLast: isLastGroup(at: index),
-                        workspaceId: workspaceId,
-                        onNavigateToNote: onNavigateToNote,
-                        toolResults: inputs.toolResults,
-                        hydratingBlockIds: inputs.hydrating,
-                        onLayoutChange: onLayoutChange,
-                        onHydrateBlock: onHydrateBlock
-                    )
+                Group {
+                    switch renderBlock {
+                    case .contentBlock(let block):
+                        ContentBlockView(
+                            block: block,
+                            toolResult: toolResults[block.id],
+                            workspaceId: workspaceId,
+                            onNavigateToNote: onNavigateToNote,
+                            isHydrating: isHydrating(block),
+                            onLayoutChange: onLayoutChange,
+                            onHydrateBlock: onHydrateBlock
+                        )
+                    case .group(let group):
+                        let inputs = groupInputs(group)
+                        ResponseGroupView(
+                            group: group,
+                            isLast: isLastGroup(at: index),
+                            workspaceId: workspaceId,
+                            onNavigateToNote: onNavigateToNote,
+                            toolResults: inputs.toolResults,
+                            hydratingBlockIds: inputs.hydrating,
+                            onLayoutChange: onLayoutChange,
+                            onHydrateBlock: onHydrateBlock
+                        )
+                    }
                 }
+                .padding(.top, blockSpacing(at: index))
             }
             // Rebuild cached markdown when a streamed prompt block closes and disappears.
             .id(hasStrippedPrompts)
@@ -111,6 +113,14 @@ struct AssistantMessageView: View {
             userStyled: false,
             isStreaming: message.isStreaming
         ))
+    }
+
+    private func blockSpacing(at index: Int) -> CGFloat {
+        guard index > 0 else { return 0 }
+        if workspaceDesign, renderBlocks[index - 1].isToolActivity, renderBlocks[index].isToolActivity {
+            return 0
+        }
+        return workspaceDesign ? Constants.Conversation.Design.Transcript.toolRowSpacing : Layout.contentSpacing
     }
 
     private func isLastGroup(at index: Int) -> Bool {
