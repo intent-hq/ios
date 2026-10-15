@@ -209,6 +209,11 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             control.tap()
             XCTAssertTrue(control.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
             capture(app, name: "iPad \(mode) sidebar \(appearance)")
+            if mode == "Recent" {
+                app.collectionViews["workspaces.list"].swipeUp(velocity: .slow)
+                capture(app, name: "iPad scrolling sidebar \(appearance)")
+                app.collectionViews["workspaces.list"].swipeDown(velocity: .fast)
+            }
         }
         capture(app, name: "iPad workspace \(appearance)")
         app.buttons["ipad.sidebar.collapse"].tap()

@@ -200,7 +200,7 @@ extension WorkspaceListSidebar {
         #endif
         .scrollContentBackground(isEmbedded ? .hidden : .automatic)
         .accessibilityIdentifier("workspaces.list")
-        .contentMargins(.horizontal, isEmbedded ? contentInset : nil)
+        .contentMargins(.horizontal, isEmbedded ? contentInset : nil, for: .scrollContent)
         // Keep the filter gap scrollable so it cannot consume the reduced
         // viewport above the keyboard; the final row retains bottom clearance.
         .contentMargins(.top, isEmbedded ? (isFocusedSearch ? IPadShellLayout.focusContentInset : IPadSidebarStyle.filterListSpacing) : Constants.WorkspaceList.sidebarTopContentMargin, for: .scrollContent)

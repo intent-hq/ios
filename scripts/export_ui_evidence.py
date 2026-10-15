@@ -37,7 +37,7 @@ CAPTURES = {
             for appearance in ("light", "dark")
             for section in (
                 "workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual",
-                "Recent sidebar", "Repo sidebar", "Status sidebar", "first workspace selected",
+                "Recent sidebar", "Repo sidebar", "Status sidebar", "first workspace selected", "scrolling sidebar",
                 "focused typing", "focused typing keyboard hidden", "typing restored",
             )
         ),
