@@ -24,7 +24,9 @@ private enum DemoProducerPhase: String {
 private struct DemoIPadProducerVisibility: View {
     private static let editorHeight: CGFloat = 100
     private static let inspectorHeight: CGFloat = 24
+    private static let overflowRowCount = 80
     @State private var phaseIndex = 0
+    @State private var actionCount = 0
     @State private var draft = "Keep this selected draft"
     @State private var focused = false
     @State private var inspector = DemoProducerInspector(frame: .zero)
@@ -44,7 +46,9 @@ private struct DemoIPadProducerVisibility: View {
             Text("Standalone text")
                 .accessibilityIdentifier("visibility.standalone")
                 .accessibilityHidden(true, isEnabled: phase.directlyHidden)
-            DemoProducerInspection(inspector: inspector, phase: phase)
+            Text("List actions: \(actionCount)")
+                .accessibilityIdentifier("visibility.action.count")
+            DemoProducerInspection(inspector: inspector, phase: phase, actionCount: actionCount)
                 .frame(height: Self.inspectorHeight)
             HStack {
                 listPane
@@ -64,6 +68,14 @@ private struct DemoIPadProducerVisibility: View {
                     Text("List row")
                         .accessibilityIdentifier("visibility.row")
                         .accessibilityHidden(true, isEnabled: phase.directlyHidden)
+                    Button("Activate List action") { actionCount += 1 }
+                        .buttonStyle(IntentContentButtonStyle())
+                        .accessibilityIdentifier("visibility.action")
+                        .accessibilityHidden(true, isEnabled: phase.directlyHidden)
+                    ForEach(0..<Self.overflowRowCount, id: \.self) { index in
+                        Text("Overflow row \(index)")
+                            .accessibilityHidden(true, isEnabled: phase.directlyHidden)
+                    }
                 } header: {
                     Text("List header")
                         .accessibilityIdentifier("visibility.list.header")
@@ -99,16 +111,22 @@ private struct DemoIPadProducerVisibility: View {
 private struct DemoProducerInspection: UIViewRepresentable {
     let inspector: DemoProducerInspector
     let phase: DemoProducerPhase
+    let actionCount: Int
 
     func makeUIView(context _: Context) -> DemoProducerInspector { inspector }
-    func updateUIView(_ view: DemoProducerInspector, context _: Context) { view.phase = phase }
+    func updateUIView(_ view: DemoProducerInspector, context _: Context) {
+        view.phase = phase
+        view.actionCount = actionCount
+    }
 }
 
 /// Reads the existing native hierarchy without rewriting its visibility or editor binding.
 private final class DemoProducerInspector: UIView {
     private static let selectionLength = 4
     var phase = DemoProducerPhase.visible
+    var actionCount = 0
     private var originalIdentity: String?
+    private var originalListIdentity: String?
     private var originalDraft: String?
     private var originalSelection: NSRange?
 
@@ -123,11 +141,14 @@ private final class DemoProducerInspector: UIView {
 
     func prepare() {
         let editors = editors(in: window)
-        guard originalIdentity == nil, editors.count == 1, let editor = editors.first else { return }
+        let lists = lists(in: window)
+        guard originalIdentity == nil, editors.count == 1, let editor = editors.first,
+              lists.count == 1, let list = lists.first else { return }
         editor.resignFirstResponder()
         let selection = NSRange(location: 0, length: min(Self.selectionLength, editor.text.utf16.count))
         editor.selectedRange = selection
         originalIdentity = String(describing: ObjectIdentifier(editor))
+        originalListIdentity = String(describing: ObjectIdentifier(list))
         originalDraft = editor.text
         originalSelection = selection
     }
@@ -157,7 +178,7 @@ private final class DemoProducerInspector: UIView {
         let editor = editors.first
         let identity = editor.map { String(describing: ObjectIdentifier($0)) } ?? "missing"
         let marker = marker(in: window?.rootViewController)
-        return [
+        let editorReport = [
             "phase": phase.rawValue, "editorCount": String(editors.count), "editor": identity,
             "originalEditor": originalIdentity ?? "unprepared", "retained": String(identity == originalIdentity),
             "draft": editor?.text ?? "missing", "originalDraft": originalDraft ?? "unprepared",
@@ -166,6 +187,30 @@ private final class DemoProducerInspector: UIView {
             "gateInteractive": String(marker?.isInteractive ?? false),
             "gateChildrenHidden": String(marker?.navigationController?.viewIfLoaded?.accessibilityElementsHidden ?? false)
         ]
+        return editorReport.merging(listReport()) { current, _ in current }
+    }
+
+    private func listReport() -> [String: String] {
+        let lists = lists(in: window)
+        var report = ["listCount": String(lists.count), "actionCount": String(actionCount)]
+        guard lists.count == 1, let list = lists.first else { return report }
+        report["list"] = String(describing: ObjectIdentifier(list))
+        report["originalList"] = originalListIdentity ?? "unprepared"
+        report["listOffsetX"] = String(Double(list.contentOffset.x))
+        report["listOffsetY"] = String(Double(list.contentOffset.y))
+        report["listMinimumY"] = String(Double(-list.adjustedContentInset.top))
+        report["listMaximumY"] = String(Double(max(-list.adjustedContentInset.top, list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)))
+        report["listHeight"] = String(Double(list.bounds.height))
+        report["listIdle"] = String(!list.isTracking && !list.isDragging && !list.isDecelerating)
+        return report
+    }
+
+    private func lists(in view: UIView?) -> [UICollectionView] {
+        guard let view else { return [] }
+        var result: [UICollectionView] = []
+        if let list = view as? UICollectionView { result.append(list) }
+        for child in view.subviews { result += lists(in: child) }
+        return result
     }
 
     private func editors(in view: UIView?) -> [UITextView] {
