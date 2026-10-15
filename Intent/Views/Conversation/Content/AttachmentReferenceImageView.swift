@@ -22,6 +22,7 @@ struct AttachmentReferenceImageView: View {
     /// fetch attachments over their own backend connection.
     @Environment(BackendSession.self) private var session: BackendSession?
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.conversationComposerFocus) private var composerFocus
     @State private var image: UIImage?
     @State private var failed = false
     /// Bumped on retry taps so the `.task(id:)` re-runs the fetch.
@@ -58,7 +59,10 @@ struct AttachmentReferenceImageView: View {
     @ViewBuilder
     private var content: some View {
         if let image {
-            Button { lightboxPresented = true } label: {
+            Button {
+                composerFocus?.wrappedValue = false
+                lightboxPresented = true
+            } label: {
                 SquareImageThumbnail(image: image, side: side)
                     .copyContextMenuPassthrough()
             }

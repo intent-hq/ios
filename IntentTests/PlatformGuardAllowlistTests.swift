@@ -24,6 +24,7 @@ struct PlatformGuardAllowlistTests {
         "Intent/Services/SpeechDictationController.swift",
         "Intent/Utils/HapticManager.swift",
         "Intent/Utils/NotificationManager.swift",
+        "Intent/Views/Components/AssistantLaunchButton.swift",
         "Intent/Views/Components/NavigationTitleSubtitleView.swift",
         "Intent/Views/Components/WindowFeedbackSoundEmitter.swift",
         "Intent/Views/Connection/ConnectionSheet.swift",

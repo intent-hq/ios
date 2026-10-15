@@ -11,6 +11,10 @@ import tempfile
 
 
 CAPTURES = {
+    "FixtureCaptureLifecycleUITests": {
+        "testAssertionAbortRetainsFinalCapture": ("fixture-assertion-abort-final-state",),
+        "testPassingFixtureRetainsRepeatedFinalCapture": ("fixture-passing-final-state",),
+    },
     "WorkspaceEntryUITests": {
         "testDisclosureAndNoteNavigationKeepSeparateTouchTargets": ("note-viewer-flat-back-button",),
     },
@@ -77,6 +81,15 @@ CAPTURES = {
         ),
     },
     "InlineResponseImageUITests": {
+        "testSavedImageOpensWithKeyboardAndPreservesDraft": (
+            "Response image with keyboard open", "Saved response image in lightbox",
+        ),
+        "testUserImageBlockOpensWithKeyboardAndPreservesDraft": (
+            "user image block with keyboard open", "Saved response image in lightbox",
+        ),
+        "testAssistantImageBlockOpensWithKeyboardAndPreservesDraft": (
+            "assistant image block with keyboard open", "Saved response image in lightbox",
+        ),
         "testPDFCardAndLinkOpenViewerAndShare": (
             "Inline PDF card and link", "PDF viewer from inline card",
             "PDF viewer from text link", "PDF share sheet", "PDF unavailable with close and retry",

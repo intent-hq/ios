@@ -1,5 +1,9 @@
 import Foundation
 
+extension ContentBlock {
+    var isToolActivity: Bool { type == .toolUse || type == .thinking }
+}
+
 struct UserBlockPartition {
     let text: [ContentBlock]
     let images: [ContentBlock]
@@ -236,6 +240,7 @@ enum MessageBlockPartitioning {
         }
 
         private mutating func addBlock(_ block: ContentBlock) {
+            guard block.type != .toolResult else { return }
             if currentGroup != nil {
                 currentGroup?.children.append(block)
             } else {

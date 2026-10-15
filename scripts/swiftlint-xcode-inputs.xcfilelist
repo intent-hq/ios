@@ -573,6 +573,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorSettingsTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorStartupTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorWorkspaceValidationTests.swift
+$(SRCROOT)/IntentTests/AssistantLauncherLayoutTests.swift
 $(SRCROOT)/IntentTests/AssistantStoreTests.swift
 $(SRCROOT)/IntentTests/AttachmentImageLoaderTests.swift
 $(SRCROOT)/IntentTests/AttachmentUploadServiceTests.swift
@@ -984,6 +985,7 @@ $(SRCROOT)/IntentUITests/CreateWorkspaceDraftUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspacePreferencesUITests.swift
 $(SRCROOT)/IntentUITests/CreateWorkspaceSelectionUITests.swift
 $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
+$(SRCROOT)/IntentUITests/FixtureCaptureLifecycleUITests.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuTestSupport.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuUITests.swift
 $(SRCROOT)/IntentUITests/IPadSidebarUITests.swift

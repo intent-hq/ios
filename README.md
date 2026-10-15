@@ -380,6 +380,28 @@ On macOS, use `TMPDIR=/private/tmp python3 scripts/test_export_ui_evidence.py`
 to avoid the fixture's symlinked temporary-path mismatch
 ([ios#671](https://github.com/intent-hq/ios/issues/671)).
 
+Final diagnostic attachments use XCTest teardown, since an assertion with
+`continueAfterFailure = false` can bypass Swift `defer`. The Linux CI job runs
+`python3 scripts/check_ui_attachment_lifecycle.py` and its mutation tests to
+reject attachment-producing defer blocks (including named helper calls);
+ordinary cleanup remains allowed. The source check is conservative by function
+name, not a Swift type checker: it includes parameter defaults but does not
+resolve dynamic dispatch, aliases, computed properties, or constructors.
+
+After `scripts/xcodebuild.sh build-for-testing-ui`, run
+`python3 scripts/verify_fixture_capture_lifecycle.py --output-root build/capture-contract`
+with the same simulator and derived-data settings. The output directory must be
+new. The iOS UI CI job runs this contract separately from the smoke selection and
+uploads `ios-fixture-capture-lifecycle`, including the original failing xcresults,
+result JSON, logs, and compact PNG manifests. The isolated abort fixture opts in
+only for this verifier; ordinary test runs skip that intentional failure.
+The verifier requires exit 65, the original marked assertion recorded as Failed,
+a passing companion fixture, and every exact named final PNG under its owning
+test in each of two result bundles. Repeated passing captures must remain
+distinct. Changing the abort fixture's capture teardown back to defer must fail
+both the source check and this native contract after rebuilding; restore and
+rebuild afterward. XCTest teardown does not guarantee evidence after a process crash.
+
 Xcode Cloud uses `ci_scripts/ci_post_clone.sh` to prepare TailcatKit for iOS with
 a checksum-pinned Go toolchain; it skips that setup for visionOS. This is build
 preparation, not release automation. See [AGENTS.md](AGENTS.md#releases) for

@@ -5,6 +5,7 @@ import SwiftUI
 struct ImageAttachmentThumbnail: View {
     let block: ContentBlock
     let workspaceId: String
+    @Environment(\.conversationComposerFocus) private var composerFocus
     @State private var lightboxPresented = false
 
     static let side: CGFloat = Constants.Conversation.ImageThumbnail.attachmentSide
@@ -20,7 +21,10 @@ struct ImageAttachmentThumbnail: View {
             )
         } else if let uiImage = ContentBlockView.decodeImage(block) {
             let imageData = ContentBlockView.decodeImageData(block)
-            Button { lightboxPresented = true } label: {
+            Button {
+                composerFocus?.wrappedValue = false
+                lightboxPresented = true
+            } label: {
                 SquareImageThumbnail(image: uiImage, side: Self.side)
                     .copyContextMenuPassthrough()
             }
