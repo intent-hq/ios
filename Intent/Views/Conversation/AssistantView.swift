@@ -28,7 +28,7 @@ struct AssistantView: View {
                 if !usesWorkspaceDesign { assistantToolbar }
             }
             .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar)
-            .safeAreaInset(edge: .top, spacing: 0) {
+            .safeAreaInset(edge: .top, spacing: presentation == .iPad ? 0 : nil) {
                 if usesWorkspaceDesign, selectedThread == nil {
                     VStack(spacing: 0) {
                         emptyHeader
