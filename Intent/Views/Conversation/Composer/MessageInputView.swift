@@ -15,7 +15,6 @@ struct MessageInputView: View {
     @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
     @Environment(\.workspaceQuestionPanelPresented) private var questionPanelPresented
     @Environment(\.conversationComposerFocus) private var conversationFocus
-
     @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
     @ScaledMetric(relativeTo: .caption) var attachmentIconSide: CGFloat = 12
     @ScaledMetric(relativeTo: .callout) private var suggestedPromptIconSide: CGFloat = 16

@@ -376,6 +376,8 @@ $(SRCROOT)/Intent/Views/Conversation/Content/CodeBlockView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/CompactMarkdownStyle.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ContentBlockView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ContextMentionChipView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/HTMLFileWebView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/HTMLLinkPreviewView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageAttachmentThumbnail.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageDecodeFailureView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageLightboxView.swift
@@ -737,6 +739,7 @@ $(SRCROOT)/IntentTests/GitHubRepoStoreBranchCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoSuggestionsTests.swift
+$(SRCROOT)/IntentTests/HTMLFileWebViewTests.swift
 $(SRCROOT)/IntentTests/HookTimeBarTests.swift
 $(SRCROOT)/IntentTests/IPadCompactNavigationTests.swift
 $(SRCROOT)/IntentTests/IPadCompactShellTests.swift
