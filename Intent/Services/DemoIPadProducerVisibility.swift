@@ -5,6 +5,8 @@ import UIKit
 /// Laid out by the pane itself so tests do not mistake a virtual accessibility
 /// container's window-sized frame for the visible panel. Enabled only by a
 /// dedicated demo launch argument; it never participates in hit testing.
+/// Only a one-point marker enters the accessibility tree: a pane-sized element
+/// changes XCTest's hit testing of the controls that the test needs to exercise.
 struct DemoIPadPaneGeometry: UIViewRepresentable {
     let identifier: String
 
@@ -13,14 +15,31 @@ struct DemoIPadPaneGeometry: UIViewRepresentable {
         view.backgroundColor = .clear
         view.isOpaque = false
         view.isUserInteractionEnabled = false
-        view.isAccessibilityElement = true
-        view.accessibilityLabel = "Pane layout bounds"
-        view.accessibilityIdentifier = "\(identifier).geometry"
+        view.isAccessibilityElement = false
+        let marker = Marker(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+        marker.isUserInteractionEnabled = false
+        marker.isAccessibilityElement = true
+        marker.accessibilityLabel = "Pane layout bounds"
+        marker.accessibilityIdentifier = "\(identifier).geometry"
+        view.addSubview(marker)
         return view
     }
 
     func updateUIView(_ view: UIView, context _: Context) {
-        view.accessibilityIdentifier = "\(identifier).geometry"
+        view.subviews.first?.accessibilityIdentifier = "\(identifier).geometry"
+    }
+
+    final class Marker: UIView {
+        override var accessibilityValue: String? {
+            get {
+                guard let pane = superview, let window else { return nil }
+                let frame = pane.convert(pane.bounds, to: window)
+                let report = ["x": frame.minX, "y": frame.minY, "width": frame.width, "height": frame.height]
+                guard let data = try? JSONEncoder().encode(report) else { return nil }
+                return String(data: data, encoding: .utf8)
+            }
+            set {}
+        }
     }
 }
 

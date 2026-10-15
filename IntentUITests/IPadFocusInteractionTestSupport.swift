@@ -46,7 +46,24 @@ struct IPadFocusBackgroundTap {
         let probes = app.otherElements.matching(identifier: "\(identifier).geometry")
         XCTAssertTrue(probes.firstMatch.waitForExistence(timeout: timeout))
         XCTAssertEqual(probes.count, 1, "The pane must have exactly one independent geometry probe")
-        let frame = probes.firstMatch.frame
+        let probe = probes.firstMatch
+        XCTAssertLessThanOrEqual(probe.frame.width, 1, "The diagnostic marker must not cover pane controls")
+        XCTAssertLessThanOrEqual(probe.frame.height, 1, "The diagnostic marker must not cover pane controls")
+        let value = try XCTUnwrap(probe.value as? String)
+        let data = try XCTUnwrap(value.data(using: .utf8))
+        let report = try JSONDecoder().decode([String: Double].self, from: data)
+        let frame = try CGRect(
+            x: XCTUnwrap(report["x"]),
+            y: XCTUnwrap(report["y"]),
+            width: XCTUnwrap(report["width"]),
+            height: XCTUnwrap(report["height"])
+        )
+        XCTContext.runActivity(named: "Measure \(identifier)") { activity in
+            let attachment = XCTAttachment(string: value)
+            attachment.name = "\(identifier)-geometry.json"
+            attachment.lifetime = .keepAlways
+            activity.add(attachment)
+        }
         return try XCTUnwrap(
             !frame.isEmpty && app.windows.firstMatch.frame.insetBy(dx: -1, dy: -1).contains(frame) ? frame : nil,
             "The measured pane must be nonempty and contained by the window"
