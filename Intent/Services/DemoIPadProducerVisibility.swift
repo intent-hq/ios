@@ -30,6 +30,14 @@ struct DemoIPadPaneGeometry: UIViewRepresentable {
     }
 
     final class Marker: UIView {
+        override var accessibilityLabel: String? {
+            get {
+                guard let pane = superview, let window else { return "Native pane report unavailable" }
+                return NativeReport.capture(in: window, pane: pane)
+            }
+            set {}
+        }
+
         override var accessibilityValue: String? {
             get {
                 guard let pane = superview, let window else { return nil }
@@ -39,6 +47,88 @@ struct DemoIPadPaneGeometry: UIViewRepresentable {
                 return String(data: data, encoding: .utf8)
             }
             set {}
+        }
+    }
+
+    /// Passive diagnostics only: no forced layout, responder changes, or visibility writes.
+    private enum NativeReport {
+        static func capture(in window: UIWindow, pane: UIView) -> String? {
+            let markers = markers(in: window.rootViewController)
+            let editors = editors(in: window)
+            let frame = pane.convert(pane.bounds, to: window)
+            var report = [
+                "runtime": UIDevice.current.systemVersion, "window": describe(window),
+                "markerCount": String(markers.count), "editorCount": String(editors.count),
+                "paneAncestors": ancestors(of: pane),
+                "paneCenterHit": hitReport(at: CGPoint(x: frame.midX, y: frame.midY), in: window),
+                "scope": "Native view ownership and hit testing; not accessibility traversal. Hit points are reported explicitly."
+            ]
+            for (index, marker) in markers.enumerated() {
+                let prefix = "marker.\(index)"
+                report["\(prefix).identity"] = identity(marker)
+                report["\(prefix).interactive"] = String(marker.isInteractive)
+                report["\(prefix).navigationController"] = identity(marker.navigationController)
+                report["\(prefix).navigationView"] = describe(marker.navigationController?.viewIfLoaded)
+                report["\(prefix).ancestors"] = ancestors(of: marker.viewIfLoaded)
+            }
+            for (index, editor) in editors.enumerated() {
+                let prefix = "editor.\(index)"
+                let frame = editor.convert(editor.bounds, to: window)
+                report["\(prefix).view"] = describe(editor)
+                report["\(prefix).firstResponder"] = String(editor.isFirstResponder)
+                report["\(prefix).draft"] = editor.text
+                report["\(prefix).selection"] = NSStringFromRange(editor.selectedRange)
+                report["\(prefix).ancestors"] = ancestors(of: editor)
+                report["\(prefix).centerHit"] = hitReport(at: CGPoint(x: frame.midX, y: frame.midY), in: window)
+                for (markerIndex, marker) in markers.enumerated() {
+                    report["\(prefix).insideMarker.\(markerIndex)"] = marker.navigationController?.viewIfLoaded.map { navigationView in
+                        String(editor.isDescendant(of: navigationView))
+                    } ?? "unloaded"
+                }
+            }
+            guard let data = try? JSONEncoder().encode(report) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+
+        private static func hitReport(at point: CGPoint, in window: UIWindow) -> String {
+            let target = window.hitTest(point, with: nil)
+            return "point=\(point) insideWindow=\(window.bounds.contains(point)) target=\(describe(target)) ancestors=\(ancestors(of: target))"
+        }
+
+        private static func identity(_ object: AnyObject?) -> String {
+            object.map { String(describing: ObjectIdentifier($0)) } ?? "nil"
+        }
+
+        private static func describe(_ view: UIView?) -> String {
+            guard let view else { return "unloaded" }
+            return "id=\(identity(view)) type=\(String(reflecting: type(of: view))) identifier=\(view.accessibilityIdentifier ?? "nil") "
+                + "frame=\(view.convert(view.bounds, to: view.window)) hidden=\(view.isHidden) alpha=\(view.alpha) "
+                + "axHidden=\(view.accessibilityElementsHidden) interactive=\(view.isUserInteractionEnabled)"
+        }
+
+        private static func ancestors(of view: UIView?) -> String {
+            var current = view
+            var chain: [String] = []
+            while let ancestor = current {
+                chain.append(describe(ancestor))
+                current = ancestor.superview
+            }
+            return chain.joined(separator: " -> ")
+        }
+
+        private static func markers(in controller: UIViewController?) -> [IPadNavigationVisibilityBridge.Controller] {
+            guard let controller else { return [] }
+            var result: [IPadNavigationVisibilityBridge.Controller] = []
+            if let marker = controller as? IPadNavigationVisibilityBridge.Controller { result.append(marker) }
+            for child in controller.children { result += markers(in: child) }
+            return result
+        }
+
+        private static func editors(in view: UIView) -> [UITextView] {
+            var result: [UITextView] = []
+            if let editor = view as? UITextView, editor.accessibilityIdentifier == "composer.textView" { result.append(editor) }
+            for child in view.subviews { result += editors(in: child) }
+            return result
         }
     }
 }

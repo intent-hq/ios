@@ -103,7 +103,13 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             try verifySearchWithoutKeyboardAndRotation(in: app, field: field, background: background, appearance: appearance)
             cancel.tap()
             XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
-            XCTAssertTrue(heading.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+            let restored = heading.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout)
+            if !restored {
+                background.actions.recordRestorationFailure(in: app, name: "iPad search restoration failure \(appearance)") {
+                    app.buttons["Create New Agent"].exists
+                }
+            }
+            XCTAssertTrue(restored, "The original post-search heading restoration must pass before any diagnostic gesture")
             XCTAssertEqual(heading.label, selectedTitle)
             XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
             try verifySearchBackgroundActivation(in: app, controls: background)
@@ -277,7 +283,7 @@ extension WorkspaceSearchUITests {
     private func prepareSearchBackground(in app: XCUIApplication) throws -> SearchBackgroundControls {
         let controls = try SearchBackgroundControls(
             connections: IPadFocusBackgroundTap(app.buttons["ipad.rail.connections"], in: app),
-            actions: IPadFocusBackgroundTap(app.buttons["Workspace actions"], in: app)
+            actions: IPadFocusBackgroundTap(app.buttons["Workspace actions"], in: app, recordsRestoration: true)
         )
         try verifySearchBackgroundActivation(in: app, controls: controls)
         return controls

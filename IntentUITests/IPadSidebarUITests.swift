@@ -29,9 +29,10 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             captureMainScreens(in: app, appearance: appearance)
             let background = try prepareTypingBackground(in: app)
             let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
-            composer.tap()
+            let composerTap = try IPadFocusBackgroundTap(composer, in: app, recordsRestoration: true)
+            try composerTap.activate(in: app)
             composer.typeText(Self.draft)
-            try verifyTypingFocus(in: app, composer: composer, background: background, appearance: appearance)
+            try verifyTypingFocus(in: app, composer: composer, composerTap: composerTap, background: background, appearance: appearance)
             try verifyBackgroundNavigation(in: app, controls: background)
             XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
             try verifySections(in: app)
@@ -149,7 +150,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
-    private func verifyTypingFocus(in app: XCUIApplication, composer: XCUIElement, background: TypingBackgroundControls, appearance: String) throws {
+    private func verifyTypingFocus(in app: XCUIApplication, composer: XCUIElement, composerTap: IPadFocusBackgroundTap, background: TypingBackgroundControls, appearance: String) throws {
         let close = app.buttons["ipad.focus.close"]
         XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         capture(app, name: "iPad focused typing \(appearance)")
@@ -183,13 +184,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
         XCTAssertTrue(app.staticTexts["Dashboard Implementor, Agent"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, Self.draft)
-        app.buttons["workspaces.search.open"].tap()
-        let search = app.textFields["workspaces.search.field"]
-        XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
-        search.typeText("payment")
-        app.buttons["workspaces.search.cancel"].tap()
-        XCTAssertTrue(composer.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-        XCTAssertEqual(composer.value as? String, Self.draft, "Search cancellation must retain the current conversation draft")
+        verifyComposerAfterSearch(in: app, composer: composer, composerTap: composerTap, appearance: appearance)
     }
 
     @MainActor
@@ -321,6 +316,23 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
 }
 
 extension IPadSidebarUITests {
+    @MainActor
+    private func verifyComposerAfterSearch(in app: XCUIApplication, composer: XCUIElement, composerTap: IPadFocusBackgroundTap, appearance: String) {
+        app.buttons["workspaces.search.open"].tap()
+        let search = app.textFields["workspaces.search.field"]
+        XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
+        search.typeText("payment")
+        app.buttons["workspaces.search.cancel"].tap()
+        let restored = composer.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout)
+        if !restored {
+            composerTap.recordRestorationFailure(in: app, name: "iPad composer search restoration failure \(appearance)") {
+                app.buttons["ipad.focus.close"].exists && app.keyboards.firstMatch.exists
+            }
+        }
+        XCTAssertTrue(restored, "The original post-search composer restoration must pass before any diagnostic gesture")
+        XCTAssertEqual(composer.value as? String, Self.draft, "Search cancellation must retain the current conversation draft")
+    }
+
     private struct TypingBackgroundControls {
         let connections: IPadFocusBackgroundTap
         let workspace: IPadFocusBackgroundTap

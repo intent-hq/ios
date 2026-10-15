@@ -5,12 +5,14 @@ import XCTest
 struct IPadFocusBackgroundTap {
     private static let timeout: TimeInterval = 30
     private static let observationDuration: TimeInterval = 1
+    private static let restorationObservationDuration: TimeInterval = 5
     private let target: XCUIElement
     private let name: String
     private let point: CGPoint
     private let windowFrame: CGRect
+    private let nativeBaseline: String?
 
-    init(_ target: XCUIElement, in app: XCUIApplication, position: CGVector = CGVector(dx: 0.5, dy: 0.5)) throws {
+    init(_ target: XCUIElement, in app: XCUIApplication, position: CGVector = CGVector(dx: 0.5, dy: 0.5), recordsRestoration: Bool = false) throws {
         XCTAssertTrue(target.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         let frame = target.frame
         let point = CGPoint(x: frame.minX + frame.width * position.dx, y: frame.minY + frame.height * position.dy)
@@ -19,6 +21,7 @@ struct IPadFocusBackgroundTap {
         self.point = try XCTUnwrap(!frame.isEmpty && windowFrame.contains(point) ? point : nil, "Background control must have an on-screen baseline point")
         self.target = target
         name = target.identifier.isEmpty ? target.label : target.identifier
+        nativeBaseline = recordsRestoration ? Self.nativeReport(in: app) : nil
     }
 
     func activate(in app: XCUIApplication) throws {
@@ -40,6 +43,69 @@ struct IPadFocusBackgroundTap {
         // Observe actual state after delivery instead of trusting hidden elements' isHittable.
         let changed = waitUntil(timeout: Self.observationDuration) { (try? unchanged()) != true }
         XCTAssertFalse(changed, "Background \(name) changed focus or context after a coordinate tap")
+    }
+
+    /// Called only after the acceptance wait failed. Never changes its saved result.
+    func recordRestorationFailure(in app: XCUIApplication, name diagnosticName: String, activated: () -> Bool) {
+        func attach(_ text: String, phase: String, to activity: any XCTActivity) {
+            let attachment = XCTAttachment(string: text)
+            attachment.name = "\(diagnosticName)-\(phase).txt"
+            attachment.lifetime = .keepAlways
+            activity.add(attachment)
+        }
+        XCTContext.runActivity(named: diagnosticName) { activity in
+            attach(nativeBaseline ?? "No native baseline recorded", phase: "baseline-native", to: activity)
+            for attachment in Self.failureAttachments(in: app, name: diagnosticName, phase: "before") { activity.add(attachment) }
+            let window = app.windows.firstMatch
+            let keyboard = app.keyboards.firstMatch
+            let targetFrame = target.exists ? target.frame : .zero
+            let pointValid = window.frame == windowFrame && window.frame.contains(point)
+                && targetFrame.contains(point)
+                && (!keyboard.exists || !keyboard.frame.contains(point))
+            let initiallyActive = activated()
+            attach(
+                "target=\(name) savedPoint=\(point) window=\(window.frame) targetFrame=\(targetFrame) "
+                    + "validPoint=\(pointValid) initiallyActive=\(initiallyActive)",
+                phase: "delivery",
+                to: activity
+            )
+            guard pointValid, !initiallyActive else {
+                attach("No gesture delivered: invalid restored point or action already active", phase: "outcome", to: activity)
+                return
+            }
+            // Do not consult isHittable: its failed result is what this gesture diagnoses.
+            let origin = window.coordinate(withNormalizedOffset: .zero)
+            let coordinate = origin.withOffset(CGVector(
+                dx: point.x - window.frame.minX, dy: point.y - window.frame.minY
+            ))
+            coordinate.tap()
+            let didActivate = waitUntil(timeout: Self.restorationObservationDuration) { activated() }
+            attach("delivered=true activated=\(didActivate)", phase: "outcome", to: activity)
+            for attachment in Self.failureAttachments(in: app, name: diagnosticName, phase: "after") { activity.add(attachment) }
+        }
+    }
+
+    private static func failureAttachments(in app: XCUIApplication, name: String, phase: String) -> [XCTAttachment] {
+        let attachments = [
+            ("\(phase)-native.txt", XCTAttachment(string: nativeReport(in: app))),
+            ("\(phase)-hierarchy.txt", XCTAttachment(string: app.debugDescription)),
+            (phase, XCTAttachment(screenshot: XCUIScreen.main.screenshot()))
+        ]
+        return attachments.map { suffix, attachment in
+            attachment.name = "\(name)-\(suffix)"
+            attachment.lifetime = .keepAlways
+            return attachment
+        }
+    }
+
+    private static func nativeReport(in app: XCUIApplication) -> String {
+        let reports = ["ipad.detail.panel", "ipad.sidebar.panel"].map { identifier in
+            let probes = app.otherElements.matching(identifier: "\(identifier).geometry")
+            guard probes.count == 1 else { return "\(identifier): probeCount=\(probes.count)" }
+            let probe = probes.firstMatch
+            return "\(identifier) geometry=\(probe.value as? String ?? "missing") native=\(probe.label)"
+        }
+        return reports.joined(separator: "\n")
     }
 
     static func paneFrame(_ identifier: String, in app: XCUIApplication) throws -> CGRect {
