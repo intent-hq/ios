@@ -12,6 +12,10 @@ import tempfile
 
 CAPTURES = {
     "DaemonStartupUITests": {
+        "testStartupWithoutCountsInitiallyAndOnReconnect": (
+            "startup-no-count-initial-preparing", "startup-no-count-initial-services",
+            "startup-no-count-reconnect-preparing", "startup-no-count-reconnect-services",
+        ),
         "testInitialStartupCountsEstimateFinalizationAndFreshHello": (
             "startup-initial-unknown-estimate", "startup-initial-estimate", "startup-initial-unchanged",
             "startup-initial-finalizing", "startup-ready-workspaces",

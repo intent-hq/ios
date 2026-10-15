@@ -56,7 +56,7 @@ nonisolated final class StartupWebSocketFixture: @unchecked Sendable {
 
     func holdStatus() { state.withLock { $0.holdStatus = true } }
 
-    func setPhase(_ phase: String?, estimate: Int? = nil, age: Int = 0) throws {
+    func setPhase(_ phase: String?, estimate: Int? = nil, age: Int = 0, includeProgress: Bool = true, finalizingStep: String = "committing") throws {
         let retryMilliseconds = 1000
         let completedNotes = 5
         let totalNotes = 20
@@ -70,7 +70,8 @@ nonisolated final class StartupWebSocketFixture: @unchecked Sendable {
                 "processedSourceBytes": processedBytes, "totalSourceBytes": totalBytes
             ]
         ]
-        if phase == "finalizing" { snapshot["finalizingStep"] = "committing" }
+        if !includeProgress { snapshot.removeValue(forKey: "progress") }
+        if phase == "finalizing" { snapshot["finalizingStep"] = finalizingStep }
         if phase == "ready" || phase == "failed" {
             snapshot.removeValue(forKey: "retryAfterMs")
             snapshot["progressAgeMs"] = 0

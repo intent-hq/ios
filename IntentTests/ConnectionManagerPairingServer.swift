@@ -65,6 +65,8 @@ extension ConnectionManagerTests {
 
         func holdHostStatus() { hold("host.status") }
         func holdSystemStatus() { hold("system.status") }
+        func holdNoteSubscription() { hold("note.subscribe") }
+        func releaseNoteSubscription() { release("note.subscribe") }
         func holdNewConnections() { state.withLock { $0.isOpen = false } }
         private func hold(_ method: String) { state.withLock { _ = $0.heldMethods.insert(method) } }
 
