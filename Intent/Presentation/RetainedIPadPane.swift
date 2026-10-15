@@ -43,12 +43,14 @@ struct IPadNavigationVisibility: ViewModifier {
     @Environment(\.isIPadPaneVisible) private var isPaneVisible
 
     func body(content: Content) -> some View {
-        content.background {
-            if isEnabled {
-                IPadNavigationVisibilityBridge(isInteractive: isPaneVisible)
-                    .frame(width: 0, height: 0)
+        content
+            .accessibilityHidden(true, isEnabled: isEnabled && !isPaneVisible)
+            .background {
+                if isEnabled {
+                    IPadNavigationVisibilityBridge(isInteractive: isPaneVisible)
+                        .frame(width: 0, height: 0)
+                }
             }
-        }
     }
 }
 
