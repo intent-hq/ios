@@ -56,6 +56,9 @@ extension AppCoordinatorTests {
         try await SyntheticBadgeHost.render(shell, width: CompactShellSize.wide, height: CompactShellSize.height) { host, _ in
             try waitForCompactShell { coordinator.iPadNavigation.isSidebarVisible && compactControl("intent.menu.open", in: host) != nil }
             #expect(coordinator.iPadNavigation.section == .workspaces)
+            try await waitUntil("the retained workspace header publishes Search", timeout: .seconds(CompactShellSize.timeout)) {
+                compactControl("workspaces.search.open", in: host) != nil
+            }
             #expect(compactControl("workspaces.search.open", in: host) != nil)
             #expect(compactControl("ipad.rail.workspaces", in: host) == nil)
             let originalLauncher = try #require(compactControl("intent.menu.open", in: host))
