@@ -17,7 +17,6 @@ struct RetainedIPadPane<Content: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .opacity(isVisible && (parentVisible || keepsCoveredContentVisible) ? 1 : 0)
         .allowsHitTesting(isInteractive)
-        .accessibilityHidden(!isInteractive)
         .preference(key: WorkspaceActionMenuInputTop.self, value: isInteractive ? inputTop : nil)
     }
 }
@@ -34,6 +33,9 @@ private struct RetainedIPadPaneHost<Content: View>: UIViewControllerRepresentabl
     func updateUIViewController(_ controller: RetainedIPadPaneController, context: Context) {
         controller.view.accessibilityElementsHidden = !isInteractive
         controller.view.isUserInteractionEnabled = isInteractive
+        if let hostedView = controller.host.view {
+            controller.view.accessibilityElements = isInteractive ? [hostedView] : []
+        }
         withTransaction(context.transaction) {
             controller.host.rootView = hostedContent(context: context)
         }
@@ -66,6 +68,7 @@ private final class RetainedIPadPaneController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
+        view.isAccessibilityElement = false
         addChild(host)
         host.view.backgroundColor = .clear
         host.view.frame = view.bounds
