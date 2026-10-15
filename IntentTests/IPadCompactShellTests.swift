@@ -120,7 +120,6 @@ extension AppCoordinatorTests {
         coordinator.iPadNavigation.collapseSidebar()
         let size = CompactShellSize(width: CompactShellSize.wide)
         let shell = ResizableIPadTestShell(session: fixture.session, coordinator: coordinator, size: size)
-            .environment(\.accessibilityReduceMotion, true)
         try await SyntheticBadgeHost.render(shell, width: CompactShellSize.wide, height: CompactShellSize.height) { host, _ in
             try verifyFocusedEditor(in: host, size: size, coordinator: coordinator)
         }
