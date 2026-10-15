@@ -336,6 +336,28 @@ struct ComposerDraftBindingTests {
 
 extension ComposerDraftBindingTests {
     @Test
+    func focusedMultilineComposerKeepsItsSurfaceAroundTheEditor() async throws {
+        let model = makeModel()
+        model.messageText = Array(repeating: "Keep this multiline draft", count: 24).joined(separator: "\n")
+        var inputHeight: CGFloat = 0
+        let view = VStack(spacing: 0) {
+            Color.clear.frame(minHeight: 100)
+            MessageInputView(viewModel: model, store: model.store, usesWorkspaceDesign: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { inputHeight = $0 }
+        }
+        .environment(\.conversationPresentation, .iPad)
+        .environment(\.iPadFocusPresentation, .constant(.conversationEditing))
+        try await SyntheticBadgeHost.render(view, width: 560, height: 200, safeAreaRegions: []) { root, _ in
+            try await waitUntil("the multiline editor grows") {
+                (textView(in: root)?.bounds.height ?? 0) > 100
+            }
+            let editor = try #require(textView(in: root))
+            #expect(inputHeight >= editor.bounds.height + 12)
+            #expect(editor.text == model.messageText)
+        }
+    }
+
+    @Test
     func multilineEditorUsesTheProposedViewportAndScrollsToTheCaret() async throws {
         let draft = Array(repeating: "Keep every line of this draft", count: 24).joined(separator: "\n")
         let adapter = SubmittableTextView(text: .constant(draft), isFocused: .constant(false)) {}

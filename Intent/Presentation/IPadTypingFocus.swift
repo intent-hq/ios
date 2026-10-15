@@ -46,6 +46,7 @@ struct IPadTypingFocusRow<Content: View>: View {
                 closeFocusButton
             }
         }
+        .fixedSize(horizontal: false, vertical: iPadFocusPresentation != nil)
     }
 
     private var closeFocusButton: some View {
