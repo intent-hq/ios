@@ -4,6 +4,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     private static let timeout: TimeInterval = 30
     private static let focusPanelWidth: CGFloat = 624
     private static let transcriptTapX: CGFloat = 0.02
+    private static let backgroundRowTap = CGVector(dx: 0.1, dy: 0.2)
     private static let draft = "Keep this workspace draft"
 
     override func setUpWithError() throws {
@@ -22,17 +23,20 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         for appearance in ["light", "dark"] {
-            let app = launch(appearance: appearance)
+            let app = launch(appearance: appearance, extraArguments: ["--demo-ipad-pane-geometry"])
             captureFirstWorkspaceSelection(in: app, appearance: appearance)
             openConversation(in: app)
             captureMainScreens(in: app, appearance: appearance)
+            let background = try prepareTypingBackground(in: app)
             let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
             composer.tap()
             composer.typeText(Self.draft)
-            verifyTypingFocus(in: app, composer: composer, appearance: appearance)
+            try verifyTypingFocus(in: app, composer: composer, background: background, appearance: appearance)
+            try verifyBackgroundNavigation(in: app, controls: background)
+            XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
             try verifySections(in: app)
             try verifyPairingCancellation(in: app, appearance: appearance)
-            XCTAssertEqual(composer.value as? String, Self.draft)
+            XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
             app.terminate()
         }
     }
@@ -145,26 +149,24 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
-    private func verifyTypingFocus(in app: XCUIApplication, composer: XCUIElement, appearance: String) {
+    private func verifyTypingFocus(in app: XCUIApplication, composer: XCUIElement, background: TypingBackgroundControls, appearance: String) throws {
         let close = app.buttons["ipad.focus.close"]
         XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         capture(app, name: "iPad focused typing \(appearance)")
-        XCTAssertFalse(app.otherElements["ipad.sidebar.panel"].exists, app.debugDescription)
-        XCTAssertFalse(app.buttons["settings.pairing.manual"].exists, app.debugDescription)
-        let panel = app.otherElements["ipad.detail.panel"]
-        XCTAssertEqual(panel.frame.width, Self.focusPanelWidth, accuracy: 2, app.debugDescription)
-        XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
-        XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)
-        XCTAssertFalse(app.buttons["ipad.sidebar.collapse"].exists)
+        let panel = try IPadFocusBackgroundTap.paneFrame("ipad.detail.panel", in: app)
+        XCTAssertEqual(panel.width, Self.focusPanelWidth, accuracy: 2, app.debugDescription)
+        XCTAssertEqual(panel.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
+        // The header is conditionally removed; retained background panes need an input test.
         XCTAssertFalse(app.buttons["conversation.back"].exists)
         XCTAssertEqual(app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.filter { $0.isHittable }.count, 1)
-        XCTAssertEqual(app.textViews.matching(identifier: "composer.textView").count, 1, "Inactive conversation editors stay outside the accessibility tree")
-        XCTAssertTrue(app.buttons["composer.send"].isHittable)
-        XCTAssertTrue(app.buttons["composer.attachment"].isHittable)
+        XCTAssertTrue(try app.buttons.matching(identifier: "composer.send").singleHittableElement().isHittable)
+        XCTAssertTrue(try app.buttons.matching(identifier: "composer.attachment").singleHittableElement().isHittable)
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
         XCTAssertLessThanOrEqual(close.frame.maxY, keyboard.frame.minY)
-        app.scrollViews["transcript.scrollView"].coordinate(withNormalizedOffset: CGVector(dx: Self.transcriptTapX, dy: 0.5)).tap()
+        try verifyBlockedTypingBackground(in: app, controls: background, panel: panel)
+        let transcript = try app.scrollViews.matching(identifier: "transcript.scrollView").singleHittableElement()
+        transcript.coordinate(withNormalizedOffset: CGVector(dx: Self.transcriptTapX, dy: 0.5)).tap()
         XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(close.isHittable, "Hiding the keyboard must not close the focused pane")
         XCTAssertEqual(composer.value as? String, Self.draft)
@@ -172,13 +174,14 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, Self.draft)
-        XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)
+        XCTAssertTrue(close.isHittable)
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
         capture(app, name: "iPad typing restored \(appearance)")
-        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
+        XCTAssertTrue(app.staticTexts["Dashboard Implementor, Agent"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, Self.draft)
         app.buttons["workspaces.search.open"].tap()
         let search = app.textFields["workspaces.search.field"]
@@ -318,6 +321,49 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
 }
 
 extension IPadSidebarUITests {
+    private struct TypingBackgroundControls {
+        let connections: IPadFocusBackgroundTap
+        let workspace: IPadFocusBackgroundTap
+    }
+
+    @MainActor
+    private func prepareTypingBackground(in app: XCUIApplication) throws -> TypingBackgroundControls {
+        let controls = try TypingBackgroundControls(
+            connections: IPadFocusBackgroundTap(app.buttons["ipad.rail.connections"], in: app),
+            workspace: IPadFocusBackgroundTap(app.buttons["workspace.row.demo-ws-reconnect"], in: app, position: Self.backgroundRowTap)
+        )
+        try verifyBackgroundNavigation(in: app, controls: controls)
+        return controls
+    }
+
+    @MainActor
+    private func verifyBackgroundNavigation(in app: XCUIApplication, controls: TypingBackgroundControls) throws {
+        try controls.connections.activate(in: app)
+        XCTAssertTrue(app.buttons["ipad.rail.connections"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["saved-connections.scan"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        app.buttons["ipad.rail.workspaces"].tap()
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+        try controls.workspace.activate(in: app)
+        XCTAssertTrue(app.staticTexts["workspace.title.heading"].wait(for: \.label, toEqual: "Fix websocket reconnect storm", timeout: Self.timeout))
+        openConversation(in: app)
+        XCTAssertTrue(app.staticTexts["Dashboard Implementor, Agent"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+    }
+
+    @MainActor
+    private func verifyBlockedTypingBackground(in app: XCUIApplication, controls: TypingBackgroundControls, panel: CGRect) throws {
+        // Calibrated native tests preserve editor identity/selection. Snapshot counts
+        // include retained editors and cannot establish VoiceOver traversal.
+        for control in [controls.connections, controls.workspace] {
+            try control.assertBlocked(in: app, focusedPane: panel) {
+                let editors = app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.filter { $0.isHittable }
+                return app.buttons["ipad.focus.close"].isHittable
+                    && editors.count == 1 && editors.first?.value as? String == Self.draft
+                    && app.keyboards.firstMatch.exists
+                    && !app.buttons["conversation.back"].exists
+            }
+        }
+    }
+
     @MainActor
     private func verifyScrollingGutter(in app: XCUIApplication, name: String) throws {
         let list = app.collectionViews["workspaces.list"]

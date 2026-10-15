@@ -78,10 +78,12 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         for appearance in ["light", "dark"] {
-            let app = launchWorkspaces(appearance: appearance)
+            let app = launchWorkspaces(arguments: ["--demo-ipad-pane-geometry"], appearance: appearance)
             let heading = app.staticTexts["workspace.title.heading"]
             XCTAssertTrue(heading.waitForExistence(timeout: Fixture.timeout))
             let selectedTitle = heading.label
+            let background = try prepareSearchBackground(in: app)
+            XCTAssertEqual(heading.label, selectedTitle)
             app.buttons["workspaces.search.open"].tap()
             let field = app.textFields["workspaces.search.field"]
             XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
@@ -89,22 +91,22 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             captureSearchState(name: "iPad focused search \(appearance)")
             XCTAssertFalse(app.staticTexts["Add usage analytics dashboard"].firstMatch.exists)
             XCTAssertFalse(app.buttons["intent.menu.open"].exists)
-            XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists, app.debugDescription)
             XCTAssertFalse(app.buttons["ipad.sidebar.collapse"].exists)
-            XCTAssertFalse(heading.exists, app.debugDescription)
-            XCTAssertFalse(app.otherElements["ipad.detail.panel"].exists, app.debugDescription)
-            XCTAssertFalse(app.buttons["settings.pairing.manual"].exists, app.debugDescription)
             let cancel = app.buttons["workspaces.search.cancel"]
             XCTAssertTrue(cancel.isHittable)
-            let panel = app.otherElements["ipad.sidebar.panel"]
-            XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
-            XCTAssertEqual(panel.frame.width, Fixture.focusPanelWidth, accuracy: 2, app.debugDescription)
-            XCTAssertEqual(panel.frame.maxX - cancel.frame.maxX, Fixture.focusContentInset, accuracy: 2)
+            let panel = try IPadFocusBackgroundTap.paneFrame("ipad.sidebar.panel", in: app)
+            XCTAssertEqual(panel.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
+            XCTAssertEqual(panel.width, Fixture.focusPanelWidth, accuracy: 2, app.debugDescription)
+            XCTAssertEqual(panel.maxX - cancel.frame.maxX, Fixture.focusContentInset, accuracy: 2)
             XCTAssertLessThanOrEqual(field.frame.maxY, app.keyboards.firstMatch.frame.minY)
-            verifySearchWithoutKeyboardAndRotation(in: app, field: field, appearance: appearance)
+            try verifyBlockedSearchBackground(in: app, controls: background, panel: panel, keyboardVisible: true)
+            try verifySearchWithoutKeyboardAndRotation(in: app, field: field, background: background, appearance: appearance)
             cancel.tap()
             XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
             XCTAssertTrue(heading.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+            XCTAssertEqual(heading.label, selectedTitle)
+            XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
+            try verifySearchBackgroundActivation(in: app, controls: background)
             XCTAssertEqual(heading.label, selectedTitle)
             captureSearchState(name: "iPad search restored \(appearance)")
             app.buttons["ipad.sidebar.collapse"].tap()
@@ -118,12 +120,13 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     }
 
     @MainActor
-    private func verifySearchWithoutKeyboardAndRotation(in app: XCUIApplication, field: XCUIElement, appearance: String) {
+    private func verifySearchWithoutKeyboardAndRotation(in app: XCUIApplication, field: XCUIElement, background: SearchBackgroundControls, appearance: String) throws {
         field.typeText("\n")
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["workspaces.search.cancel"].isHittable)
-        XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)
         XCTAssertEqual(field.value as? String, "payment")
+        let panel = try IPadFocusBackgroundTap.paneFrame("ipad.sidebar.panel", in: app)
+        try verifyBlockedSearchBackground(in: app, controls: background, panel: panel, keyboardVisible: false)
         captureSearchState(name: "iPad focused search keyboard hidden \(appearance)")
         XCUIDevice.shared.orientation = .portrait
         XCTAssertTrue(field.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
@@ -261,5 +264,56 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
         if allowNotifications.waitForExistence(timeout: 2) { allowNotifications.tap() }
         return app
+    }
+}
+
+extension WorkspaceSearchUITests {
+    private struct SearchBackgroundControls {
+        let connections: IPadFocusBackgroundTap
+        let actions: IPadFocusBackgroundTap
+    }
+
+    @MainActor
+    private func prepareSearchBackground(in app: XCUIApplication) throws -> SearchBackgroundControls {
+        let controls = try SearchBackgroundControls(
+            connections: IPadFocusBackgroundTap(app.buttons["ipad.rail.connections"], in: app),
+            actions: IPadFocusBackgroundTap(app.buttons["Workspace actions"], in: app)
+        )
+        try verifySearchBackgroundActivation(in: app, controls: controls)
+        return controls
+    }
+
+    @MainActor
+    private func verifySearchBackgroundActivation(in app: XCUIApplication, controls: SearchBackgroundControls) throws {
+        try controls.connections.activate(in: app)
+        XCTAssertTrue(app.buttons["ipad.rail.connections"].wait(for: \.isSelected, toEqual: true, timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["saved-connections.scan"].wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+        app.buttons["ipad.rail.workspaces"].tap()
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].wait(for: \.isSelected, toEqual: true, timeout: Fixture.timeout))
+        let window = app.windows.firstMatch
+        let railFrame = app.buttons["ipad.rail.workspaces"].frame
+        let dismissMenu = window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: railFrame.midX - window.frame.minX, dy: railFrame.midY - window.frame.minY
+        ))
+        try controls.actions.activate(in: app)
+        let createAgent = app.buttons["Create New Agent"]
+        XCTAssertTrue(createAgent.waitForExistence(timeout: Fixture.timeout), "The saved workspace action point must actually open its menu")
+        dismissMenu.tap()
+        XCTAssertTrue(createAgent.waitForNonExistence(timeout: Fixture.timeout))
+    }
+
+    @MainActor
+    private func verifyBlockedSearchBackground(in app: XCUIApplication, controls: SearchBackgroundControls, panel: CGRect, keyboardVisible: Bool) throws {
+        // Native calibration found retained controls in XCTest even when their real
+        // touch actions were blocked. VoiceOver traversal needs separate verification.
+        for control in [controls.connections, controls.actions] {
+            try control.assertBlocked(in: app, focusedPane: panel) {
+                let field = app.textFields["workspaces.search.field"]
+                return field.exists && field.value as? String == "payment"
+                    && app.buttons["workspaces.search.cancel"].isHittable
+                    && app.keyboards.firstMatch.exists == keyboardVisible
+                    && !app.buttons["Create New Agent"].exists
+            }
+        }
     }
 }
