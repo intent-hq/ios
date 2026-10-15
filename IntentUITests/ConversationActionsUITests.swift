@@ -25,6 +25,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         app.buttons["conversation.actions.delete"].tap()
         let delete = app.buttons["Delete"]
         XCTAssertTrue(delete.waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Agent-Delete-Confirmation-Light")
         if app.buttons["Cancel"].exists {
             app.buttons["Cancel"].tap()
         } else {

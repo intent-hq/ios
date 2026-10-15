@@ -138,7 +138,7 @@ private struct ConversationViewContent: View {
             }
     }
 
-    /// Sheets, confirmation dialog, and alerts.
+    /// Sheets and alerts; the delete confirmation is anchored to its menu.
     private var conversationPresentation: some View {
         conversationChrome
             .sheet(isPresented: $showModelPicker) {
@@ -147,16 +147,6 @@ private struct ConversationViewContent: View {
             }
             .sheet(item: $presentedNote) { noteInfo in
                 noteSheet(for: noteInfo).coversConversationComposers()
-            }
-            .confirmationDialog(
-                "Delete Agent?",
-                isPresented: $showDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive, action: deleteAgent)
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This will permanently delete this agent and its conversation history.")
             }
             .alert("Rename Agent", isPresented: $showRenameAlert) {
                 TextField("Agent name", text: $renameText)
@@ -355,6 +345,16 @@ private extension ConversationViewContent {
     /// The native menu owns its container shape and dismissal on every device.
     private var agentMenu: some View {
         nativeAgentMenu
+            .confirmationDialog(
+                "Delete Agent?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive, action: deleteAgent)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete this agent and its conversation history.")
+            }
     }
 
     private enum AgentAction {

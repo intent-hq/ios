@@ -104,12 +104,13 @@ struct AssistantConversationHeader<Actions: View>: View {
     var body: some View {
         WorkspaceNavigationHeader(
             title: title,
-            subtitle: title == "Assistant" ? nil : "Assistant",
+            subtitle: presentation == .iPad || title == "Assistant" ? nil : "Assistant",
             backLabel: "New Conversation",
             backIdentifier: "assistant.newConversation",
             leadingIcon: .displayEdit,
             isLeadingActionEnabled: canCreateConversation,
             showsBackground: showsBackground,
+            showsTitle: presentation != .iPad || title != "Assistant",
             usesConversationLayout: true,
             onBack: presentation == .iPad ? nil : onNewConversation,
             actions: actions
@@ -128,6 +129,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var leadingIcon: ImageResource = .arrowLeft
     var isLeadingActionEnabled = true
     var showsBackground = true
+    var showsTitle = true
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
     var usesConversationLayout = false
@@ -207,7 +209,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 WorkspaceTitle(title: title, createdAt: workspaceCreatedAt) { title in
                     WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
                 }
-            } else {
+            } else if showsTitle {
                 WorkspaceHeaderText(
                     Text(title),
                     style: Constants.Typography.bodyXSEmphasized,

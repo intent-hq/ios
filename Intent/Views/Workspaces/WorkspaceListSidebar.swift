@@ -14,6 +14,8 @@ struct WorkspaceListSidebar: View {
     @State private var viewModel: WorkspaceListViewModel
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var workspaceSwipeProgress: [String: CGFloat] = [:]
+    @State private var pendingAction: PendingAction?
+    @State private var actionError: String?
     @Binding private var isSearching: Bool
     @FocusState private var searchFocused: Bool
 
@@ -79,6 +81,21 @@ struct WorkspaceListSidebar: View {
                     .intentToolbarSurface()
             }
         }
+        .alert(pendingAction?.action.title ?? "Workspace", isPresented: confirmationPresented, presenting: pendingAction) { pending in
+            Button("Cancel", role: .cancel) {}
+            Button(pending.action.label, role: pending.action == .delete ? .destructive : nil) {
+                perform(pending)
+            }
+        } message: { pending in
+            Text(pending.action.message(workspaceTitle: pending.workspace.title))
+        }
+        .alert("Workspace action failed", isPresented: errorPresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(actionError ?? "Please try again.")
+        }
+        .onChange(of: viewModel.viewMode) { _, _ in revealedSwipeTarget = nil }
+        .onChange(of: viewModel.searchText) { _, _ in revealedSwipeTarget = nil }
         .onChange(of: viewModel.showArchived) { _, _ in revealedSwipeTarget = nil }
         .onChange(of: isPaneVisible) { _, visible in
             if !visible { searchFocused = false }
@@ -293,7 +310,6 @@ struct WorkspaceListSidebar: View {
             workspaceSwipeProgress: $workspaceSwipeProgress,
             nextWorkspaceId: nextWorkspaceId,
             spacious: false,
-            showsTrailingActions: false,
             isSidebar: isEmbedded,
             isSelected: coordinator.selectedWorkspaceId == workspace.id,
             isNextSelected: nextWorkspaceId != nil && coordinator.selectedWorkspaceId == nextWorkspaceId
@@ -303,11 +319,39 @@ struct WorkspaceListSidebar: View {
         } onOpenRecentAgent: {
             searchFocused = false
             coordinator.onOpenRecentWorkspaceAgent(workspace.id)
-        } onAction: { _ in }
+        } onAction: { action in
+            searchFocused = false
+            pendingAction = PendingAction(workspace: workspace, action: action)
+        }
         #endif
     }
 
     static func rowSelectionBackground(isSelected: Bool, colorScheme: ColorScheme) -> Color {
         isSelected ? Theme.sidebarSelection(for: colorScheme) : .clear
+    }
+}
+
+private extension WorkspaceListSidebar {
+    var confirmationPresented: Binding<Bool> {
+        Binding(get: { pendingAction != nil }, set: { if !$0 { pendingAction = nil } })
+    }
+
+    var errorPresented: Binding<Bool> {
+        Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })
+    }
+
+    func perform(_ pending: PendingAction) {
+        Task {
+            do {
+                try await workspaceStore.perform(pending.action, workspaceId: pending.workspace.id)
+            } catch {
+                actionError = error.localizedDescription
+            }
+        }
+    }
+
+    struct PendingAction {
+        let workspace: Workspace
+        let action: WorkspaceAction
     }
 }
