@@ -2,6 +2,28 @@ import SwiftUI
 import UIKit
 
 #if DEBUG
+/// Laid out by the pane itself so tests do not mistake a virtual accessibility
+/// container's window-sized frame for the visible panel. Enabled only by a
+/// dedicated demo launch argument; it never participates in hit testing.
+struct DemoIPadPaneGeometry: UIViewRepresentable {
+    let identifier: String
+
+    func makeUIView(context _: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        view.isUserInteractionEnabled = false
+        view.isAccessibilityElement = true
+        view.accessibilityLabel = "Pane layout bounds"
+        view.accessibilityIdentifier = "\(identifier).geometry"
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context _: Context) {
+        view.accessibilityIdentifier = "\(identifier).geometry"
+    }
+}
+
 /// Temporary, opt-in accessibility discriminator; never used by ordinary demo launches.
 struct DemoIPadProducerEntry: ViewModifier {
     func body(content: Content) -> some View {

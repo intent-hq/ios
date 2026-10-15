@@ -23,14 +23,24 @@ struct RetainedIPadPane<Content: View>: View {
     }
 }
 
-/// The resized pane owns its interaction and accessibility bounds. Native lists
-/// and navigation containers otherwise report their enclosing window's frame.
+/// Identifies a pane and scopes its interaction and accessibility policy.
+/// Native accessibility containers can report the enclosing window's frame;
+/// opt-in demo geometry tests measure the actual pane with a native background.
 struct IPadPaneBounds: ViewModifier {
     let identifier: String
     let isAccessible: Bool
 
     func body(content: Content) -> some View {
         content
+            #if DEBUG
+            .background {
+                if DemoMode.isEnabled, ProcessInfo.processInfo.arguments.contains("--demo-ipad-pane-geometry") {
+                    DemoIPadPaneGeometry(identifier: identifier)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .allowsHitTesting(false)
+                }
+            }
+            #endif
             .accessibilityElement(children: isAccessible ? .contain : .ignore)
             .accessibilityIdentifier(identifier)
             .contentShape(.interaction, Rectangle())
