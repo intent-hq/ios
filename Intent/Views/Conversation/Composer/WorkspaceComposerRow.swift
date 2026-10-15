@@ -37,6 +37,7 @@ struct WorkspaceComposerRow: View {
                 WorkspaceComposerAction(isStop: true, action: onStop)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.leading, Layout.leadingPadding - editorInset)
         .padding(.trailing, hasDraft || isStreaming ? Layout.activeTrailingPadding : Layout.trailingPadding - controlInset)
         .padding(.vertical, (Layout.minimumHeight - Design.minimumTapTarget) / 2)
