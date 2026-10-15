@@ -25,14 +25,11 @@ struct RetainedIPadPane<Content: View>: View {
 /// and navigation containers otherwise report their enclosing window's frame.
 struct IPadPaneBounds: ViewModifier {
     let identifier: String
-    @State private var frame: CGRect = .zero
 
     func body(content: Content) -> some View {
         content
-            .contentShape(Rectangle())
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(identifier)
-            .accessibilityFrame(frame)
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
+            .contentShape([.interaction, .accessibility], Rectangle())
     }
 }
