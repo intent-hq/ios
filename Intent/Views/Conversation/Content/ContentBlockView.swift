@@ -92,6 +92,7 @@ struct ContentBlockBody: View, Equatable {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.conversationComposerFocus) private var composerFocus
     var disclosure = TranscriptDisclosure()
     private var thinkingExpanded: Bool {
         get { disclosure.binding(for: .thinking(block.id), default: false).wrappedValue }
@@ -287,6 +288,7 @@ struct ContentBlockBody: View, Equatable {
                     lightboxPendingHydration = true
                     onHydrateBlock?(block.id)
                 } else {
+                    composerFocus?.wrappedValue = false
                     lightboxPresented = true
                 }
             } label: {
@@ -317,6 +319,7 @@ struct ContentBlockBody: View, Equatable {
                 // cleared): open the lightbox the tap asked for.
                 if !truncation.isTruncated, lightboxPendingHydration {
                     lightboxPendingHydration = false
+                    composerFocus?.wrappedValue = false
                     lightboxPresented = true
                 }
             }

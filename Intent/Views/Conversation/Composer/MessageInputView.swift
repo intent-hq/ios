@@ -9,19 +9,19 @@ struct MessageInputView: View {
     private let store: ConversationStore
     private let usesWorkspaceDesign: Bool
     private let allowsSending: Bool
-    private let onFocusChange: ((Bool) -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
     @Environment(\.workspaceQuestionPanelPresented) private var questionPanelPresented
+    @Environment(\.conversationComposerFocus) private var conversationFocus
 
     @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
     @ScaledMetric(relativeTo: .caption) var attachmentIconSide: CGFloat = 12
     @ScaledMetric(relativeTo: .callout) private var suggestedPromptIconSide: CGFloat = 16
     private let sendArrowScale: CGFloat = 0.75
 
-    @State private var isFocused: Bool = false
+    @State private var localFocus = false
     @State private var textViewHeight: CGFloat = Constants.Conversation.Composer.minimumTextViewHeight
     @State private var isPhotoPickerPresented: Bool = false
     @State private var isFilePickerPresented: Bool = false
@@ -40,14 +40,19 @@ struct MessageInputView: View {
         viewModel: ConversationViewModel,
         store: ConversationStore,
         usesWorkspaceDesign: Bool = false,
-        allowsSending: Bool = true,
-        onFocusChange: ((Bool) -> Void)? = nil
+        allowsSending: Bool = true
     ) {
         self.viewModel = viewModel
         self.store = store
         self.usesWorkspaceDesign = usesWorkspaceDesign
         self.allowsSending = allowsSending
-        self.onFocusChange = onFocusChange
+    }
+
+    private var focusBinding: Binding<Bool> { conversationFocus ?? $localFocus }
+
+    private var isFocused: Bool {
+        get { focusBinding.wrappedValue }
+        nonmutating set { focusBinding.wrappedValue = newValue }
     }
 
     /// Overlay visibility is presentation policy, not permission to consume a
@@ -60,7 +65,7 @@ struct MessageInputView: View {
             if usesWorkspaceDesign {
                 WorkspaceComposerRow(
                     text: $viewModel.messageText,
-                    isFocused: $isFocused,
+                    isFocused: focusBinding,
                     isStreaming: store.isStreaming,
                     hasAttachments: viewModel.hasPendingAttachments,
                     canSend: hasSendableContent,
@@ -109,9 +114,6 @@ struct MessageInputView: View {
             if case .success(let urls) = result {
                 viewModel.addFiles(urls)
             }
-        }
-        .onChange(of: isFocused) { _, focused in
-            onFocusChange?(focused)
         }
         .onChange(of: isEnabled) { _, enabled in
             if !enabled { isFocused = false }
@@ -242,7 +244,7 @@ private extension MessageInputView {
         ZStack(alignment: .leading) {
             SubmittableTextView(
                 text: $viewModel.messageText,
-                isFocused: $isFocused,
+                isFocused: focusBinding,
                 onSubmit: { sendCurrentMessage() },
                 onPasteImages: viewModel.pasteImages,
                 onHeightChange: updateTextViewHeight,
