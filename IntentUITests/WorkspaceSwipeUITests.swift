@@ -22,7 +22,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(archive.waitForNonExistence(timeout: 2), "Actions must remain open after the drag settles")
         XCTAssertTrue(archive.isHittable)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "workspace-status-swipe-stays-open"
         screenshot.lifetime = .keepAlways
         add(screenshot)
@@ -41,7 +41,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 280, dy: 0)))
         let transcript = app.scrollViews["transcript.scrollView"]
         XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "workspace-right-swipe-recent-agent"
         screenshot.lifetime = .keepAlways
         add(screenshot)
@@ -93,7 +93,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         XCTAssertTrue(row.label.contains("Updated "))
         verifyActionCancellation(in: app, row: row)
         revealActions(on: row)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "workspace-archive-delete-swipe"
         screenshot.lifetime = .keepAlways
         add(screenshot)
@@ -132,7 +132,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         XCTAssertTrue(row.exists)
         XCTAssertTrue(row.label.contains("Archived"))
         XCTAssertFalse(row.label.contains("Updated "))
-        let archivedScreenshot = XCTAttachment(screenshot: app.screenshot())
+        let archivedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         archivedScreenshot.name = "workspace-archived-badge"
         archivedScreenshot.lifetime = .keepAlways
         add(archivedScreenshot)

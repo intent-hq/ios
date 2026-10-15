@@ -29,7 +29,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         closeBrowser(in: app)
         revealResource(script, in: app)
         XCTAssertFalse(app.buttons["workspace.script.demo-check"].exists)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "workspace-scripts-section"
         screenshot.lifetime = .keepAlways
         add(screenshot)
@@ -72,7 +72,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         XCTAssertTrue(dev.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.buttons[Fixture.build].exists)
         XCTAssertTrue(app.buttons[Fixture.test].exists)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "workspace-repository-scripts-menu"
         screenshot.lifetime = .keepAlways
         add(screenshot)
@@ -98,7 +98,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         let stop = app.buttons["workspace.script.stop.demo-server"]
         XCTAssertTrue(stop.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["workspace.script.delete.demo-server"].exists)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "workspace-script-stop-delete-actions"
         screenshot.lifetime = .keepAlways
         add(screenshot)

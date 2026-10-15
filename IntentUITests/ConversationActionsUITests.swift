@@ -103,8 +103,8 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
     }
 
     @MainActor
-    private func capture(_ app: XCUIApplication, named name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+    private func capture(_: XCUIApplication, named name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
