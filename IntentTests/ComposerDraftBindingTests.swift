@@ -333,3 +333,29 @@ struct ComposerDraftBindingTests {
         return view.subviews.lazy.compactMap { textView(in: $0) }.first
     }
 }
+
+extension ComposerDraftBindingTests {
+    @Test
+    func multilineEditorUsesTheProposedViewportAndScrollsToTheCaret() async throws {
+        let draft = Array(repeating: "Keep every line of this draft", count: 24).joined(separator: "\n")
+        let adapter = SubmittableTextView(text: .constant(draft), isFocused: .constant(false)) {}
+        let view = adapter.frame(width: 320, height: 96)
+        try await SyntheticBadgeHost.render(view, width: 400, height: 250) { root, _ in
+            let editor = try #require(textView(in: root))
+            #expect(abs(editor.bounds.width - 320) < 1)
+            #expect(abs(editor.bounds.height - 96) < 1)
+            #expect(editor.contentSize.height > editor.bounds.height)
+            #expect(editor.text == draft)
+            for offset in [draft.utf16.count, 0] {
+                editor.selectedRange = NSRange(location: offset, length: 0)
+                let selection = try #require(editor.selectedTextRange)
+                let caret = editor.caretRect(for: selection.end)
+                editor.scrollRectToVisible(caret, animated: false)
+                editor.layoutIfNeeded()
+                #expect(editor.bounds.insetBy(dx: -1, dy: -1).contains(caret))
+                #expect(editor.selectedRange.location == offset)
+                #expect(editor.text == draft)
+            }
+        }
+    }
+}

@@ -37,7 +37,6 @@ struct WorkspaceComposerRow: View {
                 WorkspaceComposerAction(isStop: true, action: onStop)
             }
         }
-        .fixedSize(horizontal: false, vertical: true)
         .padding(.leading, Layout.leadingPadding - editorInset)
         .padding(.trailing, hasDraft || isStreaming ? Layout.activeTrailingPadding : Layout.trailingPadding - controlInset)
         .padding(.vertical, (Layout.minimumHeight - Design.minimumTapTarget) / 2)
@@ -101,9 +100,6 @@ private struct WorkspaceComposerEditor: View {
                 textColor: UIColor(Design.Palette.foreground(for: colorScheme))
             )
             .frame(height: height)
-            // A fixed SwiftUI frame alone does not clip the native scrolling
-            // text view. Keep long drafts inside this same bounded viewport.
-            .clipped()
             if text.isEmpty {
                 Text("Message")
                     .interFont(Constants.Typography.bodyS)
