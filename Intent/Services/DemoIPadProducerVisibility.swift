@@ -176,7 +176,7 @@ private final class DemoProducerInspector: UIView {
     private func marker(in controller: UIViewController?) -> IPadNavigationVisibilityBridge.Controller? {
         guard let controller else { return nil }
         if let marker = controller as? IPadNavigationVisibilityBridge.Controller { return marker }
-        return controller.children.lazy.compactMap { marker(in: $0) }.first
+        return controller.children.lazy.compactMap { self.marker(in: $0) }.first
     }
 }
 #endif
