@@ -14,7 +14,7 @@ struct RetainedIPadPane<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .opacity(isVisible && (parentVisible || keepsCoveredContentVisible) ? 1 : 0)
             .allowsHitTesting(isInteractive)
-            .accessibilityElement(children: .contain)
+            .accessibilityElement(children: isInteractive ? .contain : .ignore)
             .accessibilityHidden(true, isEnabled: !isInteractive)
             .environment(\.isIPadPaneVisible, isInteractive)
             .transformPreference(WorkspaceActionMenuInputTop.self) { inputTop in
@@ -28,12 +28,14 @@ struct RetainedIPadPane<Content: View>: View {
 struct IPadPaneBounds: ViewModifier {
     let identifier: String
     let isAccessible: Bool
+    var isModal = false
 
     func body(content: Content) -> some View {
         content
-            .accessibilityElement(children: .contain)
+            .accessibilityElement(children: isAccessible ? .contain : .ignore)
             .accessibilityIdentifier(identifier)
             .contentShape([.interaction, .accessibility], Rectangle())
+            .accessibilityAddTraits(isAccessible && isModal ? .isModal : [])
             .accessibilityHidden(true, isEnabled: !isAccessible)
     }
 }
