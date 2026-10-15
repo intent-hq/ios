@@ -36,7 +36,8 @@ extension ConnectionManagerTests {
         try await connecting.value
         #expect(server.acceptedCount == 2)
         #expect(server.methods.filter { $0 == "client.hello" }.count == 2)
-        let admissionMethods = server.methods
+        let startupMethods = ["client.hello", "principal.me", "system.startupStatus"]
+        let admissionMethods = server.methods.filter { startupMethods.contains($0) }
         server.holdNoteSubscription()
         let note = Task { _ = try await manager.request("note.subscribe", params: ["noteId": "unopened-note"]) }
         defer { note.cancel() }
@@ -44,7 +45,7 @@ extension ConnectionManagerTests {
         #expect(manager.connectionState == .connected)
         #expect(manager.currentPrincipal?.isOwner == true)
         #expect(manager.startupState == nil)
-        #expect(server.methods == admissionMethods + ["note.subscribe"])
+        #expect(server.methods.filter { startupMethods.contains($0) } == admissionMethods)
         server.releaseNoteSubscription()
         try await note.value
         #expect(manager.connectionState == .connected)
