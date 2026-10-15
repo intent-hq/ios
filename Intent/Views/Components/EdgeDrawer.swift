@@ -94,7 +94,6 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
 
     private var slidingPage: some View {
         content
-            .accessibilityElement(children: isRevealed ? .ignore : .contain)
             .scrollDisabled(isRevealed)
             .allowsHitTesting(!isRevealed)
             // A closed drawer must preserve hidden states inside the page.
