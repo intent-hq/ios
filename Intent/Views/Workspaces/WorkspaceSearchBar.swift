@@ -41,7 +41,7 @@ struct WorkspaceSearchBar: View {
                     viewMode = mode
                 } label: {
                     Text(mode.rawValue)
-                        .interFont(isSidebar ? Constants.Typography.bodyXSEmphasized : Constants.Typography.bodySEmphasized)
+                        .interFont(Constants.Typography.bodySEmphasized)
                         .tracking(segmentTracking)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: controlHeight - segmentInset * 2)

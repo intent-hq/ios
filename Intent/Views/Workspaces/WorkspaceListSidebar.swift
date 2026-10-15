@@ -42,7 +42,6 @@ struct WorkspaceListSidebar: View {
                     horizontalPadding: isEmbedded ? IPadSidebarStyle.inset : Constants.WorkspaceList.pickerHorizontalPadding,
                     isSidebar: isEmbedded
                 )
-                .padding(.bottom, isEmbedded ? IPadSidebarStyle.sectionSpacing : 0)
             }
 
             ZStack {
@@ -143,11 +142,12 @@ struct WorkspaceListSidebar: View {
                 // Sidebar list styling clips section edges to the system radius.
                 // The persistent sidebar uses the same custom radius for every row.
                 workspaceListContent.listStyle(.plain)
+                    .environment(\.defaultMinListRowHeight, 0)
             } else {
                 workspaceListContent.listStyle(.sidebar)
             }
         }
-        .environment(\.defaultMinListHeaderHeight, isEmbedded && viewModel.viewMode == .recent ? 0 : nil)
+        .environment(\.defaultMinListHeaderHeight, isEmbedded ? 0 : nil)
         .listRowSpacing(isEmbedded ? 0 : nil)
         #if !os(visionOS)
         // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
@@ -157,8 +157,11 @@ struct WorkspaceListSidebar: View {
         .focusEffectDisabled()
         #endif
         .scrollContentBackground(isEmbedded ? .hidden : .automatic)
+        .accessibilityIdentifier("workspaces.list")
         .contentMargins(.horizontal, isEmbedded ? IPadSidebarStyle.inset : nil)
-        .contentMargins(.top, isEmbedded ? 0 : Constants.WorkspaceList.sidebarTopContentMargin)
+        // Keep the filter gap scrollable so it cannot consume the reduced
+        // viewport above the keyboard; the final row retains bottom clearance.
+        .contentMargins(.top, isEmbedded ? IPadSidebarStyle.filterListSpacing : Constants.WorkspaceList.sidebarTopContentMargin, for: .scrollContent)
         .contentMargins(.bottom, isEmbedded ? IPadSidebarStyle.inset : (isSearching ? 0 : AssistantLaunchButton.scrollClearance), for: .scrollContent)
     }
 
@@ -176,29 +179,30 @@ struct WorkspaceListSidebar: View {
         )) {
             switch viewModel.viewMode {
             case .recent:
-                recentWorkspaces
+                sidebarRows(viewModel.filteredWorkspaces)
             case .repo:
                 let groups = viewModel.groupedByRepo.map { repoName, workspaces in
-                    let content = Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
-                        RepoOwnerAvatarView(
-                            owner: workspaces.first?.repositoryOwner,
-                            size: Constants.WorkspaceList.sidebarSectionAvatarSize
-                        )
-                        Text(repoName)
-                            .interFont(Constants.Typography.eyebrow)
-                    }) {
-                        sidebarRows(workspaces, showRepo: false)
+                    let content = sidebarGroup(
+                        workspaces,
+                        showRepo: false,
+                        isFirst: repoName == viewModel.groupedByRepo.first?.0
+                    ) {
+                        HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
+                            RepoOwnerAvatarView(
+                                owner: workspaces.first?.repositoryOwner,
+                                size: Constants.WorkspaceList.sidebarSectionAvatarSize
+                            )
+                            Text(repoName).interFont(Constants.Typography.eyebrow)
+                        }
                     }
-                    .listSectionSeparator(isEmbedded ? .hidden : .automatic)
                     return (id: repoName, content: content)
                 }
                 ForEach(groups, id: \.id) { @Sendable group in group.content }
             case .status:
                 let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
-                    let content = Section(header: Text(statusLabel).interFont(Constants.Typography.eyebrow)) {
-                        sidebarRows(workspaces)
+                    let content = sidebarGroup(workspaces, isFirst: statusLabel == viewModel.groupedByStatus.first?.0) {
+                        Text(statusLabel).interFont(Constants.Typography.eyebrow)
                     }
-                    .listSectionSeparator(isEmbedded ? .hidden : .automatic)
                     return (id: statusLabel, content: content)
                 }
                 ForEach(groups, id: \.id) { @Sendable group in group.content }
@@ -207,18 +211,29 @@ struct WorkspaceListSidebar: View {
     }
 
     @ViewBuilder
-    private var recentWorkspaces: some View {
+    private func sidebarGroup<Header: View>(
+        _ workspaces: [Workspace],
+        showRepo: Bool = true,
+        isFirst: Bool,
+        @ViewBuilder header: () -> Header
+    ) -> some View {
         if isEmbedded {
-            Section {
-                sidebarRows(viewModel.filteredWorkspaces)
-            } header: {
-                Color.clear.frame(height: 0)
-                    .listRowInsets(EdgeInsets())
-                    .accessibilityHidden(true)
-            }
-            .listSectionSeparator(.hidden)
+            // Ordinary header rows avoid the List's implicit section padding.
+            // The scroll-content top margin is the entire filter-to-label gap.
+            header()
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, IPadSidebarStyle.rowInset)
+                .padding(.top, isFirst ? 0 : IPadSidebarStyle.sectionSpacing)
+                .padding(.bottom, IPadSidebarStyle.groupLabelSpacing)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .accessibilityAddTraits(.isHeader)
+            sidebarRows(workspaces, showRepo: showRepo)
         } else {
-            sidebarRows(viewModel.filteredWorkspaces)
+            Section(header: header()) { sidebarRows(workspaces, showRepo: showRepo) }
         }
     }
 

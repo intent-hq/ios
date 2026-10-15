@@ -5,10 +5,14 @@ enum IPadSidebarStyle {
     static let inset: CGFloat = 24
     static let topInset = IPadShellLayout.headerInset
     static let sectionSpacing: CGFloat = 48
+    static let filterListSpacing: CGFloat = 56
+    static let groupLabelSpacing: CGFloat = 16
     static let settingsSpacing: CGFloat = 40
     static let rowHeight: CGFloat = 64
+    static let rowVerticalPadding: CGFloat = 24
     static let rowInset: CGFloat = 20
     static let rowRadius: CGFloat = 16
+    static let statusDotSize: CGFloat = 10
     static let titleSize: CGFloat = 24
     static let titleTracking: CGFloat = -0.72
     static let titleStyle = Constants.Typography.Style(face: .semibold, size: titleSize, relativeTo: .title2)
