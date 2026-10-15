@@ -969,6 +969,7 @@ $(SRCROOT)/IntentUITests/ConnectionSwitcherUITests.swift
 $(SRCROOT)/IntentUITests/ConversationActionsUITests.swift
 $(SRCROOT)/IntentUITests/ConversationMarkdownTableUITests.swift
 $(SRCROOT)/IntentUITests/ConversationMermaidUITests.swift
+$(SRCROOT)/IntentUITests/ConversationToolActivityUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptFullGateUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptHistoryUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
