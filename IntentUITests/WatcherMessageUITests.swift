@@ -9,7 +9,9 @@ nonisolated final class WatcherMessageUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=watcher"]
         app.launch()
-        defer { attachScreenshot(app, name: "Watcher final state") }
+        addTeardownBlock { @MainActor [self] () async in
+            attachScreenshot(app, name: "Watcher final state")
+        }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
         workspace.tap()

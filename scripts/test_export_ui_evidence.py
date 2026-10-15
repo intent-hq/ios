@@ -15,6 +15,7 @@ from unittest.mock import patch
 import zlib
 
 import export_ui_evidence as evidence
+import verify_fixture_capture_lifecycle as lifecycle
 
 
 TREE_TEST = "WorkspaceChangesUITests/testNestedFoldersPreserveCollapseUntilRepositoryChanges()"
@@ -120,6 +121,55 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(len(captures), len(re.findall(r"\bcapture\(app,", source)),
                          "Extend the producer reader for nonliteral capture names")
         return captures
+
+    def lifecycle_records(self):
+        source = (ROOT / "IntentUITests" / f"{lifecycle.SUITE}.swift").read_text()
+        methods = dict(re.findall(
+            r"^    (?:private )?func (\w+)(\([^\n]*\n.*?^    })", source, re.MULTILINE | re.DOTALL
+        ))
+        records = []
+        for test in (lifecycle.ABORT, lifecycle.PASS):
+            method = methods[test]
+            self.assertIn('"--demo-data"', method)
+            captures = re.findall(r'capture\(app, name: "([^"\\]+)"\)', method)
+            self.assertEqual(set(captures), {lifecycle.CAPTURES[test]})
+            records.append(record(test=f"{lifecycle.SUITE}/{test}()", attachments=[attachment(name) for name in captures]))
+        return records
+
+    def test_native_contract_captures_keep_repeated_names_and_bundles(self):
+        records = self.lifecycle_records()
+        bundles = [self.bundle(f"attempt-{attempt}.xcresult", records=records) for attempt in (1, 2)]
+        self.export(*bundles, bundles[0])
+        lifecycle.verify_captures(self.output, bundles, REVISION)
+
+    def test_native_contract_rejects_missing_abort_capture_even_with_retry(self):
+        records = self.lifecycle_records()
+        source = self.bundle("abort.xcresult", records=[record(test=records[0]["testIdentifier"], attachments=[]), records[1]])
+        self.bundle("abort-retry.xcresult", records=records)
+        self.export(source)
+        with self.assertRaisesRegex(ValueError, "missing a registered final capture"):
+            lifecycle.verify_captures(self.output, [source], REVISION)
+
+    def test_native_contract_rejects_removed_registration(self):
+        with patch.dict(evidence.CAPTURES, {lifecycle.SUITE: {lifecycle.PASS: (lifecycle.CAPTURES[lifecycle.PASS],)}}):
+            with self.assertRaisesRegex(ValueError, "exact named captures"):
+                self.test_native_contract_captures_keep_repeated_names_and_bundles()
+
+    def test_native_contract_excludes_wrong_identity_automatic_and_unsafe_attachments(self):
+        records = self.lifecycle_records()
+        capture = lifecycle.CAPTURES[lifecycle.ABORT]
+        secret = self.root / "secret.png"
+        secret.write_bytes(png(0))
+        records[0]["attachments"].extend([
+            attachment(capture, "../secret.png"), attachment(capture, str(secret)),
+            attachment(capture, "linked.png"), attachment(capture, "bad.png"),
+            attachment("Automatic screenshot"), attachment("unrelated"),
+        ])
+        records.extend([record(test=f"UnrelatedTests/{lifecycle.ABORT}()", attachments=[attachment(capture)]),
+                        record(test=f"{lifecycle.SUITE}/{lifecycle.PASS}()", attachments=[attachment(capture)])])
+        source = self.bundle(records=records, files={"image.png": png(255), "linked.png": secret, "bad.png": b"not PNG"})
+        self.export(source)
+        lifecycle.verify_captures(self.output, [source], REVISION)
 
     def test_mermaid_history_captures_are_scoped_to_their_owning_tests(self):
         registrations = {
