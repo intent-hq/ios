@@ -77,7 +77,7 @@ nonisolated final class IPadProducerVisibilityUITests: XCTestCase {
             return [
                 "identifier": identifier, "count": matches.count, "exists": exists,
                 "hittable": exists && element.isHittable,
-                "frame": exists ? NSStringFromCGRect(element.frame) : "absent"
+                "frame": exists ? String(describing: element.frame) : "absent"
             ]
         }
         let data = try JSONSerialization.data(withJSONObject: ["phase": phase, "native": native, "elements": observations], options: [.sortedKeys])
