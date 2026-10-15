@@ -27,7 +27,7 @@ private struct DemoIPadProducerVisibility: View {
     @State private var phaseIndex = 0
     @State private var draft = "Keep this selected draft"
     @State private var focused = false
-    @State private var inspector = DemoProducerInspector()
+    @State private var inspector = DemoProducerInspector(frame: .zero)
     private var phase: DemoProducerPhase { DemoProducerPhase.sequence[phaseIndex] }
 
     var body: some View {
@@ -109,8 +109,8 @@ private final class DemoProducerInspector: UIView {
     private var originalDraft: String?
     private var originalSelection: NSRange?
 
-    init() {
-        super.init(frame: .zero)
+    override init(frame: CGRect) {
+        super.init(frame: frame)
         isAccessibilityElement = true
         accessibilityIdentifier = "visibility.native"
     }
