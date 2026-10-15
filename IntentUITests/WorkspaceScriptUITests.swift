@@ -94,7 +94,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         closeBrowser(in: app)
         let row = app.buttons["workspace.script.demo-server"]
         revealResource(row, in: app)
-        row.swipeLeft()
+        revealActions(on: row)
         let stop = app.buttons["workspace.script.stop.demo-server"]
         XCTAssertTrue(stop.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["workspace.script.delete.demo-server"].exists)
@@ -106,7 +106,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         expectation(for: NSPredicate(format: "label CONTAINS %@", "Finished"), evaluatedWith: row)
         waitForExpectations(timeout: Self.timeout)
         XCTAssertFalse(app.textFields["Browser URL"].exists)
-        row.swipeLeft()
+        revealActions(on: row)
         let delete = app.buttons["workspace.script.delete.demo-server"]
         XCTAssertTrue(delete.waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(stop.exists)
@@ -130,10 +130,10 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         let browser = app.buttons["browser.row.tab:demo-agent-browser"]
         XCTAssertTrue(browser.isHittable)
         XCTAssertTrue(script.isHittable)
-        browser.swipeLeft()
+        revealActions(on: browser)
         let browserDelete = app.buttons["browser.delete.tab:demo-agent-browser"]
         XCTAssertTrue(browserDelete.waitForExistence(timeout: Self.timeout))
-        script.swipeLeft()
+        revealActions(on: script)
         let stop = app.buttons["workspace.script.stop.demo-server"]
         XCTAssertTrue(stop.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(browserDelete.waitForNonExistence(timeout: Self.timeout))
@@ -154,7 +154,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         closeBrowser(in: app)
         let row = app.buttons["workspace.script.demo-repo-dev"]
         revealResource(row, in: app)
-        row.swipeLeft()
+        revealActions(on: row)
         XCTAssertTrue(app.buttons["workspace.script.stop.demo-repo-dev"].waitForExistence(timeout: Self.timeout))
         app.buttons["workspace.script.delete.demo-repo-dev"].tap()
         XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
@@ -220,6 +220,16 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         XCTAssertTrue(detail.waitForExistence(timeout: Self.timeout))
         for _ in 0..<5 where !resource.isHittable { detail.swipeUp() }
         XCTAssertTrue(resource.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+    }
+
+    @MainActor
+    private func revealActions(on resource: XCUIElement) {
+        // XCTest's swipeLeft can report an empty visible frame for a fully visible
+        // iPad resource row. Drag across the row, as the workspace swipe tests do.
+        XCTAssertTrue(resource.isHittable)
+        let start = resource.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        let end = resource.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: end)
     }
 
     @MainActor
