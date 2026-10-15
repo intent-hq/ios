@@ -95,8 +95,8 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             XCTAssertTrue(cancel.isHittable)
             captureSearchState(name: "iPad focused search \(appearance)")
             let panel = app.otherElements["ipad.sidebar.panel"]
-            XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2)
-            XCTAssertEqual(panel.frame.width, Fixture.focusPanelWidth, accuracy: 2)
+            XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
+            XCTAssertEqual(panel.frame.width, Fixture.focusPanelWidth, accuracy: 2, app.debugDescription)
             XCTAssertEqual(panel.frame.maxX - cancel.frame.maxX, Fixture.focusContentInset, accuracy: 2)
             XCTAssertLessThanOrEqual(field.frame.maxY, app.keyboards.firstMatch.frame.minY)
             verifySearchWithoutKeyboardAndRotation(in: app, field: field, appearance: appearance)

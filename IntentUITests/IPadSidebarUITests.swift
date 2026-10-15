@@ -133,8 +133,8 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         capture(app, name: "iPad focused typing \(appearance)")
         let panel = app.otherElements["ipad.detail.panel"]
-        XCTAssertEqual(panel.frame.width, Self.focusPanelWidth, accuracy: 2)
-        XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2)
+        XCTAssertEqual(panel.frame.width, Self.focusPanelWidth, accuracy: 2, app.debugDescription)
+        XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
         XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)
         XCTAssertFalse(app.buttons["ipad.sidebar.collapse"].exists)
         XCTAssertFalse(app.buttons["conversation.back"].exists)

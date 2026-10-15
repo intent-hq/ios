@@ -123,7 +123,16 @@ extension AppCoordinatorTests {
         coordinator.iPadNavigation.collapseSidebar()
         let size = CompactShellSize(width: CompactShellSize.wide)
         let shell = ResizableIPadTestShell(session: fixture.session, coordinator: coordinator, size: size)
-        try await SyntheticBadgeHost.render(shell, width: CompactShellSize.wide, height: CompactShellSize.height) { host, _ in
+        try await SyntheticBadgeHost.render(shell, width: CompactShellSize.wide, height: CompactShellSize.height) { host, window in
+            // The render host is deliberately non-key. This test exercises real
+            // input focus, so temporarily make its visible window the responder root.
+            let previousKey = window.windowScene?.keyWindow
+            window.makeKey()
+            defer {
+                window.endEditing(true)
+                previousKey?.makeKey()
+            }
+            try #require(window.isKeyWindow)
             try verifyFocusedEditor(in: host, size: size, coordinator: coordinator)
         }
     }
@@ -138,10 +147,9 @@ extension AppCoordinatorTests {
         editor.selectedRange = selection
         let request = coordinator.conversationRequestId
         #expect(editor.becomeFirstResponder())
-        try waitForCompactShell {
-            coordinator.iPadNavigation.focusPresentation == .conversationEditing
-                && compactControl("ipad.focus.close", in: host) != nil
-        }
+        try waitForCompactShell { editor.isFirstResponder }
+        try waitForCompactShell { coordinator.iPadNavigation.focusPresentation == .conversationEditing }
+        try waitForCompactShell { compactControl("ipad.focus.close", in: host) != nil }
         for width in [CompactShellSize.narrow, CompactShellSize.wide] {
             size.width = width
             try waitForCompactShell {
