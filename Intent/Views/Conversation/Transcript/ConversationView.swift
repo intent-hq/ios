@@ -254,6 +254,7 @@ private extension ConversationViewContent {
     /// Keep the column's identity (including its scroll state) across width changes.
     private var conversationChrome: some View {
         legacyConversationChrome
+            .conversationReadableColumn()
             .navigationBarBackButtonHidden(assistantStore == nil)
             .toolbarBackground(viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
             .nativeNavigationBackGesture(isEnabled: !usesPhoneQuestionPresentation || !answeringWorkspaceQuestions)
@@ -277,7 +278,6 @@ private extension ConversationViewContent {
                 isEnabled: usesPhoneQuestionPresentation
             ))
             #endif
-            .conversationReadableColumn()
             .background {
                 ConversationBackground(isLoading: viewModel.showsLoadingState, usesWorkspaceDesign: usesWorkspaceDesign)
             }

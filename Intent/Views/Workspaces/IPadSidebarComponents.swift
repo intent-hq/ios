@@ -3,7 +3,7 @@ import SwiftUI
 /// Section chrome shared by the persistent iPad sidebars.
 enum IPadSidebarStyle {
     static let inset: CGFloat = 24
-    static let topInset: CGFloat = 32
+    static let topInset = IPadShellLayout.headerInset
     static let sectionSpacing: CGFloat = 48
     static let settingsSpacing: CGFloat = 40
     static let rowHeight: CGFloat = 64
@@ -14,11 +14,11 @@ enum IPadSidebarStyle {
     static let titleStyle = Constants.Typography.Style(face: .semibold, size: titleSize, relativeTo: .title2)
 
     static func background(for scheme: ColorScheme) -> Color {
-        SettingsStyle.surface(for: scheme)
+        IPadShellStyle.background(for: scheme)
     }
 
     static func selection(for scheme: ColorScheme) -> Color {
-        Constants.Connections.surface(for: scheme)
+        IPadShellStyle.selection(for: scheme)
     }
 }
 

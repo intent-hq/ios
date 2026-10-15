@@ -81,7 +81,7 @@ struct IPadShellView: View {
         }
         .padding(layout.inset)
         .opacity(width == nil ? 0 : 1)
-        .background(Constants.Pairing.background(for: colorScheme).ignoresSafeArea())
+        .background(IPadShellStyle.background(for: colorScheme).ignoresSafeArea())
         .modifier(WorkspaceActionLauncher(
             isSearching: workspaceSearchVisible,
             isEnabled: width != nil && layout.usesCompactNavigation,
@@ -120,7 +120,7 @@ struct IPadShellView: View {
             .safeAreaPadding(.bottom, layout.usesCompactNavigation && !workspaceSearchVisible ? AssistantLaunchButton.scrollClearance : 0)
             .frame(width: layout.sidebarWidth)
             .frame(maxHeight: .infinity)
-            .background(Constants.Pairing.background(for: colorScheme))
+            .background(IPadShellStyle.background(for: colorScheme))
             .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
             .opacity(navigation.isSidebarVisible ? 1 : 0)
             .allowsHitTesting(navigation.isSidebarVisible)
@@ -149,7 +149,7 @@ struct IPadShellView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Constants.Conversation.Design.Palette.background(for: colorScheme))
+        .background(IPadShellStyle.panel(for: colorScheme))
         .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
         .shadow(
             color: .black.opacity(IPadShellLayout.shadowOpacity),

@@ -28,10 +28,10 @@ struct AssistantView: View {
                 if !usesWorkspaceDesign { assistantToolbar }
             }
             .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar)
-            .safeAreaInset(edge: .top) {
+            .safeAreaInset(edge: .top, spacing: 0) {
                 if usesWorkspaceDesign, selectedThread == nil {
                     VStack(spacing: 0) {
-                        emptyHeader.conversationReadableColumn()
+                        emptyHeader
                         errorBanner.conversationReadableColumn()
                     }
                 } else {

@@ -5,12 +5,12 @@ struct IPadShellLayout: Equatable {
     static let railWidth: CGFloat = 48
     static let iconSize: CGFloat = 24
     static let railSpacing: CGFloat = 8
-    static let railTopInset: CGFloat = 32
+    static let headerInset: CGFloat = 24
+    static let railTopInset = Self.headerInset
     static let cornerRadius: CGFloat = 20
     static let largeWindowWidth: CGFloat = 1300
     static let compactWindowWidth: CGFloat = 600
-    static let largeInset: CGFloat = 24
-    static let smallInset: CGFloat = 16
+    static let outerInset: CGFloat = 16
     static let largeSidebarWidth: CGFloat = 400
     static let smallSidebarWidth: CGFloat = 384
     static let minimumDetailWidth: CGFloat = 480
@@ -24,7 +24,7 @@ struct IPadShellLayout: Equatable {
     let isAccessibilitySize: Bool
 
     var usesCompactNavigation: Bool { width < Self.compactWindowWidth }
-    var inset: CGFloat { width >= Self.largeWindowWidth ? Self.largeInset : Self.smallInset }
+    var inset: CGFloat { Self.outerInset }
     var gutter: CGFloat { inset }
     var railGutter: CGFloat { usesCompactNavigation ? 0 : gutter }
     var preferredSidebarWidth: CGFloat {
@@ -39,5 +39,21 @@ struct IPadShellLayout: Equatable {
 
     func detailLeadingInset(sidebarVisible: Bool) -> CGFloat {
         sidebarVisible && !usesSidebarOverlay ? sidebarWidth + gutter : 0
+    }
+}
+
+/// iPad shell roles keep the surrounding chrome distinct from the main panel.
+/// Reuse the approved colors without changing connection or onboarding palettes.
+enum IPadShellStyle {
+    static func background(for scheme: ColorScheme) -> Color {
+        Constants.Conversation.Design.Palette.surface(for: scheme)
+    }
+
+    static func panel(for scheme: ColorScheme) -> Color {
+        Constants.Conversation.Design.Palette.background(for: scheme)
+    }
+
+    static func selection(for scheme: ColorScheme) -> Color {
+        Constants.Conversation.Design.Palette.raisedSurface(for: scheme)
     }
 }
