@@ -6,7 +6,6 @@ nonisolated final class WorkspaceTextFile: Sendable {
     let content: String
     let byteCount: Int
     static let maxBytes = 5 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
-    private static let supportedExtensions: Set<String> = ["txt"]
 
     private init(url: URL, content: String, byteCount: Int) {
         self.url = url
@@ -18,10 +17,6 @@ nonisolated final class WorkspaceTextFile: Sendable {
         Task.detached(priority: .utility) { [url] in
             try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
         }
-    }
-
-    static func isText(path: String) -> Bool {
-        supportedExtensions.contains(URL(fileURLWithPath: path).pathExtension.lowercased())
     }
 
     /// Download and strict decoding stay off the UI executor. Preserve the name
@@ -41,7 +36,7 @@ nonisolated final class WorkspaceTextFile: Sendable {
         try Task.checkCancellation()
         guard byteCount <= maxBytes else { throw WorkspaceFileImageLoader.LoadError.fileTooLarge }
         let data = try Data(contentsOf: url)
-        guard let content = String(data: data, encoding: .utf8) else {
+        guard !data.contains(0), let content = String(data: data, encoding: .utf8) else {
             throw WorkspaceFileImageLoader.LoadError.notUTF8Text
         }
         try Task.checkCancellation()

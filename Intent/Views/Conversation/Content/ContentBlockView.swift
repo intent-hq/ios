@@ -387,7 +387,7 @@ extension ContentBlockBody {
         if let link = IntentFileLink.parse(url), WorkspacePDF.isPDF(path: link.path) {
             return .pdf(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
         }
-        if let link = IntentFileLink.parse(url), WorkspaceTextFile.isText(path: link.path) {
+        if let link = IntentFileLink.parse(url), !link.isImage, !WorkspaceVideo.isVideo(path: link.path) {
             return .text(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
         }
         if let link = NoteDetailView.parseIntentNoteLink(url) {
