@@ -37,9 +37,14 @@ CAPTURES = {
             for appearance in ("light", "dark")
             for section in (
                 "workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual",
-                "Recent sidebar", "Repo sidebar", "Status sidebar", "first workspace selected", "scrolling sidebar",
+                "Recent sidebar", "Repo sidebar", "Status sidebar", "first workspace selected",
                 "focused typing", "focused typing keyboard hidden", "typing restored",
             )
+        ),
+        "testScrollingIndicatorStaysOutsideWorkspaceRowsInBothThemes": tuple(
+            f"iPad scrolling {mode} sidebar {appearance}"
+            for appearance in ("light", "dark")
+            for mode in ("Recent", "Repo", "Status")
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
     },

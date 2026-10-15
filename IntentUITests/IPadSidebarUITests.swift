@@ -38,6 +38,23 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
+    func testScrollingIndicatorStaysOutsideWorkspaceRowsInBothThemes() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar scrolling")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance: appearance, extraArguments: ["--demo-long-workspace-list"])
+            defer { app.terminate() }
+            for mode in ["Recent", "Repo", "Status"] {
+                let control = app.buttons["workspaces.viewMode.\(mode)"]
+                control.tap()
+                XCTAssertTrue(control.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+                try verifyScrollingGutter(in: app, name: "iPad scrolling \(mode) sidebar \(appearance)")
+            }
+        }
+    }
+
+    @MainActor
     func testRailRemainsReachableWithAccessibilityText() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar navigation")
         XCUIDevice.shared.orientation = .portrait
@@ -209,11 +226,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             control.tap()
             XCTAssertTrue(control.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
             capture(app, name: "iPad \(mode) sidebar \(appearance)")
-            if mode == "Recent" {
-                app.collectionViews["workspaces.list"].swipeUp(velocity: .slow)
-                capture(app, name: "iPad scrolling sidebar \(appearance)")
-                app.collectionViews["workspaces.list"].swipeDown(velocity: .fast)
-            }
         }
         capture(app, name: "iPad workspace \(appearance)")
         app.buttons["ipad.sidebar.collapse"].tap()
@@ -302,5 +314,29 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+extension IPadSidebarUITests {
+    @MainActor
+    private func verifyScrollingGutter(in app: XCUIApplication, name: String) throws {
+        let list = app.collectionViews["workspaces.list"]
+        XCTAssertTrue(list.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        let rows = list.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace.row."))
+        let firstRow = try XCTUnwrap(rows.allElementsBoundByIndex.first { $0.isHittable })
+        let firstIdentifier = firstRow.identifier
+        list.swipeUp(velocity: .slow)
+        capture(app, name: name)
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "\(name) hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        let visibleRow = try XCTUnwrap(rows.allElementsBoundByIndex.first { $0.isHittable })
+        XCTAssertNotEqual(visibleRow.identifier, firstIdentifier, "The long-list fixture must actually scroll")
+        let indicator = list.otherElements.matching(NSPredicate(format: "label BEGINSWITH %@", "Vertical scroll bar")).firstMatch
+        XCTAssertTrue(indicator.exists, "The overflowing list must expose its native scroll indicator")
+        // AX expands the thumb's hit target; compare its outer edge, then inspect the screenshot for the visible track.
+        XCTAssertGreaterThan(indicator.frame.maxX, visibleRow.frame.maxX, app.debugDescription)
+        XCTAssertLessThanOrEqual(indicator.frame.maxX, list.frame.maxX + 1, app.debugDescription)
     }
 }
