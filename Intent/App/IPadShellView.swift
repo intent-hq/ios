@@ -25,6 +25,8 @@ struct IPadShellView: View {
     private var isFocused: Bool { navigation.focusPresentation != .normal }
     private var isEditing: Bool { navigation.focusPresentation == .conversationEditing }
     private var isDrawerVisible: Bool { navigation.usesSidebarOverlay && navigation.isSidebarVisible && !isFocused }
+    private var isDetailAccessible: Bool { !isDrawerVisible && !workspaceSearchVisible }
+    private var isSidebarAccessible: Bool { (navigation.isSidebarVisible || workspaceSearchVisible) && !isEditing }
     private var focusPresentation: Binding<IPadFocusPresentation> {
         Binding(get: { navigation.focusPresentation }, set: { coordinator.iPadNavigation.setFocusPresentation($0) })
     }
@@ -134,6 +136,7 @@ struct IPadShellView: View {
         }
         .blur(radius: isFocused ? IPadShellLayout.focusBlurRadius : 0)
         .allowsHitTesting(!isFocused)
+        .accessibilityElement(children: isFocused ? .ignore : .contain)
         .accessibilityHidden(true, isEnabled: isFocused)
         .padding(layout.inset)
         // Keep normal navigation above native pane containers' hit regions.
@@ -143,13 +146,12 @@ struct IPadShellView: View {
     private var detailPane: some View {
         detail
             .frame(width: isEditing ? layout.focusedPanelWidth : max(0, layout.contentWidth - layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible)))
-            .modifier(IPadPaneBounds(identifier: "ipad.detail.panel"))
+            .modifier(IPadPaneBounds(identifier: "ipad.detail.panel", isAccessible: isDetailAccessible))
             .padding(.leading, isEditing ? 0 : layout.railLeadingInset + layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
             .frame(maxWidth: .infinity, alignment: isEditing ? .center : .leading)
             .blur(radius: workspaceSearchVisible ? IPadShellLayout.focusBlurRadius : 0)
-            .environment(\.isIPadPaneVisible, !isDrawerVisible && !workspaceSearchVisible)
-            .allowsHitTesting(!isDrawerVisible && !workspaceSearchVisible)
-            .accessibilityHidden(true, isEnabled: isDrawerVisible || workspaceSearchVisible)
+            .environment(\.isIPadPaneVisible, isDetailAccessible)
+            .allowsHitTesting(isDetailAccessible)
             .accessibilityFocused($detailFocused)
     }
 
@@ -160,14 +162,13 @@ struct IPadShellView: View {
             .frame(maxHeight: .infinity)
             .background(IPadShellStyle.background(for: colorScheme))
             .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
-            .modifier(IPadPaneBounds(identifier: "ipad.sidebar.panel"))
+            .modifier(IPadPaneBounds(identifier: "ipad.sidebar.panel", isAccessible: isSidebarAccessible))
             .padding(.leading, workspaceSearchVisible ? 0 : layout.railLeadingInset)
             .frame(maxWidth: .infinity, alignment: workspaceSearchVisible ? .center : .leading)
             .blur(radius: isEditing ? IPadShellLayout.focusBlurRadius : 0)
             .opacity(navigation.isSidebarVisible || workspaceSearchVisible ? 1 : 0)
-            .allowsHitTesting((navigation.isSidebarVisible || workspaceSearchVisible) && !isEditing)
-            .accessibilityHidden(true, isEnabled: isEditing)
-            .environment(\.isIPadPaneVisible, (navigation.isSidebarVisible || workspaceSearchVisible) && !isEditing)
+            .allowsHitTesting(isSidebarAccessible)
+            .environment(\.isIPadPaneVisible, isSidebarAccessible)
     }
 
     private var detail: some View {

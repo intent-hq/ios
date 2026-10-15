@@ -133,12 +133,13 @@ extension AppCoordinatorTests {
                 previousKey?.makeKey()
             }
             try #require(window.isKeyWindow)
-            try verifyFocusedEditor(in: host, size: size, coordinator: coordinator)
+            try await verifyFocusedEditor(in: host, size: size, coordinator: coordinator)
         }
     }
 
-    @MainActor private func verifyFocusedEditor(in host: UIView, size: CompactShellSize, coordinator: AppCoordinator) throws {
-        try waitForCompactShell { compactEditor(in: host) != nil }
+    @MainActor private func verifyFocusedEditor(in host: UIView, size: CompactShellSize, coordinator: AppCoordinator) async throws {
+        let timeout = Duration.seconds(CompactShellSize.timeout)
+        try await waitUntil("the retained composer appears", timeout: timeout) { compactEditor(in: host) != nil }
         let editor = try #require(compactEditor(in: host))
         editor.text = "Keep this selected draft"
         editor.delegate?.textViewDidChange?(editor)
@@ -147,12 +148,17 @@ extension AppCoordinatorTests {
         editor.selectedRange = selection
         let request = coordinator.conversationRequestId
         #expect(editor.becomeFirstResponder())
-        try waitForCompactShell { editor.isFirstResponder }
-        try waitForCompactShell { coordinator.iPadNavigation.focusPresentation == .conversationEditing }
-        try waitForCompactShell { compactControl("ipad.focus.close", in: host) != nil }
+        try await waitUntil("the editor becomes first responder", timeout: timeout) { editor.isFirstResponder }
+        // Editing callbacks publish their Binding on the main queue. Yield the
+        // executor so this verifies that real callback rather than starving it.
+        try await waitUntil("the native editor publishes focus", timeout: timeout) {
+            (editor.delegate as? SubmittableTextView.Coordinator)?.parent.isFocused == true
+        }
+        try await waitUntil("the shell enters typing focus", timeout: timeout) { coordinator.iPadNavigation.focusPresentation == .conversationEditing }
+        try await waitUntil("the typing focus close control appears", timeout: timeout) { compactControl("ipad.focus.close", in: host) != nil }
         for width in [CompactShellSize.narrow, CompactShellSize.wide] {
             size.width = width
-            try waitForCompactShell {
+            try await waitUntil("the close control fits the resized pane", timeout: timeout) {
                 guard let close = compactControl("ipad.focus.close", in: host) else { return false }
                 let frame = host.convert(close.accessibilityFrame, from: nil)
                 return frame.minX >= 0 && frame.maxX <= width
@@ -166,7 +172,9 @@ extension AppCoordinatorTests {
         }
         let close = try #require(compactControl("ipad.focus.close", in: host))
         #expect(close.accessibilityActivate())
-        try waitForCompactShell { coordinator.iPadNavigation.focusPresentation == .normal && !editor.isFirstResponder }
+        try await waitUntil("closing typing focus resigns the editor", timeout: timeout) {
+            coordinator.iPadNavigation.focusPresentation == .normal && !editor.isFirstResponder
+        }
         #expect(compactEditor(in: host) === editor)
         #expect(editor.text == draft)
         #expect(editor.selectedRange == selection)

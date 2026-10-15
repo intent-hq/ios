@@ -132,6 +132,8 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         let close = app.buttons["ipad.focus.close"]
         XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         capture(app, name: "iPad focused typing \(appearance)")
+        XCTAssertFalse(app.otherElements["ipad.sidebar.panel"].exists, app.debugDescription)
+        XCTAssertFalse(app.buttons["settings.pairing.manual"].exists, app.debugDescription)
         let panel = app.otherElements["ipad.detail.panel"]
         XCTAssertEqual(panel.frame.width, Self.focusPanelWidth, accuracy: 2, app.debugDescription)
         XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
@@ -139,6 +141,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertFalse(app.buttons["ipad.sidebar.collapse"].exists)
         XCTAssertFalse(app.buttons["conversation.back"].exists)
         XCTAssertEqual(app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.filter { $0.isHittable }.count, 1)
+        XCTAssertEqual(app.textViews.matching(identifier: "composer.textView").count, 1, "Inactive conversation editors stay outside the accessibility tree")
         XCTAssertTrue(app.buttons["composer.send"].isHittable)
         XCTAssertTrue(app.buttons["composer.attachment"].isHittable)
         let keyboard = app.keyboards.firstMatch

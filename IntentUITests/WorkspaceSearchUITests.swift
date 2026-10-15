@@ -90,7 +90,9 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             XCTAssertFalse(app.buttons["intent.menu.open"].exists)
             XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)
             XCTAssertFalse(app.buttons["ipad.sidebar.collapse"].exists)
-            XCTAssertFalse(heading.isHittable)
+            XCTAssertFalse(heading.exists, app.debugDescription)
+            XCTAssertFalse(app.otherElements["ipad.detail.panel"].exists, app.debugDescription)
+            XCTAssertFalse(app.buttons["settings.pairing.manual"].exists, app.debugDescription)
             let cancel = app.buttons["workspaces.search.cancel"]
             XCTAssertTrue(cancel.isHittable)
             captureSearchState(name: "iPad focused search \(appearance)")
