@@ -80,7 +80,7 @@ struct ConversationColumnView: View {
                 viewModel: viewModel,
                 store: viewModel.store,
                 allowsSending: composerVisible
-            ) { composerFocused = $0 }
+            ).environment(\.conversationComposerFocus, $composerFocused)
         })
         .sheet(isPresented: $questionSheetPresented) {
             questionSheet
