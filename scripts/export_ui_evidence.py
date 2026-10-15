@@ -144,6 +144,9 @@ CAPTURES = {
         "testSlowStatusSwipeStaysOpenAfterFingerLifts": ("workspace-status-swipe-stays-open",),
         "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
     },
+    "WorkspaceStatusImageUITests": {
+        "testStatusImageIsAbsentFromListAndOpensFullSizeFromDetail": ("workspace-summary-and-image",),
+    },
     "ManualConnectionDesignUITests": {
         "testTokenVisibilityKeepsDraftFocusAndSheetPosition": (
             "manual-design-token-visibility-keeps-focus",
