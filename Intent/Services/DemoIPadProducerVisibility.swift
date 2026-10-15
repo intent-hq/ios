@@ -178,7 +178,7 @@ private final class DemoProducerInspector: UIView {
         let editor = editors.first
         let identity = editor.map { String(describing: ObjectIdentifier($0)) } ?? "missing"
         let marker = marker(in: window?.rootViewController)
-        let editorReport = [
+        let editorReport: [String: String] = [
             "phase": phase.rawValue, "editorCount": String(editors.count), "editor": identity,
             "originalEditor": originalIdentity ?? "unprepared", "retained": String(identity == originalIdentity),
             "draft": editor?.text ?? "missing", "originalDraft": originalDraft ?? "unprepared",
