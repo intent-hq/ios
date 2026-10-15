@@ -133,6 +133,9 @@ struct RootView: View {
                 launchContent
             }
         }
+        #if DEBUG
+        .modifier(DemoIPadProducerEntry())
+        #endif
     }
 
     private var assistantPresented: Binding<Bool> {

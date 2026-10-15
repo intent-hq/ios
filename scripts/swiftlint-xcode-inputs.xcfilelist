@@ -211,6 +211,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesNavigation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesTranscriptVideo.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceProposal.swift
+$(SRCROOT)/Intent/Services/DemoIPadProducerVisibility.swift
 $(SRCROOT)/Intent/Services/DemoMode.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/DemoRepositoryScriptFixtures.swift
@@ -988,6 +989,7 @@ $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
 $(SRCROOT)/IntentUITests/FixtureCaptureLifecycleUITests.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuTestSupport.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuUITests.swift
+$(SRCROOT)/IntentUITests/IPadProducerVisibilityUITests.swift
 $(SRCROOT)/IntentUITests/IPadSidebarUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
 $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
