@@ -144,8 +144,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertEqual(composer.value as? String, draft)
         XCUIDevice.shared.orientation = .portrait
         // The orientation notification precedes the retained pane's width update.
-        XCTAssertTrue(waitUntilHittable(app.otherElements["ipad.detail.panel"].buttons["composer.send"].firstMatch), app.debugDescription)
-        XCTAssertTrue(try app.buttons.matching(identifier: "Send message").singleHittableElement().isEnabled)
+        XCTAssertTrue(try app.buttons.matching(identifier: "Send message").waitForSingleHittableElement(timeout: Self.timeout).isEnabled)
         XCTAssertEqual(composer.value as? String, draft)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad portrait conversation with draft")
         try verifySendAndBack(in: app, draft: draft)
