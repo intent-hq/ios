@@ -131,6 +131,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     private func verifyTypingFocus(in app: XCUIApplication, composer: XCUIElement, appearance: String) {
         let close = app.buttons["ipad.focus.close"]
         XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        capture(app, name: "iPad focused typing \(appearance)")
         let panel = app.otherElements["ipad.detail.panel"]
         XCTAssertEqual(panel.frame.width, Self.focusPanelWidth, accuracy: 2)
         XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2)
@@ -143,7 +144,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
         XCTAssertLessThanOrEqual(close.frame.maxY, keyboard.frame.minY)
-        capture(app, name: "iPad focused typing \(appearance)")
         app.scrollViews["transcript.scrollView"].coordinate(withNormalizedOffset: CGVector(dx: Self.transcriptTapX, dy: 0.5)).tap()
         XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(close.isHittable, "Hiding the keyboard must not close the focused pane")
@@ -157,9 +157,9 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        capture(app, name: "iPad typing restored \(appearance)")
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
         XCTAssertEqual(composer.value as? String, Self.draft)
-        capture(app, name: "iPad typing restored \(appearance)")
         app.buttons["workspaces.search.open"].tap()
         let search = app.textFields["workspaces.search.field"]
         XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))

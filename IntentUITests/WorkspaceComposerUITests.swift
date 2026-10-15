@@ -49,13 +49,13 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         composer.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Fixture.timeout))
         let message = "Make the logo bigger\nand keep its proportions"
-        composer.typeText(message)
-        // Input delivery and the accessibility value can settle after typeText returns.
+        enterMultilineMessage(message, into: composer, in: app)
+        // Input delivery and the accessibility value can settle after input returns.
         let typedMessage = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", message), object: composer
         )
         XCTAssertEqual(XCTWaiter.wait(for: [typedMessage], timeout: Fixture.timeout), .completed)
-        XCTAssertEqual(composer.value as? String, message, "Return on iPhone inserts a newline instead of sending")
+        XCTAssertEqual(composer.value as? String, message, "The multiline draft must remain unsent until the send button is tapped")
         XCTAssertTrue(send.waitForExistence(timeout: Fixture.timeout))
         assertReachable(send, in: app)
         send.tap()
@@ -81,6 +81,20 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertTrue(stop.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertEqual(composer.value as? String, draft, "Stop must not consume the next message")
         XCTAssertTrue(send.isEnabled)
+    }
+
+    @MainActor
+    private func enterMultilineMessage(_ message: String, into composer: XCUIElement, in app: XCUIApplication) {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            // iPad Return submits. Native paste inserts a multiline draft without
+            // changing that keyboard policy or sending the first line early.
+            UIPasteboard.general.string = message
+            defer { UIPasteboard.general.items = [] }
+            pasteClipboard(into: composer, in: app)
+        } else {
+            // Keep exercising the iPhone software Return newline behavior.
+            composer.typeText(message)
+        }
     }
 
     @MainActor

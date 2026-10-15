@@ -93,12 +93,12 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             XCTAssertFalse(heading.isHittable)
             let cancel = app.buttons["workspaces.search.cancel"]
             XCTAssertTrue(cancel.isHittable)
+            captureSearchState(name: "iPad focused search \(appearance)")
             let panel = app.otherElements["ipad.sidebar.panel"]
             XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2)
             XCTAssertEqual(panel.frame.width, Fixture.focusPanelWidth, accuracy: 2)
             XCTAssertEqual(panel.frame.maxX - cancel.frame.maxX, Fixture.focusContentInset, accuracy: 2)
             XCTAssertLessThanOrEqual(field.frame.maxY, app.keyboards.firstMatch.frame.minY)
-            captureSearchState(name: "iPad focused search \(appearance)")
             verifySearchWithoutKeyboardAndRotation(in: app, field: field, appearance: appearance)
             cancel.tap()
             XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))

@@ -83,6 +83,9 @@ struct IPadShellView: View {
                 .blur(radius: isFocused ? IPadShellLayout.focusBlurRadius : 0)
                 .allowsHitTesting(!isFocused)
                 .accessibilityHidden(true, isEnabled: isFocused)
+                // Native navigation containers can extend their hit region beyond
+                // a clipped pane. Keep normal navigation above those containers.
+                .zIndex(isFocused ? 0 : 2)
             }
             detailPane
                 .zIndex(isEditing ? IPadShellLayout.focusLayer : 0)
@@ -132,6 +135,7 @@ struct IPadShellView: View {
     private var detailPane: some View {
         detail
             .frame(width: isEditing ? layout.focusedPanelWidth : max(0, layout.contentWidth - layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible)))
+            .modifier(IPadPaneBounds(identifier: "ipad.detail.panel"))
             .offset(x: isEditing ? layout.focusedPanelLeadingInset : layout.railLeadingInset + layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
             .blur(radius: workspaceSearchVisible ? IPadShellLayout.focusBlurRadius : 0)
             .environment(\.isIPadPaneVisible, !isDrawerVisible && !workspaceSearchVisible)
@@ -147,8 +151,7 @@ struct IPadShellView: View {
             .frame(maxHeight: .infinity)
             .background(IPadShellStyle.background(for: colorScheme))
             .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("ipad.sidebar.panel")
+            .modifier(IPadPaneBounds(identifier: "ipad.sidebar.panel"))
             .offset(x: workspaceSearchVisible ? layout.focusedPanelLeadingInset : layout.railLeadingInset)
             .blur(radius: isEditing ? IPadShellLayout.focusBlurRadius : 0)
             .opacity(navigation.isSidebarVisible || workspaceSearchVisible ? 1 : 0)
@@ -186,8 +189,6 @@ struct IPadShellView: View {
             radius: IPadShellLayout.shadowRadius,
             y: IPadShellLayout.shadowOffset
         )
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("ipad.detail.panel")
     }
 
     private var sidebars: some View {

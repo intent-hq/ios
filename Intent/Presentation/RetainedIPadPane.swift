@@ -20,3 +20,19 @@ struct RetainedIPadPane<Content: View>: View {
             }
     }
 }
+
+/// The resized pane owns its interaction and accessibility bounds. Native lists
+/// and navigation containers otherwise report their enclosing window's frame.
+struct IPadPaneBounds: ViewModifier {
+    let identifier: String
+    @State private var frame: CGRect = .zero
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(identifier)
+            .accessibilityFrame(frame)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
+    }
+}

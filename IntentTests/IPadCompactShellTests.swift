@@ -110,6 +110,9 @@ extension AppCoordinatorTests {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
         let coordinator = compactShellCoordinator(fixture)
+        let workspaceId = detail == .assistant ? Workspace.chiefWorkspaceId : ConversationStartupFixture.workspaceId
+        let startup = fixture.makeViewModel(workspaceId: workspaceId)
+        await startup.load()
         if detail == .assistant {
             await fixture.session.assistantStore.refresh()
             try #require(!fixture.session.assistantStore.threads.isEmpty)
