@@ -18,8 +18,6 @@ struct WorkspaceComposerRow: View {
     let onFiles: () -> Void
     var onPasteImages: (() -> Void)?
 
-    @Environment(\.colorScheme) private var colorScheme
-
     private typealias Design = Constants.Conversation.Design
     private typealias Layout = Design.Composer
 
@@ -43,10 +41,7 @@ struct WorkspaceComposerRow: View {
         .padding(.trailing, hasDraft || isStreaming ? Layout.activeTrailingPadding : Layout.trailingPadding - controlInset)
         .padding(.vertical, (Layout.minimumHeight - Design.minimumTapTarget) / 2)
         .frame(minHeight: Layout.minimumHeight)
-        .background(
-            Design.Palette.surface(for: colorScheme),
-            in: RoundedRectangle(cornerRadius: hasDraft || isStreaming ? Layout.activeCornerRadius : Design.cornerRadius)
-        )
+        .background(WorkspaceComposerSurface(text: text, hasAttachments: hasAttachments, isStreaming: isStreaming))
     }
 
     // UITextView's existing container inset and default line-fragment padding
@@ -55,6 +50,25 @@ struct WorkspaceComposerRow: View {
         Constants.Conversation.Composer.textContainerInset + WorkspaceComposerMetrics.lineFragmentPadding
     }
     private var controlInset: CGFloat { (Design.minimumTapTarget - Design.iconSize) / 2 }
+}
+
+/// Shared shape for the composer row and any pending attachment rows above it.
+struct WorkspaceComposerSurface: View {
+    let text: String
+    let hasAttachments: Bool
+    let isStreaming: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    private typealias Design = Constants.Conversation.Design
+
+    private var isActive: Bool {
+        isStreaming || hasAttachments || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: isActive ? Design.Composer.activeCornerRadius : Design.cornerRadius)
+            .fill(Design.Palette.surface(for: colorScheme))
+    }
 }
 
 private struct WorkspaceComposerEditor: View {

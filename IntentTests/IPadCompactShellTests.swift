@@ -283,7 +283,9 @@ extension AppCoordinatorTests {
 }
 
 @MainActor @Observable private final class CompactShellSize {
-    static let draftSelection = NSRange(location: 5, length: 4)
+    private static let selectionLocation = 5
+    private static let selectionLength = 4
+    static let draftSelection = NSRange(location: selectionLocation, length: selectionLength)
     static let narrow: CGFloat = 320
     static let wide: CGFloat = 1210
     static let height: CGFloat = 900

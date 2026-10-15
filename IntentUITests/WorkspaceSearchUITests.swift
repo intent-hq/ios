@@ -143,7 +143,8 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         field.typeText("payment")
         app.buttons["workspace.row.demo-ws-flaky-tests"].tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.staticTexts["workspace.title.heading"].wait(for: \.label, toEqual: Fixture.workspaceTitle, timeout: Fixture.timeout))
+        let heading = app.staticTexts["workspace.title.heading"]
+        XCTAssertTrue(heading.wait(for: \.label, toEqual: Fixture.workspaceTitle, timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Fixture.timeout))
     }

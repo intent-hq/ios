@@ -64,7 +64,6 @@ private struct ConversationViewContent: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.conversationPresentation) private var presentation
-    @Environment(\.iPadFocusPresentation) private var iPadFocusPresentation
     @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @State private var isInNavigation = false
@@ -252,17 +251,15 @@ private extension ConversationViewContent {
             #if os(iOS)
             .toolbar(usesWorkspaceDesign && !usesVerticalNavigation ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if usesWorkspaceDesign, !usesVerticalNavigation, iPadFocusPresentation?.wrappedValue != .conversationEditing {
-                    WorkspaceConversationHeader(
-                        title: viewModel.agentName,
-                        showsBackground: !viewModel.showsLoadingState,
-                        assistantStore: assistantStore,
-                        onBack: navigateBack
-                    ) { agentMenu }
-                    .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: viewModel.showsLoadingState)
-                }
-            }
+            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign && !usesVerticalNavigation) {
+                WorkspaceConversationHeader(
+                    title: viewModel.agentName,
+                    showsBackground: !viewModel.showsLoadingState,
+                    assistantStore: assistantStore,
+                    onBack: navigateBack
+                ) { agentMenu }
+                .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: viewModel.showsLoadingState)
+            })
             .modifier(WorkspaceQuestionPresentation(
                 viewModel: viewModel,
                 isPresented: $answeringWorkspaceQuestions,
