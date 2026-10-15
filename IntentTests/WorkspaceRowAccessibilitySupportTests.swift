@@ -8,7 +8,7 @@ extension WorkspaceRowPresentationTests {
     private static let pullRequestNumber = 123_456_789
     private static let additionalPullRequestCount = 100
     private static let renderedBadgeHostHeight: CGFloat = 300
-    private static let runLoopObservationInterval = 0.01
+    private static let observationInterval = 0.01
     private static let maximumClassNameLength = 80
 
     static func badgeLabels(for status: WorkspacePrPill.Status) -> [String?] {
@@ -70,16 +70,13 @@ extension WorkspaceRowPresentationTests {
                     root: window,
                     expectedIdentifiers: identifiers
                 )
-                _ = RunLoop.current.run(
-                    mode: .default,
-                    before: Date(timeIntervalSinceNow: Self.runLoopObservationInterval)
-                )
+                try await Task.sleep(for: .seconds(Self.observationInterval))
                 let observed = accessibilityGraphSnapshot(
                     root: window,
                     expectedIdentifiers: identifiers
                 )
                 print("SYNTHETIC PR badge accessibility graph immediate:\n\(immediate)")
-                print("SYNTHETIC PR badge accessibility graph after run-loop observation:\n\(observed)")
+                print("SYNTHETIC PR badge accessibility graph after async observation:\n\(observed)")
             }
             let badges = try initialBadges.map { initialBadge in
                 try #require(initialBadge)
