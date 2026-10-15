@@ -204,8 +204,8 @@ enum IPadVisibilityDiagnostics {
             "ipad.sidebar.panel", "ipad.detail.panel", "workspaces.menu", "workspaces.list",
             "workspaces.search.field", "settings.scroll", "composer.textView", "ipad.focus.close"
         ]
-        let elements = SyntheticBadgeHost.accessibilityElements(in: host).filter {
-            identifiers.contains(SyntheticBadgeHost.accessibilityIdentifier(of: $0) ?? "")
+        let elements = SyntheticBadgeHost.accessibilityElements(in: host).filter { element in
+            identifiers.contains(SyntheticBadgeHost.accessibilityIdentifier(of: element) ?? "")
         }
         for (index, element) in elements.enumerated() {
             fields["ax.\(index)"] = "id=\(identity(element)) identifier=\(SyntheticBadgeHost.accessibilityIdentifier(of: element) ?? "nil") "
