@@ -100,6 +100,9 @@ private struct WorkspaceComposerEditor: View {
                 textColor: UIColor(Design.Palette.foreground(for: colorScheme))
             )
             .frame(height: height)
+            // A fixed SwiftUI frame alone does not clip the native scrolling
+            // text view. Keep long drafts inside this same bounded viewport.
+            .clipped()
             if text.isEmpty {
                 Text("Message")
                     .interFont(Constants.Typography.bodyS)

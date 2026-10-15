@@ -83,19 +83,25 @@ struct IPadShellView: View {
                 .blur(radius: isFocused ? IPadShellLayout.focusBlurRadius : 0)
                 .allowsHitTesting(!isFocused)
                 .accessibilityHidden(true, isEnabled: isFocused)
+                .padding(layout.inset)
                 // Native navigation containers can extend their hit region beyond
                 // a clipped pane. Keep normal navigation above those containers.
                 .zIndex(isFocused ? 0 : 2)
             }
             detailPane
+                .padding(layout.inset)
                 .zIndex(isEditing ? IPadShellLayout.focusLayer : 0)
             drawerBackdrop
                 .frame(width: layout.contentWidth)
                 .offset(x: layout.railLeadingInset)
+                .padding(layout.inset)
                 .zIndex(1)
             sidebarPane
+                .padding(layout.inset)
                 .zIndex(workspaceSearchVisible ? IPadShellLayout.focusLayer : 1)
             if isFocused {
+                // Keep the shade outside pane padding so it reaches the full
+                // window, including the status bar and the shell's outer gutter.
                 Color.black.opacity(IPadShellLayout.focusShadeOpacity)
                     .ignoresSafeArea()
                     .accessibilityHidden(true)
@@ -103,7 +109,6 @@ struct IPadShellView: View {
             }
         }
         .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(layout.inset)
         .opacity(width == nil ? 0 : 1)
         .background(IPadShellStyle.background(for: colorScheme).ignoresSafeArea())
         .modifier(WorkspaceActionLauncher(
