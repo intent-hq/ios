@@ -145,7 +145,7 @@ struct IPadShellView: View {
     private var detailPane: some View {
         detail
             .frame(width: isEditing ? layout.focusedPanelWidth : max(0, layout.contentWidth - layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible)))
-            .modifier(IPadPaneBounds(identifier: "ipad.detail.panel", isAccessible: isDetailAccessible, isModal: isEditing))
+            .modifier(IPadPaneBounds(identifier: "ipad.detail.panel", isAccessible: isDetailAccessible))
             .padding(.leading, isEditing ? 0 : layout.railLeadingInset + layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
             .frame(maxWidth: .infinity, alignment: isEditing ? .center : .leading)
             .blur(radius: workspaceSearchVisible ? IPadShellLayout.focusBlurRadius : 0)
@@ -161,7 +161,7 @@ struct IPadShellView: View {
             .frame(maxHeight: .infinity)
             .background(IPadShellStyle.background(for: colorScheme))
             .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
-            .modifier(IPadPaneBounds(identifier: "ipad.sidebar.panel", isAccessible: isSidebarAccessible, isModal: workspaceSearchVisible))
+            .modifier(IPadPaneBounds(identifier: "ipad.sidebar.panel", isAccessible: isSidebarAccessible))
             .padding(.leading, workspaceSearchVisible ? 0 : layout.railLeadingInset)
             .frame(maxWidth: .infinity, alignment: workspaceSearchVisible ? .center : .leading)
             .blur(radius: isEditing ? IPadShellLayout.focusBlurRadius : 0)

@@ -28,14 +28,12 @@ struct RetainedIPadPane<Content: View>: View {
 struct IPadPaneBounds: ViewModifier {
     let identifier: String
     let isAccessible: Bool
-    var isModal = false
 
     func body(content: Content) -> some View {
         content
             .accessibilityElement(children: isAccessible ? .contain : .ignore)
             .accessibilityIdentifier(identifier)
-            .contentShape([.interaction, .accessibility], Rectangle())
-            .accessibilityAddTraits(isAccessible && isModal ? .isModal : [])
+            .contentShape(.interaction, Rectangle())
             .accessibilityHidden(true, isEnabled: !isAccessible)
     }
 }
