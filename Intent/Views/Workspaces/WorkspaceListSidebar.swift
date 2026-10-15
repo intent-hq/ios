@@ -10,6 +10,8 @@ struct WorkspaceListSidebar: View {
     private let onCreateWorkspace: () -> Void
     private let onCollapse: (() -> Void)?
     private var isEmbedded: Bool { onCollapse != nil }
+    private var isFocusedSearch: Bool { isEmbedded && isSearching }
+    private var contentInset: CGFloat { isFocusedSearch ? IPadShellLayout.focusContentInset : IPadSidebarStyle.inset }
     private var surface: Color { isEmbedded ? IPadSidebarStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme) }
     @State private var viewModel: WorkspaceListViewModel
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
@@ -34,10 +36,15 @@ struct WorkspaceListSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let onCollapse {
+            if isFocusedSearch {
+                IPadSidebarTitle(title: "Workspaces")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, contentInset)
+                    .padding(.top, IPadShellLayout.focusContentInset)
+            } else if let onCollapse {
                 sidebarHeader(onCollapse: onCollapse)
             }
-            if isEmbedded || !isSearching {
+            if !isSearching {
                 WorkspaceSearchBar(
                     viewMode: $viewModel.viewMode,
                     isSearching: $isSearching,
@@ -68,7 +75,13 @@ struct WorkspaceListSidebar: View {
         .background(surface)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSearching {
-                WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
+                WorkspaceSearchInput(
+                    text: $viewModel.searchText,
+                    isSearching: $isSearching,
+                    isFocused: $searchFocused,
+                    surfaceColor: isFocusedSearch ? IPadShellStyle.panel(for: colorScheme) : nil,
+                    horizontalPadding: isFocusedSearch ? contentInset : Constants.WorkspaceSearch.contentSpacing
+                )
             }
         }
         .refreshable {
@@ -93,6 +106,13 @@ struct WorkspaceListSidebar: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(actionError ?? "Please try again.")
+        }
+        .onChange(of: isSearching) { _, searching in
+            revealedSwipeTarget = nil
+            if !searching {
+                searchFocused = false
+                viewModel.searchText = ""
+            }
         }
         .onChange(of: viewModel.viewMode) { _, _ in revealedSwipeTarget = nil }
         .onChange(of: viewModel.searchText) { _, _ in revealedSwipeTarget = nil }
@@ -175,10 +195,10 @@ struct WorkspaceListSidebar: View {
         #endif
         .scrollContentBackground(isEmbedded ? .hidden : .automatic)
         .accessibilityIdentifier("workspaces.list")
-        .contentMargins(.horizontal, isEmbedded ? IPadSidebarStyle.inset : nil)
+        .contentMargins(.horizontal, isEmbedded ? contentInset : nil)
         // Keep the filter gap scrollable so it cannot consume the reduced
         // viewport above the keyboard; the final row retains bottom clearance.
-        .contentMargins(.top, isEmbedded ? IPadSidebarStyle.filterListSpacing : Constants.WorkspaceList.sidebarTopContentMargin, for: .scrollContent)
+        .contentMargins(.top, isEmbedded ? (isFocusedSearch ? IPadShellLayout.focusContentInset : IPadSidebarStyle.filterListSpacing) : Constants.WorkspaceList.sidebarTopContentMargin, for: .scrollContent)
         .contentMargins(.bottom, isEmbedded ? IPadSidebarStyle.inset : (isSearching ? 0 : AssistantLaunchButton.scrollClearance), for: .scrollContent)
     }
 

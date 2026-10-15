@@ -9,7 +9,6 @@ struct IPadShellView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Nil until measured, so a zero first width never drives the navigation layout.
     @State private var width: CGFloat?
-    @State private var isSearchingWorkspaces = false
     @State private var showingCreateWorkspace = false
     @State private var showingConnectionSwitcher = false
     @State private var connectionSwitcherOpen = false
@@ -23,16 +22,27 @@ struct IPadShellView: View {
     private var sidebarPresentation: SidebarPresentation {
         SidebarPresentation(isVisible: navigation.isSidebarVisible, usesOverlay: navigation.usesSidebarOverlay)
     }
-    private var isDrawerVisible: Bool { navigation.usesSidebarOverlay && navigation.isSidebarVisible }
+    private var isFocused: Bool { navigation.focusPresentation != .normal }
+    private var isEditing: Bool { navigation.focusPresentation == .conversationEditing }
+    private var isDrawerVisible: Bool { navigation.usesSidebarOverlay && navigation.isSidebarVisible && !isFocused }
+    private var focusPresentation: Binding<IPadFocusPresentation> {
+        Binding(get: { navigation.focusPresentation }, set: { coordinator.iPadNavigation.setFocusPresentation($0) })
+    }
+    private var isSearchingWorkspaces: Binding<Bool> {
+        Binding(
+            get: { navigation.focusPresentation == .workspaceSearch },
+            set: { coordinator.iPadNavigation.setFocusPresentation($0 ? .workspaceSearch : .normal) }
+        )
+    }
     private var workspaceActionsEnabled: Bool {
-        navigation.section == .workspaces && navigation.pairing == nil && !showingCreateWorkspace
+        navigation.section == .workspaces && navigation.pairing == nil && !showingCreateWorkspace && !isFocused
     }
     private var showsWorkspaceList: Bool {
         if case .workspaceList = coordinator.currentScreen { return true }
         return false
     }
     private var workspaceSearchVisible: Bool {
-        isSearchingWorkspaces && navigation.section == .workspaces && navigation.isSidebarVisible
+        navigation.focusPresentation == .workspaceSearch
     }
 
     var body: some View {
@@ -46,6 +56,7 @@ struct IPadShellView: View {
             }
         }
         .environment(\.conversationPresentation, .iPad)
+        .environment(\.iPadFocusPresentation, focusPresentation)
         .onPreferenceChange(ConnectionSwitcherOpenPreference.self) { connectionSwitcherOpen = $0 }
         .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, dismiss in
             if dismiss { showingCreateWorkspace = false }
@@ -59,7 +70,7 @@ struct IPadShellView: View {
     }
 
     private var shell: some View {
-        HStack(alignment: .top, spacing: layout.railGutter) {
+        ZStack(alignment: .topLeading) {
             if !layout.usesCompactNavigation {
                 IPadNavigationRail(
                     section: navigation.section,
@@ -69,27 +80,38 @@ struct IPadShellView: View {
                 ) {
                     coordinator.iPadNavigation.revealSidebar()
                 }
+                .blur(radius: isFocused ? IPadShellLayout.focusBlurRadius : 0)
+                .allowsHitTesting(!isFocused)
+                .accessibilityHidden(true, isEnabled: isFocused)
             }
-            ZStack(alignment: .leading) {
-                detailPane
-                drawerBackdrop
-                sidebarPane
+            detailPane
+                .zIndex(isEditing ? IPadShellLayout.focusLayer : 0)
+            drawerBackdrop
+                .frame(width: layout.contentWidth)
+                .offset(x: layout.railLeadingInset)
+                .zIndex(1)
+            sidebarPane
+                .zIndex(workspaceSearchVisible ? IPadShellLayout.focusLayer : 1)
+            if isFocused {
+                Color.black.opacity(IPadShellLayout.focusShadeOpacity)
+                    .ignoresSafeArea()
+                    .accessibilityHidden(true)
+                    .zIndex(2)
             }
-            // Accept the new width before the retained sidebar's measured width
-            // catches up; otherwise its old minimum can keep the shell expanded.
-            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(layout.inset)
         .opacity(width == nil ? 0 : 1)
         .background(IPadShellStyle.background(for: colorScheme).ignoresSafeArea())
         .modifier(WorkspaceActionLauncher(
             isSearching: workspaceSearchVisible,
-            isEnabled: width != nil && layout.usesCompactNavigation,
+            isEnabled: width != nil && layout.usesCompactNavigation && !isFocused,
             onWorkspaces: { coordinator.onSelectIPadSection(.workspaces) },
             onAssistant: { coordinator.onSelectIPadSection(.assistant) },
             onCreateWorkspace: createWorkspace,
             onConnections: showConnections
         ))
+        .accessibilityAction(.escape) { coordinator.iPadNavigation.setFocusPresentation(.normal) }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if $0 > 0 { width = $0 } }
         .onChange(of: measuredLayout, initial: true) { _, measuredLayout in
             if let measuredLayout {
@@ -109,22 +131,30 @@ struct IPadShellView: View {
 
     private var detailPane: some View {
         detail
-            .padding(.leading, layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
-            .environment(\.isIPadPaneVisible, !isDrawerVisible)
-            .allowsHitTesting(!isDrawerVisible)
+            .frame(width: isEditing ? layout.focusedPanelWidth : max(0, layout.contentWidth - layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible)))
+            .offset(x: isEditing ? layout.focusedPanelLeadingInset : layout.railLeadingInset + layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
+            .blur(radius: workspaceSearchVisible ? IPadShellLayout.focusBlurRadius : 0)
+            .environment(\.isIPadPaneVisible, !isDrawerVisible && !workspaceSearchVisible)
+            .allowsHitTesting(!isDrawerVisible && !workspaceSearchVisible)
+            .accessibilityHidden(true, isEnabled: isDrawerVisible || workspaceSearchVisible)
             .accessibilityFocused($detailFocused)
     }
 
     private var sidebarPane: some View {
         sidebars
             .safeAreaPadding(.bottom, layout.usesCompactNavigation && !workspaceSearchVisible ? AssistantLaunchButton.scrollClearance : 0)
-            .frame(width: layout.sidebarWidth)
+            .frame(width: workspaceSearchVisible ? layout.focusedPanelWidth : layout.sidebarWidth)
             .frame(maxHeight: .infinity)
             .background(IPadShellStyle.background(for: colorScheme))
             .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
-            .opacity(navigation.isSidebarVisible ? 1 : 0)
-            .allowsHitTesting(navigation.isSidebarVisible)
-            .environment(\.isIPadPaneVisible, navigation.isSidebarVisible)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("ipad.sidebar.panel")
+            .offset(x: workspaceSearchVisible ? layout.focusedPanelLeadingInset : layout.railLeadingInset)
+            .blur(radius: isEditing ? IPadShellLayout.focusBlurRadius : 0)
+            .opacity(navigation.isSidebarVisible || workspaceSearchVisible ? 1 : 0)
+            .allowsHitTesting((navigation.isSidebarVisible || workspaceSearchVisible) && !isEditing)
+            .accessibilityHidden(true, isEnabled: isEditing)
+            .environment(\.isIPadPaneVisible, (navigation.isSidebarVisible || workspaceSearchVisible) && !isEditing)
     }
 
     private var detail: some View {
@@ -157,34 +187,35 @@ struct IPadShellView: View {
             y: IPadShellLayout.shadowOffset
         )
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("ipad.detail.panel")
     }
 
     private var sidebars: some View {
         ZStack {
-            RetainedIPadPane(isVisible: navigation.section == .workspaces) {
+            RetainedIPadPane(isVisible: navigation.section == .workspaces, keepsCoveredContentVisible: true) {
                 WorkspaceListSidebar(
                     workspaceStore: session.workspaceStore,
-                    isSearching: $isSearchingWorkspaces,
+                    isSearching: isSearchingWorkspaces,
                     onCreateWorkspace: createWorkspace,
                     onCollapse: collapseSidebar
                 )
             }
             if navigation.hasOpenedAssistant {
-                RetainedIPadPane(isVisible: navigation.section == .assistant) {
+                RetainedIPadPane(isVisible: navigation.section == .assistant, keepsCoveredContentVisible: true) {
                     IPadAssistantSidebar(
                         session: session,
                         onCollapse: collapseSidebar
                     ) { coordinator.onSelectAssistant(agentId: $0) }
                 }
             }
-            RetainedIPadPane(isVisible: navigation.section == .connections) {
+            RetainedIPadPane(isVisible: navigation.section == .connections, keepsCoveredContentVisible: true) {
                 IPadConnectionsSidebar(
                     onCollapse: collapseSidebar,
                     onScanQR: { coordinator.iPadNavigation.presentPairing(.qrCode) },
                     onManualPairing: { coordinator.iPadNavigation.presentPairing(.manual) }
                 )
             }
-            RetainedIPadPane(isVisible: navigation.section == .settings) {
+            RetainedIPadPane(isVisible: navigation.section == .settings, keepsCoveredContentVisible: true) {
                 IPadSettingsSidebar(
                     onCollapse: collapseSidebar,
                     onScanQR: { coordinator.iPadNavigation.presentPairing(.qrCode) },

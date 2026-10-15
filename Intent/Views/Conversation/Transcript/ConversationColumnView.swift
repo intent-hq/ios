@@ -14,6 +14,8 @@ struct ConversationColumnView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.conversationPresentation) private var presentation
+    @Environment(\.iPadFocusPresentation) private var iPadFocusPresentation
+    @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
     /// Room a floating Intent launcher needs over this chat (0 when none).
     @Environment(\.workspaceActionLauncherClearance) private var launcherClearance
     @State private var questionWizardCollapsed = false
@@ -40,6 +42,25 @@ struct ConversationColumnView: View {
             columnContent
         }
         .environment(\.conversationComposerFocus, $composerFocused)
+        .onChange(of: composerFocused) { _, focused in
+            if focused, isIPadPaneVisible {
+                iPadFocusPresentation?.wrappedValue = .conversationEditing
+            }
+        }
+        .onChange(of: iPadFocusPresentation?.wrappedValue) { _, focus in
+            if focus != .conversationEditing { composerFocused = false }
+        }
+        .onChange(of: composerVisible) { _, visible in
+            if !visible, isIPadPaneVisible, iPadFocusPresentation?.wrappedValue == .conversationEditing {
+                composerFocused = false
+                iPadFocusPresentation?.wrappedValue = .normal
+            }
+        }
+        .onDisappear {
+            guard iPadFocusPresentation != nil else { return }
+            if composerFocused { iPadFocusPresentation?.wrappedValue = .normal }
+            composerFocused = false
+        }
         // Measured inside keyboard avoidance on purpose: with the keyboard
         // up the cap derives from the remaining visible height.
         .onGeometryChange(for: CGFloat.self) { proxy in

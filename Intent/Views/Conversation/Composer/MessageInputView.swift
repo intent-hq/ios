@@ -12,6 +12,7 @@ struct MessageInputView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.conversationPresentation) private var presentation
+    @Environment(\.iPadFocusPresentation) private var iPadFocusPresentation
     @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
     @Environment(\.workspaceQuestionPanelPresented) private var questionPanelPresented
     @Environment(\.conversationComposerFocus) private var conversationFocus
@@ -60,38 +61,10 @@ struct MessageInputView: View {
     var isConnectionReadyForSending: Bool { viewModel.connection.connectionState == .connected }
 
     var body: some View {
-        VStack(spacing: 0) {
-            supplementalRows
-            if usesWorkspaceDesign {
-                WorkspaceComposerRow(
-                    text: $viewModel.messageText,
-                    isFocused: focusBinding,
-                    isStreaming: store.isStreaming,
-                    hasAttachments: viewModel.hasPendingAttachments,
-                    canSend: hasSendableContent,
-                    onSend: sendCurrentMessage,
-                    onStop: {
-                        HapticManager.impact(.light)
-                        Task { await viewModel.stopStreaming() }
-                    },
-                    onPhotos: { isPhotoPickerPresented = true },
-                    onFiles: { isFilePickerPresented = true },
-                    onPasteImages: viewModel.pasteImages
-                )
-            } else {
-                inputRow
-            }
-        }
-        .background {
-            if usesWorkspaceDesign {
-                RoundedRectangle(cornerRadius: workspaceCornerRadius)
-                    .fill(Constants.Conversation.Design.Palette.surface(for: colorScheme))
-            } else {
-                #if os(visionOS)
-                Color.clear // the floating ornament host supplies the glass
-                #else
-                Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1)
-                #endif
+        HStack(alignment: .bottom, spacing: Constants.WorkspaceSearch.contentSpacing) {
+            inputContent
+            if isIPadPaneVisible, iPadFocusPresentation?.wrappedValue == .conversationEditing {
+                closeFocusButton
             }
         }
         .photosPicker(
@@ -140,6 +113,66 @@ struct MessageInputView: View {
 }
 
 private extension MessageInputView {
+    var inputContent: some View {
+        VStack(spacing: 0) {
+            supplementalRows
+            if usesWorkspaceDesign {
+                WorkspaceComposerRow(
+                    text: $viewModel.messageText,
+                    isFocused: focusBinding,
+                    isStreaming: store.isStreaming,
+                    hasAttachments: viewModel.hasPendingAttachments,
+                    canSend: hasSendableContent,
+                    onSend: sendCurrentMessage,
+                    onStop: {
+                        HapticManager.impact(.light)
+                        Task { await viewModel.stopStreaming() }
+                    },
+                    onPhotos: { isPhotoPickerPresented = true },
+                    onFiles: { isFilePickerPresented = true },
+                    onPasteImages: viewModel.pasteImages
+                )
+            } else {
+                inputRow
+            }
+        }
+        .background {
+            if usesWorkspaceDesign {
+                RoundedRectangle(cornerRadius: workspaceCornerRadius)
+                    .fill(Constants.Conversation.Design.Palette.surface(for: colorScheme))
+            } else {
+                #if os(visionOS)
+                Color.clear // the floating ornament host supplies the glass
+                #else
+                Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1)
+                #endif
+            }
+        }
+    }
+
+    var closeFocusButton: some View {
+        Button {
+            isFocused = false
+            iPadFocusPresentation?.wrappedValue = .normal
+        } label: {
+            Image(.close)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.Conversation.Design.iconSize, height: Constants.Conversation.Design.iconSize)
+                .foregroundStyle(Constants.Conversation.Design.Palette.foreground(for: colorScheme))
+                .frame(width: Constants.Conversation.Design.Composer.minimumHeight, height: Constants.Conversation.Design.Composer.minimumHeight)
+                .background(
+                    Constants.Conversation.Design.Palette.surface(for: colorScheme),
+                    in: RoundedRectangle(cornerRadius: Constants.Conversation.Design.cornerRadius)
+                )
+                .accessibilityHidden(true)
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .accessibilityLabel("Close typing focus")
+        .accessibilityIdentifier("ipad.focus.close")
+        .keyboardShortcut(.cancelAction)
+    }
+
     var workspaceCornerRadius: CGFloat {
         let active = store.isStreaming || !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || viewModel.hasPendingAttachments

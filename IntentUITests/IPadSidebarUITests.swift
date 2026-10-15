@@ -2,6 +2,8 @@ import XCTest
 
 nonisolated final class IPadSidebarUITests: XCTestCase {
     private static let timeout: TimeInterval = 30
+    private static let focusPanelWidth: CGFloat = 624
+    private static let transcriptTapX: CGFloat = 0.02
     private static let draft = "Keep this workspace draft"
 
     override func setUpWithError() throws {
@@ -27,6 +29,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
             composer.tap()
             composer.typeText(Self.draft)
+            verifyTypingFocus(in: app, composer: composer, appearance: appearance)
             try verifySections(in: app)
             try verifyPairingCancellation(in: app, appearance: appearance)
             XCTAssertEqual(composer.value as? String, Self.draft)
@@ -80,7 +83,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         composer.tap()
         composer.typeText(Self.draft)
         let child = app.buttons["watched-agent-demo-agent-deflake-capture"]
-        app.buttons["Hide keyboard"].tap()
+        app.buttons["ipad.focus.close"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(child.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         child.tap()
@@ -108,6 +111,8 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
         composer.tap()
         composer.typeText(Self.draft)
+        app.buttons["ipad.focus.close"].tap()
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         verifyPopulatedHistory(in: app)
         let collapse = app.buttons["ipad.sidebar.collapse"]
         let expand = app.buttons["ipad.sidebar.expand"]
@@ -120,6 +125,48 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(collapse.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, Self.draft)
         verifyPopulatedHistory(in: app)
+    }
+
+    @MainActor
+    private func verifyTypingFocus(in app: XCUIApplication, composer: XCUIElement, appearance: String) {
+        let close = app.buttons["ipad.focus.close"]
+        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        let panel = app.otherElements["ipad.detail.panel"]
+        XCTAssertEqual(panel.frame.width, Self.focusPanelWidth, accuracy: 2)
+        XCTAssertEqual(panel.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 2)
+        XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)
+        XCTAssertFalse(app.buttons["ipad.sidebar.collapse"].exists)
+        XCTAssertFalse(app.buttons["conversation.back"].exists)
+        XCTAssertEqual(app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.filter { $0.isHittable }.count, 1)
+        XCTAssertTrue(app.buttons["composer.send"].isHittable)
+        XCTAssertTrue(app.buttons["composer.attachment"].isHittable)
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        XCTAssertLessThanOrEqual(close.frame.maxY, keyboard.frame.minY)
+        capture(app, name: "iPad focused typing \(appearance)")
+        app.scrollViews["transcript.scrollView"].coordinate(withNormalizedOffset: CGVector(dx: Self.transcriptTapX, dy: 0.5)).tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(close.isHittable, "Hiding the keyboard must not close the focused pane")
+        XCTAssertEqual(composer.value as? String, Self.draft)
+        capture(app, name: "iPad focused typing keyboard hidden \(appearance)")
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, Self.draft)
+        XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
+        XCTAssertEqual(composer.value as? String, Self.draft)
+        capture(app, name: "iPad typing restored \(appearance)")
+        app.buttons["workspaces.search.open"].tap()
+        let search = app.textFields["workspaces.search.field"]
+        XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
+        search.typeText("payment")
+        app.buttons["workspaces.search.cancel"].tap()
+        XCTAssertTrue(composer.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, Self.draft, "Search cancellation must retain the current conversation draft")
     }
 
     @MainActor

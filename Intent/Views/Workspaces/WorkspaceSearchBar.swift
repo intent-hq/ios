@@ -117,6 +117,7 @@ struct WorkspaceSearchInput: View {
     var placeholder: LocalizedStringKey = "Search workspaces"
     var identifierPrefix = "workspaces.search"
     var surfaceColor: Color?
+    var horizontalPadding: CGFloat = Constants.WorkspaceSearch.contentSpacing
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
     var body: some View {
@@ -142,8 +143,9 @@ struct WorkspaceSearchInput: View {
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Close search")
             .accessibilityIdentifier("\(identifierPrefix).cancel")
+            .keyboardShortcut(.cancelAction)
         }
-        .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
+        .padding(.horizontal, horizontalPadding)
         .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
     }
 

@@ -2,6 +2,11 @@ import SwiftUI
 
 /// Figma anchors adapted to this window's safe-area width and text size.
 struct IPadShellLayout: Equatable {
+    static let focusLayer: Double = 3
+    static let focusPanelWidth: CGFloat = 624
+    static let focusContentInset: CGFloat = 32
+    static let focusBlurRadius: CGFloat = 6
+    static let focusShadeOpacity = 0.45
     static let railWidth: CGFloat = 48
     static let iconSize: CGFloat = 24
     static let railSpacing: CGFloat = 8
@@ -30,6 +35,10 @@ struct IPadShellLayout: Equatable {
     var preferredSidebarWidth: CGFloat {
         width >= Self.largeWindowWidth ? Self.largeSidebarWidth : Self.smallSidebarWidth
     }
+    var availableWidth: CGFloat { max(0, width - 2 * inset) }
+    var railLeadingInset: CGFloat { usesCompactNavigation ? 0 : Self.railWidth + railGutter }
+    var focusedPanelWidth: CGFloat { min(Self.focusPanelWidth, availableWidth) }
+    var focusedPanelLeadingInset: CGFloat { (availableWidth - focusedPanelWidth) / 2 }
     var contentWidth: CGFloat { max(0, width - 2 * inset - (usesCompactNavigation ? 0 : Self.railWidth + railGutter)) }
     var sidebarWidth: CGFloat { usesCompactNavigation ? contentWidth : min(preferredSidebarWidth, contentWidth) }
     var usesSidebarOverlay: Bool {

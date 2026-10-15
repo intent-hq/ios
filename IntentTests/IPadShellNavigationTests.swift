@@ -212,6 +212,52 @@ extension AppCoordinatorTests {
         #expect(narrow.sidebarWidth <= narrow.contentWidth)
     }
 
+    @Test(arguments: [true, false]) @MainActor
+    func iPadFocusPreservesSidebarPreferenceAndConversation(expanded: Bool) {
+        let coordinator = iPadCoordinator(connection: FakeConnectionManager())
+        coordinator.onSelectAgent("coder", workspaceId: "workspace", agentName: "Coder")
+        if !expanded { coordinator.iPadNavigation.collapseSidebar() }
+        let request = coordinator.conversationRequestId
+        let route = coordinator.currentScreenDescription
+        for presentation in [IPadFocusPresentation.workspaceSearch, .conversationEditing] {
+            coordinator.iPadNavigation.setFocusPresentation(presentation)
+            #expect(coordinator.iPadNavigation.focusPresentation == presentation)
+            coordinator.iPadNavigation.updateLayout(usesOverlay: true)
+            #expect(coordinator.iPadNavigation.focusPresentation == presentation)
+            coordinator.iPadNavigation.updateLayout(usesOverlay: false)
+            coordinator.iPadNavigation.setFocusPresentation(.normal)
+            #expect(coordinator.iPadNavigation.isSidebarExpanded == expanded)
+            #expect(coordinator.conversationRequestId == request)
+            #expect(coordinator.currentScreenDescription == route)
+        }
+    }
+
+    @Test @MainActor func iPadExplicitSelectionEndsFocusAndPairingCannotEnterIt() {
+        var state = IPadNavigationState()
+        state.setFocusPresentation(.workspaceSearch)
+        state.showWorkspaceDetail()
+        #expect(state.focusPresentation == .normal)
+        state.setFocusPresentation(.conversationEditing)
+        state.showAssistantDetail()
+        #expect(state.focusPresentation == .normal)
+        state.setFocusPresentation(.workspaceSearch)
+        #expect(state.focusPresentation == .normal)
+        state.setFocusPresentation(.conversationEditing)
+        state.presentPairing(.manual)
+        state.setFocusPresentation(.conversationEditing)
+        #expect(state.focusPresentation == .normal)
+    }
+
+    @Test @MainActor func iPadFocusedPanelFitsTheWindowWithoutReservingRailSpace() {
+        for width in [IPadReference.narrowWidth, IPadReference.portraitWidth, IPadReference.largeWidth] {
+            let layout = IPadShellLayout(width: width, isAccessibilitySize: true)
+            #expect(layout.focusedPanelWidth <= IPadShellLayout.focusPanelWidth)
+            #expect(layout.focusedPanelWidth <= layout.availableWidth)
+            #expect(layout.focusedPanelLeadingInset >= 0)
+            #expect(layout.focusedPanelLeadingInset * 2 + layout.focusedPanelWidth == layout.availableWidth)
+        }
+    }
+
     @MainActor private func iPadCoordinator(connection: FakeConnectionManager) -> AppCoordinator {
         connection.connectionState = .connected
         connection.currentPrincipal = InvitedSessionFixtures.principal("owner", role: .owner)

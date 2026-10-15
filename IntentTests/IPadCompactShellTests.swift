@@ -103,6 +103,67 @@ extension AppCoordinatorTests {
         }
     }
 
+    @Test(.enabled("The host must publish accessible controls") {
+        await SyntheticBadgeHost.publishesAccessibilityTree()
+    }, arguments: [IPadDetailSelection.workspace, .assistant])
+    @MainActor func iPadTypingFocusRetainsEditorSelectionAcrossNarrowResize(detail: IPadDetailSelection) async throws {
+        let fixture = ConversationStartupFixture()
+        defer { fixture.stop() }
+        let coordinator = compactShellCoordinator(fixture)
+        if detail == .assistant {
+            await fixture.session.assistantStore.refresh()
+            try #require(!fixture.session.assistantStore.threads.isEmpty)
+            coordinator.onSelectAssistant(agentId: ConversationStartupFixture.parentId)
+        } else {
+            coordinator.onSelectAgent(ConversationStartupFixture.parentId, workspaceId: ConversationStartupFixture.workspaceId, agentName: "Agent")
+        }
+        coordinator.iPadNavigation.collapseSidebar()
+        let size = CompactShellSize(width: CompactShellSize.wide)
+        let shell = ResizableIPadTestShell(session: fixture.session, coordinator: coordinator, size: size)
+            .environment(\.accessibilityReduceMotion, true)
+        try await SyntheticBadgeHost.render(shell, width: CompactShellSize.wide, height: CompactShellSize.height) { host, _ in
+            try verifyFocusedEditor(in: host, size: size, coordinator: coordinator)
+        }
+    }
+
+    @MainActor private func verifyFocusedEditor(in host: UIView, size: CompactShellSize, coordinator: AppCoordinator) throws {
+        try waitForCompactShell { compactEditor(in: host) != nil }
+        let editor = try #require(compactEditor(in: host))
+        editor.text = "Keep this selected draft"
+        editor.delegate?.textViewDidChange?(editor)
+        let draft = editor.text
+        let selection = CompactShellSize.draftSelection
+        editor.selectedRange = selection
+        let request = coordinator.conversationRequestId
+        #expect(editor.becomeFirstResponder())
+        try waitForCompactShell {
+            coordinator.iPadNavigation.focusPresentation == .conversationEditing
+                && compactControl("ipad.focus.close", in: host) != nil
+        }
+        for width in [CompactShellSize.narrow, CompactShellSize.wide] {
+            size.width = width
+            try waitForCompactShell {
+                guard let close = compactControl("ipad.focus.close", in: host) else { return false }
+                let frame = host.convert(close.accessibilityFrame, from: nil)
+                return frame.minX >= 0 && frame.maxX <= width
+            }
+            #expect(compactEditor(in: host) === editor)
+            #expect(editor.isFirstResponder)
+            #expect(editor.text == draft)
+            #expect(editor.selectedRange == selection)
+            #expect(compactControl("ipad.rail.workspaces", in: host) == nil)
+            #expect(compactControl("intent.menu.open", in: host) == nil)
+        }
+        let close = try #require(compactControl("ipad.focus.close", in: host))
+        #expect(close.accessibilityActivate())
+        try waitForCompactShell { coordinator.iPadNavigation.focusPresentation == .normal && !editor.isFirstResponder }
+        #expect(compactEditor(in: host) === editor)
+        #expect(editor.text == draft)
+        #expect(editor.selectedRange == selection)
+        #expect(!coordinator.iPadNavigation.isSidebarExpanded)
+        #expect(coordinator.conversationRequestId == request)
+    }
+
     @MainActor private func verifyCompactResize(
         in host: UIView, size: CompactShellSize, coordinator: AppCoordinator, detail: IPadDetailSelection
     ) throws {
@@ -222,6 +283,7 @@ extension AppCoordinatorTests {
 }
 
 @MainActor @Observable private final class CompactShellSize {
+    static let draftSelection = NSRange(location: 5, length: 4)
     static let narrow: CGFloat = 320
     static let wide: CGFloat = 1210
     static let height: CGFloat = 900
