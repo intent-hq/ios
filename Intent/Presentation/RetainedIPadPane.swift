@@ -23,9 +23,9 @@ struct RetainedIPadPane<Content: View>: View {
     }
 }
 
-/// Identifies a pane and scopes its interaction and accessibility policy.
-/// Native accessibility containers can report the enclosing window's frame;
-/// opt-in demo geometry tests measure the actual pane with a native background.
+/// Scopes visibility without adding another accessibility container. Retained
+/// panes already group their children; an outer group around native content can
+/// claim window-sized bounds after focus changes and obscure adjacent controls.
 struct IPadPaneBounds: ViewModifier {
     let identifier: String
     let isAccessible: Bool
@@ -41,8 +41,6 @@ struct IPadPaneBounds: ViewModifier {
                 }
             }
             #endif
-            .accessibilityElement(children: isAccessible ? .contain : .ignore)
-            .accessibilityIdentifier(identifier)
             .contentShape(.interaction, Rectangle())
             .accessibilityHidden(true, isEnabled: !isAccessible)
     }

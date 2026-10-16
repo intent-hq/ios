@@ -153,6 +153,7 @@ private enum DemoProducerPhase: String {
 }
 
 private struct DemoIPadProducerVisibility: View {
+    private static let actionHeight: CGFloat = 44
     private static let editorHeight: CGFloat = 100
     private static let inspectorHeight: CGFloat = 24
     private static let overflowRowCount = 80
@@ -199,10 +200,14 @@ private struct DemoIPadProducerVisibility: View {
                     Text("List row")
                         .accessibilityIdentifier("visibility.row")
                         .accessibilityHidden(true, isEnabled: phase.directlyHidden)
-                    Button("Activate List action") { actionCount += 1 }
-                        .buttonStyle(IntentContentButtonStyle())
-                        .accessibilityIdentifier("visibility.action")
-                        .accessibilityHidden(true, isEnabled: phase.directlyHidden)
+                    Button { actionCount += 1 } label: {
+                        Text("Activate List action")
+                            .frame(maxWidth: .infinity, minHeight: Self.actionHeight, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(IntentContentButtonStyle())
+                    .accessibilityIdentifier("visibility.action")
+                    .accessibilityHidden(true, isEnabled: phase.directlyHidden)
                     ForEach(0..<Self.overflowRowCount, id: \.self) { index in
                         Text("Overflow row \(index)")
                             .accessibilityHidden(true, isEnabled: phase.directlyHidden)

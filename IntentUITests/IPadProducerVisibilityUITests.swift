@@ -4,7 +4,7 @@ import XCTest
 nonisolated final class IPadProducerVisibilityUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let identifiers = [
-        "visibility.sidebar", "visibility.detail", "visibility.list", "visibility.row",
+        "visibility.list", "visibility.row",
         "visibility.list.header", "visibility.content.header", "composer.textView", "visibility.standalone",
         "visibility.action", "visibility.action.count"
     ]
@@ -70,11 +70,7 @@ nonisolated final class IPadProducerVisibilityUITests: XCTestCase {
     }
 
     @MainActor private func elements(in app: XCUIApplication, identifier: String) -> XCUIElementQuery {
-        if identifier == "visibility.list" {
-            // SwiftUI can apply the pane identifier to its native collection view.
-            return app.collectionViews.matching(NSPredicate(format: "identifier IN %@", ["visibility.list", "visibility.sidebar"]))
-        }
-        return app.descendants(matching: .any).matching(identifier: identifier)
+        app.descendants(matching: .any).matching(identifier: identifier)
     }
 
     @MainActor private func nativeReport(_ probe: XCUIElement) throws -> [String: String] {
