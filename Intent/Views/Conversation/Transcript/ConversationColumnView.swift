@@ -7,7 +7,6 @@ struct ConversationColumnView: View {
     var usesWorkspaceDesign = false
     @Binding var answeringWorkspaceQuestions: Bool
     var onDemoCover: () -> Void = {}
-
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.conversationPresentation) private var presentation
     /// Room a floating Intent launcher needs over this chat (0 when none).
@@ -146,7 +145,6 @@ struct ConversationColumnView: View {
         }
         // The conditional views use SwiftUI's default opacity transition.
         .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)
-
         measuredAccessoryRows
 
         questionRegion
