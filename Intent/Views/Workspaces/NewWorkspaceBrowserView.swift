@@ -5,6 +5,7 @@ struct NewWorkspaceBrowserView: View {
     let store: WorkspaceBrowserStore
     let onCreate: (WorkspaceBrowser) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @State private var address = ""
     @State private var errorMessage: String?
     @FocusState private var addressFocused: Bool
@@ -22,6 +23,7 @@ struct NewWorkspaceBrowserView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Open", action: create)
                         .buttonStyle(IntentButtonStyle())
+                        .fixedSize(horizontal: usesVerticalBar, vertical: false)
                         .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 .intentToolbarSurface()

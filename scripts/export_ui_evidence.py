@@ -17,6 +17,7 @@ CAPTURES = {
     },
     "WorkspaceEntryUITests": {
         "testDisclosureAndNoteNavigationKeepSeparateTouchTargets": ("note-viewer-flat-back-button",),
+        "testCreateNewAgentMenuOpensAgentSetup": ("new-agent-next", "new-agent-create", "new-browser-open"),
     },
     "AppCoordinatorTests": {
         "iPadWorkspaceBackFollowsWindowWidthAndKeepsSelection": (
@@ -49,6 +50,7 @@ CAPTURES = {
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
     },
     "HomeActionMenuUITests": {
+        "testDuoWorkspaceDetailKeepsOnlyTheAccessibleContentTitle": ("Duo workspace detail without header",),
         "testIPadConversationKeepsDraftAndRailAvailable": (
             "iPad expanded workspace conversation", "iPad collapsed conversation with draft",
             "iPad portrait conversation with draft",

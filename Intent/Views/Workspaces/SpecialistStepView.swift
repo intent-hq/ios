@@ -9,6 +9,7 @@ struct SpecialistStepView: View {
     let onSelect: (SpecialistInfo) -> Void
     let onDismiss: () -> Void
     let onNext: () -> Void
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @ScaledMetric(relativeTo: .body) private var selectionIconSize: CGFloat = 17
 
     var body: some View {
@@ -26,6 +27,8 @@ struct SpecialistStepView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Next", action: onNext)
                     .buttonStyle(IntentButtonStyle())
+                    // The Duo toolbar otherwise compresses the padded label to an ellipsis.
+                    .fixedSize(horizontal: usesVerticalBar, vertical: false)
                     .disabled(selectedSpecialist == nil)
             }
             .intentToolbarSurface()
