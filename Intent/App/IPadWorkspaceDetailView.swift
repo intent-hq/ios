@@ -14,6 +14,7 @@ struct IPadWorkspaceDetailView: View {
                 .navigationDestination(for: NoteDestination.self) { destination in
                     note(destination, showsBackButton: true)
                 }
+                .modifier(IPadNavigationVisibility())
         }
         .onChange(of: coordinator.currentScreenDescription) {
             if !notePath.isEmpty { notePath = NavigationPath() }
@@ -48,7 +49,7 @@ struct IPadWorkspaceDetailView: View {
         case let .workspaceDetail(workspaceId):
             WorkspaceDetailView(workspaceId: workspaceId, session: session)
         default:
-            Constants.Conversation.Design.Palette.background(for: colorScheme)
+            IPadShellStyle.panel(for: colorScheme)
         }
     }
 

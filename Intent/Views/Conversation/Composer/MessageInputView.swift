@@ -59,40 +59,7 @@ struct MessageInputView: View {
     var isConnectionReadyForSending: Bool { viewModel.connection.connectionState == .connected }
 
     var body: some View {
-        VStack(spacing: 0) {
-            supplementalRows
-            if usesWorkspaceDesign {
-                WorkspaceComposerRow(
-                    text: $viewModel.messageText,
-                    isFocused: focusBinding,
-                    isStreaming: store.isStreaming,
-                    hasAttachments: viewModel.hasPendingAttachments,
-                    canSend: hasSendableContent,
-                    onSend: sendCurrentMessage,
-                    onStop: {
-                        HapticManager.impact(.light)
-                        Task { await viewModel.stopStreaming() }
-                    },
-                    onPhotos: { isPhotoPickerPresented = true },
-                    onFiles: { isFilePickerPresented = true },
-                    onPasteImages: viewModel.pasteImages
-                )
-            } else {
-                inputRow
-            }
-        }
-        .background {
-            if usesWorkspaceDesign {
-                RoundedRectangle(cornerRadius: workspaceCornerRadius)
-                    .fill(Constants.Conversation.Design.Palette.surface(for: colorScheme))
-            } else {
-                #if os(visionOS)
-                Color.clear // the floating ornament host supplies the glass
-                #else
-                Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1)
-                #endif
-            }
-        }
+        IPadTypingFocusRow(isFocused: focusBinding) { inputContent }
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
@@ -139,10 +106,40 @@ struct MessageInputView: View {
 }
 
 private extension MessageInputView {
-    var workspaceCornerRadius: CGFloat {
-        let active = store.isStreaming || !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || viewModel.hasPendingAttachments
-        return active ? Constants.Conversation.Design.Composer.activeCornerRadius : Constants.Conversation.Design.cornerRadius
+    var inputContent: some View {
+        VStack(spacing: 0) {
+            supplementalRows
+            if usesWorkspaceDesign {
+                WorkspaceComposerRow(
+                    text: $viewModel.messageText,
+                    isFocused: focusBinding,
+                    isStreaming: store.isStreaming,
+                    hasAttachments: viewModel.hasPendingAttachments,
+                    canSend: hasSendableContent,
+                    onSend: sendCurrentMessage,
+                    onStop: {
+                        HapticManager.impact(.light)
+                        Task { await viewModel.stopStreaming() }
+                    },
+                    onPhotos: { isPhotoPickerPresented = true },
+                    onFiles: { isFilePickerPresented = true },
+                    onPasteImages: viewModel.pasteImages
+                )
+            } else {
+                inputRow
+            }
+        }
+        .background {
+            if usesWorkspaceDesign {
+                WorkspaceComposerSurface(text: viewModel.messageText, hasAttachments: viewModel.hasPendingAttachments, isStreaming: store.isStreaming)
+            } else {
+                #if os(visionOS)
+                Color.clear // the floating ornament host supplies the glass
+                #else
+                Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1)
+                #endif
+            }
+        }
     }
 
     @ViewBuilder

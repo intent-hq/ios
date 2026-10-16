@@ -119,7 +119,14 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertGreaterThan(composer.frame.height, emptyHeight)
         XCTAssertTrue(send.isEnabled)
         XCTAssertTrue(send.isHittable)
-        XCTAssertFalse(rail.frame.intersects(send.frame))
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad focused multiline draft")
+        XCTAssertFalse(rail.exists, "Focused typing hides background navigation\n\(app.debugDescription)")
+        let closeFocus = app.buttons["ipad.focus.close"]
+        XCTAssertTrue(closeFocus.isHittable)
+        XCTAssertFalse(closeFocus.frame.intersects(send.frame))
+        closeFocus.tap()
+        XCTAssertTrue(rail.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, draft)
         app.buttons["ipad.sidebar.collapse"].tap()
         XCTAssertTrue(app.buttons["ipad.sidebar.expand"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, draft)
@@ -136,7 +143,8 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
         XCTAssertEqual(composer.value as? String, draft)
         XCUIDevice.shared.orientation = .portrait
-        XCTAssertTrue(try app.buttons.matching(identifier: "Send message").singleHittableElement().isEnabled)
+        // The orientation notification precedes the retained pane's width update.
+        XCTAssertTrue(try app.buttons.matching(identifier: "Send message").waitForSingleHittableElement(timeout: Self.timeout).isEnabled)
         XCTAssertEqual(composer.value as? String, draft)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad portrait conversation with draft")
         try verifySendAndBack(in: app, draft: draft)

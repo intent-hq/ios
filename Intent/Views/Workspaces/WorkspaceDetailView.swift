@@ -71,7 +71,6 @@ struct WorkspaceDetailView: View {
 
     private var showsToolbarTitle: Bool { !usesVerticalBar || !isSidebarVisible }
     private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
-
     private var lifecycleContent: some View {
         ZStack {
             WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
@@ -369,11 +368,13 @@ private extension WorkspaceDetailView {
                     tabContent
                 }
                 .padding(.bottom, showsAgentList ? WorkspaceDetailStyle.pageInset : 0)
+                .iPadDetailColumn()
             } else {
                 VStack(spacing: 0) {
                     detailHeader
                     tabContent
                 }
+                .iPadDetailColumn()
             }
         }
         .accessibilityIdentifier("workspace.detail.scroll")

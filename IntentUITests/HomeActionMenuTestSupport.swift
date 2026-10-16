@@ -2,6 +2,22 @@ import XCTest
 
 extension XCUIElementQuery {
     @MainActor
+    func waitForSingleHittableElement(timeout: TimeInterval, file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { candidate, _ in
+            guard let query = candidate as? XCUIElementQuery else { return false }
+            return query.allElementsBoundByIndex.filter(\.isHittable).count == 1
+        }, object: self)
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [ready], timeout: timeout),
+            .completed,
+            "Exactly one retained control must become hittable",
+            file: file,
+            line: line
+        )
+        return try singleHittableElement(file: file, line: line)
+    }
+
+    @MainActor
     func singleHittableElement(file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
         let visible = allElementsBoundByIndex.filter(\.isHittable)
         XCTAssertEqual(visible.count, 1, "Exactly one retained control must accept input", file: file, line: line)

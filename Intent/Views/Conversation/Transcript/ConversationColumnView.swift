@@ -1,9 +1,5 @@
 import SwiftUI
 
-extension EnvironmentValues {
-    @Entry var conversationComposerFocus: Binding<Bool>?
-}
-
 struct ConversationColumnView: View {
     let viewModel: ConversationViewModel
     let onNavigateToNote: (String, String, String) -> Void
@@ -39,6 +35,7 @@ struct ConversationColumnView: View {
             columnContent
         }
         .environment(\.conversationComposerFocus, $composerFocused)
+        .modifier(IPadTypingFocus(isFocused: $composerFocused, composerVisible: composerVisible))
         // Measured inside keyboard avoidance on purpose: with the keyboard
         // up the cap derives from the remaining visible height.
         .onGeometryChange(for: CGFloat.self) { proxy in
@@ -80,7 +77,8 @@ struct ConversationColumnView: View {
                 viewModel: viewModel,
                 store: viewModel.store,
                 allowsSending: composerVisible
-            ) { composerFocused = $0 }
+            )
+            .environment(\.conversationComposerFocus, $composerFocused)
         })
         .sheet(isPresented: $questionSheetPresented) {
             questionSheet
@@ -196,23 +194,6 @@ struct ConversationColumnView: View {
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerInputTop = $0 }
             .preference(key: WorkspaceActionMenuInputTop.self, value: composerInputTop)
         }
-    }
-
-    private var workspaceQueueVisible: Bool {
-        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
-    }
-
-    private var stickyHorizontalInset: CGFloat {
-        guard presentation != .iPad else { return 0 }
-        return keyboardVisible || composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
-    }
-
-    private var composerBottomInset: CGFloat {
-        presentation == .iPad && !keyboardVisible ? Design.IPad.composerBottomInset : Design.Composer.keyboardBottomSpacing
-    }
-
-    private var usesPhoneQuestionPresentation: Bool {
-        usesWorkspaceDesign && presentation != .iPad
     }
 
     @ViewBuilder
@@ -347,6 +328,23 @@ struct ConversationColumnView: View {
 }
 
 extension ConversationColumnView {
+    private var workspaceQueueVisible: Bool {
+        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
+    }
+
+    private var stickyHorizontalInset: CGFloat {
+        guard presentation != .iPad else { return 0 }
+        return keyboardVisible || composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
+    }
+
+    private var composerBottomInset: CGFloat {
+        presentation == .iPad && !keyboardVisible ? Design.IPad.composerBottomInset : Design.Composer.keyboardBottomSpacing
+    }
+
+    private var usesPhoneQuestionPresentation: Bool {
+        usesWorkspaceDesign && presentation != .iPad
+    }
+
     /// Whether any status row (agent waiting, PR monitors, hooks, queue)
     /// shows below the transcript; mirrors `accessoryRows`.
     private var hasAccessoryRows: Bool {

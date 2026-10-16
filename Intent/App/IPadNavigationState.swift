@@ -17,8 +17,16 @@ enum IPadPairingMode: Equatable {
     case qrCode
 }
 
+/// Explicit input presentation; keyboard notifications never change this state.
+enum IPadFocusPresentation: Equatable {
+    case conversationEditing
+    case normal
+    case workspaceSearch
+}
+
 /// Window-owned presentation state, independent of the backend and workspace route.
 struct IPadNavigationState: Equatable {
+    private(set) var focusPresentation: IPadFocusPresentation = .normal
     private(set) var section: IPadSidebarSection = .workspaces
     private(set) var detail: IPadDetailSelection = .workspace
     private(set) var pairing: IPadPairingMode?
@@ -34,6 +42,7 @@ struct IPadNavigationState: Equatable {
     }
 
     mutating func selectSection(_ section: IPadSidebarSection) {
+        focusPresentation = .normal
         self.section = section
         switch section {
         case .assistant:
@@ -105,12 +114,20 @@ struct IPadNavigationState: Equatable {
     }
 
     mutating func revokeAssistantAccess() {
+        if detail == .assistant { focusPresentation = .normal }
         hasOpenedAssistant = false
         if detail == .assistant { detail = .workspace }
         if section == .assistant { section = .workspaces }
     }
 
+    mutating func setFocusPresentation(_ presentation: IPadFocusPresentation) {
+        guard pairing == nil || presentation == .normal else { return }
+        guard presentation != .workspaceSearch || section == .workspaces else { return }
+        focusPresentation = presentation
+    }
+
     private mutating func detailWasSelected() {
+        focusPresentation = .normal
         isDrawerPresented = false
     }
 }

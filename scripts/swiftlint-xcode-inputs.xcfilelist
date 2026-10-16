@@ -112,6 +112,7 @@ $(SRCROOT)/Intent/Presentation/ConversationTranscriptViewportAnchor.swift
 $(SRCROOT)/Intent/Presentation/ConversationViewportTrace.swift
 $(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
 $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
+$(SRCROOT)/Intent/Presentation/IPadTypingFocus.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MarkdownCodeFence.swift
 $(SRCROOT)/Intent/Presentation/MarkdownContentCache.swift
@@ -210,6 +211,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesNavigation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesTranscriptVideo.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceProposal.swift
+$(SRCROOT)/Intent/Services/DemoIPadProducerVisibility.swift
 $(SRCROOT)/Intent/Services/DemoMode.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/DemoRepositoryScriptFixtures.swift
@@ -743,6 +745,7 @@ $(SRCROOT)/IntentTests/HTMLFileWebViewTests.swift
 $(SRCROOT)/IntentTests/HookTimeBarTests.swift
 $(SRCROOT)/IntentTests/IPadCompactNavigationTests.swift
 $(SRCROOT)/IntentTests/IPadCompactShellTests.swift
+$(SRCROOT)/IntentTests/IPadNavigationVisibilityTests.swift
 $(SRCROOT)/IntentTests/IPadShellNavigationTests.swift
 $(SRCROOT)/IntentTests/ImagePasteboardFixture.swift
 $(SRCROOT)/IntentTests/InfoPlistSyncTests.swift
@@ -972,6 +975,7 @@ $(SRCROOT)/IntentUITests/ConnectionSwitcherUITests.swift
 $(SRCROOT)/IntentUITests/ConversationActionsUITests.swift
 $(SRCROOT)/IntentUITests/ConversationMarkdownTableUITests.swift
 $(SRCROOT)/IntentUITests/ConversationMermaidUITests.swift
+$(SRCROOT)/IntentUITests/ConversationToolActivityUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptFullGateUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptHistoryUITests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
@@ -988,6 +992,8 @@ $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
 $(SRCROOT)/IntentUITests/FixtureCaptureLifecycleUITests.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuTestSupport.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuUITests.swift
+$(SRCROOT)/IntentUITests/IPadFocusInteractionTestSupport.swift
+$(SRCROOT)/IntentUITests/IPadProducerVisibilityUITests.swift
 $(SRCROOT)/IntentUITests/IPadSidebarUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
 $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift

@@ -27,12 +27,17 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
     @ViewBuilder let actions: () -> Actions
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(\.conversationPresentation) private var presentation
+
+    private var usesCustomHeader: Bool {
+        presentation == .iPad || (horizontalSizeClass == .compact && !usesVerticalBar)
+    }
 
     func body(content: Content) -> some View {
         content
-            .toolbar(horizontalSizeClass == .compact && !usesVerticalBar ? .hidden : .automatic, for: .navigationBar)
+            .toolbar(usesCustomHeader ? .hidden : .automatic, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if horizontalSizeClass == .compact, !usesVerticalBar {
+                if usesCustomHeader {
                     WorkspaceNavigationHeader(
                         title: title,
                         subtitle: "Workspace",
@@ -40,6 +45,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
                         backIdentifier: "workspaceDetail.back",
                         showsWorkspacePlaceholder: true,
                         workspaceCreatedAt: createdAt,
+                        usesConversationLayout: presentation == .iPad,
                         onBack: showsBackButton ? onBack : nil,
                         actions: actions
                     )
@@ -98,12 +104,13 @@ struct AssistantConversationHeader<Actions: View>: View {
     var body: some View {
         WorkspaceNavigationHeader(
             title: title,
-            subtitle: title == "Assistant" ? nil : "Assistant",
+            subtitle: presentation == .iPad || title == "Assistant" ? nil : "Assistant",
             backLabel: "New Conversation",
             backIdentifier: "assistant.newConversation",
             leadingIcon: .displayEdit,
             isLeadingActionEnabled: canCreateConversation,
             showsBackground: showsBackground,
+            showsTitle: presentation != .iPad || title != "Assistant",
             usesConversationLayout: true,
             onBack: presentation == .iPad ? nil : onNewConversation,
             actions: actions
@@ -122,6 +129,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var leadingIcon: ImageResource = .arrowLeft
     var isLeadingActionEnabled = true
     var showsBackground = true
+    var showsTitle = true
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
     var usesConversationLayout = false
@@ -147,7 +155,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     private var windowAdaptedControls: some View {
         #if os(iOS)
         if usesIPadDesign {
-            // The shell already respects the window safe area around this inset pane.
+            // The shell gutter and header inset keep these controls below system chrome.
             controls
         } else if #available(iOS 26.0, *) {
             // Reserve only the system's actual corner region (including iPad window controls).
@@ -190,7 +198,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 .frame(minWidth: Design.Header.controlSize, minHeight: Design.Header.controlSize)
         }
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))
-        .padding(.horizontal, usesIPadDesign ? 0 : Design.horizontalInset)
+        .padding(.horizontal, Design.horizontalInset)
         .padding(.top, usesIPadDesign ? Design.IPad.headerTopInset : Design.Header.verticalPadding)
         .padding(.bottom, usesIPadDesign ? Design.IPad.headerBottomInset : Design.Header.verticalPadding)
     }
@@ -201,7 +209,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 WorkspaceTitle(title: title, createdAt: workspaceCreatedAt) { title in
                     WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
                 }
-            } else {
+            } else if showsTitle {
                 WorkspaceHeaderText(
                     Text(title),
                     style: Constants.Typography.bodyXSEmphasized,

@@ -28,16 +28,17 @@ struct AssistantView: View {
                 if !usesWorkspaceDesign { assistantToolbar }
             }
             .toolbar(usesWorkspaceDesign ? .hidden : .automatic, for: .navigationBar)
-            .safeAreaInset(edge: .top) {
+            .safeAreaInset(edge: .top, spacing: presentation == .iPad ? 0 : nil) {
                 if usesWorkspaceDesign, selectedThread == nil {
                     VStack(spacing: 0) {
-                        emptyHeader.conversationReadableColumn()
+                        emptyHeader
                         errorBanner.conversationReadableColumn()
                     }
                 } else {
                     errorBanner.conversationReadableColumn()
                 }
             }
+            .modifier(IPadNavigationVisibility(isEnabled: presentation == .iPad))
         }
         .accessibilityAction(.escape) {
             coordinator.selectedSection = .workspaces

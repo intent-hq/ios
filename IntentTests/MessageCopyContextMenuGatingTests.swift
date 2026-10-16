@@ -382,7 +382,7 @@ struct AssistantMessageToolRowHitTestTests {
         includeText: Bool,
         workspaceDesign: Bool,
         expectExpansion: Bool = false,
-        probe: (_ hostView: UIView, _ window: UIWindow) throws -> Void
+        probe: @MainActor (_ hostView: UIView, _ window: UIWindow) throws -> Void
     ) async throws {
         let coordinator = try Self.makeCoordinator()
         var hydratedBlockIDs: [String] = []

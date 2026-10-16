@@ -38,7 +38,13 @@ CAPTURES = {
             for section in (
                 "workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual",
                 "Recent sidebar", "Repo sidebar", "Status sidebar", "first workspace selected",
+                "focused typing", "focused typing keyboard hidden", "typing restored",
             )
+        ),
+        "testScrollingIndicatorStaysOutsideWorkspaceRowsInBothThemes": tuple(
+            f"iPad scrolling {mode} sidebar {appearance}"
+            for appearance in ("light", "dark")
+            for mode in ("Recent", "Repo", "Status")
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
     },
@@ -46,6 +52,7 @@ CAPTURES = {
         "testIPadConversationKeepsDraftAndRailAvailable": (
             "iPad expanded workspace conversation", "iPad collapsed conversation with draft",
             "iPad portrait conversation with draft",
+            "iPad focused multiline draft",
         ),
         "testIPadQuestionsKeepNextAndRailAvailable": ("iPad question actions beside persistent rail",),
     },
@@ -58,6 +65,17 @@ CAPTURES = {
             "mermaid-final-state", "mermaid-inline-before-gestures",
             "mermaid-fullscreen-from-button-edge", "mermaid-inline-after-pinch",
             "mermaid-inline-after-horizontal-pan", "mermaid-inline-after-vertical-pan",
+        ),
+    },
+    "ConversationToolActivityUITests": {
+        "testIPadConsecutiveToolsExpandAndCollapseInBothThemes": (
+            "iPad tools collapsed light", "iPad tools expanded light",
+            "iPad tools collapsed dark", "iPad tools expanded dark", "iPad tools final state",
+        ),
+    },
+    "ConversationActionsUITests": {
+        "testHistoryNoticeAndActionCancellationPreserveConversation": (
+            "Conversation-History-Light", "Agent-Actions-Light", "Agent-Delete-Confirmation-Light",
         ),
     },
     "ConversationTranscriptScrollUITests": {
@@ -142,7 +160,16 @@ CAPTURES = {
     },
     "WorkspaceSwipeUITests": {
         "testSlowStatusSwipeStaysOpenAfterFingerLifts": ("workspace-status-swipe-stays-open",),
-        "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
+        "testRightSwipeOpensRecentAgentAndBackReturnsToWorkspace": ("workspace-right-swipe-recent-agent",),
+        "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": (
+            "workspace-archive-delete-swipe", "workspace-archived-badge",
+        ),
+    },
+    "WorkspaceScriptUITests": {
+        "testSwipeStopsServerAndDeletesFinishedScript": ("workspace-script-stop-delete-actions",),
+    },
+    "WorkspaceStatusImageUITests": {
+        "testStatusImageIsAbsentFromListAndOpensFullSizeFromDetail": ("workspace-summary-and-image",),
     },
     "ManualConnectionDesignUITests": {
         "testTokenVisibilityKeepsDraftFocusAndSheetPosition": (
@@ -159,6 +186,11 @@ CAPTURES = {
         "testRecentConnectionsOpensSwitcherAndSelectsConnection": ("workspace-menu-recent-connections",),
     },
     "WorkspaceSearchUITests": {
+        "testIPadSearchSurvivesCollapseAndSectionChanges": tuple(
+            f"iPad {state} {appearance}"
+            for appearance in ("light", "dark")
+            for state in ("focused search", "focused search keyboard hidden", "search restored")
+        ),
         "testSearchAboveKeyboardHidesAssistantUntilClosed": (
             "Workspace search above keyboard without Assistant launcher",
         ),
