@@ -51,6 +51,10 @@ CAPTURES = {
     },
     "HomeActionMenuUITests": {
         "testDuoWorkspaceDetailKeepsOnlyTheAccessibleContentTitle": ("Duo workspace detail without header",),
+        "testClosePreservesWorkspaceScrollAndAssistantIsFirst": ("Intent home action tiles",),
+        "testMenuPlacementSurvivesDrawerRoundTrips": (
+            "Intent menu placement closed", "Intent menu placement open",
+        ),
         "testIPadConversationKeepsDraftAndRailAvailable": (
             "iPad expanded workspace conversation", "iPad collapsed conversation with draft",
             "iPad portrait conversation with draft",

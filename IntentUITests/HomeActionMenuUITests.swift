@@ -25,6 +25,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
             .allElementsBoundByIndex.first { $0.isHittable }
         XCTAssertNotNil(visibleRow)
         let position = visibleRow?.frame.minY ?? 0
+        let launcherFrame = app.buttons["intent.menu.open"].frame
         openMenu(app)
         let assistant = app.buttons["intent.menu.assistant"]
         let workspace = app.buttons["intent.menu.workspace"]
@@ -36,6 +37,11 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         screenshot.name = "Intent home action tiles"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        if ProcessInfo.processInfo.environment["INTENT_UITEST_VERTICAL_BAR"] == "1" {
+            let close = app.buttons["intent.menu.close"]
+            XCTAssertTrue(app.frame.contains(close.frame))
+            XCTAssertEqual(close.frame.midX, launcherFrame.midX, accuracy: Self.scrollTolerance)
+        }
         verifyMenuDragBehavior(in: app)
         app.buttons["intent.menu.close"].tap()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
