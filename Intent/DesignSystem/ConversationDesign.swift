@@ -65,6 +65,8 @@ extension Constants.Conversation.Design {
         static let activeTrailingPadding: CGFloat = 8
         static let keyboardHorizontalInset: CGFloat = 8
         static let keyboardBottomSpacing: CGFloat = 8
+        // Duo's 48pt launcher sits 24pt from the screen bottom: 24 + (48 - 56) / 2.
+        static let verticalBarBottomSpacing: CGFloat = 20
         static let activeCornerRadius: CGFloat = 24
         static let controlSpacing: CGFloat = 16
         static let actionWidth: CGFloat = 48

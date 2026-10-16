@@ -17,9 +17,11 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         let app = launch(scenario: "composer")
         let composer = app.textViews["composer.textView"]
         let keyboard = app.keyboards.firstMatch
+        assertRestingComposerPlacement(in: app, composer: composer)
         composer.tap()
         composer.typeText("Keep this unsent draft")
         XCTAssertTrue(keyboard.waitForExistence(timeout: Fixture.timeout))
+        attachComposerGeometry(in: app, composer: composer, state: "keyboard visible")
         let transcript = app.scrollViews["transcript.scrollView"]
         transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
 
@@ -28,6 +30,7 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertTrue(dismissed, "A transcript tap must dismiss the keyboard; composer focus: \(composerFocused)")
         XCTAssertFalse(composerFocused)
         XCTAssertEqual(composer.value as? String, "Keep this unsent draft")
+        attachComposerGeometry(in: app, composer: composer, state: "keyboard dismissed")
         let reopened = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: keyboard)
         reopened.isInverted = true
         XCTAssertEqual(XCTWaiter.wait(for: [reopened], timeout: 2), .completed)
@@ -219,6 +222,34 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
     private func assertReachable(_ control: XCUIElement, in app: XCUIApplication) {
         XCTAssertTrue(control.isHittable, control.debugDescription)
         assertTapTargetGeometry(control, in: app)
+    }
+
+    @MainActor
+    private func assertRestingComposerPlacement(in app: XCUIApplication, composer: XCUIElement) {
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        XCTAssertTrue(composer.isHittable)
+        let launcher = app.buttons["intent.menu.open"]
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Workspace composer resting placement"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        attachComposerGeometry(in: app, composer: composer, state: "resting")
+        if ProcessInfo.processInfo.environment["INTENT_UITEST_VERTICAL_BAR"] == "1" {
+            XCTAssertTrue(launcher.exists)
+            XCTAssertEqual(launcher.frame.width, 48, accuracy: 1, "The test must run with the Duo rail")
+            XCTAssertGreaterThan(launcher.frame.minX, composer.frame.maxX)
+            XCTAssertEqual(composer.frame.midY, launcher.frame.midY, accuracy: 1, "Duo's message field and Intent button must share a vertical center")
+        }
+    }
+
+    @MainActor
+    private func attachComposerGeometry(in app: XCUIApplication, composer: XCUIElement, state: String) {
+        let launcher = app.buttons["intent.menu.open"]
+        let keyboard = app.keyboards.firstMatch
+        let geometry = XCTAttachment(string: "composer=\(composer.frame) launcher=\(launcher.exists ? launcher.frame : .zero) keyboard=\(keyboard.exists ? keyboard.frame : .zero)")
+        geometry.name = "Workspace composer \(state) geometry"
+        geometry.lifetime = .keepAlways
+        add(geometry)
     }
 
     @MainActor

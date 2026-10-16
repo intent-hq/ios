@@ -1005,6 +1005,7 @@ $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/TranscriptVideoUITests.swift
 $(SRCROOT)/IntentUITests/WatcherMessageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceAgentGroupsUITests.swift
+$(SRCROOT)/IntentUITests/WorkspaceBackgroundUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceBrowserUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceChangesUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceComposerUITests.swift
