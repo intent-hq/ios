@@ -84,6 +84,9 @@ CAPTURES = {
             "Conversation-History-Light", "Agent-Actions-Light", "Agent-Delete-Confirmation-Light",
         ),
     },
+    "WorkspaceComposerUITests": {
+        "testTranscriptTapDismissesKeyboardAndPreservesDraft": ("Workspace composer resting placement",),
+    },
     "ConversationTranscriptScrollUITests": {
         "testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath": ("Transcript recovered release",),
         "testBlankEndSeveralScreensDeepIsRecovered": ("Transcript recovered deep-release",),

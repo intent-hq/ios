@@ -9,6 +9,7 @@ struct ConversationColumnView: View {
     var onDemoCover: () -> Void = {}
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.conversationPresentation) private var presentation
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     /// Room a floating Intent launcher needs over this chat (0 when none).
     @Environment(\.workspaceActionLauncherClearance) private var launcherClearance
     @State private var questionWizardCollapsed = false
@@ -34,10 +35,10 @@ struct ConversationColumnView: View {
         VStack(spacing: 0) {
             columnContent
         }
+        .ignoresSafeArea(.container, edges: usesWorkspaceDesign && usesVerticalBar && !keyboardVisible ? .bottom : [])
         .environment(\.conversationComposerFocus, $composerFocused)
         .modifier(IPadTypingFocus(isFocused: $composerFocused, composerVisible: composerVisible))
-        // Measured inside keyboard avoidance on purpose: with the keyboard
-        // up the cap derives from the remaining visible height.
+        // Measure inside keyboard avoidance so the cap uses the remaining visible height.
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.height
         } action: { height in
@@ -338,7 +339,8 @@ extension ConversationColumnView {
     }
 
     private var composerBottomInset: CGFloat {
-        presentation == .iPad && !keyboardVisible ? Design.IPad.composerBottomInset : Design.Composer.keyboardBottomSpacing
+        if usesVerticalBar, !keyboardVisible { return Design.Composer.verticalBarBottomSpacing }
+        return presentation == .iPad && !keyboardVisible ? Design.IPad.composerBottomInset : Design.Composer.keyboardBottomSpacing
     }
 
     private var usesPhoneQuestionPresentation: Bool {
