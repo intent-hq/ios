@@ -137,6 +137,9 @@ struct WorkspaceActionLauncher: ViewModifier {
                 // Keep the close control inside the modal overlay's accessibility boundary.
                 if isOpen {
                     AssistantLaunchButton(isOpen: isOpen) { isOpen.toggle() }
+                        // Extend through Duo's rail safe area, retaining the button's trailing inset.
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .ignoresSafeArea(.container, edges: .trailing)
                 }
             } else {
                 AssistantLaunchButton(isOpen: isOpen) {

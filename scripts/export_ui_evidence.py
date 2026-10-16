@@ -17,6 +17,7 @@ CAPTURES = {
     },
     "WorkspaceEntryUITests": {
         "testDisclosureAndNoteNavigationKeepSeparateTouchTargets": ("note-viewer-flat-back-button",),
+        "testCreateNewAgentMenuOpensAgentSetup": ("new-agent-next", "new-agent-create", "new-browser-open"),
     },
     "AppCoordinatorTests": {
         "iPadWorkspaceBackFollowsWindowWidthAndKeepsSelection": (
@@ -49,6 +50,11 @@ CAPTURES = {
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
     },
     "HomeActionMenuUITests": {
+        "testDuoWorkspaceDetailKeepsOnlyTheAccessibleContentTitle": ("Duo workspace detail without header",),
+        "testClosePreservesWorkspaceScrollAndAssistantIsFirst": ("Intent home action tiles",),
+        "testMenuPlacementSurvivesDrawerRoundTrips": (
+            "Intent menu placement closed", "Intent menu placement open",
+        ),
         "testIPadConversationKeepsDraftAndRailAvailable": (
             "iPad expanded workspace conversation", "iPad collapsed conversation with draft",
             "iPad portrait conversation with draft",
@@ -186,6 +192,7 @@ CAPTURES = {
         "testRecentConnectionsOpensSwitcherAndSelectsConnection": ("workspace-menu-recent-connections",),
     },
     "WorkspaceSearchUITests": {
+        "testWorkspaceControlsHaveSeparateTargetsAndSelectEveryMode": ("Workspace list leading alignment",),
         "testIPadSearchSurvivesCollapseAndSectionChanges": tuple(
             f"iPad {state} {appearance}"
             for appearance in ("light", "dark")

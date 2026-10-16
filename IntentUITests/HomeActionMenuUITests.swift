@@ -25,6 +25,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
             .allElementsBoundByIndex.first { $0.isHittable }
         XCTAssertNotNil(visibleRow)
         let position = visibleRow?.frame.minY ?? 0
+        let launcherFrame = app.buttons["intent.menu.open"].frame
         openMenu(app)
         let assistant = app.buttons["intent.menu.assistant"]
         let workspace = app.buttons["intent.menu.workspace"]
@@ -36,6 +37,11 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         screenshot.name = "Intent home action tiles"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        if ProcessInfo.processInfo.environment["INTENT_UITEST_VERTICAL_BAR"] == "1" {
+            let close = app.buttons["intent.menu.close"]
+            XCTAssertTrue(app.frame.contains(close.frame))
+            XCTAssertEqual(close.frame.midX, launcherFrame.midX, accuracy: Self.scrollTolerance)
+        }
         verifyMenuDragBehavior(in: app)
         app.buttons["intent.menu.close"].tap()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
@@ -342,6 +348,29 @@ extension HomeActionMenuUITests {
 }
 
 extension HomeActionMenuUITests {
+    @MainActor
+    func testDuoWorkspaceDetailKeepsOnlyTheAccessibleContentTitle() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(
+            environment["INTENT_UITEST_FOLDED_DUO"] == "1" || environment["INTENT_UITEST_UNFOLDED_DUO"] == "1",
+            "Requires a user-configured Duo; this test never changes display mode"
+        )
+        let app = launchHome(themePreference: "light")
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(waitUntilHittable(workspace))
+        workspace.tap()
+        let heading = app.staticTexts["workspace.title.heading"]
+        XCTAssertTrue(waitUntilHittable(heading))
+        XCTAssertEqual(heading.label, "Add usage analytics dashboard")
+        XCTAssertEqual(app.navigationBars.staticTexts.count, 0, "Duo must not repeat the workspace title above the content")
+        XCTAssertEqual(app.scrollViews["workspace.detail.scroll"].frame.minY, app.windows.firstMatch.frame.minY, accuracy: 1)
+        let actions = app.buttons["Workspace actions"]
+        XCTAssertTrue(waitUntilHittable(actions))
+        XCTAssertGreaterThan(actions.frame.minX, heading.frame.maxX)
+        XCTAssertEqual(app.buttons["workspaceDetail.back"].exists, environment["INTENT_UITEST_FOLDED_DUO"] == "1")
+        attachScreenshot(app.screenshot(), named: "Duo workspace detail without header")
+    }
+
     @MainActor
     func testFoldedDuoLauncherStaysInRailAcrossDetailNavigation() throws {
         try XCTSkipUnless(
