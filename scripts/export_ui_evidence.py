@@ -192,6 +192,7 @@ CAPTURES = {
         "testRecentConnectionsOpensSwitcherAndSelectsConnection": ("workspace-menu-recent-connections",),
     },
     "WorkspaceSearchUITests": {
+        "testWorkspaceControlsHaveSeparateTargetsAndSelectEveryMode": ("Workspace list leading alignment",),
         "testIPadSearchSurvivesCollapseAndSectionChanges": tuple(
             f"iPad {state} {appearance}"
             for appearance in ("light", "dark")

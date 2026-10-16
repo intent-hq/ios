@@ -22,6 +22,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     @MainActor
     func testWorkspaceControlsHaveSeparateTargetsAndSelectEveryMode() {
         let app = launchWorkspaces()
+        verifyPageLeadingAlignment(in: app)
         let modes = ["Recent", "Repo", "Status"]
         let controls = modes.map { app.buttons["workspaces.viewMode.\($0)"] }
             + [app.buttons["workspaces.search.open"]]
@@ -258,6 +259,35 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         field.typeText("payment")
         XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.waitForExistence(timeout: Fixture.timeout))
         app.buttons["workspaces.search.cancel"].tap()
+    }
+
+    @MainActor
+    private func verifyPageLeadingAlignment(in app: XCUIApplication) {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return }
+        let expectsVerticalBar = ProcessInfo.processInfo.environment["INTENT_UITEST_VERTICAL_BAR"] == "1"
+        let leadingInset: CGFloat = expectsVerticalBar ? 32 : 24
+        let title = app.staticTexts["workspaces.title"]
+        let row = app.buttons["workspace.row.demo-ws-flaky-tests"]
+        let rowTitle = app.staticTexts[Fixture.workspaceTitle].firstMatch
+        let recent = app.buttons["workspaces.viewMode.Recent"]
+        let search = app.buttons["workspaces.search.open"]
+        let list = app.scrollViews["workspaces.list"]
+        captureSearchState(name: "Workspace list leading alignment")
+        let frames = XCTAttachment(string: "Title: \(title.frame), row title: \(rowTitle.frame), Recent: \(recent.frame), search: \(search.frame), list: \(list.frame)")
+        frames.name = "Workspace list alignment frames"
+        frames.lifetime = .keepAlways
+        add(frames)
+        XCTAssertEqual(title.frame.minX - app.frame.minX, leadingInset, accuracy: 1)
+        // The row's hit target includes padding; its text follows a 16pt status dot and 20pt gap.
+        XCTAssertTrue(row.isHittable)
+        XCTAssertEqual(rowTitle.frame.minX - 36, title.frame.minX, accuracy: 1)
+        // The filter surface starts 4pt before its first segment.
+        XCTAssertEqual(recent.frame.minX - 4, title.frame.minX, accuracy: 1)
+        // Duo's scroll view spans the 84pt vertical rail as well as the existing 24pt trailing inset.
+        XCTAssertEqual(list.frame.maxX - search.frame.maxX, expectsVerticalBar ? 108 : 24, accuracy: 1)
+        if expectsVerticalBar {
+            XCTAssertGreaterThan(app.buttons["intent.menu.open"].frame.minX, search.frame.maxX)
+        }
     }
 
     @MainActor

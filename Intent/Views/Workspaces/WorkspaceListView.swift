@@ -105,6 +105,7 @@ struct WorkspaceListView: View {
                             horizontalPadding: Constants.WorkspaceList.pageInset,
                             isCompact: isFilterPinned
                         )
+                        .modifier(WorkspaceListDuoLeadingInset())
                         .background(Constants.WorkspaceList.canvas(for: colorScheme))
                         .transition(.opacity)
                         .animation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration), value: isFilterPinned)
@@ -162,11 +163,6 @@ struct WorkspaceListView: View {
             .accessibilityIdentifier("workspaces.empty.create")
     }
 
-    private func createWorkspace() {
-        showingConnectionSwitcher = false
-        if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
-    }
-
     private var pageHeader: some View {
         let style = isSearching ? Constants.Typography.heading2 : Constants.Typography.heading1
         let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
@@ -197,6 +193,7 @@ struct WorkspaceListView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(Theme.foreground(for: colorScheme))
         .padding(.horizontal, Constants.WorkspaceList.pageInset)
+        .modifier(WorkspaceListDuoLeadingInset())
     }
 
     @ViewBuilder private var workspaceContent: some View {
@@ -261,6 +258,7 @@ struct WorkspaceListView: View {
             .padding(.top, Constants.WorkspaceList.groupTopSpacing)
             .padding(.bottom, Constants.WorkspaceList.groupBottomSpacing)
             .padding(.horizontal, Constants.WorkspaceList.pageInset)
+            .modifier(WorkspaceListDuoLeadingInset())
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -297,6 +295,7 @@ struct WorkspaceListView: View {
             searchFocused = false
             pendingAction = PendingAction(workspace: workspace, action: action)
         }
+        .modifier(WorkspaceListDuoLeadingInset())
     }
 
     private var confirmationPresented: Binding<Bool> {
@@ -323,7 +322,24 @@ struct WorkspaceListView: View {
     }
 }
 
+private struct WorkspaceListDuoLeadingInset: ViewModifier {
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+
+    func body(content: Content) -> some View {
+        if usesVerticalBar {
+            content.padding(.leading, Constants.WorkspaceList.duoLeadingInset - Constants.WorkspaceList.pageInset)
+        } else {
+            content
+        }
+    }
+}
+
 private extension WorkspaceListView {
+    func createWorkspace() {
+        showingConnectionSwitcher = false
+        if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
+    }
+
     var pageMenu: some View {
         WorkspaceListMenu(showArchived: $viewModel.showArchived, canCreateWorkspace: coordinator.canCreateWorkspace, onCreateWorkspace: createWorkspace) {
             prepareConnectionSwitcher()
