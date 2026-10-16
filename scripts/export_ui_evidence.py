@@ -19,6 +19,18 @@ CAPTURES = {
         "testDisclosureAndNoteNavigationKeepSeparateTouchTargets": ("note-viewer-flat-back-button",),
         "testCreateNewAgentMenuOpensAgentSetup": ("new-agent-next", "new-agent-create", "new-browser-open"),
     },
+    "WorkspaceBackgroundUITests": {
+        "testNoteBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "note")
+        ),
+        "testNewAgentBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "agent", "provider")
+        ),
+    },
     "AppCoordinatorTests": {
         "iPadWorkspaceBackFollowsWindowWidthAndKeepsSelection": (
             "ipad-wide-workspace-no-back", "ipad-narrow-workspace-back", "ipad-narrow-back-to-workspaces",

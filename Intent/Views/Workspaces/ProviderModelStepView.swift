@@ -19,7 +19,7 @@ struct ProviderModelStepView: View {
 
     var body: some View {
         ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
+            WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
             providerContent
             creatingOverlay
         }
