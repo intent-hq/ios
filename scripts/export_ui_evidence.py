@@ -30,6 +30,26 @@ CAPTURES = {
             for appearance in ("light", "dark")
             for screen in ("reference", "agent", "provider")
         ),
+        "testBrowserBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "browser", "browser-address")
+        ),
+        "testConversationBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "conversation")
+        ),
+        "testSettingsBackgroundsMatchWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "settings", "manual", "disconnect-confirmation")
+        ),
+        "testSettingsSupportBackgroundsMatchWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "acknowledgements", "diagnostics")
+        ),
     },
     "AppCoordinatorTests": {
         "iPadWorkspaceBackFollowsWindowWidthAndKeepsSelection": (

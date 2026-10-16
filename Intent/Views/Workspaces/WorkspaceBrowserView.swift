@@ -23,9 +23,9 @@ struct WorkspaceBrowserView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 addressBar
                     .padding(.top, BrowserAppearance.rowSpacing)
-                    .background(Theme.background(for: colorScheme))
+                    .background(WorkspaceDetailStyle.background(for: colorScheme))
             }
-            .background(Theme.background(for: colorScheme))
+            .background(WorkspaceDetailStyle.background(for: colorScheme))
             .navigationTitle(page.title.isEmpty ? "Browser" : page.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { browserToolbar }
