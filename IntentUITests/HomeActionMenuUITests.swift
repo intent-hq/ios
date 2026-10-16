@@ -343,6 +343,29 @@ extension HomeActionMenuUITests {
 
 extension HomeActionMenuUITests {
     @MainActor
+    func testDuoWorkspaceDetailKeepsOnlyTheAccessibleContentTitle() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(
+            environment["INTENT_UITEST_FOLDED_DUO"] == "1" || environment["INTENT_UITEST_UNFOLDED_DUO"] == "1",
+            "Requires a user-configured Duo; this test never changes display mode"
+        )
+        let app = launchHome(themePreference: "light")
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(waitUntilHittable(workspace))
+        workspace.tap()
+        let heading = app.staticTexts["workspace.title.heading"]
+        XCTAssertTrue(waitUntilHittable(heading))
+        XCTAssertEqual(heading.label, "Add usage analytics dashboard")
+        XCTAssertEqual(app.navigationBars.staticTexts.count, 0, "Duo must not repeat the workspace title above the content")
+        XCTAssertEqual(app.scrollViews["workspace.detail.scroll"].frame.minY, app.windows.firstMatch.frame.minY, accuracy: 1)
+        let actions = app.buttons["Workspace actions"]
+        XCTAssertTrue(waitUntilHittable(actions))
+        XCTAssertGreaterThan(actions.frame.minX, heading.frame.maxX)
+        XCTAssertEqual(app.buttons["workspaceDetail.back"].exists, environment["INTENT_UITEST_FOLDED_DUO"] == "1")
+        attachScreenshot(app.screenshot(), named: "Duo workspace detail without header")
+    }
+
+    @MainActor
     func testFoldedDuoLauncherStaysInRailAcrossDetailNavigation() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["INTENT_UITEST_FOLDED_DUO"] == "1",

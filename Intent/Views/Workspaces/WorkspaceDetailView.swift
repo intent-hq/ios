@@ -69,7 +69,6 @@ struct WorkspaceDetailView: View {
 
     private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
 
-    private var showsToolbarTitle: Bool { !usesVerticalBar || !isSidebarVisible }
     private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
     private var lifecycleContent: some View {
         ZStack {
@@ -247,7 +246,8 @@ struct WorkspaceDetailView: View {
         } message: {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
-        .navigationTitle(showsToolbarTitle ? workspaceName : "")
+        .navigationTitle(workspaceName)
+        .toolbar(removing: usesVerticalBar ? .title : nil)
         .toolbarTitleDisplayMode(.inline)
         #if !os(visionOS)
         .navigationBarBackButtonHidden()
@@ -256,9 +256,6 @@ struct WorkspaceDetailView: View {
         #endif
         .toolbar {
             if usesVerticalBar {
-                if showsToolbarTitle {
-                    ToolbarItem(placement: .principal) { toolbarTitle }
-                }
                 WorkspaceVerticalNavigationToolbar(
                     isEnabled: true,
                     showsBackButton: showsBackButton && !isSidebarVisible,
