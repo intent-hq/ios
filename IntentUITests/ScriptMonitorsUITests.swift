@@ -162,17 +162,63 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         row.tap()
         assertDetailText(app, "demo-run-watched-original")
         capture(app, "script-monitors-question-details")
-        try app.performAccessibilityAudit(for: [.contrast, .sufficientElementDescription, .trait]) { issue in
-            if let element = issue.element {
-                print("Script watch accessibility issue: " + element.debugDescription)
-            }
-            return false
-        }
+        try auditScrollableDetails(app)
         closeDetails(app)
         if !isPad { app.buttons["question.answer"].tap() }
         XCTAssertTrue(option.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(option.isHittable)
         if isPad { XCTAssertEqual(option.value as? String, "Not selected") }
+    }
+
+    @MainActor
+    private func auditScrollableDetails(_ app: XCUIApplication) throws {
+        let details = app.scrollViews["script-monitor-details"]
+        XCTAssertTrue(details.waitForExistence(timeout: Self.timeout))
+        var unseen: Set<String> = [
+            Self.originalName, "Command", "Continue Spec Writer", "demo-script-build-check",
+            "demo-run-watched-original", "Created", "Watch expires", "[0-9]+$",
+            "Also notifies after 25 new output lines."
+        ]
+        let maximumPages = 20
+        for _ in 0..<maximumPages {
+            let scrollFrame = details.frame
+            let toolbarBottom = app.navigationBars["Script watch"].frame.maxY
+            let viewport = CGRect(
+                x: scrollFrame.minX,
+                y: max(scrollFrame.minY, toolbarBottom),
+                width: scrollFrame.width,
+                height: scrollFrame.maxY - max(scrollFrame.minY, toolbarBottom)
+            )
+            var clippedText: Set<String> = []
+            for text in details.staticTexts.allElementsBoundByIndex {
+                if viewport.contains(text.frame) {
+                    unseen.remove(text.label)
+                } else {
+                    clippedText.insert(text.label + String(describing: text.frame))
+                }
+            }
+            let deferredText = clippedText
+            capture(app, "script-monitors-question-details")
+            try app.performAccessibilityAudit(for: [.contrast, .sufficientElementDescription, .trait]) { issue in
+                guard let element = issue.element else { return false }
+                // XCTest reports contrast for clipped ScrollView descendants against
+                // the pixels behind the sheet. Audit them after scrolling into view.
+                // Overlapping scroll steps and the required labels above prevent
+                // treating inaccessible or never-visible metadata as a passing audit.
+                if issue.auditType == .contrast, element.elementType == .staticText,
+                   deferredText.contains(element.label + String(describing: element.frame)) {
+                    print("Deferred clipped contrast audit: " + element.debugDescription)
+                    return true
+                }
+                print("Script watch accessibility issue: " + element.debugDescription)
+                return false
+            }
+            if unseen.isEmpty { return }
+            let start = details.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+            let end = details.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+            start.press(forDuration: 0.1, thenDragTo: end)
+        }
+        XCTFail("Watch metadata never became fully visible: " + unseen.sorted().joined(separator: ", "))
     }
 
     @MainActor
