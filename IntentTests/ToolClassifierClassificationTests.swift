@@ -2,6 +2,46 @@
 import Testing
 
 struct ToolClassifierClassificationTests {
+    @Test func confirmedBareToolDefaultsMatchDesktop() {
+        let defaults = [
+            "ToolSearch": "Loading tools", "Read": "Read", "Edit": "Edit", "Write": "Write",
+            "Bash": "Run", "Glob": "Find", "Grep": "Search", "web-fetch": "Fetch"
+        ]
+        for (name, verb) in defaults {
+            let display = ToolClassifier.classify(name: name, input: [:])
+            #expect(display.verb == verb)
+            #expect(display.subject == nil)
+            #expect(display.path == nil)
+        }
+    }
+
+    @Test func globKeepsPatternAndUnrelatedNamesKeepTheirLabels() {
+        let display = ToolClassifier.classify(name: "Glob", input: ["pattern": AnyCodable("src/**/*.swift")])
+        #expect(display.verb == "Find")
+        #expect(display.subject == "src/**/*.swift")
+        for name in ["ToolSearchTool", "myToolSearch", "glob-search"] {
+            let other = ToolClassifier.classify(name: name, input: ["query": AnyCodable("ordinary query")])
+            #expect(other.verb == "Search")
+            #expect(other.subject == "ordinary query")
+        }
+    }
+
+    @Test func confirmedToolsPreserveRichLabelsAndDetails() {
+        for (name, verb) in [("Read", "Read"), ("Edit", "Edit"), ("Write", "Save")] {
+            let display = ToolClassifier.classify(name: name, input: ["file_path": AnyCodable("src/main.swift")])
+            #expect(display.verb == verb)
+            #expect(display.subject == "main.swift")
+            #expect(display.path == "src")
+        }
+        let title = "Explain the configuration changes"
+        let display = ToolClassifier.classify(name: "Write", input: ["_acpTitle": AnyCodable(title)])
+        #expect(display.verb == title)
+        #expect(display.subject == nil)
+        let command = ToolClassifier.classify(name: "Bash", input: ["command": AnyCodable("swift test")])
+        #expect(command.verb == "Run")
+        #expect(command.subject == "swift test")
+    }
+
     @Test func claudeToolSearchSelectorUsesReadableLoadingTitle() {
         let display = ToolClassifier.classify(name: "ToolSearch", input: [
             "_acpTitle": AnyCodable("ToolSearch"),
@@ -19,7 +59,13 @@ struct ToolClassifierClassificationTests {
         let selector = "select:mcp__workspace-mcp__workspace_api"
         let fixtures: [(name: String, input: [String: AnyCodable])] = [
             ("ToolSearch", [:]),
+            ("tOoLsEaRcH", [:]),
+            ("mcp__workspace-mcp__ToolSearch", [:]),
+            ("mcp.workspace-mcp.ToolSearch", [:]),
+            ("intent://local/mcp/ToolSearch", [:]),
+            ("filesystem_ToolSearch_WORKSPACE-MCP_workspace-mcp", [:]),
             ("ToolSearch", ["query": AnyCodable("workspace tools")]),
+            ("Search tools", ["query": AnyCodable("SELECT: \tMCP__server__tool")]),
             ("Search tools", ["query": AnyCodable(selector)]),
             ("Search tools", ["query": AnyCodable("select:mcp.workspace-mcp.workspace_api")]),
             ("Search tools", ["query": AnyCodable("select:mcp__workspace_api,mcp__workspace-mcp__workspace_api")]),
@@ -37,7 +83,10 @@ struct ToolClassifierClassificationTests {
     }
 
     @Test func genuineSearchQueriesRemainVisible() {
-        for query in ["how to use TypeScript generics", "select:focus css", "docs for select:mcp__server__tool"] {
+        for query in [
+            "how to use TypeScript generics", "select:focus css", "docs for select:mcp__server__tool",
+            " select:mcp__server__tool", "select:mcp_server_tool"
+        ] {
             let display = ToolClassifier.classify(name: "web-search", input: [
                 "query": AnyCodable(query)
             ])
