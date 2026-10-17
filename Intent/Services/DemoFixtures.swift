@@ -373,6 +373,7 @@ extension DemoFixtures {
         if let response = transcriptVideoResponse(for: method, params: params) { return response }
         if let response = inlinePDFResponse(for: method, params: params) { return response }
         if let response = inlineTextResponse(for: method, params: params) { return response }
+        if let response = DemoFilesFixtures.response(for: method, params: params) { return response }
         if let response = DemoWorkspaceActionFixtures.response(for: method, params: params) { return response }
         if let response = designScenario?.response(for: method, params: params)
             ?? DemoTerminalFixtures.response(for: method, params: params)
