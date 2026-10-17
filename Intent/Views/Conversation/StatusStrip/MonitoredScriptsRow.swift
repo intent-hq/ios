@@ -71,7 +71,12 @@ struct MonitoredScriptsRow: View {
     }
 
     private var heading: some View {
-        Label("Watching scripts", systemImage: "eye")
+        Label {
+            Text("Watching scripts")
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "eye")
+        }
             .font(.caption)
             .accessibilityAddTraits(.isHeader)
     }

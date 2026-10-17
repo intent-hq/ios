@@ -161,8 +161,8 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         capture(app, "script-monitors-question-accessibility")
         row.tap()
         assertDetailText(app, "demo-run-watched-original")
-        try app.performAccessibilityAudit(for: [.contrast, .sufficientElementDescription, .trait])
         capture(app, "script-monitors-question-details")
+        try app.performAccessibilityAudit(for: [.contrast, .sufficientElementDescription, .trait])
         closeDetails(app)
         if !isPad { app.buttons["question.answer"].tap() }
         XCTAssertTrue(option.waitForExistence(timeout: Self.timeout))

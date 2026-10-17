@@ -3,6 +3,8 @@ import SwiftUI
 struct ScriptMonitorDetailView: View {
     let viewModel: ConversationViewModel
     let selection: ScriptMonitorSelection
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         NavigationStack {
@@ -13,9 +15,12 @@ struct ScriptMonitorDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
             }
+            .background(Theme.background(for: colorScheme))
             .accessibilityIdentifier("script-monitor-details")
             .navigationTitle("Script watch")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.background(for: colorScheme), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Close") { viewModel.closeScriptMonitor() }
@@ -24,7 +29,8 @@ struct ScriptMonitorDetailView: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationBackground(Theme.background(for: colorScheme))
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
         .task(id: selection.id) {
             await viewModel.scriptMonitorsStore.loadDetail(selection: selection.id)
