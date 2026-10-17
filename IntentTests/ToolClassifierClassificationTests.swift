@@ -2,6 +2,51 @@
 import Testing
 
 struct ToolClassifierClassificationTests {
+    @Test func claudeToolSearchSelectorUsesReadableLoadingTitle() {
+        let display = ToolClassifier.classify(name: "ToolSearch", input: [
+            "_acpTitle": AnyCodable("ToolSearch"),
+            "query": AnyCodable("select:mcp__workspace-mcp__workspace_api"),
+            "max_results": AnyCodable(1)
+        ])
+
+        #expect(display.icon == .search)
+        #expect(display.verb == "Loading tools")
+        #expect(display.subject == nil)
+        #expect(display.path == nil)
+    }
+
+    @Test func deferredToolLoadingMatchesDesktopTitleAndQueryForms() {
+        let selector = "select:mcp__workspace-mcp__workspace_api"
+        let fixtures: [(name: String, input: [String: AnyCodable])] = [
+            ("ToolSearch", [:]),
+            ("ToolSearch", ["query": AnyCodable("workspace tools")]),
+            ("Search tools", ["query": AnyCodable(selector)]),
+            ("Search tools", ["query": AnyCodable("select:mcp.workspace-mcp.workspace_api")]),
+            ("Search tools", ["query": AnyCodable("select:mcp__workspace_api,mcp__workspace-mcp__workspace_api")]),
+            ("Search \(selector)", [:]),
+            ("ToolSearchTool", ["_acpTitle": AnyCodable("Search \(selector)")])
+        ]
+
+        for fixture in fixtures {
+            let display = ToolClassifier.classify(name: fixture.name, input: fixture.input)
+            #expect(display.icon == .search)
+            #expect(display.verb == "Loading tools")
+            #expect(display.subject == nil)
+            #expect(display.path == nil)
+        }
+    }
+
+    @Test func genuineSearchQueriesRemainVisible() {
+        for query in ["how to use TypeScript generics", "select:focus css", "docs for select:mcp__server__tool"] {
+            let display = ToolClassifier.classify(name: "web-search", input: [
+                "query": AnyCodable(query)
+            ])
+            #expect(display.icon == .web)
+            #expect(display.verb == "Search web")
+            #expect(display.subject == query)
+        }
+    }
+
     private struct TitleFixture {
         let title: String
         let verb: String
@@ -163,5 +208,74 @@ struct ToolClassifierClassificationTests {
         #expect(display.icon == .browser)
         #expect(display.verb == "Browser")
         #expect(display.subject == nil)
+    }
+}
+
+extension ConversationStoreLiveStateTests {
+    @Test func claudeToolSearchLiveAndReloadedRowsKeepDetailsWithReadableTitle() async throws {
+        let (liveStore, _) = makeStore()
+        let (reloadedStore, _) = makeStore()
+        let selector = "select:mcp__workspace-mcp__workspace_api"
+        let input: [String: Any] = ["_acpTitle": "ToolSearch", "query": selector, "max_results": 1]
+        let started: [String: Any] = [
+            "type": "tool_use", "id": "msg-1:0", "name": "ToolSearch",
+            "input": input, "toolCallId": "call-1",
+            "metadata": ["toolKind": "search", "status": "started"]
+        ]
+        var completed = started
+        completed["metadata"] = ["toolKind": "search", "status": "completed"]
+        let result: [String: Any] = [
+            "type": "tool_result", "id": "msg-1:1", "toolUseId": "call-1",
+            "output": "Loaded workspace_api"
+        ]
+
+        liveStore.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        liveStore.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-1", block: started)
+        ]))
+        let initial = try #require(liveStore.messages.first?.contentBlocks.first)
+        #expect(initial.metadata["status"]?.value as? String == "started")
+        let initialDisplay = ToolClassifier.classify(name: initial.resolvedName ?? "tool", input: initial.input)
+        #expect(initialDisplay.verb == "Loading tools")
+        #expect(initialDisplay.subject == nil)
+
+        let completedDelta = deltaParams(
+            seq: 2,
+            added: [blockEntity(messageId: "msg-1", block: result)],
+            updated: [blockEntity(messageId: "msg-1", block: completed)]
+        )
+        liveStore.handleStreamEvent("subscription.push", params: completedDelta)
+        reloadedStore.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
+            [
+                "id": "msg-1", "role": "assistant", "contentBlocks": [completed, result],
+                "timestamp": "2026-10-17T00:00:00.000Z"
+            ]
+        ]))
+
+        for store in [liveStore, reloadedStore] {
+            try expectReadableToolSearchDetails(store)
+        }
+    }
+
+    private func expectReadableToolSearchDetails(_ store: ConversationStore) throws {
+        #expect(store.messages.count == 1)
+        let blocks = try #require(store.messages.first?.contentBlocks)
+        #expect(blocks.count == 2)
+        let tool = try #require(blocks.first { $0.type == .toolUse })
+        let output = try #require(blocks.first { $0.type == .toolResult })
+        #expect(tool.id == "msg-1:0")
+        #expect(tool.resolvedName == "ToolSearch")
+        #expect(tool.toolCallId == "call-1")
+        #expect(tool.input["_acpTitle"]?.value as? String == "ToolSearch")
+        #expect(tool.input["query"]?.value as? String == "select:mcp__workspace-mcp__workspace_api")
+        #expect(tool.input["max_results"]?.value as? Int == 1)
+        #expect(tool.metadata["status"]?.value as? String == "completed")
+        #expect(output.toolUseId == "call-1")
+        #expect(output.output?.value as? String == "Loaded workspace_api")
+        let display = ToolClassifier.classify(name: tool.resolvedName ?? "tool", input: tool.input)
+        #expect(display.icon == .search)
+        #expect(display.verb == "Loading tools")
+        #expect(display.subject == nil)
+        #expect(display.path == nil)
     }
 }
