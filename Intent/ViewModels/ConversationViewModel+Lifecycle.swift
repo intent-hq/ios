@@ -13,6 +13,7 @@ extension ConversationViewModel {
             detailConsumer = agentDetails.retain(agentId: agentId)
             if streamingObserverId == nil { observeStreaming() }
             store.retainConversation(conversationConsumer, agentId: agentId, workspaceId: workspaceId)
+            activateScriptMonitors()
             latchEntryWhenReady()
         }
         let activation = liveStoreActivationGeneration
@@ -22,8 +23,9 @@ extension ConversationViewModel {
                 async let model: () = fetchCurrentModel(refresh: false)
                 async let hooks: () = hookStore.subscribe(workspaceId: workspaceId, agentId: agentId)
                 async let monitors: () = monitoredPrStore.subscribe(workspaceId: workspaceId, agentId: agentId)
+                async let scriptMonitors: () = scriptMonitorsStore.load(workspaceId: workspaceId)
                 await store.bootstrapTask?.value
-                _ = await (model, hooks, monitors)
+                _ = await (model, hooks, monitors, scriptMonitors)
             }
         }
         await withTaskCancellationHandler {

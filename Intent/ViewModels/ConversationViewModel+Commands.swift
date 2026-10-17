@@ -47,6 +47,7 @@ extension ConversationViewModel {
         store.releaseConversation(conversationConsumer)
         hookStore.deactivate()
         monitoredPrStore.deactivate()
+        deactivateScriptMonitors()
     }
 
     func cancelWait() async {

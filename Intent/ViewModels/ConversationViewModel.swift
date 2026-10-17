@@ -21,6 +21,9 @@ import SwiftUI
     }
     var hookStore: BackgroundHookStore
     var monitoredPrStore: MonitoredPrStore
+    let scriptMonitorsStore: WorkspaceScriptMonitorsStore
+    var scriptMonitorConsumer: UUID?
+    var selectedScriptMonitor: ScriptMonitorSelection?
     @ObservationIgnored let connection: any ConnectionManagerRouting
 
     let agentId: String
@@ -136,7 +139,8 @@ import SwiftUI
         agentDetails: AgentDetailStore? = nil,
         conversations: ConversationStorePool? = nil,
         hooks: WorkspaceStatusStore<BackgroundHook>? = nil,
-        monitors: WorkspacePrMonitorsStore? = nil
+        monitors: WorkspacePrMonitorsStore? = nil,
+        scriptMonitors: WorkspaceScriptMonitorsStore? = nil
     ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
@@ -149,6 +153,7 @@ import SwiftUI
         self.store = sharedStore ?? ConversationStore(connectionManager: connection, agentDetails: details)
         self.hookStore = BackgroundHookStore(connectionManager: connection, source: hooks)
         self.monitoredPrStore = MonitoredPrStore(connectionManager: connection, source: monitors)
+        self.scriptMonitorsStore = scriptMonitors ?? WorkspaceScriptMonitorsStore(connection: connection)
         self.attachmentPipeline = ConversationAttachmentPipeline(uploadService: uploadService)
         self.messageText = PersistenceManager.shared.loadDraft(
             workspaceId: workspaceId,
@@ -177,6 +182,7 @@ import SwiftUI
     }
 
     private func releaseOwnedResources() {
+        deactivateScriptMonitors()
         optionsStore.releaseCatalogs(consumer: conversationConsumer)
         loadTask?.cancel()
         markSeenDebounceTask?.cancel()
