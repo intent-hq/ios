@@ -128,6 +128,18 @@ extension DemoDesignFixtures {
     var initialMessages: [[String: Any]] {
         if scenario == .empty { return [] }
         if scenario == .mermaidHistory { return Self.mermaidHistory }
+        if scenario == .claudeTools {
+            let blocks = [
+                DemoFixtures.toolUseBlock(id: "demo-claude-search", name: "ToolSearch", input: [
+                    "_acpTitle": "ToolSearch", "max_results": 1,
+                    "query": "select:mcp__workspace-mcp__workspace_api"
+                ]),
+                DemoFixtures.toolResultBlock(toolUseId: "demo-claude-search", output: "Loaded workspace_api"),
+                DemoFixtures.toolUseBlock(id: "demo-claude-glob", name: "Glob", input: ["pattern": "src/**/*.swift"]),
+                DemoFixtures.toolResultBlock(toolUseId: "demo-claude-glob", output: "src/main.swift")
+            ]
+            return [Self.message(id: "demo-claude-tools", role: "assistant", blocks: blocks)]
+        }
         var rows = [
             Self.message(id: "demo-design-assistant", role: "assistant", blocks: [DemoFixtures.textBlock(Self.assistantText)]),
             Self.message(id: "demo-design-user", role: "user", blocks: [DemoFixtures.textBlock(Self.userText)]),

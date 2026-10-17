@@ -117,6 +117,10 @@ CAPTURES = {
         ),
     },
     "ConversationToolActivityUITests": {
+        "testIPadClaudeToolTitlesKeepExpandedDetails": (
+            "iPad Claude tools collapsed light", "iPad Claude tools expanded light",
+            "iPad Claude tools collapsed dark", "iPad Claude tools expanded dark", "iPad Claude tools final state",
+        ),
         "testIPadConsecutiveToolsExpandAndCollapseInBothThemes": (
             "iPad tools collapsed light", "iPad tools expanded light",
             "iPad tools collapsed dark", "iPad tools expanded dark", "iPad tools final state",
