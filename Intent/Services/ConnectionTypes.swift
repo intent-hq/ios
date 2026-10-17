@@ -43,6 +43,10 @@ nonisolated enum EventClassification: Equatable, Sendable {
 protocol ConnectionManagerRouting: AnyObject {
     var connectionState: ConnectionState { get }
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> { get }
+    var capabilities: ConnectionCapabilities { get }
+    var capabilitiesPublisher: AnyPublisher<ConnectionCapabilities, Never> { get }
+
+    func disableScriptMonitors()
 
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
     var globalSubscriptionPublisher: AnyPublisher<ConnectionManager.GlobalSubscriptionState, Never> { get }
@@ -56,6 +60,13 @@ protocol ConnectionManagerRouting: AnyObject {
 }
 
 extension ConnectionManagerRouting {
+    var capabilities: ConnectionCapabilities { .unknown }
+    var capabilitiesPublisher: AnyPublisher<ConnectionCapabilities, Never> {
+        Just(capabilities).eraseToAnyPublisher()
+    }
+
+    func disableScriptMonitors() {}
+
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { .subscribed }
     var globalSubscriptionPublisher: AnyPublisher<ConnectionManager.GlobalSubscriptionState, Never> {
         Just(globalSubscriptionState).eraseToAnyPublisher()

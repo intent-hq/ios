@@ -77,6 +77,8 @@ $(SRCROOT)/Intent/Models/PendingFile.swift
 $(SRCROOT)/Intent/Models/PrMonitorWakeAttribution.swift
 $(SRCROOT)/Intent/Models/Question.swift
 $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
+$(SRCROOT)/Intent/Models/ScriptMonitor.swift
+$(SRCROOT)/Intent/Models/ScriptMonitorPage.swift
 $(SRCROOT)/Intent/Models/WatchedAgentRow.swift
 $(SRCROOT)/Intent/Models/WorkspaceAction.swift
 $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
@@ -156,6 +158,7 @@ $(SRCROOT)/Intent/Services/BrowserTunnelURL.swift
 $(SRCROOT)/Intent/Services/CertFingerprintProbe.swift
 $(SRCROOT)/Intent/Services/CommentStore.swift
 $(SRCROOT)/Intent/Services/ConnectionAdmission.swift
+$(SRCROOT)/Intent/Services/ConnectionCapabilities.swift
 $(SRCROOT)/Intent/Services/ConnectionDiagnostics.swift
 $(SRCROOT)/Intent/Services/ConnectionHostRacing.swift
 $(SRCROOT)/Intent/Services/ConnectionManager.swift
@@ -618,6 +621,7 @@ $(SRCROOT)/IntentTests/ConnectionManagerPathTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerPhysicalPathTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerRecoveryFixtures.swift
 $(SRCROOT)/IntentTests/ConnectionManagerRequestTests.swift
+$(SRCROOT)/IntentTests/ConnectionManagerScriptMonitorTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerSubscriptionTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerTests.swift
 $(SRCROOT)/IntentTests/ConnectionNetworkMessageTests.swift
@@ -836,6 +840,8 @@ $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
 $(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
+$(SRCROOT)/IntentTests/ScriptMonitorCapabilitiesTests.swift
+$(SRCROOT)/IntentTests/ScriptMonitorTests.swift
 $(SRCROOT)/IntentTests/SessionCacheBoundsMeasurementTests.swift
 $(SRCROOT)/IntentTests/SettingsViewTests.swift
 $(SRCROOT)/IntentTests/ShapeIsolationTests.swift
