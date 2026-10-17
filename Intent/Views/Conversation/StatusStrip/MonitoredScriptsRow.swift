@@ -74,8 +74,6 @@ struct MonitoredScriptsRow: View {
             #endif
         }
         .foregroundStyle(Theme.foreground(for: colorScheme))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("script-monitors-status")
     }
 
     private var heading: some View {
