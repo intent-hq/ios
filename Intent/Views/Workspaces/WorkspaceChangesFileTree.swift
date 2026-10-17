@@ -11,12 +11,6 @@ struct WorkspaceChangesFileTree: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .body) private var iconSize = WorkspaceChangesLayout.treeIconSize
-
-    private enum Layout {
-        static let indentation: CGFloat = 16
-        static let maximumIndentationDepth = 3
-    }
 
     var body: some View {
         WorkspaceChangesSection(title: title, count: files.count, identifier: identifier, isExpanded: $isExpanded) {
@@ -67,32 +61,12 @@ struct WorkspaceChangesFileTree: View {
     }
 
     private func directoryLabel(_ row: WorkspaceChangeTree.TreeRow, isCollapsed: Bool) -> some View {
-        HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Image(.folder)
-                .resizable()
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(secondary)
-                .accessibilityHidden(true)
-            Text(row.depth >= Layout.maximumIndentationDepth ? row.node.path : row.node.name)
-                .interFont(Constants.Typography.bodySEmphasized)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("\(row.node.fileCount)")
-                .interFont(Constants.Typography.subtextXXS)
-                .foregroundStyle(secondary)
-            Image(isCollapsed ? .chevronRight : .chevronDown)
-                .resizable()
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(secondary)
-                .accessibilityHidden(true)
-        }
-        .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-        .multilineTextAlignment(.leading)
-        .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-        .frame(maxWidth: .infinity, minHeight: CreateWorkspaceFormStyle.controlHeight, alignment: .leading)
-        .contentShape(.rect)
+        WorkspaceFileTreeLabel(
+            name: row.depth >= WorkspaceFileTreeLayout.maximumIndentationDepth ? row.node.path : row.node.name,
+            isDirectory: true,
+            isExpanded: !isCollapsed,
+            count: row.node.fileCount
+        ) { EmptyView() }
     }
 
     private func fileRow(_ file: WorkspaceChange, name: String) -> some View {
@@ -105,29 +79,11 @@ struct WorkspaceChangesFileTree: View {
     }
 
     private func fileLabel(_ file: WorkspaceChange, name: String) -> some View {
-        HStack(alignment: .top, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Image(.file)
-                .resizable()
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
+        WorkspaceFileTreeLabel(name: name) {
+            fileMetadata(file)
+                .font(Constants.Typography.subtextXXS.font)
                 .foregroundStyle(secondary)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-                Text(name)
-                    .interFont(Constants.Typography.bodySEmphasized)
-                    .tracking(CreateWorkspaceRepoStyle.nameTracking)
-                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                    .fixedSize(horizontal: false, vertical: true)
-                fileMetadata(file)
-                    .font(Constants.Typography.subtextXXS.font)
-                    .foregroundStyle(secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .multilineTextAlignment(.leading)
-        .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-        .frame(maxWidth: .infinity, minHeight: CreateWorkspaceFormStyle.controlHeight, alignment: .leading)
-        .contentShape(.rect)
     }
 
     @ViewBuilder
@@ -158,8 +114,7 @@ struct WorkspaceChangesFileTree: View {
     }
 
     private func indentation(for depth: Int) -> CGFloat {
-        let step = dynamicTypeSize.isAccessibilitySize ? WorkspaceDetailStyle.accessibilityIndentation : Layout.indentation
-        return CGFloat(min(depth, Layout.maximumIndentationDepth)) * step
+        WorkspaceFileTreeLayout.indentation(for: depth, accessibility: dynamicTypeSize.isAccessibilitySize)
     }
 
     private func toggleDirectory(_ path: String) {
