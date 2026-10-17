@@ -516,6 +516,10 @@ jobs:
             scripts/xcodebuild.sh test-without-building-unit
           fi
 
+      - name: Build iOS for pre-PR gate
+        if: env.FULL_PRE_PR_GATE == '1'
+        run: scripts/xcodebuild.sh build-ios
+
       - name: Run full pre-PR gate
         if: env.FULL_PRE_PR_GATE == '1'
         env:

@@ -109,6 +109,22 @@ class OrdinaryCITests(unittest.TestCase):
                 route.validate(dict(base, **changes))
         self.assertEqual(route.validate({"GITHUB_EVENT_NAME": "pull_request"}), ("iphone", []))
 
+    def test_full_gate_builds_ios_through_the_wrapper(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        section = workflow.split("      - name: Build iOS for pre-PR gate\n", 1)[1].split("\n      - name:", 1)[0]
+        self.assertIn("if: env.FULL_PRE_PR_GATE == '1'", section)
+        command = section.split("        run: ", 1)[1].strip()
+        for status in (0, 65):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "scripts").mkdir()
+                wrapper = root / "scripts/xcodebuild.sh"
+                wrapper.write_text('#!/bin/bash\nprintf "%s\\n" "$*" > calls\nexit ' + str(status) + '\n')
+                wrapper.chmod(0o755)
+                result = subprocess.run(["bash", "-e", "-c", command], cwd=root, capture_output=True, text=True)
+                self.assertEqual(result.returncode, status)
+                self.assertEqual((root / "calls").read_text().splitlines(), ["build-ios"])
+
     def test_full_pre_pr_gate_executes_wrapper_once_and_preserves_failure_log(self):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
         section = workflow.split("      - name: Run full pre-PR gate\n", 1)[1].split("\n      - name:", 1)[0]
