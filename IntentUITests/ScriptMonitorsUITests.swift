@@ -87,7 +87,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 1)
         capture(app, "script-monitors-empty-owner-more")
         XCTAssertGreaterThanOrEqual(loadMore.frame.height, Self.tapHeight)
-        XCTAssertTrue(loadMore.isHittable)
+        XCTAssertTrue(loadMore.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         loadMore.tap()
         let retry = app.buttons["script-monitors-retry"]
         XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
@@ -155,7 +155,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         }
         let row = app.buttons[Self.rowID]
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(row.isHittable)
+        XCTAssertTrue(row.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         XCTAssertGreaterThanOrEqual(row.frame.height, Self.tapHeight)
         XCTAssertTrue(row.label.contains(Self.originalName))
         capture(app, "script-monitors-question-accessibility")
@@ -166,7 +166,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         closeDetails(app)
         if !isPad { app.buttons["question.answer"].tap() }
         XCTAssertTrue(option.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(option.isHittable)
+        XCTAssertTrue(option.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         if isPad { XCTAssertEqual(option.value as? String, "Not selected") }
     }
 
