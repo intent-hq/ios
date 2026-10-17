@@ -162,7 +162,6 @@ struct ConversationColumnView: View {
                 )
             )
             .layoutPriority(usesPhoneQuestionPresentation ? 1 : 0)
-
         // A floating host presents the composer from an ornament instead.
         if composerHost == .inline, !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
             VStack(spacing: 0) {
@@ -347,17 +346,15 @@ extension ConversationColumnView {
         usesWorkspaceDesign && presentation != .iPad
     }
 
-    /// Whether any status row (agent waiting, PR monitors, hooks, queue)
-    /// shows below the transcript; mirrors `accessoryRows`.
+    /// Mirrors the visible rows below the transcript.
     private var hasAccessoryRows: Bool {
         let showsMonitors = !usesWorkspaceDesign && !viewModel.showsLoadingState
             && (!viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil)
         let showsHooks = !viewModel.activeAgentHooks.isEmpty || viewModel.hookStore.error != nil
         let showsQueue = !usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
-        return viewModel.store.isWaitingForAgents || showsMonitors || showsHooks || showsQueue
+        return viewModel.store.isWaitingForAgents || showsMonitors || showsHooks || showsQueue || viewModel.showsScriptMonitorStatus
     }
 
-    /// The status rows' top for the launcher to stay above (floating host).
     private var accessoryRowsLauncherTop: CGFloat? {
         hasAccessoryRows ? accessoryRowsTop : nil
     }
@@ -376,6 +373,8 @@ extension ConversationColumnView {
     private var accessoryRows: some View {
         if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
 
+        // Keep watch details mounted outside the composer and question slot.
+        MonitoredScriptsRow(viewModel: viewModel)
         if viewModel.store.isWaitingForAgents {
             VStack(spacing: 0) {
                 AgentWaitingView(

@@ -23,6 +23,14 @@ on:
     - cron: '0 21 * * *'
   workflow_dispatch:
     inputs:
+      pre_pr_gate:
+        description: >-
+          Run scripts/xcodebuild.sh test-ios with the full unit and UI suites
+          once, replacing the split build/unit/UI jobs. Requires iPhone and
+          empty only_testing; ui_suite is ignored. Retains results and screenshots.
+        type: boolean
+        required: false
+        default: false
       ui_suite:
         description: >-
           UI tests to run in the iOS UI Tests job: smoke runs
@@ -200,7 +208,7 @@ jobs:
     # succeed. All three jobs still run in parallel.
     needs: select-macos-runner
     runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.pre_pr_gate && 120 || 45 }}
     env:
       GIT_TERMINAL_PROMPT: '0'
       # Knobs for scripts/xcodebuild.sh: pin SPM clones to the cached path
@@ -208,6 +216,7 @@ jobs:
       SPM_CLONE_DIR: build/SourcePackages
       RESULT_BUNDLE: TestResults
       SIMULATOR_FAMILY: ${{ github.event_name == 'workflow_dispatch' && inputs.simulator_family || 'iphone' }}
+      FULL_PRE_PR_GATE: ${{ github.event_name == 'workflow_dispatch' && inputs.pre_pr_gate && '1' || '' }}
       SIM_LOCK_TIMEOUT: '60'
     steps:
       - name: Checkout
@@ -438,6 +447,7 @@ jobs:
         run: scripts/xcodebuild.sh resolve
 
       - name: Build for testing
+        if: env.FULL_PRE_PR_GATE != '1'
         env:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
@@ -488,6 +498,7 @@ jobs:
       # unverifiable selection with 83, and the per-selector table is appended
       # to the job summary (see the script header).
       - name: Run unit tests
+        if: env.FULL_PRE_PR_GATE != '1'
         id: selected-tests
         env:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
@@ -504,6 +515,19 @@ jobs:
           else
             scripts/xcodebuild.sh test-without-building-unit
           fi
+
+      - name: Build iOS for pre-PR gate
+        if: env.FULL_PRE_PR_GATE == '1'
+        run: scripts/xcodebuild.sh build-ios
+
+      - name: Run full pre-PR gate
+        if: env.FULL_PRE_PR_GATE == '1'
+        env:
+          TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
+          ONLY_TESTING: ''
+        run: |
+          set -o pipefail
+          scripts/xcodebuild.sh test-ios 2>&1 | tee pre-pr-gate.log
 
       - name: Require actual iPad execution
         if: always() && env.SIMULATOR_FAMILY == 'ipad' && steps.selected-tests.outcome != 'skipped'
@@ -586,20 +610,22 @@ jobs:
           if-no-files-found: warn
 
       - name: Export filtered UI evidence
-        if: always() && github.event_name == 'workflow_dispatch' && inputs.only_testing != ''
+        if: always() && github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.pre_pr_gate)
         uses: ./.github/actions/export-ui-evidence
         with:
           bundles: TestResults
 
       - name: Upload test results
-        if: failure() || (github.event_name == 'workflow_dispatch' && (contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests')))
+        if: failure() || (github.event_name == 'workflow_dispatch' && (inputs.pre_pr_gate || contains(inputs.only_testing, 'ScriptMonitors') || contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests')))
         uses: actions/upload-artifact@v7
         with:
           name: ios-unit-test-results
           path: |
             TestResults
+            TestResults-retry
             TestResults-source-moved
             TestResults-keychain
+            pre-pr-gate.log
 
       # See the job comment: turns a go-test or swiftlint failure into a
       # failure of this (the only ruleset-required) job. Both normally finish
@@ -673,7 +699,7 @@ jobs:
     # requested selector in build-and-test.
     # A human adds this check to the ruleset after merge; build-and-test does not
     # wait for it; the macOS jobs queue on the dedicated Mac.
-    if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad')) }}
+    if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad' || inputs.pre_pr_gate)) }}
     needs: select-macos-runner
     runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
     # Allow setup, the full iPhone suite, iPad regressions, and cleanup (ios#429).

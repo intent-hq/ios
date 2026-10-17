@@ -11,6 +11,30 @@ import tempfile
 
 
 CAPTURES = {
+    "ScriptMonitorsUITests": {
+        "testOwnedWatchDetailsUpdateAndRemovalWithoutRestart": (
+            "script-monitors-active", "script-monitors-details", "script-monitors-text-update",
+            "script-monitors-removed-details", "script-monitors-removed", "script-monitors-final-state",
+        ),
+        "testLoadingFailureRetriesWithoutInventingAnEmptyState": (
+            "script-monitors-loading", "script-monitors-error", "script-monitors-retried", "script-monitors-final-state",
+        ),
+        "testEmptyOwnerCanLoadNextPageAndRetryItsFailure": (
+            "script-monitors-empty-owner-more", "script-monitors-page-error", "script-monitors-next-page", "script-monitors-final-state",
+        ),
+        "testDetailFailureRetainsSummaryAndRetriesOnlySelectedWatch": (
+            "script-monitors-detail-error", "script-monitors-detail-retried", "script-monitors-final-state",
+        ),
+        "testUnsupportedConnectionDoesNotReadOrSubscribe": (
+            "script-monitors-unsupported", "script-monitors-final-state",
+        ),
+        "testDeadlineRemainsVisibleUntilServerExpiry": (
+            "script-monitors-deadline", "script-monitors-expired", "script-monitors-final-state",
+        ),
+        "testQuestionFlowKeepsWatchReachableWithAccessibilityText": (
+            "script-monitors-question-accessibility", "script-monitors-question-details", "script-monitors-final-state",
+        ),
+    },
     "WorkspaceFilesUITests": {
         "testBrowseFilesAndPreserveFoldersAcrossTabsInBothThemes": tuple(
             f"{screen}-{appearance}"

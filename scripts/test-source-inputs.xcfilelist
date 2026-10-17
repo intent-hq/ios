@@ -327,6 +327,8 @@ $(SRCROOT)/Intent/Models/PendingFile.swift
 $(SRCROOT)/Intent/Models/PrMonitorWakeAttribution.swift
 $(SRCROOT)/Intent/Models/Question.swift
 $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
+$(SRCROOT)/Intent/Models/ScriptMonitor.swift
+$(SRCROOT)/Intent/Models/ScriptMonitorPage.swift
 $(SRCROOT)/Intent/Models/WatchedAgentRow.swift
 $(SRCROOT)/Intent/Models/WorkspaceAction.swift
 $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
@@ -413,6 +415,7 @@ $(SRCROOT)/Intent/Services/BrowserTunnelURL.swift
 $(SRCROOT)/Intent/Services/CertFingerprintProbe.swift
 $(SRCROOT)/Intent/Services/CommentStore.swift
 $(SRCROOT)/Intent/Services/ConnectionAdmission.swift
+$(SRCROOT)/Intent/Services/ConnectionCapabilities.swift
 $(SRCROOT)/Intent/Services/ConnectionDiagnostics.swift
 $(SRCROOT)/Intent/Services/ConnectionHostRacing.swift
 $(SRCROOT)/Intent/Services/ConnectionManager.swift
@@ -473,6 +476,7 @@ $(SRCROOT)/Intent/Services/DemoIPadProducerVisibility.swift
 $(SRCROOT)/Intent/Services/DemoMode.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/DemoRepositoryScriptFixtures.swift
+$(SRCROOT)/Intent/Services/DemoScriptMonitorFixtures.swift
 $(SRCROOT)/Intent/Services/DemoSettings.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/DemoWorkspaceActionFixtures.swift
@@ -527,9 +531,13 @@ $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceProviderOptions.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptDiscovery.swift
+$(SRCROOT)/Intent/Services/WorkspaceScriptMonitorsStore+Details.swift
+$(SRCROOT)/Intent/Services/WorkspaceScriptMonitorsStore+Events.swift
+$(SRCROOT)/Intent/Services/WorkspaceScriptMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptRepository.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusStore+Loading.swift
+$(SRCROOT)/Intent/Services/WorkspaceStatusStore+Pages.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusWaiters.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore+EventClassification.swift
@@ -579,6 +587,7 @@ $(SRCROOT)/Intent/ViewModels/AgentListViewModel.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Commands.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Lifecycle.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Questions.swift
+$(SRCROOT)/Intent/ViewModels/ConversationViewModel+ScriptMonitors.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Sending.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel.swift
 $(SRCROOT)/Intent/ViewModels/DiagnosticExportModel.swift
@@ -698,6 +707,10 @@ $(SRCROOT)/Intent/Views/Conversation/StatusStrip/AgentWaitingView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/BackgroundHooksRow.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/HookTimeBar.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredScriptsRow.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorClock.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorDetailView.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorPresentation.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript
 $(SRCROOT)/Intent/Views/Conversation/Transcript/AssistantMessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationColumnView.swift
@@ -900,6 +913,7 @@ $(SRCROOT)/IntentTests/ConnectionManagerPathTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerPhysicalPathTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerRecoveryFixtures.swift
 $(SRCROOT)/IntentTests/ConnectionManagerRequestTests.swift
+$(SRCROOT)/IntentTests/ConnectionManagerScriptMonitorTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerSubscriptionTests.swift
 $(SRCROOT)/IntentTests/ConnectionManagerTests.swift
 $(SRCROOT)/IntentTests/ConnectionNetworkMessageTests.swift
@@ -1000,6 +1014,7 @@ $(SRCROOT)/IntentTests/DemoConversationStartupTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesDesignTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesTests.swift
 $(SRCROOT)/IntentTests/DemoInlineImageFixtureTests.swift
+$(SRCROOT)/IntentTests/DemoScriptMonitorFixturesTests.swift
 $(SRCROOT)/IntentTests/DiagnosticConcurrencyTests.swift
 $(SRCROOT)/IntentTests/DiagnosticCoverageTests.swift
 $(SRCROOT)/IntentTests/DiagnosticExportEntryPointTests.swift
@@ -1121,6 +1136,10 @@ $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
 $(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
+$(SRCROOT)/IntentTests/ScriptMonitorCapabilitiesTests.swift
+$(SRCROOT)/IntentTests/ScriptMonitorPresentationTests+Conversation.swift
+$(SRCROOT)/IntentTests/ScriptMonitorPresentationTests.swift
+$(SRCROOT)/IntentTests/ScriptMonitorTests.swift
 $(SRCROOT)/IntentTests/SessionCacheBoundsMeasurementTests.swift
 $(SRCROOT)/IntentTests/SettingsViewTests.swift
 $(SRCROOT)/IntentTests/ShapeIsolationTests.swift
@@ -1230,6 +1249,9 @@ $(SRCROOT)/IntentTests/WorkspaceScriptDiscoveryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptFixture.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptIsolationTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptLaunchRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptMonitorsStoreRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptMonitorsStoreRecoveryTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptMonitorsStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptRepositoryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusImageViewTests.swift

@@ -40,6 +40,7 @@ IntentUITests/WorkspaceScriptUITests/testRepositoryScriptsAppearBesideSavedComma
 IntentUITests/WorkspaceStatusImageUITests/testStatusImageIsAbsentFromListAndOpensFullSizeFromDetail
 
 # Conversation
+IntentUITests/ScriptMonitorsUITests/testOwnedWatchDetailsUpdateAndRemovalWithoutRestart
 # Mermaid fullscreen/pinch/pan is quarantined (ios#735); see README.md#mermaid-ui-quarantine.
 IntentUITests/InlineResponseImageUITests/testPDFCardAndLinkOpenViewerAndShare
 IntentUITests/WatcherMessageUITests/testWatcherDetailsExpandAndCollapseWithoutLosingTheReport

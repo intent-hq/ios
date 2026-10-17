@@ -3,11 +3,11 @@ import Foundation
 extension WebSocketConnection {
     /// Runs before adoption/message pumping so a failed candidate cannot
     /// replace a working connection. Admission messages never enter logs.
-    func admittedPrincipal(helloRequest: Data) async throws -> ConnectionPrincipal {
+    func admittedHandshake(helloRequest: Data) async throws -> ConnectionHandshake {
         let hello = try await admissionRequest(helloRequest, id: -1)
         let request = Data(#"{"jsonrpc":"2.0","id":-2,"method":"principal.me"}"#.utf8)
         let principal = try await admissionRequest(request, id: -2)
-        return try ConnectionPrincipal.parse(principal, hello: hello)
+        return try ConnectionHandshake(principal: ConnectionPrincipal.parse(principal, hello: hello), capabilities: ConnectionCapabilities(hello: hello))
     }
 
     private func admissionRequest(_ data: Data, id: Int) async throws -> Any {
@@ -34,15 +34,15 @@ extension WebSocketConnection {
 }
 
 extension ConnectionManager {
-    func admit(_ winner: RacedConnection) async throws -> ConnectionPrincipal {
+    func admit(_ winner: RacedConnection) async throws -> ConnectionHandshake {
         let data = try JSONSerialization.data(withJSONObject: [
             "jsonrpc": "2.0", "id": -1, "method": "client.hello", "params": PairingClientIdentity.parameters()
         ])
         let timeoutSeconds = 10
         do {
             return try await withTaskCancellationHandler {
-                try await withThrowingTaskGroup(of: ConnectionPrincipal.self) { group in
-                    group.addTask { try await winner.socket.admittedPrincipal(helloRequest: data) }
+                try await withThrowingTaskGroup(of: ConnectionHandshake.self) { group in
+                    group.addTask { try await winner.socket.admittedHandshake(helloRequest: data) }
                     group.addTask {
                         try await Task.sleep(for: .seconds(timeoutSeconds))
                         await winner.disconnect()
