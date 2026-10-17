@@ -66,6 +66,11 @@ CAPTURES = {
             "iPad Assistant swipe delete light", "iPad Assistant swipe delete dark",
         ),
     },
+    "IPhoneAssistantHistoryUITests": {
+        "testSwipeDeletionPreservesDraftAndSelectionInBothThemes": (
+            "iPhone Assistant history swipe delete light", "iPhone Assistant history swipe delete dark",
+        ),
+    },
     "HomeActionMenuUITests": {
         "testDuoWorkspaceDetailKeepsOnlyTheAccessibleContentTitle": ("Duo workspace detail without header",),
         "testClosePreservesWorkspaceScrollAndAssistantIsFirst": ("Intent home action tiles",),

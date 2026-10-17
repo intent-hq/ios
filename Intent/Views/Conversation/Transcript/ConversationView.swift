@@ -8,6 +8,7 @@ struct ConversationView: View {
     var onBack: (() -> Void)?
     var onAgentUnavailable: (() -> Void)?
     var assistantStore: AssistantStore?
+    var onShowAssistantHistory: (() -> Void)?
 
     init(
         agentId: String,
@@ -15,6 +16,7 @@ struct ConversationView: View {
         agentName: String,
         session: BackendSession,
         assistantStore: AssistantStore? = nil,
+        onShowAssistantHistory: (() -> Void)? = nil,
         navigationRequestId: Int = 0,
         onBack: (() -> Void)? = nil,
         onAgentUnavailable: (() -> Void)? = nil
@@ -23,6 +25,7 @@ struct ConversationView: View {
         self.onBack = onBack
         self.onAgentUnavailable = onAgentUnavailable
         self.assistantStore = assistantStore
+        self.onShowAssistantHistory = onShowAssistantHistory
         _proposals = State(initialValue: ProposalActionStore(connection: session.connection, agentId: agentId, workspaceId: workspaceId, details: session.agentDetails, workspaceStore: session.workspaceStore))
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
@@ -44,7 +47,8 @@ struct ConversationView: View {
             navigationRequestId: navigationRequestId,
             onBack: onBack,
             onAgentUnavailable: onAgentUnavailable,
-            assistantStore: assistantStore
+            assistantStore: assistantStore,
+            onShowAssistantHistory: onShowAssistantHistory
         )
         .environment(proposals)
         .task(id: viewModel.store.sessionMetadataGeneration) {
@@ -59,6 +63,7 @@ private struct ConversationViewContent: View {
     var onBack: (() -> Void)?
     var onAgentUnavailable: (() -> Void)?
     var assistantStore: AssistantStore?
+    var onShowAssistantHistory: (() -> Void)?
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
@@ -377,7 +382,7 @@ private extension ConversationViewContent {
     private var nativeAgentMenu: some View {
         Menu {
             if let assistantStore {
-                AssistantHistoryMenu(store: assistantStore, coordinator: coordinator)
+                AssistantHistoryMenu(store: assistantStore, coordinator: coordinator, onOpenHistory: onShowAssistantHistory)
                 Divider()
             }
             if let displayName = viewModel.currentModelDisplayName {
