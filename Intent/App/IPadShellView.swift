@@ -31,6 +31,10 @@ struct IPadShellView: View {
     private var isDrawerVisible: Bool { navigation.usesSidebarOverlay && navigation.isSidebarVisible && !isFocused }
     private var isDetailAccessible: Bool { !isDrawerVisible && !workspaceSearchVisible }
     private var isSidebarAccessible: Bool { (navigation.isSidebarVisible || workspaceSearchVisible) && !isEditing }
+    private var sidebarLayer: Double {
+        guard isSidebarAccessible else { return -1 }
+        return workspaceSearchVisible ? IPadShellLayout.focusLayer : 1
+    }
     private var focusPresentation: Binding<IPadFocusPresentation> {
         Binding(get: { navigation.focusPresentation }, set: { coordinator.iPadNavigation.setFocusPresentation($0) })
     }
@@ -91,7 +95,9 @@ struct IPadShellView: View {
                 .zIndex(1)
             sidebarPane
                 .padding(paneInsets)
-                .zIndex(workspaceSearchVisible ? IPadShellLayout.focusLayer : 1)
+                // Retained, hidden sidebar containers must not cover detail controls
+                // in the accessibility hit-test order.
+                .zIndex(sidebarLayer)
             if isFocused {
                 // Keep the shade outside pane padding so it reaches the full
                 // window, including the status bar and the shell's outer gutter.
