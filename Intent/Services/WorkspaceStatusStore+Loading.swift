@@ -3,10 +3,14 @@ import Foundation
 extension WorkspaceStatusStore {
     /// Duplicate callers await the same ACK and read. Empty success and errors
     /// are both cached for this activation; errors retry explicitly or on reconnect.
-    func load(workspaceId: String, refresh: Bool = false) async {
-        guard !Task.isCancelled, let bucket = buckets[workspaceId], !bucket.consumers.isEmpty else { return }
+    func load(workspaceId: String, refresh: Bool = false, nextPage: Bool = false) async {
+        guard let bucket = loadableBucket(workspaceId: workspaceId) else { return }
         if let completion = bucket.loadCompletion { await completion.wait(cancelledValue: ()); return }
-        guard refresh || !bucket.attempted else { return }
+        guard refresh || nextPage || !bucket.attempted else { return }
+        guard !nextPage || bucket.nextCursor != nil else { return }
+        if pageAdapter != nil { bucket.tombstones = [:] }
+        bucket.recoveryExhausted = false
+        bucket.accessBlocked = false
         bucket.attempted = true
         bucket.isLoading = true
         let generation = bucket.generation
@@ -18,7 +22,11 @@ extension WorkspaceStatusStore {
             let ready = await ensureFeed(workspaceId: workspaceId, retry: refresh)
             guard !Task.isCancelled, owns(bucket, workspaceId: workspaceId, generation: generation) else { return }
             if ready {
-                await read(bucket, workspaceId: workspaceId, generation: generation)
+                if pageAdapter != nil {
+                    await readPage(bucket, workspaceId: workspaceId, generation: generation, nextPage: nextPage)
+                } else {
+                    await read(bucket, workspaceId: workspaceId, generation: generation)
+                }
             } else {
                 bucket.error = feeds[feedKey(workspaceId)]?.error ?? "Status subscription failed."
                 bucket.isStale = true
@@ -30,6 +38,12 @@ extension WorkspaceStatusStore {
         }
         bucket.loadTask = task
         await completion.wait(cancelledValue: ())
+    }
+
+    private func loadableBucket(workspaceId: String) -> Bucket? {
+        guard pageAdapter?.canLoad() != false, !Task.isCancelled,
+              let bucket = buckets[workspaceId], !bucket.consumers.isEmpty else { return nil }
+        return bucket
     }
 
     private func read(_ bucket: Bucket, workspaceId: String, generation: Int) async {
@@ -111,6 +125,7 @@ extension WorkspaceStatusStore {
             } catch {
                 guard self?.feeds[key] === feed, epoch == lifetime.epoch else { return }
                 feed.error = error.localizedDescription
+                self?.pageAdapter?.didFail(error, workspaceId)
             }
         }
     }
@@ -130,15 +145,29 @@ extension WorkspaceStatusStore {
         guard let envelope = params as? [String: Any] else { return }
         let event = envelope["event"] as? [String: Any] ?? envelope
         guard let type = event["type"] as? String, type.hasPrefix("\(family):") else { return }
-        let data = event["data"] as? [String: Any] ?? [:]
+        var data = event["data"] as? [String: Any] ?? [:]
         guard let workspaceId = data["workspaceId"] as? String ?? event["workspaceId"] as? String,
               let bucket = buckets[workspaceId], !bucket.consumers.isEmpty,
               let feed = feeds[feedKey(workspaceId)] else { return }
         if let id = feed.id, let received = envelope["subscriptionId"] as? String, id != received { return }
+        if let adapter = pageAdapter {
+            guard adapter.canLoad(), !bucket.accessBlocked else { return }
+            if let outerWorkspace = event["workspaceId"] as? String,
+               !outerWorkspace.utf8.elementsEqual(workspaceId.utf8) { return }
+            guard let normalized = try? adapter.normalizeEvent(type, data, workspaceId) else {
+                recoverPage(bucket, workspaceId: workspaceId)
+                return
+            }
+            data = normalized
+        }
         applyEvent(type, data: data, bucket: bucket, workspaceId: workspaceId, feedReady: feed.id != nil)
     }
 
     private func applyEvent(_ type: String, data: [String: Any], bucket: Bucket, workspaceId: String, feedReady: Bool) {
+        if pageAdapter != nil {
+            applyPageEvent(type, data: data, bucket: bucket, workspaceId: workspaceId, feedReady: feedReady)
+            return
+        }
         // A terminal removal resolves earlier incomplete updates for that row,
         // including updates queued for reconciliation but not yet read.
         if removalEvents.contains(type), let id = data[eventIDKey] as? String {

@@ -272,9 +272,13 @@ $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceProviderOptions.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptDiscovery.swift
+$(SRCROOT)/Intent/Services/WorkspaceScriptMonitorsStore+Details.swift
+$(SRCROOT)/Intent/Services/WorkspaceScriptMonitorsStore+Events.swift
+$(SRCROOT)/Intent/Services/WorkspaceScriptMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptRepository.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusStore+Loading.swift
+$(SRCROOT)/Intent/Services/WorkspaceStatusStore+Pages.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusWaiters.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore+EventClassification.swift
@@ -957,6 +961,9 @@ $(SRCROOT)/IntentTests/WorkspaceScriptDiscoveryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptFixture.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptIsolationTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptLaunchRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptMonitorsStoreRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptMonitorsStoreRecoveryTests.swift
+$(SRCROOT)/IntentTests/WorkspaceScriptMonitorsStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptRepositoryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusImageViewTests.swift
