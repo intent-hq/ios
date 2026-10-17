@@ -76,9 +76,10 @@ nonisolated final class IPhoneAssistantHistoryUITests: XCTestCase {
         XCTAssertTrue(app.textViews["composer.textView"].firstMatch.waitForExistence(timeout: Self.timeout))
         openHistory(in: app)
         XCTAssertFalse(row(in: app, id: Self.currentID).exists)
-        XCTAssertTrue(app.buttons.matching(NSPredicate(
+        let created = app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "assistant.history.thread.demo-assistant-created-"
-        )).firstMatch.waitForExistence(timeout: Self.timeout))
+        )).firstMatch
+        XCTAssertTrue(created.waitForExistence(timeout: Self.timeout))
     }
 
     @MainActor

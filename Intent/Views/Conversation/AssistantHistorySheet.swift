@@ -30,19 +30,7 @@ struct AssistantHistorySheet: View {
             .background(Constants.Pairing.background(for: colorScheme))
             .navigationTitle("Conversations")
             .toolbarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    IntentIconButton(icon: .close, label: "Close") { dismiss() }
-                        .accessibilityIdentifier("assistant.history.close")
-                }
-                .intentToolbarSurface()
-                ToolbarItem(placement: .primaryAction) {
-                    IntentIconButton(icon: .addIcon, label: "New conversation", action: createThread)
-                        .disabled(store.isCreating || !store.hasLoaded)
-                        .accessibilityIdentifier("assistant.history.newConversation")
-                }
-                .intentToolbarSurface()
-            }
+            .toolbar { historyToolbar }
             .alert("Delete Conversation?", isPresented: $showsDeleteConfirmation, presenting: pendingDeletion) { thread in
                 Button("Delete", role: .destructive) { deleteThread(thread.id) }
                 Button("Cancel", role: .cancel) {}
@@ -51,6 +39,20 @@ struct AssistantHistorySheet: View {
             }
         }
         .presentationBackground(Constants.Pairing.background(for: colorScheme))
+    }
+
+    @ToolbarContentBuilder private var historyToolbar: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            IntentIconButton(icon: .close, label: "Close") { dismiss() }
+                .accessibilityIdentifier("assistant.history.close")
+        }
+        .intentToolbarSurface()
+        ToolbarItem(placement: .primaryAction) {
+            IntentIconButton(icon: .addIcon, label: "New conversation", action: createThread)
+                .disabled(store.isCreating || !store.hasLoaded)
+                .accessibilityIdentifier("assistant.history.newConversation")
+        }
+        .intentToolbarSurface()
     }
 
     private var threadList: some View {

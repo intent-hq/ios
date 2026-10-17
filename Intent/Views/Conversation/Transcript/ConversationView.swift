@@ -158,11 +158,8 @@ private struct ConversationViewContent: View {
                 Button("Rename", action: renameAgent)
                 Button("Cancel", role: .cancel) {}
             }
-            // Non-destructive dismiss-failure surface (intent-hq/monorepo#1800):
-            // nothing was dismissed — the wizard re-pends via the store's marker
-            // rollback; this alert just makes the failure explicit. `presenting:`
-            // hands the closures a captured non-optional detail so the message
-            // doesn't degrade mid-dismissal (same shape as ConnectionsView).
+            // Keep the failure detail stable while the wizard restores its pending marker
+            // (intent-hq/monorepo#1800).
             .alert(
                 "Couldn't Dismiss Questions",
                 isPresented: dismissQuestionsErrorPresented,
