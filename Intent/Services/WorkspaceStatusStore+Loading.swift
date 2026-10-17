@@ -30,6 +30,7 @@ extension WorkspaceStatusStore {
             } else {
                 bucket.error = feeds[feedKey(workspaceId)]?.error ?? "Status subscription failed."
                 bucket.isStale = true
+                bucket.recoveryExhausted = pageAdapter != nil
             }
             guard owns(bucket, workspaceId: workspaceId, generation: generation) else { return }
             bucket.isLoading = false

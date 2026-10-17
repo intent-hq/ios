@@ -127,6 +127,17 @@ extension WorkspaceScriptMonitorsStore {
         }
     }
 
+    func revalidateDetails(workspaceId: String) {
+        // Only open sheets re-read details. A replacement page may omit an active
+        // selection through pagination, so absence cannot establish its outcome.
+        for (id, selection) in selections where selection.workspaceId == workspaceId
+            && selection.runId != nil && !selection.terminal {
+            selection.summary = rows(for: workspaceId).first { $0.monitorId == selection.monitorId }
+            selection.invalidate(state: .loading)
+            Task { [weak self] in await self?.loadDetail(selection: id) }
+        }
+    }
+
     func receiveDetailEvent(_ type: String, data: [String: Any], workspaceId: String) {
         for selection in selections.values where selection.workspaceId == workspaceId
             && selection.monitorId == data["monitorId"] as? String

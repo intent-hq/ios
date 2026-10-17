@@ -156,3 +156,33 @@ extension WorkspaceScriptMonitorsStoreTests {
         #expect(fake.paramsForMethod("scriptMonitor.list").count == 1)
     }
 }
+
+extension WorkspaceScriptMonitorsStoreTests {
+    @Test func replacementPageFencesLateDetailWithoutReadingOtherWorkspaceSelection() async throws {
+        let fake = fake()
+        let store = WorkspaceScriptMonitorsStore(connection: fake) { true }
+        store.retain(workspaceId: "ws-1")
+        await store.load(workspaceId: "ws-1")
+        fake.responseMap["scriptMonitor.list"] = page([monitor(workspace: "ws-2")])
+        fake.responseMap["scriptMonitor.get"] = monitor(workspace: "ws-2")
+        store.retain(workspaceId: "ws-2")
+        await store.load(workspaceId: "ws-2")
+        let other = store.select(workspaceId: "ws-2", monitorId: "monitor-1")
+        await store.loadDetail(selection: other)
+        let selected = store.select(workspaceId: "ws-1", monitorId: "monitor-1")
+        fake.pendingMethods = ["scriptMonitor.get"]
+        let old = Task { await store.loadDetail(selection: selected) }
+        try await fake.waitForPendingRequests("scriptMonitor.get")
+        fake.responseMap["scriptMonitor.list"] = page([monitor(name: "Fresh summary")])
+        await store.refresh(workspaceId: "ws-1")
+        try await fake.waitForPendingRequests("scriptMonitor.get", count: 2)
+        fake.resolvePending("scriptMonitor.get", with: monitor(name: "Stale detail"))
+        await old.value
+        #expect(store.detailSummary(selection: selected)?.scriptName == "Fresh summary")
+        #expect(store.detailState(selection: selected) == .loading)
+        fake.resolvePending("scriptMonitor.get", with: monitor(name: "Fresh detail"))
+        try await waitUntil("fresh detail") { store.detailSummary(selection: selected)?.scriptName == "Fresh detail" }
+        #expect(store.detailSummary(selection: other)?.workspaceId == "ws-2")
+        #expect(fake.paramsForMethod("scriptMonitor.get").filter { $0["workspaceId"] as? String == "ws-2" }.count == 1)
+    }
+}

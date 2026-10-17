@@ -16,6 +16,7 @@ struct WorkspaceStatusPageAdapter<Row> {
     var identity: ([String: Any]) -> String?
     var didReceive: (String, [String: Any], String) -> Void
     var didFail: (Error, String) -> Void
+    var didReplacePage: (String) -> Void
 }
 
 extension WorkspaceStatusStore {
@@ -36,9 +37,7 @@ extension WorkspaceStatusStore {
                     var rows = adapter.merge(cursor == nil ? [] : bucket.rows, page.rows)
                     for (type, data) in bucket.events { rows = fold(rows, type, data).rows }
                     for (type, data) in bucket.tombstones.values { rows = fold(rows, type, data).rows }
-                    bucket.rows = rows
-                    bucket.nextCursor = page.nextCursor
-                    bucket.failedNextPage = false
+                    publishPage(rows, nextCursor: page.nextCursor, replacing: cursor == nil, bucket: bucket, workspaceId: workspaceId)
                 }
                 let recover = bucket.journalOverflow || !bucket.recoveryIDs.isEmpty
                 bucket.recoveryExhausted = recover && attempt == 1
@@ -53,11 +52,19 @@ extension WorkspaceStatusStore {
                 bucket.failedNextPage = cursor != nil
                 bucket.error = error.localizedDescription
                 bucket.isStale = true
+                bucket.recoveryExhausted = true
                 bucket.events = []
                 adapter.didFail(error, workspaceId)
                 return
             }
         }
+    }
+
+    private func publishPage(_ rows: [Row], nextCursor: String?, replacing: Bool, bucket: Bucket, workspaceId: String) {
+        bucket.rows = rows
+        bucket.nextCursor = nextCursor
+        bucket.failedNextPage = false
+        if replacing { pageAdapter?.didReplacePage(workspaceId) }
     }
 
     func applyPageEvent(_ type: String, data: [String: Any], bucket: Bucket, workspaceId: String, feedReady: Bool) {
@@ -107,7 +114,7 @@ extension WorkspaceStatusStore {
         let generation = bucket.generation
         Task { [weak self] in
             guard let self, owns(bucket, workspaceId: workspaceId, generation: generation),
-                  !bucket.recoveryIDs.isEmpty else { return }
+                  !bucket.recoveryIDs.isEmpty, !bucket.recoveryExhausted else { return }
             await load(workspaceId: workspaceId, refresh: true)
         }
     }

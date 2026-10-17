@@ -41,7 +41,8 @@ import Observation
             normalizeEvent: Self.normalizeEvent,
             identity: Self.identity,
             didReceive: { [weak self] type, data, workspace in self?.receiveDetailEvent(type, data: data, workspaceId: workspace) },
-            didFail: { [weak self] error, workspace in self?.readFailed(error, workspaceId: workspace) }
+            didFail: { [weak self] error, workspace in self?.readFailed(error, workspaceId: workspace) },
+            didReplacePage: { [weak self] workspace in self?.revalidateDetails(workspaceId: workspace) }
         )
         observations.append(connection.capabilitiesPublisher.sink { [weak self] _ in self?.supportChanged() })
         var previousState = connection.connectionState

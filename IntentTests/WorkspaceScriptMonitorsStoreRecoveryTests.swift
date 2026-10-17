@@ -153,3 +153,73 @@ extension WorkspaceScriptMonitorsStoreTests {
         #expect(store.cache.buckets["ws-1"]?.tombstones.count ?? 0 <= limit)
     }
 }
+
+extension WorkspaceScriptMonitorsStoreTests {
+    @Test func failedRecoveryWaitsForExplicitRetry() async throws {
+        let fake = fake()
+        fake.responseMap["scriptMonitor.list"] = page([monitor()], cursor: "next")
+        let store = WorkspaceScriptMonitorsStore(connection: fake) { true }
+        store.retain(workspaceId: "ws-1")
+        await store.load(workspaceId: "ws-1")
+        fake.errorMap["scriptMonitor.list"] = URLError(.timedOut)
+        event(store, "registered", ["workspaceId": "ws-1"])
+        try await waitUntil("failed recovery") {
+            fake.paramsForMethod("scriptMonitor.list").count == 2 && !store.isLoading(for: "ws-1")
+        }
+        for _ in 0..<3 { event(store, "registered", ["workspaceId": "ws-1"]) }
+        try await expectNever("automatic retry after recovery failure") {
+            fake.paramsForMethod("scriptMonitor.list").count > 2
+        }
+        #expect(store.rows(for: "ws-1").count == 1)
+        #expect(store.nextCursor(for: "ws-1") == "next")
+        #expect(store.error(for: "ws-1") != nil)
+        fake.errorMap = [:]
+        await store.retry(workspaceId: "ws-1")
+        #expect(fake.paramsForMethod("scriptMonitor.list").count == 3)
+        #expect(store.error(for: "ws-1") == nil)
+        event(store, "registered", ["workspaceId": "ws-1"])
+        try await fake.waitForRequests("scriptMonitor.list", count: 4)
+    }
+
+    @Test func recoveryRevalidatesSelectedWatchAfterLostTerminalEvent() async throws {
+        let fake = fake()
+        fake.responseMap["scriptMonitor.get"] = monitor()
+        let store = WorkspaceScriptMonitorsStore(connection: fake) { true }
+        store.retain(workspaceId: "ws-1")
+        await store.load(workspaceId: "ws-1")
+        let selected = store.select(workspaceId: "ws-1", monitorId: "monitor-1")
+        await store.loadDetail(selection: selected)
+        fake.responseMap["scriptMonitor.list"] = page([])
+        fake.errorMap["scriptMonitor.get"] = NSError(domain: "WebSocket", code: WorkspaceScriptMonitorsStore.invalidParameters)
+        event(store, "completed", ["workspaceId": "ws-1"])
+        try await waitUntil("revalidated missing watch") { store.detailState(selection: selected) == .unavailable }
+        #expect(store.rows(for: "ws-1").isEmpty)
+        #expect(store.detailSummary(selection: selected) == nil)
+        #expect(fake.paramsForMethod("scriptMonitor.get").count == 2)
+    }
+
+    @Test func explicitRefreshRevalidatesActiveOffPageSelection() async throws {
+        let fake = fake()
+        fake.responseMap["scriptMonitor.get"] = monitor()
+        let store = WorkspaceScriptMonitorsStore(connection: fake) { true }
+        store.retain(workspaceId: "ws-1")
+        await store.load(workspaceId: "ws-1")
+        let selected = store.select(workspaceId: "ws-1", monitorId: "monitor-1")
+        await store.loadDetail(selection: selected)
+        fake.responseMap["scriptMonitor.list"] = page([monitor("another-watch")], cursor: "next")
+        var updated = monitor()
+        updated["scriptName"] = "Updated off-page script"
+        fake.responseMap["scriptMonitor.get"] = updated
+        await store.refresh(workspaceId: "ws-1")
+        try await waitUntil("updated selected detail") {
+            store.detailSummary(selection: selected)?.scriptName == "Updated off-page script"
+        }
+        if case .loaded = store.detailState(selection: selected) {} else { Issue.record("Off-page watch must stay available") }
+        #expect(store.rows(for: "ws-1").map(\.monitorId) == ["another-watch"])
+        #expect(store.nextCursor(for: "ws-1") == "next")
+        #expect(fake.paramsForMethod("scriptMonitor.list").count == 2)
+        #expect(fake.paramsForMethod("scriptMonitor.get").count == 2)
+        await store.loadMore(workspaceId: "ws-1")
+        #expect(fake.paramsForMethod("scriptMonitor.get").count == 2, "Appending a page must not refresh open details")
+    }
+}
