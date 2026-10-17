@@ -322,6 +322,7 @@ $(SRCROOT)/Intent/ViewModels/AgentListViewModel.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Commands.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Lifecycle.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Questions.swift
+$(SRCROOT)/Intent/ViewModels/ConversationViewModel+ScriptMonitors.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Sending.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel.swift
 $(SRCROOT)/Intent/ViewModels/DiagnosticExportModel.swift
@@ -431,6 +432,10 @@ $(SRCROOT)/Intent/Views/Conversation/StatusStrip/AgentWaitingView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/BackgroundHooksRow.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/HookTimeBar.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredScriptsRow.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorClock.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorDetailView.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorPresentation.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/AssistantMessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationColumnView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationEmptyView.swift
@@ -843,6 +848,8 @@ $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
 $(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorCapabilitiesTests.swift
+$(SRCROOT)/IntentTests/ScriptMonitorPresentationTests+Conversation.swift
+$(SRCROOT)/IntentTests/ScriptMonitorPresentationTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorTests.swift
 $(SRCROOT)/IntentTests/SessionCacheBoundsMeasurementTests.swift
 $(SRCROOT)/IntentTests/SettingsViewTests.swift
