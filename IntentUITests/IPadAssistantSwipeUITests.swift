@@ -47,7 +47,7 @@ nonisolated final class IPadAssistantSwipeUITests: XCTestCase {
                 format: "identifier BEGINSWITH %@ AND selected == true", "assistant.thread."
             )).firstMatch
             XCTAssertTrue(selected.waitForExistence(timeout: Self.timeout))
-            XCTAssertTrue(app.scrollViews["transcript.scrollView"].firstMatch.exists)
+            XCTAssertTrue(app.textViews["composer.textView"].firstMatch.waitForExistence(timeout: Self.timeout))
         }
     }
 
@@ -58,10 +58,13 @@ nonisolated final class IPadAssistantSwipeUITests: XCTestCase {
         defer { app.terminate() }
         delete(in: app, id: Self.currentID)
         XCTAssertTrue(app.buttons["assistant.thread.\(Self.currentID)"].waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.scrollViews["transcript.scrollView"].firstMatch.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["assistant.sidebar.newConversation"].isEnabled)
-        app.buttons["assistant.sidebar.newConversation"].tap()
-        XCTAssertTrue(app.scrollViews["transcript.scrollView"].firstMatch.waitForExistence(timeout: Self.timeout))
+        app.buttons["ipad.sidebar.collapse"].tap()
+        let start = app.buttons["assistant.startConversation"].firstMatch
+        XCTAssertTrue(start.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertFalse(app.textViews["composer.textView"].firstMatch.exists)
+        start.tap()
+        XCTAssertTrue(app.textViews["composer.textView"].firstMatch.waitForExistence(timeout: Self.timeout))
     }
 
     @MainActor
@@ -70,9 +73,13 @@ nonisolated final class IPadAssistantSwipeUITests: XCTestCase {
         app.launchArguments += ["--demo-data", "-appThemePreference", appearance]
         if history { app.launchArguments.append("--demo-assistant-history") }
         app.launch()
+        let workspaces = app.buttons["ipad.rail.workspaces"]
+        XCTAssertTrue(workspaces.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        workspaces.tap()
         let assistant = app.buttons["ipad.rail.assistant"]
-        XCTAssertTrue(assistant.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(assistant.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         assistant.tap()
+        XCTAssertTrue(assistant.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         XCTAssertTrue(app.buttons["assistant.thread.\(Self.currentID)"].waitForExistence(timeout: Self.timeout))
         return app
     }
@@ -96,8 +103,8 @@ nonisolated final class IPadAssistantSwipeUITests: XCTestCase {
     }
 
     @MainActor
-    private func capture(_ app: XCUIApplication, name: String) {
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+    private func capture(_: XCUIApplication, name: String) {
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name
         screenshot.lifetime = .keepAlways
         add(screenshot)
