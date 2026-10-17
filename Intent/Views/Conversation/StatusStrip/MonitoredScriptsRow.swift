@@ -6,6 +6,7 @@ struct MonitoredScriptsRow: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .caption) private var headingIconSize: CGFloat = 14
 
     private enum Layout {
         static let chipMaximumWidth: CGFloat = 280
@@ -75,7 +76,11 @@ struct MonitoredScriptsRow: View {
             Text("Watching scripts")
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
-            Image(systemName: "eye")
+            Image(.eye)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: headingIconSize, height: headingIconSize)
         }
             .font(.caption)
             .accessibilityAddTraits(.isHeader)
