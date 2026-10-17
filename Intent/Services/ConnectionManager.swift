@@ -163,6 +163,7 @@ import os
     }
 
     isolated deinit {
+        demoScriptMonitorFixtures?.stop()
         authorityRefreshTask?.cancel()
         stopPathMonitor()
     }
