@@ -147,10 +147,8 @@ struct ConversationColumnView: View {
         // The conditional views use SwiftUI's default opacity transition.
         .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)
         measuredAccessoryRows
-            // The native transcript can extend beyond its SwiftUI layout slot.
-            // Keep visible status controls above that scroll view for hit testing.
+            // Keep status hit targets above the native transcript's oversized bounds.
             .zIndex(1)
-
         questionRegion
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { questionInputTop = $0 }
             .preference(
@@ -165,7 +163,6 @@ struct ConversationColumnView: View {
                 )
             )
             .layoutPriority(usesPhoneQuestionPresentation ? 1 : 0)
-
         // A floating host presents the composer from an ornament instead.
         if composerHost == .inline, !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
             VStack(spacing: 0) {
