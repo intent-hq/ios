@@ -175,10 +175,15 @@ extension WorkspaceScriptMonitorsStoreTests {
         try await fake.waitForPendingRequests("scriptMonitor.get")
         fake.responseMap["scriptMonitor.list"] = page([monitor(name: "Fresh summary")])
         await store.refresh(workspaceId: "ws-1")
-        try await fake.waitForPendingRequests("scriptMonitor.get", count: 2)
-        fake.resolvePending("scriptMonitor.get", with: monitor(name: "Stale detail"))
+        // Invalidation cancels the superseded read; its cancellation must stay
+        // fenced rather than surfacing as a failed detail.
         await old.value
         #expect(store.detailSummary(selection: selected)?.scriptName == "Fresh summary")
+        #expect(store.detailState(selection: selected) == .loading)
+        let ws1Gets = { fake.paramsForMethod("scriptMonitor.get").filter { $0["workspaceId"] as? String == "ws-1" }.count }
+        try await waitUntil("only the revalidating read is suspended") {
+            ws1Gets() == 2 && fake.pendingRequestCount("scriptMonitor.get") == 1
+        }
         #expect(store.detailState(selection: selected) == .loading)
         fake.resolvePending("scriptMonitor.get", with: monitor(name: "Fresh detail"))
         try await waitUntil("fresh detail") { store.detailSummary(selection: selected)?.scriptName == "Fresh detail" }
