@@ -66,6 +66,13 @@ struct MonitoredScriptsRow: View {
         }
         .padding(.horizontal, Constants.Conversation.StatusStrip.horizontalPadding)
         .padding(.vertical, Constants.Conversation.StatusStrip.verticalPadding)
+        .background {
+            #if DEBUG
+            if DemoMode.isEnabled, ProcessInfo.processInfo.arguments.contains("--demo-script-monitor-hit-probe") {
+                DemoIPadPaneGeometry(identifier: "script-monitors")
+            }
+            #endif
+        }
         .foregroundStyle(Theme.foreground(for: colorScheme))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("script-monitors-status")

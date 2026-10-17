@@ -147,8 +147,7 @@ struct ConversationColumnView: View {
         // The conditional views use SwiftUI's default opacity transition.
         .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)
         measuredAccessoryRows
-            // Keep status hit targets above the native transcript's oversized bounds.
-            .zIndex(1)
+
         questionRegion
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { questionInputTop = $0 }
             .preference(

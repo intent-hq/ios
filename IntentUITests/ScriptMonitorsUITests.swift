@@ -86,6 +86,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         XCTAssertFalse(app.buttons["script-monitor-demo-script-watch-other-owner"].exists)
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 1)
         capture(app, "script-monitors-empty-owner-more")
+        print("Script watch native hit report: " + app.descendants(matching: .any)["script-monitors.geometry"].firstMatch.label)
         XCTAssertGreaterThanOrEqual(loadMore.frame.height, Self.tapHeight)
         XCTAssertTrue(loadMore.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         loadMore.tap()
@@ -155,6 +156,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         }
         let row = app.buttons[Self.rowID]
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        print("Script watch native hit report: " + app.descendants(matching: .any)["script-monitors.geometry"].firstMatch.label)
         XCTAssertTrue(row.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         XCTAssertGreaterThanOrEqual(row.frame.height, Self.tapHeight)
         XCTAssertTrue(row.label.contains(Self.originalName))
@@ -235,6 +237,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "--demo-data", "--demo-design-scenario=" + design, "--demo-script-monitors=" + scenario,
+            "--demo-script-monitor-hit-probe",
             "--demo-script-monitor-directory=" + directory.path, "-appThemePreference", accessibility ? "dark" : "light"
         ]
         if accessibility { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] }
