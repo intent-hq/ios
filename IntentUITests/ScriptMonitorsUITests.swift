@@ -174,9 +174,11 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     private func auditScrollableDetails(_ app: XCUIApplication) throws {
         let details = app.scrollViews["script-monitor-details"]
         XCTAssertTrue(details.waitForExistence(timeout: Self.timeout))
+        let patternStart = "^(build|test) completed: "
+        let patternEnd = " [0-9]+$"
         var unseen: Set<String> = [
             Self.originalName, "Command", "Continue Spec Writer", "demo-script-build-check",
-            "demo-run-watched-original", "Created", "Watch expires", "[0-9]+$",
+            "demo-run-watched-original", "Created", "Watch expires", patternStart, patternEnd,
             "Also notifies after 25 new output lines."
         ]
         let maximumPages = 20
@@ -191,6 +193,13 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
             )
             var clippedText: Set<String> = []
             for text in details.staticTexts.allElementsBoundByIndex {
+                let frame = text.frame
+                // The full pattern is taller than the sheet at AX XXXL. Its
+                // beginning and end must each be reachable, not visible at once.
+                if text.label.hasPrefix(patternStart), text.label.hasSuffix(patternEnd) {
+                    if viewport.contains(CGPoint(x: frame.midX, y: frame.minY)) { unseen.remove(patternStart) }
+                    if viewport.contains(CGPoint(x: frame.midX, y: frame.maxY)) { unseen.remove(patternEnd) }
+                }
                 if viewport.contains(text.frame) {
                     unseen.remove(text.label)
                 } else {
@@ -218,7 +227,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
             let end = details.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
             start.press(forDuration: 0.1, thenDragTo: end)
         }
-        XCTFail("Watch metadata never became fully visible: " + unseen.sorted().joined(separator: ", "))
+        XCTFail("Watch metadata never became visible: " + unseen.sorted().joined(separator: ", "))
     }
 
     @MainActor
