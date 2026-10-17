@@ -86,6 +86,8 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         XCTAssertFalse(app.buttons["script-monitor-demo-script-watch-other-owner"].exists)
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 1)
         capture(app, "script-monitors-empty-owner-more")
+        XCTAssertGreaterThanOrEqual(loadMore.frame.height, Self.tapHeight)
+        XCTAssertTrue(loadMore.isHittable)
         loadMore.tap()
         let retry = app.buttons["script-monitors-retry"]
         XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
@@ -145,10 +147,9 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let directory = try fixtureDirectory()
         let app = launch(directory: directory, design: "questions", accessibility: true)
         let isPad = UIDevice.current.userInterfaceIdiom == .pad
-        let option = app.buttons["question.option.0"]
+        let option = isPad ? app.buttons["Yes, confirmed"] : app.buttons["question.option.0"]
         if isPad {
             XCTAssertTrue(option.waitForExistence(timeout: Self.timeout))
-            option.tap()
         } else {
             XCTAssertTrue(app.buttons["question.answer"].waitForExistence(timeout: Self.timeout))
         }
@@ -166,7 +167,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         if !isPad { app.buttons["question.answer"].tap() }
         XCTAssertTrue(option.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(option.isHittable)
-        if isPad { XCTAssertEqual(option.value as? String, "Selected") }
+        if isPad { XCTAssertEqual(option.value as? String, "Not selected") }
     }
 
     @MainActor

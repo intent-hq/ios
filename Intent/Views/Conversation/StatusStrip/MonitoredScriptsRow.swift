@@ -5,6 +5,7 @@ import SwiftUI
 struct MonitoredScriptsRow: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private enum Layout {
         static let chipMaximumWidth: CGFloat = 280
@@ -35,46 +36,56 @@ struct MonitoredScriptsRow: View {
     private var hasMore: Bool { viewModel.scriptMonitorsStore.nextCursor(for: viewModel.workspaceId) != nil }
 
     private func statusRow(now: Date) -> some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Constants.Conversation.StatusStrip.contentSpacing) {
-                Label("Watching scripts", systemImage: "eye")
-                    .font(.caption)
-                    .accessibilityAddTraits(.isHeader)
-                if isLoading {
-                    Text("Loading script watches…")
-                        .font(.caption)
-                        .accessibilityIdentifier("script-monitors-loading")
+        VStack(alignment: .leading, spacing: Constants.Conversation.StatusStrip.contentSpacing) {
+            if dynamicTypeSize.isAccessibilitySize { heading }
+            ScrollView(.horizontal) {
+                HStack(spacing: Constants.Conversation.StatusStrip.contentSpacing) {
+                    if !dynamicTypeSize.isAccessibilitySize { heading }
+                    if isLoading {
+                        Text("Loading script watches…")
+                            .font(.caption)
+                            .accessibilityIdentifier("script-monitors-loading")
+                    }
+                    if hasError {
+                        retryButton
+                    } else if viewModel.scriptMonitorsStore.isStale(for: viewModel.workspaceId), !isLoading {
+                        Text("Script watches may be out of date")
+                            .font(.caption)
+                        retryButton
+                    }
+                    ForEach(viewModel.activeAgentScriptMonitors) { monitor in
+                        watchButton(monitor, now: now)
+                    }
+                    if hasMore { loadMoreButton }
                 }
-                if hasError {
-                    retryButton
-                } else if viewModel.scriptMonitorsStore.isStale(for: viewModel.workspaceId), !isLoading {
-                    Text("Script watches may be out of date")
-                        .font(.caption)
-                    retryButton
-                }
-                ForEach(viewModel.activeAgentScriptMonitors) { monitor in
-                    watchButton(monitor, now: now)
-                }
-                if hasMore {
-                    loadMoreButton
-                }
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.horizontal, Constants.Conversation.StatusStrip.horizontalPadding)
-            .padding(.vertical, Constants.Conversation.StatusStrip.verticalPadding)
+            .scrollIndicators(.hidden)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .scrollIndicators(.hidden)
+        .padding(.horizontal, Constants.Conversation.StatusStrip.horizontalPadding)
+        .padding(.vertical, Constants.Conversation.StatusStrip.verticalPadding)
         .foregroundStyle(Theme.foreground(for: colorScheme))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("script-monitors-status")
     }
 
+    private var heading: some View {
+        Label("Watching scripts", systemImage: "eye")
+            .font(.caption)
+            .accessibilityAddTraits(.isHeader)
+    }
+
     private var loadMoreButton: some View {
-        Button("Load more script watches") {
+        Button {
             Task { await viewModel.scriptMonitorsStore.loadMore(workspaceId: viewModel.workspaceId) }
+        } label: {
+            Text("Load more script watches")
+                .font(.caption)
+                .frame(minHeight: Constants.Accessibility.minimumTapTarget)
+                .contentShape(Rectangle())
         }
         .buttonStyle(IntentContentButtonStyle())
-        .font(.caption)
-        .frame(minHeight: Constants.Accessibility.minimumTapTarget)
         .disabled(isLoading)
         .accessibilityIdentifier("script-monitors-load-more")
     }
@@ -104,11 +115,13 @@ struct MonitoredScriptsRow: View {
                     .lineLimit(1)
                 Text(ScriptMonitorPresentation.expiry(monitor.expiresAt, now: now))
                     .font(.caption)
+                    .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(width: Layout.chipMaximumWidth, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, Constants.Conversation.StatusStrip.chipHorizontalPadding)
             .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: .leading)
-            .frame(maxWidth: Layout.chipMaximumWidth, alignment: .leading)
             .background(Theme.muted(for: colorScheme))
             .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius))
             .contentShape(Rectangle())
