@@ -147,6 +147,9 @@ struct ConversationColumnView: View {
         // The conditional views use SwiftUI's default opacity transition.
         .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)
         measuredAccessoryRows
+            // The native transcript can extend beyond its SwiftUI layout slot.
+            // Keep visible status controls above that scroll view for hit testing.
+            .zIndex(1)
 
         questionRegion
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { questionInputTop = $0 }
