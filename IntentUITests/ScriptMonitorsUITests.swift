@@ -248,8 +248,11 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
-        workspace.tap()
         let agent = app.staticTexts["Continue Spec Writer"].firstMatch
+        // iPad restores the workspace detail with its sidebar hidden; that hidden
+        // sidebar row is intentionally not hittable, so only open the workspace
+        // when its agent list is not already on screen.
+        if !(agent.exists && agent.isHittable) { workspace.tap() }
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
         agent.tap()
         return app
