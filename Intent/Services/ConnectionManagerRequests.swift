@@ -81,6 +81,11 @@ extension ConnectionManager {
     }
 
     private func demoResponse(for method: String, params: [String: Any]) async throws -> Any {
+        demoScriptMonitorFixtures?.startEvents(for: method, params: params) { [weak self] event in
+            guard let self else { return }
+            for handler in Array(eventHandlers.values) { handler("event", event) }
+        }
+        if let response = try await demoScriptMonitorFixtures?.response(for: method, params: params) { return response }
         if let gate = DemoFixtures.responseGate(for: method, params: params) {
             try await DemoFixtures.wait(for: gate)
         }

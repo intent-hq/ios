@@ -45,6 +45,11 @@ def simulator_family(env):
 def validate(env):
     family = simulator_family(env)
     selectors = list(dict.fromkeys(env.get("ONLY_TESTING", "").split()))
+    full_gate = env.get("FULL_PRE_PR_GATE", "")
+    if full_gate not in ("", "1"):
+        raise ValueError("FULL_PRE_PR_GATE must be empty or 1")
+    if full_gate and (env.get("GITHUB_EVENT_NAME") != "workflow_dispatch" or family != "iphone" or selectors):
+        raise ValueError("The full pre-PR gate requires an unfiltered iPhone workflow_dispatch")
     if family == "ipad":
         pattern = r"(?:IntentTests|IntentUITests)/[A-Za-z_]\w*(?:/[A-Za-z_]\w*(?:\([^()\s]*\))?)?"
         if env.get("GITHUB_EVENT_NAME") != "workflow_dispatch":

@@ -94,6 +94,45 @@ class Host:
 
 
 class OrdinaryCITests(unittest.TestCase):
+    def test_full_pre_pr_gate_requires_unfiltered_iphone_dispatch(self):
+        base = {"GITHUB_EVENT_NAME": "workflow_dispatch", "FULL_PRE_PR_GATE": "1"}
+        self.assertEqual(route.validate(base), ("iphone", []))
+        for changes in (
+            {"ONLY_TESTING": "IntentTests"},
+            {"ONLY_TESTING": "IntentUITests/ScriptMonitorsUITests"},
+            {"SIMULATOR_FAMILY": "ipad", "ONLY_TESTING": SELECTORS},
+            {"GITHUB_EVENT_NAME": "pull_request"},
+            {"GITHUB_EVENT_NAME": "merge_group"},
+            {"FULL_PRE_PR_GATE": "true"},
+        ):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                route.validate(dict(base, **changes))
+        self.assertEqual(route.validate({"GITHUB_EVENT_NAME": "pull_request"}), ("iphone", []))
+
+    def test_full_pre_pr_gate_executes_wrapper_once_and_preserves_failure_log(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        section = workflow.split("      - name: Run full pre-PR gate\n", 1)[1].split("\n      - name:", 1)[0]
+        command = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        for status in (0, 65):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "scripts").mkdir()
+                wrapper = root / "scripts/xcodebuild.sh"
+                wrapper.write_text('#!/bin/bash\nprintf "%s\\n" "$*" >> calls\necho gate-output\necho gate-error >&2\nexit ' + str(status) + '\n')
+                wrapper.chmod(0o755)
+                result = subprocess.run(["bash", "-e", "-c", command], cwd=root, capture_output=True, text=True)
+                self.assertEqual(result.returncode, status)
+                self.assertEqual((root / "calls").read_text().splitlines(), ["test-ios"])
+                self.assertEqual((root / "pre-pr-gate.log").read_text(), "gate-output\ngate-error\n")
+        build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
+        for name in ("Build for testing", "Run unit tests"):
+            step = build.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
+            self.assertIn("if: env.FULL_PRE_PR_GATE != '1'", step)
+        ui_job = workflow.split("  ios-ui-tests:\n", 1)[1].split("    steps:\n", 1)[0]
+        self.assertIn("inputs.pre_pr_gate", ui_job)
+        self.assertIn("TestResults-retry", build)
+        self.assertIn("pre-pr-gate.log", build)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

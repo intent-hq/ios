@@ -324,11 +324,17 @@ on the default branch at **09:00 and 21:00 UTC** or on manual dispatch:
 
 ```bash
 gh workflow run ci.yml --repo intent-hq/ios --ref your-branch -f ui_suite=full
+gh workflow run ci.yml --repo intent-hq/ios --ref your-branch -f pre_pr_gate=true
 gh workflow run ci.yml --repo intent-hq/ios --ref your-branch -f only_testing='IntentTests/DemoFixturesTests'
 ```
 
 Replace `your-branch` with the branch to test. Filtered dispatches are
 **non-gating** and do not replace the normal PR checks.
+`pre_pr_gate=true` runs the literal `scripts/xcodebuild.sh test-ios` gate,
+building once and running unit and UI tests together on an owned iPhone simulator.
+It replaces the separate build/unit/UI steps for that dispatch, keeps the visionOS
+build, and retains the xcresult, retry results, full gate log and allowlisted fixture
+screenshots. It rejects `only_testing` and iPad selection; `ui_suite` is ignored.
 For an iPad proof run, add `-f simulator_family=ipad` with 1–20
 `Target/Suite[/test]` selectors in `only_testing`; whole-bundle selectors are not
 accepted, and each selection must actually execute. This route creates and

@@ -111,6 +111,7 @@ struct SessionWindowRoot: View {
         RootView(networkAvailability: networkAvailability)
             .environment(session)
             .environment(coordinator)
+            .environment(\.scriptMonitorPresentationDate, DemoScriptMonitorFixtures.configuredPresentationDate())
             .onAppear {
                 coordinator.retargetWindow = retargetWindow
                 coordinator.returnWindowToSavedMachines = returnToSavedMachines

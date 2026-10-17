@@ -100,6 +100,12 @@ For UI evidence, extend the explicit fixture capture allowlist in
 with `TMPDIR=/private/tmp`; see the README). A missing capture is not evidence
 that the UI was reviewed.
 
+For the literal full pre-PR gate on CI, dispatch `ci.yml -f pre_pr_gate=true`.
+It runs `scripts/xcodebuild.sh test-ios` once instead of the split build/unit/UI
+steps, retains the visionOS build and native evidence, and rejects filters or
+iPad selection. Default PR checks are unchanged. The full gate honors the same
+quarantines and runtime skips; inspect its results before claiming coverage.
+
 ### TailcatKit and simulator safety
 
 iOS builds link the gitignored prebuilt

@@ -218,6 +218,7 @@ $(SRCROOT)/Intent/Services/DemoIPadProducerVisibility.swift
 $(SRCROOT)/Intent/Services/DemoMode.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Services/DemoRepositoryScriptFixtures.swift
+$(SRCROOT)/Intent/Services/DemoScriptMonitorFixtures.swift
 $(SRCROOT)/Intent/Services/DemoSettings.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/DemoWorkspaceActionFixtures.swift
@@ -722,6 +723,7 @@ $(SRCROOT)/IntentTests/DemoConversationStartupTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesDesignTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesTests.swift
 $(SRCROOT)/IntentTests/DemoInlineImageFixtureTests.swift
+$(SRCROOT)/IntentTests/DemoScriptMonitorFixturesTests.swift
 $(SRCROOT)/IntentTests/DiagnosticConcurrencyTests.swift
 $(SRCROOT)/IntentTests/DiagnosticCoverageTests.swift
 $(SRCROOT)/IntentTests/DiagnosticExportEntryPointTests.swift
@@ -1006,6 +1008,7 @@ $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift
 $(SRCROOT)/IntentUITests/PairingDesignUITests.swift
 $(SRCROOT)/IntentUITests/QuestionWizardUITests.swift
+$(SRCROOT)/IntentUITests/ScriptMonitorsUITests.swift
 $(SRCROOT)/IntentUITests/SettingsUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/TranscriptVideoUITests.swift
