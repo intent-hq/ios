@@ -36,9 +36,45 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
     }
 
     @MainActor
-    private func openTools(in app: XCUIApplication, appearance: String) {
+    func testIPadClaudeToolTitlesKeepExpandedDetails() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad Claude tool title evidence")
+        let app = XCUIApplication()
+        addTeardownBlock { @MainActor [self] () async in
+            if app.state == .runningForeground {
+                capture(app, name: "iPad Claude tools final state")
+                app.terminate()
+            }
+            XCUIDevice.shared.orientation = .portrait
+        }
+        XCUIDevice.shared.orientation = .landscapeLeft
+        for appearance in ["light", "dark"] {
+            openTools(in: app, appearance: appearance, scenario: "claude-tools")
+            let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+            let loading = transcript.buttons["Loading tools"]
+            let find = transcript.buttons["Find src/**/*.swift"]
+            assertCollapsedRows([loading, find], in: transcript)
+            XCTAssertFalse(transcript.buttons.matching(NSPredicate(format: "label CONTAINS %@", "select:mcp")).firstMatch.exists)
+            capture(app, name: "iPad Claude tools collapsed \(appearance)")
+            loading.tap()
+            let output = transcript.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Loaded workspace_api")).firstMatch
+            XCTAssertTrue(output.waitForExistence(timeout: Self.timeout))
+            let input = transcript.buttons["Input"].firstMatch
+            XCTAssertTrue(input.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            input.tap()
+            let selector = transcript.staticTexts.matching(NSPredicate(
+                format: "label CONTAINS %@", "select:mcp__workspace-mcp__workspace_api"
+            )).firstMatch
+            XCTAssertTrue(selector.waitForExistence(timeout: Self.timeout))
+            XCTAssertEqual(loading.label, "Loading tools")
+            capture(app, name: "iPad Claude tools expanded \(appearance)")
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    private func openTools(in app: XCUIApplication, appearance: String, scenario: String = "tools") {
         app.launchArguments = [
-            "--demo-data", "--demo-design-scenario=tools", "-appThemePreference", appearance,
+            "--demo-data", "--demo-design-scenario=\(scenario)", "-appThemePreference", appearance,
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL",
             "-AppleLanguages", "(en)", "-AppleLocale", "en_US"
         ]
