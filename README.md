@@ -338,7 +338,9 @@ screenshots. It rejects `only_testing` and iPad selection; `ui_suite` is ignored
 For an iPad proof run, add `-f simulator_family=ipad` with 1–20
 `Target/Suite[/test]` selectors in `only_testing`; whole-bundle selectors are not
 accepted, and each selection must actually execute. This route creates and
-cleans up its own simulator and uploads `ios-ipad-execution-evidence`.
+cleans up its own simulator and uploads `ios-ipad-execution-evidence`. Like the
+iPhone route, it selects an available runtime matching the selected Xcode SDK's
+major version and fails before creation if no compatible iPad is available.
 
 The full UI bundle still excludes `AppStoreScreenshotTests` and honors runtime
 skips. Quarantined transcript cases in `ConversationTranscriptFullGateUITests`

@@ -105,7 +105,7 @@ def prepare(env, directory):
     family, selectors = validate(env)
     if family != "ipad":
         raise ValueError("prepare is reserved for the iPad lane; default iPhone selection stays in xcodebuild.sh")
-    prepare_owned(env, directory, family, selectors)
+    prepare_owned(env, directory, family, selectors, compatible_sdk=True)
 
 
 def prepare_ci(env, directory):

@@ -542,6 +542,23 @@ class SimulatorTests(unittest.TestCase):
         self.assertEqual([call for call in self.host.calls if "delete" in call], [["xcrun", "simctl", "delete", NEW]])
         self.assertEqual(json.loads((self.directory / "cleanup.json").read_text())["deleteExit"], 0)
 
+    def test_filtered_ipad_dispatch_matches_selected_xcode_sdk_major(self):
+        other = RUNTIME.replace("26-2", "27-0")
+        self.host.document["runtimes"].append({"identifier": other, "version": "27.0", "name": "iOS 27.0", "isAvailable": True})
+        self.host.document["devices"][other] = copy.deepcopy(self.host.document["devices"][RUNTIME])
+        route.prepare(self.env, self.directory)
+        plan = json.loads((self.directory / "ownership.json").read_text())
+        self.assertEqual(plan["runtime"]["identifier"], RUNTIME)
+        self.assertEqual(plan["sdkVersion"], "26.2")
+        self.assertEqual(plan["selectors"], SELECTORS.split())
+
+    def test_filtered_ipad_dispatch_refuses_runtime_mismatch_before_creation(self):
+        self.host.sdk_version = "25.0"
+        with self.assertRaises(ValueError):
+            route.prepare(self.env, self.directory)
+        self.assertFalse(any("create" in call for call in self.host.calls))
+        self.assertFalse((self.directory / "environment").exists())
+
     def test_no_available_ipad_or_ios_runtime_never_creates_or_falls_back(self):
         for key in ("runtime", "device", "family"):
             document = copy.deepcopy(Host().document)
