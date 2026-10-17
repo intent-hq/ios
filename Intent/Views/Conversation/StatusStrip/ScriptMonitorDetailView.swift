@@ -102,7 +102,7 @@ struct ScriptMonitorDetailView: View {
         VStack(alignment: .leading) {
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.foreground(for: colorScheme))
             Text(verbatim: value)
                 .font(monospaced ? .body.monospaced() : .body)
                 .textSelection(.enabled)
