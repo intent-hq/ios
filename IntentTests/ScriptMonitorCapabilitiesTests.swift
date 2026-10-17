@@ -57,4 +57,25 @@ struct ScriptMonitorCapabilitiesTests {
         manager.finishIdentityAdmission(ConnectionHandshake(principal: .demoOwner, capabilities: .unknown), token: "host-b", fingerprint: "pin-b")
         #expect(!manager.capabilities.supportsScriptMonitors)
     }
+
+    @Test @MainActor func demoCapabilitiesRequireExplicitFixtureAndResetOnExit() {
+        let manager = ConnectionManager(persistence: .ephemeral())
+        defer { manager.disconnect() }
+        let active = ["--demo-data", "--demo-script-monitors=active"]
+        manager.configureDemoScriptMonitors(serveFixtures: false, arguments: active)
+        #expect(manager.demoScriptMonitorFixtures == nil)
+        #expect(manager.capabilities == .unknown)
+        manager.configureDemoScriptMonitors(serveFixtures: true, arguments: ["--demo-data"])
+        #expect(manager.demoScriptMonitorFixtures == nil)
+        manager.configureDemoScriptMonitors(serveFixtures: true, arguments: active)
+        #expect(manager.demoScriptMonitorFixtures?.supportsMonitors == true)
+        #expect(manager.capabilities.supportsScriptMonitors)
+        manager.configureDemoScriptMonitors(serveFixtures: true, arguments: ["--demo-data", "--demo-script-monitors=unsupported"])
+        #expect(manager.demoScriptMonitorFixtures?.supportsMonitors == false)
+        #expect(!manager.capabilities.supportsScriptMonitors)
+        manager.configureDemoScriptMonitors(serveFixtures: true, arguments: active)
+        manager.disconnect()
+        #expect(manager.demoScriptMonitorFixtures == nil)
+        #expect(manager.capabilities == .unknown)
+    }
 }

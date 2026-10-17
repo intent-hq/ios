@@ -45,6 +45,7 @@ import os
     }
     @ObservationIgnored private var isDemoConnection = false
     @ObservationIgnored var servesDemoFixtures = false
+    @ObservationIgnored var demoScriptMonitorFixtures: DemoScriptMonitorFixtures?
     @ObservationIgnored var scriptMonitorsDisabledForConnection = false
     var capabilities: ConnectionCapabilities = .unknown {
         didSet { capabilitiesSubject.send(capabilities) }
@@ -174,7 +175,19 @@ extension ConnectionManager {
         if !isDemoConnection { disconnect() }
         isDemoConnection = true
         servesDemoFixtures = serveFixtures
+        configureDemoScriptMonitors(serveFixtures: serveFixtures)
         connectionState = .connected
+    }
+
+    func configureDemoScriptMonitors(serveFixtures: Bool, arguments: [String] = ProcessInfo.processInfo.arguments) {
+        demoScriptMonitorFixtures?.stop()
+        demoScriptMonitorFixtures = serveFixtures ? DemoScriptMonitorFixtures.configured(arguments: arguments) : nil
+        capabilities = .unknown
+        if demoScriptMonitorFixtures?.supportsMonitors == true {
+            capabilities = ConnectionCapabilities(hello: [
+                "server": ["protocolVersion": "14.0", "capabilities": ["scriptMonitors": 2, "scriptActiveLists": 1]]
+            ])
+        }
     }
 
     /// Combine compatibility for stores that depend on ConnectionManagerRouting.
@@ -419,6 +432,8 @@ extension ConnectionManager {
     /// `connect()` to the same target must keep the accumulated mismatches,
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
+        demoScriptMonitorFixtures?.stop()
+        demoScriptMonitorFixtures = nil
         isDemoConnection = false
         servesDemoFixtures = false
         connectionGeneration += 1
