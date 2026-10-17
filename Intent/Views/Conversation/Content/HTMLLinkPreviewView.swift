@@ -5,6 +5,7 @@ struct HTMLLinkPreviewView: View {
     typealias Link = TextLinkPreviewView.Link
 
     let link: Link
+    var loaderOverride: WorkspaceFileImageLoader?
     @Environment(BackendSession.self) private var session: BackendSession?
     @Environment(\.dismiss) private var dismiss
     @State private var file: WorkspaceTextFile?
@@ -14,7 +15,7 @@ struct HTMLLinkPreviewView: View {
     @ScaledMetric(relativeTo: .body) private var closeIconSide: CGFloat = 17
 
     private var fileLoader: WorkspaceFileImageLoader {
-        session?.workspaceFileImageLoader ?? .shared
+        loaderOverride ?? session?.workspaceFileImageLoader ?? .shared
     }
 
     var body: some View {

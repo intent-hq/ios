@@ -35,6 +35,13 @@ CAPTURES = {
             "script-monitors-question-accessibility", "script-monitors-question-details", "script-monitors-final-state",
         ),
     },
+    "WorkspaceFilesUITests": {
+        "testBrowseFilesAndPreserveFoldersAcrossTabsInBothThemes": tuple(
+            f"{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("workspace-context", "workspace-files", "workspace-file-preview")
+        ),
+    },
     "FixtureCaptureLifecycleUITests": {
         "testAssertionAbortRetainsFinalCapture": ("fixture-assertion-abort-final-state",),
         "testPassingFixtureRetainsRepeatedFinalCapture": ("fixture-passing-final-state",),

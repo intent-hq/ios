@@ -87,6 +87,7 @@ $(SRCROOT)/Intent/Models/WorkspaceChanges.swift
 $(SRCROOT)/Intent/Models/WorkspaceCreationDraft.swift
 $(SRCROOT)/Intent/Models/WorkspaceCreationProposal.swift
 $(SRCROOT)/Intent/Models/WorkspaceDiff.swift
+$(SRCROOT)/Intent/Models/WorkspaceFileEntry.swift
 $(SRCROOT)/Intent/Models/WorkspacePrPill.swift
 $(SRCROOT)/Intent/Models/WorkspaceScript.swift
 $(SRCROOT)/Intent/Models/WorkspaceTask.swift
@@ -197,6 +198,7 @@ $(SRCROOT)/Intent/Services/DemoBrowserFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesRootFixtures.swift
 $(SRCROOT)/Intent/Services/DemoConnectionLoss.swift
+$(SRCROOT)/Intent/Services/DemoFilesFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixturesAssistant.swift
 $(SRCROOT)/Intent/Services/DemoFixturesConversationStartup.swift
@@ -267,6 +269,7 @@ $(SRCROOT)/Intent/Services/WorkspaceCreationImages.swift
 $(SRCROOT)/Intent/Services/WorkspaceCreationVideoSubmission.swift
 $(SRCROOT)/Intent/Services/WorkspaceDiffLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
+$(SRCROOT)/Intent/Services/WorkspaceFilesStore.swift
 $(SRCROOT)/Intent/Services/WorkspacePDF.swift
 $(SRCROOT)/Intent/Services/WorkspaceParsing.swift
 $(SRCROOT)/Intent/Services/WorkspacePrMonitorsStore.swift
@@ -530,11 +533,15 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesSection.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceConnectionSwitcher.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceContextView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCreationVideoPreview.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+AgentGroups.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceFilePreview.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileTreeLabel.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceFilesView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListMenu.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
@@ -942,7 +949,10 @@ $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFallbackRefreshTests.swift
+$(SRCROOT)/IntentTests/WorkspaceFileEntryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift
+$(SRCROOT)/IntentTests/WorkspaceFilesRaceTests.swift
+$(SRCROOT)/IntentTests/WorkspaceFilesStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceLinksTests.swift
 $(SRCROOT)/IntentTests/WorkspaceListCacheTests.swift
 $(SRCROOT)/IntentTests/WorkspaceListViewModelTests.swift
@@ -1033,6 +1043,7 @@ $(SRCROOT)/IntentUITests/WorkspaceBrowserUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceChangesUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceComposerUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceEntryUITests.swift
+$(SRCROOT)/IntentUITests/WorkspaceFilesUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceListMenuUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceScriptUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceSearchUITests.swift
