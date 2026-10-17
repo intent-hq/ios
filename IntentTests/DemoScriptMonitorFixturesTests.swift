@@ -50,7 +50,7 @@ struct DemoScriptMonitorFixturesTests {
         let response = try #require(try await fixture.response(for: "scriptMonitor.list", params: listParams) as? [String: Any])
         let rows = try #require(response["monitors"] as? [[String: Any]])
         #expect(!rows.contains { $0["monitorId"] as? String == DemoScriptMonitorFixtures.monitorId })
-        await #expect(throws: NSError.self) { try await fixture.response(for: "scriptMonitor.get", params: detailParams) }
+        await #expect(throws: NSError.self) { _ = try await fixture.response(for: "scriptMonitor.get", params: detailParams) }
     }
 
     @Test func emptyOwnerPageKeepsCursorAndRetryIsScopedToNextPage() async throws {
@@ -61,7 +61,7 @@ struct DemoScriptMonitorFixturesTests {
         let cursor = try #require(first["nextCursor"] as? String)
         var params = listParams
         params["cursor"] = cursor
-        await #expect(throws: NSError.self) { try await fixture.response(for: "scriptMonitor.list", params: params) }
+        await #expect(throws: NSError.self) { _ = try await fixture.response(for: "scriptMonitor.list", params: params) }
         let next = try #require(try await fixture.response(for: "scriptMonitor.list", params: params) as? [String: Any])
         #expect(next["nextCursor"] == nil)
         #expect((next["monitors"] as? [[String: Any]])?.first?["agentId"] as? String == DemoDesignFixtures.agentId)
@@ -69,10 +69,10 @@ struct DemoScriptMonitorFixturesTests {
 
     @Test func fixtureRejectsCrossWorkspaceAndUnboundedReadShapes() async {
         let fixture = DemoScriptMonitorFixtures(scenario: .active)
-        await #expect(throws: NSError.self) { try await fixture.response(for: "scriptMonitor.list", params: [:]) }
+        await #expect(throws: NSError.self) { _ = try await fixture.response(for: "scriptMonitor.list", params: [:]) }
         var foreign = listParams
         foreign["workspaceId"] = "foreign-workspace"
-        await #expect(throws: NSError.self) { try await fixture.response(for: "scriptMonitor.list", params: foreign) }
+        await #expect(throws: NSError.self) { _ = try await fixture.response(for: "scriptMonitor.list", params: foreign) }
     }
 
     @Test func fileEventsReachRealConnectionHandlersAndSharedStoreWithoutReload() async throws {
