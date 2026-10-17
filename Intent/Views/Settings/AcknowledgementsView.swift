@@ -56,7 +56,7 @@ struct AcknowledgementsView: View {
 
     var body: some View {
         ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
+            WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: Constants.Settings.contentSpacing) {
                     ForEach(Self.entries) { acknowledgementCard($0) }

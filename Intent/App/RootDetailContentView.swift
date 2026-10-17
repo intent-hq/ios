@@ -70,7 +70,7 @@ extension RootView {
     /// iPad split-view detail placeholder shown when no workspace is selected.
     var emptyDetailPlaceholder: some View {
         ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
+            WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
 
             ContentUnavailableView {
                 Label {
