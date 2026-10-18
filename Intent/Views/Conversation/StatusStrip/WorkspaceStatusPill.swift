@@ -44,6 +44,16 @@ extension WorkspaceStatusPill where Trailing == EmptyView {
     }
 }
 
+// Generic types cannot hold static stored properties, so the timing lives here.
+private enum MarqueeMotion {
+    static let pointsPerSecond: Double = 60
+    static let maximumDuration: Double = 3
+    static let startDelay: Duration = .seconds(1)
+    static let endPauseSeconds: Double = 1.5
+    // Lets the overlay mount at rest before its offset changes.
+    static let overlayDelaySeconds: Double = 0.05
+}
+
 /// One line that scrolls once to show an overflowing end, then returns to its truncated start.
 /// Reduce Motion keeps it truncated; a single pass keeps UI tests idle afterwards.
 struct MarqueeText<Content: View>: View {
@@ -54,15 +64,6 @@ struct MarqueeText<Content: View>: View {
     @State private var isRevealing = false
     @State private var isScrolled = false
     @State private var scrollDuration: Double = 0
-
-    private enum Motion {
-        static let pointsPerSecond: Double = 60
-        static let maximumDuration: Double = 3
-        static let startDelay: Duration = .seconds(1)
-        static let endPauseSeconds: Double = 1.5
-        // Lets the overlay mount at rest before its offset changes.
-        static let overlayDelaySeconds: Double = 0.05
-    }
 
     private var overflow: CGFloat { max(0, fullWidth - visibleWidth) }
 
@@ -100,15 +101,15 @@ struct MarqueeText<Content: View>: View {
             isScrolled = false
         }
         guard overflow > 0, !reduceMotion else { return }
-        let duration = min(Double(overflow) / Motion.pointsPerSecond, Motion.maximumDuration)
+        let duration = min(Double(overflow) / MarqueeMotion.pointsPerSecond, MarqueeMotion.maximumDuration)
         scrollDuration = duration
-        try? await Task.sleep(for: Motion.startDelay)
+        try? await Task.sleep(for: MarqueeMotion.startDelay)
         guard !Task.isCancelled else { return }
         isRevealing = true
-        try? await Task.sleep(for: .seconds(Motion.overlayDelaySeconds))
+        try? await Task.sleep(for: .seconds(MarqueeMotion.overlayDelaySeconds))
         isScrolled = true
         // The deferred reset returns to the truncated start without scrolling back.
-        try? await Task.sleep(for: .seconds(duration + Motion.endPauseSeconds))
+        try? await Task.sleep(for: .seconds(duration + MarqueeMotion.endPauseSeconds))
     }
 }
 
