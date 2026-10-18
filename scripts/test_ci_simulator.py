@@ -503,6 +503,44 @@ class OrdinaryCITests(unittest.TestCase):
                 state = json.loads((root / "host.json").read_text())
                 self.assertEqual([device["udid"] for _, device in route.device_rows(state["document"])], [OLD])
 
+    def test_iphone_ui_step_limits_theme_override_to_smoke_and_preserves_failures(self):
+        scripts = Path(__file__).resolve().parent
+        workflow = (scripts.parent / ".github/workflows/ci.yml").read_text()
+        section = workflow.split("      - name: Run UI tests\n", 1)[1].split("\n      - name:", 1)[0]
+        command = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        smoke_list = (scripts / "ui-smoke-tests.txt").read_text()
+        smoke = " ".join(line.split("#", 1)[0].strip() for line in smoke_list.splitlines()).split()
+        for full in (False, True):
+            for policy in ("light", "both", "", "unexpected"):
+                for exit_code in (0, 65):
+                    with self.subTest(full=full, policy=policy, exit_code=exit_code), tempfile.TemporaryDirectory() as temporary:
+                        root = Path(temporary)
+                        (root / "scripts").mkdir()
+                        (root / "scripts/ui-smoke-tests.txt").write_text(smoke_list)
+                        wrapper = root / "scripts/xcodebuild.sh"
+                        wrapper.write_text(f"#!{sys.executable}\n" + textwrap.dedent("""\
+                            import json, os, sys
+                            from pathlib import Path
+                            Path('calls.json').write_text(json.dumps({
+                                'args': sys.argv[1:],
+                                'selectors': os.environ['ONLY_TESTING'].split(),
+                                'appearances': os.environ['TEST_RUNNER_INTENT_UITEST_WORKSPACE_ENTRY_APPEARANCES'],
+                            }))
+                            sys.exit(int(os.environ['TEST_EXIT']))
+                            """))
+                        wrapper.chmod(0o755)
+                        env = dict(os.environ, FULL_UI_SUITE="1" if full else "",
+                                   WORKSPACE_ENTRY_APPEARANCES=policy, TEST_EXIT=str(exit_code),
+                                   TEST_RUNNER_INTENT_UITEST_WORKSPACE_ENTRY_APPEARANCES="light",
+                                   GITHUB_STEP_SUMMARY=str(root / "summary"))
+                        result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", command],
+                                                cwd=root, env=env, text=True, capture_output=True)
+                        self.assertEqual(result.returncode, exit_code, result.stderr)
+                        call = json.loads((root / "calls.json").read_text())
+                        self.assertEqual(call["args"], ["test-without-building-ui"])
+                        self.assertEqual(call["selectors"], ["IntentUITests"] if full else smoke)
+                        self.assertEqual(call["appearances"], "both" if full else policy)
+
     def test_ui_completion_check_rejects_unsuccessful_lanes(self):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
         job = workflow.split("  ios-ui-tests:\n", 1)[1].split("  visionos-build:\n", 1)[0]

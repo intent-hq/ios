@@ -104,6 +104,15 @@ selector `.github/scripts/select-fixture-capture-repetitions.sh` defaults to two
 when changed files cannot be inspected. Run
 `python3 scripts/test_select_fixture_capture_repetitions.py` after changing it.
 
+Only the two workspace creation entry tests reduce to light appearance on
+ordinary PRs with exclusively known unrelated modified files. The narrow allowlist
+is in `.github/scripts/select-workspace-entry-appearances.sh`; shared UI, fixtures,
+unknown paths, new/renamed files, and failed file lookups retain both appearances.
+Local, manual, merge-queue, scheduled, and full runs default to both. The explicit
+local override is `TEST_RUNNER_INTENT_UITEST_WORKSPACE_ENTRY_APPEARANCES=light`.
+Run `python3 scripts/test_select_workspace_entry_appearances.py` after changing the
+selector and `python3 scripts/test_ci_simulator.py` after changing its workflow wiring.
+
 `ui_suite=full` does not opt into quarantined transcript cases:
 `ConversationTranscriptFullGateUITests` needs
 `TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run.

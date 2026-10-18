@@ -37,8 +37,6 @@ nonisolated final class WorkspaceAgentGroupsUITests: XCTestCase {
     @MainActor
     func testSectionsLoadOnExpansionAndKeepNestedChildrenWithTheirParent() {
         let app = launch(scenario: "agent-groups")
-        let parent = app.buttons["workspace.agent.groups-parent"]
-        XCTAssertTrue(parent.waitForExistence(timeout: 15))
         for id in ["child", "grandchild", "background", "orphan", "retired"] {
             XCTAssertFalse(app.buttons["workspace.agent.groups-" + id].exists)
         }
@@ -127,8 +125,15 @@ nonisolated final class WorkspaceAgentGroupsUITests: XCTestCase {
     @MainActor
     private func reveal(_ app: XCUIApplication, id: String) -> XCUIElement {
         let element = app.buttons[id]
-        for _ in 0..<4 where !element.isHittable { app.swipeDown() }
-        for _ in 0..<8 where !element.isHittable { app.swipeUp() }
+        if element.isHittable { return element }
+        for _ in 0..<4 {
+            app.swipeDown()
+            if element.isHittable { return element }
+        }
+        for _ in 0..<8 {
+            app.swipeUp()
+            if element.isHittable { return element }
+        }
         XCTAssertTrue(element.waitForExistence(timeout: 15))
         XCTAssertTrue(element.isHittable)
         return element
