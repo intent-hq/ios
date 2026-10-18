@@ -445,6 +445,8 @@ $(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredScriptsRow.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorClock.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorDetailView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorPresentation.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptWatchPills.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/WorkspaceStatusPill.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/AssistantMessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationColumnView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationEmptyView.swift

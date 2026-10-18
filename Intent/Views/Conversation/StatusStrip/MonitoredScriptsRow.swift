@@ -2,8 +2,11 @@ import SwiftUI
 
 /// The sheet host outlives an empty status row so a terminal event can explain
 /// that the selected watch ended without asserting what happened to its run.
+/// The workspace design shows its watches as pills in `WorkspaceStatusPillsRow`
+/// and keeps only this host.
 struct MonitoredScriptsRow: View {
     let viewModel: ConversationViewModel
+    var showsRow = true
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption) private var headingIconSize: CGFloat = 14
@@ -14,7 +17,7 @@ struct MonitoredScriptsRow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if viewModel.showsScriptMonitorStatus {
+            if showsRow, viewModel.showsScriptMonitorStatus {
                 ScriptMonitorClock { now in
                     statusRow(now: now)
                 }
