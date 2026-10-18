@@ -63,8 +63,9 @@ struct ScriptWatchPills: View {
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityIdentifier("script-monitors-menu")
         } else if isLoading {
-            WorkspaceStatusPill(icon: .eye, text: Text("Loading script watches…"))
-                .accessibilityElement(children: .combine)
+            WorkspaceStatusPill(icon: .eye, text: Text("Loading watches…"))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading script watches")
                 .accessibilityIdentifier("script-monitors-loading")
         }
     }
@@ -73,10 +74,7 @@ struct ScriptWatchPills: View {
         Button {
             Task { await viewModel.retryScriptMonitors() }
         } label: {
-            WorkspaceStatusPill(
-                icon: .attentionCircle,
-                text: Text(hasError ? "Script watches unavailable · Retry" : "Script watches may be out of date · Retry")
-            )
+            WorkspaceStatusPill(icon: .attentionCircle, text: Text("Retry watches"))
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(isLoading)
@@ -88,10 +86,11 @@ struct ScriptWatchPills: View {
         Button {
             Task { await store.loadMore(workspaceId: viewModel.workspaceId) }
         } label: {
-            WorkspaceStatusPill(icon: .eye, text: Text("Load more script watches"))
+            WorkspaceStatusPill(icon: .eye, text: Text("More watches"))
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(isLoading)
+        .accessibilityLabel("Load more script watches")
         .accessibilityIdentifier("script-monitors-load-more")
     }
 }

@@ -20,10 +20,7 @@ struct WorkspaceStatusPill<Trailing: View>: View {
                 .frame(width: Design.smallIconSize, height: Design.smallIconSize)
                 .accessibilityHidden(true)
             if truncates {
-                text
-                    .interFont(Design.Typography.status)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                MarqueeText { text.interFont(Design.Typography.status) }
             } else {
                 text
                     .interFont(Design.Typography.status)
@@ -44,6 +41,69 @@ struct WorkspaceStatusPill<Trailing: View>: View {
 extension WorkspaceStatusPill where Trailing == EmptyView {
     init(icon: ImageResource, text: Text, truncates: Bool = false) {
         self.init(icon: icon, text: text, truncates: truncates) { EmptyView() }
+    }
+}
+
+/// One line that scrolls once to show an overflowing end, then returns to its truncated start.
+/// Reduce Motion keeps it truncated; a single pass keeps UI tests idle afterwards.
+struct MarqueeText<Content: View>: View {
+    @ViewBuilder let text: Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var fullWidth: CGFloat = 0
+    @State private var visibleWidth: CGFloat = 0
+    @State private var isRevealing = false
+    @State private var isScrolled = false
+    @State private var scrollDuration: Double = 0
+
+    private enum Motion {
+        static let pointsPerSecond: Double = 60
+        static let maximumDuration: Double = 3
+        static let startDelay: Duration = .seconds(1)
+        static let endPause: Duration = .milliseconds(1500)
+        // Lets the overlay mount at rest before its offset changes.
+        static let overlayDelay: Duration = .milliseconds(50)
+    }
+
+    private var overflow: CGFloat { max(0, fullWidth - visibleWidth) }
+
+    var body: some View {
+        text
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .opacity(isRevealing ? 0 : 1)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { visibleWidth = $0 }
+            .background(alignment: .leading) {
+                text.lineLimit(1).fixedSize().hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { fullWidth = $0 }
+            }
+            .overlay(alignment: .leading) {
+                if isRevealing {
+                    text.lineLimit(1).fixedSize()
+                        .offset(x: isScrolled ? -overflow : 0)
+                        // Declared on the moving text so a parent's animation reset cannot remove it.
+                        .animation(.linear(duration: scrollDuration), value: isScrolled)
+                        .accessibilityHidden(true)
+                }
+            }
+            .clipped()
+            .task(id: reduceMotion ? 0 : overflow) { await reveal() }
+    }
+
+    private func reveal() async {
+        defer {
+            isRevealing = false
+            isScrolled = false
+        }
+        guard overflow > 0, !reduceMotion else { return }
+        let duration = min(Double(overflow) / Motion.pointsPerSecond, Motion.maximumDuration)
+        scrollDuration = duration
+        try? await Task.sleep(for: Motion.startDelay)
+        guard !Task.isCancelled else { return }
+        isRevealing = true
+        try? await Task.sleep(for: Motion.overlayDelay)
+        isScrolled = true
+        // The deferred reset returns to the truncated start without scrolling back.
+        try? await Task.sleep(for: .seconds(duration) + Motion.endPause)
     }
 }
 
