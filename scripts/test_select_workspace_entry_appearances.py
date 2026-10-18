@@ -14,6 +14,8 @@ SELECTOR = (
     / ".github/scripts/select-workspace-entry-appearances.sh"
 )
 TOKEN = "fixture-token-must-not-appear-in-output"
+HEAD_SHA = "a" * 40
+BASE_SHA = "b" * 40
 ALLOWED = [
     "README.md",
     "AGENTS.md",
@@ -93,17 +95,29 @@ def paginated(files):
 class WorkspaceEntryAppearanceSelectionTests(unittest.TestCase):
     def select(self, pages=None, *, event="pull_request", pr_number="852",
                repository="intent-hq/ios", token=TOKEN, gh_status=0, raw=None,
-               stderr="", missing=()):
+               stderr="", missing=(), head_sha=HEAD_SHA, base_sha=BASE_SHA,
+               metadata_raw=None, after_metadata_raw=None, metadata_status=0):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fixture = root / "response.json"
             if pages is None:
                 pages = [[changed_file("README.md")]]
             fixture.write_text(json.dumps(pages) if raw is None else raw)
+            metadata = json.dumps({"head": {"sha": HEAD_SHA}, "base": {"sha": BASE_SHA},
+                                   "changed_files": sum(len(page) for page in pages if isinstance(page, list))})
+            before = root / "metadata-before.json"
+            after = root / "metadata-after.json"
+            before.write_text(metadata if metadata_raw is None else metadata_raw)
+            after.write_text(before.read_text() if after_metadata_raw is None else after_metadata_raw)
             stub = root / "gh"
             stub.write_text(
                 '#!/bin/bash\nset -eu\n'
-                'printf "%s\\n" "$@" > "$TEST_ARGUMENTS"\n'
+                'printf "%s\\n" "$@" >> "$TEST_ARGUMENTS"\n'
+                'if [[ "$*" != *"/files?per_page=100" ]]; then\n'
+                '  if [[ -f "$TEST_METADATA_SEEN" ]]; then cat "$TEST_METADATA_AFTER";\n'
+                '  else cat "$TEST_METADATA_BEFORE"; touch "$TEST_METADATA_SEEN"; fi\n'
+                '  exit "$TEST_METADATA_STATUS"\n'
+                'fi\n'
                 'cat "$TEST_RESPONSE"\n'
                 'printf "%s" "$TEST_STDERR" >&2\n'
                 'if [ "$TEST_GH_STATUS" != 0 ]; then\n'
@@ -121,10 +135,16 @@ class WorkspaceEntryAppearanceSelectionTests(unittest.TestCase):
                 PATH=f"{root}:{env['PATH']}",
                 GITHUB_EVENT_NAME=event,
                 PR_NUMBER=pr_number,
+                PR_HEAD_SHA=head_sha,
+                PR_BASE_SHA=base_sha,
                 GITHUB_REPOSITORY=repository,
                 GH_TOKEN=token,
                 GITHUB_OUTPUT=str(output),
                 TEST_RESPONSE=str(fixture),
+                TEST_METADATA_BEFORE=str(before),
+                TEST_METADATA_AFTER=str(after),
+                TEST_METADATA_SEEN=str(root / "metadata-seen"),
+                TEST_METADATA_STATUS=str(metadata_status),
                 TEST_ARGUMENTS=str(arguments),
                 TEST_GH_STATUS=str(gh_status),
                 TEST_STDERR=stderr,
@@ -148,8 +168,10 @@ class WorkspaceEntryAppearanceSelectionTests(unittest.TestCase):
         output, arguments = self.select()
         self.assertEqual(output, "appearances=light")
         self.assertEqual(arguments, [
+            "api", "repos/intent-hq/ios/pulls/852",
             "api", "--paginate", "--slurp",
             "repos/intent-hq/ios/pulls/852/files?per_page=100",
+            "api", "repos/intent-hq/ios/pulls/852",
         ])
 
     def test_every_allowlisted_path_and_their_mixture_select_light(self):
@@ -214,7 +236,7 @@ class WorkspaceEntryAppearanceSelectionTests(unittest.TestCase):
                 self.assertEqual(output, "appearances=both")
 
     def test_missing_inputs_keep_both_without_api_access(self):
-        for name in ["GITHUB_EVENT_NAME", "PR_NUMBER", "GITHUB_REPOSITORY", "GH_TOKEN"]:
+        for name in ["GITHUB_EVENT_NAME", "PR_NUMBER", "PR_HEAD_SHA", "PR_BASE_SHA", "GITHUB_REPOSITORY", "GH_TOKEN"]:
             with self.subTest(name=name):
                 output, arguments = self.select(missing=[name])
                 self.assertEqual(output, "appearances=both")
@@ -229,7 +251,10 @@ class WorkspaceEntryAppearanceSelectionTests(unittest.TestCase):
             ["", "ios", "intent-hq/ios/extra", "/ios", "intent-hq/", "../ios",
              "intent-hq/..", "intent-hq/.", "intent-hq/ios\n", "intent hq/ios",
              "intent-hq/ios?per_page=1", TOKEN]
-        ] + [{"token": value} for value in ["", " ", "\n", f"{TOKEN}\n"]]
+        ] + [{"token": value} for value in ["", " ", "\n", f"{TOKEN}\n"]] + [
+            {name: value} for name in ["head_sha", "base_sha"]
+            for value in ["", "a" * 39, "a" * 41, "g" * 40, "a" * 40 + "\n"]
+        ]
         for case in cases:
             with self.subTest(case=case):
                 output, arguments = self.select(**case)
@@ -242,6 +267,21 @@ class WorkspaceEntryAppearanceSelectionTests(unittest.TestCase):
                 output, arguments = self.select(gh_status=status)
                 self.assertEqual(output, "appearances=both")
                 self.assertTrue(arguments)
+
+    def test_stale_changing_missing_or_malformed_revision_metadata_keeps_both(self):
+        valid = {"head": {"sha": HEAD_SHA}, "base": {"sha": BASE_SHA}, "changed_files": 1}
+        invalid = ["", "null", "[]", "{}", "not-json", json.dumps(valid) + json.dumps(valid)]
+        for field in ["head", "base"]:
+            invalid.append(json.dumps(dict(valid, **{field: {"sha": "c" * 40}})))
+        for count in [0, 2, 3000, "1", 1.5, None]:
+            invalid.append(json.dumps(dict(valid, changed_files=count)))
+        for raw in invalid:
+            for stage in ["metadata_raw", "after_metadata_raw"]:
+                with self.subTest(raw=raw, stage=stage):
+                    output, _ = self.select(**{stage: raw})
+                    self.assertEqual(output, "appearances=both")
+        output, _ = self.select(metadata_status=1)
+        self.assertEqual(output, "appearances=both")
 
     def test_tokens_in_responses_and_diagnostics_are_never_printed(self):
         for status in [0, 1]:

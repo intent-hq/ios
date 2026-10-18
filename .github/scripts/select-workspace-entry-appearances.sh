@@ -4,8 +4,20 @@ set -euo pipefail
 # Reduce only ordinary PRs containing exclusively unrelated modified files.
 # Unknown paths, uncertain pagination, and every other event retain both themes.
 appearances=both
+verified_file_count() {
+  local metadata
+  metadata=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" 2>/dev/null) || return 1
+  jq -ers --arg head "$PR_HEAD_SHA" --arg base "$PR_BASE_SHA" '
+    if length == 1 then .[0] else error("invalid metadata response") end
+    | select(type == "object" and .head.sha == $head and .base.sha == $base)
+    | .changed_files
+    | select(type == "number" and . == floor and . > 0 and . < 3000)
+  ' <<< "$metadata" 2>/dev/null
+}
+
 if [[ "${GITHUB_EVENT_NAME:-}" == pull_request ]]; then
   if [[ ! "${PR_NUMBER:-}" =~ ^[1-9][0-9]*$ ]] ||
+      [[ ! "${PR_HEAD_SHA:-}" =~ ^[0-9a-f]{40}$ || ! "${PR_BASE_SHA:-}" =~ ^[0-9a-f]{40}$ ]] ||
       [[ ! "${GITHUB_REPOSITORY:-}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+$ ]] ||
       [[ "${GITHUB_REPOSITORY##*/}" == . || "${GITHUB_REPOSITORY##*/}" == .. ]] ||
       [[ -z "${GH_TOKEN:-}" || "${GH_TOKEN:-}" =~ [[:space:][:cntrl:]] ]]; then
@@ -13,10 +25,11 @@ if [[ "${GITHUB_EVENT_NAME:-}" == pull_request ]]; then
   else
     response=$(mktemp)
     trap 'rm -f "$response"' EXIT
-    if gh api --paginate --slurp \
+    if expected_count=$(verified_file_count) && gh api --paginate --slurp \
         "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
-        >"$response" 2>/dev/null; then
-      if selected=$(jq -ers '
+        >"$response" 2>/dev/null && final_count=$(verified_file_count) &&
+        [[ "$expected_count" == "$final_count" ]]; then
+      if selected=$(jq -ers --argjson expected_count "$expected_count" '
           def valid_path:
             type == "string" and length > 0 and
             (test("^/|//|/$|\\\\|(^|/)\\.\\.?(/|$)|[[:cntrl:]]") | not);
@@ -42,7 +55,7 @@ if [[ "${GITHUB_EVENT_NAME:-}" == pull_request ]]; then
           | if all(.[0:-1][]; length == 100) and (.[-1] | length < 100) then add
             else error("incomplete pagination") end
           # GitHub caps this endpoint at 3000 files; that limit can hide changes.
-          | if length == 0 or length >= 3000 then error("incomplete file list") else . end
+          | if length != $expected_count or length >= 3000 then error("incomplete file list") else . end
           | if all(.[];
               type == "object" and
               (.filename | valid_path) and

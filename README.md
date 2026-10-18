@@ -337,6 +337,8 @@ Replace `your-branch` with the branch to test. Filtered dispatches are
 
 The two workspace creation entry tests use light appearance only on ordinary PRs
 whose complete changed-file list contains exclusively known unrelated edits.
+The selector checks the PR head, base, and file count before and after fetching
+the list; older reruns or changing PRs retain both appearances.
 `.github/scripts/select-workspace-entry-appearances.sh` owns the narrow allowlist
 (documentation, unit tests, and selected PDF, watcher, and terminal leaf files).
 Shared UI, fixtures, build configuration, new or renamed files, unknown paths,
