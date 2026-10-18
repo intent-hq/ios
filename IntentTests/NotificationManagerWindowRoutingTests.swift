@@ -195,7 +195,7 @@ extension NotificationManagerTests {
         // for the source window to emit spatially instead of playing the
         // global (non-spatial) sound.
         var feedbackCount = 0
-        let (manager, _) = makeNotificationManager(
+        let (manager, center) = makeNotificationManager(
             state: .active,
             windowEmitsFeedbackSound: true
         ) { feedbackCount += 1 }
@@ -213,6 +213,7 @@ extension NotificationManagerTests {
         #expect(feedbackCount == 0)
         #expect(manager.windowFeedbackEvent?.sourceBackendID == BackendID(Self.connectionId))
         #expect(manager.currentToast?.agentId == "agent-1")
+        #expect(center.requests.isEmpty)
     }
 
     @Test @MainActor func windowEmittingSuppressedAlertStillPublishesEvent() {
@@ -269,11 +270,9 @@ extension NotificationManagerTests {
         #expect(manager.windowFeedbackEvent != first)
     }
 
-    @Test @MainActor func globalFeedbackPathNeverPublishesWindowEvent() {
-        // iPhone/iPad: the global haptic + sound closure keeps playing and
-        // no window event is published.
+    @Test @MainActor func systemSoundPathNeverPublishesWindowEvent() {
         var feedbackCount = 0
-        let (manager, _) = makeNotificationManager(state: .active) {
+        let (manager, center) = makeNotificationManager(state: .active) {
             feedbackCount += 1
         }
 
@@ -285,5 +284,6 @@ extension NotificationManagerTests {
 
         #expect(feedbackCount == 1)
         #expect(manager.windowFeedbackEvent == nil)
+        #expect(center.requests.count == 1)
     }
 }
