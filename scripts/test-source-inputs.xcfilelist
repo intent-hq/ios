@@ -1107,6 +1107,7 @@ $(SRCROOT)/IntentTests/NoteStoreFetchIntegrationTests.swift
 $(SRCROOT)/IntentTests/NoteStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/NoteStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerPresentationAndRoutingTests.swift
+$(SRCROOT)/IntentTests/NotificationManagerSoundDeliveryTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerWindowRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationSessionAggregationTests.swift
