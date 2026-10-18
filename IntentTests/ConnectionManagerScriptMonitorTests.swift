@@ -58,7 +58,7 @@ extension ConnectionManagerTests {
         let manager = ConnectionManager(persistence: .ephemeral())
         defer { manager.disconnect(); server.stop() }
         var hello = ScriptMonitorCapabilitiesTests.hello()
-        hello["server"] = ["protocolVersion": "14.0", "capabilities": ["hostMembership": 1, "scriptMonitors": 2, "scriptActiveLists": 1]]
+        hello["server"] = ["protocolVersion": "15.0", "capabilities": ["hostMembership": 1, "scriptMonitors": 2, "scriptActiveLists": 1]]
         try server.setHello(hello)
         server.setPrincipal(["id": "person", "isAdministrator": false, "hostRole": "guest", "hostMembershipRevision": 1])
         try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "test-token")

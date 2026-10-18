@@ -8,18 +8,12 @@ nonisolated struct ConnectionCapabilities: Equatable, Sendable {
     private(set) var scriptMonitorsDisabled = false
 
     static let unknown = Self(protocolVersion: nil, scriptMonitorsVersion: nil, scriptActiveListsVersion: nil)
-    private static let supportedScriptProtocolMajor = 14
 
+    /// Gated only on the advertised capabilities, never on a protocol-version maximum: the
+    /// protocol major moves for unrelated changes (protocol 15 hid monitors, intent-hq/intent#7206).
+    /// A breaking change to these methods changes the capability values instead.
     var supportsScriptMonitors: Bool {
-        guard !scriptMonitorsDisabled, scriptMonitorsVersion == 2, scriptActiveListsVersion == 1,
-              let protocolVersion else { return false }
-        let parts = protocolVersion.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 2,
-              parts.allSatisfy({ part in !part.isEmpty && part.allSatisfy { $0.isASCII && $0.isNumber } }),
-              let major = Int(parts[0]), Int(parts[1]) != nil else { return false }
-        // No general iOS protocol-range negotiation exists yet. Admit only the implemented
-        // major's additive minor versions; a future breaking major needs an explicit review.
-        return major == Self.supportedScriptProtocolMajor
+        !scriptMonitorsDisabled && scriptMonitorsVersion == 2 && scriptActiveListsVersion == 1
     }
 
     func disablingScriptMonitors() -> Self {
