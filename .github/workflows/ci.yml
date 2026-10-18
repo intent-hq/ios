@@ -162,6 +162,26 @@ jobs:
       - name: generate-test-inputs.sh self-tests
         run: scripts/test-generate-test-inputs.sh
 
+      # Fake hellos must default to the current intentd protocol: literal
+      # versions froze while the daemon moved on and hid a version cap
+      # (intent-hq/intent#7206). `lint` is offline and gating. `check` reads
+      # the newest intentd release: upstream drift (or a GitHub API blip) must
+      # not block unrelated PRs or the merge queue, so it only warns there and
+      # fails the scheduled run on main, where a protocol bump needs a sync PR.
+      - name: Fixture protocol version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python3 scripts/test_protocol_fixture_version.py
+          python3 scripts/protocol_fixture_version.py lint
+          if ! python3 scripts/protocol_fixture_version.py check; then
+            if [ "$EVENT_NAME" = "schedule" ]; then
+              exit 1
+            fi
+            echo "::warning::IntentTests/CurrentProtocolVersion.swift is behind the newest intentd protocol; run python3 scripts/protocol_fixture_version.py sync."
+          fi
+
   swiftlint:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
