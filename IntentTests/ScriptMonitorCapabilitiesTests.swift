@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 struct ScriptMonitorCapabilitiesTests {
-    static func hello(version: Any = "15.0", monitors: Any = 2, lists: Any = 1) -> [String: Any] {
+    static func hello(version: Any = ProtocolFixtures.currentProtocolVersion, monitors: Any = 2, lists: Any = 1) -> [String: Any] {
         ["server": ["protocolVersion": version, "capabilities": ["scriptMonitors": monitors, "scriptActiveLists": lists]]]
     }
 
@@ -18,7 +18,7 @@ struct ScriptMonitorCapabilitiesTests {
         #expect(!ConnectionCapabilities(hello: Self.hello(monitors: 1)).supportsScriptMonitors)
         #expect(!ConnectionCapabilities(hello: Self.hello(lists: 2)).supportsScriptMonitors)
         #expect(!ConnectionCapabilities(hello: [:]).supportsScriptMonitors)
-        #expect(!ConnectionCapabilities(hello: ["server": ["protocolVersion": "15.0", "capabilities": [:]]]).supportsScriptMonitors)
+        #expect(!ConnectionCapabilities(hello: ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": [:]]]).supportsScriptMonitors)
     }
 
     @Test func capabilitiesAloneGateMonitorsOnEveryProtocolVersion() {

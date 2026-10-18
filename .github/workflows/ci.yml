@@ -162,6 +162,18 @@ jobs:
       - name: generate-test-inputs.sh self-tests
         run: scripts/test-generate-test-inputs.sh
 
+      # Fake hellos must default to the current intentd protocol: literal
+      # versions froze while the daemon moved on and hid a version cap
+      # (intent-hq/intent#7206). `lint` is offline; `check` reads the newest
+      # intentd release and fails only when its PROTOCOL_VERSION changed.
+      - name: Fixture protocol version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/test_protocol_fixture_version.py
+          python3 scripts/protocol_fixture_version.py lint
+          python3 scripts/protocol_fixture_version.py check
+
   swiftlint:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
