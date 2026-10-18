@@ -206,7 +206,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let maximumPages = 20
         for _ in 0..<maximumPages {
             let scrollFrame = details.frame
-            let toolbarBottom = app.navigationBars["Script watch"].frame.maxY
+            let toolbarBottom = app.buttons["connection-sheet.close"].frame.maxY
             let viewport = CGRect(
                 x: scrollFrame.minX,
                 y: max(scrollFrame.minY, toolbarBottom),
@@ -301,7 +301,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
 
     @MainActor
     private func closeDetails(_ app: XCUIApplication) {
-        let close = app.buttons["script-monitor-details-close"]
+        let close = app.buttons["connection-sheet.close"]
         XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
