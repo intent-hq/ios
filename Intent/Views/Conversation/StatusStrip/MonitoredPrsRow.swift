@@ -126,17 +126,7 @@ struct MonitoredPrsRow: View {
             }
         } label: {
             if usesWorkspaceDesign {
-                WorkspaceStatusPill(
-                    icon: .infoCircle,
-                    text: Text("Monitoring PR \(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))")
-                ) {
-                    if monitor.hasPendingChanges {
-                        Circle()
-                            .fill(Color.orange)
-                            .frame(width: Layout.pendingIndicatorSide, height: Layout.pendingIndicatorSide)
-                            .accessibilityHidden(true)
-                    }
-                }
+                workspacePill(monitor)
             } else {
                 chipLabel(monitor)
             }
@@ -149,6 +139,20 @@ struct MonitoredPrsRow: View {
                 : Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))
         )
         .accessibilityValue(Text(Self.pendingSummary(monitor)))
+    }
+
+    private func workspacePill(_ monitor: MonitoredPr) -> some View {
+        WorkspaceStatusPill(
+            icon: .infoCircle,
+            text: Text("Monitoring PR \(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))")
+        ) {
+            if monitor.hasPendingChanges {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: Layout.pendingIndicatorSide, height: Layout.pendingIndicatorSide)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 
     @ViewBuilder
