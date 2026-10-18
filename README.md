@@ -318,7 +318,11 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 
 `.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
 `scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
-queue. The UI job also runs focused iPad sidebar regressions. Go tests, wrapper
+queue. iPhone UI tests and all seven focused iPad sidebar regressions run in
+independent jobs, each with its own build directory and disposable simulator.
+The iPad job uses Depot macOS so it can overlap the local iPhone job; matrix
+fail-fast is disabled so an iPhone failure does not cancel iPad coverage. The
+existing `iOS UI Tests` check requires both jobs to succeed. Go tests, wrapper
 self-tests, and the strict SwiftLint gate run on Linux. The full UI bundle runs
 on the default branch at **09:00 and 21:00 UTC** or on manual dispatch:
 
@@ -379,7 +383,9 @@ configurations with the original assertions and timeouts.
 CI uploads `ios-ui-review-evidence` for 14 days when allowlisted captures exist,
 on success or failure and for filtered UI runs. Open its PNGs directly;
 `manifest.json` records the tested revision, suite/test, source bundle, and retry
-origin. Captures include workspace creation, iPad sidebars and pairing, menus, changes, and connection-loss
+origin. Parallel iPad exports append `-ipad` to evidence artifact names, including
+`ios-ui-review-evidence-ipad`, to avoid collisions with the iPhone job. Captures
+include workspace creation, iPad sidebars and pairing, menus, changes, and connection-loss
 flows; `scripts/export_ui_evidence.py` is the complete allowlist. Missing images
 are not proof that a view was captured. `ios-agent-group-evidence` and
 `ios-transcript-recovery-evidence` remain separate artifacts. Run
@@ -399,14 +405,21 @@ resolve dynamic dispatch, aliases, computed properties, or constructors.
 After `scripts/xcodebuild.sh build-for-testing-ui`, run
 `python3 scripts/verify_fixture_capture_lifecycle.py --output-root build/capture-contract`
 with the same simulator and derived-data settings. The output directory must be
-new. The iOS UI CI job runs this contract separately from the smoke selection and
+new. The iPhone UI CI job runs this contract separately from the smoke selection and
 uploads `ios-fixture-capture-lifecycle`, including the original failing xcresults,
 result JSON, logs, and compact PNG manifests. The isolated abort fixture opts in
 only for this verifier; ordinary test runs skip that intentional failure.
 The verifier requires exit 65, the original marked assertion recorded as Failed,
 a passing companion fixture, and every exact named final PNG under its owning
-test in each of two result bundles. Repeated passing captures must remain
-distinct. Changing the abort fixture's capture teardown back to defer must fail
+test in each result bundle. The local verifier defaults to two result bundles.
+Ordinary PRs use `--repetitions 1`; capture fixture/exporter/tooling changes,
+scheduled runs, manual runs, and the merge queue retain two. If the changed-file
+lookup fails, CI keeps two. `.github/scripts/select-fixture-capture-repetitions.sh`
+defines the relevant paths; its offline regression is
+`python3 scripts/test_select_fixture_capture_repetitions.py`. One repetition
+still requires repeated passing captures to remain distinct; the second also
+checks separation across result bundles. Changing the abort fixture's capture
+teardown back to defer must fail
 both the source check and this native contract after rebuilding; restore and
 rebuild afterward. XCTest teardown does not guarantee evidence after a process crash.
 
@@ -437,8 +450,12 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 ### Depot GitHub Actions runners
 
-Script and Go jobs use Depot Ubuntu 24.04. Build and simulator selectors prefer
+Script and Go jobs use Depot Ubuntu 24.04. The independent iPad UI job always
+uses Depot macOS; it does not wait for a local simulator runner. Other build and
+simulator selectors prefer
 available self-hosted Macs, using `RUNNER_STATUS_TOKEN` to inspect the pools,
-and fall back to Depot’s latest macOS Apple Silicon. The selected image needs Xcode 26;
+and fall back to Depot’s latest macOS Apple Silicon. An online local runner
+remains eligible while busy; this preference does not provide automatic overflow
+for queued jobs. The selected image needs Xcode 26;
 runtime and Metal provisioning run as needed. Go and Swift package caches and
 Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.

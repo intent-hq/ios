@@ -140,12 +140,14 @@ class OrdinaryCITests(unittest.TestCase):
                 self.assertEqual(result.returncode, status)
                 self.assertEqual((root / "calls").read_text().splitlines(), ["test-ios"])
                 self.assertEqual((root / "pre-pr-gate.log").read_text(), "gate-output\ngate-error\n")
-        build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
+        build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-test-lanes:\n", 1)[0]
         for name in ("Build for testing", "Run unit tests"):
             step = build.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
             self.assertIn("if: env.FULL_PRE_PR_GATE != '1'", step)
         ui_job = workflow.split("  ios-ui-tests:\n", 1)[1].split("    steps:\n", 1)[0]
         self.assertIn("inputs.pre_pr_gate", ui_job)
+        lanes = workflow.split("  ios-ui-test-lanes:\n", 1)[1].split("    steps:\n", 1)[0]
+        self.assertIn("inputs.pre_pr_gate", lanes)
         self.assertIn("TestResults-retry", build)
         self.assertIn("pre-pr-gate.log", build)
 
@@ -408,18 +410,19 @@ class OrdinaryCITests(unittest.TestCase):
     def test_ui_workflow_uses_separate_owned_destinations_and_cleans_failures_or_skips(self):
         scripts = Path(__file__).resolve().parent
         workflow = (scripts.parent / ".github/workflows/ci.yml").read_text()
-        job = workflow.split("  ios-ui-tests:\n", 1)[1].split("  visionos-build:\n", 1)[0]
+        job = workflow.split("  ios-ui-test-lanes:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
 
         def step(name):
             section = job.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
             command = section.split("        run: ", 1)[1]
             return textwrap.dedent(command[2:]) if command.startswith("|\n") else command.strip()
 
-        self.assertLess(job.index("name: Create owned iPhone simulator"), job.index("name: Pre-boot simulator"))
-        self.assertLess(job.index("name: Clean up owned iPhone simulator"), job.index("name: Run iPad sidebar regression tests"))
-        for name in ("Clean up owned iPhone simulator", "Clean up owned iPad simulator"):
-            section = job.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
-            self.assertIn("if: always()", section)
+        self.assertIn("fail-fast: false", job)
+        self.assertIn("family: [iphone, ipad]", job)
+        self.assertIn("matrix.family == 'ipad' && 'depot-macos-latest'", job)
+        self.assertLess(job.index("name: Create owned UI simulator"), job.index("name: Pre-boot simulator"))
+        cleanup = job.split("      - name: Clean up owned UI simulator\n", 1)[1].split("\n      - name:", 1)[0]
+        self.assertIn("if: always()", cleanup)
         for outcome in ("passed", "failed", "skipped", "create-failed"):
             with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -452,8 +455,8 @@ class OrdinaryCITests(unittest.TestCase):
                 wrapper.chmod(0o755)
                 env = dict(os.environ, PATH=str(root / "bin") + os.pathsep + os.environ["PATH"],
                            RUNNER_TEMP=str(root / "runner temp"), GITHUB_ENV=str(root / "environment"),
-                           GITHUB_RUN_ID="123", GITHUB_RUN_ATTEMPT="2", GITHUB_JOB="ios-ui-tests",
-                           SIMULATOR_FAMILY="iphone", HOST_STATE=str(root / "host.json"),
+                           GITHUB_RUN_ID="123", GITHUB_RUN_ATTEMPT="2", GITHUB_JOB="ios-ui-test-lanes",
+                           HOST_STATE=str(root / "host.json"),
                            CALLS=str(root / "calls"), TEST_EXIT="65" if outcome == "failed" else "0")
                 env.pop("SIMULATOR_EVIDENCE_DIR", None)
                 env.pop("IPAD_EVIDENCE_DIR", None)
@@ -465,32 +468,53 @@ class OrdinaryCITests(unittest.TestCase):
                 def import_environment():
                     env.update(line.split("=", 1) for line in (root / "environment").read_text().splitlines())
 
-                result = execute("Use isolated build directory")
-                self.assertEqual(result.returncode, 0, result.stderr)
-                import_environment()
-                result = execute("Create owned iPhone simulator")
-                self.assertEqual(result.returncode, 0, result.stderr)
-                import_environment()
-                phone = json.loads((Path(env["SIMULATOR_EVIDENCE_DIR"]) / "ownership.json").read_text())
-                self.assertEqual(env["SIM_UDID"], phone["createdUDID"])
-                result = execute("Clean up owned iPhone simulator")
-                self.assertEqual(result.returncode, 0, result.stderr)
-                overrides = {"SIMULATOR_FAMILY": "ipad", "SIMULATOR_EVIDENCE_DIR": str(root / "runner temp" / "intent-simulator-123-2-ui-ipad"),
-                             "FAIL_CREATE": "1" if outcome == "create-failed" else "0"}
+                lanes = {}
+                for family in ("iphone", "ipad"):
+                    env["SIMULATOR_FAMILY"] = family
+                    result = execute("Use isolated build directory")
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    import_environment()
+                    result = execute("Create owned UI simulator", {"FAIL_CREATE": "1" if family == "ipad" and outcome == "create-failed" else "0"})
+                    self.assertEqual(result.returncode, 1 if family == "ipad" and outcome == "create-failed" else 0, result.stderr)
+                    import_environment()
+                    lanes[family] = dict(env)
+                phone = json.loads((Path(lanes["iphone"]["SIMULATOR_EVIDENCE_DIR"]) / "ownership.json").read_text())
+                ipad = json.loads((Path(lanes["ipad"]["SIMULATOR_EVIDENCE_DIR"]) / "ownership.json").read_text())
+                self.assertNotEqual(lanes["iphone"]["DERIVED_DATA_DIR"], lanes["ipad"]["DERIVED_DATA_DIR"])
+                self.assertNotEqual(phone["createdUDID"], ipad["createdUDID"])
+                self.assertEqual(lanes["iphone"]["SIM_UDID"], phone["createdUDID"])
+                if outcome != "create-failed":
+                    self.assertEqual(lanes["ipad"]["SIM_UDID"], ipad["createdUDID"])
                 if outcome != "skipped":
-                    result = execute("Run iPad sidebar regression tests", overrides)
-                    self.assertEqual(result.returncode, 1 if outcome == "create-failed" else int(env["TEST_EXIT"]), result.stderr)
-                    ipad = json.loads((Path(overrides["SIMULATOR_EVIDENCE_DIR"]) / "ownership.json").read_text())
                     if outcome != "create-failed":
-                        self.assertNotEqual(phone["createdUDID"], ipad["createdUDID"])
+                        result = execute("Run iPad sidebar regression tests", lanes["ipad"])
+                        self.assertEqual(result.returncode, int(env["TEST_EXIT"]), result.stderr)
                         self.assertEqual((root / "calls").read_text().splitlines(),
                                          ["test-without-building-ui", ipad["createdUDID"]])
                     else:
                         self.assertFalse((root / "calls").exists())
-                result = execute("Clean up owned iPad simulator", overrides)
+                result = execute("Clean up owned UI simulator", lanes["ipad"])
+                self.assertEqual(result.returncode, 0, result.stderr)
+                state = json.loads((root / "host.json").read_text())
+                self.assertEqual({device["udid"] for _, device in route.device_rows(state["document"])},
+                                 {OLD, phone["createdUDID"]})
+                result = execute("Clean up owned UI simulator", lanes["iphone"])
                 self.assertEqual(result.returncode, 0, result.stderr)
                 state = json.loads((root / "host.json").read_text())
                 self.assertEqual([device["udid"] for _, device in route.device_rows(state["document"])], [OLD])
+
+    def test_ui_completion_check_rejects_unsuccessful_lanes(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        job = workflow.split("  ios-ui-tests:\n", 1)[1].split("  visionos-build:\n", 1)[0]
+        self.assertIn("needs: ios-ui-test-lanes", job)
+        self.assertIn("always()", job)
+        self.assertIn("UI_RESULT: ${{ needs.ios-ui-test-lanes.result }}", job)
+        command = textwrap.dedent(job.split("        run: |\n", 1)[1])
+        for result in ("success", "failure", "cancelled", "skipped", ""):
+            with self.subTest(result=result):
+                process = subprocess.run(["bash", "-e", "-c", command],
+                                         env=dict(os.environ, UI_RESULT=result), text=True, capture_output=True)
+                self.assertEqual(process.returncode, 0 if result == "success" else 1, process.stderr)
 
 
 class SimulatorTests(unittest.TestCase):
@@ -1003,7 +1027,7 @@ class SimulatorTests(unittest.TestCase):
 
     def test_workflow_retains_required_default_paths_and_always_collects_owned_cleanup(self):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
-        build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
+        build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-test-lanes:\n", 1)[0]
         self.assertIn("(inputs.only_testing != '' || inputs.simulator_family == 'ipad') && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test'", build)
         self.assertIn("scripts/xcodebuild.sh test-without-building-unit", build)
         self.assertIn("name: Source-independence check", build)
@@ -1015,7 +1039,7 @@ class SimulatorTests(unittest.TestCase):
 
     def test_simulator_selection_preserves_filtered_ipad_and_owns_ordinary_devices(self):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
-        build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
+        build = workflow.split("  build-and-test:\n", 1)[1].split("  ios-ui-test-lanes:\n", 1)[0]
         step = build.split("      - name: Create owned simulator\n", 1)[1].split("\n      - name:", 1)[0]
         command = textwrap.dedent(step.split("        run: |\n", 1)[1])
         for family in ("iphone", "ipad"):

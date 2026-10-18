@@ -4,6 +4,9 @@ inputs:
   bundles:
     description: Result bundle paths, one per line; retry bundles are included automatically
     required: true
+  artifact-suffix:
+    description: Suffix for artifact names when multiple UI jobs export evidence
+    default: ''
 runs:
   using: composite
   steps:
@@ -22,7 +25,7 @@ runs:
       if: always() && steps.evidence.outputs.review_available == 'true'
       uses: actions/upload-artifact@v7
       with:
-        name: ios-ui-review-evidence
+        name: ios-ui-review-evidence${{ inputs.artifact-suffix }}
         path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/review
         retention-days: 14
         if-no-files-found: ignore
@@ -31,7 +34,7 @@ runs:
       if: always() && steps.evidence.outputs.agent-groups_available == 'true'
       uses: actions/upload-artifact@v7
       with:
-        name: ios-agent-group-evidence
+        name: ios-agent-group-evidence${{ inputs.artifact-suffix }}
         path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/agent-groups
         retention-days: 14
         if-no-files-found: ignore
@@ -40,7 +43,7 @@ runs:
       if: always() && steps.evidence.outputs.recovery_available == 'true'
       uses: actions/upload-artifact@v7
       with:
-        name: ios-transcript-recovery-evidence
+        name: ios-transcript-recovery-evidence${{ inputs.artifact-suffix }}
         path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/recovery
         retention-days: 14
         if-no-files-found: ignore

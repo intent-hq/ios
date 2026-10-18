@@ -80,15 +80,29 @@ Debug-only plaintext fixtures and must not be treated as Release coverage.
 `gh workflow run ci.yml --repo intent-hq/ios --ref <branch> -f only_testing='IntentTests/DemoFixturesTests'`
 runs the same filter in CI as a non-gating `iOS Filtered Tests` job, with the
 per-selector table in the job summary. In CI, pull requests and the merge queue
-run the UI smoke selectors in `scripts/ui-smoke-tests.txt` plus focused iPad menu
-regressions (keep the smoke list to a few fast tests per core flow and update it
-when renaming a listed test); the full `IntentUITests` bundle runs on `main` at
+run the UI smoke selectors in `scripts/ui-smoke-tests.txt` plus focused iPad sidebar
+regressions in independent matrix jobs (keep the smoke list to a few fast tests
+per core flow and update it when renaming a listed test); the full
+`IntentUITests` bundle runs on `main` at
 09:00 and 21:00 UTC as `iOS UI Tests (full)`,
 and on any branch with `gh workflow run ci.yml --repo intent-hq/ios --ref <branch>
 -f ui_suite=full`. For an explicitly selected iPad run, add
 `-f simulator_family=ipad` with 1–20 `Target/Suite[/test]` selectors; full-bundle
 selectors and skipped-only selections are rejected. See the README's CI section
 for evidence artifacts and the disposable simulator route.
+
+The iPad matrix job uses Depot macOS for independent capacity; iPhone keeps the
+selected Mac pool. Each job owns its simulator, build directory, results, and
+evidence. Keep matrix `fail-fast: false` and the aggregate `iOS UI Tests` check,
+which must fail unless both jobs succeed. Filtered and `pre_pr_gate` dispatches
+skip the matrix and aggregate. Parallel iPad screenshot artifacts use the `-ipad`
+suffix in `.github/actions/export-ui-evidence/action.yml`.
+
+The native screenshot-retention contract runs once on ordinary PRs and twice
+for capture-tooling changes, scheduled/manual runs, and the merge queue. The
+selector `.github/scripts/select-fixture-capture-repetitions.sh` defaults to two
+when changed files cannot be inspected. Run
+`python3 scripts/test_select_fixture_capture_repetitions.py` after changing it.
 
 `ui_suite=full` does not opt into quarantined transcript cases:
 `ConversationTranscriptFullGateUITests` needs
