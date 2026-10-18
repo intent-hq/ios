@@ -94,6 +94,55 @@ class ExportTests(unittest.TestCase):
     def manifest(self, kind="review"):
         return json.loads((self.output / kind / "manifest.json").read_text())
 
+    def test_script_monitor_allowlist_matches_only_named_fixture_captures(self):
+        suite = "ScriptMonitorsUITests"
+        source = (ROOT / "IntentUITests" / f"{suite}.swift").read_text()
+        self.assertIn('"--demo-data"', source)
+        self.assertIn('"--demo-script-monitors="', source)
+        methods = dict(re.findall(
+            r"^    (?:private )?func (\w+)(\([^\n]*\n.*?^    })", source, re.MULTILINE | re.DOTALL
+        ))
+        tests = {name for name in methods if name.startswith("test")}
+        self.assertEqual(tests, set(evidence.CAPTURES[suite]))
+        records = []
+        files = {}
+        expected = set()
+        for test in sorted(tests):
+            captures = re.findall(r'capture\(app, "([^"\\]+)"\)', methods[test])
+            captures += ["script-monitors-final-state"]
+            self.assertEqual(set(captures), set(evidence.CAPTURES[suite][test]))
+            attachments = []
+            for capture in captures:
+                filename = f"{len(files)}.png"
+                files[filename] = png(255)
+                attachments.append(attachment(capture, filename))
+                expected.add((test, capture))
+            attachments.append(attachment("Automatic failure screenshot", "automatic.png"))
+            records.append(record(test=f"{suite}/{test}()", attachments=attachments))
+        files["automatic.png"] = png(0)
+        records.append(record(test="UnrelatedUITests/testPrivateSession()", attachments=[
+            attachment("script-monitors-active", "automatic.png"),
+        ]))
+        self.export(self.bundle(records=records, files=files))
+        manifest = self.manifest()
+        self.assertEqual(manifest["missingCaptures"], [])
+        self.assertEqual({(evidence.test_identity(item["testIdentifier"])[1], item["capture"])
+                          for item in manifest["files"]}, expected)
+        self.assertTrue(all(item["exportedFileName"] != "automatic.png" for item in manifest["files"]))
+
+    def test_missing_script_monitor_capture_remains_missing_when_retry_has_it(self):
+        suite = "ScriptMonitorsUITests"
+        test = "testOwnedWatchDetailsUpdateAndRemovalWithoutRestart"
+        captures = evidence.CAPTURES[suite][test]
+        records = [record(test=f"{suite}/{test}()", attachments=[])]
+        source = self.bundle("monitors.xcresult", records=records)
+        self.bundle("monitors-retry.xcresult", records=[record(test=f"{suite}/{test}()", attachments=[
+            attachment(name, f"{index}.png") for index, name in enumerate(captures)
+        ])], files={f"{index}.png": png(255) for index, _ in enumerate(captures)})
+        self.export(source)
+        self.assertTrue(self.manifest()["missingCaptures"])
+        self.assertEqual(set(self.manifest()["missingCaptures"][0]["captures"]), set(captures))
+
     def mermaid_producer(self):
         source = (ROOT / "IntentUITests" / f"{MERMAID_SUITE}.swift").read_text()
         self.assertEqual(re.findall(r"\bclass (\w+): XCTestCase", source), [MERMAID_SUITE])

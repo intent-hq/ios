@@ -11,12 +11,76 @@ import tempfile
 
 
 CAPTURES = {
+    "ScriptMonitorsUITests": {
+        "testOwnedWatchDetailsUpdateAndRemovalWithoutRestart": (
+            "script-monitors-active", "script-monitors-details", "script-monitors-text-update",
+            "script-monitors-removed-details", "script-monitors-removed", "script-monitors-final-state",
+        ),
+        "testLoadingFailureRetriesWithoutInventingAnEmptyState": (
+            "script-monitors-loading", "script-monitors-error", "script-monitors-retried", "script-monitors-final-state",
+        ),
+        "testEmptyOwnerCanLoadNextPageAndRetryItsFailure": (
+            "script-monitors-empty-owner-more", "script-monitors-page-error", "script-monitors-next-page", "script-monitors-final-state",
+        ),
+        "testDetailFailureRetainsSummaryAndRetriesOnlySelectedWatch": (
+            "script-monitors-detail-error", "script-monitors-detail-retried", "script-monitors-final-state",
+        ),
+        "testUnsupportedConnectionDoesNotReadOrSubscribe": (
+            "script-monitors-unsupported", "script-monitors-final-state",
+        ),
+        "testDeadlineRemainsVisibleUntilServerExpiry": (
+            "script-monitors-deadline", "script-monitors-expired", "script-monitors-final-state",
+        ),
+        "testQuestionFlowKeepsWatchReachableWithAccessibilityText": (
+            "script-monitors-question-accessibility", "script-monitors-question-details", "script-monitors-final-state",
+        ),
+    },
+    "WorkspaceFilesUITests": {
+        "testBrowseFilesAndPreserveFoldersAcrossTabsInBothThemes": tuple(
+            f"{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("workspace-context", "workspace-files", "workspace-file-preview")
+        ),
+    },
     "FixtureCaptureLifecycleUITests": {
         "testAssertionAbortRetainsFinalCapture": ("fixture-assertion-abort-final-state",),
         "testPassingFixtureRetainsRepeatedFinalCapture": ("fixture-passing-final-state",),
     },
     "WorkspaceEntryUITests": {
         "testDisclosureAndNoteNavigationKeepSeparateTouchTargets": ("note-viewer-flat-back-button",),
+        "testCreateNewAgentMenuOpensAgentSetup": ("new-agent-next", "new-agent-create", "new-browser-open"),
+    },
+    "WorkspaceBackgroundUITests": {
+        "testNoteBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "note")
+        ),
+        "testNewAgentBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "agent", "provider")
+        ),
+        "testBrowserBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "browser", "browser-address")
+        ),
+        "testConversationBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "conversation")
+        ),
+        "testSettingsBackgroundsMatchWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "settings", "manual", "disconnect-confirmation")
+        ),
+        "testSettingsSupportBackgroundsMatchWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "acknowledgements", "diagnostics")
+        ),
     },
     "AppCoordinatorTests": {
         "iPadWorkspaceBackFollowsWindowWidthAndKeepsSelection": (
@@ -38,14 +102,26 @@ CAPTURES = {
             for section in (
                 "workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual",
                 "Recent sidebar", "Repo sidebar", "Status sidebar", "first workspace selected",
+                "focused typing", "focused typing keyboard hidden", "typing restored",
             )
+        ),
+        "testScrollingIndicatorStaysOutsideWorkspaceRowsInBothThemes": tuple(
+            f"iPad scrolling {mode} sidebar {appearance}"
+            for appearance in ("light", "dark")
+            for mode in ("Recent", "Repo", "Status")
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
     },
     "HomeActionMenuUITests": {
+        "testDuoWorkspaceDetailKeepsOnlyTheAccessibleContentTitle": ("Duo workspace detail without header",),
+        "testClosePreservesWorkspaceScrollAndAssistantIsFirst": ("Intent home action tiles",),
+        "testMenuPlacementSurvivesDrawerRoundTrips": (
+            "Intent menu placement closed", "Intent menu placement open",
+        ),
         "testIPadConversationKeepsDraftAndRailAvailable": (
             "iPad expanded workspace conversation", "iPad collapsed conversation with draft",
             "iPad portrait conversation with draft",
+            "iPad focused multiline draft",
         ),
         "testIPadQuestionsKeepNextAndRailAvailable": ("iPad question actions beside persistent rail",),
     },
@@ -59,6 +135,24 @@ CAPTURES = {
             "mermaid-fullscreen-from-button-edge", "mermaid-inline-after-pinch",
             "mermaid-inline-after-horizontal-pan", "mermaid-inline-after-vertical-pan",
         ),
+    },
+    "ConversationToolActivityUITests": {
+        "testIPadClaudeToolTitlesKeepExpandedDetails": (
+            "iPad Claude tools collapsed light", "iPad Claude tools expanded light",
+            "iPad Claude tools collapsed dark", "iPad Claude tools expanded dark", "iPad Claude tools final state",
+        ),
+        "testIPadConsecutiveToolsExpandAndCollapseInBothThemes": (
+            "iPad tools collapsed light", "iPad tools expanded light",
+            "iPad tools collapsed dark", "iPad tools expanded dark", "iPad tools final state",
+        ),
+    },
+    "ConversationActionsUITests": {
+        "testHistoryNoticeAndActionCancellationPreserveConversation": (
+            "Conversation-History-Light", "Agent-Actions-Light", "Agent-Delete-Confirmation-Light",
+        ),
+    },
+    "WorkspaceComposerUITests": {
+        "testTranscriptTapDismissesKeyboardAndPreservesDraft": ("Workspace composer resting placement",),
     },
     "ConversationTranscriptScrollUITests": {
         "testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath": ("Transcript recovered release",),
@@ -142,7 +236,16 @@ CAPTURES = {
     },
     "WorkspaceSwipeUITests": {
         "testSlowStatusSwipeStaysOpenAfterFingerLifts": ("workspace-status-swipe-stays-open",),
-        "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
+        "testRightSwipeOpensRecentAgentAndBackReturnsToWorkspace": ("workspace-right-swipe-recent-agent",),
+        "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": (
+            "workspace-archive-delete-swipe", "workspace-archived-badge",
+        ),
+    },
+    "WorkspaceScriptUITests": {
+        "testSwipeStopsServerAndDeletesFinishedScript": ("workspace-script-stop-delete-actions",),
+    },
+    "WorkspaceStatusImageUITests": {
+        "testStatusImageIsAbsentFromListAndOpensFullSizeFromDetail": ("workspace-summary-and-image",),
     },
     "ManualConnectionDesignUITests": {
         "testTokenVisibilityKeepsDraftFocusAndSheetPosition": (
@@ -159,6 +262,12 @@ CAPTURES = {
         "testRecentConnectionsOpensSwitcherAndSelectsConnection": ("workspace-menu-recent-connections",),
     },
     "WorkspaceSearchUITests": {
+        "testWorkspaceControlsHaveSeparateTargetsAndSelectEveryMode": ("Workspace list leading alignment",),
+        "testIPadSearchSurvivesCollapseAndSectionChanges": tuple(
+            f"iPad {state} {appearance}"
+            for appearance in ("light", "dark")
+            for state in ("focused search", "focused search keyboard hidden", "search restored")
+        ),
         "testSearchAboveKeyboardHidesAssistantUntilClosed": (
             "Workspace search above keyboard without Assistant launcher",
         ),

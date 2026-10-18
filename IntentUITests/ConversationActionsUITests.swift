@@ -25,6 +25,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         app.buttons["conversation.actions.delete"].tap()
         let delete = app.buttons["Delete"]
         XCTAssertTrue(delete.waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Agent-Delete-Confirmation-Light")
         if app.buttons["Cancel"].exists {
             app.buttons["Cancel"].tap()
         } else {
@@ -57,6 +58,15 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         composer.typeText("Keep the current model")
         app.buttons["composer.send"].tap()
         XCTAssertTrue(app.buttons["composer.stop"].waitForExistence(timeout: Self.timeout))
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let close = app.buttons["ipad.focus.close"]
+            XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
+            XCTAssertFalse(app.buttons["conversation.actions.open"].exists)
+            close.tap()
+            XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertEqual(composer.value as? String, "")
+            XCTAssertTrue(app.buttons["composer.stop"].exists, "Closing focus must retain the streaming conversation")
+        }
         openActions(app)
         XCTAssertFalse(model.exists, "Model changes are only available before the first message")
         XCTAssertTrue(app.buttons["conversation.actions.rename"].exists)
@@ -93,8 +103,8 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
     }
 
     @MainActor
-    private func capture(_ app: XCUIApplication, named name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+    private func capture(_: XCUIApplication, named name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)

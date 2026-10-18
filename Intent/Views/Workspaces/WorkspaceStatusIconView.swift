@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkspaceStatusIconView: View {
     let workspace: Workspace
     let colorScheme: ColorScheme
+    var size: CGFloat = Constants.WorkspaceRow.statusIconSize
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
@@ -47,8 +48,6 @@ struct WorkspaceStatusIconView: View {
 
     @ViewBuilder
     private var statusIcon: some View {
-        let size = Constants.WorkspaceRow.statusIconSize
-
         ZStack {
             if displayStatus == .notStarted {
                 Circle()

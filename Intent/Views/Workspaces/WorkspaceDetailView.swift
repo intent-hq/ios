@@ -24,6 +24,9 @@ struct WorkspaceDetailView: View {
     @State private var noteStore: NoteStore
     @State private var scriptStore: WorkspaceScriptStore
     @State private var changesStore: WorkspaceChangesStore
+    @State private var filesStore: WorkspaceFilesStore
+    @State private var notesExpanded = true
+    @State private var filesExpanded = true
     @State private var titleEditor = WorkspaceTitleEditor()
     @FocusState private var titleFocused: Bool
     @Environment(BackendSession.self) private var session
@@ -42,19 +45,15 @@ struct WorkspaceDetailView: View {
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
         _scriptStore = State(initialValue: WorkspaceScriptStore(connection: session.connection))
         _changesStore = State(initialValue: WorkspaceChangesStore(connectionManager: session.connection))
+        _filesStore = State(initialValue: .init(connection: session.connection))
     }
 
     var agentStore: AgentStore { storedAgentStore }
     var viewModel: AgentListViewModel { storedViewModel }
     var currentTab: WorkspaceTab { selectedTab }
-
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
-
     var noteStoreConnectionID: ObjectIdentifier { ObjectIdentifier(noteStore.connectionManager) }
-
-    var changesStoreConnectionID: ObjectIdentifier {
-        ObjectIdentifier(changesStore.connectionManager)
-    }
+    var changesStoreConnectionID: ObjectIdentifier { ObjectIdentifier(changesStore.connectionManager) }
 
     private var workspaceStore: WorkspaceStore { session.workspaceStore }
     private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
@@ -69,9 +68,7 @@ struct WorkspaceDetailView: View {
 
     private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
 
-    private var showsToolbarTitle: Bool { !usesVerticalBar || !isSidebarVisible }
     private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
-
     private var lifecycleContent: some View {
         ZStack {
             WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
@@ -123,6 +120,9 @@ struct WorkspaceDetailView: View {
             }
             resetAgentWorkspace(to: newId)
             noteStore.prepareForWorkspaceChange(to: newId)
+            if filesStore.workspaceId != newId { filesStore.reset() }
+            notesExpanded = true
+            filesExpanded = true
             agentStore.startObservingEvents()  // Re-register with new workspaceId context
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: newId) }
@@ -248,7 +248,8 @@ struct WorkspaceDetailView: View {
         } message: {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
-        .navigationTitle(showsToolbarTitle ? workspaceName : "")
+        .navigationTitle(workspaceName)
+        .toolbar(removing: usesVerticalBar ? .title : nil)
         .toolbarTitleDisplayMode(.inline)
         #if !os(visionOS)
         .navigationBarBackButtonHidden()
@@ -257,9 +258,6 @@ struct WorkspaceDetailView: View {
         #endif
         .toolbar {
             if usesVerticalBar {
-                if showsToolbarTitle {
-                    ToolbarItem(placement: .principal) { toolbarTitle }
-                }
                 WorkspaceVerticalNavigationToolbar(
                     isEnabled: true,
                     showsBackButton: showsBackButton && !isSidebarVisible,
@@ -369,11 +367,13 @@ private extension WorkspaceDetailView {
                     tabContent
                 }
                 .padding(.bottom, showsAgentList ? WorkspaceDetailStyle.pageInset : 0)
+                .iPadDetailColumn()
             } else {
                 VStack(spacing: 0) {
                     detailHeader
                     tabContent
                 }
+                .iPadDetailColumn()
             }
         }
         .accessibilityIdentifier("workspace.detail.scroll")
@@ -387,6 +387,7 @@ private extension WorkspaceDetailView {
                 await changesStore.refresh(workspaceId: workspaceId)
             } else {
                 await noteStore.fetchNotes(workspaceId: workspaceId)
+                await filesStore.refresh()
             }
         }
     }
@@ -451,7 +452,7 @@ private extension WorkspaceDetailView {
         } else if selectedTab == .changes {
             WorkspaceChangesView(workspaceId: workspaceId, store: changesStore)
         } else {
-            NoteListView(workspaceId: workspaceId, noteStore: noteStore)
+            WorkspaceContextView(workspaceId: workspaceId, noteStore: noteStore, filesStore: filesStore, notesExpanded: $notesExpanded, filesExpanded: $filesExpanded)
         }
     }
 
@@ -483,10 +484,7 @@ private extension WorkspaceDetailView {
     private func changeWorkspace(_ method: String) {
         Task {
             do {
-                _ = try await session.connection.request(
-                    method,
-                    params: ["workspaceId": workspaceId]
-                )
+                _ = try await session.connection.request(method, params: ["workspaceId": workspaceId])
                 coordinator.onBackToWorkspaceList()
                 await workspaceStore.fetchAll()
             } catch {

@@ -2,6 +2,7 @@ import SwiftUI
 
 extension Constants.WorkspaceList {
     static let pageInset: CGFloat = 24
+    static let duoLeadingInset: CGFloat = 32
     static let titleTopSpacing: CGFloat = 64
     static let titleBottomSpacing: CGFloat = 64
     static let searchTitleSpacing: CGFloat = 16

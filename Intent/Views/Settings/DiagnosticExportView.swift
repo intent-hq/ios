@@ -4,6 +4,7 @@ import SwiftUI
 struct DiagnosticExportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @State private var model = DiagnosticExportModel()
     @State private var confirmsClear = false
 
@@ -15,6 +16,8 @@ struct DiagnosticExportView: View {
                     DiagnosticPreviewSection(preview: preview)
                 }
             }
+            .scrollContentBackground(colorScheme == .dark ? .hidden : .automatic)
+            .background(exportBackground)
             // Preserve native diagnostic list actions; only navigation uses Intent button chrome.
             // swiftlint:disable:next generic_button_style
             .buttonStyle(.automatic)
@@ -38,6 +41,12 @@ struct DiagnosticExportView: View {
                 if value == nil { model.refreshIfNeeded() }
             }
             .onDisappear { model.cancelPreparation() }
+        }
+    }
+
+    @ViewBuilder private var exportBackground: some View {
+        if colorScheme == .dark {
+            WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
         }
     }
 

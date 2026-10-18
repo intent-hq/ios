@@ -365,8 +365,8 @@ extension ConnectionManager {
         )
         let winner = raced.winner
         recordLateCertMismatches(from: raced.drain, generation: generation)
-        let principal = try await admit(winner, token: parameters.token, fingerprint: parameters.certFingerprint)
-        guard !Task.isCancelled, adoptReconnectWinner(winner, principal: principal, parameters: parameters, attempt: attempt, generation: generation) else {
+        let handshake = try await admit(winner, token: parameters.token, fingerprint: parameters.certFingerprint)
+        guard !Task.isCancelled, adoptReconnectWinner(winner, handshake: handshake, parameters: parameters, attempt: attempt, generation: generation) else {
             await winner.disconnect()
             return true
         }
@@ -377,7 +377,7 @@ extension ConnectionManager {
 
     private func adoptReconnectWinner(
         _ winner: RacedConnection,
-        principal: ConnectionPrincipal,
+        handshake: ConnectionHandshake,
         parameters: ReconnectParameters,
         attempt: Int,
         generation: Int
@@ -387,7 +387,7 @@ extension ConnectionManager {
         activeTunnel = winner.tunnel
         host = winner.host
         configureSocketMessagePump()
-        finishIdentityAdmission(principal, token: parameters.token, fingerprint: parameters.certFingerprint)
+        finishIdentityAdmission(handshake, token: parameters.token, fingerprint: parameters.certFingerprint)
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = attempt
         recordConnectionAttempt(.recovered, context: activeTunnel == nil ? .direct : .tunnel)

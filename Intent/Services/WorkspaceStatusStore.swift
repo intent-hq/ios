@@ -13,6 +13,12 @@ import Observation
         var isLoading = false
         var isStale = true
         var error: String?
+        var nextCursor: String?
+        var failedNextPage = false
+        var accessBlocked = false
+        @ObservationIgnored var recoveryExhausted = false
+        @ObservationIgnored var journalOverflow = false
+        @ObservationIgnored var tombstones: [String: (String, [String: Any])] = [:]
         @ObservationIgnored var consumers: Set<UUID> = []
         @ObservationIgnored var generation = 0
         @ObservationIgnored var attempted = false
@@ -54,6 +60,8 @@ import Observation
     let removalEvents: Set<String>
     let parse: ([String: Any]) -> Row?
     let fold: Fold
+    /// Optional bounded summary contract. Legacy hook/PR paths remain unchanged.
+    var pageAdapter: WorkspaceStatusPageAdapter<Row>?
 
     init(
         connection: any ConnectionManagerRouting,
@@ -131,11 +139,19 @@ import Observation
         removeHandler()
     }
 
-    private func invalidateConnection() {
+    func invalidateConnection() {
         for bucket in buckets.values { invalidate(bucket) }
         // The old socket owns these IDs. Never unsubscribe them on a new socket.
         feeds = [:]
         removeHandler()
+    }
+
+    func denyAccess(workspaceId: String, message: String) {
+        guard let bucket = buckets[workspaceId], pageAdapter != nil else { return }
+        invalidate(bucket)
+        bucket.accessBlocked = true
+        bucket.attempted = true
+        bucket.error = message
     }
 
     private func invalidate(_ bucket: Bucket) {
@@ -148,6 +164,14 @@ import Observation
         bucket.loadCompletion = nil
         bucket.events = []
         bucket.recoveryIDs = []
+        bucket.tombstones = [:]
+        bucket.journalOverflow = false
+        bucket.nextCursor = nil
+        bucket.failedNextPage = false
+        bucket.accessBlocked = false
+        bucket.recoveryExhausted = false
+        if pageAdapter != nil { bucket.rows = []; bucket.error = nil }
+
         bucket.attempted = false
         bucket.isLoading = false
         bucket.isStale = true

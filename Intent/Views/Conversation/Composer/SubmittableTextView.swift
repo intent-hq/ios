@@ -223,6 +223,7 @@ struct SubmittableTextView: UIViewRepresentable {
         let inset = Constants.Conversation.Composer.textContainerInset
         textView.textContainerInset = UIEdgeInsets(top: inset, left: inset, bottom: inset, right: inset)
         textView.isScrollEnabled = true
+        textView.clipsToBounds = true
         textView.alwaysBounceVertical = false
         textView.setContentHuggingPriority(.defaultHigh, for: .vertical)
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -236,6 +237,12 @@ struct SubmittableTextView: UIViewRepresentable {
         }
 
         return textView
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView _: KeyCommandTextView, context _: Context) -> CGSize? {
+        guard let width = proposal.width, let height = proposal.height,
+              width.isFinite, height.isFinite else { return nil }
+        return CGSize(width: width, height: height)
     }
 
     func updateUIView(_ textView: KeyCommandTextView, context: Context) {

@@ -34,7 +34,8 @@ struct ConversationView: View {
             agentDetails: session.agentDetails,
             conversations: session.conversations,
             hooks: session.hooksStore,
-            monitors: session.prMonitorsStore
+            monitors: session.prMonitorsStore,
+            scriptMonitors: session.scriptMonitorsStore
         ))
     }
 
@@ -138,7 +139,7 @@ private struct ConversationViewContent: View {
             }
     }
 
-    /// Sheets, confirmation dialog, and alerts.
+    /// Sheets and alerts; the delete confirmation is anchored to its menu.
     private var conversationPresentation: some View {
         conversationChrome
             .sheet(isPresented: $showModelPicker) {
@@ -147,16 +148,6 @@ private struct ConversationViewContent: View {
             }
             .sheet(item: $presentedNote) { noteInfo in
                 noteSheet(for: noteInfo).coversConversationComposers()
-            }
-            .confirmationDialog(
-                "Delete Agent?",
-                isPresented: $showDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive, action: deleteAgent)
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This will permanently delete this agent and its conversation history.")
             }
             .alert("Rename Agent", isPresented: $showRenameAlert) {
                 TextField("Agent name", text: $renameText)
@@ -254,30 +245,28 @@ private extension ConversationViewContent {
     /// Keep the column's identity (including its scroll state) across width changes.
     private var conversationChrome: some View {
         legacyConversationChrome
+            .conversationReadableColumn()
             .navigationBarBackButtonHidden(assistantStore == nil)
             .toolbarBackground(viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
             .nativeNavigationBackGesture(isEnabled: !usesPhoneQuestionPresentation || !answeringWorkspaceQuestions)
             #if os(iOS)
             .toolbar(usesWorkspaceDesign && !usesVerticalNavigation ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if usesWorkspaceDesign, !usesVerticalNavigation {
-                    WorkspaceConversationHeader(
-                        title: viewModel.agentName,
-                        showsBackground: !viewModel.showsLoadingState,
-                        assistantStore: assistantStore,
-                        onBack: navigateBack
-                    ) { agentMenu }
-                    .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: viewModel.showsLoadingState)
-                }
-            }
+            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign && !usesVerticalNavigation) {
+                WorkspaceConversationHeader(
+                    title: viewModel.agentName,
+                    showsBackground: !viewModel.showsLoadingState,
+                    assistantStore: assistantStore,
+                    onBack: navigateBack
+                ) { agentMenu }
+                .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: viewModel.showsLoadingState)
+            })
             .modifier(WorkspaceQuestionPresentation(
                 viewModel: viewModel,
                 isPresented: $answeringWorkspaceQuestions,
                 isEnabled: usesPhoneQuestionPresentation
             ))
             #endif
-            .conversationReadableColumn()
             .background {
                 ConversationBackground(isLoading: viewModel.showsLoadingState, usesWorkspaceDesign: usesWorkspaceDesign)
             }
@@ -355,6 +344,16 @@ private extension ConversationViewContent {
     /// The native menu owns its container shape and dismissal on every device.
     private var agentMenu: some View {
         nativeAgentMenu
+            .confirmationDialog(
+                "Delete Agent?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive, action: deleteAgent)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete this agent and its conversation history.")
+            }
     }
 
     private enum AgentAction {

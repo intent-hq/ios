@@ -59,7 +59,7 @@ nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
             "status image never appeared in the workspace detail header"
         )
         let inlineWidth = detailImage.frame.width
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "workspace-summary-and-image"
         screenshot.lifetime = .keepAlways
         add(screenshot)

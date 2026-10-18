@@ -12,6 +12,7 @@ enum DemoDesignScenario: String, CaseIterable {
     case agentGroupsLarge = "agent-groups-large"
     case agentGroupsRetry = "agent-groups-retry"
     case blocker
+    case claudeTools = "claude-tools"
     case composer
     case context
     case conversation

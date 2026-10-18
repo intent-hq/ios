@@ -1,9 +1,5 @@
 import SwiftUI
 
-extension EnvironmentValues {
-    @Entry var conversationComposerFocus: Binding<Bool>?
-}
-
 struct ConversationColumnView: View {
     let viewModel: ConversationViewModel
     let onNavigateToNote: (String, String, String) -> Void
@@ -11,9 +7,9 @@ struct ConversationColumnView: View {
     var usesWorkspaceDesign = false
     @Binding var answeringWorkspaceQuestions: Bool
     var onDemoCover: () -> Void = {}
-
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.conversationPresentation) private var presentation
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     /// Room a floating Intent launcher needs over this chat (0 when none).
     @Environment(\.workspaceActionLauncherClearance) private var launcherClearance
     @State private var questionWizardCollapsed = false
@@ -39,9 +35,10 @@ struct ConversationColumnView: View {
         VStack(spacing: 0) {
             columnContent
         }
+        .ignoresSafeArea(.container, edges: usesWorkspaceDesign && usesVerticalBar && !keyboardVisible ? .bottom : [])
         .environment(\.conversationComposerFocus, $composerFocused)
-        // Measured inside keyboard avoidance on purpose: with the keyboard
-        // up the cap derives from the remaining visible height.
+        .modifier(IPadTypingFocus(isFocused: $composerFocused, composerVisible: composerVisible))
+        // Measure inside keyboard avoidance so the cap uses the remaining visible height.
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.height
         } action: { height in
@@ -81,7 +78,8 @@ struct ConversationColumnView: View {
                 viewModel: viewModel,
                 store: viewModel.store,
                 allowsSending: composerVisible
-            ) { composerFocused = $0 }
+            )
+            .environment(\.conversationComposerFocus, $composerFocused)
         })
         .sheet(isPresented: $questionSheetPresented) {
             questionSheet
@@ -148,7 +146,6 @@ struct ConversationColumnView: View {
         }
         // The conditional views use SwiftUI's default opacity transition.
         .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)
-
         measuredAccessoryRows
 
         questionRegion
@@ -165,7 +162,6 @@ struct ConversationColumnView: View {
                 )
             )
             .layoutPriority(usesPhoneQuestionPresentation ? 1 : 0)
-
         // A floating host presents the composer from an ornament instead.
         if composerHost == .inline, !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
             VStack(spacing: 0) {
@@ -198,23 +194,6 @@ struct ConversationColumnView: View {
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerInputTop = $0 }
             .preference(key: WorkspaceActionMenuInputTop.self, value: composerInputTop)
         }
-    }
-
-    private var workspaceQueueVisible: Bool {
-        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
-    }
-
-    private var stickyHorizontalInset: CGFloat {
-        guard presentation != .iPad else { return 0 }
-        return keyboardVisible || composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
-    }
-
-    private var composerBottomInset: CGFloat {
-        presentation == .iPad && !keyboardVisible ? Design.IPad.composerBottomInset : Design.Composer.keyboardBottomSpacing
-    }
-
-    private var usesPhoneQuestionPresentation: Bool {
-        usesWorkspaceDesign && presentation != .iPad
     }
 
     @ViewBuilder
@@ -349,17 +328,33 @@ struct ConversationColumnView: View {
 }
 
 extension ConversationColumnView {
-    /// Whether any status row (agent waiting, PR monitors, hooks, queue)
-    /// shows below the transcript; mirrors `accessoryRows`.
+    private var workspaceQueueVisible: Bool {
+        usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
+    }
+
+    private var stickyHorizontalInset: CGFloat {
+        guard presentation != .iPad else { return 0 }
+        return keyboardVisible || composerFocused ? Design.Composer.keyboardHorizontalInset : Design.horizontalInset
+    }
+
+    private var composerBottomInset: CGFloat {
+        if usesVerticalBar, !keyboardVisible { return Design.Composer.verticalBarBottomSpacing }
+        return presentation == .iPad && !keyboardVisible ? Design.IPad.composerBottomInset : Design.Composer.keyboardBottomSpacing
+    }
+
+    private var usesPhoneQuestionPresentation: Bool {
+        usesWorkspaceDesign && presentation != .iPad
+    }
+
+    /// Mirrors the visible rows below the transcript.
     private var hasAccessoryRows: Bool {
         let showsMonitors = !usesWorkspaceDesign && !viewModel.showsLoadingState
             && (!viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil)
         let showsHooks = !viewModel.activeAgentHooks.isEmpty || viewModel.hookStore.error != nil
         let showsQueue = !usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
-        return viewModel.store.isWaitingForAgents || showsMonitors || showsHooks || showsQueue
+        return viewModel.store.isWaitingForAgents || showsMonitors || showsHooks || showsQueue || viewModel.showsScriptMonitorStatus
     }
 
-    /// The status rows' top for the launcher to stay above (floating host).
     private var accessoryRowsLauncherTop: CGFloat? {
         hasAccessoryRows ? accessoryRowsTop : nil
     }
@@ -378,6 +373,8 @@ extension ConversationColumnView {
     private var accessoryRows: some View {
         if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
 
+        // Keep watch details mounted outside the composer and question slot.
+        MonitoredScriptsRow(viewModel: viewModel)
         if viewModel.store.isWaitingForAgents {
             VStack(spacing: 0) {
                 AgentWaitingView(

@@ -32,6 +32,8 @@ extension DemoFixturesTests {
         #expect(viewModel.totalMessageCount == viewModel.messages.count + (scenario == .history ? 100 : 0))
         if scenario == .mermaidHistory {
             assertDiagramHistory(viewModel)
+        } else if scenario == .claudeTools {
+            try assertClaudeToolDetails(viewModel)
         } else {
             #expect(viewModel.messages.first?.joinedTextContent.hasPrefix("Worth adding tests?") == true)
             #expect(viewModel.messages.contains { $0.role == .user && $0.joinedTextContent.contains("attention circle not fill") })
@@ -57,6 +59,15 @@ extension DemoFixturesTests {
             #expect(viewModel.pendingQuestions == nil)
         }
         #expect(viewModel.monitoredPrStore.activeMonitors.count == (scenario == .conversation ? 1 : 0))
+    }
+
+    private func assertClaudeToolDetails(_ viewModel: ConversationViewModel) throws {
+        let message = try #require(viewModel.messages.first)
+        #expect(viewModel.messages.count == 1)
+        let tools = message.contentBlocks.filter { $0.type == .toolUse }
+        #expect(tools.map(\.resolvedName) == ["ToolSearch", "Glob"])
+        #expect(tools.first?.input["query"]?.value as? String == "select:mcp__workspace-mcp__workspace_api")
+        #expect(message.contentBlocks.filter { $0.type == .toolResult }.count == tools.count)
     }
 
     private func assertDiagramHistory(_ viewModel: ConversationViewModel) {

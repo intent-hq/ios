@@ -64,7 +64,7 @@ struct IPadNavigationRail: View {
                 .background {
                     if isSelected {
                         RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius)
-                            .fill(Constants.Pairing.surface(for: colorScheme))
+                            .fill(IPadShellStyle.selection(for: colorScheme))
                     }
                 }
                 .contentShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))

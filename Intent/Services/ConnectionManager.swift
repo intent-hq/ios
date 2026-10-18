@@ -45,6 +45,13 @@ import os
     }
     @ObservationIgnored private var isDemoConnection = false
     @ObservationIgnored var servesDemoFixtures = false
+    @ObservationIgnored var demoScriptMonitorFixtures: DemoScriptMonitorFixtures?
+    @ObservationIgnored var scriptMonitorsDisabledForConnection = false
+    var capabilities: ConnectionCapabilities = .unknown {
+        didSet { capabilitiesSubject.send(capabilities) }
+    }
+    @ObservationIgnored private let capabilitiesSubject = CurrentValueSubject<ConnectionCapabilities, Never>(.unknown)
+    var capabilitiesPublisher: AnyPublisher<ConnectionCapabilities, Never> { capabilitiesSubject.eraseToAnyPublisher() }
     private var admittedPrincipal: ConnectionPrincipal?
     @ObservationIgnored var admission: ConnectionAdmission?
     @ObservationIgnored private(set) var pairingAttemptID: UUID?
@@ -156,6 +163,7 @@ import os
     }
 
     isolated deinit {
+        demoScriptMonitorFixtures?.stop()
         authorityRefreshTask?.cancel()
         stopPathMonitor()
     }
@@ -168,7 +176,19 @@ extension ConnectionManager {
         if !isDemoConnection { disconnect() }
         isDemoConnection = true
         servesDemoFixtures = serveFixtures
+        configureDemoScriptMonitors(serveFixtures: serveFixtures)
         connectionState = .connected
+    }
+
+    func configureDemoScriptMonitors(serveFixtures: Bool, arguments: [String] = ProcessInfo.processInfo.arguments) {
+        demoScriptMonitorFixtures?.stop()
+        demoScriptMonitorFixtures = serveFixtures ? DemoScriptMonitorFixtures.configured(arguments: arguments) : nil
+        capabilities = .unknown
+        if demoScriptMonitorFixtures?.supportsMonitors == true {
+            capabilities = ConnectionCapabilities(hello: [
+                "server": ["protocolVersion": "14.0", "capabilities": ["scriptMonitors": 2, "scriptActiveLists": 1]]
+            ])
+        }
     }
 
     /// Combine compatibility for stores that depend on ConnectionManagerRouting.
@@ -250,7 +270,7 @@ extension ConnectionManager {
         defer {
             recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration)
         }
-        let principal = try await admit(winner, token: target.token, fingerprint: target.certFingerprint)
+        let handshake = try await admit(winner, token: target.token, fingerprint: target.certFingerprint)
         let raceEnd = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms (at +\(Int((raceEnd - connectStart) * Self.millisecondsPerSecond))ms)")
         AppLog.connection.debug("[ConnectionManager] Race won by \(winner.host), generation=\(context.generation)")
@@ -267,7 +287,7 @@ extension ConnectionManager {
         }
         lateMismatchGeneration = adoptConnectedWinner(
             winner,
-            principal: principal,
+            handshake: handshake,
             target: target,
             preservesLiveConnection: context.preservesLiveConnection,
             initialGeneration: context.generation
@@ -335,7 +355,7 @@ extension ConnectionManager {
 
     private func adoptConnectedWinner(
         _ winner: RacedConnection,
-        principal: ConnectionPrincipal,
+        handshake: ConnectionHandshake,
         target: ConnectTarget,
         preservesLiveConnection: Bool,
         initialGeneration: Int
@@ -350,10 +370,7 @@ extension ConnectionManager {
         activeTunnel = winner.tunnel
         host = winner.host
         configureSocketMessagePump()
-        currentPrincipal = principal
-        admission = ConnectionAdmission(id: UUID(), token: target.token, fingerprint: target.certFingerprint, principal: principal)
-        bindSavedIdentity(principal)
-        connectionState = .connected
+        finishIdentityAdmission(handshake, token: target.token, fingerprint: target.certFingerprint)
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = 0
         subscribeToAllEvents()
@@ -416,6 +433,8 @@ extension ConnectionManager {
     /// `connect()` to the same target must keep the accumulated mismatches,
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
+        demoScriptMonitorFixtures?.stop()
+        demoScriptMonitorFixtures = nil
         isDemoConnection = false
         servesDemoFixtures = false
         connectionGeneration += 1

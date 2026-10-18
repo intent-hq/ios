@@ -15,10 +15,11 @@ struct ProviderModelStepView: View {
     let onRetryProviders: () -> Void
     let onCreate: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
 
     var body: some View {
         ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
+            WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
             providerContent
             creatingOverlay
         }
@@ -38,6 +39,7 @@ struct ProviderModelStepView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Create", action: onCreate)
                     .buttonStyle(IntentButtonStyle())
+                    .fixedSize(horizontal: usesVerticalBar, vertical: false)
                     .disabled(isCreateDisabled)
             }
             .intentToolbarSurface()

@@ -20,6 +20,7 @@ struct SettingsView: View {
                 onManualPairing: onManualPairing
             )
                 .environment(\.colorScheme, contentColorScheme ?? colorScheme)
+                .modifier(IPadNavigationVisibility(isEnabled: isEmbedded))
         }
         #if os(iOS)
         .background {
@@ -100,7 +101,9 @@ private struct SettingsContent: View {
         }
         .buttonStyle(IntentContentButtonStyle())
         .foregroundStyle(SettingsStyle.foreground(for: colorScheme))
-        .background(IPadSidebarStyle.background(for: colorScheme))
+        .background(colorScheme == .dark
+            ? WorkspaceDetailStyle.background(for: colorScheme)
+            : IPadSidebarStyle.background(for: colorScheme))
     }
 
     @ViewBuilder private var settingsSections: some View {
