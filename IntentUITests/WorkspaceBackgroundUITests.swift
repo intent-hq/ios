@@ -158,40 +158,38 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
     }
 
     @MainActor
-    func testIPadSettingsSidebarKeepsShellBackgroundInBothLayouts() throws {
+    func testIPadSettingsSidebarKeepsShellBackground() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar")
-        defer { XCUIDevice.shared.orientation = .portrait }
-        // Landscape keeps the sidebar beside the workspace; portrait on smaller iPads opens it as a drawer.
-        for (layout, orientation) in [("landscape", UIDeviceOrientation.landscapeLeft), ("portrait", .portrait)] {
-            XCUIDevice.shared.orientation = orientation
-            for appearance in ["dark", "light"] {
-                let app = XCUIApplication()
-                let content = try openWorkspace(
-                    in: app,
-                    appearance: appearance,
-                    arguments: ["--demo-settings", "--demo-ipad-pane-geometry"]
-                )
-                let shell = appearance == "dark" ? Sample.darkSidebar : Sample.lightSettings
-                openSettings(in: app)
-                let manual = app.buttons["settings.pairing.manual"]
-                let settings = app.scrollViews["settings.scroll"]
-                let point = CGPoint(x: settings.frame.minX + Sample.gutterInset, y: manual.frame.midY)
-                let sidebar = try background(in: app, at: point, capture: "ipad-settings-sidebar-\(layout)-\(appearance)")
-                assertMatches(sidebar, expected: shell, screen: "iPad Settings sidebar (\(layout), \(appearance))")
-                let heading = app.staticTexts["workspace.title.heading"]
-                if heading.exists, heading.isHittable {
-                    let detailPoint = CGPoint(x: heading.frame.minX - Sample.gutterInset, y: heading.frame.midY)
-                    let detail = try background(in: app, at: detailPoint, capture: "ipad-settings-detail-\(layout)-\(appearance)")
-                    assertMatches(detail, expected: content, screen: "iPad workspace beside Settings (\(layout), \(appearance))")
-                }
-                // A rounded corner would expose the drawer shade or a different shell color.
-                let panel = app.descendants(matching: .any)["ipad.sidebar.panel.geometry"].firstMatch
-                XCTAssertTrue(panel.waitForExistence(timeout: Sample.timeout))
-                let corner = CGPoint(x: panel.frame.minX + 1, y: panel.frame.minY + 1)
-                let cornerColor = try background(in: app, at: corner, capture: "ipad-settings-corner-\(layout)-\(appearance)")
-                assertMatches(cornerColor, expected: shell, screen: "iPad Settings sidebar leading corner (\(layout), \(appearance))")
-                app.terminate()
+        // Portrait only: XCUITest screenshots of a landscape iPad simulator come back rotated and cropped.
+        XCUIDevice.shared.orientation = .portrait
+        for appearance in ["dark", "light"] {
+            let app = XCUIApplication()
+            let content = try openWorkspace(
+                in: app,
+                appearance: appearance,
+                arguments: ["--demo-settings", "--demo-ipad-pane-geometry"]
+            )
+            let shell = appearance == "dark" ? Sample.darkSidebar : Sample.lightSettings
+            openSettings(in: app)
+            let manual = app.buttons["settings.pairing.manual"]
+            let settings = app.scrollViews["settings.scroll"]
+            let point = CGPoint(x: settings.frame.minX + Sample.gutterInset, y: manual.frame.midY)
+            let sidebar = try background(in: app, at: point, capture: "ipad-settings-sidebar-\(appearance)")
+            assertMatches(sidebar, expected: shell, screen: "iPad Settings sidebar (\(appearance))")
+            // Wide iPads keep the workspace beside the sidebar; smaller ones cover it with a drawer.
+            let heading = app.staticTexts["workspace.title.heading"]
+            if heading.exists, heading.isHittable {
+                let detailPoint = CGPoint(x: heading.frame.minX - Sample.gutterInset, y: heading.frame.midY)
+                let detail = try background(in: app, at: detailPoint, capture: "ipad-settings-detail-\(appearance)")
+                assertMatches(detail, expected: content, screen: "iPad workspace beside Settings (\(appearance))")
             }
+            // A rounded drawer corner would expose the shade against the rail.
+            let panel = app.descendants(matching: .any)["ipad.sidebar.panel.geometry"].firstMatch
+            XCTAssertTrue(panel.waitForExistence(timeout: Sample.timeout))
+            let corner = CGPoint(x: panel.frame.minX + 1, y: panel.frame.minY + 1)
+            let cornerColor = try background(in: app, at: corner, capture: "ipad-settings-corner-\(appearance)")
+            assertMatches(cornerColor, expected: shell, screen: "iPad Settings sidebar leading corner (\(appearance))")
+            app.terminate()
         }
     }
 
