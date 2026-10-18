@@ -144,6 +144,26 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     }
 
     @MainActor
+    func testSeveralWatchesShareOneCountedPill() throws {
+        let directory = try fixtureDirectory()
+        let app = launch(directory: directory, scenario: "multiple")
+        let pill = app.buttons["script-monitors-menu"]
+        XCTAssertTrue(pill.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(pill.label.contains("Watching 3 scripts"), pill.label)
+        XCTAssertFalse(app.buttons[Self.rowID].exists, "Several watches must not render one pill each")
+        capture(app, "script-monitors-multiple")
+        // Native Menu wrappers can report non-hittable while physical touch opens them.
+        pill.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let item = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", Self.originalName)).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: Self.timeout))
+        capture(app, "script-monitors-multiple-menu")
+        item.tap()
+        assertDetailText(app, "demo-run-watched-original")
+        capture(app, "script-monitors-multiple-details")
+        closeDetails(app)
+    }
+
+    @MainActor
     func testQuestionFlowKeepsWatchReachableWithAccessibilityText() throws {
         let directory = try fixtureDirectory()
         let app = launch(directory: directory, design: "questions", accessibility: true)

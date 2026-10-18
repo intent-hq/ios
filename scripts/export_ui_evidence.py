@@ -31,6 +31,10 @@ CAPTURES = {
         "testDeadlineRemainsVisibleUntilServerExpiry": (
             "script-monitors-deadline", "script-monitors-expired", "script-monitors-final-state",
         ),
+        "testSeveralWatchesShareOneCountedPill": (
+            "script-monitors-multiple", "script-monitors-multiple-menu", "script-monitors-multiple-details",
+            "script-monitors-final-state",
+        ),
         "testQuestionFlowKeepsWatchReachableWithAccessibilityText": (
             "script-monitors-question-accessibility", "script-monitors-question-details", "script-monitors-final-state",
         ),

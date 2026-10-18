@@ -5,7 +5,7 @@ import Foundation
 @MainActor
 final class DemoScriptMonitorFixtures {
     enum Scenario: String {
-        case active, unsupported, retry
+        case active, unsupported, retry, multiple
         case emptyOwner = "empty-owner"
         case pageRetry = "page-retry"
         case detailRetry = "detail-retry"
@@ -27,6 +27,7 @@ final class DemoScriptMonitorFixtures {
     private static let invalidParams = -32_602
     private static let cursor = "demo-opaque-next-page"
     private static let lifetime: TimeInterval = 3600
+    private static let extraScriptNames = ["Lint", "Unit tests"]
     private static let lineCount = 25
     private static let pollInterval: Duration = .milliseconds(100)
     private static let presentationTimestamp: TimeInterval = 1_792_238_400
@@ -119,7 +120,7 @@ final class DemoScriptMonitorFixtures {
         if scenario == .emptyOwner || scenario == .pageRetry {
             return ["view": "summary", "monitors": [otherOwnerRow], "nextCursor": Self.cursor]
         }
-        return ["view": "summary", "monitors": (active ? [ownedRow(full: false)] : []) + [otherOwnerRow]]
+        return ["view": "summary", "monitors": (active ? [ownedRow(full: false)] : []) + extraOwnedRows + [otherOwnerRow]]
     }
 
     func startEvents(for method: String, params: [String: Any], deliver: @escaping @MainActor ([String: Any]) -> Void) {
@@ -183,6 +184,18 @@ final class DemoScriptMonitorFixtures {
             row["outputPatternTruncated"] = true
         }
         return row
+    }
+
+    private var extraOwnedRows: [[String: Any]] {
+        guard scenario == .multiple else { return [] }
+        return Self.extraScriptNames.enumerated().map { index, name in
+            [
+                "monitorId": "demo-script-watch-extra-\(index)", "workspaceId": DemoDesignFixtures.workspaceId,
+                "agentId": DemoDesignFixtures.agentId, "scriptId": "demo-script-extra-\(index)",
+                "runId": "demo-run-extra-\(index)", "scriptName": name, "mode": "command", "state": "active",
+                "createdAt": anchor.ISO8601Format(), "expiresAt": anchor.addingTimeInterval(Self.lifetime).ISO8601Format()
+            ]
+        }
     }
 
     private var otherOwnerRow: [String: Any] {
