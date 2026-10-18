@@ -12,6 +12,7 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
         static let darkChannel = 22.0
         static let lightChannel = 255.0
         static let lightSettings = [240.0, 240.0, 235.0]
+        static let darkSidebar = [39.0, 39.0, 39.0]
         static let lightDiagnostics = [242.0, 242.0, 247.0]
         static let contentOffset: CGFloat = 40
     }
@@ -125,7 +126,10 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             let settings = app.scrollViews["settings.scroll"]
             let point = CGPoint(x: settings.frame.minX + Sample.gutterInset, y: manual.frame.midY)
             let actual = try background(in: app, at: point, capture: "workspace-background-settings-\(appearance)")
-            assertMatches(actual, expected: expected, screen: "Settings (\(appearance))")
+            // The iPad sidebar keeps shell chrome; only the main panel uses the workspace background.
+            let isSidebar = app.buttons["ipad.rail.settings"].exists
+            let settingsExpected = isSidebar && appearance == "dark" ? Sample.darkSidebar : expected
+            assertMatches(actual, expected: settingsExpected, screen: "Settings (\(appearance))")
             manual.tap()
             let host = app.textFields["manual.host"]
             XCTAssertTrue(host.waitForExistence(timeout: Sample.timeout))
