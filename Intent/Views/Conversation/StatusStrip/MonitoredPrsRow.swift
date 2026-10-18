@@ -126,10 +126,7 @@ struct MonitoredPrsRow: View {
             }
         } label: {
             if usesWorkspaceDesign {
-                WorkspaceMonitoringLabel(
-                    pullRequest: Self.chipLabel(monitor, workspaceRepo: workspaceRepo),
-                    hasPendingChanges: monitor.hasPendingChanges
-                )
+                workspacePill(monitor)
             } else {
                 chipLabel(monitor)
             }
@@ -142,6 +139,20 @@ struct MonitoredPrsRow: View {
                 : Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))
         )
         .accessibilityValue(Text(Self.pendingSummary(monitor)))
+    }
+
+    private func workspacePill(_ monitor: MonitoredPr) -> some View {
+        WorkspaceStatusPill(
+            icon: .infoCircle,
+            text: Text("Monitoring PR \(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))")
+        ) {
+            if monitor.hasPendingChanges {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: Layout.pendingIndicatorSide, height: Layout.pendingIndicatorSide)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 
     @ViewBuilder
@@ -281,43 +292,5 @@ struct MonitoredPrsRow: View {
         return monitor.pendingChanges.count == 1
             ? "1 pending change"
             : "\(monitor.pendingChanges.count) pending changes"
-    }
-}
-
-private struct WorkspaceMonitoringLabel: View {
-    let pullRequest: String
-    let hasPendingChanges: Bool
-    @Environment(\.colorScheme) private var colorScheme
-
-    private typealias Design = Constants.Conversation.Design
-
-    var body: some View {
-        HStack(spacing: Design.Status.iconSpacing) {
-            Image(.infoCircle)
-                .resizable()
-                .scaledToFit()
-                .frame(width: Design.smallIconSize, height: Design.smallIconSize)
-                .accessibilityHidden(true)
-            Text("Monitoring PR \(pullRequest)")
-                .interFont(Design.Typography.status)
-                .fixedSize(horizontal: false, vertical: true)
-            if hasPendingChanges {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(
-                        width: Constants.Conversation.StatusStrip.MonitoredPrs.pendingIndicatorSide,
-                        height: Constants.Conversation.StatusStrip.MonitoredPrs.pendingIndicatorSide
-                    )
-                    .accessibilityHidden(true)
-            }
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(Design.Palette.foreground(for: colorScheme))
-        .padding(.leading, Design.Status.leadingPadding)
-        .padding(.trailing, Design.Status.trailingPadding)
-        .frame(minHeight: Design.Status.minimumHeight)
-        .background(Design.Palette.surface(for: colorScheme), in: Capsule())
-        .frame(minHeight: Design.minimumTapTarget)
-        .contentShape(Rectangle())
     }
 }

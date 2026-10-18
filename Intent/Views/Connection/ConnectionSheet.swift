@@ -11,6 +11,7 @@ struct ConnectionSheet<Content: View>: View {
     var backgroundColor: Color?
     var closeForeground: Color?
     var isDismissDisabled = false
+    var scrollIdentifier = ""
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -29,6 +30,7 @@ struct ConnectionSheet<Content: View>: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
             .scrollBounceBehavior(.basedOnSize)
+            .accessibilityIdentifier(scrollIdentifier)
             #if !os(visionOS)
             .scrollDismissesKeyboard(.interactively)
             #endif

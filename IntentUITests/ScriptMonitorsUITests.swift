@@ -144,6 +144,26 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     }
 
     @MainActor
+    func testSeveralWatchesShareOneCountedPill() throws {
+        let directory = try fixtureDirectory()
+        let app = launch(directory: directory, scenario: "multiple")
+        let pill = app.buttons["script-monitors-menu"]
+        XCTAssertTrue(pill.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(pill.label.contains("Watching 3 scripts"), pill.label)
+        XCTAssertFalse(app.buttons[Self.rowID].exists, "Several watches must not render one pill each")
+        capture(app, "script-monitors-multiple")
+        // Native Menu wrappers can report non-hittable while physical touch opens them.
+        pill.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let item = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", Self.originalName)).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: Self.timeout))
+        capture(app, "script-monitors-multiple-menu")
+        item.tap()
+        assertDetailText(app, "demo-run-watched-original")
+        capture(app, "script-monitors-multiple-details")
+        closeDetails(app)
+    }
+
+    @MainActor
     func testQuestionFlowKeepsWatchReachableWithAccessibilityText() throws {
         let directory = try fixtureDirectory()
         let app = launch(directory: directory, design: "questions", accessibility: true)
@@ -186,7 +206,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let maximumPages = 20
         for _ in 0..<maximumPages {
             let scrollFrame = details.frame
-            let toolbarBottom = app.navigationBars["Script watch"].frame.maxY
+            let toolbarBottom = app.buttons["connection-sheet.close"].frame.maxY
             let viewport = CGRect(
                 x: scrollFrame.minX,
                 y: max(scrollFrame.minY, toolbarBottom),
@@ -281,7 +301,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
 
     @MainActor
     private func closeDetails(_ app: XCUIApplication) {
-        let close = app.buttons["script-monitor-details-close"]
+        let close = app.buttons["connection-sheet.close"]
         XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
