@@ -191,7 +191,7 @@ extension ConnectionManagerTests {
             if method == "client.hello", let hello = snapshot.3 {
                 return (try? JSONSerialization.jsonObject(with: hello)) as? [String: Any] ?? [:]
             }
-            return ["server": ["capabilities": snapshot.1 ? ["hostMembership": 1] : [String: Int]()]]
+            return ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": snapshot.1 ? ["hostMembership": 1] : [String: Int]()]]
         }
 
         private func receiveNext(on connection: NWConnection) {

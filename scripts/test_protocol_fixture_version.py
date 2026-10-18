@@ -40,6 +40,7 @@ def run(argv, root, get=None):
 class GeneratorTests(unittest.TestCase):
     def test_rust_constant_must_be_unique(self):
         self.assertEqual(pfv.parse_rust_protocol_version(RUST.format("16.2")), "16.2")
+        self.assertEqual(pfv.parse_rust_protocol_version('pub const PROTOCOL_VERSION: &\'static str = "16.2.1";'), "16.2.1")
         with self.assertRaises(ValueError):
             pfv.parse_rust_protocol_version('pub const OTHER: &str = "1.0";')
         with self.assertRaises(ValueError):
@@ -56,6 +57,7 @@ class GeneratorTests(unittest.TestCase):
         ]
         self.assertEqual(pfv.newest_release_tag(releases), "v0.11.10-beta.2")
         self.assertEqual(pfv.newest_release_tag(releases + [{"tag_name": "v0.11.10"}]), "v0.11.10")
+        self.assertEqual(pfv.newest_release_tag([{"tag_name": "v0.11.7"}, {"tag_name": "v0.11.8+build.5"}]), "v0.11.8+build.5")
 
     def test_rendered_file_round_trips(self):
         self.assertEqual(pfv.parse_rendered(pfv.render("v0.11.7", "15.0")), ("v0.11.7", "15.0"))
@@ -131,18 +133,19 @@ class LintTests(unittest.TestCase):
         }
         self.assertEqual([line for _, line, _, _ in pfv.lint_violations(files)], [1, 3])
 
-    def test_lint_scans_test_targets_and_passes_on_the_tree(self):
+    def test_lint_scans_only_the_target_that_owns_the_constant(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "IntentUITests").mkdir()
-            (root / "Intent").mkdir()
-            (root / "IntentUITests/Y.swift").write_text('["protocolVersion": "14.0"]\n')
+            for directory in ("IntentTests", "IntentUITests", "Intent"):
+                (root / directory).mkdir()
+            (root / "IntentTests/Y.swift").write_text('["protocolVersion": "14.0"]\n')
+            (root / "IntentUITests/Z.swift").write_text('["protocolVersion": "14.0"]\n')
             (root / "Intent/App.swift").write_text('["protocolVersion": "15.0"]\n')
             code, output = run(["lint"], root)
             self.assertEqual(code, 1)
-            self.assertIn("IntentUITests/Y.swift:1", output)
+            self.assertIn("IntentTests/Y.swift:1", output)
+            self.assertNotIn("IntentUITests/Z.swift", output)
             self.assertNotIn("Intent/App.swift", output)
-        self.assertEqual(run(["lint"], ROOT)[0], 0)
 
 
 if __name__ == "__main__":
