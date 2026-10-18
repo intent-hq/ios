@@ -9,16 +9,6 @@ struct AgentHistoryList: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
 
-    /// Snapshot store values before SwiftUI builds rows on its async render thread.
-    private struct HistoryRow: Identifiable, Equatable {
-        let entry: AgentHistoryEntry
-        let title: String
-        let subtitle: String
-        let timestamp: String
-        let isCurrent: Bool
-        var id: AgentHistoryEntry.ID { entry.id }
-    }
-
     private var secondaryForeground: Color {
         Constants.Connections.sectionForeground(for: colorScheme, contrast: contrast)
     }
@@ -48,10 +38,10 @@ struct AgentHistoryList: View {
         .accessibilityIdentifier("agent-history.list")
     }
 
-    private var rowSnapshot: [HistoryRow] {
+    private var rowSnapshot: [AgentHistoryRowSnapshot] {
         coordinator.visibleAgentHistory.map { entry in
             let workspaceTitle = workspaceTitle(for: entry)
-            return HistoryRow(
+            return AgentHistoryRowSnapshot(
                 entry: entry,
                 title: workspaceTitle ?? entry.agentName,
                 subtitle: subtitle(for: entry, showsAgentName: workspaceTitle != nil),
@@ -61,11 +51,18 @@ struct AgentHistoryList: View {
         }
     }
 
-    private func rowList(_ rows: [HistoryRow]) -> some View {
+    private func rowList(_ rows: [AgentHistoryRowSnapshot]) -> some View {
         // Resolve environment values and actions before SwiftUI's async row callback.
-        let content = rows.map { (id: $0.id, content: rowView($0)) }
+        let content = rows.map { row in
+            let content = AgentHistoryRow(
+                snapshot: row,
+                colorScheme: colorScheme,
+                secondaryForeground: secondaryForeground
+            ) { onSelect(row.entry) }
+            return (id: row.id, content: content)
+        }
         return VStack(spacing: ConnectionSwitcherStyle.rowSpacing) {
-            ForEach(content, id: \.id) { @Sendable row in row.content }
+            ForEach(snapshots: content, id: \.id) { row in row.content }
         }
     }
 
@@ -91,39 +88,6 @@ struct AgentHistoryList: View {
                     .accessibilityIdentifier("agent-history.clear")
             }
         }
-    }
-
-    private func rowView(_ row: HistoryRow) -> some View {
-        Button { onSelect(row.entry) } label: {
-            HStack(spacing: ConnectionSwitcherStyle.rowInset) {
-                VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.rowTextSpacing) {
-                    Text(row.title)
-                        .interFont(Constants.Typography.bodySEmphasized)
-                        .lineLimit(1)
-                    if !row.subtitle.isEmpty {
-                        Text(row.subtitle)
-                            .interFont(Constants.Typography.bodyXS)
-                            .foregroundStyle(secondaryForeground)
-                            .lineLimit(1)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Text(row.timestamp)
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(secondaryForeground)
-            }
-            .padding(ConnectionSwitcherStyle.rowInset)
-            .frame(maxWidth: .infinity, minHeight: ConnectionSwitcherStyle.rowHeight, alignment: .leading)
-            .background(
-                row.isCurrent ? ConnectionSwitcherStyle.selection(for: colorScheme) : .clear,
-                in: .rect(cornerRadius: ConnectionSwitcherStyle.cornerRadius)
-            )
-            .contentShape(.rect(cornerRadius: ConnectionSwitcherStyle.cornerRadius))
-        }
-        .buttonStyle(IntentContentButtonStyle())
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(row.isCurrent ? .isSelected : [])
-        .accessibilityIdentifier("agent-history.entry.\(row.id)")
     }
 
     /// The open device's workspace title is read live; others use the title from the visit.

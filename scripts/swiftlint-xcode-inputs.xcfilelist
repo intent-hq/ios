@@ -338,10 +338,12 @@ $(SRCROOT)/Intent/Views/Agents/AgentAvatarPulse.swift
 $(SRCROOT)/Intent/Views/Agents/AgentAvatarView.swift
 $(SRCROOT)/Intent/Views/Agents/AgentHistoryDrawer.swift
 $(SRCROOT)/Intent/Views/Agents/AgentHistoryList.swift
+$(SRCROOT)/Intent/Views/Agents/AgentHistoryRow.swift
 $(SRCROOT)/Intent/Views/Agents/AgentRowView.swift
 $(SRCROOT)/Intent/Views/Components/AssistantLaunchButton.swift
 $(SRCROOT)/Intent/Views/Components/EdgeDrawer.swift
 $(SRCROOT)/Intent/Views/Components/EdgeDrawerGesture.swift
+$(SRCROOT)/Intent/Views/Components/ForEach+Snapshots.swift
 $(SRCROOT)/Intent/Views/Components/IntentLoadingIndicator.swift
 $(SRCROOT)/Intent/Views/Components/NavigationBackGesture.swift
 $(SRCROOT)/Intent/Views/Components/NavigationPopObserver.swift
@@ -759,6 +761,7 @@ $(SRCROOT)/IntentTests/FakeConnectionManager.swift
 $(SRCROOT)/IntentTests/FakeConnectionManagerTests.swift
 $(SRCROOT)/IntentTests/FloatingComposerImportTests.swift
 $(SRCROOT)/IntentTests/FloatingComposerPolicyTests.swift
+$(SRCROOT)/IntentTests/ForEachSnapshotTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreBranchCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift

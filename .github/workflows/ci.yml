@@ -296,6 +296,9 @@ jobs:
             xcrun metal -v
           fi
 
+      - name: Check deferred row-provider isolation
+        run: scripts/test-row-provider-isolation.sh
+
       - name: Create owned simulator
         env:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
