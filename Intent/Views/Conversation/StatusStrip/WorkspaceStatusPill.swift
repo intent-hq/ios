@@ -59,9 +59,9 @@ struct MarqueeText<Content: View>: View {
         static let pointsPerSecond: Double = 60
         static let maximumDuration: Double = 3
         static let startDelay: Duration = .seconds(1)
-        static let endPause: Duration = .milliseconds(1500)
+        static let endPauseSeconds: Double = 1.5
         // Lets the overlay mount at rest before its offset changes.
-        static let overlayDelay: Duration = .milliseconds(50)
+        static let overlayDelaySeconds: Double = 0.05
     }
 
     private var overflow: CGFloat { max(0, fullWidth - visibleWidth) }
@@ -73,12 +73,17 @@ struct MarqueeText<Content: View>: View {
             .opacity(isRevealing ? 0 : 1)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { visibleWidth = $0 }
             .background(alignment: .leading) {
-                text.lineLimit(1).fixedSize().hidden()
+                text
+                    .lineLimit(1)
+                    .fixedSize()
+                    .hidden()
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { fullWidth = $0 }
             }
             .overlay(alignment: .leading) {
                 if isRevealing {
-                    text.lineLimit(1).fixedSize()
+                    text
+                        .lineLimit(1)
+                        .fixedSize()
                         .offset(x: isScrolled ? -overflow : 0)
                         // Declared on the moving text so a parent's animation reset cannot remove it.
                         .animation(.linear(duration: scrollDuration), value: isScrolled)
@@ -100,10 +105,10 @@ struct MarqueeText<Content: View>: View {
         try? await Task.sleep(for: Motion.startDelay)
         guard !Task.isCancelled else { return }
         isRevealing = true
-        try? await Task.sleep(for: Motion.overlayDelay)
+        try? await Task.sleep(for: .seconds(Motion.overlayDelaySeconds))
         isScrolled = true
         // The deferred reset returns to the truncated start without scrolling back.
-        try? await Task.sleep(for: .seconds(duration) + Motion.endPause)
+        try? await Task.sleep(for: .seconds(duration + Motion.endPauseSeconds))
     }
 }
 
