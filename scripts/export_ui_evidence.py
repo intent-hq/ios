@@ -142,14 +142,6 @@ CAPTURES = {
         ),
         "testIPadQuestionsKeepNextAndRailAvailable": ("iPad question actions beside persistent rail",),
     },
-    "ConversationActionsUITests": {
-        "testHistoryNoticeAndActionCancellationPreserveConversation": (
-            "Conversation-History-Light", "Agent-Actions-Light", "Agent-Model-Picker-Light", "Agent-Actions-Updated-Light",
-        ),
-        "testLargeTextModelPickerWorksAfterSending": (
-            "Agent-Actions-Dark-LargeText", "Agent-Model-Picker-Dark-LargeText", "Agent-Model-Picker-Selected-Dark-LargeText",
-        ),
-    },
     "ConversationMermaidUITests": {
         "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
         "testDiagramHistoryReopensAndGoToEndShowsLastAnswer": (
@@ -174,6 +166,10 @@ CAPTURES = {
     "ConversationActionsUITests": {
         "testHistoryNoticeAndActionCancellationPreserveConversation": (
             "Conversation-History-Light", "Agent-Actions-Light", "Agent-Delete-Confirmation-Light",
+            "Agent-Model-Picker-Light", "Agent-Actions-Updated-Light",
+        ),
+        "testLargeTextModelPickerWorksAfterSending": (
+            "Agent-Actions-Dark-LargeText", "Agent-Model-Picker-Dark-LargeText", "Agent-Model-Picker-Selected-Dark-LargeText",
         ),
     },
     "WorkspaceComposerUITests": {
