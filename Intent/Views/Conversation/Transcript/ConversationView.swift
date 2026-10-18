@@ -169,10 +169,7 @@ private struct ConversationViewContent: View {
             } message: { detail in
                 Text("The questions were not dismissed and are still pending. " + detail)
             }
-            // Image placement failure (monorepo#3338): the message was NOT
-            // sent — the draft text and captured images are restored to the
-            // composer; this alert makes the failure explicit (same shape as
-            // the dismiss-failure alert above).
+            // Failed image placement restores the draft and images (monorepo#3338).
             .alert(
                 "Couldn't Send Images",
                 isPresented: imagePlacementErrorPresented,
@@ -182,9 +179,7 @@ private struct ConversationViewContent: View {
             } message: { detail in
                 Text("The message was not sent. " + detail)
             }
-            // File placement failure: the message was NOT sent — the draft
-            // text is restored and the pending files stay attached (same
-            // fail-closed shape as the image alert above).
+            // Failed file placement restores the draft and retains pending attachments.
             .alert(
                 "Couldn't Send Files",
                 isPresented: filePlacementErrorPresented,
@@ -324,8 +319,6 @@ private extension ConversationViewContent {
         )
     }
 
-    /// Presented-or-not binding for the image-placement-failure alert, hoisted
-    /// like `dismissQuestionsErrorPresented`.
     private var imagePlacementErrorPresented: Binding<Bool> {
         Binding(
             get: { viewModel.imagePlacementError != nil },
@@ -333,8 +326,6 @@ private extension ConversationViewContent {
         )
     }
 
-    /// Presented-or-not binding for the file-placement-failure alert, hoisted
-    /// like `imagePlacementErrorPresented`.
     private var filePlacementErrorPresented: Binding<Bool> {
         Binding(
             get: { viewModel.filePlacementError != nil },
