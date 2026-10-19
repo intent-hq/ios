@@ -326,8 +326,9 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 `scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
 queue. Smoke coverage uses two balanced iPhone shards and an independent job for
 all seven focused iPad sidebar regressions. Each lane owns its build directory,
-disposable simulator, results, and evidence. The second iPhone shard and iPad use
-GitHub-hosted `macos-26-xlarge` so they can overlap the selected local Mac pool. Matrix fail-fast is
+disposable simulator, results, and evidence. All lanes prefer an idle
+self-hosted Mac; GitHub-hosted Macs handle overflow when the local pool is busy.
+Matrix fail-fast is
 disabled, and the existing `iOS UI Tests` check requires every lane to succeed.
 Go tests, wrapper self-tests, and the strict SwiftLint gate run on Linux.
 The full UI bundle runs once in one iPhone job, alongside the iPad regressions,
@@ -474,19 +475,24 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 ### GitHub Actions runners
 
-Script and Go jobs use GitHub-hosted `ubuntu-24.04`. The independent iPad UI job
-always uses GitHub-hosted `macos-26-xlarge`; smoke runs also use it for the second
-iPhone shard. This
-requires hosted capacity for both jobs so they can overlap the selected Mac pool.
-Each pool selects its installed Xcode independently.
+Script and Go jobs use GitHub-hosted `ubuntu-24.04`. All macOS jobs prefer
+self-hosted Macs: iOS builds and every iPhone/iPad UI lane use the `intent-ios`
+pool; visionOS builds and cache warming prefer `intent-ios-build`, then
+`intent-ios`. Each pool selects its installed Xcode independently.
 The 18 October 2026 validation used Xcode 26.5 on a Depot Mac (the hosted pool
 before the move to GitHub-hosted runners) for iPad and 26.3 on the local iPhone Mac.
 The pools do not guarantee the same toolchain or simulator runtime. Record the
 runner, Xcode, and runtime when comparing timings or investigating failures.
-Build and iPhone simulator selectors prefer available self-hosted Macs, using
-`RUNNER_STATUS_TOKEN` to inspect the pools,
-and fall back to GitHub-hosted `macos-26-xlarge` (Apple Silicon). An online local runner
-remains eligible while busy; this preference does not provide automatic overflow
-for queued jobs. The selected image needs Xcode 26;
+Selectors use `RUNNER_STATUS_TOKEN` to inspect the pools and fall back to
+GitHub-hosted `macos-26-xlarge` (Apple Silicon) when every matching local runner is
+busy or offline, or runner status cannot be read. Selection uses a snapshot of
+runner availability. CI allocates each idle service once across builds and UI
+lanes, then sends remaining jobs to hosted Macs. Independent workflows can still
+race for the same capacity before GitHub assigns them.
+Each local registration must carry `intent-ios-runner-<id>`, using its GitHub
+runner ID. The selector verifies that label is unique and includes it in the
+job's routing labels, so GitHub schedules the service counted by the allocation.
+Missing or duplicate routing labels make that service ineligible for selection.
+The selected image needs Xcode 26;
 runtime and Metal provisioning run as needed. Go and Swift package caches and
 Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.

@@ -7,8 +7,27 @@ set -euo pipefail
 hosted='"macos-26-xlarge"'
 local_runner='["self-hosted","macOS","ARM64","intent-ios"]'
 pool_label=${RUNNER_POOL_LABEL:-intent-ios}
-preferred_runner=$(jq -cn --arg label "$pool_label" '["self-hosted","macOS","ARM64",$label]')
+preferred_runner=$(jq -cn --arg pool "$pool_label" '["self-hosted","macOS","ARM64",$pool]')
 selected="$hosted"
+reserved='[]'
+if [ -n "${RUNNER_RESERVATIONS_FILE:-}" ] && [ -f "$RUNNER_RESERVATIONS_FILE" ]; then
+  reserved=$(cat "$RUNNER_RESERVATIONS_FILE")
+fi
+
+available_runner() {
+  jq -er --argjson required "$1" --argjson reserved "$reserved" '
+    .runners as $fleet |
+    first($fleet[] |
+      select(.status == "online" and .busy == false) |
+      select(($required - [.labels[].name]) | length == 0) |
+      select(.name as $name | $reserved | index($name) | not) |
+      select((.id | type) == "number" and .id > 0) |
+      ("intent-ios-runner-" + (.id | tostring)) as $routing |
+      select(any(.labels[]; .name == $routing)) |
+      select([$fleet[] | select(any(.labels[]; .name == $routing))] | length == 1) |
+      {name, runsOn: ($required + [$routing])})
+  ' "$response"
+}
 
 if [ -z "${RUNNER_STATUS_TOKEN:-}" ]; then
   echo '::notice::RUNNER_STATUS_TOKEN is unavailable; using macos-26-xlarge'
@@ -20,25 +39,25 @@ else
       -H "Authorization: Bearer $RUNNER_STATUS_TOKEN" \
       "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runners?per_page=100" \
       -o "$response"; then
-    if jq -e --argjson required "$preferred_runner" '
-        any(.runners[];
-          .status == "online" and
-          (($required - [.labels[].name]) | length == 0))
-      ' "$response" >/dev/null; then
+    if available=$(available_runner "$preferred_runner"); then
       selected="$preferred_runner"
-      echo "::notice::A matching Mac is online; using the $pool_label runner pool"
-    elif [ "$pool_label" != intent-ios ] && jq -e --argjson required "$local_runner" '
-        any(.runners[];
-          .status == "online" and
-          (($required - [.labels[].name]) | length == 0))
-      ' "$response" >/dev/null; then
+      echo "::notice::A matching Mac is online and idle; using the $pool_label runner pool"
+    elif [ "$pool_label" != intent-ios ] && available=$(available_runner "$local_runner"); then
       selected="$local_runner"
       echo '::notice::Build pool unavailable; using the intent-ios runner pool'
     else
-      echo '::notice::No matching Mac is online; using macos-26-xlarge'
+      echo '::notice::No unallocated matching Mac is online and idle; using macos-26-xlarge'
     fi
   else
     echo '::warning::Could not check local Mac status; using macos-26-xlarge'
+  fi
+fi
+
+if [ "$selected" != "$hosted" ]; then
+  selected=$(jq -c '.runsOn' <<< "$available")
+  if [ -n "${RUNNER_RESERVATIONS_FILE:-}" ]; then
+    jq -cn --argjson reserved "$reserved" --argjson allocated "$available" \
+      '$reserved + [$allocated.name]' > "$RUNNER_RESERVATIONS_FILE"
   fi
 fi
 

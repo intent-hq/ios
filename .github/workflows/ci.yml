@@ -86,6 +86,8 @@ jobs:
       ui-matrix: ${{ steps.ui-lanes.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
+      - name: Initialize local runner allocation
+        run: echo "RUNNER_RESERVATIONS_FILE=$RUNNER_TEMP/intent-macos-reservations.json" >> "$GITHUB_ENV"
       - name: Check local Mac status
         id: select
         env:
@@ -108,13 +110,26 @@ jobs:
       - name: Select UI test lanes
         id: ui-lanes
         env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
           FULL_UI_SUITE: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && '1' || '' }}
         run: |
           if [ -n "$FULL_UI_SUITE" ]; then
-            echo 'matrix={"include":[{"lane":"iphone","family":"iphone","shard":0,"capture":true,"hosted":false},{"lane":"ipad","family":"ipad","shard":0,"capture":false,"hosted":true}]}' >> "$GITHUB_OUTPUT"
+            matrix='{"include":[{"lane":"iphone","family":"iphone","shard":0,"capture":true},{"lane":"ipad","family":"ipad","shard":0,"capture":false}]}'
           else
-            echo 'matrix={"include":[{"lane":"iphone-1","family":"iphone","shard":1,"capture":true,"hosted":false},{"lane":"iphone-2","family":"iphone","shard":2,"capture":false,"hosted":true},{"lane":"ipad","family":"ipad","shard":0,"capture":false,"hosted":true}]}' >> "$GITHUB_OUTPUT"
+            matrix='{"include":[{"lane":"iphone-1","family":"iphone","shard":1,"capture":true},{"lane":"iphone-2","family":"iphone","shard":2,"capture":false},{"lane":"ipad","family":"ipad","shard":0,"capture":false}]}'
           fi
+          lanes='[]'
+          runner_output=$(mktemp)
+          trap 'rm -f "$runner_output"' EXIT
+          while IFS= read -r lane; do
+            : > "$runner_output"
+            GITHUB_OUTPUT="$runner_output" bash .github/scripts/select-macos-runner.sh
+            runs_on=$(sed -n 's/^runs-on=//p' "$runner_output")
+            lanes=$(jq -cn --argjson lanes "$lanes" --argjson lane "$lane" --argjson runs_on "$runs_on" \
+              '$lanes + [$lane + {"runs-on": $runs_on}]')
+          done < <(jq -c '.include[]' <<< "$matrix")
+          matrix=$(jq -cn --argjson lanes "$lanes" '{include: $lanes}')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   go-test:
     name: Go unit tests (TailcatKit)
@@ -750,8 +765,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.select-macos-runner.outputs.ui-matrix) }}
-    # Shard 2 and iPad need independent capacity to overlap the local shard.
-    runs-on: ${{ matrix.hosted && 'macos-26-xlarge' || fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-26-xlarge"') }}
+    runs-on: ${{ matrix.runs-on }}
     # Allow setup, the full iPhone suite, and cleanup (ios#429).
     timeout-minutes: 90
     env:
