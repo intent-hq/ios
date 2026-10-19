@@ -166,9 +166,13 @@ extension ConversationViewModel {
         switch PendingQuestionSet.MarkerState(pendingMarker) {
         case .cleared: return false
         case .set(let markedId): return markedId == messageId
-        // Legacy visibility can flip during a new turn. Preserve the mount-time
-        // answer tag unless an authoritative retirement signal arrives.
-        case .absent: return true
+        case .absent:
+            // Streaming alone can hide a legacy wizard, but a superseding
+            // non-system transcript row retires its mount-time question set.
+            return PendingQuestionSet.derive(
+                messages: messages,
+                isTurnActive: false
+            )?.messageId == messageId
         }
     }
 

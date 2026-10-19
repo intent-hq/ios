@@ -140,6 +140,8 @@ extension ConversationViewModelTests {
     @Test func questionAttachmentsStayOutOfOrdinarySendsAndOtherQuestionSets() async throws {
         let (viewModel, fake) = makeFakeBackedVM()
         viewModel.store.messages = [questionMessage(id: "a2")]
+        // This set must remain pending across the ordinary user message below.
+        viewModel.store.pendingQuestionsMessageId = "a2"
         let answers = try firstAnswer(viewModel)
         let attachments = viewModel.questionAttachments(for: "a1")
         let image = try #require(UIImage(systemName: "star"))
@@ -293,6 +295,41 @@ extension ConversationViewModelTests {
         let retired = change != "streaming" && change != "untagged"
         #expect(fake.paramsForMethod("agent.sendMessage").count == (retired ? 0 : 1))
         if retired { #expect(viewModel.messages.map(\.id) == messageIdsBeforeUploadCompletes) }
+        #expect(viewModel.submittingQuestionMessageIds.isEmpty)
+        #expect(!attachments.hasPendingAttachments)
+        #expect(viewModel.questionAttachmentPipelines["a1"] == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func legacyQuestionSubmissionRechecksTailAfterUpload(superseded: Bool) async throws {
+        let (viewModel, fake) = makeFakeBackedVM()
+        viewModel.store.messages = [questionMessage()]
+        try #require(viewModel.store.pendingQuestionsMessageId == nil)
+        let answers = try firstAnswer(viewModel)
+        let attachments = viewModel.questionAttachments(for: "a1")
+        attachments.addImage(try #require(UIImage(systemName: "star")))
+        fake.pendingMethods = ["file.placeAttachment"]
+        let submission = Task { await viewModel.submitQuestionAnswers(answers, answeredQuestionsMessageId: "a1") }
+        defer { submission.cancel() }
+        try await fake.waitForPendingRequests("file.placeAttachment")
+        #expect(viewModel.submittingQuestionMessageIds.contains("a1"))
+        if superseded {
+            viewModel.store.messages.append(textMessage(role: .user, text: "Unrelated follow-up"))
+        } else {
+            viewModel.store.isStreaming = true
+        }
+        #expect(viewModel.pendingQuestions == nil)
+        let messageIdsBeforeUploadCompletes = viewModel.messages.map(\.id)
+        fake.resolvePending("file.placeAttachment", with: try #require(fake.responseMap["file.placeAttachment"]))
+        await submission.value
+
+        if superseded {
+            #expect(fake.paramsForMethod("agent.sendMessage").isEmpty)
+            #expect(viewModel.messages.map(\.id) == messageIdsBeforeUploadCompletes)
+        } else {
+            let sent = try questionAnswerRequest(fake)
+            #expect((sent["imageBlocks"] as? [[String: Any]])?.count == 1)
+        }
         #expect(viewModel.submittingQuestionMessageIds.isEmpty)
         #expect(!attachments.hasPendingAttachments)
         #expect(viewModel.questionAttachmentPipelines["a1"] == nil)
