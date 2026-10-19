@@ -105,20 +105,23 @@ extension ConversationViewModel {
         }
     }
 
+    var modelProviderId: String? { currentProviderId ?? optionsStore.defaultModelProvider }
+
     // nil distinguishes a cache miss from a loaded empty provider catalog.
     // swiftlint:disable:next discouraged_optional_collection
     var selectableModels: [ModelInfo]? {
-        if let providerId = currentProviderId {
+        if let providerId = modelProviderId {
             return optionsStore.models(for: providerId)
         }
-        return availableModels
+        return nil
     }
 
     var currentModelDisplayName: String? {
         guard let modelId = currentModelId else { return nil }
+        if modelId == "default" { return String(localized: "Provider default") }
         return Self.modelDisplayName(
             modelId: modelId,
-            provider: currentProviderId,
+            provider: modelProviderId,
             catalog: selectableModels ?? []
         )
     }
@@ -141,16 +144,26 @@ extension ConversationViewModel {
 
     var modelCatalogKey: ModelCatalogKey {
         ModelCatalogKey(
-            providerId: currentProviderId,
-            isCached: currentProviderId.map { optionsStore.models(for: $0) != nil } ?? false,
+            providerId: modelProviderId,
+            isCached: modelProviderId.map { optionsStore.models(for: $0) != nil } ?? false,
             loadGeneration: optionsStore.loadGeneration
         )
     }
 
     func loadModelCatalogIfNeeded() async {
+        await loadModelCatalog(refresh: false)
+    }
+
+    func refreshSelectableModels() async {
+        await loadModelCatalog(refresh: true)
+    }
+
+    private func loadModelCatalog(refresh: Bool) async {
+        guard !Task.isCancelled else { return }
+        modelCatalogLoadFailed = false
         let activation = liveStoreActivationGeneration
         let generation = optionsStore.loadGeneration
-        if let readUnder = modelMetadataGeneration, readUnder != generation {
+        if modelMetadataGeneration != generation, modelMetadataGeneration != nil || currentProviderId == nil {
             // Reconnect already expires shared detail. A delayed catalog task
             // must reuse that bootstrap even after its reply has settled.
             await fetchCurrentModel(refresh: modelMetadataEpoch == agentDetails.connectionEpoch)
@@ -160,23 +173,23 @@ extension ConversationViewModel {
                 currentModelId = nil
                 currentProviderId = nil
                 optionsStore.selectModelProvider(nil, consumer: conversationConsumer)
+                modelCatalogLoadFailed = true
                 return
             }
         }
         guard activation == liveStoreActivationGeneration, !Task.isCancelled else { return }
-        optionsStore.selectModelProvider(currentProviderId, consumer: conversationConsumer)
-        guard let providerId = currentProviderId else { return }
-        await loadProviderCatalog(providerId, refresh: false)
-    }
-
-    func refreshSelectableModels() async {
-        guard !Task.isCancelled else { return }
-        if let providerId = currentProviderId {
-            optionsStore.selectModelProvider(providerId, consumer: conversationConsumer)
-            await loadProviderCatalog(providerId, refresh: true)
-        } else {
-            await fetchModels()
+        optionsStore.useDefaultModelProvider(currentProviderId == nil, consumer: conversationConsumer)
+        if currentProviderId == nil {
+            await optionsStore.defaultModelProviderCatalog.ensure(force: refresh, consumer: conversationConsumer)
         }
+        guard generation == optionsStore.loadGeneration, activation == liveStoreActivationGeneration,
+              !Task.isCancelled else { return }
+        optionsStore.selectModelProvider(modelProviderId, consumer: conversationConsumer)
+        guard let providerId = modelProviderId else {
+            modelCatalogLoadFailed = true
+            return
+        }
+        await loadProviderCatalog(providerId, refresh: refresh)
     }
 
     private func loadProviderCatalog(_ providerId: String, refresh: Bool) async {
@@ -189,31 +202,40 @@ extension ConversationViewModel {
             await optionsStore.ensureModels(providerId: providerId, consumer: conversationConsumer)
         }
         guard generation == optionsStore.loadGeneration, activation == liveStoreActivationGeneration,
-              currentProviderId == providerId, !Task.isCancelled else { return }
+              modelProviderId == providerId, !Task.isCancelled else { return }
         modelCatalogLoadFailed = optionsStore.modelCatalog(for: providerId).loadFailed
     }
 
-    func fetchModels() async {
-        do {
-            // Backend returns flat: [{ id: "sonnet4.5", name: "sonnet4.5 (balanced)", provider: "auggie" }]
-            let raw = try await store.getModels(agentId: agentId)
-            availableModels = raw.compactMap { dict -> ModelInfo? in
-                guard let id = dict["id"] as? String,
-                      let name = dict["name"] as? String else { return nil }
-                let provider = dict["provider"] as? String ?? "Unknown"
-                return ModelInfo(id: id, name: name, provider: provider)
-            }
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Fetch models failed: \(error)")
-        }
+    func setModel(_ modelId: String, providerId: String? = nil) async throws {
+        let generation = optionsStore.loadGeneration
+        let activation = liveStoreActivationGeneration
+        try await store.setModel(agentId: agentId, modelId: modelId, workspaceId: workspaceId, providerId: providerId)
+        guard generation == optionsStore.loadGeneration, activation == liveStoreActivationGeneration,
+              !Task.isCancelled else { throw CancellationError() }
+        currentModelId = modelId
+        if let providerId { currentProviderId = providerId }
     }
 
-    func setModel(_ modelId: String) async {
+    func saveModelSelection(providerID: String, modelID: String, reasoningEffort: String?) async throws {
+        let generation = optionsStore.loadGeneration
+        let activation = liveStoreActivationGeneration
+        let changedModel = modelID != (currentModelId ?? "default") || providerID != modelProviderId
+        if changedModel { try await setModel(modelID, providerId: providerID) }
+        guard reasoningEffort != currentReasoningEffort else { return }
         do {
-            try await store.setModel(agentId: agentId, modelId: modelId, workspaceId: workspaceId)
-            currentModelId = modelId
+            try await store.setReasoningEffort(agentId: agentId, workspaceId: workspaceId, effort: reasoningEffort)
+            guard generation == optionsStore.loadGeneration, activation == liveStoreActivationGeneration,
+                  !Task.isCancelled else { throw CancellationError() }
+            currentReasoningEffort = reasoningEffort
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
-            AppLog.conversation.error("[ConversationViewModel] Set model failed: \(error)")
+            if changedModel {
+                throw NSError(domain: "ModelSelection", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Provider and model were saved, but reasoning could not be saved. Try Save again."
+                ])
+            }
+            throw error
         }
     }
 

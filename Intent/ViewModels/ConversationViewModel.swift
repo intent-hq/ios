@@ -67,9 +67,9 @@ import SwiftUI
         }
     }
     @ObservationIgnored var composerTextRevision = 0
-    var availableModels: [ModelInfo] = []
     var currentModelId: String?
     var currentProviderId: String?
+    var currentReasoningEffort: String?
     @ObservationIgnored var modelMetadataGeneration: Int?
     @ObservationIgnored var modelMetadataEpoch: Int?
     var modelCatalogLoadFailed = false

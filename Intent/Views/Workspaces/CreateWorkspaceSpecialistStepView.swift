@@ -28,7 +28,6 @@ struct CreateWorkspaceSpecialistStepView: View {
     let onCreate: () -> Void
     let onLoad: () async -> Void
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .title) private var headingTracking = CreateWorkspaceFormStyle.headingTracking
@@ -162,31 +161,20 @@ struct CreateWorkspaceSpecialistStepView: View {
         VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
             agentHeading
                 .padding(.bottom, CreateWorkspaceFormStyle.controlPadding - CreateWorkspaceFormStyle.rowSpacing)
-            adaptiveField("Specialist") { specialistPicker }
-            if let providerGuidance {
-                Text(providerGuidance)
-                    .interFont(Constants.Typography.bodyS)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                Button("Retry", action: onRetryProviders)
-                    .buttonStyle(IntentButtonStyle(variant: .secondary))
-            } else if isLoadingProviders, providers.isEmpty {
-                ProgressView {
-                    Text("Loading providers...").interFont(Constants.Typography.bodyS)
-                }
-            } else if providers.noneSelectable {
-                noProvidersSignedInPlaceholder
-            } else if !providers.isEmpty {
-                adaptiveField("Provider") { providerPicker }
-            }
-            if !providers.isEmpty, !models.isEmpty {
-                adaptiveField("Model") { modelPicker }
-            }
-            adaptiveField("Reasoning") { reasoningPicker }
-            if reasoningLevels.isEmpty {
-                Text("Choose a model with reasoning options to override Auto.")
-                    .interFont(Constants.Typography.subtextXXS)
-                    .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
-            }
+            AgentOptionField("Specialist") { specialistPicker }
+            AgentModelFields(
+                providers: providers,
+                isLoadingProviders: isLoadingProviders,
+                providerGuidance: providerGuidance,
+                selectedProvider: selectedProvider,
+                models: models,
+                selectedModel: $selectedModel,
+                daemonDefaultLabel: SpecialistInfo.daemonDefaultLabel(for: selectedSpecialist, providerId: selectedProvider?.id),
+                reasoningLevels: reasoningLevels,
+                selectedReasoningEffort: $selectedReasoningEffort,
+                onSelectProvider: onSelectProvider,
+                onRetryProviders: onRetryProviders
+            )
         }
     }
 
@@ -209,83 +197,6 @@ struct CreateWorkspaceSpecialistStepView: View {
         .accessibilityLabel("Specialist")
         .accessibilityValue(selectedSpecialist?.name ?? String(localized: "None"))
         .accessibilityIdentifier("creation.specialistPicker")
-    }
-
-    private var providerPicker: some View {
-        ProviderPicker(
-            providers: providers,
-            selectedProvider: selectedProvider,
-            usesFormStyle: true,
-            onSelect: onSelectProvider
-        )
-    }
-
-    private var modelPicker: some View {
-        ModelPicker(
-            models: models,
-            selectedModel: $selectedModel,
-            daemonDefaultLabel: SpecialistInfo.daemonDefaultLabel(
-                for: selectedSpecialist,
-                providerId: selectedProvider?.id
-            ),
-            usesFormStyle: true
-        )
-    }
-
-    private var reasoningPicker: some View {
-        Menu {
-            Picker("Reasoning", selection: $selectedReasoningEffort) {
-                Text("Auto").tag(String?.none)
-                ForEach(reasoningLevels, id: \.self) { level in
-                    Text(level).tag(Optional(level))
-                }
-            }
-            .pickerStyle(.inline)
-        } label: {
-            CreateWorkspaceChoiceLabel(title: selectedReasoningEffort ?? String(localized: "Auto"))
-        }
-        .buttonStyle(IntentContentButtonStyle())
-        .disabled(reasoningLevels.isEmpty || isLoadingProviders)
-        .accessibilityLabel("Reasoning")
-        .accessibilityValue(selectedReasoningEffort ?? String(localized: "Auto"))
-        .accessibilityHint("Auto uses the host's defaults. Other options override reasoning for the selected model.")
-        .accessibilityIdentifier("creation.reasoningPicker")
-    }
-
-    @ViewBuilder
-    private func adaptiveField<Content: View>(
-        _ label: LocalizedStringKey,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        if CreateWorkspaceView.usesExpandedFormLayout(for: dynamicTypeSize) {
-            VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-                Text(label)
-                    .interFont(Constants.Typography.bodyS)
-                    .accessibilityHidden(true)
-                content()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        } else {
-            HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
-                Text(label)
-                    .interFont(Constants.Typography.bodyS)
-                    .frame(width: CreateWorkspaceFormStyle.fieldLabelWidth, alignment: .leading)
-                    .accessibilityHidden(true)
-                content()
-            }
-        }
-    }
-
-    private var noProvidersSignedInPlaceholder: some View {
-        VStack(alignment: .leading, spacing: Constants.ModalPicker.placeholderSpacing) {
-            Text("No providers are signed in")
-                .interFont(Constants.Typography.bodyXSEmphasized)
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-            Text("Set up a provider in the Intent desktop app, then come back and try again.")
-                .interFont(Constants.Typography.bodyXS)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        }
-        .padding(.vertical, Constants.ModalPicker.rowVerticalPadding)
     }
 }
 

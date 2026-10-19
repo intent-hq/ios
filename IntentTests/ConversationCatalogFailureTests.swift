@@ -58,12 +58,12 @@ extension ConversationStartupRPCTests {
         await other.load()
         await other.loadModelCatalogIfNeeded()
         let connection = fixture.connection
-        connection.errorMap["agent.get"] = URLError(.networkConnectionLost)
         fixture.options.invalidate()
-        // The other window still has a selected provider and can explicitly
-        // refresh its models even while this window's metadata retry fails.
+        // Refresh the other window's metadata before failing this window's read.
         await other.refreshSelectableModels()
+        #expect(other.currentProviderId == "auggie")
         let cached = fixture.options.models(for: "auggie")
+        connection.errorMap["agent.get"] = URLError(.networkConnectionLost)
         await first.loadModelCatalogIfNeeded()
         #expect(first.currentProviderId == nil)
         #expect(other.currentProviderId == "auggie")

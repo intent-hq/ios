@@ -29,10 +29,21 @@ extension CreationOptionsStore {
         }
     }
 
+    func useDefaultModelProvider(_ inherited: Bool, consumer: UUID) {
+        guard isActive else { return }
+        if inherited {
+            observeSession()
+            defaultModelProviderCatalog.retain(consumer)
+        } else {
+            defaultModelProviderCatalog.release(consumer)
+        }
+    }
+
     func releaseCatalogs(consumer: UUID) {
         creationConsumers.remove(consumer)
         cancelUninterestedCreationLoad()
         specialistCatalog.release(consumer)
+        defaultModelProviderCatalog.release(consumer)
         selectModelProvider(nil, consumer: consumer)
     }
 
@@ -53,6 +64,7 @@ extension CreationOptionsStore {
             if wasConnected || state == .connected { invalidateCatalogs(clear: false) }
             guard state == .connected else { return }
             if creationConsumers.isEmpty { specialistCatalog.refreshIfInterested() }
+            defaultModelProviderCatalog.refreshIfInterested()
             for catalog in modelCatalogs.values { catalog.refreshIfInterested() }
             refreshCreationOptionsIfInterested()
         }
@@ -74,6 +86,7 @@ extension CreationOptionsStore {
             // repeated readiness never add reads or provider discovery.
             let refresh = connectionManager.connectionState == .connected
             specialistCatalog.invalidate(refresh: refresh)
+            defaultModelProviderCatalog.invalidate(refresh: refresh)
             for catalog in modelCatalogs.values { catalog.invalidate(refresh: refresh) }
         }
     }
@@ -104,6 +117,9 @@ extension CreationOptionsStore {
             let paths = changes.compactMap { $0["path"] as? String }
             if paths.contains(where: { Self.affectsSpecialists($0) }) {
                 specialistCatalog.invalidate(refresh: canRefresh)
+            }
+            if paths.contains(where: { Self.inSettingsFamily($0, "model") }) {
+                defaultModelProviderCatalog.invalidate(refresh: canRefresh)
             }
             for (provider, catalog) in modelCatalogs where paths.contains(where: { Self.affectsModels($0, provider: provider) }) {
                 catalog.invalidate(refresh: canRefresh)

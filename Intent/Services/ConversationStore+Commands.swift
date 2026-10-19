@@ -132,16 +132,17 @@ extension ConversationStore {
 
     // MARK: - Models
 
-    func getModels(agentId: String) async throws -> [[String: Any]] {
-        try await commands.getModels(agentId: agentId)
-    }
-
-    func setModel(agentId: String, modelId: String, workspaceId: String) async throws {
+    func setModel(agentId: String, modelId: String, workspaceId: String, providerId: String? = nil) async throws {
         try await commands.setModel(
             agentId: agentId,
             modelId: modelId,
-            workspaceId: workspaceId
+            workspaceId: workspaceId,
+            providerId: providerId
         )
+    }
+
+    func setReasoningEffort(agentId: String, workspaceId: String, effort: String?) async throws {
+        try await commands.setReasoningEffort(agentId: agentId, workspaceId: workspaceId, effort: effort)
     }
 
     // MARK: - Agent subscriptions

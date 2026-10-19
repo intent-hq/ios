@@ -358,7 +358,8 @@ private extension ConversationViewContent {
     private func handleAgentAction(_ action: AgentAction) {
         switch action {
         case .changeModel:
-            if viewModel.filteredMessages.isEmpty { showModelPicker = true }
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            showModelPicker = true
         case .delete:
             showDeleteConfirmation = true
         case .rename:
@@ -367,23 +368,18 @@ private extension ConversationViewContent {
         }
     }
 
-    /// Ellipsis toolbar menu (model info, rename, delete).
+    /// Ellipsis toolbar menu (model selection, rename, delete).
     private var nativeAgentMenu: some View {
         Menu {
             if let assistantStore {
                 AssistantHistoryMenu(store: assistantStore, coordinator: coordinator, onOpenHistory: onShowAssistantHistory)
                 Divider()
             }
-            if let displayName = viewModel.currentModelDisplayName {
-                Text("Model: \(displayName)")
-                    .accessibilityIdentifier("conversation.actions.modelInformation")
+            Button { handleAgentAction(.changeModel) } label: {
+                Label { Text(viewModel.currentModelDisplayName ?? "Select Model") } icon: { Image(.settings2) }
             }
-            if viewModel.filteredMessages.isEmpty {
-                Button { handleAgentAction(.changeModel) } label: {
-                    Label { Text("Change Model") } icon: { Image(.settings2) }
-                }
-                .accessibilityIdentifier("conversation.actions.model")
-            }
+            .accessibilityIdentifier("conversation.actions.model")
+            .accessibilityHint("Change model")
             Button { handleAgentAction(.rename) } label: {
                 Label { Text("Rename") } icon: { Image(.edit) }
             }

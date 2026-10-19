@@ -1,120 +1,83 @@
 import SwiftUI
 
 struct ModelPickerView: View {
-    let viewModel: ConversationViewModel
-    @Environment(\.colorScheme) var colorScheme
-    @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.dismiss) private var dismiss
+    @State private var selection: ConversationModelSelection
 
-    @ScaledMetric(relativeTo: .body) private var selectionIconSide: CGFloat = 17
+    init(viewModel: ConversationViewModel) {
+        _selection = State(initialValue: ConversationModelSelection(viewModel: viewModel))
+    }
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let models = viewModel.selectableModels {
-                    modelList(models)
-                } else if viewModel.modelCatalogLoadFailed {
-                    loadFailedState
-                } else {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+            ScrollView {
+                fields.padding(CreateWorkspaceFormStyle.pagePadding)
             }
-            .background(Constants.Pairing.background(for: colorScheme).ignoresSafeArea())
-            .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-            .navigationTitle("Select Model")
+            .accessibilityIdentifier("conversation.model.form")
+            .background(CreateWorkspaceFormStyle.background(for: colorScheme))
+            .safeAreaInset(edge: .bottom) { formControls }
+            .navigationTitle("Model Settings")
             .toolbarTitleDisplayMode(.inline)
-            .toolbarBackground(Constants.Pairing.background(for: colorScheme), for: .navigationBar)
+            .toolbarBackground(CreateWorkspaceFormStyle.background(for: colorScheme), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    IntentIconButton(icon: .close, label: "Cancel") { dismiss() }
-                }
-                .intentToolbarSurface()
-            }
-            .task {
-                await viewModel.refreshSelectableModels()
+            .task(id: selection.options.loadGeneration) { await selection.load() }
+            .task(id: selection.catalogKey) { await selection.loadModels() }
+            .onDisappear { selection.deactivate() }
+            .alert("Couldn't Save Model Settings", isPresented: Binding(
+                get: { selection.errorMessage != nil }, set: { if !$0 { selection.errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(selection.errorMessage ?? "")
             }
         }
-        .presentationBackground(Constants.Pairing.background(for: colorScheme))
+        .presentationBackground(CreateWorkspaceFormStyle.background(for: colorScheme))
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+        .interactiveDismissDisabled(selection.isSaving)
     }
 
-    /// The provider's `models.list` failed and nothing is cached: an
-    /// explicit retry instead of an indefinite spinner.
-    private var loadFailedState: some View {
-        ContentUnavailableView {
-            Label {
-                Text("Models Unavailable").interFont(Constants.Typography.bodyM)
-            } icon: {
-                Image(systemName: "exclamationmark.triangle")
-            }
-        } description: {
-            Text("The model list could not be loaded.")
-                .interFont(Constants.Typography.bodyXS)
-        } actions: {
-            Button("Retry") {
-                Task { await viewModel.refreshSelectableModels() }
-            }
-            .buttonStyle(IntentButtonStyle())
-            .interFont(Constants.Typography.bodyS)
-        }
+    private var fields: some View {
+        AgentModelFields(
+            providers: selection.providers,
+            isLoadingProviders: selection.isLoading || selection.providerOptions.isLoading,
+            providerGuidance: selection.providerGuidance,
+            selectedProvider: selection.provider,
+            models: selection.models,
+            selectedModel: Binding(get: { selection.model }, set: { selection.selectModel($0) }),
+            daemonDefaultLabel: String(localized: "Provider default"),
+            reasoningLevels: selection.reasoningLevels,
+            selectedReasoningEffort: $selection.reasoningEffort,
+            isLoadingModels: selection.isLoadingModels,
+            modelGuidance: selection.modelGuidance,
+            onSelectProvider: selection.selectProvider,
+            onRetryProviders: { Task { await selection.load() } },
+            onRetryModels: { Task { await selection.loadModels() } }
+        )
+        .disabled(selection.isSaving)
     }
 
-    private func modelList(_ models: [ModelInfo]) -> some View {
-        let selectedModelId = viewModel.currentModelId
-        let grouped = Dictionary(grouping: models, by: \.provider)
-        let sections = grouped.keys.sorted().map { provider in
-            let rows = (grouped[provider] ?? []).map { model in
-                (id: model.id, content: modelButton(model, isSelected: selectedModelId == model.id))
-            }
-            let header = Text(provider)
-                .interFont(Constants.Typography.eyebrow)
-                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
-            let section = Section(header: header) {
-                ForEach(rows, id: \.id) { @Sendable row in
-                    row.content
-                }
-            }
-            .listRowBackground(Constants.Pairing.surface(for: colorScheme))
-            return (id: provider, content: section)
-        }
-        // Prepare row values on MainActor before SwiftUI requests them off-main.
-        return List {
-            ForEach(sections, id: \.id) { @Sendable section in
-                section.content
+    private var formControls: some View {
+        HStack {
+            CreateWorkspaceNavigationButton(control: .close, identifier: "conversation.model.cancel") { dismiss() }
+                .accessibilityLabel("Cancel")
+                .disabled(selection.isSaving)
+            Spacer()
+            CreateWorkspaceSubmitButton(
+                isCreating: selection.isSaving,
+                isDisabled: !selection.canSave,
+                title: "Save",
+                progressTitle: "Saving model settings",
+                icon: .check,
+                identifier: "conversation.model.save"
+            ) {
+                Task { if await selection.save() { dismiss() } }
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-    }
-
-    private func modelButton(_ model: ModelInfo, isSelected: Bool) -> some View {
-        Button {
-            Task {
-                await viewModel.setModel(model.id)
-                dismiss()
-            }
-        } label: {
-            HStack {
-                Text(model.name)
-                    .interFont(Constants.Typography.bodyS)
-                    .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-                Spacer()
-                if isSelected {
-                    selectionIndicator
-                }
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(IntentContentButtonStyle())
-    }
-
-    private var selectionIndicator: some View {
-        Image(.check)
-            .resizable()
-            .scaledToFit()
-            .frame(width: selectionIconSide, height: selectionIconSide)
-            .foregroundStyle(Theme.primary(for: colorScheme))
-            .accessibilityHidden(true)
+        .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
+        .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
+        .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
+        .background(CreateWorkspaceFormStyle.background(for: colorScheme))
     }
 }

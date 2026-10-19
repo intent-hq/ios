@@ -370,6 +370,7 @@ extension DemoFixtures {
 
     /// JSON-RPC fixture response. Unknown methods return an empty dictionary.
     static func response(for method: String, params: [String: Any], snapshotAnchor: Date = Date()) -> Any {
+        if let response = assistantModelResponse(for: method, params: params) { return response }
         if let response = transcriptVideoResponse(for: method, params: params) { return response }
         if let response = inlinePDFResponse(for: method, params: params) { return response }
         if let response = inlineTextResponse(for: method, params: params) { return response }
@@ -456,7 +457,7 @@ extension DemoFixtures {
 
     private static func agentGetResponse(params: [String: Any]) -> Any {
         let agentId = params["agentId"] as? String
-        if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) { return ["agent": assistant] }
+        if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) { return ["agent": assistantDetail(assistant)] }
         var agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
         if usesStartupTranscript, agentId == longConversationAgentId {
             agent["metadata"] = ["lastSeenMessageId": startupSeenMessageId]
@@ -480,8 +481,7 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
-    /// Non-transcript timestamp relative to one response's snapshot time, so
-    /// relative-time labels and future events refresh together on each request.
+    /// Non-transcript labels and future events share each response's snapshot time.
     static func iso(minutesAgo: Double) -> String {
         iso(minutesAgo: minutesAgo, relativeTo: snapshotTimestampAnchor ?? Date())
     }

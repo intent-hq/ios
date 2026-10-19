@@ -8,6 +8,49 @@ import Testing
 // swiftlint:disable no_magic_numbers
 
 extension ConversationViewModelTests {
+    @Test func changingModelWithHistoryWaitsForConfirmationAndPreservesDraft() async throws {
+        let (vm, _, fake) = makeCatalogVM()
+        vm.currentModelId = "sonnet4.5"
+        vm.store.messages = [textMessage(role: .user, text: "Existing conversation")]
+        vm.messageText = "Continue with this draft"
+        let messageIds = vm.filteredMessageIDs
+        fake.pendingMethods = ["agent.setModel"]
+
+        let change = Task { try await vm.setModel("opus") }
+        try await waitUntil("model change request") { fake.didCallMethod("agent.setModel") }
+        #expect(vm.currentModelId == "sonnet4.5")
+        let params = try #require(fake.paramsForMethod("agent.setModel").first)
+        #expect(params["agentId"] as? String == "test-agent")
+        #expect(params["workspaceId"] as? String == "test-ws")
+        #expect(params["modelId"] as? String == "opus")
+
+        fake.resolvePending("agent.setModel", with: ["success": true])
+        try await change.value
+        #expect(vm.currentModelId == "opus")
+        #expect(vm.messageText == "Continue with this draft")
+        #expect(vm.filteredMessageIDs == messageIds)
+    }
+
+    @Test func failedModelChangeKeepsSelectionAndCanBeRetried() async throws {
+        let (vm, _, fake) = makeCatalogVM()
+        vm.currentModelId = "sonnet4.5"
+        let expectedError = NSError(domain: "ModelChange", code: -1)
+        fake.errorMap["agent.setModel"] = expectedError
+
+        do {
+            try await vm.setModel("opus")
+            Issue.record("A failed model change must reach the picker")
+        } catch {
+            #expect(error as NSError == expectedError)
+        }
+        #expect(vm.currentModelId == "sonnet4.5")
+
+        fake.errorMap["agent.setModel"] = nil
+        fake.responseMap["agent.setModel"] = ["success": true]
+        try await vm.setModel("opus")
+        #expect(vm.currentModelId == "opus")
+    }
+
     // MARK: - Model display name (conversation menu)
 
     @Test func modelDisplayNameResolvesNameFromCatalog() {
@@ -255,6 +298,106 @@ extension ConversationViewModelTests {
         await load.value
         #expect(vm.selectableModels == nil)
         #expect(!vm.modelCatalogLoadFailed)
+    }
+}
+
+extension ConversationViewModelTests {
+    @Test func assistantWithoutProviderUsesHostDefaultCatalog() async {
+        let (vm, _, fake) = makeCatalogVM()
+        fake.responseMap["agent.get"] = ["agent": ["model": "default-model"]]
+        fake.responseMap["settings.get"] = ["value": " codex "]
+        fake.responseMap["agent.getModels"] = ["models": []]
+        fake.responseMap["models.list"] = ["models": [["id": "default-model", "name": "Default Model", "provider": "codex"]]]
+
+        await vm.refreshSelectableModels()
+
+        #expect(vm.currentProviderId == nil)
+        #expect(vm.modelProviderId == "codex")
+        #expect(vm.currentModelDisplayName == "Default Model")
+        #expect(vm.selectableModels?.map(\.id) == ["default-model"])
+        #expect(fake.paramsForMethod("settings.get").first?["path"] as? String == "model.defaultProvider")
+        #expect(fake.paramsForMethod("models.list").first?["providerId"] as? String == "codex")
+        #expect(!fake.didCallMethod("agent.getModels"))
+    }
+
+    @Test(arguments: ["auggie", "codex@work"])
+    func explicitProviderDoesNotUseHostDefault(provider: String) async {
+        let (vm, _, fake) = makeCatalogVM()
+        fake.responseMap["agent.get"] = ["agent": ["provider": provider]]
+        fake.errorMap["settings.get"] = NSError(domain: "Unavailable", code: -1)
+
+        await vm.refreshSelectableModels()
+
+        #expect(fake.paramsForMethod("models.list").first?["providerId"] as? String == provider)
+        #expect(!fake.didCallMethod("settings.get"))
+        #expect(!vm.modelCatalogLoadFailed)
+    }
+
+    @Test(arguments: ["missing", "empty", "failed"])
+    func unavailableInheritedProviderCanBeRetried(response: String) async {
+        let (vm, _, fake) = makeCatalogVM()
+        fake.responseMap["agent.get"] = ["agent": ["model": "sonnet4.5"]]
+        fake.responseMap["settings.get"] = response == "empty" ? ["value": " "] : [:]
+        if response == "failed" { fake.errorMap["settings.get"] = NSError(domain: "Unavailable", code: -1) }
+
+        await vm.refreshSelectableModels()
+        #expect(vm.selectableModels == nil)
+        #expect(vm.modelCatalogLoadFailed)
+        #expect(!fake.didCallMethod("models.list"))
+        #expect(!fake.didCallMethod("agent.getModels"))
+
+        fake.errorMap["settings.get"] = nil
+        fake.responseMap["settings.get"] = ["value": "auggie"]
+        await vm.refreshSelectableModels()
+        #expect(vm.selectableModels?.map(\.id) == ["sonnet4.5"])
+        #expect(!vm.modelCatalogLoadFailed)
+    }
+
+    @Test func reconnectDiscardsPendingInheritedProvider() async throws {
+        let (vm, store, fake) = makeCatalogVM()
+        fake.responseMap["agent.get"] = ["agent": ["model": "sonnet4.5"]]
+        fake.pendingMethods = ["settings.get"]
+        let load = Task { await vm.refreshSelectableModels() }
+        try await waitUntil("default provider read") { fake.didCallMethod("settings.get") }
+
+        store.invalidate()
+        fake.resolvePending("settings.get", with: ["value": "codex"])
+        await load.value
+        #expect(vm.modelProviderId == nil)
+        #expect(!fake.didCallMethod("models.list"))
+
+        fake.pendingMethods = []
+        fake.responseMap["settings.get"] = ["value": "auggie"]
+        await vm.loadModelCatalogIfNeeded()
+        #expect(vm.modelProviderId == "auggie")
+        #expect(vm.currentModelDisplayName == "Sonnet 4.5 (balanced)")
+    }
+
+    @Test func inheritedProviderTracksDefaultSettingChanges() async {
+        let (vm, _, fake) = makeCatalogVM()
+        fake.responseMap["agent.get"] = ["agent": ["model": "sonnet4.5"]]
+        fake.responseMap["settings.get"] = ["value": "auggie"]
+        await vm.loadModelCatalogIfNeeded()
+        let key = vm.modelCatalogKey
+
+        fake.responseMap["settings.get"] = ["value": "codex"]
+        fake.deliverEvent(method: "event", params: ["type": "settings:changed", "data": ["changes": [["path": "model.defaultProvider"]]]])
+        await vm.loadModelCatalogIfNeeded()
+        #expect(vm.modelCatalogKey != key)
+        #expect(vm.modelProviderId == "codex")
+        #expect(fake.paramsForMethod("models.list").last?["providerId"] as? String == "codex")
+    }
+
+    @Test func emptyProviderCatalogCanBeRefreshed() async {
+        let (vm, _, fake) = makeCatalogVM()
+        fake.responseMap["models.list"] = ["models": []]
+        await vm.refreshSelectableModels()
+        #expect(vm.selectableModels?.isEmpty == true)
+        #expect(!vm.modelCatalogLoadFailed)
+
+        fake.responseMap["models.list"] = ["models": [["id": "opus", "name": "Opus", "provider": "auggie"]]]
+        await vm.refreshSelectableModels()
+        #expect(vm.selectableModels?.map(\.id) == ["opus"])
     }
 }
 

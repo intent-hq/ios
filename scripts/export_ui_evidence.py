@@ -171,8 +171,17 @@ CAPTURES = {
         ),
     },
     "ConversationActionsUITests": {
+        "testAssistantModelPickerUsesInheritedProviderAndPreservesDraft": (
+            "Assistant-Model-Picker-light", "Assistant-Model-Picker-dark",
+            "Assistant-Model-Settings-selected-light", "Assistant-Model-Settings-selected-dark",
+        ),
+        "testEmptyAssistantModelPickerOffersRetryAndCancel": ("Assistant-Model-Picker-Empty",),
         "testHistoryNoticeAndActionCancellationPreserveConversation": (
             "Conversation-History-Light", "Agent-Actions-Light", "Agent-Delete-Confirmation-Light",
+            "Agent-Model-Picker-Light", "Agent-Actions-Updated-Light",
+        ),
+        "testLargeTextModelPickerWorksAfterSending": (
+            "Agent-Actions-Dark-LargeText", "Agent-Model-Picker-Dark-LargeText", "Agent-Model-Picker-Selected-Dark-LargeText",
         ),
     },
     "WorkspaceComposerUITests": {
