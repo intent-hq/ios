@@ -80,6 +80,9 @@ CAPTURES = {
             for appearance in ("light", "dark")
             for screen in ("reference", "settings", "manual", "disconnect-confirmation")
         ),
+        "testIPadSettingsSidebarKeepsShellBackground": (
+            "ipad-settings-sidebar-light", "ipad-settings-sidebar-dark",
+        ),
         "testSettingsSupportBackgroundsMatchWorkspaceInBothAppearances": tuple(
             f"workspace-background-{screen}-{appearance}"
             for appearance in ("light", "dark")

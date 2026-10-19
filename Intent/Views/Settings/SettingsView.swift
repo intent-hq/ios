@@ -101,9 +101,7 @@ private struct SettingsContent: View {
         }
         .buttonStyle(IntentContentButtonStyle())
         .foregroundStyle(SettingsStyle.foreground(for: colorScheme))
-        .background(colorScheme == .dark
-            ? WorkspaceDetailStyle.background(for: colorScheme)
-            : IPadSidebarStyle.background(for: colorScheme))
+        .background(IPadSidebarStyle.background(for: colorScheme))
     }
 
     @ViewBuilder private var settingsSections: some View {
