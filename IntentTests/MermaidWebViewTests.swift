@@ -95,6 +95,8 @@ struct MermaidWebViewTests {
 @MainActor
 private enum MermaidJavaScriptProbe {
     typealias Completion = @MainActor @Sendable (Any?, (any Error)?) -> Void
+    private static let defaultTimeout: Duration = .seconds(5)
+    private static let pollInterval: Duration = .milliseconds(10)
 
     static func evaluate(_ expression: String, in webView: WKWebView) async throws -> Any? {
         try await waitForResult { completion in
@@ -103,7 +105,7 @@ private enum MermaidJavaScriptProbe {
     }
 
     static func waitForResult(
-        timeout: Duration = .seconds(5),
+        timeout: Duration = MermaidJavaScriptProbe.defaultTimeout,
         start: (@escaping Completion) -> Void
     ) async throws -> Any? {
         try Task.checkCancellation()
@@ -117,7 +119,7 @@ private enum MermaidJavaScriptProbe {
         while reply.result == nil {
             try Task.checkCancellation()
             guard ContinuousClock.now < deadline else { throw URLError(.timedOut) }
-            try await Task.sleep(for: .milliseconds(10))
+            try await Task.sleep(for: Self.pollInterval)
         }
         try Task.checkCancellation()
         return try reply.result?.get()
@@ -149,8 +151,12 @@ struct MermaidJavaScriptProbeTests {
     @Test func acceptsAsynchronousCallback() async throws {
         let result = try await MermaidJavaScriptProbe.waitForResult { completion in
             Task { @MainActor in
-                try await Task.sleep(for: .milliseconds(20))
-                completion("ready", nil)
+                do {
+                    try await Task.sleep(for: .milliseconds(20))
+                    completion("ready", nil)
+                } catch {
+                    completion(nil, error)
+                }
             }
         }
         #expect(result as? String == "ready")
