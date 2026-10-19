@@ -13,7 +13,8 @@ struct QuestionAttachmentPickers: ViewModifier {
             .photosPicker(
                 isPresented: $showsPhotos,
                 selection: $attachments.selectedPhotoItems,
-                maxSelectionCount: Constants.Conversation.Composer.maximumImageSelectionCount,
+                // Photos interprets zero as unlimited; the menu is disabled at zero.
+                maxSelectionCount: max(1, attachments.remainingPhotoImageCount ?? Constants.Conversation.Composer.maximumImageSelectionCount),
                 matching: .images
             )
             .onChange(of: attachments.selectedPhotoItems) { _, _ in

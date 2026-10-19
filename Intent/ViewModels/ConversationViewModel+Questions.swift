@@ -10,7 +10,10 @@ extension ConversationViewModel {
         for supersededId in Array(questionAttachmentPipelines.keys) {
             discardQuestionAttachments(for: supersededId)
         }
-        let pipeline = ConversationAttachmentPipeline(uploadService: uploadService)
+        let pipeline = ConversationAttachmentPipeline(
+            uploadService: uploadService,
+            maximumPhotoImageCount: Constants.Conversation.Composer.maximumImageSelectionCount
+        )
         questionAttachmentPipelines[messageId] = pipeline
         return pipeline
     }
@@ -121,10 +124,17 @@ extension ConversationViewModel {
         guard submittingQuestionMessageIds.insert(answeredQuestionsMessageId).inserted else { return }
         defer { submittingQuestionMessageIds.remove(answeredQuestionsMessageId) }
         let sendingStore = store
+        let pendingMarker = sendingStore.pendingQuestionsMessageId
         // A late submit for an older mount must not replace a newer card's selection.
         let attachments = questionAttachmentPipelines[answeredQuestionsMessageId]
             ?? ConversationAttachmentPipeline(uploadService: uploadService)
         guard let payload = await buildQuestionAttachmentPayloads(attachments), store === sendingStore else { return }
+        // Uploads suspend before the optimistic answer exists. Remote retirement
+        // must win here even though the view lifecycle exempts submitting IDs.
+        guard questionSubmissionIsCurrent(answeredQuestionsMessageId, pendingMarker: pendingMarker) else {
+            discardQuestionAttachments(for: answeredQuestionsMessageId)
+            return
+        }
         do {
             try await sendingStore.sendMessage(
                 agentId: agentId,
@@ -145,6 +155,20 @@ extension ConversationViewModel {
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Submit question answers failed: \(error)")
             sendingStore.rollbackFailedSend()
+        }
+    }
+
+    private func questionSubmissionIsCurrent(_ messageId: String, pendingMarker: String?) -> Bool {
+        guard store.pendingQuestionsMessageId == pendingMarker,
+              store.dismissedQuestionsMessageId != messageId,
+              !PendingQuestionSet.isQuestionSetAnswered(messages: messages, messageId: messageId),
+              !store.queuedMessages.contains(where: { $0.answeredQuestionsMessageId == messageId }) else { return false }
+        switch PendingQuestionSet.MarkerState(pendingMarker) {
+        case .cleared: return false
+        case .set(let markedId): return markedId == messageId
+        // Legacy visibility can flip during a new turn. Preserve the mount-time
+        // answer tag unless an authoritative retirement signal arrives.
+        case .absent: return true
         }
     }
 

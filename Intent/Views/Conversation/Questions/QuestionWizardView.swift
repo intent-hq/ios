@@ -148,7 +148,8 @@ struct QuestionWizardView: View {
                 onTextChange: markCurrentDraftUnskipped,
                 onPhotos: { showsPhotos = true },
                 onFiles: { showsFiles = true },
-                onPasteImages: attachments.pasteImages
+                onPasteImages: attachments.pasteImages,
+                photosEnabled: attachments.remainingPhotoImageCount != 0
             )
         }
         .background(Design.Palette.surface(for: colorScheme), in: .rect(cornerRadius: Design.cornerRadius))
@@ -229,16 +230,15 @@ struct QuestionWizardView: View {
                 isMulti: questions[step].multiSelect,
                 contentHeight: stepContentHeights[step],
                 maximumHeight: stepBodyMaxHeight,
-                onContentHeight: { step, height in
-                    stepContentHeights[step] = height
-                },
+                onContentHeight: { step, height in stepContentHeights[step] = height },
                 onSelect: selectOption,
                 onSubmit: handleNext,
                 onTextChange: { drafts[step].skipped = false },
                 isActive: step == idx && !collapsed && isPaneVisible,
                 onPhotos: { showsPhotos = true },
                 onFiles: { showsFiles = true },
-                onPasteImages: attachments.pasteImages
+                onPasteImages: attachments.pasteImages,
+                photosEnabled: attachments.remainingPhotoImageCount != 0
             )
             QuestionAttachmentTray(attachments: attachments)
             footer(for: step)

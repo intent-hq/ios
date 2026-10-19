@@ -17,6 +17,7 @@ struct QuestionStepView: View {
     var onPhotos: () -> Void = {}
     var onFiles: () -> Void = {}
     var onPasteImages: (() -> Void)?
+    var photosEnabled = true
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -213,7 +214,7 @@ struct QuestionStepView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.secondaryLabelOpacity))
                 .accessibilityHidden(true)
             freeTextEditor
-            WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles)
+            WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles, photosEnabled: photosEnabled)
                 .accessibilityIdentifier("question.attachment")
             if KeyCommandTextView.returnSubmitsNow {
                 Image(.enter)

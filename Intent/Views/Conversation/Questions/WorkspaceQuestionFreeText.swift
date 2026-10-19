@@ -10,6 +10,7 @@ struct WorkspaceQuestionFreeText: View {
     var onPhotos: () -> Void = {}
     var onFiles: () -> Void = {}
     var onPasteImages: (() -> Void)?
+    var photosEnabled = true
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -24,7 +25,7 @@ struct WorkspaceQuestionFreeText: View {
     var body: some View {
         HStack(spacing: Design.Question.buttonSpacing) {
             editor
-            WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles)
+            WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles, photosEnabled: photosEnabled)
                 .accessibilityIdentifier("question.attachment")
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 focusButton

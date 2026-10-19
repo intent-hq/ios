@@ -116,6 +116,7 @@ private struct WorkspaceComposerEditor: View {
 struct WorkspaceAttachmentMenu: View {
     let onPhotos: () -> Void
     let onFiles: () -> Void
+    var photosEnabled = true
     var glyphAlignment: Alignment = .center
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
@@ -126,6 +127,7 @@ struct WorkspaceAttachmentMenu: View {
     var body: some View {
         Menu {
             Button(action: onPhotos) { Label("Photos", systemImage: "photo.on.rectangle") }
+                .disabled(!photosEnabled)
             Button(action: onFiles) { Label("Files", image: "Folder") }
         } label: {
             Image(.paperclip)

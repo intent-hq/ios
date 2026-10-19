@@ -1,5 +1,6 @@
 import Foundation
 @testable import Intent
+import PhotosUI
 import Testing
 import UIKit
 
@@ -256,6 +257,109 @@ extension ConversationViewModelTests {
         await submission.value
         #expect(!attachments.hasPendingAttachments)
         #expect(viewModel.submittingQuestionMessageIds.isEmpty)
+    }
+
+    @Test(arguments: ["cleared", "dismissed", "answered", "queued", "replaced", "removed", "streaming", "untagged"])
+    func questionSubmissionRechecksRetirementAfterUpload(change: String) async throws {
+        let (viewModel, fake) = makeFakeBackedVM()
+        viewModel.store.messages = [questionMessage()]
+        viewModel.store.pendingQuestionsMessageId = "a1"
+        let answers = try firstAnswer(viewModel)
+        let attachments = viewModel.questionAttachments(for: "a1")
+        attachments.addImage(try #require(UIImage(systemName: "star")))
+        fake.pendingMethods = ["file.placeAttachment"]
+        let submission = Task { await viewModel.submitQuestionAnswers(answers, answeredQuestionsMessageId: "a1") }
+        defer { submission.cancel() }
+        try await fake.waitForPendingRequests("file.placeAttachment")
+        let metadata = ["type": AnyCodable("question_answers"), "answeredQuestionsMessageId": AnyCodable("a1")]
+        switch change {
+        case "cleared": viewModel.store.pendingQuestionsMessageId = ""
+        case "dismissed": viewModel.store.dismissedQuestionsMessageId = "a1"
+        case "answered":
+            var answer = textMessage(role: .user, text: "Answered elsewhere")
+            answer.metadata = metadata
+            viewModel.store.messages.append(answer)
+        case "queued": viewModel.store.queuedMessages = [queuedEntry(id: "remote-answer", metadata: metadata)]
+        case "replaced": viewModel.store.pendingQuestionsMessageId = "a2"
+        case "removed": viewModel.store.pendingQuestionsMessageId = nil
+        case "streaming": viewModel.store.isStreaming = true
+        default: viewModel.store.messages.append(textMessage(role: .user, text: "Unrelated follow-up"))
+        }
+        let messageIdsBeforeUploadCompletes = viewModel.messages.map(\.id)
+        fake.resolvePending("file.placeAttachment", with: try #require(fake.responseMap["file.placeAttachment"]))
+        await submission.value
+
+        let retired = change != "streaming" && change != "untagged"
+        #expect(fake.paramsForMethod("agent.sendMessage").count == (retired ? 0 : 1))
+        if retired { #expect(viewModel.messages.map(\.id) == messageIdsBeforeUploadCompletes) }
+        #expect(viewModel.submittingQuestionMessageIds.isEmpty)
+        #expect(!attachments.hasPendingAttachments)
+        #expect(viewModel.questionAttachmentPipelines["a1"] == nil)
+    }
+
+    @Test func questionPhotoImportsCountPendingImagesAcrossBatches() async throws {
+        let (viewModel, _) = makeFakeBackedVM()
+        let attachments = viewModel.questionAttachments(for: "a1")
+        let limit = Constants.Conversation.Composer.maximumImageSelectionCount
+        let image = try #require(UIImage(systemName: "star"))
+        let data = try #require(image.pngData())
+        var loadedPhotos = 0
+        attachments.loadPhotoData = { _ in
+            loadedPhotos += 1
+            return data
+        }
+        attachments.addImage(image)
+        #expect(attachments.remainingPhotoImageCount == limit - 1)
+        attachments.selectedPhotoItems = (1..<limit).map { PhotosPickerItem(itemIdentifier: "batch-\($0)") }
+        attachments.startLoadingSelectedPhotos(workspaceId: "test-ws")
+        await attachments.photoImportTask?.value
+        #expect(attachments.pendingImages.count == limit)
+        #expect(attachments.remainingPhotoImageCount == 0)
+        #expect(attachments.selectedPhotoItems.isEmpty)
+
+        attachments.selectedPhotoItems = [PhotosPickerItem(itemIdentifier: "over-cap")]
+        attachments.startLoadingSelectedPhotos(workspaceId: "test-ws")
+        await attachments.photoImportTask?.value
+        #expect(attachments.pendingImages.count == limit)
+        #expect(loadedPhotos == limit - 1, "over-cap selections are rejected before loading")
+        #expect(attachments.imagePlacementError?.contains("up to \(limit) images") == true)
+
+        attachments.removeImage(at: 0)
+        #expect(attachments.remainingPhotoImageCount == 1)
+        attachments.selectedPhotoItems = [PhotosPickerItem(itemIdentifier: "replacement")]
+        attachments.startLoadingSelectedPhotos(workspaceId: "test-ws")
+        await attachments.photoImportTask?.value
+        #expect(attachments.pendingImages.count == limit)
+        #expect(loadedPhotos == limit)
+        #expect(attachments.imagePlacementError == nil)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func questionPhotoImportRechecksCapacityAfterLoading() async throws {
+        let (viewModel, _) = makeFakeBackedVM()
+        let attachments = viewModel.questionAttachments(for: "a1")
+        let limit = Constants.Conversation.Composer.maximumImageSelectionCount
+        let image = try #require(UIImage(systemName: "star"))
+        let data = try #require(image.pngData())
+        let (started, didStart) = AsyncStream.makeStream(of: Void.self)
+        let (gate, release) = AsyncStream.makeStream(of: Void.self)
+        defer { didStart.finish(); release.finish() }
+        attachments.loadPhotoData = { _ in
+            didStart.yield()
+            for await _ in gate { break }
+            return data
+        }
+        attachments.selectedPhotoItems = [PhotosPickerItem(itemIdentifier: "in-flight")]
+        attachments.startLoadingSelectedPhotos(workspaceId: "test-ws")
+        let importTask = try #require(attachments.photoImportTask)
+        defer { importTask.cancel() }
+        for await _ in started { break }
+        for _ in 0..<limit { attachments.addImage(image) }
+        release.yield()
+        await importTask.value
+
+        #expect(attachments.pendingImages.count == limit)
+        #expect(attachments.pendingImages.allSatisfy { $0 === image }, "the late import must not replace existing images")
+        #expect(attachments.imagePlacementError?.contains("up to \(limit) images") == true)
     }
 
     private func questionAnswerRequest(_ fake: FakeConnectionManager) throws -> [String: Any] {
