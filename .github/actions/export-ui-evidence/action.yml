@@ -4,6 +4,9 @@ inputs:
   bundles:
     description: Result bundle paths, one per line; retry bundles are included automatically
     required: true
+  artifact-suffix:
+    description: Suffix for artifact names when multiple UI jobs export evidence
+    default: ''
 runs:
   using: composite
   steps:
@@ -13,17 +16,18 @@ runs:
       shell: bash
       env:
         EVIDENCE_BUNDLES: ${{ inputs.bundles }}
+        EVIDENCE_SUFFIX: ${{ inputs.artifact-suffix }}
       run: >-
         python3 scripts/export_ui_evidence.py
-        --output-root "$RUNNER_TEMP/ui-evidence-$GITHUB_JOB"
+        --output-root "$RUNNER_TEMP/ui-evidence-$GITHUB_JOB$EVIDENCE_SUFFIX"
         --bundles "$EVIDENCE_BUNDLES"
 
     - name: Upload review screenshots
       if: always() && steps.evidence.outputs.review_available == 'true'
       uses: actions/upload-artifact@v7
       with:
-        name: ios-ui-review-evidence
-        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/review
+        name: ios-ui-review-evidence${{ inputs.artifact-suffix }}
+        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}${{ inputs.artifact-suffix }}/review
         retention-days: 14
         if-no-files-found: ignore
 
@@ -31,8 +35,8 @@ runs:
       if: always() && steps.evidence.outputs.agent-groups_available == 'true'
       uses: actions/upload-artifact@v7
       with:
-        name: ios-agent-group-evidence
-        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/agent-groups
+        name: ios-agent-group-evidence${{ inputs.artifact-suffix }}
+        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}${{ inputs.artifact-suffix }}/agent-groups
         retention-days: 14
         if-no-files-found: ignore
 
@@ -40,7 +44,7 @@ runs:
       if: always() && steps.evidence.outputs.recovery_available == 'true'
       uses: actions/upload-artifact@v7
       with:
-        name: ios-transcript-recovery-evidence
-        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/recovery
+        name: ios-transcript-recovery-evidence${{ inputs.artifact-suffix }}
+        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}${{ inputs.artifact-suffix }}/recovery
         retention-days: 14
         if-no-files-found: ignore

@@ -144,6 +144,11 @@ Review the generated bundle, license notices, and `vendor.json` together. To tes
 the shipped renderer from the same directory, run `npx playwright install chromium webkit`
 then `npm test`. Native coverage lives in `MermaidMarkdownContentTests`,
 `MermaidWebViewTests`, and `ConversationMermaidUITests`.
+The native Mermaid probes have a five-second JavaScript deadline and require a
+successful render before inspecting the page. `MermaidJavaScriptProbeTests`
+checks missing and late callbacks, error propagation, and cancellation without
+depending on a healthy WebKit process. CI retains unit results and console logs
+on cancellation as well as failure so interrupted renderer runs can be inspected.
 
 ## Development
 
@@ -318,8 +323,13 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 
 `.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
 `scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
-queue. The UI job also runs focused iPad sidebar regressions. Go tests, wrapper
-self-tests, and the strict SwiftLint gate run on Linux. The full UI bundle runs
+queue. Smoke coverage uses two balanced iPhone shards and an independent job for
+all seven focused iPad sidebar regressions. Each lane owns its build directory,
+disposable simulator, results, and evidence. The second iPhone shard and iPad use
+Depot macOS so they can overlap the selected local Mac pool. Matrix fail-fast is
+disabled, and the existing `iOS UI Tests` check requires every lane to succeed.
+Go tests, wrapper self-tests, and the strict SwiftLint gate run on Linux.
+The full UI bundle runs once in one iPhone job, alongside the iPad regressions,
 on the default branch at **09:00 and 21:00 UTC** or on manual dispatch:
 
 ```bash
@@ -330,6 +340,20 @@ gh workflow run ci.yml --repo intent-hq/ios --ref your-branch -f only_testing='I
 
 Replace `your-branch` with the branch to test. Filtered dispatches are
 **non-gating** and do not replace the normal PR checks.
+
+Both workspace creation entry tests exercise light and dark appearances on every
+run, including ordinary PRs.
+
+Each selector in `scripts/ui-smoke-tests.txt` has a `# shard: 1` or `# shard: 2`
+annotation. Assign new selectors to a shard and keep suite members together when
+practical. `python3 scripts/ui_smoke_tests.py --shard 1` prints that shard's
+selection. Invalid annotations, duplicate selectors, or empty shards fail before
+native tests start. Run `python3 scripts/test_ui_smoke_tests.py` after changing
+selection logic and `python3 scripts/test_ci_simulator.py` after changing the
+workflow. Screenshot artifact names use `-iphone-1`, `-iphone-2`, and `-ipad`
+suffixes for smoke runs; full runs use `-iphone` and `-ipad`. Simulator and failure
+artifacts also include the lane name.
+
 `pre_pr_gate=true` runs the literal `scripts/xcodebuild.sh test-ios` gate,
 building once and running unit and UI tests together on an owned iPhone simulator.
 It replaces the separate build/unit/UI steps for that dispatch, keeps the visionOS
@@ -379,7 +403,9 @@ configurations with the original assertions and timeouts.
 CI uploads `ios-ui-review-evidence` for 14 days when allowlisted captures exist,
 on success or failure and for filtered UI runs. Open its PNGs directly;
 `manifest.json` records the tested revision, suite/test, source bundle, and retry
-origin. Captures include workspace creation, iPad sidebars and pairing, menus, changes, and connection-loss
+origin. Parallel iPad exports append `-ipad` to evidence artifact names, including
+`ios-ui-review-evidence-ipad`, to avoid collisions with the iPhone job. Captures
+include workspace creation, iPad sidebars and pairing, menus, changes, and connection-loss
 flows; `scripts/export_ui_evidence.py` is the complete allowlist. Missing images
 are not proof that a view was captured. `ios-agent-group-evidence` and
 `ios-transcript-recovery-evidence` remain separate artifacts. Run
@@ -399,14 +425,24 @@ resolve dynamic dispatch, aliases, computed properties, or constructors.
 After `scripts/xcodebuild.sh build-for-testing-ui`, run
 `python3 scripts/verify_fixture_capture_lifecycle.py --output-root build/capture-contract`
 with the same simulator and derived-data settings. The output directory must be
-new. The iOS UI CI job runs this contract separately from the smoke selection and
-uploads `ios-fixture-capture-lifecycle`, including the original failing xcresults,
+new. The first iPhone smoke shard, or the single full iPhone job, runs this contract
+separately from the smoke selection and uploads `ios-fixture-capture-lifecycle`,
+including the original failing xcresults,
 result JSON, logs, and compact PNG manifests. The isolated abort fixture opts in
 only for this verifier; ordinary test runs skip that intentional failure.
 The verifier requires exit 65, the original marked assertion recorded as Failed,
 a passing companion fixture, and every exact named final PNG under its owning
-test in each of two result bundles. Repeated passing captures must remain
-distinct. Changing the abort fixture's capture teardown back to defer must fail
+test in each result bundle. The local verifier defaults to two result bundles.
+Ordinary PRs use `--repetitions 1`; capture fixture/exporter/tooling changes,
+scheduled runs, manual runs, and the merge queue retain two. If the changed-file
+lookup fails, CI keeps two. The selector checks the PR head, base, and file count
+before and after fetching files; stale reruns and changing PRs also keep two.
+`.github/scripts/select-fixture-capture-repetitions.sh`
+defines the relevant paths; its offline regression is
+`python3 scripts/test_select_fixture_capture_repetitions.py`. One repetition
+still requires repeated passing captures to remain distinct; the second also
+checks separation across result bundles. Changing the abort fixture's capture
+teardown back to defer must fail
 both the source check and this native contract after rebuilding; restore and
 rebuild afterward. XCTest teardown does not guarantee evidence after a process crash.
 
@@ -437,8 +473,18 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 ### Depot GitHub Actions runners
 
-Script and Go jobs use Depot Ubuntu 24.04. Build and simulator selectors prefer
-available self-hosted Macs, using `RUNNER_STATUS_TOKEN` to inspect the pools,
-and fall back to Depot’s latest macOS Apple Silicon. The selected image needs Xcode 26;
+Script and Go jobs use Depot Ubuntu 24.04. The independent iPad UI job always
+uses Depot macOS; smoke runs also use Depot for the second iPhone shard. This
+requires hosted capacity for both jobs so they can overlap the selected Mac pool.
+Each pool selects its installed Xcode independently.
+The 18 October 2026 validation used Xcode 26.5 on Depot for iPad and 26.3 on the
+local iPhone Mac.
+The pools do not guarantee the same toolchain or simulator runtime. Record the
+runner, Xcode, and runtime when comparing timings or investigating failures.
+Build and iPhone simulator selectors prefer available self-hosted Macs, using
+`RUNNER_STATUS_TOKEN` to inspect the pools,
+and fall back to Depot’s latest macOS Apple Silicon. An online local runner
+remains eligible while busy; this preference does not provide automatic overflow
+for queued jobs. The selected image needs Xcode 26;
 runtime and Metal provisioning run as needed. Go and Swift package caches and
 Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.
