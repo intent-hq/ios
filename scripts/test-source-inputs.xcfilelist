@@ -354,6 +354,7 @@ $(SRCROOT)/Intent/Presentation
 $(SRCROOT)/Intent/Presentation/BoundedMarkdownCache.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStatusTiming.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStep.swift
+$(SRCROOT)/Intent/Presentation/ConversationModelSelection.swift
 $(SRCROOT)/Intent/Presentation/ConversationPresentation.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy+Geometry.swift
@@ -776,6 +777,7 @@ $(SRCROOT)/Intent/Views/Settings/SettingsStyle.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsSupportSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsView.swift
 $(SRCROOT)/Intent/Views/Workspaces
+$(SRCROOT)/Intent/Views/Workspaces/AgentModelFields.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift
@@ -943,6 +945,7 @@ $(SRCROOT)/IntentTests/ConversationHistoryTests.swift
 $(SRCROOT)/IntentTests/ConversationIncrementalDeltaTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
+$(SRCROOT)/IntentTests/ConversationModelSelectionTests.swift
 $(SRCROOT)/IntentTests/ConversationRetryNowTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupAuthorityTests.swift
