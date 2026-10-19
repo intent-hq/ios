@@ -40,6 +40,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         let composer = app.textViews["composer.textView"]
         composer.tap()
         composer.typeText("Continue with this draft")
+        closeTypingFocus(in: app)
         openActions(app)
         app.buttons["conversation.actions.model"].tap()
         let picker = app.navigationBars["Model Settings"]
@@ -107,6 +108,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
             let composer = app.textViews["composer.textView"]
             composer.tap()
             composer.typeText("Keep this Assistant draft")
+            closeTypingFocus(in: app)
             app.buttons["assistant.actions"].tap()
             app.buttons["conversation.actions.model"].tap()
             assertField("Codex", identifier: "creation.providerPicker", in: app)
@@ -193,12 +195,19 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "-appThemePreference", appearance, "-AppleLanguages", "(en)", "-AppleLocale", "en_US"] + arguments
         app.launch()
-        let launcher = app.buttons["intent.menu.open"]
-        XCTAssertTrue(launcher.waitForExistence(timeout: Self.timeout))
-        launcher.tap()
-        let assistant = app.buttons["intent.menu.assistant"]
-        XCTAssertTrue(assistant.waitForExistence(timeout: Self.timeout))
-        assistant.tap()
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            selectIPadSection("assistant", in: app)
+            let thread = app.buttons["assistant.thread.demo-agent-assistant"]
+            XCTAssertTrue(thread.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            thread.tap()
+        } else {
+            let launcher = app.buttons["intent.menu.open"]
+            XCTAssertTrue(launcher.waitForExistence(timeout: Self.timeout))
+            launcher.tap()
+            let assistant = app.buttons["intent.menu.assistant"]
+            XCTAssertTrue(assistant.waitForExistence(timeout: Self.timeout))
+            assistant.tap()
+        }
         XCTAssertTrue(app.buttons["assistant.actions"].waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
         return app
@@ -216,14 +225,33 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
         app.launch()
-        let workspace = app.staticTexts["Workspace agent design"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        if UIDevice.current.userInterfaceIdiom == .pad { selectIPadSection("workspaces", in: app) }
+        let workspace = app.buttons["workspace.row.demo-ws-agent-design"]
+        XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         workspace.tap()
         let agent = app.buttons["workspace.agent.demo-agent-design"]
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
         agent.tap()
         XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
         return app
+    }
+
+    @MainActor
+    private func selectIPadSection(_ section: String, in app: XCUIApplication) {
+        let destination = app.buttons["ipad.rail.\(section)"]
+        XCTAssertTrue(destination.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        destination.tap()
+        XCTAssertTrue(destination.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+    }
+
+    @MainActor
+    private func closeTypingFocus(in app: XCUIApplication) {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+        let close = app.buttons["ipad.focus.close"]
+        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
     }
 
     @MainActor
