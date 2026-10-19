@@ -67,7 +67,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         model.tap()
         let picker = app.navigationBars["Model Settings"]
         XCTAssertTrue(picker.waitForExistence(timeout: Self.timeout))
-        picker.buttons["Cancel"].tap()
+        app.buttons["conversation.model.cancel"].tap()
         XCTAssertTrue(picker.waitForNonExistence(timeout: Self.timeout))
 
         let composer = app.textViews["composer.textView"]
@@ -129,7 +129,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
             app.buttons["conversation.actions.model"].tap()
             assertSavedAssistantSettings(app)
             choose("Codex", identifier: "creation.providerPicker", in: app)
-            app.navigationBars["Model Settings"].buttons["Cancel"].tap()
+            app.buttons["conversation.model.cancel"].tap()
             XCTAssertTrue(app.navigationBars["Model Settings"].waitForNonExistence(timeout: Self.timeout))
             app.buttons["assistant.actions"].tap()
             app.buttons["conversation.actions.model"].tap()
@@ -157,7 +157,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         assertField("Auto", identifier: "creation.reasoningPicker", in: app)
         assertField("Codex", identifier: "creation.providerPicker", in: app)
         assertField("default-model", identifier: "creation.modelPicker", in: app)
-        app.navigationBars["Model Settings"].buttons["Cancel"].tap()
+        app.buttons["conversation.model.cancel"].tap()
         XCTAssertTrue(app.navigationBars["Model Settings"].waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(app.textViews["composer.textView"].exists)
     }

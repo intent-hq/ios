@@ -17,18 +17,11 @@ struct ModelPickerView: View {
             }
             .accessibilityIdentifier("conversation.model.form")
             .background(CreateWorkspaceFormStyle.background(for: colorScheme))
-            .safeAreaInset(edge: .bottom) { saveControls }
+            .safeAreaInset(edge: .bottom) { formControls }
             .navigationTitle("Model Settings")
             .toolbarTitleDisplayMode(.inline)
             .toolbarBackground(CreateWorkspaceFormStyle.background(for: colorScheme), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    IntentIconButton(icon: .close, label: "Cancel") { dismiss() }
-                        .disabled(selection.isSaving)
-                }
-                .intentToolbarSurface()
-            }
             .task(id: selection.options.loadGeneration) { await selection.load() }
             .task(id: selection.catalogKey) { await selection.loadModels() }
             .onDisappear { selection.deactivate() }
@@ -65,8 +58,11 @@ struct ModelPickerView: View {
         .disabled(selection.isSaving)
     }
 
-    private var saveControls: some View {
+    private var formControls: some View {
         HStack {
+            CreateWorkspaceNavigationButton(control: .close, identifier: "conversation.model.cancel") { dismiss() }
+                .accessibilityLabel("Cancel")
+                .disabled(selection.isSaving)
             Spacer()
             CreateWorkspaceSubmitButton(
                 isCreating: selection.isSaving,
@@ -79,7 +75,9 @@ struct ModelPickerView: View {
                 Task { if await selection.save() { dismiss() } }
             }
         }
-        .padding(CreateWorkspaceFormStyle.pagePadding)
+        .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
+        .padding(.top, CreateWorkspaceFormStyle.rowSpacing)
+        .padding(.bottom, CreateWorkspaceFormStyle.pagePadding)
         .background(CreateWorkspaceFormStyle.background(for: colorScheme))
     }
 }
