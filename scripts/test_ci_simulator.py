@@ -419,7 +419,7 @@ class OrdinaryCITests(unittest.TestCase):
 
         self.assertIn("fail-fast: false", job)
         self.assertIn("fromJSON(needs.select-macos-runner.outputs.ui-matrix)", job)
-        self.assertIn("matrix.hosted && 'macos-15-xlarge'", job)
+        self.assertIn("matrix.hosted && 'macos-26-xlarge'", job)
         self.assertLess(job.index("name: Create owned UI simulator"), job.index("name: Pre-boot simulator"))
         cleanup = job.split("      - name: Clean up owned UI simulator\n", 1)[1].split("\n      - name:", 1)[0]
         self.assertIn("if: always()", cleanup)

@@ -80,8 +80,8 @@ jobs:
     name: Select macOS runner
     runs-on: ubuntu-24.04
     outputs:
-      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"macos-15-xlarge"' }}
-      runs-on: ${{ steps.select.outputs.runs-on || '"macos-15-xlarge"' }}
+      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"macos-26-xlarge"' }}
+      runs-on: ${{ steps.select.outputs.runs-on || '"macos-26-xlarge"' }}
       fixture-capture-repetitions: ${{ steps.capture-contract.outputs.repetitions || '2' }}
       ui-matrix: ${{ steps.ui-lanes.outputs.matrix }}
     steps:
@@ -250,7 +250,7 @@ jobs:
     # step below waits for those jobs and fails this one if either did not
     # succeed. All three jobs still run in parallel.
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15-xlarge"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-26-xlarge"') }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.pre_pr_gate && 120 || 45 }}
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -751,7 +751,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.select-macos-runner.outputs.ui-matrix) }}
     # Shard 2 and iPad need independent capacity to overlap the local shard.
-    runs-on: ${{ matrix.hosted && 'macos-15-xlarge' || fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15-xlarge"') }}
+    runs-on: ${{ matrix.hosted && 'macos-26-xlarge' || fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-26-xlarge"') }}
     # Allow setup, the full iPhone suite, and cleanup (ios#429).
     timeout-minutes: 90
     env:
@@ -946,7 +946,7 @@ jobs:
     # dispatch to save runner time.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"macos-15-xlarge"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"macos-26-xlarge"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'

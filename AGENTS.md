@@ -93,7 +93,7 @@ selectors and skipped-only selections are rejected. See the README's CI section
 for evidence artifacts and the disposable simulator route.
 
 The first iPhone shard uses the selected Mac pool; the second iPhone shard and
-iPad use GitHub-hosted `macos-15-xlarge` for independent capacity. Scheduled/manual full runs keep
+iPad use GitHub-hosted `macos-26-xlarge` for independent capacity. Scheduled/manual full runs keep
 one full-bundle iPhone job and the iPad regressions. Each job owns its simulator,
 build directory, results, and evidence. Keep matrix `fail-fast: false` and the
 aggregate `iOS UI Tests` check,

@@ -157,7 +157,7 @@ on cancellation as well as failure so interrupted renderer runs can be inspected
 - For app builds: macOS with Xcode and its command-line tools. Tests require an available iPhone
   simulator by default; use `SIM_UDID` to select an iPad. Every CI Mac selects its
   newest installed GA Xcode 26 (betas and release candidates are skipped); on
-  GitHub-hosted `macos-15-xlarge` that is Xcode 26.3.
+  GitHub-hosted `macos-26-xlarge` that is Xcode 26.6 (the local iPhone pool runs 26.3).
 - Network access for the first Swift package resolution and pinned Go tool download.
 - A Go toolchain compatible with the version in `TailcatKit/go.mod`. iOS commands
   automatically run `TailcatKit/build_xcframework.sh` when the gitignored framework
@@ -327,7 +327,7 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 queue. Smoke coverage uses two balanced iPhone shards and an independent job for
 all seven focused iPad sidebar regressions. Each lane owns its build directory,
 disposable simulator, results, and evidence. The second iPhone shard and iPad use
-GitHub-hosted `macos-15-xlarge` so they can overlap the selected local Mac pool. Matrix fail-fast is
+GitHub-hosted `macos-26-xlarge` so they can overlap the selected local Mac pool. Matrix fail-fast is
 disabled, and the existing `iOS UI Tests` check requires every lane to succeed.
 Go tests, wrapper self-tests, and the strict SwiftLint gate run on Linux.
 The full UI bundle runs once in one iPhone job, alongside the iPad regressions,
@@ -475,7 +475,7 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 ### GitHub Actions runners
 
 Script and Go jobs use GitHub-hosted `ubuntu-24.04`. The independent iPad UI job
-always uses GitHub-hosted `macos-15-xlarge`; smoke runs also use it for the second
+always uses GitHub-hosted `macos-26-xlarge`; smoke runs also use it for the second
 iPhone shard. This
 requires hosted capacity for both jobs so they can overlap the selected Mac pool.
 Each pool selects its installed Xcode independently.
@@ -485,7 +485,7 @@ The pools do not guarantee the same toolchain or simulator runtime. Record the
 runner, Xcode, and runtime when comparing timings or investigating failures.
 Build and iPhone simulator selectors prefer available self-hosted Macs, using
 `RUNNER_STATUS_TOKEN` to inspect the pools,
-and fall back to GitHub-hosted `macos-15-xlarge` (Apple Silicon). An online local runner
+and fall back to GitHub-hosted `macos-26-xlarge` (Apple Silicon). An online local runner
 remains eligible while busy; this preference does not provide automatic overflow
 for queued jobs. The selected image needs Xcode 26;
 runtime and Metal provisioning run as needed. Go and Swift package caches and
