@@ -423,10 +423,7 @@ extension ConversationCommands {
     func setModel(agentId: String, modelId: String, workspaceId: String, providerId: String? = nil) async throws {
         var params: [String: Any] = ["agentId": agentId, "modelId": modelId, "workspaceId": workspaceId]
         if let providerId { params["providerId"] = providerId }
-        _ = try await connectionManager.request(
-            "agent.setModel",
-            params: params
-        )
+        _ = try await connectionManager.request("agent.setModel", params: params)
     }
 
     func setReasoningEffort(agentId: String, workspaceId: String, effort: String?) async throws {

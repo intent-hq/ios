@@ -99,14 +99,8 @@ final class DemoDesignFixtures {
     private func agentResponse(for method: String, params: [String: Any]) -> Any? {
         switch method {
         case "agent.get": return ["agent": agent]
-        case "agent.setModel" where params["workspaceId"] as? String == Self.workspaceId:
-            guard let modelId = params["modelId"] as? String else { return nil }
-            self.modelId = modelId
-            if let provider = params["providerId"] as? String { providerId = provider }
-            return ["success": true]
-        case "agent.update":
-            if let changes = params["changes"] as? [String: Any] { reasoningEffort = changes["reasoningEffort"] as? String }
-            return ["success": true]
+        case "agent.setModel", "agent.update":
+            return modelResponse(for: method, params: params)
         case "agent.getConversation":
             return ["messages": messages, "truncated": historyIsTruncated, "totalMessages": totalMessageCount]
         case "chat.subscribe":
@@ -122,6 +116,22 @@ final class DemoDesignFixtures {
             questionsResolved = true
             questionsDismissed = true
             return ["success": true, "dismissedQuestionsMessageId": Self.questionMessageId]
+        default:
+            return nil
+        }
+    }
+
+    private func modelResponse(for method: String, params: [String: Any]) -> Any? {
+        guard params["workspaceId"] as? String == Self.workspaceId else { return nil }
+        switch method {
+        case "agent.setModel":
+            guard let modelId = params["modelId"] as? String else { return nil }
+            self.modelId = modelId
+            if let provider = params["providerId"] as? String { providerId = provider }
+            return ["success": true]
+        case "agent.update":
+            if let changes = params["changes"] as? [String: Any] { reasoningEffort = changes["reasoningEffort"] as? String }
+            return ["success": true]
         default:
             return nil
         }

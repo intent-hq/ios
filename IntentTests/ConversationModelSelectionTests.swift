@@ -13,18 +13,24 @@ struct ConversationModelSelectionTests {
     private func fixture() async -> Fixture {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = ["agent": ["provider": "codex", "model": "shared-model", "reasoningEffort": "high"]]
-        fake.responseMap["providers.catalog"] = ["providers": [
-            ["id": "codex", "visible": true, "canBeDisabled": true],
-            ["id": "claude-code", "visible": true, "canBeDisabled": true]
-        ]]
+        fake.responseMap["providers.catalog"] = [
+            "providers": [
+                ["id": "codex", "visible": true, "canBeDisabled": true],
+                ["id": "claude-code", "visible": true, "canBeDisabled": true]
+            ]
+        ]
         fake.responseMap["settings.get"] = ["path": "providers.enabled", "value": ["codex": true, "claude-code": true]]
         fake.responseMap["host.providerAuthStatus"] = ["providers": [["id": "codex", "authenticated": true], ["id": "claude-code", "authenticated": true]]]
         fake.responseMap["models.list"] = ["models": [["id": "shared-model", "name": "Shared Model", "effortLevels": ["low", "high"]]]]
         fake.responseMap["agent.setModel"] = ["success": true]
         fake.responseMap["agent.update"] = ["success": true]
         let viewModel = ConversationViewModel(
-            agentId: "test-agent", workspaceId: "test-workspace", agentName: "Test", connection: fake,
-            uploadService: AttachmentUploadService(connection: fake), optionsStore: CreationOptionsStore(connectionManager: fake)
+            agentId: "test-agent",
+            workspaceId: "test-workspace",
+            agentName: "Test",
+            connection: fake,
+            uploadService: AttachmentUploadService(connection: fake),
+            optionsStore: CreationOptionsStore(connectionManager: fake)
         )
         let selection = ConversationModelSelection(viewModel: viewModel)
         await selection.load()
