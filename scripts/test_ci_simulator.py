@@ -420,7 +420,7 @@ class OrdinaryCITests(unittest.TestCase):
         self.assertIn("fail-fast: false", job)
         self.assertIn("fromJSON(needs.select-macos-runner.outputs.ui-matrix)", job)
         runner = next(line.strip() for line in job.splitlines() if line.strip().startswith("runs-on:"))
-        self.assertEqual(runner, 'runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || \'"macos-26-xlarge"\') }}')
+        self.assertEqual(runner, 'runs-on: ${{ matrix.runs-on }}')
         self.assertLess(job.index("name: Create owned UI simulator"), job.index("name: Pre-boot simulator"))
         cleanup = job.split("      - name: Clean up owned UI simulator\n", 1)[1].split("\n      - name:", 1)[0]
         self.assertIn("if: always()", cleanup)
@@ -512,10 +512,13 @@ class OrdinaryCITests(unittest.TestCase):
             with self.subTest(full=full), tempfile.TemporaryDirectory() as temporary:
                 output = Path(temporary) / "output"
                 result = subprocess.run(["bash", "-e", "-c", command],
-                                        env=dict(os.environ, FULL_UI_SUITE="1" if full else "", GITHUB_OUTPUT=str(output)),
+                                        cwd=Path(__file__).resolve().parent.parent,
+                                        env=dict(os.environ, FULL_UI_SUITE="1" if full else "", GITHUB_OUTPUT=str(output),
+                                                 RUNNER_STATUS_TOKEN="", RUNNER_RESERVATIONS_FILE=""),
                                         text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 lanes = json.loads(output.read_text().removeprefix("matrix="))["include"]
+                self.assertTrue(all(lane["runs-on"] == "macos-26-xlarge" for lane in lanes))
                 self.assertEqual(len({lane["lane"] for lane in lanes}), len(lanes))
                 phones = [lane for lane in lanes if lane["family"] == "iphone"]
                 self.assertEqual(sorted(lane["shard"] for lane in phones), [0] if full else [1, 2])
@@ -524,6 +527,63 @@ class OrdinaryCITests(unittest.TestCase):
                 capture = [lane for lane in lanes if lane["capture"]]
                 self.assertEqual(len(capture), 1)
                 self.assertEqual(capture[0]["family"], "iphone")
+
+    def test_workflow_allocates_local_capacity_across_builds_and_ui_lanes(self):
+        root = Path(__file__).resolve().parent.parent
+        workflow = (root / ".github/workflows/ci.yml").read_text()
+        selection = workflow.split("  select-macos-runner:\n", 1)[1].split("\n  go-test:", 1)[0]
+
+        def command(name):
+            section = selection.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
+            script = section.split("        run: ", 1)[1]
+            return textwrap.dedent(script[2:]) if script.startswith("|\n") else script.strip()
+
+        for full in (False, True):
+            for busy in (False, True):
+                with self.subTest(full=full, busy=busy), tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    fixture = directory / "runners.json"
+                    labels = ["self-hosted", "macOS", "ARM64"]
+                    pools = (["intent-ios"], ["intent-ios-build"], ["intent-ios"],
+                             ["intent-ios", "intent-ios-build"])
+                    fixture.write_text(json.dumps({"runners": [
+                        {"name": f"mac-{index}", "status": "online", "busy": busy,
+                         "labels": [{"name": label} for label in labels + pool]}
+                        for index, pool in enumerate(pools)]}))
+                    stub = directory / "curl"
+                    stub.write_text('#!/bin/bash\nset -eu\nwhile [ "$1" != -o ]; do shift; done\n'
+                                    'cp "$TEST_RESPONSE" "$2"\n')
+                    stub.chmod(0o755)
+                    environment = directory / "environment"
+                    env = dict(os.environ, PATH=str(directory) + os.pathsep + os.environ["PATH"],
+                               RUNNER_TEMP=str(directory), GITHUB_ENV=str(environment),
+                               RUNNER_STATUS_TOKEN="fixture", GITHUB_REPOSITORY="intent-hq/ios",
+                               RUNNER_RESERVATIONS_FILE="", FULL_UI_SUITE="1" if full else "",
+                               TEST_RESPONSE=str(fixture))
+
+                    def execute(name, pool="intent-ios"):
+                        output = directory / "output"
+                        output.unlink(missing_ok=True)
+                        result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", command(name)],
+                                                cwd=root, env=dict(env, GITHUB_OUTPUT=str(output),
+                                                                   RUNNER_POOL_LABEL=pool),
+                                                text=True, capture_output=True)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        return output.read_text() if output.exists() else ""
+
+                    execute("Initialize local runner allocation")
+                    env.update(line.split("=", 1) for line in environment.read_text().splitlines())
+                    build = json.loads(execute("Check local Mac status").removeprefix("runs-on="))
+                    vision = json.loads(execute("Check build-only Mac status", "intent-ios-build")
+                                        .removeprefix("runs-on="))
+                    lanes = json.loads(execute("Select UI test lanes").removeprefix("matrix="))["include"]
+                    choices = [build, vision, *[lane["runs-on"] for lane in lanes]]
+                    hosted = [choice for choice in choices if choice == "macos-26-xlarge"]
+                    self.assertEqual(len(hosted), len(choices) if busy else len(choices) - 4)
+                    allocation = Path(env["RUNNER_RESERVATIONS_FILE"])
+                    reserved = json.loads(allocation.read_text()) if allocation.exists() else []
+                    self.assertEqual(len(reserved), 0 if busy else 4)
+                    self.assertEqual(len(reserved), len(set(reserved)))
 
     def test_iphone_ui_step_selects_smoke_or_full_and_preserves_failures(self):
         scripts = Path(__file__).resolve().parent

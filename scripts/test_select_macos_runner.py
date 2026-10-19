@@ -34,7 +34,7 @@ class RunnerSelectionTests(unittest.TestCase):
         for path in paths:
             self.assertEqual(re.findall(r"depot-(?:ubuntu|windows|macos)[\w.-]*", path.read_text()), [], str(path))
 
-    def select(self, runners, token="fixture", curl_status=0, raw=None, pool_label="intent-ios"):
+    def select(self, runners, token="fixture", curl_status=0, raw=None, pool_label="intent-ios", reservations=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fixture = root / "response.json"
@@ -48,11 +48,15 @@ class RunnerSelectionTests(unittest.TestCase):
                 'cp "$TEST_RESPONSE" "$2"\n'
             )
             stub.chmod(0o755)
+            allocation = root / "reserved.json"
+            if reservations is not None:
+                allocation.write_text(json.dumps(reservations))
             env = os.environ.copy()
             env.update(
                 PATH=f"{root}:{env['PATH']}",
                 RUNNER_STATUS_TOKEN=token,
                 RUNNER_POOL_LABEL=pool_label,
+                RUNNER_RESERVATIONS_FILE=str(allocation) if reservations is not None else "",
                 GITHUB_REPOSITORY="intent-hq/ios",
                 GITHUB_OUTPUT=str(root / "output"),
                 TEST_RESPONSE=str(fixture),
@@ -60,6 +64,8 @@ class RunnerSelectionTests(unittest.TestCase):
                 TEST_CURL_STATUS=str(curl_status),
             )
             subprocess.run(["bash", str(SELECTOR)], env=env, check=True, capture_output=True)
+            if reservations is not None:
+                reservations[:] = json.loads(allocation.read_text())
             return (root / "output").read_text().strip(), (root / "called").exists()
 
     def test_either_machine_can_select_pool(self):
@@ -91,6 +97,34 @@ class RunnerSelectionTests(unittest.TestCase):
             with self.subTest(label=label):
                 output, _ = self.select([runner("wrong-pool", labels=[x for x in REQUIRED if x != label])])
                 self.assertEqual(output, f"runs-on={HOSTED}")
+
+    def test_each_idle_runner_is_allocated_only_once(self):
+        reservations = []
+        runners = [runner("first"), runner("second")]
+        for expected in (POOL, POOL, HOSTED):
+            output, _ = self.select(runners, reservations=reservations)
+            self.assertEqual(output, f"runs-on={expected}")
+        self.assertEqual(reservations, ["first", "second"])
+
+    def test_build_reservation_is_shared_with_simulator_pool(self):
+        reservations = []
+        runners = [runner("shared", labels=REQUIRED + ["intent-ios-build"])]
+        output, _ = self.select(runners, pool_label="intent-ios-build", reservations=reservations)
+        self.assertEqual(output, 'runs-on=["self-hosted","macOS","ARM64","intent-ios-build"]')
+        output, _ = self.select(runners, reservations=reservations)
+        self.assertEqual(output, f"runs-on={HOSTED}")
+        self.assertEqual(reservations, ["shared"])
+
+    def test_builds_and_ui_jobs_overflow_after_four_idle_services(self):
+        reservations = []
+        runners = [runner("phone-1"), runner("build", labels=REQUIRED[:-1] + ["intent-ios-build"]),
+                   runner("phone-2"), runner("shared", labels=REQUIRED + ["intent-ios-build"])]
+        for pool, expected in (("intent-ios", POOL),
+                               ("intent-ios-build", '["self-hosted","macOS","ARM64","intent-ios-build"]'),
+                               ("intent-ios", POOL), ("intent-ios", POOL), ("intent-ios", HOSTED)):
+            output, _ = self.select(runners, pool_label=pool, reservations=reservations)
+            self.assertEqual(output, f"runs-on={expected}")
+        self.assertEqual(len(set(reservations)), 4)
 
     def test_build_pool_is_preferred_over_simulator_pool(self):
         labels = ["self-hosted", "macOS", "ARM64", "intent-ios-build"]

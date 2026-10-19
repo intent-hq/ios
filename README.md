@@ -486,8 +486,9 @@ runner, Xcode, and runtime when comparing timings or investigating failures.
 Selectors use `RUNNER_STATUS_TOKEN` to inspect the pools and fall back to
 GitHub-hosted `macos-26-xlarge` (Apple Silicon) when every matching local runner is
 busy or offline, or runner status cannot be read. Selection uses a snapshot of
-runner availability; simultaneous jobs can still queue if capacity changes
-before GitHub assigns them.
+runner availability. CI allocates each idle service once across builds and UI
+lanes, then sends remaining jobs to hosted Macs. Independent workflows can still
+race for the same capacity before GitHub assigns them.
 The selected image needs Xcode 26;
 runtime and Metal provisioning run as needed. Go and Swift package caches and
 Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.

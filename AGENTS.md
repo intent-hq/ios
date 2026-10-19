@@ -95,7 +95,8 @@ for evidence artifacts and the disposable simulator route.
 Every iPhone shard and iPad UI job prefers the selected self-hosted Mac pool.
 GitHub-hosted `macos-26-xlarge` is the fallback when every matching local runner
 is busy or offline, or runner status cannot be read. Selection uses an availability
-snapshot; simultaneous jobs can still queue if capacity changes before assignment.
+snapshot and allocates each idle service once across that run's builds and UI lanes.
+Independent workflows can still race for capacity before assignment.
 Scheduled/manual full runs keep
 one full-bundle iPhone job and the iPad regressions. Each job owns its simulator,
 build directory, results, and evidence. Keep matrix `fail-fast: false` and the
