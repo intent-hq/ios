@@ -78,10 +78,10 @@ concurrency:
 jobs:
   select-macos-runner:
     name: Select macOS runner
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     outputs:
-      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"depot-macos-latest"' }}
-      runs-on: ${{ steps.select.outputs.runs-on || '"depot-macos-latest"' }}
+      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"macos-15-xlarge"' }}
+      runs-on: ${{ steps.select.outputs.runs-on || '"macos-15-xlarge"' }}
       fixture-capture-repetitions: ${{ steps.capture-contract.outputs.repetitions || '2' }}
       ui-matrix: ${{ steps.ui-lanes.outputs.matrix }}
     steps:
@@ -121,7 +121,7 @@ jobs:
     # TailcatKit is pure Go and cross-compiles for Linux, so its tests run
     # here on a cheap, fast Linux runner instead of serialising 2-12 minutes
     # of Tailscale compilation onto the 3-core macOS VM.
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -211,7 +211,7 @@ jobs:
     # SwiftLint" step in build-and-test never sees a skipped job. The official
     # Linux release requires a compatible SourceKit runtime. Use the same
     # supported native setup as developers; no Xcode or simulator work needed.
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -250,7 +250,7 @@ jobs:
     # step below waits for those jobs and fails this one if either did not
     # succeed. All three jobs still run in parallel.
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15-xlarge"') }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.pre_pr_gate && 120 || 45 }}
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -326,7 +326,7 @@ jobs:
         run: |
           xcode=$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort -V | tail -n 1)
           if [ -z "$xcode" ]; then
-            echo '::error::Xcode 26 is required on the Depot macOS image' >&2
+            echo '::error::Xcode 26 is required on the GitHub-hosted macOS image' >&2
             exit 1
           fi
           echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
@@ -751,7 +751,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.select-macos-runner.outputs.ui-matrix) }}
     # Shard 2 and iPad need independent capacity to overlap the local shard.
-    runs-on: ${{ matrix.hosted && 'depot-macos-latest' || fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
+    runs-on: ${{ matrix.hosted && 'macos-15-xlarge' || fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-15-xlarge"') }}
     # Allow setup, the full iPhone suite, and cleanup (ios#429).
     timeout-minutes: 90
     env:
@@ -775,7 +775,7 @@ jobs:
         run: |
           xcode=$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort -V | tail -n 1)
           if [ -z "$xcode" ]; then
-            echo '::error::Xcode 26 is required on the Depot macOS image' >&2
+            echo '::error::Xcode 26 is required on the GitHub-hosted macOS image' >&2
             exit 1
           fi
           echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
@@ -926,7 +926,7 @@ jobs:
     name: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && 'iOS UI Tests (full)' || 'iOS UI Tests' }}
     if: ${{ always() && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad' || inputs.pre_pr_gate)) }}
     needs: ios-ui-test-lanes
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require all iPhone shards and iPad UI tests
@@ -946,7 +946,7 @@ jobs:
     # dispatch to save runner time.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"depot-macos-latest"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"macos-15-xlarge"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -963,7 +963,7 @@ jobs:
         run: |
           xcode=$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort -V | tail -n 1)
           if [ -z "$xcode" ]; then
-            echo '::error::Xcode 26 is required on the Depot macOS image' >&2
+            echo '::error::Xcode 26 is required on the GitHub-hosted macOS image' >&2
             exit 1
           fi
           echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
@@ -1007,7 +1007,7 @@ jobs:
         run: scripts/xcodebuild.sh build-visionos
 
   pr-title:
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request'
     steps:
       - uses: amannn/action-semantic-pull-request@v6
