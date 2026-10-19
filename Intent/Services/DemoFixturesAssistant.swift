@@ -29,6 +29,7 @@ extension DemoFixtures {
     static func assistantDetail(_ agent: [String: Any]) -> [String: Any] {
         var detail = agent
         detail["model"] = "default-model"
+        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-reasoning-high") { detail["reasoningEffort"] = "high" }
         detail.merge(assistantModelSettings[agent["id"] as? String ?? ""] ?? [:]) { _, updated in updated }
         return detail
     }

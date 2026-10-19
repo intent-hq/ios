@@ -73,7 +73,7 @@ struct AgentModelFields: View {
             CreateWorkspaceChoiceLabel(title: selectedReasoningEffort ?? String(localized: "Auto"))
         }
         .buttonStyle(IntentContentButtonStyle())
-        .disabled(reasoningLevels.isEmpty || isLoadingProviders || isLoadingModels)
+        .disabled((reasoningLevels.isEmpty && selectedReasoningEffort == nil) || isLoadingProviders || isLoadingModels)
         .accessibilityLabel("Reasoning")
         .accessibilityValue(selectedReasoningEffort ?? String(localized: "Auto"))
         .accessibilityHint("Auto uses the host's defaults. Other options override reasoning for the selected model.")

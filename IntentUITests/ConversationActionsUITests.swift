@@ -137,7 +137,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
 
     @MainActor
     func testEmptyAssistantModelPickerOffersRetryAndCancel() {
-        let app = launchAssistant(appearance: "light", arguments: ["--demo-model-catalog-empty"])
+        let app = launchAssistant(appearance: "light", arguments: ["--demo-model-catalog-empty", "--demo-assistant-reasoning-high"])
         app.buttons["assistant.actions"].tap()
         app.buttons["conversation.actions.model"].tap()
         let retry = app.buttons["Retry"]
@@ -145,6 +145,15 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         retry.tap()
         XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
         capture(app, named: "Assistant-Model-Picker-Empty")
+        assertField("high", identifier: "creation.reasoningPicker", in: app)
+        choose("Auto", identifier: "creation.reasoningPicker", in: app)
+        app.buttons["conversation.model.save"].tap()
+        XCTAssertTrue(app.navigationBars["Model Settings"].waitForNonExistence(timeout: Self.timeout))
+        app.buttons["assistant.actions"].tap()
+        app.buttons["conversation.actions.model"].tap()
+        assertField("Auto", identifier: "creation.reasoningPicker", in: app)
+        assertField("Codex", identifier: "creation.providerPicker", in: app)
+        assertField("default-model", identifier: "creation.modelPicker", in: app)
         app.navigationBars["Model Settings"].buttons["Cancel"].tap()
         XCTAssertTrue(app.navigationBars["Model Settings"].waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(app.textViews["composer.textView"].exists)

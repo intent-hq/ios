@@ -10,6 +10,13 @@ struct ConversationModelSelectionTests {
         let fake: FakeConnectionManager
     }
 
+    enum CatalogWithoutReasoning: CaseIterable {
+        case empty
+        case failed
+        case missingModel
+        case noEfforts
+    }
+
     private func fixture() async -> Fixture {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = ["agent": ["provider": "codex", "model": "shared-model", "reasoningEffort": "high"]]
@@ -85,6 +92,34 @@ struct ConversationModelSelectionTests {
         #expect(fixture.fake.paramsForMethod("agent.setModel").first?["providerId"] as? String == "claude-code")
         #expect(fixture.viewModel.currentModelId == "shared-model")
         #expect(fixture.viewModel.currentReasoningEffort == "low")
+    }
+
+    @Test(arguments: CatalogWithoutReasoning.allCases)
+    func restoringAutoDoesNotRequireCatalogReasoningOptions(_ catalog: CatalogWithoutReasoning) async throws {
+        let fixture = await fixture()
+        fixture.selection.options.invalidate()
+        switch catalog {
+        case .empty:
+            fixture.fake.responseMap["models.list"] = ["models": []]
+        case .failed:
+            fixture.fake.errorMap["models.list"] = CocoaError(.fileReadUnknown)
+        case .missingModel:
+            fixture.fake.responseMap["models.list"] = ["models": [["id": "other-model", "name": "Other Model"]]]
+        case .noEfforts:
+            fixture.fake.responseMap["models.list"] = ["models": [["id": "shared-model", "name": "Shared Model"]]]
+        }
+        await fixture.selection.load()
+        await fixture.selection.loadModels()
+        #expect(fixture.selection.reasoningLevels.isEmpty)
+        #expect(fixture.selection.reasoningEffort == "high")
+        fixture.selection.reasoningEffort = nil
+        #expect(await fixture.selection.save())
+        #expect(fixture.viewModel.currentReasoningEffort == nil)
+        #expect(fixture.viewModel.currentProviderId == "codex")
+        #expect(fixture.viewModel.currentModelId == "shared-model")
+        #expect(!fixture.fake.didCallMethod("agent.setModel"))
+        let changes = try #require(fixture.fake.paramsForMethod("agent.update").first?["changes"] as? [String: Any])
+        #expect(changes["reasoningEffort"] is NSNull)
     }
 
     @Test func failedProviderChangeKeepsDraftSettingsForRetry() async {
