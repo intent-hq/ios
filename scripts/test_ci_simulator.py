@@ -578,6 +578,40 @@ class OrdinaryCITests(unittest.TestCase):
                     self.assertCountEqual(selected, smoke)
                     self.assertEqual(len(selected), len(set(selected)))
 
+    def test_unit_console_retention_preserves_native_exit_status(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        section = workflow.split("      - name: Run unit tests\n", 1)[1].split("\n      - name:", 1)[0]
+        command = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        for family, selectors, subcommand in (
+            ("iphone", "", "test-without-building-unit"),
+            ("iphone", "IntentTests/MermaidWebViewTests", "test-without-building"),
+            ("iphone", "IntentUITests", "test-without-building-ui"),
+            ("ipad", SELECTORS, "test-without-building"),
+        ):
+            for exit_code in (0, 65):
+                with self.subTest(family=family, selectors=selectors, exit_code=exit_code), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    (root / "scripts").mkdir()
+                    evidence = root / "evidence"
+                    evidence.mkdir()
+                    wrapper = root / "scripts/xcodebuild.sh"
+                    wrapper.write_text(f"#!{sys.executable}\n" + textwrap.dedent("""\
+                        import os, sys
+                        print('selected ' + sys.argv[1], flush=True)
+                        print('native diagnostic', file=sys.stderr, flush=True)
+                        sys.exit(int(os.environ['TEST_EXIT']))
+                        """))
+                    wrapper.chmod(0o755)
+                    env = dict(os.environ, SIMULATOR_FAMILY=family, ONLY_TESTING=selectors,
+                               IPAD_EVIDENCE_DIR=str(evidence), TEST_EXIT=str(exit_code))
+                    result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", command],
+                                            cwd=root, env=env, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, exit_code, result.stderr)
+                    console = (root / "unit-tests.log").read_text()
+                    self.assertEqual(console, f"selected {subcommand}\nnative diagnostic\n")
+                    if family == "ipad":
+                        self.assertEqual((evidence / "test.log").read_text(), console)
+
     def test_ui_completion_check_rejects_unsuccessful_lanes(self):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
         job = workflow.split("  ios-ui-tests:\n", 1)[1].split("  visionos-build:\n", 1)[0]

@@ -144,6 +144,11 @@ Review the generated bundle, license notices, and `vendor.json` together. To tes
 the shipped renderer from the same directory, run `npx playwright install chromium webkit`
 then `npm test`. Native coverage lives in `MermaidMarkdownContentTests`,
 `MermaidWebViewTests`, and `ConversationMermaidUITests`.
+The native Mermaid probes have a five-second JavaScript deadline and require a
+successful render before inspecting the page. `MermaidJavaScriptProbeTests`
+checks missing and late callbacks, error propagation, and cancellation without
+depending on a healthy WebKit process. CI retains unit results and console logs
+on cancellation as well as failure so interrupted renderer runs can be inspected.
 
 ## Development
 

@@ -202,6 +202,11 @@ then `npm run build` there), rather than hand-editing `mermaid.bundle.js`. Keep
 the lockfile, bundle, `vendor.json`, and license notices consistent. The README
 documents renderer tests; native coverage is in `MermaidMarkdownContentTests`,
 `MermaidWebViewTests`, and `ConversationMermaidUITests`.
+Native Mermaid JavaScript probes must remain bounded even when WebKit never
+calls back. Keep the missing/late-callback and cancellation coverage in
+`MermaidJavaScriptProbeTests`; a task-group timeout around WebKit's async API
+cannot guarantee this. CI retains unit results and console logs on failure and
+cancellation; keep the console pipeline's `pipefail` behavior.
 
 ## Releases
 

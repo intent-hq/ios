@@ -550,8 +550,8 @@ jobs:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: |
+          set -o pipefail
           if [ "$SIMULATOR_FAMILY" = ipad ]; then
-            set -o pipefail
             export ONLY_TESTING_IDENTITIES_PATH="$IPAD_EVIDENCE_DIR/resolved-tests.json"
             scripts/xcodebuild.sh test-without-building 2>&1 | tee "$IPAD_EVIDENCE_DIR/test.log"
           elif [ "$ONLY_TESTING" = IntentUITests ]; then
@@ -560,7 +560,7 @@ jobs:
             scripts/xcodebuild.sh test-without-building
           else
             scripts/xcodebuild.sh test-without-building-unit
-          fi
+          fi 2>&1 | tee unit-tests.log
 
       - name: Build iOS for pre-PR gate
         if: env.FULL_PRE_PR_GATE == '1'
@@ -662,7 +662,7 @@ jobs:
           bundles: TestResults
 
       - name: Upload test results
-        if: failure() || (github.event_name == 'workflow_dispatch' && (inputs.pre_pr_gate || contains(inputs.only_testing, 'ScriptMonitors') || contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests')))
+        if: failure() || cancelled() || (github.event_name == 'workflow_dispatch' && (inputs.pre_pr_gate || contains(inputs.only_testing, 'ScriptMonitors') || contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests')))
         uses: actions/upload-artifact@v7
         with:
           name: ios-unit-test-results
@@ -671,6 +671,7 @@ jobs:
             TestResults-retry
             TestResults-source-moved
             TestResults-keychain
+            unit-tests.log
             pre-pr-gate.log
 
       # See the job comment: turns a go-test or swiftlint failure into a
