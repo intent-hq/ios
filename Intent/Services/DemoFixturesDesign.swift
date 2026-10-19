@@ -54,6 +54,8 @@ final class DemoDesignFixtures {
     private(set) var questionsDismissed = false
     private(set) var monitorCancelled = false
     private(set) var modelId = "default-model"
+    private(set) var providerId = "auggie"
+    private(set) var reasoningEffort: String?
     private var sentMessages: [[String: Any]] = []
     private var queuedMessages: [[String: Any]] = []
     private var sequence = 0
@@ -100,6 +102,10 @@ final class DemoDesignFixtures {
         case "agent.setModel" where params["workspaceId"] as? String == Self.workspaceId:
             guard let modelId = params["modelId"] as? String else { return nil }
             self.modelId = modelId
+            if let provider = params["providerId"] as? String { providerId = provider }
+            return ["success": true]
+        case "agent.update":
+            if let changes = params["changes"] as? [String: Any] { reasoningEffort = changes["reasoningEffort"] as? String }
             return ["success": true]
         case "agent.getConversation":
             return ["messages": messages, "truncated": historyIsTruncated, "totalMessages": totalMessageCount]

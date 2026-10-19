@@ -166,6 +166,7 @@ CAPTURES = {
     "ConversationActionsUITests": {
         "testAssistantModelPickerUsesInheritedProviderAndPreservesDraft": (
             "Assistant-Model-Picker-light", "Assistant-Model-Picker-dark",
+            "Assistant-Model-Settings-selected-light", "Assistant-Model-Settings-selected-dark",
         ),
         "testEmptyAssistantModelPickerOffersRetryAndCancel": ("Assistant-Model-Picker-Empty",),
         "testHistoryNoticeAndActionCancellationPreserveConversation": (

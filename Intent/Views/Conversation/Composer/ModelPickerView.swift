@@ -1,161 +1,85 @@
 import SwiftUI
 
 struct ModelPickerView: View {
-    let viewModel: ConversationViewModel
-    @Environment(\.colorScheme) var colorScheme
-    @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.dismiss) var dismiss
-    @State private var savingModelId: String?
-    @State private var modelChangeError: String?
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.dismiss) private var dismiss
+    @State private var selection: ConversationModelSelection
 
-    @ScaledMetric(relativeTo: .body) private var selectionIconSide: CGFloat = 17
+    init(viewModel: ConversationViewModel) {
+        _selection = State(initialValue: ConversationModelSelection(viewModel: viewModel))
+    }
 
     var body: some View {
         NavigationStack {
-            pickerContent
-            .background(Constants.Pairing.background(for: colorScheme).ignoresSafeArea())
-            .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-            .navigationTitle("Select Model")
+            ScrollView {
+                fields.padding(CreateWorkspaceFormStyle.pagePadding)
+            }
+            .accessibilityIdentifier("conversation.model.form")
+            .background(CreateWorkspaceFormStyle.background(for: colorScheme))
+            .safeAreaInset(edge: .bottom) { saveControls }
+            .navigationTitle("Model Settings")
             .toolbarTitleDisplayMode(.inline)
-            .toolbarBackground(Constants.Pairing.background(for: colorScheme), for: .navigationBar)
+            .toolbarBackground(CreateWorkspaceFormStyle.background(for: colorScheme), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     IntentIconButton(icon: .close, label: "Cancel") { dismiss() }
-                        .disabled(savingModelId != nil)
+                        .disabled(selection.isSaving)
                 }
                 .intentToolbarSurface()
             }
-            .task {
-                await viewModel.refreshSelectableModels()
-            }
-            .alert(
-                "Couldn't Change Model",
-                isPresented: Binding(
-                    get: { modelChangeError != nil },
-                    set: { if !$0 { modelChangeError = nil } }
-                ),
-                presenting: modelChangeError
-            ) { _ in
+            .task(id: selection.options.loadGeneration) { await selection.load() }
+            .task(id: selection.catalogKey) { await selection.loadModels() }
+            .onDisappear { selection.deactivate() }
+            .alert("Couldn't Save Model Settings", isPresented: Binding(
+                get: { selection.errorMessage != nil }, set: { if !$0 { selection.errorMessage = nil } }
+            )) {
                 Button("OK", role: .cancel) {}
-            } message: { detail in
-                Text(detail)
+            } message: {
+                Text(selection.errorMessage ?? "")
             }
         }
-        .presentationBackground(Constants.Pairing.background(for: colorScheme))
-        .interactiveDismissDisabled(savingModelId != nil)
+        .presentationBackground(CreateWorkspaceFormStyle.background(for: colorScheme))
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+        .interactiveDismissDisabled(selection.isSaving)
     }
 
-    @ViewBuilder
-    private var pickerContent: some View {
-        if let models = viewModel.selectableModels {
-            if models.isEmpty {
-                unavailableState("No models are available from this provider.")
-            } else {
-                modelList(models)
-            }
-        } else if viewModel.modelCatalogLoadFailed {
-            unavailableState("The model list could not be loaded.")
-        } else {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+    private var fields: some View {
+        AgentModelFields(
+            providers: selection.providers,
+            isLoadingProviders: selection.isLoading || selection.providerOptions.isLoading,
+            providerGuidance: selection.providerGuidance,
+            selectedProvider: selection.provider,
+            models: selection.models,
+            selectedModel: Binding(get: { selection.model }, set: { selection.selectModel($0) }),
+            daemonDefaultLabel: String(localized: "Provider default"),
+            reasoningLevels: selection.reasoningLevels,
+            selectedReasoningEffort: $selection.reasoningEffort,
+            isLoadingModels: selection.isLoadingModels,
+            modelGuidance: selection.modelGuidance,
+            onSelectProvider: selection.selectProvider,
+            onRetryProviders: { Task { await selection.load() } },
+            onRetryModels: { Task { await selection.loadModels() } }
+        )
+        .disabled(selection.isSaving)
     }
 
-    private func unavailableState(_ message: String) -> some View {
-        ContentUnavailableView {
-            Label {
-                Text("Models Unavailable").interFont(Constants.Typography.bodyM)
-            } icon: {
-                Image(systemName: "exclamationmark.triangle")
-            }
-        } description: {
-            Text(message)
-                .interFont(Constants.Typography.bodyXS)
-        } actions: {
-            Button("Retry") {
-                Task { await viewModel.refreshSelectableModels() }
-            }
-            .buttonStyle(IntentButtonStyle())
-            .interFont(Constants.Typography.bodyS)
-        }
-    }
-
-    private func modelList(_ models: [ModelInfo]) -> some View {
-        let selectedModelId = viewModel.currentModelId
-        let grouped = Dictionary(grouping: models, by: \.provider)
-        let sections = grouped.keys.sorted().map { provider in
-            let rows = (grouped[provider] ?? []).map { model in
-                (id: model.id, content: modelButton(model, isSelected: selectedModelId == model.id))
-            }
-            let header = Text(provider)
-                .interFont(Constants.Typography.eyebrow)
-                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
-            let section = Section(header: header) {
-                ForEach(rows, id: \.id) { @Sendable row in
-                    row.content
-                }
-            }
-            .listRowBackground(Constants.Pairing.surface(for: colorScheme))
-            return (id: provider, content: section)
-        }
-        // Prepare row values on MainActor before SwiftUI requests them off-main.
-        return List {
-            ForEach(sections, id: \.id) { @Sendable section in
-                section.content
+    private var saveControls: some View {
+        HStack {
+            Spacer()
+            CreateWorkspaceSubmitButton(
+                isCreating: selection.isSaving,
+                isDisabled: !selection.canSave,
+                title: "Save",
+                progressTitle: "Saving model settings",
+                icon: .check,
+                identifier: "conversation.model.save"
+            ) {
+                Task { if await selection.save() { dismiss() } }
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-    }
-
-    private func modelButton(_ model: ModelInfo, isSelected: Bool) -> some View {
-        Button {
-            selectModel(model.id)
-        } label: {
-            HStack {
-                Text(model.name)
-                    .interFont(Constants.Typography.bodyS)
-                    .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-                Spacer()
-                if savingModelId == model.id {
-                    ProgressView()
-                } else if isSelected {
-                    selectionIndicator
-                }
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(IntentContentButtonStyle())
-        .disabled(savingModelId != nil)
-        .accessibilityIdentifier("conversation.model.\(model.id)")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private func selectModel(_ modelId: String) {
-        guard savingModelId == nil else { return }
-        guard modelId != viewModel.currentModelId else {
-            dismiss()
-            return
-        }
-        savingModelId = modelId
-        Task {
-            defer { savingModelId = nil }
-            do {
-                try await viewModel.setModel(modelId)
-                dismiss()
-            } catch {
-                modelChangeError = error.localizedDescription
-            }
-        }
-    }
-
-    private var selectionIndicator: some View {
-        Image(.check)
-            .resizable()
-            .scaledToFit()
-            .frame(width: selectionIconSide, height: selectionIconSide)
-            .foregroundStyle(Theme.primary(for: colorScheme))
-            .accessibilityHidden(true)
+        .padding(CreateWorkspaceFormStyle.pagePadding)
+        .background(CreateWorkspaceFormStyle.background(for: colorScheme))
     }
 }

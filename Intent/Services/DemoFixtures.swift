@@ -370,6 +370,7 @@ extension DemoFixtures {
 
     /// JSON-RPC fixture response. Unknown methods return an empty dictionary.
     static func response(for method: String, params: [String: Any], snapshotAnchor: Date = Date()) -> Any {
+        if let response = assistantModelResponse(for: method, params: params) { return response }
         if let response = transcriptVideoResponse(for: method, params: params) { return response }
         if let response = inlinePDFResponse(for: method, params: params) { return response }
         if let response = inlineTextResponse(for: method, params: params) { return response }
@@ -430,7 +431,6 @@ extension DemoFixtures {
         "agent.list": agentListResponse,
         "agent.delete": deleteAssistantAgent,
         "agent.get": agentGetResponse,
-        "agent.setModel": setAssistantModel,
         "agent.getConversation": conversationResponse,
         "chat.subscribe": { ["subscriptionId": chatSubscriptionId(agentId: $0["agentId"] as? String)] },
         "agent.getMessageBlock": { params in

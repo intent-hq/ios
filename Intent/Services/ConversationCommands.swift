@@ -420,18 +420,19 @@ extension ConversationCommands {
         confirmQueueMutation(.remove(messageId), generation: generation)
     }
 
-    func getModels(agentId: String) async throws -> [[String: Any]] {
-        let result = try await connectionManager.request(
-            "agent.getModels",
-            params: ["agentId": agentId]
-        )
-        return (result as? [String: Any])?["models"] as? [[String: Any]] ?? []
-    }
-
-    func setModel(agentId: String, modelId: String, workspaceId: String) async throws {
+    func setModel(agentId: String, modelId: String, workspaceId: String, providerId: String? = nil) async throws {
+        var params: [String: Any] = ["agentId": agentId, "modelId": modelId, "workspaceId": workspaceId]
+        if let providerId { params["providerId"] = providerId }
         _ = try await connectionManager.request(
             "agent.setModel",
-            params: ["agentId": agentId, "modelId": modelId, "workspaceId": workspaceId]
+            params: params
+        )
+    }
+
+    func setReasoningEffort(agentId: String, workspaceId: String, effort: String?) async throws {
+        _ = try await connectionManager.request(
+            "agent.update",
+            params: ["agentId": agentId, "workspaceId": workspaceId, "changes": ["reasoningEffort": effort as Any? ?? NSNull()]]
         )
     }
 

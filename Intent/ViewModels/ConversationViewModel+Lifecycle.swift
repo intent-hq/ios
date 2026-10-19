@@ -83,6 +83,7 @@ extension ConversationViewModel {
             latchEntryWhenReady()
             if store.metadataReadyForEntry, let detail = agentDetails.cached(agentId: agentId) {
                 currentModelId = detail.values["model"] as? String
+                currentReasoningEffort = detail.values["reasoningEffort"] as? String
                 currentProviderId = (detail.values["provider"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             }
         }
@@ -171,6 +172,7 @@ extension ConversationViewModel {
             modelMetadataGeneration = generation
             modelMetadataEpoch = agentDetails.connectionEpoch
             currentModelId = detail.values["model"] as? String
+            currentReasoningEffort = detail.values["reasoningEffort"] as? String
             currentProviderId = (detail.values["provider"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             currentSpecialistId = detail.metadata["specialist"] as? String
             if currentSpecialistId != nil {

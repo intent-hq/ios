@@ -42,13 +42,12 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         composer.typeText("Continue with this draft")
         openActions(app)
         app.buttons["conversation.actions.model"].tap()
-        let picker = app.navigationBars["Select Model"]
+        let picker = app.navigationBars["Model Settings"]
         XCTAssertTrue(picker.waitForExistence(timeout: Self.timeout))
-        let selectedModel = app.buttons["conversation.model.default-model"]
-        XCTAssertTrue(selectedModel.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(selectedModel.isSelected)
+        assertField("Default Model", identifier: "creation.modelPicker", in: app)
         capture(app, named: "Agent-Model-Picker-Light")
-        app.buttons["conversation.model.named-model"].tap()
+        choose("Named Model", identifier: "creation.modelPicker", in: app)
+        app.buttons["conversation.model.save"].tap()
         XCTAssertTrue(picker.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(transcript.exists)
         XCTAssertEqual(composer.value as? String, "Continue with this draft")
@@ -65,7 +64,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         XCTAssertTrue(model.isHittable)
         capture(app, named: "Agent-Actions-Dark-LargeText")
         model.tap()
-        let picker = app.navigationBars["Select Model"]
+        let picker = app.navigationBars["Model Settings"]
         XCTAssertTrue(picker.waitForExistence(timeout: Self.timeout))
         picker.buttons["Cancel"].tap()
         XCTAssertTrue(picker.waitForNonExistence(timeout: Self.timeout))
@@ -89,16 +88,15 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["conversation.actions.rename"].exists)
         model.tap()
         XCTAssertTrue(picker.waitForExistence(timeout: Self.timeout))
-        let namedModel = app.buttons["conversation.model.named-model"]
-        XCTAssertTrue(namedModel.waitForExistence(timeout: Self.timeout))
+        assertField("Default Model", identifier: "creation.modelPicker", in: app)
         capture(app, named: "Agent-Model-Picker-Dark-LargeText")
-        namedModel.tap()
+        choose("Named Model", identifier: "creation.modelPicker", in: app)
+        app.buttons["conversation.model.save"].tap()
         XCTAssertTrue(picker.waitForNonExistence(timeout: Self.timeout))
         openActions(app)
         assertNamedModelInMenu(app)
         model.tap()
-        XCTAssertTrue(namedModel.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(namedModel.isSelected)
+        assertField("Named Model", identifier: "creation.modelPicker", in: app)
         capture(app, named: "Agent-Model-Picker-Selected-Dark-LargeText")
     }
 
@@ -111,20 +109,28 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
             composer.typeText("Keep this Assistant draft")
             app.buttons["assistant.actions"].tap()
             app.buttons["conversation.actions.model"].tap()
-            let selected = app.buttons["conversation.model.default-model"]
-            XCTAssertTrue(selected.waitForExistence(timeout: Self.timeout))
-            XCTAssertTrue(selected.isSelected)
+            assertField("Codex", identifier: "creation.providerPicker", in: app)
+            assertField("Default Model", identifier: "creation.modelPicker", in: app)
             capture(app, named: "Assistant-Model-Picker-\(appearance)")
-            app.buttons["conversation.model.named-model"].tap()
-            XCTAssertTrue(app.navigationBars["Select Model"].waitForNonExistence(timeout: Self.timeout))
+            choose("Auggie", identifier: "creation.providerPicker", in: app)
+            assertField("Provider default", identifier: "creation.modelPicker", in: app)
+            choose("Named Model", identifier: "creation.modelPicker", in: app)
+            choose("high", identifier: "creation.reasoningPicker", in: app)
+            capture(app, named: "Assistant-Model-Settings-selected-\(appearance)")
+            app.buttons["conversation.model.save"].tap()
+            XCTAssertTrue(app.navigationBars["Model Settings"].waitForNonExistence(timeout: Self.timeout))
             XCTAssertEqual(composer.value as? String, "Keep this Assistant draft")
             XCTAssertTrue(app.scrollViews["transcript.scrollView"].exists)
             app.buttons["assistant.actions"].tap()
             assertNamedModelInMenu(app)
             app.buttons["conversation.actions.model"].tap()
-            let updated = app.buttons["conversation.model.named-model"]
-            XCTAssertTrue(updated.waitForExistence(timeout: Self.timeout))
-            XCTAssertTrue(updated.isSelected)
+            assertSavedAssistantSettings(app)
+            choose("Codex", identifier: "creation.providerPicker", in: app)
+            app.navigationBars["Model Settings"].buttons["Cancel"].tap()
+            XCTAssertTrue(app.navigationBars["Model Settings"].waitForNonExistence(timeout: Self.timeout))
+            app.buttons["assistant.actions"].tap()
+            app.buttons["conversation.actions.model"].tap()
+            assertSavedAssistantSettings(app)
             app.terminate()
         }
     }
@@ -139,9 +145,33 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         retry.tap()
         XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
         capture(app, named: "Assistant-Model-Picker-Empty")
-        app.navigationBars["Select Model"].buttons["Cancel"].tap()
-        XCTAssertTrue(app.navigationBars["Select Model"].waitForNonExistence(timeout: Self.timeout))
+        app.navigationBars["Model Settings"].buttons["Cancel"].tap()
+        XCTAssertTrue(app.navigationBars["Model Settings"].waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(app.textViews["composer.textView"].exists)
+    }
+
+    @MainActor
+    private func assertSavedAssistantSettings(_ app: XCUIApplication) {
+        assertField("Auggie", identifier: "creation.providerPicker", in: app)
+        assertField("Named Model", identifier: "creation.modelPicker", in: app)
+        assertField("high", identifier: "creation.reasoningPicker", in: app)
+    }
+
+    @MainActor
+    private func choose(_ value: String, identifier: String, in app: XCUIApplication) {
+        let field = app.buttons[identifier]
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND enabled == true"), object: field)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: Self.timeout), .completed)
+        if !field.isHittable { app.scrollViews["conversation.model.form"].swipeUp() }
+        field.tap()
+        app.buttons[value].tap()
+        assertField(value, identifier: identifier, in: app)
+    }
+
+    @MainActor
+    private func assertField(_ value: String, identifier: String, in app: XCUIApplication) {
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: app.buttons[identifier])
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: Self.timeout), .completed)
     }
 
     @MainActor

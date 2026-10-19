@@ -69,6 +69,7 @@ import SwiftUI
     @ObservationIgnored var composerTextRevision = 0
     var currentModelId: String?
     var currentProviderId: String?
+    var currentReasoningEffort: String?
     @ObservationIgnored var modelMetadataGeneration: Int?
     @ObservationIgnored var modelMetadataEpoch: Int?
     var modelCatalogLoadFailed = false

@@ -118,6 +118,7 @@ extension ConversationViewModel {
 
     var currentModelDisplayName: String? {
         guard let modelId = currentModelId else { return nil }
+        if modelId == "default" { return String(localized: "Provider default") }
         return Self.modelDisplayName(
             modelId: modelId,
             provider: modelProviderId,
@@ -205,9 +206,37 @@ extension ConversationViewModel {
         modelCatalogLoadFailed = optionsStore.modelCatalog(for: providerId).loadFailed
     }
 
-    func setModel(_ modelId: String) async throws {
-        try await store.setModel(agentId: agentId, modelId: modelId, workspaceId: workspaceId)
+    func setModel(_ modelId: String, providerId: String? = nil) async throws {
+        let generation = optionsStore.loadGeneration
+        let activation = liveStoreActivationGeneration
+        try await store.setModel(agentId: agentId, modelId: modelId, workspaceId: workspaceId, providerId: providerId)
+        guard generation == optionsStore.loadGeneration, activation == liveStoreActivationGeneration,
+              !Task.isCancelled else { throw CancellationError() }
         currentModelId = modelId
+        if let providerId { currentProviderId = providerId }
+    }
+
+    func saveModelSelection(providerID: String, modelID: String, reasoningEffort: String?) async throws {
+        let generation = optionsStore.loadGeneration
+        let activation = liveStoreActivationGeneration
+        let changedModel = modelID != (currentModelId ?? "default") || providerID != modelProviderId
+        if changedModel { try await setModel(modelID, providerId: providerID) }
+        guard reasoningEffort != currentReasoningEffort else { return }
+        do {
+            try await store.setReasoningEffort(agentId: agentId, workspaceId: workspaceId, effort: reasoningEffort)
+            guard generation == optionsStore.loadGeneration, activation == liveStoreActivationGeneration,
+                  !Task.isCancelled else { throw CancellationError() }
+            currentReasoningEffort = reasoningEffort
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            if changedModel {
+                throw NSError(domain: "ModelSelection", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Provider and model were saved, but reasoning could not be saved. Try Save again."
+                ])
+            }
+            throw error
+        }
     }
 
     typealias ImagePlacementError = ConversationAttachmentPipeline.ImagePlacementError

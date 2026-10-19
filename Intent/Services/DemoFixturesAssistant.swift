@@ -7,19 +7,29 @@ extension DemoFixtures {
     private static var deletedAssistantAgentIDs: Set<String> = []
     private static var proposalOutcome: String?
     private static var assistantListFailed = false
-    private static var assistantModelIDs: [String: String] = [:]
+    private static var assistantModelSettings: [String: [String: Any]] = [:]
 
-    static func setAssistantModel(params: [String: Any]) -> [String: Any] {
+    static func assistantModelResponse(for method: String, params: [String: Any]) -> Any? {
         guard params["workspaceId"] as? String == Workspace.chiefWorkspaceId,
-              let agentID = params["agentId"] as? String,
-              let modelID = params["modelId"] as? String else { return [:] }
-        assistantModelIDs[agentID] = modelID
+              let agentID = params["agentId"] as? String else { return nil }
+        switch method {
+        case "agent.setModel":
+            assistantModelSettings[agentID, default: [:]]["model"] = params["modelId"]
+            if let provider = params["providerId"] { assistantModelSettings[agentID, default: [:]]["provider"] = provider }
+        case "agent.update":
+            if let changes = params["changes"] as? [String: Any] {
+                assistantModelSettings[agentID, default: [:]].merge(changes) { _, updated in updated }
+            }
+        default:
+            return nil
+        }
         return ["success": true]
     }
 
     static func assistantDetail(_ agent: [String: Any]) -> [String: Any] {
         var detail = agent
-        detail["model"] = assistantModelIDs[agent["id"] as? String ?? ""] ?? "default-model"
+        detail["model"] = "default-model"
+        detail.merge(assistantModelSettings[agent["id"] as? String ?? ""] ?? [:]) { _, updated in updated }
         return detail
     }
 
