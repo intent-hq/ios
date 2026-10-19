@@ -106,6 +106,7 @@ extension ConversationViewModelTests {
             optionsStore: CreationOptionsStore()
         )
         #expect(viewModel.uploadService === service)
+        #expect(viewModel.questionAttachments(for: "a1").uploadService === service)
     }
 
     func firstAnswer(_ viewModel: ConversationViewModel) throws -> [QuestionAnswer] {
@@ -134,9 +135,14 @@ extension ConversationViewModelTests {
         // The trailing user message supersedes the questions derivationally,
         // so the wizard hides while the send is in flight and after it lands.
         #expect(viewModel.pendingQuestions == nil)
-        // Wire contract: wizard sends never carry image attachments.
+        // Text-only answers keep the existing wire shape and skip uploads.
         let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
         #expect(sent.params["imageBlocks"] == nil)
+        #expect(sent.params["fileBlocks"] == nil)
+        #expect(sent.params["agentId"] as? String == "test-agent")
+        #expect(sent.params["workspaceId"] as? String == "test-ws")
+        #expect(sent.params["content"] as? String == "Q: Which auth method?\nA: OAuth")
+        #expect(!fake.requestLog.contains { $0.method.hasPrefix("file.") })
     }
 
     @Test func submitQuestionAnswersTagsWireMessageWithQuestionAnswersMetadata() async throws {
@@ -188,18 +194,23 @@ extension ConversationViewModelTests {
         #expect(sent.params["messageMetadata"] == nil)
     }
 
-    @Test func submitQuestionAnswersClearsPendingImages() async throws {
-        // Regression (PR #55 review): stale composer attachments must not
-        // silently ride a later normal message after a wizard submit
-        // (FE parity: ChatPanel.performLocalSendCleanup).
-        let (viewModel, _) = makeFakeBackedVM()
+    @Test func submitQuestionAnswersPreservesSeparateComposerAttachments() async throws {
+        let (viewModel, fake) = makeFakeBackedVM()
         viewModel.store.messages = [questionMessage()]
-        viewModel.addImage(try #require(UIImage(systemName: "star")))
+        let image = try #require(UIImage(systemName: "star"))
+        viewModel.addImage(image)
+        let file = PendingFile(url: URL(fileURLWithPath: "/tmp/composer.txt"), displayName: "composer.txt", size: 0)
+        viewModel.pendingFiles = [file]
         let answers = try firstAnswer(viewModel)
 
         await viewModel.submitQuestionAnswers(answers, answeredQuestionsMessageId: "a1")
 
-        #expect(viewModel.pendingImages.isEmpty)
+        #expect(viewModel.pendingImages.first === image)
+        #expect(viewModel.pendingFiles.map(\.id) == [file.id])
+        let sent = try #require(fake.paramsForMethod("agent.sendMessage").first)
+        #expect(sent["imageBlocks"] == nil)
+        #expect(sent["fileBlocks"] == nil)
+        #expect(!fake.requestLog.contains { $0.method.hasPrefix("file.") })
     }
 
     @Test func dismissQuestionsRetiresPendingSet() async throws {

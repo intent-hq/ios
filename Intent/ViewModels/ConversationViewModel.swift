@@ -85,6 +85,8 @@ import SwiftUI
     var dismissQuestionsError: String?
 
     let attachmentPipeline: ConversationAttachmentPipeline
+    @ObservationIgnored var questionAttachmentPipelines: [String: ConversationAttachmentPipeline] = [:]
+    var submittingQuestionMessageIds: Set<String> = []
     var pendingImages: [UIImage] {
         get { attachmentPipeline.pendingImages }
         set { attachmentPipeline.pendingImages = newValue }

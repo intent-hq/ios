@@ -3,6 +3,29 @@ import Foundation
 extension ConversationViewModel {
     // MARK: - Agent Q&A pending questions
 
+    /// A question set owns its selection independently of the ordinary composer
+    /// and other question sets. Reuse it across wizard remounts and failed sends.
+    func questionAttachments(for messageId: String) -> ConversationAttachmentPipeline {
+        if let pipeline = questionAttachmentPipelines[messageId] { return pipeline }
+        for supersededId in Array(questionAttachmentPipelines.keys) {
+            discardQuestionAttachments(for: supersededId)
+        }
+        let pipeline = ConversationAttachmentPipeline(
+            uploadService: uploadService,
+            maximumPhotoImageCount: Constants.Conversation.Composer.maximumImageSelectionCount
+        )
+        questionAttachmentPipelines[messageId] = pipeline
+        return pipeline
+    }
+
+    /// Release the selection and imports when this question set is retired.
+    func discardQuestionAttachments(for messageId: String) {
+        guard let pipeline = questionAttachmentPipelines.removeValue(forKey: messageId) else { return }
+        pipeline.cancelPhotoImport()
+        pipeline.pendingImages.removeAll()
+        pipeline.clearPendingFiles()
+    }
+
     /// Pending Agent Q&A question set for the composer-slot wizard. When the
     /// daemon's `pendingQuestionsMessageId` marker is present (PROTOCOL §5.5)
     /// it is authoritative: the marked set appears once the asking turn ends
@@ -81,10 +104,10 @@ extension ConversationViewModel {
         ) == nil
     }
 
-    /// Flatten the wizard's answers into ONE plain-text user message of
+    /// Flatten the wizard's answers into ONE user message of
     /// `Q:`/`A:` pairs and send it through the ordinary send path tagged with
     /// `messageMetadata { type: "question_answers",
-    /// answeredQuestionsMessageId }` (wire contract — no image attachments).
+    /// answeredQuestionsMessageId }`, together with the question set's attachments.
     /// The structured tag, never the answer text, is what makes the daemon
     /// retire the question hold and demote `needs_attention` (FE parity:
     /// `answer-message.ts` / `ChatPanel`). `answeredQuestionsMessageId` is the
@@ -92,27 +115,90 @@ extension ConversationViewModel {
     /// is `.id`-keyed on it) — passed in rather than re-derived here so a
     /// derivation flip between the tap and this main-actor hop (pushed stream
     /// start, superseding row from another client) can never send the answer
-    /// untagged. Completing the wizard clears any pending composer image
-    /// attachments (FE parity: `ChatPanel.performLocalSendCleanup`) so stale
-    /// images never ride a later message.
+    /// untagged. Upload failures preserve the selection for retry; successful
+    /// sends retire only this question set's attachments, never the composer's.
     func submitQuestionAnswers(
         _ answers: [QuestionAnswer],
         answeredQuestionsMessageId: String
     ) async {
-        pendingImages.removeAll()
+        guard submittingQuestionMessageIds.insert(answeredQuestionsMessageId).inserted else { return }
+        defer { submittingQuestionMessageIds.remove(answeredQuestionsMessageId) }
+        let sendingStore = store
+        let pendingMarker = sendingStore.pendingQuestionsMessageId
+        // A late submit for an older mount must not replace a newer card's selection.
+        let attachments = questionAttachmentPipelines[answeredQuestionsMessageId]
+            ?? ConversationAttachmentPipeline(uploadService: uploadService)
+        guard let payload = await buildQuestionAttachmentPayloads(attachments), store === sendingStore else { return }
+        // Uploads suspend before the optimistic answer exists. Remote retirement
+        // must win here even though the view lifecycle exempts submitting IDs.
+        guard questionSubmissionIsCurrent(answeredQuestionsMessageId, pendingMarker: pendingMarker) else {
+            discardQuestionAttachments(for: answeredQuestionsMessageId)
+            return
+        }
         do {
-            try await store.sendMessage(
+            try await sendingStore.sendMessage(
                 agentId: agentId,
                 content: QuestionAnswer.flattenToMessage(answers),
                 workspaceId: workspaceId,
+                imagePayload: payload.images,
+                filePayload: payload.files,
                 messageMetadata: .fields([
                     "type": "question_answers",
                     "answeredQuestionsMessageId": answeredQuestionsMessageId
                 ])
             )
+            discardQuestionAttachments(for: answeredQuestionsMessageId)
+        } catch let error as OutgoingImagePayload.RequestError {
+            attachments.imagePlacementError = error.localizedDescription
+            imagePlacementError = error.localizedDescription
+            sendingStore.rollbackFailedSend()
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Submit question answers failed: \(error)")
-            store.rollbackFailedSend()
+            sendingStore.rollbackFailedSend()
+        }
+    }
+
+    private func questionSubmissionIsCurrent(_ messageId: String, pendingMarker: String?) -> Bool {
+        guard store.pendingQuestionsMessageId == pendingMarker,
+              store.dismissedQuestionsMessageId != messageId,
+              !PendingQuestionSet.isQuestionSetAnswered(messages: messages, messageId: messageId),
+              !store.queuedMessages.contains(where: { $0.answeredQuestionsMessageId == messageId }) else { return false }
+        switch PendingQuestionSet.MarkerState(pendingMarker) {
+        case .cleared: return false
+        case .set(let markedId): return markedId == messageId
+        case .absent:
+            // Streaming alone can hide a legacy wizard, but a superseding
+            // non-system transcript row retires its mount-time question set.
+            return PendingQuestionSet.derive(
+                messages: messages,
+                isTurnActive: false
+            )?.messageId == messageId
+        }
+    }
+
+    private func buildQuestionAttachmentPayloads(_ attachments: ConversationAttachmentPipeline) async
+        -> (images: OutgoingImagePayload, files: OutgoingFilePayload)? {
+        let images = attachments.pendingImages
+        let files = attachments.pendingFiles
+        let fileAccess = attachments.retainFileAccess(for: files)
+        defer { withExtendedLifetime(fileAccess) {} }
+        attachments.imagePlacementError = nil
+        attachments.filePlacementError = nil
+        let imagePayload: OutgoingImagePayload
+        do {
+            imagePayload = try await attachments.buildImageBlocks(from: images, workspaceId: workspaceId)
+        } catch {
+            attachments.imagePlacementError = error.localizedDescription
+            imagePlacementError = error.localizedDescription
+            return nil
+        }
+        do {
+            let filePayload = try await attachments.buildFileBlocks(from: files, workspaceId: workspaceId)
+            return (imagePayload, filePayload)
+        } catch {
+            attachments.filePlacementError = error.localizedDescription
+            filePlacementError = error.localizedDescription
+            return nil
         }
     }
 
@@ -132,6 +218,7 @@ extension ConversationViewModel {
                 messageId: messageId,
                 workspaceId: workspaceId
             )
+            discardQuestionAttachments(for: messageId)
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Dismiss questions failed: \(error)")
             dismissQuestionsError = error.localizedDescription

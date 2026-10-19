@@ -60,6 +60,7 @@ final class DemoDesignFixtures {
     private var queuedMessages: [[String: Any]] = []
     private var sequence = 0
     private var failedBackgroundRead = false
+    private let attachments = DemoDesignAttachments()
 
     init(scenario: DemoDesignScenario) {
         self.scenario = scenario
@@ -78,6 +79,7 @@ final class DemoDesignFixtures {
     private var totalMessageCount: Int { messages.count + (historyIsTruncated ? Self.archivedMessageCount : 0) }
 
     func response(for method: String, params: [String: Any]) -> Any? {
+        if let response = attachments.response(for: method, params: params) { return response }
         let ownsAgent = params["agentId"] as? String == Self.agentId
         let ownsWorkspace = params["workspaceId"] as? String == Self.workspaceId
         if ownsAgent, let response = queueResponse(for: method, params: params) { return response }
@@ -140,7 +142,9 @@ final class DemoDesignFixtures {
     private func sendMessageResponse(params: [String: Any]) -> Any? {
         guard let messageId = params["messageId"] as? String,
               let content = params["content"] as? String else { return nil }
-        var row = Self.message(id: messageId, role: "user", blocks: [DemoFixtures.textBlock(content)])
+        let images = params["imageBlocks"] as? [[String: Any]] ?? []
+        let files = params["fileBlocks"] as? [[String: Any]] ?? []
+        var row = Self.message(id: messageId, role: "user", blocks: [DemoFixtures.textBlock(content)] + images + files)
         if let metadata = params["messageMetadata"] as? [String: Any] {
             row["metadata"] = metadata
             if metadata["type"] as? String == "question_answers",
