@@ -113,6 +113,7 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
             assertField("Default Model", identifier: "creation.modelPicker", in: app)
             capture(app, named: "Assistant-Model-Picker-\(appearance)")
             choose("Auggie", identifier: "creation.providerPicker", in: app)
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
             assertField("Provider default", identifier: "creation.modelPicker", in: app)
             choose("Named Model", identifier: "creation.modelPicker", in: app)
             choose("high", identifier: "creation.reasoningPicker", in: app)
@@ -172,8 +173,11 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND enabled == true"), object: field)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: Self.timeout), .completed)
         if !field.isHittable { app.scrollViews["conversation.model.form"].swipeUp() }
+        XCTAssertTrue(field.isHittable)
         field.tap()
-        app.buttons[value].tap()
+        let choice = app.buttons[value]
+        XCTAssertTrue(choice.waitForExistence(timeout: Self.timeout))
+        choice.tap()
         assertField(value, identifier: identifier, in: app)
     }
 

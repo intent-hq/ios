@@ -358,6 +358,7 @@ private extension ConversationViewContent {
     private func handleAgentAction(_ action: AgentAction) {
         switch action {
         case .changeModel:
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             showModelPicker = true
         case .delete:
             showDeleteConfirmation = true
