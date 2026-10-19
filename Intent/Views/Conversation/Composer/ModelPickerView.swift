@@ -49,18 +49,20 @@ struct ModelPickerView: View {
     @ViewBuilder
     private var pickerContent: some View {
         if let models = viewModel.selectableModels {
-            modelList(models)
+            if models.isEmpty {
+                unavailableState("No models are available from this provider.")
+            } else {
+                modelList(models)
+            }
         } else if viewModel.modelCatalogLoadFailed {
-            loadFailedState
+            unavailableState("The model list could not be loaded.")
         } else {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    /// The provider's `models.list` failed and nothing is cached: an
-    /// explicit retry instead of an indefinite spinner.
-    private var loadFailedState: some View {
+    private func unavailableState(_ message: String) -> some View {
         ContentUnavailableView {
             Label {
                 Text("Models Unavailable").interFont(Constants.Typography.bodyM)
@@ -68,7 +70,7 @@ struct ModelPickerView: View {
                 Image(systemName: "exclamationmark.triangle")
             }
         } description: {
-            Text("The model list could not be loaded.")
+            Text(message)
                 .interFont(Constants.Typography.bodyXS)
         } actions: {
             Button("Retry") {

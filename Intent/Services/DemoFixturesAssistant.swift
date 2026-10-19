@@ -7,6 +7,21 @@ extension DemoFixtures {
     private static var deletedAssistantAgentIDs: Set<String> = []
     private static var proposalOutcome: String?
     private static var assistantListFailed = false
+    private static var assistantModelIDs: [String: String] = [:]
+
+    static func setAssistantModel(params: [String: Any]) -> [String: Any] {
+        guard params["workspaceId"] as? String == Workspace.chiefWorkspaceId,
+              let agentID = params["agentId"] as? String,
+              let modelID = params["modelId"] as? String else { return [:] }
+        assistantModelIDs[agentID] = modelID
+        return ["success": true]
+    }
+
+    static func assistantDetail(_ agent: [String: Any]) -> [String: Any] {
+        var detail = agent
+        detail["model"] = assistantModelIDs[agent["id"] as? String ?? ""] ?? "default-model"
+        return detail
+    }
 
     static var assistantAgents: [[String: Any]] {
         if ProcessInfo.processInfo.arguments.contains("--demo-assistant-empty") {

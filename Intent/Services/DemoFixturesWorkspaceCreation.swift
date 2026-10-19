@@ -28,6 +28,8 @@ extension DemoFixtures {
             return ["providers": providers]
         case "settings.get" where params["path"] as? String == "providers.enabled":
             return ["path": "providers.enabled", "value": ["auggie": true, "codex": true]]
+        case "settings.get" where params["path"] as? String == "model.defaultProvider":
+            return ["path": "model.defaultProvider", "value": "codex"]
         case "host.providerAuthStatus":
             let providers = ["auggie", "codex"].map { id in
                 ["id": id, "authenticated": true] as [String: Any]
@@ -35,6 +37,9 @@ extension DemoFixtures {
             return ["providers": providers]
         case "models.list":
             let provider = params["providerId"] as? String ?? "auggie"
+            if ProcessInfo.processInfo.arguments.contains("--demo-model-catalog-empty") {
+                return ["models": [[String: Any]]()]
+            }
             return [
                 "models": [
                     ["id": "default-model", "name": "Default Model", "provider": provider, "isDefault": true],

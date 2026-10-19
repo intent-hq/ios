@@ -103,6 +103,65 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
     }
 
     @MainActor
+    func testAssistantModelPickerUsesInheritedProviderAndPreservesDraft() {
+        for appearance in ["light", "dark"] {
+            let app = launchAssistant(appearance: appearance)
+            let composer = app.textViews["composer.textView"]
+            composer.tap()
+            composer.typeText("Keep this Assistant draft")
+            app.buttons["assistant.actions"].tap()
+            app.buttons["conversation.actions.model"].tap()
+            let selected = app.buttons["conversation.model.default-model"]
+            XCTAssertTrue(selected.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(selected.isSelected)
+            capture(app, named: "Assistant-Model-Picker-\(appearance)")
+            app.buttons["conversation.model.named-model"].tap()
+            XCTAssertTrue(app.navigationBars["Select Model"].waitForNonExistence(timeout: Self.timeout))
+            XCTAssertEqual(composer.value as? String, "Keep this Assistant draft")
+            XCTAssertTrue(app.scrollViews["transcript.scrollView"].exists)
+            app.buttons["assistant.actions"].tap()
+            assertNamedModelInMenu(app)
+            app.buttons["conversation.actions.model"].tap()
+            let updated = app.buttons["conversation.model.named-model"]
+            XCTAssertTrue(updated.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(updated.isSelected)
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testEmptyAssistantModelPickerOffersRetryAndCancel() {
+        let app = launchAssistant(appearance: "light", arguments: ["--demo-model-catalog-empty"])
+        app.buttons["assistant.actions"].tap()
+        app.buttons["conversation.actions.model"].tap()
+        let retry = app.buttons["Retry"]
+        XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+        retry.tap()
+        XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Assistant-Model-Picker-Empty")
+        app.navigationBars["Select Model"].buttons["Cancel"].tap()
+        XCTAssertTrue(app.navigationBars["Select Model"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].exists)
+    }
+
+    @MainActor
+    private func launchAssistant(appearance: String, arguments: [String] = []) -> XCUIApplication {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "-appThemePreference", appearance, "-AppleLanguages", "(en)", "-AppleLocale", "en_US"] + arguments
+        app.launch()
+        let launcher = app.buttons["intent.menu.open"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: Self.timeout))
+        launcher.tap()
+        let assistant = app.buttons["intent.menu.assistant"]
+        XCTAssertTrue(assistant.waitForExistence(timeout: Self.timeout))
+        assistant.tap()
+        XCTAssertTrue(app.buttons["assistant.actions"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
+        return app
+    }
+
+    @MainActor
     private func launch(scenario: String, appearance: String, largeText: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()

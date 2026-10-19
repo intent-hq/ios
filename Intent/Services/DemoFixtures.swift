@@ -430,6 +430,7 @@ extension DemoFixtures {
         "agent.list": agentListResponse,
         "agent.delete": deleteAssistantAgent,
         "agent.get": agentGetResponse,
+        "agent.setModel": setAssistantModel,
         "agent.getConversation": conversationResponse,
         "chat.subscribe": { ["subscriptionId": chatSubscriptionId(agentId: $0["agentId"] as? String)] },
         "agent.getMessageBlock": { params in
@@ -456,7 +457,7 @@ extension DemoFixtures {
 
     private static func agentGetResponse(params: [String: Any]) -> Any {
         let agentId = params["agentId"] as? String
-        if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) { return ["agent": assistant] }
+        if let assistant = assistantAgents.first(where: { ($0["id"] as? String) == agentId }) { return ["agent": assistantDetail(assistant)] }
         var agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
         if usesStartupTranscript, agentId == longConversationAgentId {
             agent["metadata"] = ["lastSeenMessageId": startupSeenMessageId]
