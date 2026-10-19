@@ -430,7 +430,9 @@ a passing companion fixture, and every exact named final PNG under its owning
 test in each result bundle. The local verifier defaults to two result bundles.
 Ordinary PRs use `--repetitions 1`; capture fixture/exporter/tooling changes,
 scheduled runs, manual runs, and the merge queue retain two. If the changed-file
-lookup fails, CI keeps two. `.github/scripts/select-fixture-capture-repetitions.sh`
+lookup fails, CI keeps two. The selector checks the PR head, base, and file count
+before and after fetching files; stale reruns and changing PRs also keep two.
+`.github/scripts/select-fixture-capture-repetitions.sh`
 defines the relevant paths; its offline regression is
 `python3 scripts/test_select_fixture_capture_repetitions.py`. One repetition
 still requires repeated passing captures to remain distinct; the second also
@@ -467,9 +469,14 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 ### Depot GitHub Actions runners
 
 Script and Go jobs use Depot Ubuntu 24.04. The independent iPad UI job always
-uses Depot macOS; it does not wait for a local simulator runner. Other build and
-simulator selectors prefer
-available self-hosted Macs, using `RUNNER_STATUS_TOKEN` to inspect the pools,
+uses Depot macOS so it can overlap local simulator jobs. This requires hosted
+capacity on each UI run. Each pool selects its installed Xcode independently.
+The 18 October 2026 validation used Xcode 26.5 on Depot for iPad and 26.3 on the
+local iPhone Mac.
+The pools do not guarantee the same toolchain or simulator runtime. Record the
+runner, Xcode, and runtime when comparing timings or investigating failures.
+Build and iPhone simulator selectors prefer available self-hosted Macs, using
+`RUNNER_STATUS_TOKEN` to inspect the pools,
 and fall back to Depot’s latest macOS Apple Silicon. An online local runner
 remains eligible while busy; this preference does not provide automatic overflow
 for queued jobs. The selected image needs Xcode 26;

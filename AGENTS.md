@@ -97,12 +97,16 @@ evidence. Keep matrix `fail-fast: false` and the aggregate `iOS UI Tests` check,
 which must fail unless both jobs succeed. Filtered and `pre_pr_gate` dispatches
 skip the matrix and aggregate. Parallel iPad screenshot artifacts use the `-ipad`
 suffix in `.github/actions/export-ui-evidence/action.yml`.
+Depot adds hosted runner cost, and its installed Xcode/runtime can differ from the
+local iPhone pool. Record the actual runner and toolchain in timing evidence.
 
 The native screenshot-retention contract runs once on ordinary PRs and twice
 for capture-tooling changes, scheduled/manual runs, and the merge queue. The
 selector `.github/scripts/select-fixture-capture-repetitions.sh` defaults to two
 when changed files cannot be inspected. Run
 `python3 scripts/test_select_fixture_capture_repetitions.py` after changing it.
+PR metadata must match the event head, base, and file count before and after lookup;
+stale reruns and changing PRs keep two repetitions.
 
 Only the two workspace creation entry tests reduce to light appearance on
 ordinary PRs with exclusively known unrelated modified files. The narrow allowlist
