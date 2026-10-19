@@ -29,7 +29,9 @@ class RunnerSelectionTests(unittest.TestCase):
         # Depot was retired; hosted fallbacks are GitHub-hosted labels.
         import re
         root = SELECTOR.parents[2]
-        for path in [*(root / ".github").rglob("*.yml"), *(root / ".github").rglob("*.yaml"), *(root / ".github").rglob("*.sh")]:
+        paths = [*(root / ".github").rglob("*.yml"), *(root / ".github").rglob("*.yaml"), *(root / ".github").rglob("*.sh")]
+        self.assertIn(SELECTOR, paths)
+        for path in paths:
             self.assertEqual(re.findall(r"depot-(?:ubuntu|windows|macos)[\w.-]*", path.read_text()), [], str(path))
 
     def select(self, runners, token="fixture", curl_status=0, raw=None, pool_label="intent-ios"):

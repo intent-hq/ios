@@ -155,8 +155,9 @@ on cancellation as well as failure so interrupted renderer runs can be inspected
 ### Clean-checkout prerequisites
 
 - For app builds: macOS with Xcode and its command-line tools. Tests require an available iPhone
-  simulator by default; use `SIM_UDID` to select an iPad. CI's self-hosted Macs
-  select Xcode 26.3 explicitly; GitHub-hosted Macs select their newest installed Xcode 26.
+  simulator by default; use `SIM_UDID` to select an iPad. Every CI Mac selects its
+  newest installed GA Xcode 26 (betas and release candidates are skipped); on
+  GitHub-hosted `macos-15-xlarge` that is Xcode 26.3.
 - Network access for the first Swift package resolution and pinned Go tool download.
 - A Go toolchain compatible with the version in `TailcatKit/go.mod`. iOS commands
   automatically run `TailcatKit/build_xcframework.sh` when the gitignored framework
