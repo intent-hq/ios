@@ -141,10 +141,13 @@ struct MermaidJavaScriptProbeTests {
     }
 
     @Test func propagatesWebKitErrors() async {
-        await #expect(throws: URLError(.cannotLoadFromNetwork)) {
-            try await MermaidJavaScriptProbe.waitForResult { completion in
+        do {
+            _ = try await MermaidJavaScriptProbe.waitForResult { completion in
                 completion(nil, URLError(.cannotLoadFromNetwork))
             }
+            Issue.record("The probe must propagate the WebKit error")
+        } catch {
+            #expect((error as? URLError)?.code == .cannotLoadFromNetwork)
         }
     }
 
@@ -164,8 +167,11 @@ struct MermaidJavaScriptProbeTests {
 
     @Test func missingCallbackTimesOutAndLateCallbackIsHarmless() async throws {
         var late: MermaidJavaScriptProbe.Completion?
-        await #expect(throws: URLError(.timedOut)) {
-            try await MermaidJavaScriptProbe.waitForResult(timeout: .milliseconds(30)) { late = $0 }
+        do {
+            _ = try await MermaidJavaScriptProbe.waitForResult(timeout: .milliseconds(30)) { late = $0 }
+            Issue.record("A missing callback must time out")
+        } catch {
+            #expect((error as? URLError)?.code == .timedOut)
         }
         let completion = try #require(late)
         completion("too late", nil)
