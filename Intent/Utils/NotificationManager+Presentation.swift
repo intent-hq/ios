@@ -74,23 +74,26 @@ extension NotificationManager {
         let workspaceName = workspaceStore(for: sourceBackendID).workspaces
             .first { $0.id == workspaceId }?.title ?? "Workspace"
 
-        guard applicationState() == .active else {
-            localNotificationService.postAgentIdleNotification(
+        let isForeground = applicationState() == .active
+        if isForeground {
+            guard presentForegroundAlert(
                 agentId: agentId,
                 workspaceId: workspaceId,
                 agentName: agentName,
                 workspaceName: workspaceName,
                 connectionId: connectionId
-            )
-            return
+            ) else { return }
+            guard !windowEmitsFeedbackSound else { return }
         }
 
-        presentForegroundAlert(
+        // iOS owns sound policy; the toast does not depend on notification permission.
+        localNotificationService.postAgentIdleNotification(
             agentId: agentId,
             workspaceId: workspaceId,
             agentName: agentName,
             workspaceName: workspaceName,
-            connectionId: connectionId
+            connectionId: connectionId,
+            foregroundPresentationHandled: isForeground
         )
     }
 
@@ -103,20 +106,16 @@ extension NotificationManager {
     // Presentation is window-scoped: on multi-window platforms the alert
     // (feedback and toast alike) presents only via the source backend's
     // window (`alertPresents`); other windows see and hear nothing.
+    @discardableResult
     func presentForegroundAlert(
         agentId: String,
         workspaceId: String,
         agentName: String,
         workspaceName: String?,
         connectionId: UUID
-    ) {
+    ) -> Bool {
         let sourceBackendID = BackendID(connectionId)
-        guard Self.alertPresents(
-            source: sourceBackendID,
-            registeredBackends: Set(agentSelectionHandlers.keys),
-            supportsMultipleWindows: supportsMultipleWindows
-        )
-        else { return }
+        guard canPresentForegroundAlert(connectionId: connectionId) else { return false }
         let workspaceName = workspaceName ?? workspaceStore(for: sourceBackendID).workspaces
             .first { $0.id == workspaceId }?.title ?? "Workspace"
         if isAgentOpen(agentId, connectionId: connectionId) {
@@ -137,13 +136,23 @@ extension NotificationManager {
                 sourceBackendID: sourceBackendID
             )
         }
+        return true
+    }
+
+    func canPresentForegroundAlert(connectionId: UUID) -> Bool {
+        Self.alertPresents(
+            source: BackendID(connectionId),
+            registeredBackends: Set(agentSelectionHandlers.keys),
+            supportsMultipleWindows: supportsMultipleWindows
+        )
     }
 
     /// Plays alert feedback: on window-emitting platforms (visionOS) publish
     /// the request for the source backend's window to emit the chime from
     /// its own scene (`WindowFeedbackSoundEmitter`); elsewhere play the
-    /// global haptic + sound. Deduplicated against the source session's
-    /// workspace attention cue: one agent event (idle/blocker) often also
+    /// haptic feedback. iOS sound goes through local notifications.
+    /// Deduplicated against the source session's workspace attention cue:
+    /// one agent event (idle/blocker) often also
     /// flips its workspace's attention, and both sounds within a second is
     /// the "double chime" — the cue center arbitrates so at most one
     /// audible trigger plays per workspace per event (no-op off visionOS,

@@ -9,11 +9,13 @@ final class NotificationManagerFakeCenter: LocalNotificationCenter {
     weak var delegate: (any UNUserNotificationCenterDelegate)?
     private(set) var requests: [UNNotificationRequest] = []
     private(set) var removedNotificationIdentifiers: [[String]] = []
+    var authorizationStatus: UNAuthorizationStatus = .authorized
+    var addError: (any Error)?
 
     func getAuthorizationStatus(
         completionHandler: @MainActor @Sendable (UNAuthorizationStatus) -> Void
     ) {
-        completionHandler(.authorized)
+        completionHandler(authorizationStatus)
     }
 
     func requestAuthorization(
@@ -28,7 +30,7 @@ final class NotificationManagerFakeCenter: LocalNotificationCenter {
         withCompletionHandler completionHandler: (@Sendable ((any Error)?) -> Void)?
     ) {
         requests.append(request)
-        completionHandler?(nil)
+        completionHandler?(addError)
     }
 
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
