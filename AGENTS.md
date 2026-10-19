@@ -93,7 +93,7 @@ selectors and skipped-only selections are rejected. See the README's CI section
 for evidence artifacts and the disposable simulator route.
 
 The first iPhone shard uses the selected Mac pool; the second iPhone shard and
-iPad use Depot macOS for independent capacity. Scheduled/manual full runs keep
+iPad use GitHub-hosted `macos-26-xlarge` for independent capacity. Scheduled/manual full runs keep
 one full-bundle iPhone job and the iPad regressions. Each job owns its simulator,
 build directory, results, and evidence. Keep matrix `fail-fast: false` and the
 aggregate `iOS UI Tests` check,
@@ -106,7 +106,7 @@ Run `python3 scripts/test_ui_smoke_tests.py` after changing shard selection and
 must reject invalid/missing annotations, duplicates, and empty shards before
 invoking native tests.
 
-Depot adds hosted runner cost, and its installed Xcode/runtime can differ from the
+GitHub-hosted Macs add runner cost, and their installed Xcode/runtime can differ from the
 local iPhone pool. Record the actual runner and toolchain in timing evidence.
 
 The native screenshot-retention contract runs once on ordinary PRs and twice

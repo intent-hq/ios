@@ -11,7 +11,7 @@ import unittest
 
 SELECTOR = Path(__file__).resolve().parents[1] / ".github/scripts/select-macos-runner.sh"
 REQUIRED = ["self-hosted", "macOS", "ARM64", "intent-ios"]
-HOSTED = '"depot-macos-latest"'
+HOSTED = '"macos-26-xlarge"'
 POOL = '["self-hosted","macOS","ARM64","intent-ios"]'
 
 
@@ -25,6 +25,15 @@ def runner(name, status="online", labels=None, busy=False):
 
 
 class RunnerSelectionTests(unittest.TestCase):
+    def test_no_depot_runner_labels(self):
+        # Depot was retired; hosted fallbacks are GitHub-hosted labels.
+        import re
+        root = SELECTOR.parents[2]
+        paths = [*(root / ".github").rglob("*.yml"), *(root / ".github").rglob("*.yaml"), *(root / ".github").rglob("*.sh")]
+        self.assertIn(SELECTOR, paths)
+        for path in paths:
+            self.assertEqual(re.findall(r"depot-(?:ubuntu|windows|macos)[\w.-]*", path.read_text()), [], str(path))
+
     def select(self, runners, token="fixture", curl_status=0, raw=None, pool_label="intent-ios"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
