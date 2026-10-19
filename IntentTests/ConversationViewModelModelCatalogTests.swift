@@ -320,7 +320,7 @@ extension ConversationViewModelTests {
         #expect(!fake.didCallMethod("agent.getModels"))
     }
 
-    @Test(arguments: ["auggie", "codex:work"])
+    @Test(arguments: ["auggie", "codex@work"])
     func explicitProviderDoesNotUseHostDefault(provider: String) async {
         let (vm, _, fake) = makeCatalogVM()
         fake.responseMap["agent.get"] = ["agent": ["provider": provider]]
