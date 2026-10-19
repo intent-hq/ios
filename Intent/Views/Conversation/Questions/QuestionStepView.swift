@@ -14,6 +14,9 @@ struct QuestionStepView: View {
     let onSubmit: () -> Void
     let onTextChange: () -> Void
     var isActive = true
+    var onPhotos: () -> Void = {}
+    var onFiles: () -> Void = {}
+    var onPasteImages: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -210,6 +213,8 @@ struct QuestionStepView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.secondaryLabelOpacity))
                 .accessibilityHidden(true)
             freeTextEditor
+            WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles)
+                .accessibilityIdentifier("question.attachment")
             if KeyCommandTextView.returnSubmitsNow {
                 Image(.enter)
                     .resizable()
@@ -234,6 +239,7 @@ struct QuestionStepView: View {
                 text: $freeText,
                 isFocused: $freeTextFocused,
                 onSubmit: onSubmit,
+                onPasteImages: onPasteImages,
                 onHeightChange: { height in
                     freeTextHeight = Self.clampedFreeTextHeight(
                         height,

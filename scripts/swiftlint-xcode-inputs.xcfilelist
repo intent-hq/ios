@@ -198,6 +198,7 @@ $(SRCROOT)/Intent/Services/DemoBrowserFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesFixtures.swift
 $(SRCROOT)/Intent/Services/DemoChangesRootFixtures.swift
 $(SRCROOT)/Intent/Services/DemoConnectionLoss.swift
+$(SRCROOT)/Intent/Services/DemoDesignAttachments.swift
 $(SRCROOT)/Intent/Services/DemoFilesFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixturesAssistant.swift
@@ -425,6 +426,9 @@ $(SRCROOT)/Intent/Views/Conversation/Notices/PrMonitorWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/QuestionsDismissedNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/SystemNoticeBannerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/WatcherMessageBodyView.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/QuestionAttachmentLifecycle.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/QuestionAttachmentPickers.swift
+$(SRCROOT)/Intent/Views/Conversation/Questions/QuestionAttachmentTray.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionCardPager.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionStepView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionWizardCollapsedBanner.swift
@@ -856,6 +860,7 @@ $(SRCROOT)/IntentTests/PlatformGuardAllowlistTests.swift
 $(SRCROOT)/IntentTests/PrivacyManifestDriftTests.swift
 $(SRCROOT)/IntentTests/ProposalActionStoreTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift
+$(SRCROOT)/IntentTests/QuestionAttachmentLifecycleTests.swift
 $(SRCROOT)/IntentTests/QuestionTests.swift
 $(SRCROOT)/IntentTests/QuestionWizardLayoutTests.swift
 $(SRCROOT)/IntentTests/QueuedMessageImageDecodingTests.swift
@@ -1042,6 +1047,7 @@ $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
 $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift
 $(SRCROOT)/IntentUITests/PairingDesignUITests.swift
+$(SRCROOT)/IntentUITests/QuestionAttachmentUITests.swift
 $(SRCROOT)/IntentUITests/QuestionWizardUITests.swift
 $(SRCROOT)/IntentUITests/ScriptMonitorsUITests.swift
 $(SRCROOT)/IntentUITests/SettingsUITests.swift
