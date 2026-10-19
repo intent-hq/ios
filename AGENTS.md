@@ -108,15 +108,8 @@ when changed files cannot be inspected. Run
 PR metadata must match the event head, base, and file count before and after lookup;
 stale reruns and changing PRs keep two repetitions.
 
-Only the two workspace creation entry tests reduce to light appearance on
-ordinary PRs with exclusively known unrelated modified files. The narrow allowlist
-is in `.github/scripts/select-workspace-entry-appearances.sh`; shared UI, fixtures,
-unknown paths, new/renamed files, and failed file lookups retain both appearances.
-PR metadata must match the event head, base, and file count before and after lookup.
-Local, manual, merge-queue, scheduled, and full runs default to both. The explicit
-local override is `TEST_RUNNER_INTENT_UITEST_WORKSPACE_ENTRY_APPEARANCES=light`.
-Run `python3 scripts/test_select_workspace_entry_appearances.py` after changing the
-selector and `python3 scripts/test_ci_simulator.py` after changing its workflow wiring.
+Both workspace creation entry tests must exercise light and dark appearances on
+every run, including ordinary PRs.
 
 `ui_suite=full` does not opt into quarantined transcript cases:
 `ConversationTranscriptFullGateUITests` needs

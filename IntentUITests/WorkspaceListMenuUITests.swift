@@ -4,16 +4,11 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let maximumHistorySwipes = 12
 
-    private var entryAppearances: [String] {
-        ProcessInfo.processInfo.environment["INTENT_UITEST_WORKSPACE_ENTRY_APPEARANCES"] == "light"
-            ? ["light"] : ["light", "dark"]
-    }
-
     @MainActor
     func testEmptyWorkspaceButtonOpensCreationAndReturns() {
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
         defer { XCUIDevice.shared.orientation = .portrait }
-        for appearance in entryAppearances {
+        for appearance in ["light", "dark"] {
             let app = launchWorkspaces(arguments: ["--demo-empty-workspaces", "-appThemePreference", appearance])
             let create = app.buttons["workspaces.empty.create"]
             XCTAssertTrue(create.waitForExistence(timeout: Self.timeout))
@@ -38,7 +33,7 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     func testNewWorkspaceMenuOpensCreationAndReturns() {
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
         defer { XCUIDevice.shared.orientation = .portrait }
-        for appearance in entryAppearances {
+        for appearance in ["light", "dark"] {
             let app = launchWorkspaces(arguments: ["-appThemePreference", appearance])
             let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
             XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))

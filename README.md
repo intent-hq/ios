@@ -335,20 +335,8 @@ gh workflow run ci.yml --repo intent-hq/ios --ref your-branch -f only_testing='I
 Replace `your-branch` with the branch to test. Filtered dispatches are
 **non-gating** and do not replace the normal PR checks.
 
-The two workspace creation entry tests use light appearance only on ordinary PRs
-whose complete changed-file list contains exclusively known unrelated edits.
-The selector checks the PR head, base, and file count before and after fetching
-the list; older reruns or changing PRs retain both appearances.
-`.github/scripts/select-workspace-entry-appearances.sh` owns the narrow allowlist
-(documentation, unit tests, and selected PDF, watcher, and terminal leaf files).
-Shared UI, fixtures, build configuration, new or renamed files, unknown paths,
-and unavailable file lists retain light and dark. Merge queue, manual, scheduled,
-full, and local runs also retain both. All assertions and both entry points remain
-in the smoke list; only the second appearance pass is conditional. Run
-`python3 scripts/test_select_workspace_entry_appearances.py` after changing the
-selector. For focused local measurement, explicitly set
-`TEST_RUNNER_INTENT_UITEST_WORKSPACE_ENTRY_APPEARANCES=light` on a wrapper test run;
-unset or unrecognized values retain both appearances.
+Both workspace creation entry tests exercise light and dark appearances on every
+run, including ordinary PRs.
 
 `pre_pr_gate=true` runs the literal `scripts/xcodebuild.sh test-ios` gate,
 building once and running unit and UI tests together on an owned iPhone simulator.

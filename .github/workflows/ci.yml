@@ -83,7 +83,6 @@ jobs:
       build-runs-on: ${{ steps.select-build.outputs.runs-on || '"depot-macos-latest"' }}
       runs-on: ${{ steps.select.outputs.runs-on || '"depot-macos-latest"' }}
       fixture-capture-repetitions: ${{ steps.capture-contract.outputs.repetitions || '2' }}
-      workspace-entry-appearances: ${{ steps.entry-appearances.outputs.appearances || 'both' }}
     steps:
       - uses: actions/checkout@v7
       - name: Check local Mac status
@@ -105,14 +104,6 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bash .github/scripts/select-fixture-capture-repetitions.sh
-      - name: Select workspace entry appearances
-        id: entry-appearances
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: bash .github/scripts/select-workspace-entry-appearances.sh
 
   go-test:
     name: Go unit tests (TailcatKit)
@@ -157,7 +148,6 @@ jobs:
         run: |
           python3 scripts/test_select_macos_runner.py
           python3 scripts/test_select_fixture_capture_repetitions.py
-          python3 scripts/test_select_workspace_entry_appearances.py
 
       - name: Xcode Cloud post-clone tests
         run: scripts/test-ci-post-clone.sh
@@ -864,18 +854,14 @@ jobs:
         if: matrix.family == 'iphone'
         env:
           FULL_UI_SUITE: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && '1' || '' }}
-          WORKSPACE_ENTRY_APPEARANCES: ${{ needs.select-macos-runner.outputs.workspace-entry-appearances || 'both' }}
         run: |
-          export TEST_RUNNER_INTENT_UITEST_WORKSPACE_ENTRY_APPEARANCES=both
           if [ -n "$FULL_UI_SUITE" ]; then
             export ONLY_TESTING=IntentUITests
             echo "UI tests: full IntentUITests bundle" >> "$GITHUB_STEP_SUMMARY"
           else
             ONLY_TESTING=$(sed -e 's/#.*//' scripts/ui-smoke-tests.txt | xargs)
             export ONLY_TESTING
-            export TEST_RUNNER_INTENT_UITEST_WORKSPACE_ENTRY_APPEARANCES="$WORKSPACE_ENTRY_APPEARANCES"
             echo "UI tests: smoke list (scripts/ui-smoke-tests.txt)" >> "$GITHUB_STEP_SUMMARY"
-            echo "Workspace creation entry appearances: ${WORKSPACE_ENTRY_APPEARANCES:-both}" >> "$GITHUB_STEP_SUMMARY"
           fi
           scripts/xcodebuild.sh test-without-building-ui
 
