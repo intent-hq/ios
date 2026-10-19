@@ -95,8 +95,10 @@ struct MermaidWebViewTests {
 @MainActor
 private enum MermaidJavaScriptProbe {
     typealias Completion = @MainActor @Sendable (Any?, (any Error)?) -> Void
-    private static let defaultTimeout: Duration = .seconds(5)
-    private static let pollInterval: Duration = .milliseconds(10)
+
+    private static let defaultTimeoutSeconds = 5
+    private static let pollIntervalMilliseconds = 10
+    private static let pollInterval: Duration = .milliseconds(pollIntervalMilliseconds)
 
     static func evaluate(_ expression: String, in webView: WKWebView) async throws -> Any? {
         try await waitForResult { completion in
@@ -105,7 +107,7 @@ private enum MermaidJavaScriptProbe {
     }
 
     static func waitForResult(
-        timeout: Duration = MermaidJavaScriptProbe.defaultTimeout,
+        timeout: Duration = .seconds(defaultTimeoutSeconds),
         start: (@escaping Completion) -> Void
     ) async throws -> Any? {
         try Task.checkCancellation()
